@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Literal
 
 from ops_ingest.dedupe import content_digest
-from ops_ingest.model_client import ModelClient
+from ops_ingest.model_client import ModelBudget, ModelClient
 from ops_ingest.models import (
     AI_STEPS,
     SPLITTERS,
@@ -114,9 +114,23 @@ class Pipeline:
         self.model = model
         self.count_tokens = count_tokens
 
-    def run(self, document: ParsedDocument, *, preview: bool = False) -> SplitResult:
+    def run(
+        self,
+        document: ParsedDocument,
+        *,
+        preview: bool = False,
+        known_questions: dict[str, list[str]] | None = None,
+        budget: ModelBudget | None = None,
+    ) -> SplitResult:
         settings = self.settings
-        ctx = SplitContext(settings=settings, title=document.title, count=self.count_tokens, model=self.model)
+        ctx = SplitContext(
+            settings=settings,
+            title=document.title,
+            count=self.count_tokens,
+            model=self.model,
+            known_questions=known_questions or {},
+            budget=budget,
+        )
         strategies = settings.strategies
 
         def ai(step: IngestStrategy) -> bool:
@@ -190,8 +204,11 @@ def split(
     model: ModelClient | None = None,
     preview: bool = False,
     count_tokens: TokenCounter = approx_tokens,
+    known_questions: dict[str, list[str]] | None = None,
+    budget: ModelBudget | None = None,
 ) -> SplitResult:
-    return Pipeline(settings, model=model, count_tokens=count_tokens).run(document, preview=preview)
+    pipeline = Pipeline(settings, model=model, count_tokens=count_tokens)
+    return pipeline.run(document, preview=preview, known_questions=known_questions, budget=budget)
 
 
 def document_digest(document: ParsedDocument, settings: IngestSettings) -> str:

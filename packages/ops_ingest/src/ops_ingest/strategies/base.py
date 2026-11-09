@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass, field
 from typing import cast
 
-from ops_ingest.model_client import ModelClient
+from ops_ingest.model_client import ModelBudget, ModelClient
 from ops_ingest.models import IngestSettings, IngestStrategy, Paragraph, Section
 from ops_ingest.text import TokenCounter, approx_tokens
 
@@ -23,10 +23,17 @@ class SplitContext:
     notes: list[str] = field(default_factory=list[str])
     model_calls: int = 0
     removed_chars: int = 0
+    # Questions written before for a piece of the same text, by piece_digest: reused, never asked for again.
+    known_questions: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    # The run's ceiling on model calls; None for no ceiling (a preview's sample).
+    budget: ModelBudget | None = None
 
     def call_model(self, prompt: str, *, max_tokens: int) -> str:
+        """The model's reply; raises ModelBudgetSpent past the run's ceiling, or the client's ModelUnavailable."""
         if self.model is None:
             raise RuntimeError("An AI step ran without a model client")
+        if self.budget is not None:
+            self.budget.take()
         self.model_calls += 1
         return self.model.complete(prompt, alias=self.settings.model, max_tokens=max_tokens)
 

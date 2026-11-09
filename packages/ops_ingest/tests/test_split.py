@@ -11,9 +11,11 @@ from typing import Any
 import pytest
 
 import ops_ingest
+from ops_ingest.model_client import ModelBudget, ModelUnavailable
 from ops_ingest.models import IngestSettings, ParsedDocument, TableColumn
 from ops_ingest.parsers import parse
 from ops_ingest.split import PRESETS, InvalidIngestError, document_digest, split
+from ops_ingest.strategies.faq import piece_digest
 from ops_ingest.testing import FakeModelClient
 from ops_ingest.text import approx_tokens
 from tests.conftest import fixture_bytes
@@ -172,6 +174,29 @@ def test_faq_goes_through_model_client_only() -> None:
     )
     offenders = [str(p) for p in package.rglob("*.py") if provider_import.search(p.read_text())]
     assert offenders == []
+
+
+def test_questions_are_asked_only_for_changed_pieces_and_stop_at_the_ceiling_or_a_down_model() -> None:
+    """A sync that asks again for every piece pays for unchanged ones; one past the ceiling, or a model that is down,
+    must stop asking without failing the document."""
+    doc = md(f"# Fees\n\n{sentences(3)}\n\n# Holds\n\n{sentences(3, 10)}\n\n# Limits\n\n{sentences(3, 20)}")
+    on = settings(strategies=["structure", "faq"], model="ingest-small", approval=approved("faq"))
+    first = split(doc, on, model=FakeModelClient(respond=faq_reply))
+    known = {piece_digest(c.text): list(c.questions or []) for c in first.chunks[:2]}
+    again = FakeModelClient(respond=faq_reply)
+    second = split(doc, on, model=again, known_questions=known)
+    assert len(again.calls) == len(first.chunks) - 2, "only the piece with no known questions is asked"
+    assert [c.questions for c in second.chunks] == [c.questions for c in first.chunks]
+    capped = FakeModelClient(respond=faq_reply)
+    third = split(doc, on, model=capped, budget=ModelBudget(1))
+    assert len(capped.calls) == 1 and [bool(c.questions) for c in third.chunks] == [True, False, False]
+    assert any("ceiling" in n for n in third.notes)
+
+    def down(prompt: str) -> str:
+        raise ModelUnavailable("key_budget_exhausted")
+
+    fourth = split(doc, on, model=FakeModelClient(respond=down))
+    assert all(not c.questions for c in fourth.chunks) and any("did not answer" in n for n in fourth.notes)
 
 
 def test_ai_step_waits_for_approval() -> None:

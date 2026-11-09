@@ -418,6 +418,27 @@ class SourceKind(Out):
     inputs: Json = Field(default_factory=dict[str, Any])
 
 
+class AiApprovalIn(In):
+    decision: Literal["approve", "revoke"]
+
+
+class TokenRange(Out):
+    low: int
+    high: int
+
+
+class AiEstimate(Out):
+    steps: list[str]
+    model: str
+    sampled_items: int
+    total_items: int
+    calls: int
+    input_tokens: int
+    output_tokens: TokenRange
+    # What the numbers rest on and what they leave out, in words.
+    basis: str
+
+
 class Tombstone(Out):
     id: str
     at: str | None = None

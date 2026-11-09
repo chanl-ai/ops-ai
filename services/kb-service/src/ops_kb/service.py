@@ -19,8 +19,11 @@ from ops_documents_client import DocumentsRefused
 from ops_identity import Principal, ServiceUnreachable
 from ops_ingest import ParsedDocument, SplitResult, split
 from ops_ingest.metadata import resolve_metadata
+from ops_ingest.models import AI_STEPS, IngestApproval, IngestSettings
 from ops_ingest.rules import ItemFacts, evaluate_rules
-from ops_ingest.split import document_digest
+from ops_ingest.split import ai_step_allowed, document_digest
+from ops_ingest.strategies.faq import piece_digest
+from ops_ingest.text import approx_tokens
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
@@ -28,6 +31,7 @@ from ops_service_kit.logging import get_logger
 from ops_store.schedule import next_run
 
 from .agents import AgentDirectory, Usage
+from .ai import AiClients, ai_run, spent_on
 from .embedding import Embedder, EmbedFailed, embed_pending
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .origin import Origin, source_team
@@ -209,6 +213,7 @@ class KnowledgeService:
         ocr: str = "auto",
         embedder: Embedder | None = None,
         vectors: PgVectorStore | None = None,
+        ai_clients: AiClients | None = None,
     ) -> None:
         """`tools` reads "tool" sources through tools-service's gateway; without it none can be made. `readings` gives
         each file's reading from documents-service, read with OCR mode `ocr` (settings.kb_ocr); without it a file
@@ -223,6 +228,8 @@ class KnowledgeService:
         # The environment's embedding model and the vector store: units a sync settled are embedded at once.
         self.embedder = embedder
         self.vectors = vectors
+        # Each run's model client for the sources' approved AI steps (ai.py); None in a stack with no models-service.
+        self.ai_clients = ai_clients
         # Rebuilds running in this process, so stopping the service ends them and their runs say why.
         self.rebuilds: set[asyncio.Task[None]] = set()
 
@@ -828,7 +835,8 @@ class KnowledgeService:
         if not await self.store.claim(who.tenant_id, source_id, until=datetime.now(UTC) + LEASE):
             raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
-            return await self._sync(who, s, full=full, retry=retry, trigger=trigger)
+            with ai_run(self.ai_clients, who.tenant_id):
+                return await self._sync(who, s, full=full, retry=retry, trigger=trigger)
         finally:
             await self.store.release(who.tenant_id, source_id)
 
@@ -841,7 +849,8 @@ class KnowledgeService:
         if not await self.store.claim(who.tenant_id, str(s["id"]), until=datetime.now(UTC) + LEASE):
             raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")
         try:
-            run = _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
+            with ai_run(self.ai_clients, who.tenant_id):
+                run = _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
         finally:
             await self.store.release(who.tenant_id, str(s["id"]))
         await self.settle_repeats(who, str(s["id"]))
@@ -923,6 +932,13 @@ class KnowledgeService:
         return _run(run)
 
     async def _rebuild(self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]]) -> None:
+        # A run of its own for the AI steps: its task may be made inside a sync, whose run it must not share.
+        with ai_run(self.ai_clients, who.tenant_id, fresh=True):
+            await self._rebuild_items(who, s, run, stale)
+
+    async def _rebuild_items(
+        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]]
+    ) -> None:
         tenant, source_id, run_id = who.tenant_id, str(s["id"]), str(run["id"])
         counts: dict[str, int] = dict(run["counts"])
         log: list[str] = []
@@ -962,6 +978,7 @@ class KnowledgeService:
             log.append("Stopped when the service stopped; save the settings again or sync to finish.")
             raise
         finally:
+            spent_on(counts, log)
             ended = datetime.now(UTC)
             await self.store.update_run(
                 tenant,
@@ -1085,6 +1102,7 @@ class KnowledgeService:
         _, by_source = await self._joined(who.tenant_id)
         if counts["upserted"] or counts["deleted"]:
             await self.store.refreshed(who.tenant_id, by_source.get(source_id, []))
+        spent_on(counts, log)
         run: dict[str, Any] = {
             "tenant_id": who.tenant_id,
             "id": new_id("run"),
@@ -1101,13 +1119,37 @@ class KnowledgeService:
         await self.store.add_run(run)
         return _run(run)
 
-    def _chunks(
+    async def _chunks(
         self, who: Who, s: dict[str, Any], doc: ParsedDocument, *, item_id: str, version: int, title: str
     ) -> list[dict[str, Any]]:
-        """The item's pieces under the source's settings, each with its index units and its mapped metadata."""
-        settings = self.settings_of(s)
-        result = split(doc, split_settings(settings))
+        """The item's pieces under the source's settings, each with its index units and its mapped metadata. With an
+        approved AI step the split asks the model in a worker thread, on the run's client and ceiling, and only for
+        pieces whose text has no questions yet."""
+        settings = split_settings(self.settings_of(s))
+        if not ai_steps_on(settings):
+            result = split(doc, settings)
+        else:
+            with ai_run(self.ai_clients, who.tenant_id) as run:
+                if run.client is None:
+                    run.notes.add("Likely questions are on, but this stack has no models-service to write them.")
+                    result = split(doc, settings.model_copy(update={"approval": IngestApproval()}))
+                else:
+                    known = await self._known_questions(who.tenant_id, item_id)
+                    result = await asyncio.to_thread(
+                        split, doc, settings, model=run.client, known_questions=known, budget=run.budget
+                    )
+                    run.notes.update(n for n in result.notes if "stopped" in n)
         return pieces(who.tenant_id, item_id, version, title, result, self._metadata(s, doc))
+
+    async def _known_questions(self, tenant: str, item_id: str) -> dict[str, list[str]]:
+        """The questions the item's live pieces have, by piece_digest of their text: a piece split again with the same
+        text keeps them, and the model is not asked again."""
+        texts = {str(c["id"]): str(c["text"]) for c in await self.store.chunks(tenant, item_id)}
+        known: dict[str, list[str]] = {}
+        for u in await self.store.units(tenant, item_id):
+            if u["kind"] == "question" and str(u["chunk_id"]) in texts:
+                known.setdefault(piece_digest(texts[str(u["chunk_id"])]), []).append(str(u["text"]))
+        return known
 
     def _metadata(self, s: dict[str, Any], doc: ParsedDocument) -> dict[str, str]:
         mapped = resolve_metadata(
@@ -1137,7 +1179,7 @@ class KnowledgeService:
         warning: str | None = None
         title, pages = title_given or doc.title or name, doc.source.page_count
         settings = self.settings_of(s)
-        chunks = self._chunks(who, s, doc, item_id=existing["id"], version=existing["version"], title=title)
+        chunks = await self._chunks(who, s, doc, item_id=existing["id"], version=existing["version"], title=title)
         if chunks:
             warning = _unread(doc)
         else:
@@ -1317,7 +1359,7 @@ class KnowledgeService:
         warning: str | None = None
         settings = self.settings_of(s)
         title, pages = title_given or doc.title or name, doc.source.page_count
-        chunks = self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
+        chunks = await self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
         if chunks:
             warning = _unread(doc)
         else:
@@ -1527,6 +1569,84 @@ class KnowledgeService:
         if given and rebuild_for(before, self.settings_of(after)) != "none":
             rebuild = await self.start_rebuild(who, after)
         return {**self._source(after, by_source.get(source_id, [])), "rebuild": rebuild}
+
+    async def decide_ai_steps(self, who: Who, source_id: str, *, approve: bool) -> dict[str, Any]:
+        """The knowledge owner's approval of the source's AI steps as now chosen, or its revocation; the one audit log
+        records it as a settings change, and a change in what the split asks the model rebuilds the pieces."""
+        s = await self._changeable_source(who, source_id)
+        before = self.settings_of(s)
+        chosen = [step for step in before.ingest.strategies if step in AI_STEPS]
+        if approve and not chosen:
+            raise ValidationFailed("Choose an AI step (likely questions) before approving it.")
+        approval = IngestApproval(
+            status="approved" if approve else "pending" if chosen else "not_needed",
+            approved_steps=chosen if approve else [],
+            requested_by=before.ingest.approval.requested_by,
+            decided_by=who.email,
+            decided_at=datetime.now(UTC).isoformat(),
+        )
+        after = before.model_copy(update={"ingest": before.ingest.model_copy(update={"approval": approval})})
+        values = {"settings": wire(after)}
+        entry = audit_entry(who, "knowledge.source.settings", "knowledge_source", source_id, s["name"], s, values)
+        await self.store.update_source(who.tenant_id, source_id, values, audit=entry)
+        changed = {**s, **values}
+        rebuild = None
+        if rebuild_for(before, self.settings_of(changed)) != "none":
+            rebuild = await self.start_rebuild(who, changed)
+        _, by_source = await self._joined(who.tenant_id)
+        return {**self._source(changed, by_source.get(source_id, [])), "rebuild": rebuild}
+
+    async def estimate_ai_steps(self, who: Who, source_id: str) -> dict[str, Any]:
+        """The chosen AI steps' calls and tokens, from a preview split of up to ESTIMATE_SAMPLE indexed items with a
+        model that answers nothing (no call is made), scaled to every indexed item of the source."""
+        s = await self._source_row(who, source_id)
+        settings = split_settings(self.settings_of(s))
+        steps = [step for step in settings.strategies if step in AI_STEPS]
+        indexed = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i["status"] == "indexed"]
+        sample = indexed[:ESTIMATE_SAMPLE]
+        counter = CountingModel()
+        read = 0
+        for item in sample if steps else []:
+            doc = await self._stored_document(who, s, item)
+            if doc is not None:
+                await asyncio.to_thread(split, doc, settings, model=counter, preview=True)
+                read += 1
+        scale = len(indexed) / read if read else 0.0
+        return {
+            "steps": steps,
+            "model": settings.model,
+            "sampledItems": read,
+            "totalItems": len(indexed),
+            "calls": round(counter.calls * scale),
+            "inputTokens": round(counter.input_tokens * scale),
+            "outputTokens": {
+                "low": round(counter.calls * scale * OUTPUT_LOW),
+                "high": round(counter.calls * scale * OUTPUT_HIGH),
+            },
+            "basis": (
+                f"A split of {read} of {len(indexed)} indexed items, scaled to all; one call per piece, input counted "
+                f"from the prompts at about four characters a token, output {OUTPUT_LOW} to {OUTPUT_HIGH} tokens a "
+                "call. A sync asks again only for pieces whose text changed. The price per token is the alias's at "
+                "models-service and is not included."
+            ),
+        }
+
+    async def _stored_document(self, who: Who, s: dict[str, Any], item: dict[str, Any]) -> ParsedDocument | None:
+        """The item's document as its last split read it, from documents-service's kept reading; None when there is
+        no reading to read now."""
+        if self.readings is None or not item.get("file_id"):
+            return None
+        try:
+            ocr = self.settings_of(s).parsing.ocr
+            answer = await self.readings.reading(who.tenant_id, source_team(s), str(item["file_id"]), ocr=ocr)
+        except (DocumentsRefused, ServiceUnreachable):
+            return None
+        if answer.get("status") != "done":
+            return None
+        cleaning = self.settings_of(s).cleaning
+        fields = cast(dict[str, str] | None, item.get("fields"))
+        doc = parsed_of(answer, fields=fields, furniture=cleaning.furniture, main_content=cleaning.main_content)
+        return without(doc, set(repeats_of(s))) if cleaning.site_repeats else doc
 
     async def tombstones(self, who: Who, source_id: str) -> list[dict[str, Any]]:
         """The addresses removed after answering gone twice, with when and why; the next sync leaves them out."""
@@ -2111,6 +2231,29 @@ class UnknownFile(ApiError):
 
 def _location(section: str, page: int | None) -> str:
     return ", ".join(p for p in (f"p. {page}" if page else "", section) if p)
+
+
+# Items an AI estimate splits, and the output tokens a questions call writes (a few short questions, up to its cap).
+ESTIMATE_SAMPLE = 20
+OUTPUT_LOW, OUTPUT_HIGH = 60, 120
+
+
+class CountingModel:
+    """A model client for an estimate: counts each call and its prompt's tokens, and answers with nothing."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.input_tokens = 0
+
+    def complete(self, prompt: str, *, alias: str, max_tokens: int) -> str:
+        self.calls += 1
+        self.input_tokens += approx_tokens(prompt)
+        return '{"questions": []}'
+
+
+def ai_steps_on(settings: IngestSettings) -> bool:
+    """Whether the split will ask a model: an AI step chosen and approved."""
+    return any(step in AI_STEPS and ai_step_allowed(settings, step, preview=False) for step in settings.strategies)
 
 
 def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None) -> Search:

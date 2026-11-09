@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Likely questions help search find a passage",
+  "description": "A knowledge owner can approve a source's likely questions after seeing what they would cost; each sync writes them only for passages that changed and records what the model calls spent.",
+  "tag": "new"
+}

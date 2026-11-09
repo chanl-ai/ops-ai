@@ -21,6 +21,7 @@ from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Conflict, ValidationFailed
 from ops_service_kit.ids import new_id
 
+from .ai import spent_on
 from .files import FileNotScanned, Stored
 from .origin import Origin, source_team
 
@@ -441,6 +442,7 @@ async def sync_tool_source(
     if counts["upserted"] or counts["deleted"]:
         _, by_source = await service._joined(tenant)  # pyright: ignore[reportPrivateUsage]
         await service.store.refreshed(tenant, by_source.get(source_id, []))
+    spent_on(counts, log)
     run = {
         "tenant_id": tenant,
         "id": new_id("run"),

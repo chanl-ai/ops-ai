@@ -41,6 +41,7 @@ from ops_store.background import report as background_report
 from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
+from .ai import AiClients, models_clients
 from .embedding import Backlog, Embedder, ModelsEmbedder, keep_embedding
 from .files import FileIntake, file_intake
 from .readings import DocumentsReadings, Readings
@@ -48,6 +49,8 @@ from .schedule import keep_syncing
 from .schemas import (
     AddedDocuments,
     AddedFile,
+    AiApprovalIn,
+    AiEstimate,
     AttachIn,
     ChangeList,
     DocumentRow,
@@ -167,6 +170,13 @@ def _embedder(settings: Settings) -> Embedder | None:
     return ModelsEmbedder(calls, settings.embedding_alias, settings.embedding_width)
 
 
+def _ai_clients(settings: Settings) -> AiClients | None:
+    """The sources' AI steps through models-service with kb-service's own key; None without either."""
+    if not settings.models_url or settings.models_key is None:
+        return None
+    return models_clients(settings.models_url, settings.models_key.get_secret_value())
+
+
 def _events_service(settings: Settings) -> ServiceClient:
     """agents-service, which runs the workflows that listen to kb-service's events (a source that keeps failing)."""
     http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=10)
@@ -217,6 +227,7 @@ def create_kb_app(
     platform: ServiceClient | None = None,
     events_to: ServiceClient | None = None,
     embedder: Embedder | None = None,
+    ai_clients: AiClients | None = None,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
@@ -229,6 +240,7 @@ def create_kb_app(
     audit_log = platform or _platform_service(Settings())
     events = events_to or _events_service(Settings())
     embedder = embedder or _embedder(Settings())
+    ai_clients = ai_clients or _ai_clients(Settings())
     vectors = PgVectorStore(engine)
     backlog = Backlog()
 
@@ -279,6 +291,7 @@ def create_kb_app(
         ocr=Settings().kb_ocr,
         embedder=embedder,
         vectors=vectors,
+        ai_clients=ai_clients,
     )
     errors = error_responses()
 
@@ -446,6 +459,18 @@ def create_kb_app(
     @sources.post("/{source_id}/tombstones/lift", response_model=Envelope[list[Tombstone]])
     async def lift_tombstones(source_id: str, body: TombstonesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.lift_tombstones(who, source_id, body.ids))
+
+    @sources.post("/{source_id}/ai-approval", response_model=Envelope[Source])
+    async def decide_ai_steps(source_id: str, body: AiApprovalIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The knowledge owner approves the source's AI steps (likely questions) as now chosen, or takes the approval
+        back; the change goes to the audit log, and approving rebuilds the pieces in the background."""
+        return ok(await service.decide_ai_steps(who, source_id, approve=body.decision == "approve"))
+
+    @sources.get("/{source_id}/ai-estimate", response_model=Envelope[AiEstimate])
+    async def estimate_ai_steps(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What the source's chosen AI steps would cost, from a split of up to 20 of its items with no model called:
+        calls and tokens for the sample and the whole source, with the basis."""
+        return ok(await service.estimate_ai_steps(who, source_id))
 
     @sources.post("/{source_id}/files", response_model=Envelope[list[AddedFile]])
     async def add_files(source_id: str, body: FileIdsIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

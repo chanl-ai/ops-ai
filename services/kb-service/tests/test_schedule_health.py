@@ -122,7 +122,10 @@ async def test_a_failing_source_shows_it_and_alerts_once_on_its_second_failure(
     assert (health["state"], health["failedRuns"], health["daysFailing"]) == ("failing", 3, 0), health
     assert health["lastGoodSyncAt"] and health["failingSince"]
     agents = Agents()
-    await relay(engine, None, agents.client()).once()
+    hand_off = relay(engine, None, agents.client())
+    # The outbox is every test's, oldest first in batches: deliver until it is empty.
+    while await hand_off.once():
+        pass
     mine = [e for e in agents.events if e["payload"].get("sourceId") == src["id"]]
     assert [(e["name"], e["payload"]["failedRuns"]) for e in mine] == [("knowledge.source.failing", 2)], mine
     web.call = real  # type: ignore[method-assign]

@@ -298,6 +298,28 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "sources_decide_ai_steps": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sources/{source_id}/ai-approval",
+    "pathParams": [
+      "source_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "sources_estimate_ai_steps": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/sources/{source_id}/ai-estimate",
+    "pathParams": [
+      "source_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sources_get_run": {
     "body": null,
     "headers": [],

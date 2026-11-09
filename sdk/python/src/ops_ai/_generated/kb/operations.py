@@ -253,6 +253,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_decide_ai_steps": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/{source_id}/ai-approval",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sources_estimate_ai_steps": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/sources/{source_id}/ai-estimate",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
     "sources_get_run": {
         "body": None,
         "headers": [],
@@ -594,6 +612,14 @@ class Operations:
         "Remove Source"
         return self._t.call(SERVICE, OPERATIONS["sources_remove_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def sources_decide_ai_steps(self, source_id: str, body: AiApprovalIn) -> Source:
+        "Decide Ai Steps"
+        return self._t.call(SERVICE, OPERATIONS["sources_decide_ai_steps"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def sources_estimate_ai_steps(self, source_id: str) -> AiEstimate:
+        "Estimate Ai Steps"
+        return self._t.call(SERVICE, OPERATIONS["sources_estimate_ai_steps"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def sources_add_files(self, source_id: str, body: FileIdsIn) -> list[AddedFile]:
         "Add Files"
         return self._t.call(SERVICE, OPERATIONS["sources_add_files"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -859,6 +885,18 @@ class AsyncOperations:
     async def sources_remove_source(self, source_id: str) -> Any:
         "Remove Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_remove_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sources_decide_ai_steps(self, source_id: str, body: AiApprovalIn) -> Source:
+        "Decide Ai Steps"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_decide_ai_steps"], {"source_id": source_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def sources_estimate_ai_steps(self, source_id: str) -> AiEstimate:
+        "Estimate Ai Steps"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_estimate_ai_steps"], {"source_id": source_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def sources_add_files(self, source_id: str, body: FileIdsIn) -> list[AddedFile]:
         "Add Files"

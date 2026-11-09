@@ -13,6 +13,10 @@ class AddedFile(TypedDict, closed=True):
     name: str
 
 
+class AiApprovalIn(TypedDict):
+    decision: Literal["approve", "revoke"]
+
+
 class AttachIn(TypedDict):
     sourceIds: list[str]
 
@@ -458,6 +462,11 @@ class SyncRun(TypedDict, closed=True):
     trigger: str
 
 
+class TokenRange(TypedDict, closed=True):
+    high: int
+    low: int
+
+
 class Tombstone(TypedDict, closed=True):
     at: NotRequired[str | None]
     id: str
@@ -486,12 +495,28 @@ class AddedDocuments(TypedDict, closed=True):
     sourceId: str
 
 
+class AiEstimate(TypedDict, closed=True):
+    basis: str
+    calls: int
+    inputTokens: int
+    model: str
+    outputTokens: TokenRange
+    sampledItems: int
+    steps: list[str]
+    totalItems: int
+
+
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
 
 
 class EnvelopeAddedDocuments(TypedDict, closed=True):
     data: AddedDocuments
+    success: Literal[True]
+
+
+class EnvelopeAiEstimate(TypedDict, closed=True):
+    data: AiEstimate
     success: Literal[True]
 
 
