@@ -26,6 +26,8 @@ import { initials, plural } from '@/lib/format';
 
 import type { ConnectMode } from './connect-system-dialog';
 import { appPageHref } from '@/lib/app-links';
+import { APP_STATES, appStateFor, type AppStateShown, type AppTone } from '@/lib/app-state';
+import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 
 export type { ConnectMode };
 type View = 'all' | 'connected' | 'available';
@@ -33,13 +35,18 @@ type View = 'all' | 'connected' | 'available';
 // An account whose sign-in ended (expired, refused or revoked) is signed in again with Reconnect, not Connect.
 const ENDED = new Set(['expired', 'refused', 'revoked']);
 
-const STATE: Record<AppState, { label: string; className: string; icon?: typeof CircleCheck }> = {
-  connected: { label: 'Connected', className: 'border-success/40 bg-success/10 text-success-text', icon: CircleCheck },
-  test_failed: { label: 'Signed in, test failed', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: TriangleAlert },
-  needs_sign_in: { label: 'Needs sign-in', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: CircleAlert },
-  not_installed: { label: 'Available', className: 'text-muted-foreground' },
-  removed: { label: 'No longer installed', className: 'border-destructive/40 bg-destructive/10 text-destructive-text', icon: CircleAlert },
+// The words and next action of each state come from the one table (lib/app-state.ts); this adds only how it looks.
+// Typed by the SDK's AppState, so a state the API adds fails the build until the table has it.
+const TABLE: Record<AppState, AppStateShown> = APP_STATES;
+const TONE: Record<AppTone, { className: string; icon?: typeof CircleCheck }> = {
+  success: { className: 'border-success/40 bg-success/10 text-success-text', icon: CircleCheck },
+  warning: { className: 'border-warning/40 bg-warning/10 text-warning-text', icon: CircleAlert },
+  muted: { className: 'text-muted-foreground' },
+  destructive: { className: 'border-destructive/40 bg-destructive/10 text-destructive-text', icon: CircleAlert },
 };
+const STATE = Object.fromEntries(
+  (Object.keys(TABLE) as AppState[]).map((k) => [k, { label: TABLE[k].label, ...TONE[TABLE[k].tone], ...(k === 'test_failed' ? { icon: TriangleAlert } : {}) }]),
+) as Record<AppState, { label: string; className: string; icon?: typeof CircleCheck }>;
 
 /** The app's state as a badge, worded the same on its card and its page. */
 export function AppStateBadge({ card, testId }: { card: SystemCard; testId?: string }) {
@@ -54,6 +61,24 @@ export function AppStateBadge({ card, testId }: { card: SystemCard; testId?: str
   );
 }
 
+
+/**
+ * The card's one next action, from its state (lib/app-state.ts): Turn on, Add an auth config, Connect, Reconnect, or
+ * whom to ask. An account whose sign-in ended is signed in again with Reconnect.
+ */
+function NextAction({ card, onConnect }: { card: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
+  const { action } = appStateFor(card.appState, Boolean(card.mayManage));
+  if (action === 'ask_admin') return <AskAnAdmin testId={`connect-${card.id}-why`} />;
+  if (action === 'add_auth_config') return <AddAuthConfigButton appId={card.id} testId={`add-auth-config-${card.id}`} />;
+  if (action === 'turn_on') return <TurnOnButton card={card} variant="outline" onFirstTurnOn={() => onConnect(card, 'connect')} testId={`connect-${card.id}`} />;
+  if (!card.mayManage || (action !== 'sign_in' && action !== 'reconnect')) return null;
+  const again = action === 'reconnect' || (card.appState === 'needs_sign_in' && ENDED.has(String(card.state)));
+  return (
+    <Button size="sm" variant="outline" onClick={(e) => (e.stopPropagation(), onConnect(card, again ? 'reconnect' : 'connect'))} data-testid={`${again ? 'reconnect' : 'connect'}-${card.id}`}>
+      {again ? 'Reconnect' : 'Connect'}
+    </Button>
+  );
+}
 
 /** The app's page, where its accounts, tools, skills, sign-ins, runs and settings are; a built-in app's is the console
  * page that manages it (its knowledge bases, its mailboxes). */
@@ -94,20 +119,7 @@ function SystemAppCard({ system, onConnect }: { system: SystemCard; onConnect: (
           <AppStateBadge card={system} testId={`system-${system.id}-state`} />
         )
       }
-      action={
-        state === 'connected' || state === 'removed' ? null : !system.mayManage ? (
-          // Only a team admin connects an app; anyone else is told why rather than shown a dead button.
-          <AskAnAdmin testId={`connect-${system.id}-why`} />
-        ) : state === 'test_failed' || (state === 'needs_sign_in' && ENDED.has(String(system.state))) ? (
-          <Button size="sm" variant="outline" onClick={() => onConnect(system, 'reconnect')} data-testid={`reconnect-${system.id}`}>
-            Reconnect
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" onClick={() => onConnect(system, 'connect')} data-testid={`connect-${system.id}`}>
-            Connect
-          </Button>
-        )
-      }
+      action={<NextAction card={system} onConnect={onConnect} />}
     >
       {system.description && <CardDescription className="break-words line-clamp-none">{system.description}</CardDescription>}
       {system.category && (
@@ -169,16 +181,7 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
   {
     id: 'actions',
     meta: { className: 'w-28 text-right' },
-    cell: ({ row }) => {
-      const s = row.original;
-      if (!s.mayManage || s.appState === 'connected' || s.appState === 'removed') return null;
-      const mode: ConnectMode = s.appState === 'test_failed' ? 'reconnect' : 'connect';
-      return (
-        <Button size="sm" variant="outline" onClick={(e) => (e.stopPropagation(), onConnect(s, mode))}>
-          {mode === 'reconnect' ? 'Reconnect' : 'Connect'}
-        </Button>
-      );
-    },
+    cell: ({ row }) => <NextAction card={row.original} onConnect={onConnect} />,
     enableHiding: false,
   },
 ];

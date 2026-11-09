@@ -360,7 +360,7 @@ try {
           check(
             '42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page',
             connectedHas && ourState === 'connected' && /Connected · \d+ accounts?/.test(ourText) && oneAction &&
-              others.length >= 1 && others.every(([, st]) => st === 'not_installed' || st === 'needs_sign_in') && othersConnect >= 1 &&
+              others.length >= 1 && others.every(([, st]) => ['off', 'needs_auth_config', 'needs_sign_in'].includes(st)) && othersConnect >= 1 &&
               narrowedCards === 1 && href === `/integrations/apps/${encodeURIComponent(APP)}` && opened,
             { connectedHas, ourState, ourText, oneAction, others, othersConnect, narrowedCards, href, opened },
           );

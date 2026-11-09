@@ -25,10 +25,12 @@ import { ConnectWindow, connectsInWindow } from '@/components/connections/connec
 import { PluginUpdatePanel } from '@/components/connections/plugin-update-panel';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { AppStateBadge } from '@/components/connections/systems-grid';
+import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
+import { appStateFor } from '@/lib/app-state';
 import { plural } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
 
@@ -79,10 +81,13 @@ export function AppPageView({ appId }: { appId: string }) {
   // Team setup is the team's view: Connect here is managing the team's apps (the roles grid's connections.manage).
   // Someone who does not hold it signs in as themselves from Connectors (Mine), where the app lets people bring one.
   const ownOnly = !card.mayManage;
-  // An app the system no longer has installed is shown for the record: nothing connects, signs in or turns it on.
-  const removed = card.appState === 'removed';
+  // An app the system does not have installed (removed, or never installed) is shown for the record: nothing connects,
+  // signs in or turns it on.
+  const removed = card.appState === 'removed' || card.appState === 'not_installed';
   const mayConnect = !removed && card.mayManage;
   const ownSignIn = !removed && Boolean(conn) && card.signIn !== 'team';
+  // The header's one next action, from the card's state (lib/app-state.ts), as the card and Settings read it.
+  const next = appStateFor(card.appState, Boolean(card.mayManage)).action;
 
   const signIn = (account: 'self' | 'team', accountId = conn?.id) => {
     if (!accountId) return;
@@ -118,11 +123,16 @@ export function AppPageView({ appId }: { appId: string }) {
       backHref="/integrations"
       badge={<AppStateBadge card={card} testId="app-status" />}
       actions={
-        builtIn || removed ? undefined : mayConnect ? (
+        builtIn || removed ? undefined : next === 'turn_on' ? (
+          <TurnOnButton card={card} onFirstTurnOn={() => setConnecting(true)} />
+        ) : next === 'add_auth_config' ? (
+          <AddAuthConfigButton appId={card.id} variant="default" />
+        ) : next === 'ask_admin' ? (
+          <AskAnAdmin testId="app-admin-connects" />
+        ) : mayConnect ? (
           <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
             <Plug />
-            {/* A plugin the team has not turned on opens the Turn on window, which saves and never signs in. */}
-            {card.kind === 'plugin' && !card.connectionId ? 'Turn on' : 'Connect'}
+            Connect
           </Button>
         ) : ownSignIn ? (
           <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
@@ -140,8 +150,8 @@ export function AppPageView({ appId }: { appId: string }) {
           <AlertDescription>{card.appStateReason}</AlertDescription>
         </Alert>
       )}
-      {/* Taking an update is managing the team's apps: nobody else is shown it, or asks the route for it. */}
-      {card.kind === 'plugin' && !removed && card.mayManage && <PluginUpdatePanel appId={card.id} name={card.name} />}
+      {/* Taking an update is managing the team's apps; the card says when one waits, so nothing asks before then. */}
+      {card.plugin?.updateAvailable && card.mayManage && <PluginUpdatePanel appId={card.id} name={card.name} />}
       <Tabs value={tab && tabs.some(([v]) => v === tab) ? tab : tabs[0][0]} onValueChange={(v) => (setTab(v), v !== 'accounts' && setConfig(null))} className="min-w-0">
         {/* Six tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
@@ -168,7 +178,7 @@ export function AppPageView({ appId }: { appId: string }) {
           </div>
         </TabsContent>
         <TabsContent value="settings">
-          <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onDeleted={() => router.push('/integrations')} />
+          <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onTurnOn={() => setConnecting(true)} onDeleted={() => router.push('/integrations')} />
         </TabsContent>
       </Tabs>
       {setUp && conn && (
