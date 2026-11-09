@@ -14,7 +14,7 @@ test('every app state the API answers has a label and an action for an admin and
   for (const s of answered) {
     const shown = APP_STATES[s as AppStateId];
     assert.ok(shown, `no entry for ${s}`);
-    assert.ok(shown.label && shown.admin && shown.member, `${s} lacks a label or an action`);
+    assert.ok(shown.label && shown.admin && shown.member && shown.group, `${s} lacks a label, an action or a group`);
   }
   assert.deepEqual(Object.keys(APP_STATES).sort(), [...answered].sort());
 });

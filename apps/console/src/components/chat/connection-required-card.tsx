@@ -12,7 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
-import { useMyConnections, useRefreshMine } from '@/hooks/connections-queries';
+import { useMyConnections, useMyConnectors, useRefreshMine } from '@/hooks/connections-queries';
+import { appStateFor } from '@/lib/app-state';
+import { AppStateBadge } from '@/components/connections/app-state-badge';
 import { usePinDefault } from '@/hooks/systems-queries';
 import { useCan } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
@@ -71,6 +73,10 @@ const why = (need: Need, keyed: boolean) => (WHY[need.reason as ConnectionRequir
  */
 export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall; need: ConnectionRequired & { message: string }; onReply?: (text: string) => void }) {
   const mine = useMyConnections(true);
+  // The app's state for the person is its Mine row's appState, read through the one state table (lib/app-state.ts):
+  // the card's badge says what the app page and Mine say.
+  const connectors = useMyConnectors();
+  const row = connectors.data?.find((r) => r.accounts.some((a) => a.connectionId === need.connectionId)) ?? connectors.data?.find((r) => r.name === appOf(need));
   const [dismissed, setDismissed] = React.useState(false);
   const [connectedNow, setConnectedNow] = React.useState<string | null>(null);
   const window_ = React.useRef<Window | null>(null);
@@ -80,7 +86,7 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
   const keyed = Boolean(need.personFields?.length);
   const method = linked?.method ?? offered?.method ?? 'key';
   // A scope request or a refusal is answered only by connecting again, so an existing sign-in does not settle it.
-  const connected = connectedNow !== null || (need.reason !== 'insufficient_scope' && need.reason !== 'refused' && Boolean(linked));
+  const connected = connectedNow !== null || (need.reason !== 'insufficient_scope' && need.reason !== 'refused' && (row ? appStateFor(row.appState, row.mayTurnOn).group === 'on' : Boolean(linked)));
 
   React.useEffect(() => {
     const onMessage = (e: MessageEvent<ConnectedMessage>) => {
@@ -89,11 +95,12 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
       window_.current = null;
       setConnectedNow(e.data.connection);
       void mine.refetch();
+      void connectors.refetch();
       onReply?.(`I connected ${e.data.connection}. Please go ahead.`);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [mine, need.connectionId, onReply]);
+  }, [mine, connectors, need.connectionId, onReply]);
 
   const connect = () => {
     if (!need.connectUrl) return;
@@ -101,23 +108,18 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
     window_.current = window.open(need.connectUrl, 'ops-sign-in', 'popup,width=520,height=720');
   };
 
-  const status = connected ? (
-    <Badge variant="secondary" data-testid="connection-status">
-      {linked?.account ? `Connected as ${linked.account}` : keyed ? `Connected with your ${method}` : 'Connected'}
-    </Badge>
-  ) : dismissed ? (
-    <Badge variant="outline" data-testid="connection-status">
-      Not connected
-    </Badge>
-  ) : need.reason === 'refused' && !keyed ? (
-    <Badge variant="destructive" data-testid="connection-status">
-      Sign-in expired
-    </Badge>
-  ) : (
-    <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning-text" data-testid="connection-status">
-      Not connected
-    </Badge>
-  );
+  const status =
+    row && connectedNow === null && !dismissed ? (
+      <AppStateBadge card={row} testId="connection-status" />
+    ) : connected ? (
+      <Badge variant="secondary" data-testid="connection-status">
+        {linked?.account ? `Connected as ${linked.account}` : keyed ? `Connected with your ${method}` : 'Connected'}
+      </Badge>
+    ) : (
+      <Badge variant="outline" data-testid="connection-status">
+        Not connected
+      </Badge>
+    );
 
   return (
     <div className="flex flex-col gap-2" data-testid="connection-required" data-connection={need.connectionId} data-state={connected ? 'connected' : dismissed ? 'dismissed' : 'open'}>
@@ -163,6 +165,7 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
               onDone={() => {
                 setConnectedNow(need.connection);
                 void mine.refetch();
+                void connectors.refetch();
                 onReply(`I connected ${need.connection}. Please go ahead.`);
               }}
             />

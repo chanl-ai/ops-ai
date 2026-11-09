@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CircleCheck, CircleAlert, Plug, Plus, TriangleAlert } from 'lucide-react';
+import { CircleCheck, Plug, Plus } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -26,7 +26,8 @@ import { initials, plural } from '@/lib/format';
 
 import type { ConnectMode } from './connect-system-dialog';
 import { appPageHref } from '@/lib/app-links';
-import { APP_STATES, appStateFor, type AppStateShown, type AppTone } from '@/lib/app-state';
+import { appStateFor } from '@/lib/app-state';
+import { APP_STATE_LOOK, AppStateBadge } from '@/components/connections/app-state-badge';
 import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 
 export type { ConnectMode };
@@ -35,31 +36,8 @@ type View = 'all' | 'connected' | 'available';
 // An account whose sign-in ended (expired, refused or revoked) is signed in again with Reconnect, not Connect.
 const ENDED = new Set(['expired', 'refused', 'revoked']);
 
-// The words and next action of each state come from the one table (lib/app-state.ts); this adds only how it looks.
-// Typed by the SDK's AppState, so a state the API adds fails the build until the table has it.
-const TABLE: Record<AppState, AppStateShown> = APP_STATES;
-const TONE: Record<AppTone, { className: string; icon?: typeof CircleCheck }> = {
-  success: { className: 'border-success/40 bg-success/10 text-success-text', icon: CircleCheck },
-  warning: { className: 'border-warning/40 bg-warning/10 text-warning-text', icon: CircleAlert },
-  muted: { className: 'text-muted-foreground' },
-  destructive: { className: 'border-destructive/40 bg-destructive/10 text-destructive-text', icon: CircleAlert },
-};
-const STATE = Object.fromEntries(
-  (Object.keys(TABLE) as AppState[]).map((k) => [k, { label: TABLE[k].label, ...TONE[TABLE[k].tone], ...(k === 'test_failed' ? { icon: TriangleAlert } : {}) }]),
-) as Record<AppState, { label: string; className: string; icon?: typeof CircleCheck }>;
 
-/** The app's state as a badge, worded the same on its card and its page. */
-export function AppStateBadge({ card, testId }: { card: SystemCard; testId?: string }) {
-  if (!card.appState) return null;
-  const shown = STATE[card.appState];
-  const Icon = shown.icon;
-  return (
-    <Badge variant="outline" className={shown.className} data-testid={testId}>
-      {Icon && <Icon />}
-      {shown.label}
-    </Badge>
-  );
-}
+const STATE = APP_STATE_LOOK;
 
 
 /**

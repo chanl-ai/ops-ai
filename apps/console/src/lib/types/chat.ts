@@ -2,6 +2,7 @@ import type { Citation } from './knowledge';
 import type { RetrievalTrace } from './knowledge-retrieval';
 import type { ListParams, ListResult } from './query';
 import type { MessagePart } from './widgets';
+import type { AppStateId } from '@/lib/app-state';
 
 export type { Citation };
 
@@ -333,13 +334,15 @@ export interface ThreadLimits {
 
 /**
  * One connector a chat may use, for the composer's picker (GET /v1/chat/threads/{id}/connectors): an app the agent
- * holds tools of, with its state for the person, or an app the team has off, which grants no tool.
+ * holds tools of, with its app state for the person, or an app the team has off, which grants no tool.
  */
 export interface ChatConnector {
   appId: string;
   name: string;
   logo?: string | null;
-  state: 'on' | 'needs_sign_in' | 'off_for_team';
+  /** The app card's state for the person, as tools-service answers it; words and grouping come from lib/app-state.ts. */
+  appState: AppStateId;
+  appStateReason?: string | null;
   /** Whether this chat uses it; every connected connector is on in a new chat. */
   on: boolean;
   /** The person signs in with their own account, so Connect is theirs to press. */

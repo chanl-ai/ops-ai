@@ -135,6 +135,40 @@ await withUiStack(
           { before, offBadge, off, headerTurnOn, onBadge, back, errors: errs() });
       }, priyaPage);
 
+      // One state, three places: after a change on the app page, Mine and the chat picker read the same words.
+      await step('8 Turned off on its page, Salesforce reads the same state on Mine and in the chat picker; on again, Mine matches the page', async () => {
+        const mineLabel = async () => {
+          await priyaPage.goto(`${consoleUrl}/integrations/my-accounts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          const b = priyaPage.getByTestId(`connector-state-${SF}`);
+          await b.waitFor({ timeout: 60_000 });
+          return (await b.innerText()).trim();
+        };
+        const pickerLabel = async () => {
+          await priyaPage.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await priyaPage.getByTestId('connectors-picker').click({ timeout: 60_000 });
+          const row = priyaPage.locator(`[data-testid$="-${SF}"][data-state]`).first();
+          await row.waitFor({ timeout: 30_000 });
+          const label = await row.getAttribute('data-state');
+          await priyaPage.keyboard.press('Escape');
+          return label;
+        };
+        await open(priyaPage, consoleUrl, SF);
+        await settingsState(priyaPage);
+        await priyaPage.getByTestId('app-off').click();
+        await priyaPage.getByTestId('app-off-confirm').click();
+        await priyaPage.getByTestId('app-settings-turn-on').waitFor({ timeout: 30_000 });
+        const off = { page: await badge(priyaPage), mine: await mineLabel(), chat: await pickerLabel() };
+        await open(priyaPage, consoleUrl, SF);
+        await settingsState(priyaPage);
+        await priyaPage.getByTestId('app-settings-turn-on').click();
+        await priyaPage.getByTestId('app-off').waitFor({ timeout: 30_000 });
+        const on = { page: await badge(priyaPage), mine: await mineLabel() };
+        await priyaPage.screenshot({ path: join(SHOTS, 'mine-after-turn-on.png') });
+        check('8 Turned off on its page, Salesforce reads the same state on Mine and in the chat picker; on again, Mine matches the page',
+          off.page === 'Available' && off.mine === off.page && off.chat === off.page && on.page !== 'Available' && on.mine === on.page,
+          { off, on });
+      }, priyaPage);
+
       await step('4 An app the install does not hold says so, with no failed call', async () => {
         const errs = await open(priyaPage, consoleUrl, GONE);
         const alert = (await priyaPage.getByTestId('app-removed').innerText()).replace(/\s+/g, ' ');
@@ -185,6 +219,8 @@ await withUiStack(
   {
     platform: true,
     tools: {
+      // The chat picker reads the apps through agents-service, which reaches tools-service as the gateway.
+      gateway: true,
       env: {
         OPS_PLUGINS: 'true',
         OPS_PLUGIN_PATHS: JSON.stringify([join(PLUGINS, 'github/src/ops_plugin_github'), join(PLUGINS, 'salesforce/src/ops_plugin_salesforce')]),

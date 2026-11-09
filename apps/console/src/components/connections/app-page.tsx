@@ -24,7 +24,7 @@ import { ConnectSystemDialog } from '@/components/connections/connect-system-dia
 import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
 import { PluginUpdatePanel } from '@/components/connections/plugin-update-panel';
 import { useSignInWindow } from '@/components/connections/sign-in';
-import { AppStateBadge } from '@/components/connections/systems-grid';
+import { AppStateBadge } from '@/components/connections/app-state-badge';
 import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { useNavAllows } from '@/hooks/me-queries';

@@ -8,39 +8,31 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { DetailSheet } from '@/components/shared/detail-sheet';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
+import { AppStateBadge } from '@/components/connections/app-state-badge';
 import type { MyConnector } from '@/hooks/connections-queries';
 import { useTestAccount } from '@/hooks/systems-queries';
 import { plural, shortDate } from '@/lib/format';
 import { appPageHref } from '@/lib/app-links';
-
-/** A connector's state in the words Connectors (Mine) uses. */
-export const CONNECTOR_STATE = {
-  connected: 'Connected',
-  expired: 'Sign in again',
-  not_connected: 'Not connected',
-  app_off: 'Off for this team',
-} as const satisfies Record<MyConnector['state'], string>;
+import { appStateFor } from '@/lib/app-state';
 
 /** What a member reads on an app the team has not turned on. */
 export const NOT_SET_UP = 'Not set up for your team yet';
 
-/** What is missing where a connected connector names its account, so no row shows a bare dash; the state's own words
- * (Off for this team, Not connected) sit beside it. */
-export const MISSING_ACCOUNT = {
-  app_off: 'No account connected',
-  not_connected: 'No account connected',
-} as const satisfies Partial<Record<MyConnector['state'], string>>;
+/** Where a row names its account but the person has none connected, so no row shows a bare dash. */
+export const NO_ACCOUNT = 'No account connected';
 
-/** Whether chat uses it, as the row's In chat column says it. */
+/** Where the row's app stands for the person, from its appState and the one state table (lib/app-state.ts). */
+export const groupOf = (c: MyConnector) => appStateFor(c.appState, c.mayTurnOn).group;
+
+/** The person's own sign-in on the row's account ended, so it reads Sign in again rather than Connect. */
+export const signInEnded = (c: MyConnector) => c.accounts.find((a) => a.connectionId === c.primaryAccountId)?.state === 'expired';
+
+/** Whether chat uses it, as the row's In chat line says it. */
 export function inChatWords(c: MyConnector): string {
-  if (c.state === 'connected') return 'On in chat';
-  if (c.state === 'expired') return 'Paused until you sign in';
-  if (c.state === 'not_connected') return 'Asks when a tool needs it';
+  const group = groupOf(c);
+  if (group === 'on') return 'On in chat';
+  if (group === 'sign_in') return signInEnded(c) ? 'Paused until you sign in' : 'Asks when a tool needs it';
   return c.mayTurnOn ? 'Turn it on for the team' : 'An admin turns it on';
-}
-
-export function stateVariant(state: MyConnector['state']): 'secondary' | 'destructive' | 'outline' {
-  return state === 'connected' ? 'secondary' : state === 'expired' ? 'destructive' : 'outline';
 }
 
 function Section({ title, children, testId }: { title: string; children: React.ReactNode; testId?: string }) {
@@ -73,7 +65,7 @@ export function ConnectorSheet({
 }) {
   const test = useTestAccount();
   if (!c) return null;
-  const connected = c.state === 'connected';
+  const connected = groupOf(c) === 'on';
   const since = c.since ? ` · since ${shortDate(c.since)}` : '';
   return (
     <DetailSheet
@@ -84,7 +76,7 @@ export function ConnectorSheet({
       title={
         <span className="flex flex-wrap items-center gap-2">
           {c.name}
-          <Badge variant={stateVariant(c.state)}>{CONNECTOR_STATE[c.state]}</Badge>
+          <AppStateBadge card={c} testId="connector-sheet-state" />
         </span>
       }
       description={connected ? `Acts as you · ${c.account ?? 'your account'}${since}` : c.canDo}
@@ -166,8 +158,8 @@ export function ConnectorSheet({
           </>
         )}
         <Separator />
-        <Section title={c.state !== 'app_off' ? 'Account' : c.mayTurnOn ? 'Turn it on' : NOT_SET_UP} testId="connector-accounts">
-          {c.state === 'app_off' ? (
+        <Section title={groupOf(c) !== 'off_for_team' ? 'Account' : c.mayTurnOn ? 'Turn it on' : NOT_SET_UP} testId="connector-accounts">
+          {groupOf(c) === 'off_for_team' ? (
             // Only someone who may turn it on is sent to the app's page; everyone else asks, and never lands there.
             c.mayTurnOn ? (
               <Button size="sm" asChild>
@@ -197,7 +189,7 @@ export function ConnectorSheet({
                 </>
               ) : (
                 <Button size="sm" className="self-start" onClick={() => onConnect(c, false)} data-testid="connector-sheet-connect">
-                  {c.state === 'expired' ? 'Sign in again' : 'Connect'}
+                  {signInEnded(c) ? 'Sign in again' : 'Connect'}
                 </Button>
               )}
             </>

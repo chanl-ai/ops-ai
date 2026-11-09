@@ -11,11 +11,15 @@ export type AppAction = 'none' | 'turn_on' | 'add_auth_config' | 'sign_in' | 're
 
 export type AppTone = 'success' | 'warning' | 'muted' | 'destructive';
 
+/** Where a list that groups apps puts one: it works; it needs the person; an admin acts first; it is not there. */
+export type AppGroup = 'on' | 'sign_in' | 'off_for_team' | 'gone';
+
 export interface AppStateShown {
   label: string;
   tone: AppTone;
   /** On for the team: Settings offers Turn off. */
   on: boolean;
+  group: AppGroup;
   /** Someone who manages the team's apps. */
   admin: AppAction;
   /** Anyone else on the team. */
@@ -23,19 +27,19 @@ export interface AppStateShown {
 }
 
 export const APP_STATES: Record<AppStateId, AppStateShown> = {
-  connected: { label: 'Connected', tone: 'success', on: true, admin: 'none', member: 'none' },
-  test_failed: { label: 'Signed in, test failed', tone: 'warning', on: true, admin: 'reconnect', member: 'none' },
-  needs_sign_in: { label: 'Needs sign-in', tone: 'warning', on: true, admin: 'sign_in', member: 'sign_in' },
-  needs_auth_config: { label: 'Needs an auth config', tone: 'warning', on: false, admin: 'add_auth_config', member: 'ask_admin' },
-  off: { label: 'Available', tone: 'muted', on: false, admin: 'turn_on', member: 'ask_admin' },
-  not_installed: { label: 'Not installed', tone: 'muted', on: false, admin: 'none', member: 'none' },
-  removed: { label: 'No longer installed', tone: 'destructive', on: false, admin: 'delete', member: 'none' },
+  connected: { label: 'Connected', tone: 'success', on: true, group: 'on', admin: 'none', member: 'none' },
+  test_failed: { label: 'Signed in, test failed', tone: 'warning', on: true, group: 'on', admin: 'reconnect', member: 'none' },
+  needs_sign_in: { label: 'Needs sign-in', tone: 'warning', on: true, group: 'sign_in', admin: 'sign_in', member: 'sign_in' },
+  needs_auth_config: { label: 'Needs an auth config', tone: 'warning', on: false, group: 'off_for_team', admin: 'add_auth_config', member: 'ask_admin' },
+  off: { label: 'Available', tone: 'muted', on: false, group: 'off_for_team', admin: 'turn_on', member: 'ask_admin' },
+  not_installed: { label: 'Not installed', tone: 'muted', on: false, group: 'gone', admin: 'none', member: 'none' },
+  removed: { label: 'No longer installed', tone: 'destructive', on: false, group: 'gone', admin: 'delete', member: 'none' },
 };
 
 /** A state's words and next action for the caller: `manages` is the card's mayManage. */
 export function appStateFor(state: AppStateId, manages: boolean): AppStateShown & { action: AppAction } {
   // A card read from a source that sends no state (a sample) offers nothing rather than throwing.
-  const shown = APP_STATES[state] ?? { label: '', tone: 'muted', on: false, admin: 'none', member: 'none' };
+  const shown = APP_STATES[state] ?? { label: '', tone: 'muted', on: false, group: 'gone', admin: 'none', member: 'none' };
   return { ...shown, action: manages ? shown.admin : shown.member };
 }
 
