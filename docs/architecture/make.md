@@ -47,6 +47,7 @@ into it before reviewing it.
 | `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), and the install smoke plus the examples on `make up` |
 | `make/usecase.mk` | `usecase-test`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-runner-test` | Calls `scripts/usecase.mjs` (`packages/usecase-runner`); use-case ports and database `OPS_USECASE_*`. Registry and rules: `docs/usecases/README.md` |
 | `make/git.mk` | `commit`, `commit-hunks`, `review` | Committing named files through the hooks, and the review worktree |
+| `make/plugins.mk` | `plugins-sync`, `plugins-bump` | Putting the plugins `deploy/plugins.json` pins into `OPS_PLUGINS_DIR`, and moving the pins |
 | `make/experiments.mk` | `experiment` | Runs `services/agents-service/experiments/e<n>_*.py` on the scripted model |
 | `make/service-common.mk` | `help`, `stop`, `logs`, `health` | Included by running services' Makefiles: the verbs that act on the `make up` process |
 | `make/service-stub.mk` | the whole verb set | Included by planned services' Makefiles: every verb answers "not started" unless the Makefile defines it (`OWN_VERBS`) |

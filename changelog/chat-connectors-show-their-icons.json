@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Chat connectors show icons and stay open",
+  "description": "The Connectors button shows the icons of the apps a chat uses, the list shows each app's icon, and checking or unchecking one keeps the list open instead of closing it and opening another page.",
+  "tag": "fix"
+}

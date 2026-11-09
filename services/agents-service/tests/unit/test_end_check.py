@@ -197,6 +197,17 @@ async def test_knowledge_used_without_a_citation_is_corrected() -> None:
     assert writer.calls == 2 and [c.n for c in result.citations] == [1]
 
 
+async def test_a_correction_that_drops_the_answer_keeps_the_answer() -> None:
+    # A reply about what the assistant can do had no citation; the correction rewrote it as "nothing found [1]".
+    first = (
+        "I can't create a knowledge base from chat. Open Knowledge, choose New knowledge base, and add this file "
+        "from Files so later chats can search it."
+    )
+    writer = Writer(first, "I couldn't find that in the passages [1].")
+    _, result = await run(writer, tools=[], passages=[POLICY])
+    assert writer.calls == 2 and result.text == first
+
+
 async def test_a_tool_answer_in_a_knowledge_thread_is_not_forced_to_cite() -> None:
     writer = Writer("Two cases match.", "unused", read=True)
     _, result = await run(writer, tools=[CASES], passages=[POLICY])

@@ -4,7 +4,7 @@ import * as React from 'react';
 import { ArrowUpRight, Check, Loader2, Pencil } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AppLogo } from '@/components/shared/app-logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useCardAppPage } from '@/hooks/systems-queries';
-import { initials, titleWithoutCount } from '@/lib/format';
+import { titleWithoutCount } from '@/lib/format';
 import type { Cell, KindAction, KindNode, KindStatus, Tone } from '@/lib/types/widgets';
 import { cn } from '@/lib/utils';
 
@@ -61,14 +61,6 @@ export function useCardApp(app?: string): { name: string; logo?: string | null; 
   return { name: card?.name ?? nameOf(app), logo: card?.logo, origin: originOf(page.data as Parameters<typeof originOf>[0]) };
 }
 
-function AppMark({ name, logo }: { name: string; logo?: string | null }) {
-  return (
-    <Avatar className="mt-0.5 size-6 rounded-md">
-      {logo && <AvatarImage src={logo} alt="" />}
-      <AvatarFallback className="rounded-md text-[10px] font-semibold">{initials(name)}</AvatarFallback>
-    </Avatar>
-  );
-}
 
 function OpenLink({ origin, open, testId }: { origin?: string; open?: { path: string; label?: string }; testId: string }) {
   // Without the account's address there is nowhere safe to open, so the link is left out rather than guessed.
@@ -101,7 +93,7 @@ function AppCard({
   return (
     <section className={cn('overflow-hidden rounded-lg border bg-card text-card-foreground', ENTER)} data-kind={kind}>
       <header className="flex items-start gap-2 border-b px-3 py-2">
-        {app ? <AppMark name={app.name} logo={app.logo} /> : <AppMark name={title} />}
+        {app ? <AppLogo name={app.name} logo={app.logo} className="mt-0.5" /> : <AppLogo name={title} className="mt-0.5" />}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium break-words">{title}</p>
           {subtitle && <p className="text-xs break-words text-muted-foreground">{subtitle}</p>}

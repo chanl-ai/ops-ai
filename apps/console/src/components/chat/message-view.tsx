@@ -187,17 +187,19 @@ export function AssistantMessage({
 
       {phaseLabel && !message.content ? (
         <ChatThinking label={phaseLabel} />
-      ) : message.noAnswer && settled ? (
-        <div className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
-          <SearchX className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <div className="space-y-1">
-            <p>{message.content}</p>
-            {noAnswerHint}
-          </div>
-        </div>
       ) : message.content ? (
         <ChatResponse text={message.content} renderCitation={renderCitation} streaming={streaming} citations={cites.length} />
       ) : null}
+
+      {/* A reply with no matching passage is often a full answer (a question back, a plan), so it keeps its
+          formatting; the missing match is a note under it. */}
+      {message.noAnswer && settled && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <SearchX className="size-3.5 shrink-0" />
+          <span>No knowledge passage matched this question.</span>
+          {noAnswerHint}
+        </div>
+      )}
 
       {settled && cites.length > 0 && <SourcesList citations={cites} onOpenDocument={onOpenDocument} />}
       {settled && message.trace && onOpenTrace && (
