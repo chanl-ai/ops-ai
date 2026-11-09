@@ -119,3 +119,27 @@ async def test_a_service_asking_for_a_person_reads_that_persons_own_sign_in(worl
     maya = await card(world, tenant, acting_for(tenant, "usr_maya"))
     assert (james["appState"], james["signIn"]) == ("connected", "person"), james
     assert maya["appState"] == "needs_sign_in", maya
+
+
+async def test_with_the_team_account_as_backup_a_persons_card_is_their_own_and_a_services_the_teams(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    # Each person's own account with the team's for runs nobody started: a person's calls never use the team's, so
+    # their card (and Mine and the chat picker, which read it) needs their own sign-in; a service asking for nobody
+    # reads the team account's.
+    conn = await connected(world, tenant)
+    row = await world.store.get(tenant, conn)
+    assert row is not None
+    await world.store.change(
+        tenant, conn, int(row["revision"]), {"sign_in": "person_or_team"}, actor="t", at=datetime.now(UTC)
+    )
+    await signed(world, tenant, conn, "https://acme.my.desk.test")
+    assert state(await card(world, tenant)) == ("needs_sign_in", "Connect your own account.")
+    await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
+    assert (await card(world, tenant, acting_for(tenant, "usr_james")))["appState"] == "connected"
+    service = mint_service_token(
+        dev_service_signer(), service="agents", audience="tools", tenant_id=tenant,
+        scopes=["tools:view", "connections:view"], team_id="team_platform",
+    )  # fmt: skip
+    assert (await card(world, tenant, {"Authorization": f"Bearer {service}"}))["appState"] == "connected"

@@ -661,6 +661,16 @@ class MyConnector(TypedDict, closed=True):
     accountCount: NotRequired[int]
     accounts: list[ConnectorAccount]
     appId: str
+    appState: Literal[
+        "connected",
+        "test_failed",
+        "needs_sign_in",
+        "needs_auth_config",
+        "off",
+        "not_installed",
+        "removed",
+    ]
+    appStateReason: NotRequired[str | None]
     authConfig: NotRequired[str | None]
     authKind: NotRequired[str | None]
     canDo: str
@@ -673,7 +683,6 @@ class MyConnector(TypedDict, closed=True):
     personFields: NotRequired[list[str]]
     primaryAccountId: NotRequired[str | None]
     since: NotRequired[str | None]
-    state: Literal["connected", "expired", "not_connected", "app_off"]
     tools: list[ConnectorTool]
     used: ConnectorUse
 

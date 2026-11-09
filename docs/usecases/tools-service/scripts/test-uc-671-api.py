@@ -54,7 +54,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
         "1 Priya's Person desk is one row with 2 accounts, primary the team's default, named priya.own at sign-in",
         [s[0] for s in signed] == [200, 200]
         and (row.get("accountCount"), row.get("primaryAccountId"), row.get("account")) == (2, first, "priya.own")
-        and row.get("state") == "connected"
+        and row.get("appState") == "connected"
         and row.get("inChat") is True,
         {"signed": signed, "row": row},
     )
@@ -100,8 +100,8 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     # 4. An app the team has off is listed off, and the person who may turn it on is told so.
     sam = mine(w, "security").get(APP) or {}
     check(
-        "4 in Security, where Person desk is off, Sam's row is app_off with no accounts and may be turned on by him",
-        sam.get("state") == "app_off" and sam.get("accounts") == [] and sam.get("mayTurnOn") is True,
+        "4 in Security, where Person desk is off, Sam's row says Security needs an auth config, with no accounts, and may be turned on by him",
+        sam.get("appState") == "needs_auth_config" and sam.get("accounts") == [] and sam.get("mayTurnOn") is True,
         sam,
     )
 

@@ -25,6 +25,7 @@ from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
 
+from .app_states import AppState
 from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
 from .connections.records import (
@@ -138,11 +139,6 @@ class SystemPlugin(Out):
     update_available: bool = False
 
 
-# An app card's one state for the caller (the Apps design, "An app's state"): not_installed (the install does not hold
-# the plugin and the team never had it on), removed (the team had it on; the install no longer holds it), off
-# (installed, not on for the team), needs_auth_config (nothing to sign in with: no auth config, or the account's has
-# gone or holds no client secret), needs_sign_in, connected, and test_failed (signed in; its test then failed).
-AppState = Literal["connected", "test_failed", "needs_sign_in", "needs_auth_config", "off", "not_installed", "removed"]
 # Plugins are installed by the operator on the system, never from a screen, so no person here can put it back.
 REMOVED = "This app isn't installed. Ask the person who runs Ops AI at your company to install it."
 
@@ -795,6 +791,8 @@ class Apps:
             for c in await store.team_credentials(who.tenant_id, who.team.id)
         ]
         mine = person or own_key(who)
+        # A person's card is their own state; a service asking for nobody reads the team's.
+        is_person = person is not None or who.principal is None or who.principal.kind == "person"
         own: dict[str, dict[str, Any]] = {}
         for t in await store.own_sign_ins(who.tenant_id, mine, ids):
             own.setdefault(str(t["connection_id"]), t)
@@ -803,7 +801,9 @@ class Apps:
             token = team_tokens.get(str(conn["id"])) if conn else None
             mine_row = own.get(str(conn["id"])) if conn else None
             configured = self._configured(c, conn, creds)
-            c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row, configured=configured)
+            c["appState"], c["appStateReason"] = app_state(
+                c, conn, token, mine_row, configured=configured, person=is_person
+            )
             c["credential"] = card_credential(conn)
             c["signIn"] = (conn.get("sign_in") or "team") if conn else None
             # The caller's (or `person`'s) own sign-in on an app each person signs in to: connected, expired or none.
@@ -1009,10 +1009,13 @@ def app_state(
     own: dict[str, Any] | None,
     *,
     configured: bool = True,
+    person: bool = False,
 ) -> tuple[str, str | None]:
     """One card's state for the caller: signing in is what connects an account, and a failed test after it warns
-    without disconnecting. On an app each person signs in to, it is the caller's own sign-in that counts.
-    `configured`: whether there is an auth config to sign in with (`Apps._configured`)."""
+    without disconnecting. On an app each person signs in to, it is the caller's own sign-in that counts; on one where
+    each person signs in with the team's account for runs nobody started, a person's own sign-in counts too, since the
+    calls they make never use the team's. `configured`: whether there is an auth config to sign in with
+    (`Apps._configured`); `person`: whether the caller is a person (or a service acting for one)."""
     if card["kind"] in ("builtin", "module"):
         return "connected", None
     plugin = cast(dict[str, Any] | None, card.get("plugin"))
@@ -1025,9 +1028,12 @@ def app_state(
         return "needs_auth_config", f"Add an auth config for {card['name']} first."
     if not configured:
         return "needs_auth_config", f"The auth config {card['name']} signs in with is gone or has no client secret."
-    if (conn.get("sign_in") or "team") == "person":
-        if own is None or own.get("refused_at") is not None:
-            return "needs_sign_in", "Sign in with your own account."
+    sign_in = conn.get("sign_in") or "team"
+    if sign_in == "person" or (sign_in == "person_or_team" and person):
+        if own is None:
+            return "needs_sign_in", "Connect your own account."
+        if own.get("refused_at") is not None:
+            return "needs_sign_in", "Your sign-in ended. Sign in again."
         test = cast(dict[str, Any] | None, own.get("test"))
     else:
         if card.get("state") != CONNECTED:

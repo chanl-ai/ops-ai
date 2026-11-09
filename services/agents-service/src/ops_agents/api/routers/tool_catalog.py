@@ -123,7 +123,9 @@ def _kind_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
 
 def _status_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
     if card is not None and card.get("appState") not in RUNNABLE:
-        each_person = card.get("appState") == "needs_sign_in" and card.get("signIn") == "person"
+        # tools-service answers the person's own state on an app each person signs in to, with or without the team's
+        # account as a fallback for runs nobody started.
+        each_person = card.get("appState") == "needs_sign_in" and card.get("signIn") in ("person", "person_or_team")
         return "needs_your_sign_in" if each_person else "app_not_connected"
     return "needs_approval" if tool.get("requiresApproval") else "ready"
 

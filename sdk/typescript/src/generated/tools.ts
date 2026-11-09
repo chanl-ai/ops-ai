@@ -3986,6 +3986,13 @@ export interface components {
             accounts: components["schemas"]["ConnectorAccount"][];
             /** Appid */
             appId: string;
+            /**
+             * Appstate
+             * @enum {string}
+             */
+            appState: "connected" | "test_failed" | "needs_sign_in" | "needs_auth_config" | "off" | "not_installed" | "removed";
+            /** Appstatereason */
+            appStateReason?: string | null;
             /** Authconfig */
             authConfig?: string | null;
             /** Authkind */
@@ -4016,11 +4023,6 @@ export interface components {
             primaryAccountId?: string | null;
             /** Since */
             since?: string | null;
-            /**
-             * State
-             * @enum {string}
-             */
-            state: "connected" | "expired" | "not_connected" | "app_off";
             /** Tools */
             tools: components["schemas"]["ConnectorTool"][];
             used: components["schemas"]["ConnectorUse"];

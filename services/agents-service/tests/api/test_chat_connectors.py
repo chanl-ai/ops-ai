@@ -63,10 +63,10 @@ async def test_a_connector_turned_off_is_not_offered_in_that_chat_and_the_next_c
     wire(rt)
     tid = (await new_thread(client))["id"]
     start = await connectors(client, tid)
-    assert {k: (v["state"], v["on"]) for k, v in start.items()} == {
-        CRM: ("on", True),
+    assert {k: (v["appState"], v["on"]) for k, v in start.items()} == {
+        CRM: ("connected", True),
         WIRES: ("needs_sign_in", True),
-        CORE: ("off_for_team", False),
+        CORE: ("off", False),
     }, start
     assert start[CRM]["tools"] == ["lookup_account"] and start[CORE]["tools"] == [], start
     narrowed = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CRM]})
@@ -122,8 +122,8 @@ async def test_a_new_chats_connectors_are_listed_before_it_exists_and_its_first_
     wire(rt)
     listed = await client.get("/chat/connectors", params={"agentId": "ag_fraud"})
     assert listed.status_code == 200, listed.text
-    before = {c["appId"]: (c["state"], c["on"]) for c in listed.json()["data"]["connectors"]}
-    assert before == {CRM: ("on", True), WIRES: ("needs_sign_in", True), CORE: ("off_for_team", False)}, before
+    before = {c["appId"]: (c["appState"], c["on"]) for c in listed.json()["data"]["connectors"]}
+    assert before == {CRM: ("connected", True), WIRES: ("needs_sign_in", True), CORE: ("off", False)}, before
     tid = (await new_thread(client))["id"]
     assert (await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CRM]})).status_code == 200
     _, events = await send(client, tid, {"content": LOOKUP})
@@ -148,18 +148,18 @@ async def test_a_run_nobody_started_in_a_chat_ignores_a_chats_connectors(
 async def test_an_app_the_person_has_not_signed_in_to_is_in_the_sign_in_group_not_on(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
 ) -> None:
-    # The team's account makes the CRM read as connected, but this person signs in with their own and has not: the
-    # picker must not tick it as on for them.
+    # tools-service answers the person's own state on an app each person signs in to; the picker shows it as it is,
+    # never the team account's.
     client, rt = stack
     wire(rt)
 
     class Mine(Cards):
         async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
             rows = await super().cards(person, team)
-            rows[0] = {**rows[0], "signIn": "person_or_team", "ownSignIn": "none"}
+            rows[0] = {**rows[0], "signIn": "person_or_team", "appState": "needs_sign_in"}
             return rows
 
     rt.app_states = Mine()
     tid = (await new_thread(client))["id"]
     crm = (await connectors(client, tid))[CRM]
-    assert (crm["state"], crm["personal"]) == ("needs_sign_in", True), crm
+    assert (crm["appState"], crm["personal"]) == ("needs_sign_in", True), crm

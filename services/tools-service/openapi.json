@@ -7687,6 +7687,30 @@
             "title": "Appid",
             "type": "string"
           },
+          "appState": {
+            "enum": [
+              "connected",
+              "test_failed",
+              "needs_sign_in",
+              "needs_auth_config",
+              "off",
+              "not_installed",
+              "removed"
+            ],
+            "title": "Appstate",
+            "type": "string"
+          },
+          "appStateReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appstatereason"
+          },
           "authConfig": {
             "anyOf": [
               {
@@ -7789,16 +7813,6 @@
             ],
             "title": "Since"
           },
-          "state": {
-            "enum": [
-              "connected",
-              "expired",
-              "not_connected",
-              "app_off"
-            ],
-            "title": "State",
-            "type": "string"
-          },
           "tools": {
             "items": {
               "$ref": "#/components/schemas/ConnectorTool"
@@ -7813,7 +7827,7 @@
         "required": [
           "appId",
           "name",
-          "state",
+          "appState",
           "canDo",
           "tools",
           "accounts",
