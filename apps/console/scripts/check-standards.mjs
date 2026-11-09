@@ -200,7 +200,8 @@ for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !re
 }
 
 // 16. One component per job (16, not 15: services' check_standards owns rule 15, the database drivers): a table is the data table, a status is
-//     a badge from components/status-badges.tsx, and the chat composer and message renderers live in components/chat.
+//     a badge from components/status-badges.tsx, the chat composer and message renderers live in components/chat, and
+//     a link to an app page comes from lib/app-links.
 //     The files that broke this when the rule came in are listed per rule in reuse-baseline.json. The list may only
 //     shrink: a file not listed fails, and a listed file that no longer breaks the rule fails until it is taken off
 //     (`--write-baseline` takes it off and never adds one).
@@ -219,6 +220,11 @@ const REUSE = {
     what: 'a chat composer or message renderer outside components/chat (use Composer and MessageView)',
     owns: (rel) => rel.startsWith('src/components/chat/'),
     hit: (text) => text.search(/\b(?:function|const)\s+[A-Z]\w*(?:Composer|MessageView|MessageList|Bubble|ToolCall|Chat(?:Response|Prompt|Conversation|Thinking))\b/),
+  },
+  appLink: {
+    what: 'an app page link built by hand (use appPageHref from lib/app-links)',
+    owns: (rel) => rel === 'src/lib/app-links.ts',
+    hit: (text) => text.search(/`\/integrations\/(?:apps\/)?\$\{/),
   },
   dialogColumns: {
     what: 'a form laid out in columns inside a dialog (dialog forms are one column)',

@@ -28,7 +28,7 @@ make layout in [docs/architecture/make.md](../docs/architecture/make.md).
 | `release/` | The versioned package a client team installs with no checkout, the multi-platform image build | [release/README.md](release/README.md) |
 | `devhost/` | A Coder template for a shared dev VM, one workspace per developer from `.devcontainer/` | [devhost/README.md](devhost/README.md) |
 | `mirror-test/` | The behind-a-company-mirror lane: a clean install through a local Nexus on a closed network | [mirror-test/CLAUDE.md](mirror-test/CLAUDE.md) |
-| `plugins.json` | The plugins every image ships with, each pinned to a full commit; `images/bake_plugins.py` reads it | [docs/guide/plugins.md](../docs/guide/plugins.md) |
+| `plugins.json` | The plugins every image ships with, each pinned to a full commit and the sha256 digest of its folder; `images/bake_plugins.py` reads it and refuses a download that differs | [docs/guide/plugins.md](../docs/guide/plugins.md) |
 | `vm/` | Does not exist yet. The VM target (systemd units, native PostgreSQL, no container runtime) is designed only | [service map](../docs/architecture/service-map.md) |
 
 ## How the targets fit together

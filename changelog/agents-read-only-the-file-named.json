@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "An agent reads only the file it names",
+  "description": "When an agent reads a file by its id, an id written to reach some other part of Files is treated as no file at all, so text inside a document cannot steer an agent into a different request.",
+  "tag": "fix"
+}

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "A file's reading stays in its team",
+  "description": "When two teams upload the same document, each team's reading of it is its own. One team can no longer see what was read from another team's file.",
+  "tag": "fix"
+}

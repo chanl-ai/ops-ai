@@ -16,7 +16,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
-from ops_identity import ServiceCallError, ServiceClient
+from ops_identity import ServiceCallError, ServiceClient, segment
 from ops_service_kit.settings import Settings
 
 __all__ = [
@@ -87,6 +87,14 @@ class FilesRefused(Exception):
 
 class FileNotFound(FilesRefused):
     """No such file in this tenant and team."""
+
+
+def _file(file_id: str) -> str:
+    """The file id as one path segment; an id that cannot be one names no file."""
+    try:
+        return segment(file_id)
+    except ValueError:
+        raise FileNotFound(404, "not_found", f"No file {file_id!r}") from None
 
 
 class FileNotReady(FilesRefused):
@@ -174,7 +182,7 @@ class FilesClient:
         return StoredFile.model_validate(response.json()["data"])
 
     async def get(self, tenant: str, team: str, file_id: str) -> FileInfo:
-        return await self._json("GET", f"/v1/files/{file_id}", tenant, team)
+        return await self._json("GET", f"/v1/files/{_file(file_id)}", tenant, team)
 
     async def find(self, tenant: str, team: str, search: str, *, limit: int = 10) -> list[FileInfo]:
         """The team's available files whose name matches `search`, newest first, at most `limit`."""
@@ -191,7 +199,7 @@ class FilesClient:
         """A clean file's bytes as they arrive; raises `FileNotReady` before the first byte when it is not clean."""
         http = self._files.http
         headers = self._files.headers(tenant=tenant, team=team)
-        request = http.build_request("GET", f"/v1/files/{file_id}/content", headers=headers)
+        request = http.build_request("GET", f"/v1/files/{_file(file_id)}/content", headers=headers)
         response = await http.send(request, stream=True)
         try:
             if not response.is_success:
@@ -218,18 +226,22 @@ class FilesClient:
     ) -> FileInfo:
         """Records that `ref_id` uses the file; `FileNotReady` when the file is not scanned clean (files 5.3.4)."""
         body = {"type": type, "refId": ref_id, "name": name, "href": href}
-        return await self._json("POST", f"/v1/files/{file_id}/references", tenant, team, json=body)
+        return await self._json("POST", f"/v1/files/{_file(file_id)}/references", tenant, team, json=body)
 
     async def set_data(self, tenant: str, team: str, file_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Records what was read from the file; needs `files:edit`. Answers the stored data."""
         try:
-            detail = await self._files.request("PUT", f"/v1/files/{file_id}/data", json=data, tenant=tenant, team=team)
+            detail = await self._files.request(
+                "PUT", f"/v1/files/{_file(file_id)}/data", json=data, tenant=tenant, team=team
+            )
         except ServiceCallError as e:
             raise _refused(e) from e
         return cast(dict[str, Any], cast(dict[str, Any], detail).get("data") or {})
 
     async def detach(self, tenant: str, team: str, file_id: str, *, type: ReferenceType, ref_id: str) -> FileInfo:
-        return await self._json("DELETE", f"/v1/files/{file_id}/references/{type}/{ref_id}", tenant, team)
+        return await self._json(
+            "DELETE", f"/v1/files/{_file(file_id)}/references/{segment(type)}/{segment(ref_id)}", tenant, team
+        )
 
     async def report_scan(
         self,

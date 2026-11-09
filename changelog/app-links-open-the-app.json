@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Turn-on and fix links open the app",
+  "description": "The Turn on button in chat and on the connectors page, Open on a revoked knowledge source, and Fix the connection on a mailbox deployment now open the app's page instead of a page that does not exist.",
+  "tag": "fix"
+}

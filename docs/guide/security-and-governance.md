@@ -125,6 +125,9 @@ Details and status are in [Data and database](data-and-database.md#the-audit-tra
 | Network | Only the entry point publishes a port. On Kubernetes, a network policy admits platform-service's private port only from the other services |
 | Containers | Non-root (uid 10001). On Kubernetes: every capability dropped, no privilege escalation, read-only root filesystem except the console, the runtime's default seccomp profile |
 | Database | One login per service with row rights on its own tables only; no running container can change the schema when your DBA applies it |
-| Service calls | Each service signs its calls with its own Ed25519 key, and a callee accepts only the calls that caller is allowed to make |
+| Service calls | Each service signs its calls with its own Ed25519 key, and a callee accepts only the calls that caller is allowed to make. An id placed in a call's path (a file the model names to `read_file`, a tool name) is sent as one encoded path segment, and an id holding a slash or made of dots names no file, so it cannot reach another route |
+| File content given to the model | An attached file's pages and knowledge passages go in labelled data blocks the model is told never to follow. Text in them that opens or closes a data block, in any letter case or spacing, is escaped, so a file cannot end its block early or forge a knowledge passage |
+| Oversized files | The reader and the page images share the same limits: at most 2,000 pages, a page drawn at most 16 million pixels (a larger page at a lower resolution), an image frame over 50 million pixels never decoded, and 60 seconds per page in a background read |
+| Plugins in an image | Each pin is a full commit plus the sha256 digest of the plugin's folder; the build refuses a pin with no digest or a download that differs from it ([Plugins](plugins.md#plugins-in-a-built-image)) |
 | Policy engine | The gateway writes its policy into the policy engine at start and reports unhealthy if the engine serves a different one; token expiry is judged by the gateway's clock |
 | Telemetry | None. Nothing in the platform calls home |

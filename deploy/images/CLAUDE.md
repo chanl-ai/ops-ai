@@ -14,7 +14,7 @@ Fly, the release package). Deploy-wide rules: [../CLAUDE.md](../CLAUDE.md).
 | `healthcheck.py` | `healthcheck.py <url>` or `healthcheck.py db`, standard library only, so images need no curl |
 | `service_keys.py` | Which keys each service uses besides its own signing key; every target reads it so no service holds a key it does not use |
 | `console-start.mjs` | Swaps the console build's placeholder service URLs for the container's env, then serves it |
-| `bake_plugins.py` | Puts the plugins `../plugins.json` pins (full 40-character commits only) into the image's plugins folder |
+| `bake_plugins.py` | Puts the plugins `../plugins.json` pins (full 40-character commits only, each folder checked against its pinned sha256) into the image's plugins folder |
 | `prune_build_cache.sh` | Prunes Docker's build cache past `OPS_BUILD_CACHE_CAP` GB after image builds |
 
 Tests: `bake_plugins.py` is covered by `scripts/tests/test_bake_plugins.py` (`uv run pytest -q scripts/tests/test_bake_plugins.py`);

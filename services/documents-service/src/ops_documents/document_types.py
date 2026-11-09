@@ -31,7 +31,7 @@ from ops_documents.store.document_types import DocumentTypesStore, NameTakenErro
 from ops_documents.store.extractions import ExtractionRow
 from ops_extract import boxes, rules, templates
 from ops_extract.checks import fold
-from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable, segment
 from ops_pii import mask
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
@@ -65,7 +65,7 @@ class ModelsPrices:
         for name in dict.fromkeys((alias, FALLBACK_ALIAS)):
             try:
                 # models-service refuses a service token that names no tenant (401), which read as "no price".
-                path = f"/v1/models/aliases/{name}/versions"
+                path = f"/v1/models/aliases/{segment(name)}/versions"
                 rows = cast(list[dict[str, Any]], await self.client.request("GET", path, tenant=tenant))
             except ServiceCallError as e:
                 if e.status == 404:
@@ -73,6 +73,8 @@ class ModelsPrices:
                 return None
             except ServiceUnreachable:
                 return None
+            except ValueError:
+                continue  # a name with a slash is no alias models-service holds
             current = [r for r in rows if r.get("status") == "current"] or rows
             if current:
                 return Decimal(str(current[-1]["inputPerMillion"])), Decimal(str(current[-1]["outputPerMillion"]))

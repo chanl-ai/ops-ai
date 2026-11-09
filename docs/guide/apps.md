@@ -22,18 +22,29 @@ Open **Data Hub › Apps** in the sidebar. Four tabs sit at the top of every pag
 
 ## Turn an App on
 
+Turning an App on for the team and connecting an account are two separate actions. Turning it on saves the team's
+setting and opens no sign-in; connecting is its own button, and it is optional for the admin who turned the App on.
+
 | Step | What happens |
 |---|---|
-| 1. Press **Connect** on the App's card | A small window opens |
-| 2. Name the Account, or keep the suggested name (the App and your team) | Steps and Tools pick an Account by this name |
-| 3. Keep **Team account** ticked for an Account anyone in the team can run Tools as, or untick it to connect your own | Untick it and the Account is yours alone |
-| 4. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company's address (My Domain), typed as its host | The sign-in opens there |
-| 5. Keep **Auth config** on Ops AI's app, and press **Connect** | The App's own sign-in page opens; allow access there |
-| 6. The window closes | The App's page opens with the Account listed as **Default** and **Connected**, and its header reads **Connected · <Account name>** |
+| 1. On **Connectors › Team setup**, press **Turn on** on the App's card (the App's page has the same button) | The Turn on window opens |
+| 2. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company's address (My Domain), typed as its host | Saved on the App's auth config |
+| 3. Pick whose account Tools use: each person's, the team's, or each person's with the team's for runs nobody started | Asked once, when the App is first turned on |
+| 4. Keep **Give the team's assistant this app's read tools** ticked, or untick it | The assistant gets the read Tools when the App is saved |
+| 5. Press **Turn on** | The team's setting is saved and no sign-in window opens. The window reads, for example, **Saved. Salesforce is on for Operations**, how many read Tools were added, and **Members connect their own account from Connectors › Mine** |
+| 6. Optional: press **Connect my account**, or **Connect the team account** when Tools run as the team's account | The App's own sign-in page opens; allow access there, and the window names the account that signed in |
 
 An App is **Connected** only once an Account has signed in or a test has passed; saving settings alone does not count.
-Signing in an Account turns its App on for the team, and **Add account** works on an App with no Account yet: the
-first Account becomes the default. A team admin connects an App.
+The same rule holds everywhere an App's settings are saved: **Settings › Set up**, a new auth config and the Turn on
+window each save and stop, and never start a sign-in. A sign-in starts only from a button that says Connect or Sign
+in: **Connect** on the App's page once it is on, **Sign in** on an Account's row, or **Connect** on **Connectors › Mine**.
+
+A member who opens an App the team has not turned on, from **Connectors › Mine**, reads **Not set up for your team
+yet** with the admins to ask, and stays on Mine. Only someone who may turn the App on is offered **Turn on**, which
+opens the App's page.
+
+**Add account** works on an App with no Account yet: the first Account becomes the default. A team admin turns an App
+on and connects the team's Accounts.
 
 ### The first time a team turns on a plugin's App
 
@@ -44,7 +55,7 @@ Connect window asks for more than the steps above.
 |---|---|---|
 | Platform admin | Installs the plugin (its folder in the plugins folder, or pinned in the image); it is then offered to every team. Settings fixed for every team come from the install config | `OPS_PLUGINS_DIR`, `deploy/plugins.json`, `OPS_PLUGIN_LOCKED` |
 | Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
-| Team admin | Presses **Connect** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Save and connect the team account** opens the App's sign-in page |
+| Team admin | Presses **Turn on** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Turn on** saves them and opens no sign-in; **Connect my account** or **Connect the team account** after it opens the App's sign-in page |
 
 The App's page is **Data Hub › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
 enough to use it everywhere: test runs and live runs both sign in with the account you connected.

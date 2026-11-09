@@ -1,6 +1,6 @@
 """ci.yml's plan (scripts/ci-plan.sh), by failure mode: a full plan leaves out a suite `make verify` runs, so a pull
 request goes green on a red suite; a long suite is not split, so the run waits on it; a narrow change runs the repo
-job meant for a full plan."""
+job meant for a full plan; the one required check, ci-ok, misses a job or passes when a job failed or was cancelled."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 # Run under `make python-verify VERIFY_POOL=...` (ci.yml's repo job), the inner make would inherit that override
@@ -63,3 +66,26 @@ def test_a_service_change_runs_that_service_and_no_repo_job(tmp_path: Path) -> N
     p = plan(tmp_path, "services/kb-service/src/ops_kb/app.py")
     assert (p["full"], p["repo_pool"]) == ("false", ""), p
     assert json.loads(p["service_jobs"]) == [{"service": "kb-service", "part": "verify"}], p
+
+
+def _ci_ok() -> tuple[dict[str, Any], set[str]]:
+    jobs: dict[str, Any] = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    return jobs["ci-ok"], set(jobs) - {"ci-ok"}
+
+
+def _gate(needs: dict[str, str]) -> int:
+    script = _ci_ok()[0]["steps"][0]["run"]
+    env = {"NEEDS": json.dumps({k: {"result": v} for k, v in needs.items()}, indent=2), "PATH": os.environ["PATH"]}
+    return subprocess.run(["bash", "-c", script], env=env, capture_output=True, check=False).returncode
+
+
+def test_one_check_named_ci_ok_waits_for_every_other_job_whatever_they_did() -> None:
+    job, others = _ci_ok()
+    assert (job.get("name"), job.get("if")) == ("ci-ok", "always()"), job
+    assert set(job["needs"]) == others, set(job["needs"]) ^ others
+
+
+def test_ci_ok_fails_on_a_failed_or_cancelled_job_and_passes_a_skipped_one() -> None:
+    assert _gate({"plan": "success", "checks": "skipped", "repo": "success"}) == 0
+    assert _gate({"plan": "success", "checks": "failure"}) == 1
+    assert _gate({"plan": "success", "console": "cancelled"}) == 1

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-import { allowBank } from '../../lib/connection_ui.mjs';
+import { allowBank, openSignIn } from '../../lib/connection_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -228,7 +228,19 @@ try {
             const u = new URL(r.url());
             if (u.hostname === LOGIN_HOST && u.searchParams.get('state')) states.push(u.searchParams.get('state'));
           });
-          const [first] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-authorize').click()]);
+          // The account's name, which later steps pick it by; left empty it would be the app and the team.
+          await page.getByTestId('connect-window-more').click();
+          const suggested = await page.getByTestId('connect-window-name').getAttribute('placeholder');
+          await page.getByTestId('connect-window-name').fill('Person desk');
+          // Turn on saves the team's setting and opens no sign-in; signing in is the saved state's Connect.
+          let early = 0;
+          const count = () => (early += 1);
+          page.on('popup', count);
+          await page.getByTestId('connect-window-authorize').click();
+          const saved = ((await page.getByTestId('connect-window-result').innerText({ timeout: 60_000 })) ?? '').replace(/\s+/g, ' ');
+          await page.waitForTimeout(1500);
+          page.off('popup', count);
+          const [first] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-connect-mine').click()]);
           const openedAt = first.url();
           await first.locator('input[name=username]').waitFor({ timeout: 60_000 });
           // Sent from inside the window, as the system's redirect is: a navigation typed into the window would drop its
@@ -238,24 +250,20 @@ try {
           const deniedShown = await first.getByTestId('sign-in-denied').waitFor({ timeout: 60_000 }).then(() => true, () => false);
           const closeOffered = await first.getByTestId('sign-in-close').isVisible().catch(() => false);
           const told = await page.getByTestId('connect-window-error').waitFor({ timeout: 30_000 }).then(async () => ((await page.getByTestId('connect-window-error').innerText()) ?? '').trim(), () => '');
-          // Authorize comes back once the window has removed what the refused attempt made.
-          const again = await page.waitForFunction(() => !document.querySelector('[data-testid="connect-window-authorize"]')?.hasAttribute('disabled'), null, { timeout: 30_000 }).then(() => true, () => false);
+          // Connect comes back once the refused attempt has ended.
+          const again = await page.waitForFunction(() => !document.querySelector('[data-testid="connect-window-connect-mine"]')?.hasAttribute('disabled'), null, { timeout: 30_000 }).then(() => true, () => false);
           await shoot(page, 'connect-refused');
           await first.close();
           check(
             '3 one Connect window: the auth config, test or team account and Connect; the sign-in window opens at once on the console’s connect page; a refusal shows in both windows and Connect works again',
             // What the account may do is shown once, in the auth config's details, so the window asks only how to sign in.
-            // Turning an app on asks once whose account tools use; the button turns it on with the sign-in.
-            /Auth config/.test(said) && /Add your own app/.test(said) && /Whose account do tools use\?/.test(said) && /Team account/.test(said) && button === 'Sign in and turn on' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
+            // Turning an app on asks once whose account tools use; Turn on saves it and opens no sign-in window.
+            /Auth config/.test(said) && /Add your own app/.test(said) && /Whose account do tools use\?/.test(said) && /Team account/.test(said) && button === 'Turn on' && early === 0 && /Saved\. Person desk is on for/.test(saved) && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
               new URL(openedAt).pathname === '/connections/connect' && new URL(openedAt).searchParams.get('app') === 'Person desk' &&
               deniedShown && closeOffered && /not given/.test(told) && again,
-            { said, button, folded, openedAt, deniedShown, closeOffered, told, again },
+            { said, button, early, saved, folded, openedAt, deniedShown, closeOffered, told, again },
           );
-          // The account's name, which later steps pick it by; left empty it would be the app and the team.
-          await page.getByTestId('connect-window-more').click();
-          const suggested = await page.getByTestId('connect-window-name').getAttribute('placeholder');
-          await page.getByTestId('connect-window-name').fill('Person desk');
-          const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-authorize').click()]);
+          const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-connect-mine').click()]);
           await allow(popup, 'harbor.ops', 'allow');
           // Turned on, the window says so and Done opens the app's page.
           await page.getByTestId('connect-window-done').click({ timeout: 60_000 });
@@ -1144,7 +1152,7 @@ try {
           const asked = await window_.getByTestId('connect-window-place-login_url').count();
           check(`19 the Connect window shows where ${user} signs in, read from the auth config, and asks nothing about it`, shown.includes(`Signs in at ${values.login_url}`) && asked === 0, { shown, asked });
           if (sandbox) await shoot(page, 'connect-sandbox');
-          const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), window_.getByTestId('connect-window-authorize').click()]);
+          const popup = await openSignIn(page);
           const name = popup.locator('input[name=username]');
           await name.waitFor({ timeout: 60_000 });
           await name.fill(user);

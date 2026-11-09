@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import type { AuthMethod, ConnectionRef, IntegrationKind, IntegrationStatus, Tone } from '@/lib/types/integrations';
 import { cn } from '@/lib/utils';
+import { appPageHref } from '@/lib/app-links';
 
 const pill = 'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap';
 
@@ -83,7 +84,7 @@ export function ConnectionChip({ connection, className }: { connection: Connecti
   const s = STATUS[connection.status];
   return (
     <Link
-      href={`/integrations/apps/${encodeURIComponent(connection.id)}`}
+      href={appPageHref(connection.id)}
       className={cn('inline-flex max-w-full items-center gap-1.5 rounded-md border bg-card py-0.5 pr-2 pl-0.5 text-xs hover:bg-muted', className)}
       title={`${connection.name} · ${s.label}. Opens the app’s page.`}
       data-testid="connection-chip"

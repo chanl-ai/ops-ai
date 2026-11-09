@@ -226,24 +226,19 @@ async def test_health_says_degraded_without_ocr(make: Make, monkeypatch: pytest.
     assert health.status_code == 200 and health.json() == {"status": "degraded", "reason": "ocr"}, health.text
 
 
-async def test_a_reading_goes_once_no_file_holds_its_bytes(make: Make) -> None:
+async def test_a_reading_goes_with_the_teams_last_file_of_its_bytes(make: Make) -> None:
     s = make(Models(), Floor())
+    risk = token(s.tenant, "documents:run", team="team_risk")
     async with s.client as c:
         mine = await s.stored(NOTICE)
         theirs = await s.stored(NOTICE, team="team_risk")
         await ask(c, mine)
-        await ask(c, theirs, headers=token(s.tenant, "documents:run", team="team_risk"))
+        await ask(c, theirs, headers=risk)
         s.files.files.pop(mine)
-        first = await c.post("/v1/documents/purge", json={"fileId": mine}, headers=token(s.tenant, "documents:delete"))
-        s.files.files.pop(theirs)
-        last = await c.post(
-            "/v1/documents/purge",
-            json={"fileId": theirs},
-            headers=token(s.tenant, "documents:delete", team="team_risk"),
-        )
-    assert first.status_code == 200, first.text
-    assert first.json()["data"]["readings"] == 0, "team_risk's file still holds the bytes"
-    assert last.json()["data"]["readings"] == 1, last.text
+        gone = await c.post("/v1/documents/purge", json={"fileId": mine}, headers=token(s.tenant, "documents:delete"))
+        kept = await c.get(f"/v1/documents/readings/{theirs}", headers={"X-Team-Id": "team_risk"})
+    assert gone.status_code == 200 and gone.json()["data"]["readings"] == 1, gone.text
+    assert kept.json()["data"]["status"] == "done", "another team's reading of the same bytes is its own"
 
 
 async def test_a_file_with_no_reader_fails_with_its_reason(make: Make) -> None:

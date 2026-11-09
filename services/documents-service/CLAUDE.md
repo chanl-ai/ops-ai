@@ -3,7 +3,7 @@
 Status: current.
 
 The documents service (`ops_documents`, :8760) owns what is read from a file: every file's reading (read once per
-tenant, content digest, reader version and OCR settings, kept, and shared by every caller: extraction, layouts, knowledge
+team, content digest, reader version and OCR settings, kept, and shared by every caller in the team: extraction, layouts, knowledge
 bases, chat attachments, read_file), extractions with each field's value, confidence, page and quote, corrections, classification,
 document types with their versions, samples and capped test runs, and the document type templates a team installs
 from its plugins. It never holds file bytes: it reads them through files-service as the caller's team, so a file

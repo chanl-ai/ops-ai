@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 
@@ -41,6 +42,15 @@ class ServiceCallError(ApiError):
 
 class ServiceUnreachable(ServiceUnavailable):
     """The callee did not answer: refused, reset or timed out."""
+
+
+def segment(value: str) -> str:
+    """`value` as one path segment of a callee's route, every reserved character percent-encoded so it cannot add a
+    query. ValueError for a value that is no segment at all: empty, `.` or `..`, or holding a slash, which a server
+    decodes before routing, so an id a person or a model supplied could reach another route."""
+    if value in ("", ".", "..") or "/" in value or "\\" in value:
+        raise ValueError(f"{value!r} is not one path segment")
+    return quote(value, safe="")
 
 
 def _none() -> str | None:

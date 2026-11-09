@@ -24,7 +24,7 @@ The service map that applies to every service is `docs/architecture/service-map.
 | `POST /v1/documents/purge` is for services only (`documents:delete`) and removes a file's extractions and samples | Called by a system workflow on the file-deleted trigger (workflows lane). files-service calls nobody when it deletes |
 | A document type version never changes once saved; a workflow save pins the newest version | A running workflow reads the fields it was tested with |
 | A test run reads at most 20 samples, and its estimate is shown before it starts | Each sample is one model call |
-| A file's reading (`POST /v1/documents/readings`, `DocumentsClient.reading`) is kept per tenant, files-service digest, reader version and OCR settings, whoever asks: extraction, layouts, a knowledge base, a chat attachment and the read_file tool share one reading, and no model is called. A scan is read in the background and reported as `reading.finished` | A chat turn reads every attachment in its thread on each message; the second and later reads answer the stored reading |
+| A file's reading (`POST /v1/documents/readings`, `DocumentsClient.reading`) is kept per team, files-service digest, reader version and OCR settings, whoever in the team asks: extraction, layouts, a knowledge base, a chat attachment and the read_file tool share one reading, another team never sees it (the team policy holds all three readings tables), and no model is called. A scan is read in the background and reported as `reading.finished` | A chat turn reads every attachment in its thread on each message; the second and later reads answer the stored reading |
 | The workflow runner and the agent kernel never import `ops_extract` | The checks run in one place; `scripts/tests/test_no_cross_service_imports.py` enforces it |
 
 ## Routes
@@ -136,7 +136,10 @@ needs `documents.manage`, held by team admins; a later version carries it forwar
 (per team, read live from platform-service, off for a team that set nothing, changed under `settings.manage` in the
 Security team; an unreadable policy counts as off), and the model alias version's `images` clearance in models-service,
 which refuses an image to an alias not cleared (403 `images_not_cleared`, logged denied). A page read through OCR goes
-whole with the first read (at most 4 pages, drawn at 150 dpi, longest side 1600 px). On any page, a field that fails a
+whole with the first read (at most 4 pages, drawn at 150 dpi, longest side 1600 px). A page larger than 16 million
+pixels at 150 dpi (a poster or plan sheet) is drawn at the lower resolution that fits, and an image file over 50 million
+pixels is never decoded, the same limits the reader uses, so one oversized upload cannot exhaust the service's memory;
+`GET /v1/documents/readings/{fileId}/pages/{n}/image` answers 404 for such an image. On any page, a field that fails a
 rule or reads below its review threshold goes to the one re-read with a crop around its boxes, margin wide enough to
 take in its label; a doubtful field with no boxes adds no crop, and a text page whose fields all pass sends nothing.
 Every call that carried an image is listed on the read as `imageCalls` (`step`, `pages`, `images`, `alias`) and counted

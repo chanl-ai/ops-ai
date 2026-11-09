@@ -7,6 +7,7 @@ import { IntegrationStatusBadge, SystemMark } from '@/components/integrations/in
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ConnectionRef, IntegrationKind, IntegrationStatus } from '@/lib/types/integrations';
+import { appPageHref } from '@/lib/app-links';
 
 /** A connection as the picker lists it; `kind` draws its system's mark where the caller knows it. */
 export type ConnectionOption = { id: string; name: string; status: IntegrationStatus; kind?: IntegrationKind };
@@ -57,7 +58,7 @@ export function ConnectionSelect({
       </Button>
       {value && (
         <Button variant="ghost" size="sm" asChild>
-          <Link href={`/integrations/apps/${encodeURIComponent(value.id)}`}>Open app</Link>
+          <Link href={appPageHref(value.id)}>Open app</Link>
         </Button>
       )}
     </div>

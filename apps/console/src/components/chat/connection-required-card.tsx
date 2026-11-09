@@ -19,6 +19,7 @@ import { useTeam } from '@/hooks/use-team';
 import type { ToolCall } from '@/lib/types/chat';
 import { actsAs } from '@/lib/failure-words';
 import type { ConnectionRequired, ConnectionRequiredReason } from '@/lib/types/connections';
+import { appPageHref } from '@/lib/app-links';
 
 /**
  * What a tool call refused with `CONNECTION_NOT_LINKED` carries: the gateway's error, as the agent's tool output
@@ -239,7 +240,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {mayTurnOn ? (
                 <Button size="sm" asChild data-testid="app-off-turn-on">
-                  <Link href={`/integrations/${encodeURIComponent(off.appId)}`}>Turn on {off.app}</Link>
+                  <Link href={appPageHref(off.appId)}>Turn on {off.app}</Link>
                 </Button>
               ) : (
                 <AskAnAdmin testId="app-off-ask" />

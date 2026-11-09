@@ -34,6 +34,7 @@ import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKey
 import { modelHint, ModelSelect } from './model-select';
 import { teamLabel } from '@/components/shared/team-name';
 import { useTeam } from '@/hooks/use-team';
+import { appPageHref } from '@/lib/app-links';
 
 /** Everything one save of the agent page can change. */
 export interface AgentDraft {
@@ -183,7 +184,7 @@ function ToolsNotAddedNote({ apps }: { apps: NonNullable<ToolOptionsPage['notAdd
       {apps.map((a) => (
         <p key={a.appId}>
           {`${plural(a.count, `${a.name} tool`)} ${a.count === 1 ? 'isn’t' : 'aren’t'} added. `}
-          <Link href={`/integrations/apps/${encodeURIComponent(a.appId)}?tab=tools`} className="underline underline-offset-2 hover:text-foreground">
+          <Link href={appPageHref(a.appId, 'tools')} className="underline underline-offset-2 hover:text-foreground">
             {`Add ${a.count === 1 ? 'it' : 'them'} from ${a.name}’s Tools tab`}
           </Link>
         </p>

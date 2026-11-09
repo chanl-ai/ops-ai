@@ -2,14 +2,18 @@
 
     python deploy/images/bake_plugins.py [--pins deploy/plugins.json] --into /app/plugins
 
-Each pin names a GitHub repository, a full 40-character commit and the plugin's folder in it. The commit is fetched as
-a tarball, so the image needs no git, and the plugin is validated and copied as `ops plugin install` does; a plugin
-with problems stops the build. A branch or tag is refused because either can move, and an image must hold the same
-plugin every time it is built from the same commit. Exit 0 done, 1 refused."""
+Each pin names a GitHub repository, a full 40-character commit, the plugin's folder in it and that folder's sha256
+digest. The commit is fetched as a tarball, so the image needs no git; the folder is checked against the digest before
+anything is installed, so a download that differs from what was pinned (a swapped archive, a compromised mirror) stops
+the build; then the plugin is validated and copied as `ops plugin install` does, and a plugin with problems stops the
+build too. A branch or tag is refused because either can move, and an image must hold the same plugin every time it is
+built from the same commit. `scripts/plugins_bump.py` writes the commit and the digest together. Exit 0 done, 1
+refused."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import re
@@ -26,6 +30,7 @@ from ops_plugin_sdk.install import install, installed
 from ops_plugin_sdk.manifest import ManifestError, read
 
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
+DIGEST = re.compile(r"^[0-9a-f]{64}$")
 GITHUB = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
 FETCH_TIMEOUT_S = 60
 
@@ -64,17 +69,44 @@ def _extract(archive: bytes, into: Path) -> Path:
     return tops[0]
 
 
+def folder_digest(folder: Path) -> str:
+    """The sha256 of a plugin folder's content: each file's path inside it and the sha256 of its bytes, in path order,
+    so the same files give the same digest however the archive around them was compressed."""
+    whole = hashlib.sha256()
+    for item in sorted(p for p in folder.rglob("*") if p.is_symlink() or not p.is_dir()):
+        rel = item.relative_to(folder).as_posix()
+        body = f"link:{item.readlink()}".encode() if item.is_symlink() else item.read_bytes()
+        whole.update(rel.encode() + b"\0" + hashlib.sha256(body).digest())
+    return whole.hexdigest()
+
+
+def pinned_folder(pin: dict[str, Any], tmp: Path, fetch: Callable[[str], bytes] = _download) -> Path:
+    """The pin's plugin folder, unpacked under `tmp` from the commit's tarball; PinRefused when it is missing."""
+    source, ref, path = str(pin.get("source", "")), str(pin.get("ref", "")), str(pin.get("path", ""))
+    top = _extract(fetch(tarball_url(source, ref)), tmp)
+    folder = (top / path).resolve()
+    if not folder.is_relative_to(top.resolve()) or not folder.is_dir():
+        raise PinRefused(f"{source}@{ref[:12]} has no folder {path!r}")
+    # The digest reads only files, while the install's copy follows a link: a link anywhere in the folder is refused.
+    if links := [p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_symlink()]:
+        raise PinRefused(f"{source}@{ref[:12]} {path} holds a symbolic link ({', '.join(sorted(links))})")
+    return folder
+
+
 def bake(pins: list[dict[str, Any]], into: Path, fetch: Callable[[str], bytes] = _download) -> list[str]:
     """Installs every pin into `into`; the ids and versions installed. Raises PinRefused on the first problem."""
     done: list[str] = []
     for pin in pins:
         source, ref, path = str(pin.get("source", "")), str(pin.get("ref", "")), str(pin.get("path", ""))
-        url = tarball_url(source, ref)
+        want = str(pin.get("sha256", ""))
         with tempfile.TemporaryDirectory() as tmp:
-            top = _extract(fetch(url), Path(tmp))
-            folder = (top / path).resolve()
-            if not folder.is_relative_to(top.resolve()) or not folder.is_dir():
-                raise PinRefused(f"{source}@{ref[:12]} has no folder {path!r}")
+            folder = pinned_folder(pin, Path(tmp), fetch)
+            if not DIGEST.match(want):
+                raise PinRefused(f"{source}@{ref[:12]} {path} pins no sha256 digest; run scripts/plugins_bump.py")
+            if (got := folder_digest(folder)) != want:
+                raise PinRefused(
+                    f"{source}@{ref[:12]} {path}: the download's digest {got[:12]} is not the pinned {want[:12]}"
+                )
             installed, problems = install(folder, into)
             if installed is None:
                 raise PinRefused(f"{source}@{ref[:12]} {path}: " + "; ".join(str(p) for p in problems))

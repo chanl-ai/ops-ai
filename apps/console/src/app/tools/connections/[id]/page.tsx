@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { PageLayout } from '@/components/page-layout';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { useSystems } from '@/hooks/systems-queries';
+import { appPageHref } from '@/lib/app-links';
 
 /**
  * The old connection page's address: it lands on the app's own page. A plugin's account opens its plugin's app,
@@ -19,7 +20,7 @@ export default function OldConnectionPage() {
   React.useEffect(() => {
     if (systems.isPending) return;
     const card = (systems.data ?? []).find((c) => c.id === connectionId || c.connectionId === connectionId);
-    router.replace(card ? `/integrations/apps/${encodeURIComponent(card.id)}` : '/integrations');
+    router.replace(card ? appPageHref(card.id) : '/integrations');
   }, [systems.isPending, systems.data, connectionId, router]);
   return (
     <PageLayout title="Opening the app">

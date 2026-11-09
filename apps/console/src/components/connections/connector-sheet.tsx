@@ -11,6 +11,7 @@ import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import type { MyConnector } from '@/hooks/connections-queries';
 import { useTestAccount } from '@/hooks/systems-queries';
 import { plural, shortDate } from '@/lib/format';
+import { appPageHref } from '@/lib/app-links';
 
 /** A connector's state in the words Connectors (Mine) uses. */
 export const CONNECTOR_STATE = {
@@ -19,6 +20,9 @@ export const CONNECTOR_STATE = {
   not_connected: 'Not connected',
   app_off: 'Off for this team',
 } as const satisfies Record<MyConnector['state'], string>;
+
+/** What a member reads on an app the team has not turned on. */
+export const NOT_SET_UP = 'Not set up for your team yet';
 
 /** Whether chat uses it, as the row's In chat column says it. */
 export function inChatWords(c: MyConnector): string {
@@ -155,14 +159,17 @@ export function ConnectorSheet({
           </>
         )}
         <Separator />
-        <Section title={c.state === 'app_off' ? 'Turn it on' : 'Account'} testId="connector-accounts">
+        <Section title={c.state !== 'app_off' ? 'Account' : c.mayTurnOn ? 'Turn it on' : NOT_SET_UP} testId="connector-accounts">
           {c.state === 'app_off' ? (
+            // Only someone who may turn it on is sent to the app's page; everyone else asks, and never lands there.
             c.mayTurnOn ? (
               <Button size="sm" asChild>
-                <Link href={`/integrations/${encodeURIComponent(c.appId)}`}>Turn on for the team</Link>
+                <Link href={appPageHref(c.appId)} data-testid="connector-sheet-turn-on">
+                  Turn on for the team
+                </Link>
               </Button>
             ) : (
-              <AskAnAdmin testId="connector-ask-admin" lead={`${c.name} is off for this team.`} />
+              <AskAnAdmin testId="connector-ask-admin" lead={`An admin sets ${c.name} up for the team before you can connect it.`} />
             )
           ) : (
             <>
