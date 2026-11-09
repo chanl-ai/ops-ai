@@ -429,8 +429,17 @@ export interface KbSourceView extends KbSourceLink {
   source: Source;
 }
 
+/** How many of a base's search units have a vector in the base's embedding model; null with no embedding model. */
+export interface EmbeddingCoverage {
+  model: string;
+  width: number;
+  units: number;
+  embedded: number;
+}
+
 export interface KnowledgeBaseDetail extends KnowledgeBaseRow {
   attached: KbSourceView[];
+  embedding?: EmbeddingCoverage | null;
   /** Metadata keys present on this knowledge base's documents, for filter editors. */
   metadataKeys: string[];
   suggestedQuestions: string[];

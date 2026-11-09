@@ -11,7 +11,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { count, dateTime, duration, plural, relativeTime } from '@/lib/format';
 import type { KnowledgeBaseDetail } from '@/lib/types/knowledge';
 
-import { KbHealthBadge, RunStatusBadge, SourceTypeIcon } from './knowledge-meta';
+import { KbHealthBadge, RunStatusBadge, SourceHealthText, SourceKindIcon } from './knowledge-meta';
+
+/**
+ * How much of the base meaning search can reach: its units with a vector in the base's embedding model, from the base
+ * detail's `embedding`. Units not embedded yet are found by keyword only until the embedding pass reaches them.
+ */
+function EmbeddingTile({ embedding: e }: { embedding?: KnowledgeBaseDetail['embedding'] }) {
+  if (!e) return <StatTile label="Embedded" value="Off" hint="No embedding model: search is by keyword only" />;
+  const waiting = Math.max(e.units - e.embedded, 0);
+  return (
+    <StatTile
+      label="Embedded for meaning search"
+      value={e.units ? `${count(e.embedded)} of ${count(e.units)}` : '0'}
+      tone={waiting ? 'warn' : 'default'}
+      hint={<span data-testid="kb-embedding-hint">{e.units ? (waiting ? `${count(waiting)} not embedded yet` : `All embedded · ${e.model}`) : `Nothing to embed yet · ${e.model}`}</span>}
+    />
+  );
+}
 
 /**
  * Why a knowledge base's health badge says what it says, what it reads, and its recent index jobs. Someone who may not
@@ -37,9 +54,10 @@ export function KbOverview({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatTile label="Documents" value={count(kb.stats.documents)} hint={plural(kb.sources.length, 'source')} href={tabHref('sources')} />
         <StatTile label="Chunks" value={count(kb.stats.chunks)} hint={kb.stats.documents ? `${(kb.stats.chunks / Math.max(kb.stats.documents, 1)).toFixed(1)} per document` : 'Nothing indexed'} />
+        <EmbeddingTile embedding={kb.embedding} />
         {/* One clock, the one each source row shows; when the content last changed is said under it. */}
         <StatTile label="Last synced" value={kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : 'Never'} hint={kb.lastRefreshedAt ? `Content changed ${relativeTime(kb.lastRefreshedAt)}` : 'Nothing indexed yet'} />
         <StatTile label="Failures" value={count(kb.stats.failures)} tone={kb.stats.failures ? 'bad' : 'default'} hint={kb.stats.failures ? 'View failed documents' : 'None'} href={kb.stats.failures ? tabHref('documents', 'status=failed') : undefined} />
@@ -63,10 +81,10 @@ export function KbOverview({
               <Row
                 key={l.sourceId}
                 href={`/integrations/sources/${l.sourceId}`}
-                leading={<SourceTypeIcon type={l.source.type} />}
+                leading={<SourceKindIcon kind={l.source.kind} />}
                 title={l.source.name}
                 description={`${plural(l.itemsContributed, 'item')}${l.rules.length ? ` · ${plural(l.rules.length, 'rule')}` : ''} · synced ${relativeTime(l.source.lastSyncAt)}`}
-                trailing={<RunStatusBadge status={l.source.status === 'revoked' ? 'failed' : l.source.lastRunStatus} />}
+                trailing={<SourceHealthText health={l.source.health} />}
               />
             ))}
             {kb.attached.length === 0 && <li className="px-4 py-6 text-sm text-muted-foreground">This knowledge base reads no sources. Attach one on the Sources tab.</li>}
