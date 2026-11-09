@@ -30,7 +30,7 @@ install-cli: ## make install-cli [WHEELS=dist/wheelhouse] [FROM_INDEX=1]: only t
 wheelhouse: ## make wheelhouse [PLATFORMS='…'] [PYTHONS='3.11 3.12'] [OUT=dir]: every wheel the opsai command needs, into dist/wheelhouse (needs internet)
 	@PLATFORMS='$(PLATFORMS)' PYTHONS='$(PYTHONS)' $(ROOT)/scripts/wheelhouse.sh $(if $(OUT),'$(OUT)')
 
-nexus-proof: ## make nexus-proof [NEXUS_IMAGE=sonatype/nexus3:3.70.4] [NEXUS_ACCEPT_EULA=1]: install-cli through a real Sonatype Nexus (proxy, group, hosted), then the wheelhouse via twine; removes its containers
+nexus-proof: ## make nexus-proof [NEXUS_IMAGE=sonatype/nexus3]: accepts Sonatype's Community Edition EULA; install-cli through a real Sonatype Nexus (proxy, group, hosted), then the wheelhouse via twine; removes its containers
 	@$(ROOT)/scripts/nexus_proof.sh
 
 ##@ Chat (opsai chat)

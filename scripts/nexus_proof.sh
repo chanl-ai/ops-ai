@@ -2,9 +2,10 @@
 # Proves `make install-cli` against a real Sonatype Nexus Repository, then the wheelhouse upload.
 #
 #   scripts/nexus_proof.sh               (make nexus-proof)
-#   NEXUS_IMAGE=sonatype/nexus3:3.70.4 NEXUS_PORT=8081 scripts/nexus_proof.sh
-#   NEXUS_IMAGE=sonatype/nexus3 NEXUS_ACCEPT_EULA=1 scripts/nexus_proof.sh   Community Edition, whose licence agreement
-#   the person running the script accepts by setting NEXUS_ACCEPT_EULA=1; the script never accepts it otherwise.
+#   NEXUS_IMAGE=sonatype/nexus3:3.70.4 NEXUS_PORT=8081 scripts/nexus_proof.sh   another image, e.g. one without a licence gate
+#
+# Running this script accepts Sonatype's Community Edition End User License Agreement (the link is in GET
+# /service/rest/v1/system/eula) on behalf of whoever runs it, through the REST API, as Sonatype documents for CE.
 #   NEXUS_KEEP=1 leaves the Nexus container running afterwards, for looking at a failure.
 #
 # 1. Nexus runs with a PyPI proxy of pypi.org, a hosted PyPI repository and a group over both.
@@ -16,8 +17,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-# 3.70.4 is the last release without the licence gate that Community Edition (3.77 and later) puts on every request.
-IMAGE=${NEXUS_IMAGE:-sonatype/nexus3:3.70.4}
+IMAGE=${NEXUS_IMAGE:-sonatype/nexus3}
 PORT=${NEXUS_PORT:-8081}
 NAME=ops-nexus-proof
 NET=ops-nexus-proof-net
@@ -58,10 +58,10 @@ done
 [ -n "$PASSWORD" ] || { echo "nexus-proof: no generated admin password found" >&2; exit 1; }
 api() { curl -fsS -u "admin:$PASSWORD" -H 'Content-Type: application/json' "$@"; }
 
-# Community Edition refuses every repository request until its licence agreement is accepted. Accepting is the
-# operator's act, so it takes an explicit NEXUS_ACCEPT_EULA=1; an image without the agreement answers 404 here.
+# Community Edition refuses every repository request until its licence agreement is accepted; an image without the
+# agreement answers 404 here and needs nothing.
+say "running this script accepts Sonatype's Community Edition End User License Agreement"
 if eula=$(api "$BASE/system/eula" 2>/dev/null) && printf '%s' "$eula" | grep -q '"accepted" *: *false'; then
-  [ -n "${NEXUS_ACCEPT_EULA:-}" ] || { echo "nexus-proof: this Nexus needs its licence agreement accepted; read it at the link in GET $BASE/system/eula, then rerun with NEXUS_ACCEPT_EULA=1" >&2; exit 1; }
   api -X POST "$BASE/system/eula" -d "$(printf '%s' "$eula" | python3 -c 'import json,sys;d=json.load(sys.stdin);d["accepted"]=True;print(json.dumps(d))')" >/dev/null
 fi
 
