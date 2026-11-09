@@ -66,6 +66,9 @@ export const useSyncRun = (id: string | null) =>
 export const useItem = (id: string | null) =>
   useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
 export const useSourceKinds = (enabled = true) => useTeamQuery({ queryKey: kk.sourceKinds, queryFn: api.knowledge.sourceKinds, enabled, staleTime: 60_000 });
+/** What a website or app source with `config` would take in, before it exists; asked only while the settings are valid. */
+export const useSourcePreview = (config: Record<string, unknown>, enabled: boolean) =>
+  useTeamQuery({ queryKey: ['knowledge', 'source-preview', config], queryFn: () => api.knowledge.sources.preview(config), enabled, retry: false, staleTime: 60_000 });
 export const useKnowledgeLookups = () => useTeamQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
 
 /** Knowledge base names are agent collections, so writes also refresh the shared lookups and agent pages. */
@@ -94,6 +97,8 @@ export const useDeleteSource = () => useWrite((id: string) => api.knowledge.sour
 export const useAddSourceFiles = () => useWrite(({ id, fileIds }: { id: string; fileIds: string[] }) => api.knowledge.sources.addFiles(id, fileIds), ['files']);
 export const useSyncSource = () => useWrite(({ id, opts }: { id: string; opts?: SyncOptions }) => api.knowledge.sources.sync(id, opts));
 export const useAiEstimate = (id: string, enabled = true) => useTeamQuery({ queryKey: kk.aiEstimate(id), queryFn: () => api.knowledge.sources.aiEstimate(id), enabled });
+/** Approves a new source's AI steps right after Add source creates it; refused unless the caller owns the knowledge. */
+export const useApproveAiSteps = () => useWrite((id: string) => api.knowledge.sources.decideAiSteps(id, 'approve'));
 export const useDecideAiSteps = (id: string) => useWrite((decision: 'approve' | 'revoke') => api.knowledge.sources.decideAiSteps(id, decision));
 export const useCancelRun = () => useWrite((runId: string) => api.knowledge.sources.cancelRun(runId));
 export const useTombstones = (id: string) => useTeamQuery({ queryKey: kk.tombstones(id), queryFn: () => api.knowledge.sources.tombstones(id) });

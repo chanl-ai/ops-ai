@@ -21,10 +21,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { useIntegrationOptions } from '@/hooks/integration-queries';
-import { kk, useAddDocuments, useAddPage, useAttachSources, useCreateSource, useDetachSource, useSource, useSourceKinds, useSourcesList, useSyncSource } from '@/hooks/knowledge-queries';
+import { kk, useAddDocuments, useAddPage, useAttachSources, useDetachSource, useSource, useSourceKinds, useSourcesList, useSyncSource } from '@/hooks/knowledge-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
-import { NewSourceDialog } from '@/components/sources/new-source-dialog';
+import { AddSourceWizard } from '@/components/sources/add-source-wizard';
 import { useSticky } from '@/hooks/use-sticky';
 import { count, plural, relativeTime } from '@/lib/format';
 import type { KbSourceView, KnowledgeBaseDetail, Source, SourceHealth, SourceKindOption, SyncRun } from '@/lib/types/knowledge';
@@ -94,8 +93,6 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
   const [attachSearch, setAttachSearch] = React.useState('');
   const candidates = useSourcesList({ page: 1, pageSize: 20, search: attachSearch || undefined });
   const [addOpen, setAddOpen] = React.useState(false);
-  const connections = useIntegrationOptions(addOpen);
-  const create = useCreateSource();
   const syncSource = useSyncSource();
   const [picked, setPicked] = React.useState<string[]>([]);
   const [detaching, setDetaching] = React.useState<KbSourceView | null>(null);
@@ -286,17 +283,21 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
         saving={addPage.isPending}
         onSubmit={(input) => addPage.mutateAsync(input).then((d) => toast.success(`Added ${d.title}`, { description: d.status === 'indexed' ? 'Indexed; agents can cite it now.' : d.error }))}
       />
-      <NewSourceDialog
+      <AddSourceWizard
         open={addOpen}
         onOpenChange={setAddOpen}
-        connections={connections.data ?? []}
-        existingNames={[]}
-        isPending={create.isPending}
-        onSubmit={(input) => create.mutateAsync({ input, sync: false, kbIds: [kb.id] })}
-        onSync={(id) => syncSource.mutateAsync({ id })}
-        onCreated={(s, synced) => {
-          toast.success(synced ? `Added ${s.name} to ${kb.name} and syncing` : `Added ${s.name} to ${kb.name} as a draft`);
-          router.push(`/integrations/sources/${s.id}?tab=${synced ? 'items' : 'settings'}`);
+        kb={kb}
+        onCreated={(s, approval) => {
+          watched.watch(s.id);
+          toast.success(`${s.name} created`, {
+            description:
+              approval.state === 'waiting'
+                ? `First sync started. Its questions and FAQ steps wait for the knowledge owner’s approval: ${approval.reason}`
+                : approval.state === 'approved'
+                  ? 'First sync started, with its questions and FAQ steps approved.'
+                  : 'First sync started.',
+            action: { label: 'View source', onClick: () => router.push(`/integrations/sources/${s.id}`) },
+          });
         }}
       />
       <DialogShell

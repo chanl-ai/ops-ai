@@ -588,9 +588,9 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       create: (input, opts) =>
         run(() => {
           if (sources.some((s) => s.name.trim().toLowerCase() === input.name.trim().toLowerCase())) throw new ApiError('A source with this name already exists.', 409);
-          validateIngest(input.ingest ?? MOCK_INGEST);
+          validateIngest({ ...MOCK_INGEST, ...input.ingest });
           if (input.type === 'file' && input.status !== 'draft' && !input.fileIds?.length) throw new ApiError('Upload at least one file.', 400);
-          const { fileIds, ...rest } = input;
+          const { fileIds, ingest, ...rest } = input;
           const sid = id('src');
           // Linking first refuses a quarantined or still-scanning file before the source exists.
           for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/integrations/sources/${sid}` }, ['knowledge_source']);
@@ -598,7 +598,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const s: Source = {
             parsing: { ocr: 'auto', tables: true, vision: false },
             cleaning: { furniture: kind !== 'file', mainContent: kind === 'web', siteRepeats: kind === 'web', duplicates: 'flag' },
-            ingest: structuredClone(MOCK_INGEST),
+            ingest: { ...structuredClone(MOCK_INGEST), ...ingest },
             rules: [],
             metadataMapping: [],
             tags: [],
@@ -694,15 +694,11 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           return list(rows, p, { text: (r) => r.id, value: (r, key) => String((r as unknown as Record<string, unknown>)[key]), facetKeys: ['status', 'trigger'] }, m);
         }),
       run: (rid) => run(() => runs.find((r) => r.id === rid) ?? notFound('Sync run')),
-      preview: (input) =>
+      preview: (config) =>
         run(() => {
-          const c = input.config as { startUrl?: string };
-          if (input.type === 'crawl' && /\/\/(10\.|192\.168\.|127\.)/.test(c.startUrl ?? '')) {
-            return { ok: false, message: 'URL resolves to a private IP range. Crawls must target a public host.', rows: [] };
-          }
-          const rows = previewRows(input);
-          const n = rows.length;
-          return { ok: true, message: `Connection OK · ${n} item${n === 1 ? '' : 's'} would be fetched`, rows };
+          const rows = previewRows({ type: 'crawl', config });
+          const pages = rows.map((r) => ({ id: r.path, outcome: 'Will fetch', willFetch: true }));
+          return { found: pages.length, willFetch: pages.length, pages, capped: false };
         }),
       previewHeld: (input) =>
         run(() => {

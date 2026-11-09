@@ -479,12 +479,6 @@ export interface PlaygroundAnswer {
   trace?: RetrievalTrace;
 }
 
-export interface SourcePreview {
-  ok: boolean;
-  message: string;
-  rows: { title: string; path: string; size: number; modified: string }[];
-}
-
 /** What a new source's previewed items would look like to the knowledge bases chosen for attachment (spec 5.15.10). */
 export interface HeldPreviewInput extends Pick<SourceInput, 'type' | 'config' | 'metadataMapping'> {
   kbIds: string[];
@@ -532,8 +526,10 @@ export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'descripti
 
 /** A new source, as `POST /v1/sources` takes it; settings left out start from its kind's defaults. */
 export type SourceInput = Pick<Source, 'type' | 'name'> &
-  Partial<Pick<Source, 'config' | 'parsing' | 'cleaning' | 'ingest' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
+  Partial<Pick<Source, 'config' | 'parsing' | 'cleaning' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
     status?: 'active' | 'draft';
+    /** Merged over the kind's defaults, so Add source sends only the steps it switches. */
+    ingest?: Partial<IngestSettings>;
     /** File sources: ids from the Files API. The source never receives bytes; it reads each file from storage. */
     fileIds?: string[];
   };

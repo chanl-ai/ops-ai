@@ -24,8 +24,8 @@ import type {
   SourceFilters,
   SourceInput,
   SourceKindOption,
+  SourceKindPreview,
   SourcePatch,
-  SourcePreview,
   SourceRow,
   SourceType,
   SyncOptions,
@@ -82,8 +82,8 @@ export interface KnowledgeApi {
     items(id: string, params: ListParams<ItemFilters>): Promise<ListResult<Item>>;
     runs(id: string, params: ListParams<RunFilters>): Promise<ListResult<SyncRun>>;
     run(runId: string): Promise<SyncRun>;
-    /** Lists what a source would fetch, without creating it. */
-    preview(input: Pick<SourceInput, 'type' | 'config'>): Promise<SourcePreview>;
+    /** What a website or app source with this `config` ({plugin, source, values}) would take in, without creating it. */
+    preview(config: Record<string, unknown>): Promise<SourceKindPreview>;
     /** Required metadata of the chosen knowledge bases, and how many previewed items each would hold for it. */
     previewHeld(input: HeldPreviewInput): Promise<HeldPreview>;
     /** Seeded documents a split preview can run on; a source's own documents first when `sourceId` is given. */
