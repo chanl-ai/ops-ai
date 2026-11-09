@@ -14,7 +14,7 @@ the file by its number. The file is a two-page scan made by the script: no text 
 | S1 | A banker attaches a scanned fee schedule and the agent is given both pages of it | api | 1, 2 | 2 |
 | S2 | The banker asks what a replacement card costs and the answer cites page 2 of the scan | api | 3 | 3 |
 | S3 | The scan was read once, with OCR, by documents-service | api | 4 | 4 |
-| S4 | In the console the banker attaches the scan, asks, and sees the answer cite page 2 | ui | 1 | 1 |
+| S4 | In the console the banker attaches a one-page scan, asks about it, and sees the answer cite its page | ui | 1 | 1 |
 
 ## Preconditions
 
