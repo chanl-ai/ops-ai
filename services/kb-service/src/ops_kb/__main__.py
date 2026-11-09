@@ -17,8 +17,9 @@ from ops_store.schema_version import require_current_schema
 from .agents import StaticAgents
 from .app import _documents_service, create_kb_app  # pyright: ignore[reportPrivateUsage]
 from .files import KnowledgeFiles, file_intake, move_files
+from .origin import source_team
 from .seed import TENANT, seed_demo
-from .service import KnowledgeService, source_team
+from .service import KnowledgeService
 from .store import KnowledgeStore, engine_for
 from .store.fulltext import PostgresFullTextRetriever
 

@@ -17,9 +17,8 @@ from typing import Any, cast
 from ops_access import can, require_provisioner
 from ops_documents_client import DocumentsRefused
 from ops_identity import Principal, ServiceUnreachable
-from ops_ingest import ParsedDocument, SplitResult, parse, split
+from ops_ingest import ParsedDocument, SplitResult, split
 from ops_ingest.metadata import resolve_metadata
-from ops_ingest.parsers import TooLargeError, UnsupportedFormatError
 from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_ingest.split import document_digest
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
@@ -28,6 +27,7 @@ from ops_service_kit.ids import new_id
 
 from .agents import AgentDirectory, Usage
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
+from .origin import Origin, source_team
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .retrieval import Passage, Retriever
 from .source_settings import (
@@ -795,7 +795,10 @@ class KnowledgeService:
                 else:
                     found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
                                    str(item["digest"]), False)  # fmt: skip
-                    done = await self._read_file(who, s, item, name=str(item["path"]), found=found, rebuild=True)
+                    origin = Origin(str(item["path"]), str(item["title"])) if s["type"] != "file" else None
+                    done = await self._read_file(
+                        who, s, item, name=str(item["path"]), found=found, rebuild=True, origin=origin
+                    )
                     outcome = {"indexed": "rebuilt", "reading": "reading"}.get(str(done["status"]), "failed")
                     counts[outcome] += 1
                     if outcome == "failed":
@@ -964,13 +967,21 @@ class KnowledgeService:
         return mapped.values
 
     async def _reindex(
-        self, who: Who, s: dict[str, Any], existing: dict[str, Any], *, name: str, doc: ParsedDocument, read_with: str
+        self,
+        who: Who,
+        s: dict[str, Any],
+        existing: dict[str, Any],
+        *,
+        name: str,
+        doc: ParsedDocument,
+        read_with: str,
+        title_given: str | None = None,
     ) -> dict[str, Any]:
         """The same content split again from its stored reading under its current version: no new version, no change
         row, and the file's bytes are not read again."""
         error: tuple[str, str] | None = None
         warning: str | None = None
-        title, pages = doc.title or name, doc.source.page_count
+        title, pages = title_given or doc.title or name, doc.source.page_count
         settings = self.settings_of(s)
         chunks = self._chunks(who, s, doc, item_id=existing["id"], version=existing["version"], title=title)
         if chunks:
@@ -1005,38 +1016,52 @@ class KnowledgeService:
         return built != index_key(settings) or reread
 
     async def _read_file(
-        self, who: Who, s: dict[str, Any], existing: dict[str, Any] | None, *, name: str, found: Stored, rebuild: bool
+        self,
+        who: Who,
+        s: dict[str, Any],
+        existing: dict[str, Any] | None,
+        *,
+        name: str,
+        found: Stored,
+        rebuild: bool,
+        origin: Origin | None = None,
     ) -> dict[str, Any]:
         """One file of a source from its reading: indexed when the reading is ready, marked reading while
-        documents-service reads it in the background (or is out of reach), failed with the reader's reason."""
+        documents-service reads it in the background (or is out of reach), failed with the reader's reason. A file
+        source's item is keyed by its name; a fetched item gives its `origin` (the system's id, title and marker)."""
+        origin = origin or Origin(name)
         if self.readings is None:
-            return await self._failed(who, s, existing, name=name, found=found, error=NO_READER)
+            return await self._failed(who, s, existing, name=name, found=found, error=NO_READER, origin=origin)
         try:
             ocr = self.settings_of(s).parsing.ocr
             answer = await self.readings.reading(who.tenant_id, source_team(s), found.file_id, ocr=ocr)
         except DocumentsRefused as e:
-            return await self._failed(who, s, existing, name=name, found=found, error=("parse", e.message))
+            failed = ("parse", e.message)
+            return await self._failed(who, s, existing, name=name, found=found, error=failed, origin=origin)
         except ServiceUnreachable:
             # The owner's rule: a sync waits for documents-service while it is down; the item stays queued.
-            return await self._mark_reading(who, s, existing, name=name, found=found)
+            return await self._mark_reading(who, s, existing, name=name, found=found, origin=origin)
         status = answer.get("status")
         if status in READING_PENDING:
-            return await self._mark_reading(who, s, existing, name=name, found=found)
+            return await self._mark_reading(who, s, existing, name=name, found=found, origin=origin)
         if status != "done":
             said: dict[str, Any] = answer.get("error") or {}
             reason = str(said.get("message") or "the file could not be read")
-            return await self._failed(who, s, existing, name=name, found=found, error=("parse", reason))
+            return await self._failed(who, s, existing, name=name, found=found, error=("parse", reason), origin=origin)
         cleaning = self.settings_of(s).cleaning
         doc = parsed_of(answer, furniture=cleaning.furniture, main_content=cleaning.main_content)
         if rebuild and existing is not None:
-            return await self._reindex(who, s, existing, name=name, doc=doc, read_with=read_with(answer))
+            return await self._reindex(
+                who, s, existing, name=name, doc=doc, read_with=read_with(answer), title_given=origin.title
+            )
         return await self._index(
             who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
-            digest=found.digest, read_with=read_with(answer),
+            digest=found.digest, read_with=read_with(answer), path=origin.path, extra=origin.extra,
+            title_given=origin.title,
         )  # fmt: skip
 
     async def _mark_reading(
-        self, who: Who, s: dict[str, Any], existing: dict[str, Any] | None, *, name: str, found: Stored
+        self, who: Who, s: dict[str, Any], existing: dict[str, Any] | None, *, name: str, found: Stored, origin: Origin
     ) -> dict[str, Any]:
         """The item waits for its reading; an indexed version keeps answering until the new one is indexed."""
         values = {"status": "reading", "digest": found.digest, "file_id": found.file_id, "mime": found.mime,
@@ -1044,7 +1069,7 @@ class KnowledgeService:
         if existing is not None:
             await self.store.update_item(who.tenant_id, existing["id"], values)
             return {**existing, **values}
-        item = self._placeholder(who, s, name, found) | values
+        item = self._placeholder(who, s, name, found, origin) | values
         await self.store.add_item(who.tenant_id, item)
         return item
 
@@ -1057,22 +1082,24 @@ class KnowledgeService:
         name: str,
         found: Stored,
         error: tuple[str, str],
+        origin: Origin | None = None,
     ) -> dict[str, Any]:
         values = {"status": "failed", "error_class": error[0], "error": error[1], "digest": found.digest,
                   "file_id": found.file_id, "processed_at": datetime.now(UTC)}  # fmt: skip
         if existing is not None:
             await self.store.update_item(who.tenant_id, existing["id"], values)
             return {**existing, **values}
-        item = self._placeholder(who, s, name, found) | values
+        item = self._placeholder(who, s, name, found, origin or Origin(name)) | values
         await self.store.add_item(who.tenant_id, item)
         return item
 
-    def _placeholder(self, who: Who, s: dict[str, Any], name: str, found: Stored) -> dict[str, Any]:
+    def _placeholder(self, who: Who, s: dict[str, Any], name: str, found: Stored, origin: Origin) -> dict[str, Any]:
         """An item with no version yet: its first indexed version is 1."""
         return {
-            "tenant_id": who.tenant_id, "id": new_id("itm"), "source_id": s["id"], "path": name, "title": name,
-            "mime": found.mime, "size": found.size, "file_id": found.file_id, "digest": found.digest, "version": 0,
-            "status": "reading", "chunk_count": 0, "owner": s["owner"], "created_at": datetime.now(UTC),
+            "tenant_id": who.tenant_id, "id": new_id("itm"), "source_id": s["id"], "path": origin.path,
+            "title": origin.title or name, "mime": found.mime, "size": found.size, "file_id": found.file_id,
+            "digest": found.digest, "version": 0, "status": "reading", "chunk_count": 0, "owner": s["owner"],
+            "created_at": datetime.now(UTC), **origin.extra,
         }  # fmt: skip
 
     async def finish_reading(self, who: Who, file_id: str) -> int:
@@ -1086,7 +1113,11 @@ class KnowledgeService:
             source = found_sources[0]
             found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
                            str(item["digest"]), False)  # fmt: skip
-            done = await self._read_file(who, source, item, name=str(item["path"]), found=found, rebuild=False)
+            # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
+            origin = Origin(str(item["path"]), str(item["title"])) if source["type"] != "file" else None
+            done = await self._read_file(
+                who, source, item, name=str(item["path"]), found=found, rebuild=False, origin=origin
+            )
             if done["status"] != "reading":
                 settled += 1
                 if done["status"] == "indexed":
@@ -1105,39 +1136,30 @@ class KnowledgeService:
         name: str,
         mime: str,
         digest: str,
-        data: bytes | None = None,
-        doc: ParsedDocument | None = None,
-        size: int | None = None,
+        doc: ParsedDocument,
+        size: int,
         read_with: str | None = None,
         path: str | None = None,
         extra: dict[str, Any] | None = None,
         title_given: str | None = None,
     ) -> dict[str, Any]:
-        """A file source gives its reading's document (`doc`); a tool source gives the content it read (`data`),
-        parsed here. `path` keys the document in its source (a file's name, or the system's id for a tool source),
-        `extra` adds a tool source's marker, parent and address, and `title_given` is the system's own title for it."""
+        """The item's next version from its reading's document (`doc`): every file and every fetched item is read by
+        documents-service, never here. `path` keys the document in its source (a file's name, or the system's id for
+        a fetched item), `extra` adds a fetched item's marker, parent and address, and `title_given` is the system's
+        own title for it."""
         now = datetime.now(UTC)
         item_id = existing["id"] if existing else new_id("itm")
         version = (existing["version"] + 1) if existing else 1
         chunks: list[dict[str, Any]] = []
         error: tuple[str, str] | None = None
         warning: str | None = None
-        title, pages = title_given or name, None
         settings = self.settings_of(s)
-        try:
-            if doc is None:
-                # Content a tool gives has no reading yet, so its furniture goes as it is parsed.
-                doc = parse(data or b"", filename=name, mime_type=mime, clean=settings.cleaning.furniture)
-            title, pages = title_given or doc.title or name, doc.source.page_count
-            chunks = self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
-            if chunks:
-                warning = _unread(doc)
-            else:
-                error = _empty(doc, settings.parsing.ocr)
-        except (UnsupportedFormatError, TooLargeError) as e:
-            error = ("parse", str(e))
-        except Exception as e:
-            error = ("parse", f"The file could not be read: {type(e).__name__}.")
+        title, pages = title_given or doc.title or name, doc.source.page_count
+        chunks = self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
+        if chunks:
+            warning = _unread(doc)
+        else:
+            error = _empty(doc, settings.parsing.ocr)
         item = {
             "tenant_id": who.tenant_id,
             "id": item_id,
@@ -1145,7 +1167,7 @@ class KnowledgeService:
             "path": path or name,
             "title": title,
             "mime": mime,
-            "size": size if size is not None else len(data or b""),
+            "size": size,
             "file_id": file_id,
             "digest": digest,
             "version": version,
@@ -1160,7 +1182,7 @@ class KnowledgeService:
             "processed_at": now,
             "read_with": read_with,
             "indexed_with": None if error else index_key(settings),
-            "content_digest": None if error or doc is None else document_digest(doc, split_settings(settings)),
+            "content_digest": None if error else document_digest(doc, split_settings(settings)),
             "duplicate_of": None,
             **(extra or {}),
         }
@@ -1852,11 +1874,6 @@ class UnknownFile(ApiError):
     code = "file_not_found"
 
 
-def source_team(s: dict[str, Any]) -> str:
-    """The files-service team a source's files are stored under: the team that created the source."""
-    return str(s["team_id"] or "team_ops")
-
-
 def _location(section: str, page: int | None) -> str:
     return ", ".join(p for p in (f"p. {page}" if page else "", section) if p)
 
@@ -1872,4 +1889,7 @@ def passage_out(p: Passage) -> dict[str, Any]:
         "snippet": p.snippet,
         "text": p.text,
         "score": p.score,
+        **({"fileId": p.file_id} if p.file_id else {}),
+        **({"url": p.url} if p.url else {}),
+        "matched": p.matched,
     }

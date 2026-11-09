@@ -1654,10 +1654,17 @@ export interface components {
         };
         /** PassageOut */
         PassageOut: {
+            /** Fileid */
+            fileId?: string | null;
             /** Itemid */
             itemId: string;
             /** Kbid */
             kbId: string;
+            /**
+             * Matched
+             * @default self
+             */
+            matched: string;
             /** Page */
             page?: number | null;
             /** Score */
@@ -1670,6 +1677,8 @@ export interface components {
             text: string;
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
             /** Version */
             version: string;
         };

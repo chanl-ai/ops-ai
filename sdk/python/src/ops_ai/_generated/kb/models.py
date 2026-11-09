@@ -319,14 +319,17 @@ class Pagination(TypedDict, closed=True):
 
 
 class PassageOut(TypedDict, closed=True):
+    fileId: NotRequired[str | None]
     itemId: str
     kbId: str
+    matched: NotRequired[str]
     page: NotRequired[int | None]
     score: float
     section: str
     snippet: str
     text: str
     title: str
+    url: NotRequired[str | None]
     version: str
 
 

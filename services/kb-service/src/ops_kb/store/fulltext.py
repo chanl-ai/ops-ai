@@ -29,7 +29,7 @@ _SEARCH = sa.text(
     ),
     hits AS (
         SELECT l.kb_id, c.id AS chunk_id, c.item_id, c.version, c.title, c.section, c.page, c.text,
-               u.kind AS unit_kind, u.text AS unit_text,
+               u.kind AS unit_kind, u.text AS unit_text, i.file_id, i.url,
                (SELECT count(*) FROM unnest(q.terms) t WHERE u.tsv @@ to_tsquery('english', quote_literal(t)))
                    AS shared,
                cardinality(q.terms) AS total,
@@ -107,6 +107,8 @@ class PostgresFullTextRetriever:
                     score=round(float(r["shared"]) / float(r["total"]), 3),
                     matched=r["unit_kind"],
                     matched_text=r["unit_text"],
+                    file_id=r["file_id"] or None,
+                    url=r["url"],
                 )
             )
         return out

@@ -3025,12 +3025,28 @@
       "PassageOut": {
         "additionalProperties": false,
         "properties": {
+          "fileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fileid"
+          },
           "itemId": {
             "title": "Itemid",
             "type": "string"
           },
           "kbId": {
             "title": "Kbid",
+            "type": "string"
+          },
+          "matched": {
+            "default": "self",
+            "title": "Matched",
             "type": "string"
           },
           "page": {
@@ -3063,6 +3079,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           },
           "version": {
             "title": "Version",

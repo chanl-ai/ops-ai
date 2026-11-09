@@ -26,6 +26,10 @@ class Passage:
     # The unit that matched: the piece's own text (`self`), a smaller child, or a question written for it.
     matched: str = "self"
     matched_text: str = ""
+    # The file this version was built from (an upload, or the snapshot of a fetched page), which a citation opens, and
+    # the item's address where it came from.
+    file_id: str | None = None
+    url: str | None = None
 
 
 class Retriever(Protocol):

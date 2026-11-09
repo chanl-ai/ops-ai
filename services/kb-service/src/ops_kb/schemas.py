@@ -297,6 +297,11 @@ class PassageOut(Out):
     snippet: str
     text: str
     score: float
+    # The file the cited version was built from, which a citation opens; the item's address at its source.
+    file_id: str | None = None
+    url: str | None = None
+    # What matched: the piece's own text, a smaller child, or a question written for it.
+    matched: str = "self"
 
 
 class SearchOut(Out):

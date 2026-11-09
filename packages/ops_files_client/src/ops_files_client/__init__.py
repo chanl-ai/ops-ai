@@ -26,6 +26,7 @@ __all__ = [
     "FileScan",
     "FilesClient",
     "FilesRefused",
+    "Purpose",
     "StoredFile",
 ]
 

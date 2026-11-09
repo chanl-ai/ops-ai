@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -21,6 +20,9 @@ from typing import TYPE_CHECKING, Any, cast
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Conflict, ValidationFailed
 from ops_service_kit.ids import new_id
+
+from .files import FileNotScanned, Stored
+from .origin import Origin, source_team
 
 if TYPE_CHECKING:
     from .service import KnowledgeService, Who
@@ -298,7 +300,9 @@ async def sync_tool_source(
             removed_ids = [str(known[p]["id"]) for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
             removed_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(removed_ids)]
+            gone_files = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(removed_ids)]
             counts["deleted"] = await service.store.remove_items(tenant, removed_ids)
+            await release_snapshots(service, who, s, gone_files)
             for p in dropped:
                 log.append(f"{known[p]['title']}: no longer listed by the system, removed")
         if status == "success":
@@ -346,47 +350,60 @@ async def _put(
     counts: dict[str, int],
     errors: list[dict[str, Any]],
 ) -> None:
-    """One fetched item: unchanged when its content's digest is the stored one (its marker updated), else indexed as
-    a new document or the next version of the one stored under the system's id."""
+    """One fetched item, kept as a knowledge snapshot in files-service before it is read, so a rebuild never fetches
+    it again and a citation opens the copy used. Unchanged when files-service's digest of its bytes is the stored one
+    (its marker updated); else read through the shared reading step and indexed as a new document or the next version
+    of the one stored under the system's id. The snapshot an older version used is let go."""
     data = _content(item)
-    digest = hashlib.sha256(data).hexdigest()
     item_id = str(item["id"])
     ex = known.get(item_id)
-    if ex is not None and ex["digest"] == digest:
-        await service.store.update_item(who.tenant_id, str(ex["id"]), {"marker": marker})
+    tenant, team, source_id = who.tenant_id, source_team(s), str(s["id"])
+    name, mime = _filename(item), str(item.get("mime") or "text/plain")
+    try:
+        stored = await service.files.put(
+            tenant, team, data, name=name, mime=mime, actor=f"kb-sync:{source_id}", purpose="knowledge_snapshot"
+        )
+        await service.files.use(tenant, team, stored.file_id, source_id=source_id, source_name=str(s["name"]))
+    except (ValueError, FileNotScanned) as e:
+        counts["failed"] += 1
+        errors.append({"itemTitle": item.get("title"), "phase": "store", "errorClass": "snapshot", "message": str(e)})
+        return
+    if ex is not None and ex["digest"] == stored.digest and ex["status"] == "indexed":
+        await service.store.update_item(tenant, str(ex["id"]), {"marker": marker})
         counts["unchanged"] += 1
         return
-    extra = {"marker": marker, "parent_id": None, "url": item.get("url")}
+    extra: dict[str, Any] = {"marker": marker, "parent_id": None, "url": item.get("url")}
     if parent is not None:
         parent_row = known.get(parent) or next(
-            (i for i in await service.store.items(who.tenant_id, source_ids=[str(s["id"])]) if i["path"] == parent),
-            None,
+            (i for i in await service.store.items(tenant, source_ids=[source_id]) if i["path"] == parent), None
         )
         extra["parent_id"] = parent_row["id"] if parent_row else None
-    stored = await service._index(  # pyright: ignore[reportPrivateUsage]
-        who,
-        s,
-        ex,
-        file_id="",
-        name=_filename(item),
-        mime=str(item.get("mime") or "text/plain"),
-        data=data,
-        digest=digest,
-        path=item_id,
-        extra=extra,
-        title_given=str(item.get("title") or item_id),
-    )
-    known[item_id] = stored
-    if stored["status"] == "failed":
+    found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
+    origin = Origin(item_id, str(item.get("title") or item_id), extra)
+    done = await service._read_file(who, s, ex, name=name, found=found, rebuild=False, origin=origin)  # pyright: ignore[reportPrivateUsage]
+    known[item_id] = done
+    if ex is not None and ex.get("file_id") and ex["file_id"] != stored.file_id:
+        await release_snapshots(service, who, s, [str(ex["file_id"])])
+    if done["status"] == "failed":
         counts["failed"] += 1
         errors.append(
             {
-                "itemId": stored["id"],
-                "itemTitle": stored["title"],
+                "itemId": done["id"],
+                "itemTitle": done["title"],
                 "phase": "parse",
-                "errorClass": stored["error_class"],
-                "message": stored["error"],
+                "errorClass": done["error_class"],
+                "message": done["error"],
             }
         )
+    elif done["status"] == "reading":
+        counts.setdefault("reading", 0)
+        counts["reading"] += 1
     else:
         counts["upserted"] += 1
+
+
+async def release_snapshots(service: KnowledgeService, who: Who, s: dict[str, Any], file_ids: list[str]) -> None:
+    """Lets go of snapshots no item of the source uses any more; files-service keeps each for its retention days."""
+    held = {str(i["file_id"]) for i in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])}
+    for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
+        await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s["id"]))

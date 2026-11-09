@@ -23,6 +23,7 @@ from ops_kb.schedule import due
 from ops_kb.tool_sources import Answer
 from ops_service_kit.settings import Settings
 
+from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
 
 LIST, GET = "salesforce_list_articles", "salesforce_get_article"
@@ -122,12 +123,14 @@ def tools() -> FakeTools:
 async def kb(engine: AsyncEngine, tenant: str, tools: FakeTools) -> AsyncIterator[httpx.AsyncClient]:
     email = "james@harborpine.example"
     auth = Auth.for_dev(Settings(), audience="kb", name="james", email=email, tenant_id=tenant)
+    intake = KnowledgeFiles(Path(mkdtemp(prefix="kb-files-")))
     app = create_kb_app(
         engine,
         auth=auth,
-        files=KnowledgeFiles(Path(mkdtemp(prefix="kb-files-"))),
+        files=intake,
         agents=StaticAgents(),
         tools=tools,  # type: ignore[arg-type]
+        readings=LocalReadings(intake),
         schedule=False,
     )
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://kb") as c:
