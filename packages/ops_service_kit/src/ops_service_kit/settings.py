@@ -359,7 +359,9 @@ class Settings(BaseSettings):
             "scanner": ["files:decide"],
             # runner-service sends a running code operation's calls back to tools-service.
             "runner": ["tools:run"],
-            "kb": ["files:view", "files:create", "files:edit", "agents:view"],
+            # documents:view, documents:run: kb-service indexes each file of a source from its reading in
+            # documents-service.
+            "kb": ["files:view", "files:create", "files:edit", "agents:view", "documents:view", "documents:run"],
             # The workflow worker reads a file an Extract from file step names.
             # It also stores the attachments of mail that starts a workflow.
             # deployments:run: it reads the IMAP mailboxes workflows watch through tools-service.

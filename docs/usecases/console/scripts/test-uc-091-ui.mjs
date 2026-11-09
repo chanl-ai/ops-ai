@@ -91,7 +91,7 @@ await withUiStack(async (consoleUrl) => {
     const ready = await page.getByTestId('chat-attach-items').locator('[data-phase="ready"]').waitFor({ timeout: 30_000 }).then(() => true, () => false);
     const chip = ready ? 'ready' : await page.getByTestId('chat-attach-items').innerHTML().catch(() => 'no chip');
     await send('What does a replacement debit card cost?');
-    const marker = page.getByRole('button', { name: /^Citation 1: fee-schedule-v2\.pdf/ }).last();
+    const marker = page.getByRole('button', { name: /^Citation \d+: fee-schedule-v2\.pdf/ }).last();
     const cited = await marker.waitFor({ timeout: 30_000 }).then(() => true, () => false);
     if (cited) await marker.click();
     const location = cited ? await page.getByRole('dialog').getByTestId('citation-location').innerText().catch(() => '') : '';

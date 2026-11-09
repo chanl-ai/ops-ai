@@ -341,27 +341,24 @@ def kb(
     `kb_url`, and `files_url` is where a seed puts the files it adds to a source. With `models_url` or `document_types`
     a documents-service starts beside them, its extractions calling the model at `models_url` and reading the
     workspace floor at `platform_url`; `document_types` seeds the demo's document types the levy workflows name. With
-    `agents_url` files-service delivers its service events (file.deleted) there. `documents_env` starts
-    documents-service too, with those settings (e.g. platform sign-in), for a use case that calls it beside an agents
-    stack: agents() starts kb() and its files-service, so a files-service of the use case's own takes the same port."""
+    `agents_url` files-service delivers its service events (file.deleted) there. documents-service always starts, since
+    kb-service indexes each file from its reading there; `documents_env` adds settings to it (e.g. platform sign-in),
+    for a use case that calls it beside an agents stack: agents() starts kb() and its files-service, so a files-service
+    of the use case's own takes the same port."""
     # The agents chain creates the run's database; files-service and kb-service migrate into it after.
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
     subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     with ExitStack() as stack:
         store = stack.enter_context(files(files_dir, scanning="off", platform_auth=False, agents_url=agents_url))
         files_url = str(store.base_url).rstrip("/")
-        documents_url = ""
-        if models_url or document_types or documents_env:
-            reader = stack.enter_context(
-                documents(
-                    files_url,
-                    models_url=models_url,
-                    platform_url=platform_url,
-                    agents_url=agents_url,
-                    env=documents_env,
-                )
+        # A finished reading reaches this kb-service, which indexes the items waiting on it.
+        reading_env = {"OPS_KB_URL": f"http://127.0.0.1:{KB_PORT}", **(documents_env or {})}
+        reader = stack.enter_context(
+            documents(
+                files_url, models_url=models_url, platform_url=platform_url, agents_url=agents_url, env=reading_env
             )
-            documents_url = str(reader.base_url).rstrip("/")
+        )
+        documents_url = str(reader.base_url).rstrip("/")
         if document_types:
             # The demo's document types (levy_notice v1 and its samples), which the seeded levy workflows name.
             subprocess.run(
@@ -378,6 +375,7 @@ def kb(
         env["OPS_DATABASE_URL"] = pg_url()
         env["OPS_KB_PORT"] = str(KB_PORT)
         env["OPS_FILES_URL"] = files_url
+        env["OPS_DOCUMENTS_URL"] = documents_url
         # A knowledge base's "used by" comes from agents-service, on this run's port rather than the
         # shared stack's.
         env["OPS_AGENTS_URL"] = f"http://127.0.0.1:{AGENTS_PORT}"
