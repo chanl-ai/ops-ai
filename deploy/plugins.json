@@ -14,9 +14,9 @@
     },
     {
       "source": "https://github.com/chanl-ai/ops-ai-plugins",
-      "ref": "f3df22fde60d4fb2c6b14b8633d3fbb2d52e022b",
+      "ref": "a5bfc40c80bd735b46ab132ca77e02e30a7a64d1",
       "path": "plugins/web",
-      "sha256": "5f0eb1e7062ccbab1b0ac53528042502cebb5db4122092086f037a11a9773ec4"
+      "sha256": "d62dad9c634239b5cfdf8b360ce30e4560b64b42d0e15c052a9e2e817341e32a"
     }
   ]
 }

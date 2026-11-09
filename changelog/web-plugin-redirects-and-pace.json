@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Website crawls follow redirects and keep pace",
+  "description": "The website source follows same-site redirects, skips sitemaps on other sites, and spaces its page fetches by the site's own crawl delay.",
+  "tag": "improved"
+}
