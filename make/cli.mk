@@ -4,13 +4,14 @@
 # `make api` keeps, so the two share one sign-in per person. What a target makes carries the `[test] ` prefix (a dev
 # seed sign-in is a test run), so `make test-data-clean` finds it.
 
-OPS_CLI = uv run --quiet --project $(ROOT)/sdk/python ops
+# The `ops` on PATH (make install-cli) or the workspace's own; never a workspace sync (scripts/ops_cli.sh).
+OPS_CLI = $(ROOT)/scripts/ops_cli.sh
 # The options go before the verb, where every area reads them.
 OPS_AS = --as '$(AS)' $(if $(TEAM),--team $(TEAM)) $(if $(JSON),--json)
 # $(call need,VAR,example): stops the target with what to give when VAR is empty.
 need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 
-.PHONY: sf-signin-save sf-signin-remove sf-signin-restore sf-signin-env demo-org-seed demo-org-remove chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
+.PHONY: install-cli wheelhouse sf-signin-save sf-signin-remove sf-signin-restore sf-signin-env demo-org-seed demo-org-remove chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
 	chat-approve chat-reject chat-submit chat-transcript chat-transcripts \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
@@ -21,6 +22,13 @@ need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 	documents-extractions people-list people-invite people-roles people-me \
 	models-aliases models-providers models-keys models-test memories-list memories-forget memories-forget-agent \
 	memories-export test-data-clean
+
+##@ Install the ops command
+
+install-cli: ## make install-cli [WHEELS=dist/wheelhouse]: only the ops command, in its own tool environment; honours the mirror settings; WHEELS installs offline
+	@WHEELS='$(WHEELS)' $(ROOT)/scripts/install_cli.sh
+wheelhouse: ## make wheelhouse [PLATFORMS='…'] [PYTHONS='3.11 3.12'] [OUT=dir]: every wheel the ops command needs, into dist/wheelhouse (needs internet)
+	@PLATFORMS='$(PLATFORMS)' PYTHONS='$(PYTHONS)' $(ROOT)/scripts/wheelhouse.sh $(if $(OUT),'$(OUT)')
 
 ##@ Chat (ops chat)
 
