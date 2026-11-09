@@ -91,6 +91,13 @@ class DraftEdit(TypedDict):
     question: str
 
 
+class EmbeddingCoverage(TypedDict, closed=True):
+    embedded: int
+    model: str
+    units: int
+    width: int
+
+
 class EnvelopeListAddedFile(TypedDict, closed=True):
     data: list[AddedFile]
     success: Literal[True]
@@ -450,6 +457,7 @@ class SourcePatch(TypedDict):
     schedule: NotRequired[dict[str, Any] | None]
     sensitivity: NotRequired[str | None]
     tags: NotRequired[list[str] | None]
+    values: NotRequired[dict[str, Any] | None]
 
 
 class SourcePreview(TypedDict, closed=True):
@@ -694,6 +702,7 @@ class Source(TypedDict, closed=True):
     itemsFailed: int
     itemsIndexed: int
     itemsPending: int
+    kind: str
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
     metadataMapping: list[dict[str, Any]]
@@ -735,6 +744,7 @@ class SourceDetail(TypedDict, closed=True):
     itemsFailed: int
     itemsIndexed: int
     itemsPending: int
+    kind: str
     lastRunDurationSec: NotRequired[float | None]
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
@@ -775,6 +785,7 @@ class SourceRow(TypedDict, closed=True):
     itemsFailed: int
     itemsIndexed: int
     itemsPending: int
+    kind: str
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
     metadataMapping: list[dict[str, Any]]
@@ -882,6 +893,7 @@ class KnowledgeBaseDetail(TypedDict, closed=True):
     color: str
     createdAt: str
     description: str
+    embedding: NotRequired[EmbeddingCoverage | None]
     health: str
     healthReasons: list[str]
     heldCount: int

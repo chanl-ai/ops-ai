@@ -92,6 +92,8 @@ async def test_a_question_in_other_words_is_found_by_meaning_and_both_lanes_say_
     assert set(top["lanes"]) == {"meaning"} and top["lanes"]["meaning"] >= 0.5, top
     assert found["lanes"] == {"asked": ["keyword", "meaning"], "ran": ["keyword", "meaning"], "skipped": []}
     assert found["cost"]["embeddingTokens"] == len(PARAPHRASE.split())
+    coverage = data(await stack.client.get(f"/v1/knowledge-bases/{kb['id']}"))["embedding"]
+    assert coverage["model"] == "concept-embed" and coverage["embedded"] == coverage["units"] > 0, coverage
     keyword_only = await stack.search(kb["id"], PARAPHRASE, limit=8)
     assert keyword_only["passages"], "the request's limit caps; it does not change the lanes"
     both = await stack.search(kb["id"], "early repayment charge on my loan")

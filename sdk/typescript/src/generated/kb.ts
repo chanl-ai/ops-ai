@@ -913,6 +913,17 @@ export interface components {
             /** Question */
             question: string;
         };
+        /** EmbeddingCoverage */
+        EmbeddingCoverage: {
+            /** Embedded */
+            embedded: number;
+            /** Model */
+            model: string;
+            /** Units */
+            units: number;
+            /** Width */
+            width: number;
+        };
         /** Envelope[AddedDocuments] */
         Envelope_AddedDocuments_: {
             data: components["schemas"]["AddedDocuments"];
@@ -1531,6 +1542,7 @@ export interface components {
             createdAt: string;
             /** Description */
             description: string;
+            embedding?: components["schemas"]["EmbeddingCoverage"] | null;
             /** Health */
             health: string;
             /** Healthreasons */
@@ -2092,6 +2104,8 @@ export interface components {
             itemsIndexed: number;
             /** Itemspending */
             itemsPending: number;
+            /** Kind */
+            kind: string;
             /** Lastrunstatus */
             lastRunStatus?: string | null;
             /** Lastsyncat */
@@ -2192,6 +2206,8 @@ export interface components {
             itemsIndexed: number;
             /** Itemspending */
             itemsPending: number;
+            /** Kind */
+            kind: string;
             /** Lastrundurationsec */
             lastRunDurationSec?: number | null;
             /** Lastrunstatus */
@@ -2408,6 +2424,10 @@ export interface components {
             sensitivity?: string | null;
             /** Tags */
             tags?: string[] | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** SourcePreview */
         SourcePreview: {
@@ -2452,6 +2472,8 @@ export interface components {
             itemsIndexed: number;
             /** Itemspending */
             itemsPending: number;
+            /** Kind */
+            kind: string;
             /** Lastrunstatus */
             lastRunStatus?: string | null;
             /** Lastsyncat */

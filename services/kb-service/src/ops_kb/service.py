@@ -263,11 +263,14 @@ class KnowledgeService:
             "id": s["id"],
             "type": s["type"],
             "name": s["name"],
-            "scopeSummary": f"{cfg.get('plugin')} {cfg.get('source')}"
-            if tool
-            else f"{len(s['file_ids'])} uploaded files",
+            # The kind its defaults and its label come from: file, web (a plugin source of one site's pages) or tool.
+            "kind": kind_of(s),
+            "scopeSummary": scope_summary(s),
             "config": (
-                {k: cfg.get(k) for k in ("plugin", "source", "listTool", "getTool", "connectionId", "paused")}
+                {
+                    k: cfg.get(k)
+                    for k in ("plugin", "source", "listTool", "getTool", "connectionId", "paused", "site", "values")
+                }
                 if tool
                 else {"fileIds": s["file_ids"]}
             ),
@@ -438,6 +441,7 @@ class KnowledgeService:
             "metadataKeys": [],
             "suggestedQuestions": [],
             "heldCount": 0,
+            **({"embedding": cov} if (cov := await self.embedding_coverage(who, kb_id)) else {}),
             **self._rights(who, b["team_id"], b["name"], b.get("protection")),
         }
 
@@ -1673,6 +1677,8 @@ class KnowledgeService:
         for key in ("collection", "tags"):
             if patch.get(key) is not None:
                 values[key] = patch[key]
+        if patch.get("values") is not None:
+            values["config"] = await self._values_changed(who, s, cast(dict[str, Any], patch["values"]))
         given = {k: patch[k] for k in SETTINGS_KEYS if patch.get(k) is not None}
         before = self.settings_of(s)
         if given:
@@ -1686,6 +1692,18 @@ class KnowledgeService:
         if given and rebuild_for(before, self.settings_of(after)) != "none":
             rebuild = await self.start_rebuild(who, after)
         return {**self._source(after, by_source.get(source_id, [])), "rebuild": rebuild}
+
+    async def _values_changed(self, who: Who, s: dict[str, Any], given: dict[str, Any]) -> dict[str, Any]:
+        """A plugin source's own settings (a site's start, include and exclude rules, depth, pace), merged over the
+        saved ones and checked against what its plugin declares, as a create checks them."""
+        if s["type"] != "tool":
+            raise ValidationFailed("Only a source read through an app has settings of its own.")
+        cfg = dict(s.get("config") or {})
+        merged = {**cast(dict[str, Any], cfg.get("values") or {}), **given}
+        checked = await source_config(
+            self.tools, who, {"config": {"plugin": cfg.get("plugin"), "source": cfg.get("source"), "values": merged}}
+        )
+        return {**cfg, "values": checked["values"]}
 
     async def decide_ai_steps(self, who: Who, source_id: str, *, approve: bool) -> dict[str, Any]:
         """The knowledge owner's approval of the source's AI steps as now chosen, or its revocation; the one audit log
@@ -2304,6 +2322,19 @@ def health_of(s: dict[str, Any]) -> dict[str, Any]:
         "failedRuns": int(s.get("failures_in_row") or 0),
         "tombstoned": len(cast(dict[str, Any], cfg.get("tombstones") or {})),
     }
+
+
+def scope_summary(s: dict[str, Any]) -> str:
+    """What a source takes in, in a few words: a site's start address, or a plugin source's name, or its files."""
+    if s["type"] != "tool":
+        return f"{len(s['file_ids'])} uploaded files"
+    cfg = dict(s.get("config") or {})
+    values = cast(dict[str, Any], cfg.get("values") or {})
+    start = cast(list[Any], values.get("start") or [])
+    if start:
+        first = str(start[0]).split("://", 1)[-1].rstrip("/")
+        return first if len(start) == 1 else f"{first} and {len(start) - 1} more"
+    return f"{cfg.get('plugin')} {cfg.get('source')}"
 
 
 def kind_of(s: dict[str, Any]) -> str:

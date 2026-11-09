@@ -119,6 +119,8 @@ class KnowledgeBaseRow(KnowledgeBase):
 class Source(Out):
     id: str
     type: str
+    # file, web (a plugin source of one site's pages) or tool.
+    kind: str
     name: str
     scope_summary: str
     config: Json
@@ -174,8 +176,17 @@ class KbSourceView(KbSourceLink):
     source: Source
 
 
+class EmbeddingCoverage(Out):
+    model: str
+    width: int
+    embedded: int
+    units: int
+
+
 class KnowledgeBaseDetail(KnowledgeBaseRow):
     attached: list[KbSourceView]
+    # How many of the base's units have a vector of the environment's model; absent with no embedding model.
+    embedding: EmbeddingCoverage | None = None
     metadata_keys: list[str]
     suggested_questions: list[str]
     held_count: int
@@ -490,6 +501,9 @@ class SourcePreview(Out):
 
 class SourcePatch(In):
     name: str | None = None
+    # A source read through an app: its own settings (a site's start, include and exclude, depth, pace), merged over
+    # the saved ones and checked against what the plugin declares.
+    values: Json | None = None
     collection: str | None = None
     owner: str | None = None
     sensitivity: str | None = None

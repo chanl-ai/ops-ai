@@ -48,8 +48,8 @@ class WebPlugin:
             {
                 "plugin": "opsai.web", "source": "site", "title": "Website", "listTool": LIST, "getTool": GET,
                 "previewTool": PREVIEW, "listsWhole": True, "fetchAtOnce": 1, "getTakesTag": True,
-                "needsConnection": False, "inputs": {"start": {"type": "array"}}, "schedule": {"kind": "daily"},
-                "site": True,
+                "needsConnection": False, "schedule": {"kind": "daily"}, "site": True,
+                "inputs": {"start": {"type": "array"}, "exclude": {"type": "array", "required": False}},
             }
         ]  # fmt: skip
 
@@ -157,6 +157,17 @@ async def test_the_preview_asks_the_plugin_and_stores_nothing(kb: httpx.AsyncCli
 
 
 FOOTER = "Northbank is a trading name of Northbank plc, registered in England."
+
+
+async def test_a_sites_own_settings_are_edited_as_its_plugin_declares_them(kb: httpx.AsyncClient) -> None:
+    """A site's rules saved without the plugin's check would send a crawl what it cannot read; one the plugin does not
+    declare must be refused, and the source must say what it is (kind) and where it starts."""
+    src, _ = await site_source(kb)
+    assert (src["kind"], src["scopeSummary"]) == ("web", "help.northbank.test"), src
+    saved = data(await kb.patch(f"/v1/sources/{src['id']}", json={"values": {"exclude": ["/lending/archive/**"]}}))
+    assert saved["config"]["values"] == {"start": [f"{SITE}/"], "exclude": ["/lending/archive/**"]}, saved["config"]
+    bad = await kb.patch(f"/v1/sources/{src['id']}", json={"values": {"crawlEverything": True}})
+    assert bad.status_code == 400 and bad.json()["error"]["code"] == "invalid_source_values", bad.text
 
 
 async def test_a_website_source_starts_with_a_websites_cleaning(kb: httpx.AsyncClient) -> None:

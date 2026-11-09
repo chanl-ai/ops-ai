@@ -619,6 +619,35 @@
         "title": "DraftEdit",
         "type": "object"
       },
+      "EmbeddingCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "embedded": {
+            "title": "Embedded",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "units": {
+            "title": "Units",
+            "type": "integer"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "width",
+          "embedded",
+          "units"
+        ],
+        "title": "EmbeddingCoverage",
+        "type": "object"
+      },
       "Envelope_AddedDocuments_": {
         "additionalProperties": false,
         "properties": {
@@ -2224,6 +2253,16 @@
             "title": "Description",
             "type": "string"
           },
+          "embedding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbeddingCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "health": {
             "title": "Health",
             "type": "string"
@@ -3816,6 +3855,10 @@
             "title": "Itemspending",
             "type": "integer"
           },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
           "lastRunStatus": {
             "anyOf": [
               {
@@ -3944,6 +3987,7 @@
         "required": [
           "id",
           "type",
+          "kind",
           "name",
           "scopeSummary",
           "config",
@@ -4079,6 +4123,10 @@
           "itemsPending": {
             "title": "Itemspending",
             "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
           },
           "lastRunDurationSec": {
             "anyOf": [
@@ -4257,6 +4305,7 @@
         "required": [
           "id",
           "type",
+          "kind",
           "name",
           "scopeSummary",
           "config",
@@ -4679,6 +4728,18 @@
               }
             ],
             "title": "Tags"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
           }
         },
         "title": "SourcePatch",
@@ -4766,6 +4827,10 @@
           "itemsPending": {
             "title": "Itemspending",
             "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
           },
           "lastRunStatus": {
             "anyOf": [
@@ -4906,6 +4971,7 @@
         "required": [
           "id",
           "type",
+          "kind",
           "name",
           "scopeSummary",
           "config",
