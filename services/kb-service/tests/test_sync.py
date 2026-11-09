@@ -4,6 +4,7 @@ the same file indexed twice, and a document page that cannot show what was index
 
 from __future__ import annotations
 
+import shutil
 from typing import Any
 
 import httpx
@@ -16,6 +17,8 @@ from .pdfs import HARDSHIP, RATES, blank_scan_pdf, partly_scanned_pdf, policy_pd
 from .test_bases_and_sources import data
 
 PDF = {"Content-Type": "application/pdf"}
+# Whether this machine reads scans: the reader fails a scanned page with "OCR not installed" where it cannot.
+OCR = shutil.which("tesseract") is not None
 
 
 async def file_source(client: httpx.AsyncClient) -> dict[str, Any]:
@@ -52,7 +55,9 @@ async def test_a_pdf_without_text_fails_with_a_reason_and_the_rest_index(client:
     assert (run["status"], run["counts"]["upserted"], run["counts"]["failed"]) == ("partial", 1, 1), run
     items = {i["path"]: i for i in data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]}
     assert items["rates.pdf"]["status"] == "indexed"
-    assert items["scan.pdf"]["status"] == "failed" and items["scan.pdf"]["error"].startswith("no_text_layer")
+    # With Tesseract the blank scan is read by OCR and holds no text; without it the scan cannot be read at all.
+    reason = "no_text_layer" if OCR else "OCR not installed"
+    assert items["scan.pdf"]["status"] == "failed" and reason in items["scan.pdf"]["error"], items["scan.pdf"]
     assert run["errors"][0]["itemTitle"] == "scan.pdf"
 
 
@@ -169,11 +174,15 @@ async def test_a_reupload_replaces_the_file_so_later_syncs_leave_the_document_al
 async def test_a_partly_scanned_pdf_indexes_its_text_and_says_which_pages_it_could_not_read(
     client: httpx.AsyncClient,
 ) -> None:
-    """A PDF with some scanned pages indexed the rest silently; the document now names the pages."""
+    """A PDF with some scanned pages indexed the rest silently; the document now names the pages. Without Tesseract
+    the scanned page cannot be read, so the document fails with that reason rather than indexing part of itself."""
     src = await file_source(client)
     await upload(client, src["id"], "overdraft.pdf", partly_scanned_pdf())
     run = data(await client.post(f"/v1/sources/{src['id']}/sync"))
     items = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]
+    if not OCR:
+        assert items[0]["status"] == "failed" and "OCR not installed" in items[0]["error"], items[0]
+        return
     assert run["counts"]["upserted"] == 1 and items[0]["status"] == "indexed", (run, items)
     assert items[0]["warning"].startswith("Page 2 has no text that could be read"), items[0]
 
