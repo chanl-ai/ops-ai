@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- files-service, stamped at files_0013
+-- files-service, stamped at files_0014
 CREATE TABLE files (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -264,5 +264,5 @@ CREATE TABLE alembic_version_files (
     CONSTRAINT alembic_version_files_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_files (version_num) VALUES ('files_0013');
+INSERT INTO alembic_version_files (version_num) VALUES ('files_0014');
 GO

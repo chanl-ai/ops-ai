@@ -34,6 +34,7 @@ install() {
     psql_as "postgresql://postgres:proof@localhost/postgres" -c "ALTER ROLE $role PASSWORD 'proof'"
   done
   psql_as "postgresql://postgres:proof@localhost/postgres" -c "CREATE DATABASE $db OWNER ops_migrator"
+  psql_as "postgresql://postgres:proof@localhost/$db" -c "CREATE EXTENSION IF NOT EXISTS vector"
   psql_as "postgresql://ops_migrator:proof@localhost/$db" < "$dir/bundle.sql" >/dev/null
   psql_as "postgresql://ops_migrator:proof@localhost/$db" < "$dir/grants.sql" >/dev/null
 }

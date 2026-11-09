@@ -27,7 +27,11 @@ _HEADER = re.compile(r"^-- (?:Data for )?Name: (?P<name>.+?); Type: (?P<type>[^;
 _FENCE = re.compile(r"^\\(un)?restrict .*$\n?", re.M)
 _GRANTEE = re.compile(r"\bTO (\"?[A-Za-z_][A-Za-z0-9_]*\"?);")
 # A statement only a superuser may run: CREATE or ALTER ROLE, or a role granted to a role (GRANT <role> TO, no ON).
-_ROLE_STATEMENT = re.compile(r"\b(CREATE|ALTER) ROLE\b|\bGRANT \w+ TO \w+")
+_ROLE_STATEMENT = re.compile(r"\b(CREATE|ALTER) ROLE\b|\bGRANT \w+ TO \w+|\bCREATE EXTENSION\b")
+# Extensions the schema needs in each database, which only a superuser (on Azure, the server admin) may create:
+# pgvector, for knowledge search by meaning.
+EXTENSIONS = ("vector",)
+CREATE_EXTENSIONS = "".join(f"CREATE EXTENSION IF NOT EXISTS {e};\n" for e in EXTENSIONS)
 _ON_TABLE = re.compile(r"ON (?:TABLE|SEQUENCE) public\.(\"?[A-Za-z_][A-Za-z0-9_]*\"?)")
 
 
@@ -99,6 +103,11 @@ class Postgres:
             c = await self._connect(self.server)
             try:
                 await c.execute(f'CREATE DATABASE "{name}"')
+            finally:
+                await c.close()
+            c = await self._connect(with_database(self.server, name))
+            try:
+                await c.execute(CREATE_EXTENSIONS)
             finally:
                 await c.close()
 
@@ -188,6 +197,7 @@ class Postgres:
         for role, password in passwords.items():
             self.execute(self.server, f"ALTER ROLE {role} PASSWORD '{password}'")
         self.execute(self.server, f'CREATE DATABASE "{database}" OWNER ops_migrator')
+        self.execute(with_database(self.server, database), CREATE_EXTENSIONS)
         parts = urlsplit(self.server)
         netloc = f"ops_migrator:{passwords['ops_migrator']}@{parts.hostname}:{parts.port or 5432}"
         url = urlunsplit((parts.scheme, netloc, f"/{database}", "", ""))
@@ -299,7 +309,10 @@ class Postgres:
         out = [
             "-- Roles for Ops AI, run once per server by a superuser before the bundle. Set each login's password\n"
             "-- (ALTER ROLE <role> PASSWORD '...'), then create the database owned by the migrator:\n"
-            f"--   CREATE DATABASE <name> OWNER {migrator};\n\n",
+            f"--   CREATE DATABASE <name> OWNER {migrator};\n"
+            "-- and in that database, as a superuser (on Azure, the server admin), the extensions the schema needs:\n"
+            + "".join(f"--   {line}\n" for line in CREATE_EXTENSIONS.splitlines())
+            + "\n",
             "-- The roles the schema's grants and policies name; the services switch to them per transaction.\n",
         ]
         for role, a in sorted(granted.items()):

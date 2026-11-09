@@ -422,11 +422,12 @@ dba_install() {
 Ask your DBA to run these three commands from this folder ($ROOT), as the server admin ($admin):
 
   1. psql "$(libpq postgres "$admin")" -v ON_ERROR_STOP=1 -f dba/1-server.sql
-  2. psql "$(libpq "$DB_NAME" "$admin")" -v ON_ERROR_STOP=1 -c "SET ROLE ops_migrator" -f dba/postgres/bundle.sql
+  2. psql "$(libpq "$DB_NAME" "$admin")" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector" -c "SET ROLE ops_migrator" -f dba/postgres/bundle.sql
   3. psql "$(libpq "$DB_NAME" "$admin")" -v ON_ERROR_STOP=1 -c "SET ROLE ops_migrator" -f dba/postgres/grants.sql
 
-1 makes the roles, sets each service's login password and creates database $DB_NAME owned by ops_migrator; 2 applies
-the schema as ops_migrator; 3 grants each service's login its own tables. The files are in dba/postgres for review
+1 makes the roles, sets each service's login password and creates database $DB_NAME owned by ops_migrator; 2 creates
+the pgvector extension (a superuser's step; on Azure the admin may, as vector is allow-listed) and applies the schema as
+ops_migrator; 3 grants each service's login its own tables. The files are in dba/postgres for review
 (manifest.json, SHA256SUMS). No container gets a login that may change the schema.
 EOF
   wait_for_dba "the three commands above"

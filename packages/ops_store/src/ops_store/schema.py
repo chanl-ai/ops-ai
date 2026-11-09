@@ -86,7 +86,11 @@ def differences(conn: sa.Connection, metadatas: Sequence[sa.MetaData], exclude: 
     tenant, from its markings) against what the database enforces."""
     ours = tables(metadatas, exclude)
 
-    def include(name: str | None, type_: str, _parent: dict[str, str | None]) -> bool:
+    def include(name: str | None, type_: str, parent: dict[str, str | None]) -> bool:
+        if type_ == "index" and name:
+            table = ours.get(parent.get("table_name") or "")
+            made = table.info.get(DIALECT_INDEXES, ()) if table is not None else ()
+            return not any(name.startswith(prefix) for prefix in made)
         return type_ != "table" or name in ours
 
     context = MigrationContext.configure(
@@ -414,6 +418,24 @@ def _describe(diff: Any) -> str:
         return f"{kind} {table}.{column}: database {rest[-2]!r}, metadata {rest[-1]!r}"
     side = "in metadata, not in the database" if kind.startswith("add_") else "in the database, not in metadata"
     return f"{kind} {where} {side}"
+
+
+# Tables and indexes one database holds ------------------------------------------------------------------------------
+
+# A table only PostgreSQL holds for now: its columns have no SQL Server form yet (pgvector's vector), so SQL Server's
+# DDL leaves it out and says so, and the store that reads it checks the table is there.
+POSTGRES_ONLY = "postgres_only"
+# Indexes a migration makes per database with raw DDL (a GIN or HNSW index, which no portable Index declares), by name
+# prefix: the model comparison (differences) leaves them to the migration.
+DIALECT_INDEXES = "dialect_indexes"
+
+
+def postgres_only() -> dict[str, Any]:
+    return {POSTGRES_ONLY: True}
+
+
+def dialect_indexes(*prefixes: str) -> dict[str, Any]:
+    return {DIALECT_INDEXES: tuple(prefixes)}
 
 
 # Full-text search on SQL Server ----------------------------------------------------------------------------------

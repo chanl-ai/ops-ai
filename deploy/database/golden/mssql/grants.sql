@@ -137,11 +137,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_bases TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_sources TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_retired_bases TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_changes TO ops_kb_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_outbox TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_base_sources TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_items TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_runs TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_item_versions TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_chunks TO ops_kb_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_units TO ops_kb_runtime;
 GRANT SELECT ON dbo.alembic_version_kb TO ops_kb_runtime;
 GO
 -- platform-service
@@ -189,6 +191,7 @@ GO
 IF USER_ID(N'ops_files_system') IS NULL CREATE USER ops_files_system WITHOUT LOGIN;
 GO
 GRANT SELECT, UPDATE, DELETE ON dbo.files_outbox TO ops_files_system;
+GRANT SELECT ON dbo.files TO ops_files_system;
 GRANT IMPERSONATE ON USER::ops_files_system TO ops_files_runtime;
 GO
 -- documents-service
@@ -213,5 +216,6 @@ GO
 GRANT SELECT, UPDATE, DELETE ON dbo.documents_outbox TO ops_documents_system;
 GRANT SELECT ON dbo.extractions TO ops_documents_system;
 GRANT SELECT ON dbo.document_type_tests TO ops_documents_system;
+GRANT SELECT ON dbo.documents_readings TO ops_documents_system;
 GRANT IMPERSONATE ON USER::ops_documents_system TO ops_documents_runtime;
 GO
