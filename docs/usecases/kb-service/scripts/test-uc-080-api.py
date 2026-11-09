@@ -10,11 +10,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw
+from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
-from usecase_harness import KB_PORT, agents, check, data, finish, kb, put_in_files, sse
+from usecase_harness import KB_PORT, agents, check, data, finish, kb, put_in_files, sse, until
 
 # The team kb-service's dev caller makes the base in (team_ops): a chat sees only its own team's bases.
 TEAM = {"X-Team-Id": "team_ops"}
@@ -36,10 +36,9 @@ def pdf(title: str, sections: list[tuple[str, str]]) -> bytes:
 
 
 def scanned() -> bytes:
-    image = Image.new("RGB", (620, 877), "white")
-    ImageDraw.Draw(image).text((50, 100), "LATE PAYMENT FEE 25 DOLLARS", fill="black")
+    """A blank scanned page: no text layer, and nothing for OCR to read."""
     out = io.BytesIO()
-    image.save(out, "PDF", resolution=75.0)
+    Image.new("RGB", (620, 877), "white").save(out, "PDF", resolution=75.0)
     return out.getvalue()
 
 
@@ -103,10 +102,18 @@ def main() -> None:
             and items["rates.pdf"]["status"] == "indexed",
             {k2: (v["status"], v.get("pageCount")) for k2, v in items.items()},
         )
+        # A scan is read in the background; its item is settled when documents-service reports the reading's end.
+        scan = until(
+            lambda: next(
+                (i for i in data(k.get(f"/v1/sources/{src['id']}/items"))["data"]
+                 if i["path"] == "scan.pdf" and i["status"] != "processing"),
+                None,
+            )
+        )  # fmt: skip
         check(
-            "the PDF with no text layer fails with its reason and the rest index",
-            run["status"] == "partial" and str(items["scan.pdf"].get("error", "")).startswith("no_text_layer"),
-            {"run": run["status"], "scan": items["scan.pdf"].get("error")},
+            "the scan with no text, even by OCR, does not hold up the sync and then fails with its reason",
+            run["counts"].get("reading") == 1 and str((scan or {}).get("error", "")).startswith("no_text_layer"),
+            {"run": run["status"], "counts": run["counts"], "scan": (scan or {}).get("error")},
         )
 
         answer = ask(k, kb_id, QUESTION)

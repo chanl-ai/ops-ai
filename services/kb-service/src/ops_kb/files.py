@@ -55,6 +55,11 @@ class FileIntake(Protocol):
         """(name, mime, bytes); FileMissing when there is no such file, FileNotScanned before it is clean."""
         ...
 
+    async def describe(self, tenant: str, team: str, file_id: str) -> Stored:
+        """The file's name, type, size and content digest, without its bytes; FileMissing and FileNotScanned as
+        `read`. The digest is the one documents-service keys the file's reading by."""
+        ...
+
     async def use(self, tenant: str, team: str, file_id: str, *, source_id: str, source_name: str) -> str:
         """Records that the source reads a file already stored in `team` and returns its name; FileMissing when the
         team has no such file, FileNotScanned when it is not scanned clean."""
@@ -108,6 +113,17 @@ class FilesServiceIntake:
             raise FileNotScanned(file_id) from e
         except (FilesRefused, httpx.HTTPError) as e:
             raise _unavailable(e, "read this source's files") from e
+
+    async def describe(self, tenant: str, team: str, file_id: str) -> Stored:
+        try:
+            info = await self._client.get(tenant, team, file_id)
+        except FileNotFound as e:
+            raise FileMissing(file_id) from e
+        except (FilesRefused, httpx.HTTPError) as e:
+            raise _unavailable(e, "read this source's files") from e
+        if info.scan.status != "clean":
+            raise FileNotScanned(file_id)
+        return Stored(info.id, info.name, info.mime, info.size, info.digest, False)
 
     async def use(self, tenant: str, team: str, file_id: str, *, source_id: str, source_name: str) -> str:
         # The reference keeps the file in Files while the source reads it; attaching the same source again is a no-op.
@@ -186,6 +202,15 @@ class KnowledgeFiles:
         if rec is None or rec.team != team or not rec.bytes_at.exists():
             raise FileMissing(file_id)
         return rec.stored.name, rec.stored.mime, rec.bytes_at.read_bytes()
+
+    async def describe(self, tenant: str, team: str, file_id: str) -> Stored:
+        path = self._records / f"{file_id}.json"
+        if not file_id.replace("_", "").isalnum() or not path.exists():
+            raise FileMissing(file_id)
+        rec = self._load(path)
+        if rec is None or rec.team != team or not rec.bytes_at.exists():
+            raise FileMissing(file_id)
+        return rec.stored
 
     async def use(self, tenant: str, team: str, file_id: str, *, source_id: str, source_name: str) -> str:
         # No scan and no references in this store: a file of the team is always readable.

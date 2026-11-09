@@ -18,7 +18,7 @@ the next free id.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Create a knowledge base with no owner | 400 `collection_without_owner` |
-| 2 | Create it with an owner, a file source attached to it, upload two text PDFs and a scanned page, sync | the two text PDFs indexed with their page counts; the scan failed with `no_text_layer`; the run `partial` |
+| 2 | Create it with an owner, a file source attached to it, upload two text PDFs and a blank scanned page, sync | the two text PDFs indexed with their page counts; the blank scan is read in the background (the sync returns with it `reading`), then fails with `no_text_layer` |
 | 3 | Ask the knowledge base how many payments a borrower who lost their job may defer | first citation: Mortgage Hardship Policy, page 1, section Eligibility |
 | 4 | Ask about the weather in Lisbon | no citation, `noAnswer` |
 | 5 | Upload a new rate sheet under the same name, sync, ask for the fixed rate | every citation is v2; the old rate (4.89) is gone |

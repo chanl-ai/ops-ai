@@ -10,7 +10,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .conftest import kb_client
-from .pdfs import HARDSHIP, RATES, scanned_pdf
+from .pdfs import HARDSHIP, RATES, blank_scan_pdf
 from .test_bases_and_sources import data
 from .test_sync import file_source, upload
 
@@ -20,7 +20,7 @@ async def synced(client: httpx.AsyncClient) -> tuple[dict[str, Any], dict[str, A
     body = {"name": "Lending", "owner": "james@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
     await upload(client, src["id"], "hardship.pdf", HARDSHIP)
-    await upload(client, src["id"], "scan.pdf", scanned_pdf())
+    await upload(client, src["id"], "scan.pdf", blank_scan_pdf())
     data(await client.post(f"/v1/sources/{src['id']}/sync"))
     return src, kb
 

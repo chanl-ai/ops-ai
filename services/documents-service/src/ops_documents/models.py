@@ -10,6 +10,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from ops_ingest.reading import FileFacts, OcrMode
+from ops_ingest.reading import Page as ReadingPage
+
 
 class Model(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
@@ -31,9 +34,9 @@ class ExtractionRequest(Model):
     version: int | None = Field(default=None, ge=1)
     # Classify the file over the team's types first and read it with the kind found.
     detect: bool = False
-    # What comes back: the fields asked for (today's read), the full text from the cached layout with no model
-    # call, or fields the model proposes from the first `propose_pages` pages and then reads like any other.
-    read: Literal["fields", "text", "propose"] = "fields"
+    # What comes back: the fields asked for (today's read), or fields the model proposes from the first
+    # `propose_pages` pages and then reads like any other. A file's full text is its reading (/v1/documents/readings).
+    read: Literal["fields", "propose"] = "fields"
     # What the document is, in a few words, for a proposed read ("a supplier invoice").
     hint: str | None = Field(default=None, max_length=200)
     propose_pages: int | None = Field(default=None, ge=1, le=20)
@@ -300,7 +303,7 @@ class LayoutPage(Model):
     # Points; None for formats with no pages (DOCX, HTML).
     width: float | None
     height: float | None
-    source: Literal["text", "ocr", "none"]
+    source: Literal["text", "ocr", "mixed", "none"]
 
 
 class LayoutCell(Model):
@@ -353,12 +356,50 @@ class TestRun(Model):
     error: str | None = None
 
 
+class ReadingIn(Model):
+    file_id: str = Field(min_length=1, max_length=64)
+    # off: text layers only; auto: scans and the picture parts of mixed pages; always: every page, for a bad text layer.
+    ocr: OcrMode = "auto"
+    # A Tesseract language, or several joined by + (eng+fra).
+    language: str = Field("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$")
+
+
+class ReadingSettingsOut(Model):
+    ocr: OcrMode
+    language: str
+
+
+class ReadingError(Model):
+    code: str
+    message: str
+
+
+class FileReading(Model):
+    """A file's reading: queued, reading or none (never asked) with its progress, failed with the reason, or done with
+    the file's facts and its pages (all of them, or the one asked for). Keyed by the file's bytes and settings, so every
+    caller that reads the same file gets this one reading."""
+
+    file_id: str
+    digest: str
+    status: Literal["none", "queued", "reading", "done", "failed"]
+    reader_version: str
+    settings: ReadingSettingsOut
+    pages_total: int | None
+    pages_done: int
+    error: ReadingError | None = None
+    facts: FileFacts | None = None
+    duration_ms: int | None = None
+    pages: list[ReadingPage] | None = None
+
+
 class PurgeIn(Model):
     file_id: str = Field(min_length=1, max_length=64)
 
 
 class Purged(Model):
-    """What was removed for a deleted file: its extractions (with their corrections) and the samples naming it."""
+    """What was removed for a deleted file: its extractions (with their corrections), the samples naming it, and the
+    readings of its bytes once no other file of the workspace holds them."""
 
     extractions: int
     samples: int
+    readings: int = 0

@@ -47,6 +47,10 @@ kill_timeout = 30
   OPS_FILES_PUBLIC_URL = "https://<your-app>.fly.dev/api/files"
   # No scanner runs here: the inline test engine marks clean files clean; `hook` would leave every upload pending.
   OPS_FILES_SCANNING = "eicar"
+  # Scanned pages are read by OCR (Tesseract is in the image) for knowledge sources, chat attachments and read_file;
+  # stg-deploy's health step fails when documents-service reports OCR missing.
+  OPS_KB_OCR = "auto"
+  OPS_ATTACHMENTS_OCR = "auto"
   OPS_MAIL_PROVIDER = "none"
   # The features this install turns on, separated by commas (docs/deploy/install.md, Feature flags); unset turns none on.
   # OPS_FLAGS = "mcp_gateway"

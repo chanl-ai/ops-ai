@@ -1,4 +1,4 @@
-# 78 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a Standards-exception: trailer.
+# 77 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a Standards-exception: trailer.
 # Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key.
 # packages/ops_engine: 12
 2 sql packages/ops_engine/src/ops_engine/store/clock.py database clock
@@ -7,14 +7,14 @@
 1 sql packages/ops_engine/src/ops_engine/store/steps.py row lock
 1 sql packages/ops_engine/src/ops_engine/store/work.py SKIP LOCKED
 1 sql packages/ops_engine/src/ops_engine/store/work.py row lock
-# services/agents-service: 26
+# services/agents-service: 25
 1 sql services/agents-service/migrations/versions/0006_gateway_calls_and_review_approvals.py postgresql_where option
 1 sql services/agents-service/migrations/versions/0007_timers_human_step_sla_timers.py postgresql_where option
 2 sql services/agents-service/migrations/versions/0009_timer_claims_fenced_claim_and_retry_cap.py postgresql_where option
 1 sql services/agents-service/src/ops_agents/api/hitl_facade.py RETURNING
 1 sql services/agents-service/src/ops_agents/store/agent_registry.py row lock
 2 sql services/agents-service/src/ops_agents/store/cases.py row lock
-4 sql services/agents-service/src/ops_agents/store/channels.py ON CONFLICT
+3 sql services/agents-service/src/ops_agents/store/channels.py ON CONFLICT
 1 sql services/agents-service/src/ops_agents/store/channels.py dialect insert
 2 sql services/agents-service/src/ops_agents/store/timers.py SKIP LOCKED
 8 sql services/agents-service/src/ops_agents/store/timers.py database clock

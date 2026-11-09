@@ -25,6 +25,7 @@ from ops_kb.store.fulltext import PostgresFullTextRetriever
 from ops_store import isolation
 
 from .conftest import kb_client
+from .readings_fake import LocalReadings
 
 
 def seeding(tenant: str) -> AbstractContextManager[object]:
@@ -135,7 +136,13 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     """The FAQ agents' seed names kb_retail_products and kb_branch_operations; the bases must exist under those ids,
     indexed, after a start, and a second start must change nothing."""
     store = KnowledgeStore(engine)
-    service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
+    service = KnowledgeService(
+        store,
+        KnowledgeFiles(tmp_path),
+        PostgresFullTextRetriever(engine),
+        StaticAgents(),
+        readings=LocalReadings(KnowledgeFiles(tmp_path)),
+    )
     with seeding(tenant):
         assert await seed_demo(service, tenant) == ["kb_retail_products", "kb_branch_operations"]
         assert await seed_demo(service, tenant) == [], "a second start adds nothing"
@@ -171,7 +178,13 @@ async def test_a_dev_start_leaves_a_persons_source_of_a_demo_sources_name_alone(
     """The seed reused any source of a demo source's name, uploading into it as the demo owner; a
     different owner raised Forbidden and stopped kb-service starting. The base is skipped and the source untouched."""
     store = KnowledgeStore(engine)
-    service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
+    service = KnowledgeService(
+        store,
+        KnowledgeFiles(tmp_path),
+        PostgresFullTextRetriever(engine),
+        StaticAgents(),
+        readings=LocalReadings(KnowledgeFiles(tmp_path)),
+    )
     with seeding(tenant):
         mine = await service.create_source(
             Who(tenant, "m.okafor@harborpine.example", "team_ops"),
@@ -189,8 +202,9 @@ async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
     ids the new store had never seen and every sync failed. The next start uploads the demo files again."""
     store = KnowledgeStore(engine)
     retriever = PostgresFullTextRetriever(engine)
-    before = KnowledgeService(store, KnowledgeFiles(tmp_path / "before"), retriever, StaticAgents())
-    after = KnowledgeService(store, KnowledgeFiles(tmp_path / "after"), retriever, StaticAgents())
+    old, new = KnowledgeFiles(tmp_path / "before"), KnowledgeFiles(tmp_path / "after")
+    before = KnowledgeService(store, old, retriever, StaticAgents(), readings=LocalReadings(old))
+    after = KnowledgeService(store, new, retriever, StaticAgents(), readings=LocalReadings(new))
     with seeding(tenant):
         assert await seed_demo(before, tenant) == ["kb_retail_products", "kb_branch_operations"]
         assert await seed_demo(after, tenant) == ["kb_retail_products", "kb_branch_operations"]

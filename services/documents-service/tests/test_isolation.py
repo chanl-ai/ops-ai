@@ -1,7 +1,7 @@
 """The database holds documents-service's tables to the caller's tenant and team (migration documents_0011),
 with raw SQL and no WHERE clause as ops_documents_tenant, by failure mode: a team transaction reading or writing
 another team's document type, version, sample, test, example, extraction or correction; a transaction reading or
-changing another tenant's layouts or outbox events; a dropped policy that nobody notices; and the system role reaching
+changing another tenant's readings or outbox events; a dropped policy that nobody notices; and the system role reaching
 more than the outbox and the work a restart picks up. On the PostgreSQL test database migrated to head."""
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from ops_store.schema import isolation_ddl, isolation_kind
 
 TABLES = [t for t in metadata.sorted_tables if isolation_kind(t) in ("team", "tenant")]
 # What the system role reads: the outbox (the relay) and the queued work a restart picks up again.
-SYSTEM_READS = {"documents_outbox", "extractions", "document_type_tests"}
+SYSTEM_READS = {"documents_outbox", "extractions", "document_type_tests", "documents_readings"}
 
 
 def test_every_documents_table_is_marked() -> None:

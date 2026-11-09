@@ -13,7 +13,7 @@ const JAMES = 'j.richardson@harborpine.example';
 const TAG = Math.random().toString(36).slice(2, 6);
 const NAME = `Teller procedures ${TAG}`;
 const PDFS = join(ROOT, 'services/kb-service/seed/pdfs');
-// A one-page PDF with no text layer, as a scan is: it must fail with its reason, never index empty.
+// A one-page PDF with no text layer and nothing for OCR to read: it must fail with its reason, never index empty.
 const SCAN = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
     '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n' +
@@ -87,20 +87,25 @@ await withUiStack(
         await files.getByTestId('new-source-sync').click();
         const res = await synced;
         const run = res ? (await res.json()).data : undefined;
-        check('2 James adds two PDFs from the Sources tab and syncs them', res?.status() === 200 && run?.counts?.upserted === 1 && run?.counts?.failed === 1, { status: res?.status(), counts: run?.counts });
+        // The scan needs OCR, so it is read in the background: the sync answers with it reading or already failed.
+        const scanSettled = (run?.counts?.failed ?? 0) + (run?.counts?.reading ?? 0) === 1;
+        check('2 James adds two PDFs from the Sources tab and syncs them', res?.status() === 200 && run?.counts?.upserted === 1 && scanSettled, { status: res?.status(), counts: run?.counts });
       });
 
       // 3. Watch ingestion on the base: the manual indexed, the scan failed with its reason; the list counts one document and
       // shows the base degraded by the failure.
       await step('3 the base shows each document indexed or failed with its reason, and the list counts them', async () => {
-        await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        // The scan's reading ends in the background (no text, even by OCR); the page shows it failed once it has.
+        let reason = false;
+        for (let tries = 0; tries < 6 && !reason; tries++) {
+          await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          reason = await page.getByRole('row', { name: /scanned-notice/ }).getByText(/no text/i).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+        }
         const manual = page.getByRole('row', { name: /Branch Operations Manual/ });
         if (!(await manual.waitFor({ timeout: 60_000 }).then(() => true, () => false))) {
           throw new Error(`no manual row; rows: ${JSON.stringify(await page.getByRole('row').allInnerTexts())}`);
         }
         const indexed = await manual.getByText('Indexed').count();
-        const failedRow = page.getByRole('row', { name: /scanned-notice/ });
-        const reason = await failedRow.getByText(/no text layer/i).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
         await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const row = page.getByRole('row', { name: new RegExp(NAME) });
         if (!(await row.waitFor({ timeout: 60_000 }).then(() => true, () => false))) {

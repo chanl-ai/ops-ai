@@ -5,6 +5,7 @@ and the parent not listing what its children did."""
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import AsyncIterator
 from typing import Any, cast
@@ -24,6 +25,7 @@ from ops_agents.graphs import definition as graphs_definition
 from ops_agents.graphs.definition import record_matches
 from ops_agents.store.base import metadata
 from ops_agents.store.graphs import graph_threads, graph_versions
+from ops_ingest.parsers import parse
 from ops_policy import input_hash
 from ops_policy.approval import binding_of
 from ops_service_kit.settings import Settings
@@ -46,17 +48,14 @@ class Stack:
         return tid, sse_events(res.text)
 
     async def notice(self) -> tuple[str, list[dict[str, Any]]]:
-        """The fixture notice as the mailbox adapter hands it to the graph: the PDF stored under a file id."""
-        assert self.rt.channels is not None
+        """The fixture notice as the graph receives it: the PDF's text, as documents-service reads it."""
         (att,) = NOTICE["attachments"]
-        await self.rt.channels.put_file(
-            "file_levy_pdf", name=att["name"], content_type=att["contentType"], content=att["contentBytes"], sha256="x"
-        )
+        pdf = base64.b64decode(att["contentBytes"])
         email = {
             "sender": NOTICE["from"]["emailAddress"]["address"],
             "subject": NOTICE["subject"],
             "body": NOTICE["body"]["content"],
-            "attachments": [{"name": att["name"], "file_id": "file_levy_pdf"}],
+            "attachments": [{"name": att["name"], "text": parse(pdf, filename=att["name"]).plain_text()}],
         }
         return await self.intake(email)
 

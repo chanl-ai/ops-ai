@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Document reads see scans and typed form values",
+  "description": "A page that is half text and half scan is now read in full, values typed into a fillable PDF form are read, and a file is read only once however many times it is used.",
+  "tag": "improved"
+}

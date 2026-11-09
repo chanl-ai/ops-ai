@@ -4,16 +4,16 @@
 
 from ops_documents.store.document_types import DocumentTypesStore, NameTakenError
 from ops_documents.store.extractions import ExtractionRow, ExtractionsStore
-from ops_documents.store.layouts import LayoutsStore
 from ops_documents.store.metadata import engine_for, metadata
+from ops_documents.store.readings import ReadingsStore
 from ops_documents.store.template_copies import TemplateCopies
 
 __all__ = [
     "DocumentTypesStore",
     "ExtractionRow",
     "ExtractionsStore",
-    "LayoutsStore",
     "NameTakenError",
+    "ReadingsStore",
     "TemplateCopies",
     "engine_for",
     "metadata",

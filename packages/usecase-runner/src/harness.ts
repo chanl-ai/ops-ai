@@ -797,6 +797,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}`,
       // A type's delete asks this run's agents-service which workflows read the type.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
+      // A finished reading reaches this run's kb-service, which indexes the items waiting on it.
+      OPS_KB_URL: `http://127.0.0.1:${KB_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
       // Extractions run on the run's models-service with documents-service's own dev key.
@@ -811,6 +813,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_DATABASE_URL: pgUrl(DB),
       OPS_KB_PORT: String(KB_PORT),
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
+      // Each file of a source is indexed from its reading in this run's documents-service.
+      OPS_DOCUMENTS_URL: `http://127.0.0.1:${DOCUMENTS_PORT}`,
       // A knowledge base's "used by" comes from agents-service, on this run's port.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),

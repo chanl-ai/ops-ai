@@ -241,6 +241,7 @@ def main() -> None:
             file_tools=FileTools(
                 FilesClient.from_settings(settings, service="tools", scopes=["files:view"]),
                 DocumentsClient.from_settings(settings, service="tools", scopes=["documents:view", "documents:run"]),
+                ocr=settings.attachments_ocr,
             ),
             # search_knowledge searches the calling team's knowledge bases through kb-service.
             knowledge=KnowledgeSearch(client("kb", settings.kb_url, ["knowledge:view"])) if settings.kb_url else None,

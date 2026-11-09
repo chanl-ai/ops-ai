@@ -33,8 +33,8 @@ def _team(request: httpx.Request) -> str:
 
 @dataclass
 class FakeDocuments:
-    """documents-service as the tools call it: types per team, a text read, a fields read, and a large file whose read
-    runs in the background for `polls` polls."""
+    """documents-service as the tools call it: types per team, a file's reading, a fields read, and a large file whose
+    reading or read runs in the background for `polls` polls."""
 
     texts: dict[str, str] = field(default_factory=dict[str, str])
     polls: int = 0
@@ -42,6 +42,14 @@ class FakeDocuments:
     asked: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     keys: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
     reads: int = 0
+    # The OCR mode each reading was asked with, and the readings made, by (file id, mode).
+    ocr: list[str] = field(default_factory=list[str])
+    readings: dict[tuple[str, str], int] = field(default_factory=dict[tuple[str, str], int])
+
+    def _reading(self, file_id: str, status: str = "done") -> dict[str, Any]:
+        text = self.texts.get(file_id, "")
+        pages = [{"number": 1, "source": "text" if text else "none", "text": text}]
+        return {"fileId": file_id, "status": status, **({"pages": pages} if status == "done" else {})}
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         team, path = _team(request), request.url.path
@@ -54,6 +62,23 @@ class FakeDocuments:
             if team == OPS and path.endswith(LEVY_ID):
                 return httpx.Response(200, json={"data": LEVY})
             return httpx.Response(404, json={"success": False, "error": {"code": "not_found", "message": "no type"}})
+        if path == "/v1/documents/readings":
+            body = json.loads(request.content)
+            asked = (str(body["fileId"]), str(body["ocr"]))
+            self.ocr.append(asked[1])
+            if asked not in self.readings:
+                self.reads += 1
+                self.readings[asked] = self.polls
+            return httpx.Response(
+                202 if self.readings[asked] else 200,
+                json={"data": self._reading(asked[0], "reading" if self.readings[asked] else "done")},
+            )
+        if path.startswith("/v1/documents/readings/"):
+            asked = (path.rsplit("/", 1)[-1], request.url.params["ocr"])
+            self.readings[asked] = max(0, self.readings[asked] - 1)
+            return httpx.Response(
+                200, json={"data": self._reading(asked[0], "reading" if self.readings[asked] else "done")}
+            )
         if path == "/v1/documents/extractions":
             body = json.loads(request.content)
             key = request.headers["Idempotency-Key"]
@@ -76,8 +101,6 @@ class FakeDocuments:
         return httpx.Response(404, json={"success": False, "error": {"code": "no_route", "message": path}})
 
     def _done(self, body: dict[str, Any]) -> dict[str, Any]:
-        if body.get("read") == "text":
-            return {"id": "ext_1", "status": "done", "outcome": "ok", "text": self.texts.get(body["fileId"], "")}
         fields = {"amount": {"value": 1500, "confidence": 0.96, "needsReview": False}}
         return {"id": "ext_1", "status": "done", "outcome": "ok", "fields": fields, "documentType": {"id": LEVY_ID}}
 
@@ -117,6 +140,7 @@ async def test_a_file_is_read_by_name_and_its_fields_by_type() -> None:
     documents.texts[fid] = "Levy of 1,500.00 on account CHQ-2219"
     text = await _call(tools, "read_file", file="levy-notice.txt")
     assert text.ok and text.output["text"].startswith("Levy of 1,500.00"), text.output
+    assert documents.ocr == ["auto"], "a scan is read only with OCR on"
     fields = await _call(tools, "read_document", file=fid, documentType="Levy notice")
     assert fields.ok and fields.output["fields"]["amount"]["value"] == 1500, fields.output
     assert documents.asked[-1]["documentTypeId"] == "dt_levy"

@@ -145,6 +145,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "documents_ask_reading": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/documents/readings",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "documents_classify_file": {
         "body": "json",
         "headers": [],
@@ -206,6 +215,24 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/documents/layout/{file_id}",
         "pathParams": ["file_id"],
         "query": ["page", "ocr"],
+        "stream": False,
+    },
+    "documents_get_reading": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/documents/readings/{file_id}",
+        "pathParams": ["file_id"],
+        "query": ["ocr", "language", "page"],
+        "stream": False,
+    },
+    "documents_page_image": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/documents/readings/{file_id}/pages/{number}/image",
+        "pathParams": ["file_id", "number"],
+        "query": ["detail"],
         "stream": False,
     },
     "documents_purge": {
@@ -419,6 +446,34 @@ class Operations:
         "Purge"
         return self._t.call(SERVICE, OPERATIONS["documents_purge"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def documents_ask_reading(self, body: ReadingIn) -> FileReading:
+        "Ask Reading"
+        return self._t.call(SERVICE, OPERATIONS["documents_ask_reading"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def documents_get_reading(
+        self, file_id: str, *, ocr: str | None = None, language: str | None = None, page: int | None = None
+    ) -> FileReading:
+        "Get Reading"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["documents_get_reading"],
+            {"file_id": file_id},
+            {"ocr": ocr, "language": language, "page": page},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def documents_page_image(self, file_id: str, number: int, *, detail: str | None = None) -> Any:
+        "Page Image"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["documents_page_image"],
+            {"file_id": file_id, "number": number},
+            {"detail": detail},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
         "Copy Resource"
         return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
@@ -590,6 +645,34 @@ class AsyncOperations:
     async def documents_purge(self, body: PurgeIn) -> Purged:
         "Purge"
         return await self._t.call(SERVICE, OPERATIONS["documents_purge"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def documents_ask_reading(self, body: ReadingIn) -> FileReading:
+        "Ask Reading"
+        return await self._t.call(SERVICE, OPERATIONS["documents_ask_reading"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def documents_get_reading(
+        self, file_id: str, *, ocr: str | None = None, language: str | None = None, page: int | None = None
+    ) -> FileReading:
+        "Get Reading"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["documents_get_reading"],
+            {"file_id": file_id},
+            {"ocr": ocr, "language": language, "page": page},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def documents_page_image(self, file_id: str, number: int, *, detail: str | None = None) -> Any:
+        "Page Image"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["documents_page_image"],
+            {"file_id": file_id, "number": number},
+            {"detail": detail},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
         "Copy Resource"

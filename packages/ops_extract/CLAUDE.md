@@ -13,7 +13,7 @@ model call, and the workspace floor. Package rules and test commands: [../CLAUDE
 | Module | What it is |
 |---|---|
 | `checks` | Scoring: a field needs a person when its confidence is under the highest of its own threshold, the schema's and the workspace floor, or when it is always reviewed |
-| `layout` | A file's layout: pages, blocks and table cells with ids, boxes as page fractions, reading order, words with confidence |
+| `layout` | A file's layout as a view of its reading (`ops_ingest.reading`): pages, blocks and table cells with ids, boxes as page fractions, reading order, words with confidence |
 | `pages` | A parsed document as one text per page, the text quotes are checked against |
 | `boxes` | Where on the page each field came from: one box per line and the layout block ids |
 | `classify` | Which of the team's document types a file is; under the floor or unknown goes to a person |

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "An attached file reaches the agent whole",
+  "description": "A file you attach in chat is given to the agent in full, up to about 24,000 characters, scanned files included, instead of three short pieces.",
+  "tag": "improved"
+}

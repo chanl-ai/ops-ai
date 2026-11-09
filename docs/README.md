@@ -504,3 +504,5 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |
 | `usecases/tools-service/salesforce-org-address.md` | uc-627: A team connects Salesforce at its company address and its agents query that org |
 | `usecases/tools-service/turn-on-in-one-window.md` | uc-628: An admin turns an app on in one window and everyone can use it |
+| `usecases/documents-service/files-read-once.md` | uc-672: A scan, a half scan and a filled form are each read once by documents-service and cited from a knowledge base by the OCR'd page |
+| `usecases/agents-service/scanned-chat-attachment.md` | uc-673: A scanned file attached in chat is read with OCR and reaches the agent whole |

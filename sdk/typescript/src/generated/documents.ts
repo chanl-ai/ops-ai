@@ -396,7 +396,7 @@ export interface paths {
         /**
          * Compute Layout
          * @description The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as
-         *     fractions of the page. Read on the first ask and cached by the file's content digest.
+         *     fractions of the page. Drawn from the file's reading, read on the first ask and kept.
          */
         post: operations["documents_compute_layout"];
         delete?: never;
@@ -442,6 +442,69 @@ export interface paths {
          *     files-service still serves the team is refused (409), so a purge can never remove the reads of a live file.
          */
         post: operations["documents_purge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/readings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Reading
+         * @description The file's reading: every page's text in reading order, blocks with boxes, words with confidence, form
+         *     fields and OCR quality. Answered at once when it is stored, or when the file is small (5 pages and 5 MB) with no
+         *     page to OCR; otherwise 202 with its status, and reading.finished or reading.failed when it ends.
+         */
+        post: operations["documents_ask_reading"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/readings/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Reading
+         * @description The reading as it is now, with every page or the one asked for once done; status none when never asked
+         *     for. A file the team cannot see is 404, whoever else holds its bytes.
+         */
+        get: operations["documents_get_reading"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/readings/{file_id}/pages/{number}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page Image
+         * @description One page drawn as an image, on request and never stored: 150 DPI, longest side 1,600 pixels (512 at low).
+         */
+        get: operations["documents_page_image"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -567,6 +630,73 @@ export interface components {
             title: string;
             /** Waiting */
             waiting: number | null;
+        };
+        /**
+         * Block
+         * @description One run of content in reading order. A paragraph keeps its lines (and their boxes) so the page's text can put
+         *     each on its own line; a table keeps its cells.
+         */
+        Block: {
+            /** Box */
+            box?: number[] | null;
+            /** Caption */
+            caption?: string | null;
+            /** Cells */
+            cells?: components["schemas"]["Cell"][];
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "title" | "heading" | "paragraph" | "table";
+            /** Level */
+            level?: number | null;
+            /** Lines */
+            lines?: components["schemas"]["Line"][];
+            /**
+             * Order
+             * @default 0
+             */
+            order: number;
+            /**
+             * Readby
+             * @default text
+             * @enum {string}
+             */
+            readBy: "text" | "ocr";
+            /** Sheet */
+            sheet?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** Cell */
+        Cell: {
+            /** Box */
+            box?: number[] | null;
+            /** Col */
+            col: number;
+            /**
+             * Colspan
+             * @default 1
+             */
+            colSpan: number;
+            /**
+             * Header
+             * @default false
+             */
+            header: boolean;
+            /** Id */
+            id: string;
+            /** Row */
+            row: number;
+            /**
+             * Rowspan
+             * @default 1
+             */
+            rowSpan: number;
+            /** Text */
+            text: string;
         };
         /**
          * Classification
@@ -876,6 +1006,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[FileReading] */
+        Envelope_FileReading_: {
+            data: components["schemas"]["FileReading"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Installation] */
         Envelope_Installation_: {
             data: components["schemas"]["Installation"];
@@ -1140,11 +1279,95 @@ export interface components {
              * @default fields
              * @enum {string}
              */
-            read: "fields" | "text" | "propose";
+            read: "fields" | "propose";
             /** Reviewbelow */
             reviewBelow?: number | null;
             /** Version */
             version?: number | null;
+        };
+        /**
+         * FileFacts
+         * @description What is known about a file before its pages are read.
+         */
+        FileFacts: {
+            /** Author */
+            author?: string | null;
+            /** Created */
+            created?: string | null;
+            /** Filename */
+            filename: string;
+            /** Mimetype */
+            mimeType: string;
+            /** Modified */
+            modified?: string | null;
+            /** Pagecount */
+            pageCount: number;
+            /**
+             * Paged
+             * @default true
+             */
+            paged: boolean;
+            /**
+             * Removedchars
+             * @default 0
+             */
+            removedChars: number;
+            /** Sizebytes */
+            sizeBytes: number;
+            /** Title */
+            title?: string | null;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
+         * FileReading
+         * @description A file's reading: queued, reading or none (never asked) with its progress, failed with the reason, or done with
+         *     the file's facts and its pages (all of them, or the one asked for). Keyed by the file's bytes and settings, so every
+         *     caller that reads the same file gets this one reading.
+         */
+        FileReading: {
+            /** Digest */
+            digest: string;
+            /** Durationms */
+            durationMs?: number | null;
+            error?: components["schemas"]["ReadingError"] | null;
+            facts?: components["schemas"]["FileFacts"] | null;
+            /** Fileid */
+            fileId: string;
+            /** Pages */
+            pages?: components["schemas"]["Page"][] | null;
+            /** Pagesdone */
+            pagesDone: number;
+            /** Pagestotal */
+            pagesTotal: number | null;
+            /** Readerversion */
+            readerVersion: string;
+            settings: components["schemas"]["ReadingSettingsOut"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "none" | "queued" | "reading" | "done" | "failed";
+        };
+        /**
+         * FormField
+         * @description A field of a fillable PDF form, read from the form dictionary: values typed into a form are not in the text
+         *     layer.
+         */
+        FormField: {
+            /** Box */
+            box?: number[] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "checkbox" | "choice" | "signature";
+            /** Name */
+            name: string;
+            /** Page */
+            page: number;
+            /** Value */
+            value: string;
         };
         /** Health */
         Health: {
@@ -1255,7 +1478,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "text" | "ocr" | "none";
+            source: "text" | "ocr" | "mixed" | "none";
             /** Width */
             width: number | null;
         };
@@ -1270,6 +1493,13 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** Line */
+        Line: {
+            /** Box */
+            box?: number[] | null;
+            /** Text */
+            text: string;
+        };
         /** ListResult[Extraction] */
         ListResult_Extraction_: {
             /** Data */
@@ -1281,6 +1511,55 @@ export interface components {
                 };
             };
             pagination: components["schemas"]["Pagination"];
+        };
+        /** OcrQuality */
+        OcrQuality: {
+            /** Lowshare */
+            lowShare: number;
+            /** Mean */
+            mean: number;
+            /** Words */
+            words: number;
+        };
+        /** Page */
+        Page: {
+            /** Blocks */
+            blocks?: components["schemas"]["Block"][];
+            /**
+             * Durationms
+             * @default 0
+             */
+            durationMs: number;
+            /** Formfields */
+            formFields?: components["schemas"]["FormField"][];
+            /** Height */
+            height?: number | null;
+            /**
+             * Imageshare
+             * @default 0
+             */
+            imageShare: number;
+            /** Number */
+            number: number;
+            ocr?: components["schemas"]["OcrQuality"] | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "text" | "ocr" | "mixed" | "none";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /** Unreadreason */
+            unreadReason?: string | null;
+            /** Warnings */
+            warnings?: string[];
+            /** Width */
+            width?: number | null;
+            /** Words */
+            words?: components["schemas"]["Word"][];
         };
         /** Pagination */
         Pagination: {
@@ -1304,13 +1583,52 @@ export interface components {
         };
         /**
          * Purged
-         * @description What was removed for a deleted file: its extractions (with their corrections) and the samples naming it.
+         * @description What was removed for a deleted file: its extractions (with their corrections), the samples naming it, and the
+         *     readings of its bytes once no other file of the workspace holds them.
          */
         Purged: {
             /** Extractions */
             extractions: number;
+            /**
+             * Readings
+             * @default 0
+             */
+            readings: number;
             /** Samples */
             samples: number;
+        };
+        /** ReadingError */
+        ReadingError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /** ReadingIn */
+        ReadingIn: {
+            /** Fileid */
+            fileId: string;
+            /**
+             * Language
+             * @default eng
+             */
+            language: string;
+            /**
+             * Ocr
+             * @default auto
+             * @enum {string}
+             */
+            ocr: "off" | "auto" | "always";
+        };
+        /** ReadingSettingsOut */
+        ReadingSettingsOut: {
+            /** Language */
+            language: string;
+            /**
+             * Ocr
+             * @enum {string}
+             */
+            ocr: "off" | "auto" | "always";
         };
         /** Sample */
         Sample: {
@@ -1510,6 +1828,15 @@ export interface components {
             taken: boolean;
             /** Toversion */
             toVersion: number;
+        };
+        /** Word */
+        Word: {
+            /** Box */
+            box: number[];
+            /** Confidence */
+            confidence: number;
+            /** Text */
+            text: string;
         };
     };
     responses: never;
@@ -3895,6 +4222,333 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Purged_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not ready or already in another state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    documents_ask_reading: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FileReading_"];
+                };
+            };
+            /** @description Queued; poll GET /v1/documents/readings/{fileId} */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FileReading_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not ready or already in another state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    documents_get_reading: {
+        parameters: {
+            query?: {
+                ocr?: "off" | "auto" | "always";
+                language?: string;
+                page?: number | null;
+            };
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FileReading_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not ready or already in another state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    documents_page_image: {
+        parameters: {
+            query?: {
+                detail?: "low" | "high";
+            };
+            header?: never;
+            path: {
+                file_id: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page drawn as a PNG */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
                 };
             };
             /** @description Invalid request */

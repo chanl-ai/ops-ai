@@ -118,6 +118,9 @@ SETTINGS: dict[str, str] = {
     "OPS_FILES_DIR": "/tmp/ops/files",
     "OPS_KB_FILES_DIR": "/tmp/ops/kb-files",
     "OPS_FILES_SCANNING": "eicar",
+    # Scanned pages are read by OCR (Tesseract is in the image) for knowledge sources, chat attachments and read_file.
+    "OPS_KB_OCR": "auto",
+    "OPS_ATTACHMENTS_OCR": "auto",
     "OPS_MAIL_PROVIDER": "none",
     "OPS_BOOTSTRAP_TENANT_ID": "local",
 }

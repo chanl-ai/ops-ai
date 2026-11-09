@@ -29,6 +29,17 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class Cell(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    col: int
+    colSpan: NotRequired[int]
+    header: NotRequired[bool]
+    id: str
+    row: int
+    rowSpan: NotRequired[int]
+    text: str
+
+
 class Classification(TypedDict, closed=True):
     confidence: float | None
     floor: float
@@ -169,9 +180,31 @@ class ExtractionRequest(TypedDict, closed=True):
     maxTokens: NotRequired[int | None]
     ocr: NotRequired[bool]
     proposePages: NotRequired[int | None]
-    read: NotRequired[Literal["fields", "text", "propose"]]
+    read: NotRequired[Literal["fields", "propose"]]
     reviewBelow: NotRequired[float | None]
     version: NotRequired[int | None]
+
+
+class FileFacts(TypedDict, closed=True):
+    author: NotRequired[str | None]
+    created: NotRequired[str | None]
+    filename: str
+    mimeType: str
+    modified: NotRequired[str | None]
+    pageCount: int
+    paged: NotRequired[bool]
+    removedChars: NotRequired[int]
+    sizeBytes: int
+    title: NotRequired[str | None]
+    warnings: NotRequired[list[str]]
+
+
+class FormField(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    kind: Literal["text", "checkbox", "choice", "signature"]
+    name: str
+    page: int
+    value: str
 
 
 class Health(TypedDict):
@@ -215,7 +248,7 @@ class LayoutIn(TypedDict, closed=True):
 class LayoutPage(TypedDict, closed=True):
     height: float | None
     number: int
-    source: Literal["text", "ocr", "none"]
+    source: Literal["text", "ocr", "mixed", "none"]
     width: float | None
 
 
@@ -224,6 +257,17 @@ class LayoutWord(TypedDict, closed=True):
     conf: float
     page: int
     text: str
+
+
+class Line(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    text: str
+
+
+class OcrQuality(TypedDict, closed=True):
+    lowShare: float
+    mean: float
+    words: int
 
 
 class Pagination(TypedDict, closed=True):
@@ -241,7 +285,24 @@ class PurgeIn(TypedDict, closed=True):
 
 class Purged(TypedDict, closed=True):
     extractions: int
+    readings: NotRequired[int]
     samples: int
+
+
+class ReadingError(TypedDict, closed=True):
+    code: str
+    message: str
+
+
+class ReadingIn(TypedDict, closed=True):
+    fileId: str
+    language: NotRequired[str]
+    ocr: NotRequired[Literal["off", "auto", "always"]]
+
+
+class ReadingSettingsOut(TypedDict, closed=True):
+    language: str
+    ocr: Literal["off", "auto", "always"]
 
 
 class Sample(TypedDict, closed=True):
@@ -343,8 +404,28 @@ class UpdateReview(TypedDict, closed=True):
     toVersion: int
 
 
+class Word(TypedDict, closed=True):
+    box: list[float]
+    confidence: float
+    text: str
+
+
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
+
+
+class Block(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    caption: NotRequired[str | None]
+    cells: NotRequired[list[Cell]]
+    id: str
+    kind: Literal["title", "heading", "paragraph", "table"]
+    level: NotRequired[int | None]
+    lines: NotRequired[list[Line]]
+    order: NotRequired[int]
+    readBy: NotRequired[Literal["text", "ocr"]]
+    sheet: NotRequired[str | None]
+    text: str
 
 
 class DocumentType(TypedDict, closed=True):
@@ -464,6 +545,22 @@ class ListResultExtraction(TypedDict, closed=True):
     pagination: Pagination
 
 
+class Page(TypedDict, closed=True):
+    blocks: NotRequired[list[Block]]
+    durationMs: NotRequired[int]
+    formFields: NotRequired[list[FormField]]
+    height: NotRequired[float | None]
+    imageShare: NotRequired[float]
+    number: int
+    ocr: NotRequired[OcrQuality | None]
+    source: Literal["text", "ocr", "mixed", "none"]
+    text: NotRequired[str]
+    unreadReason: NotRequired[str | None]
+    warnings: NotRequired[list[str]]
+    width: NotRequired[float | None]
+    words: NotRequired[list[Word]]
+
+
 class EnvelopeExtraction(TypedDict, closed=True):
     data: Extraction
     success: Literal[True]
@@ -474,11 +571,30 @@ class EnvelopeListResultExtraction(TypedDict, closed=True):
     success: Literal[True]
 
 
+class FileReading(TypedDict, closed=True):
+    digest: str
+    durationMs: NotRequired[int | None]
+    error: NotRequired[ReadingError | None]
+    facts: NotRequired[FileFacts | None]
+    fileId: str
+    pages: NotRequired[list[Page] | None]
+    pagesDone: int
+    pagesTotal: int | None
+    readerVersion: str
+    settings: ReadingSettingsOut
+    status: Literal["none", "queued", "reading", "done", "failed"]
+
+
 class Layout(TypedDict, closed=True):
     blocks: list[LayoutBlock]
     engine: str
     pages: list[LayoutPage]
     words: list[LayoutWord]
+
+
+class EnvelopeFileReading(TypedDict, closed=True):
+    data: FileReading
+    success: Literal[True]
 
 
 class EnvelopeLayout(TypedDict, closed=True):

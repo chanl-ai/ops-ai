@@ -2,8 +2,9 @@
 
 Status: current.
 
-The documents service (`ops_documents`, :8760) owns what is read from a file: page layouts (read once per content
-digest and cached), extractions with each field's value, confidence, page and quote, corrections, classification,
+The documents service (`ops_documents`, :8760) owns what is read from a file: every file's reading (read once per
+tenant, content digest, reader version and OCR settings, kept, and shared by every caller: extraction, layouts, knowledge
+bases, chat attachments, read_file), extractions with each field's value, confidence, page and quote, corrections, classification,
 document types with their versions, samples and capped test runs, and the document type templates a team installs
 from its plugins. It never holds file bytes: it reads them through files-service as the caller's team, so a file
 that team cannot see is 404 and a file not scanned clean is refused. Model calls go through models-service with its
@@ -17,15 +18,16 @@ Libraries: `packages/ops_extract` (field checks, the confidence floor, the promp
 
 | Path | Holds |
 |---|---|
-| `src/ops_documents/app.py` | The HTTP API: `/v1/documents` (extractions, corrections), document types, layouts, `/v1/templates` |
-| `src/ops_documents/extraction.py`, `layouts.py` | Reading a clean file against a schema; the layout cache |
+| `src/ops_documents/app.py` | The HTTP API: `/v1/documents` (readings, extractions, corrections, layouts), document types, `/v1/templates` |
+| `src/ops_documents/readings.py`, `store/readings.py` | The reading step: stored readings per digest and settings, the background queue (2 per process, one per team while another waits, resumed page by page), `reading.finished`/`reading.failed` to kb-service |
+| `src/ops_documents/extraction.py` | Reading a clean file against a schema, from its reading |
 | `src/ops_documents/document_types.py`, `templates.py` | Document types and their versions and tests; templates from plugins |
 | `src/ops_documents/files.py`, `agents_client.py`, `tools_client.py` | Bytes from files-service; which workflows read a type (agents-service); plugin templates (tools-service) |
 | `src/ops_documents/errors.py`, `models.py` | Refusals, each mapped to one HTTP answer; request and response shapes |
 | `src/ops_documents/store/` | All database code; `store/metadata.py:10` names the tenant role `ops_documents_tenant` |
 | `scripts/` | Fixture generators (`make_fake_reads.py`, `make_form_fixtures.py`, `make_restraining_fixtures.py`) and `seed_document_types.py` |
 | `migrations/` | Its own chain, version table `alembic_version_documents` |
-| `tests/` | Extractions, types, layouts, classify, templates, isolation, OCR; fixtures per document family under `tests/fixtures/` and the fake model's answers in `tests/fixtures/fake-model/` |
+| `tests/` | Readings, extractions, types, layouts, classify, templates, isolation, OCR; fixtures per document family under `tests/fixtures/` and the fake model's answers in `tests/fixtures/fake-model/` |
 
 ## Run, test, lint
 
@@ -35,7 +37,7 @@ From this folder (`make help` lists every target):
 |---|---|
 | Serve in the foreground on :8760 | `make stop` (the `make up` copy), then `make run` |
 | Its tests | `make test`, or from the root `make test PKG=services/documents-service` |
-| One test file | `PYTEST_ADDOPTS=tests/test_layouts.py make test`: this Makefile ignores `T=` |
+| One test file | `PYTEST_ADDOPTS=tests/test_readings.py make test`: this Makefile ignores `T=` |
 | Lint, types, OpenAPI | `make lint`, `make typecheck`, `make openapi-check` (`make openapi` to regenerate) |
 | Apply the chain | `make migrate` |
 | Regenerate the fake model's answers after a fixture change | `uv run python scripts/make_fake_reads.py` |

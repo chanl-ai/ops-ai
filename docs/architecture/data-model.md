@@ -682,7 +682,7 @@ The documents service reads a file into checked fields, each tied to where it is
 
 ```mermaid
 erDiagram
-  documents_layouts ||--o{ extractions : "read once per file digest"
+  documents_readings ||--o{ extractions : "read once per file digest"
   document_types ||--|{ document_type_versions : has
   document_types ||--o{ document_type_samples : "is tested on"
   document_type_versions ||--o{ document_type_tests : "is tested by"
@@ -691,13 +691,13 @@ erDiagram
   extraction_corrections ||--o| documents_outbox : reports
   document_types ||--o{ document_type_examples : "is taught by"
   extractions ||--o{ document_type_examples : teaches
-  documents_layouts {
+  documents_readings {
     string tenant_id PK
     string file_digest PK
-    string engine_version PK
-    json pages
-    json blocks
-    json words "boxes on the scan as uploaded"
+    string reader_version PK
+    string settings_key PK
+    string status
+    json facts
   }
   extractions {
     string id PK
@@ -766,7 +766,7 @@ erDiagram
 
 | Table | Holds | Status |
 |---|---|---|
-| `documents_layouts` | One file's layout per digest and layout engine version: pages, blocks, table cells and words with boxes | built |
+| `documents_readings` | One file's reading per digest, reader version and OCR settings, with its pages (`documents_reading_pages`) and the files holding the bytes (`documents_reading_files`); layouts are drawn from it | built |
 | `extractions` | Each read: the fields with their boxes, the path (template or model), image calls, measured tokens and, for a model read, its layout fingerprint for template offers. Unique on the idempotency key | built |
 | `extraction_corrections` | A person's correction of one field, with the original value and confidence kept | built |
 | `document_types, document_type_versions` | A team's document types and their immutable versions: fields with rules and key fields, templates, checks, date order, page images | built |

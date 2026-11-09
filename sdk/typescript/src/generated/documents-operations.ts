@@ -167,6 +167,15 @@ export const documentsOperations = {
     "query": [],
     "stream": false
   },
+  "documents_ask_reading": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/documents/readings",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "documents_classify_file": {
     "body": "json",
     "headers": [],
@@ -243,6 +252,35 @@ export const documentsOperations = {
     "query": [
       "page",
       "ocr"
+    ],
+    "stream": false
+  },
+  "documents_get_reading": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/documents/readings/{file_id}",
+    "pathParams": [
+      "file_id"
+    ],
+    "query": [
+      "ocr",
+      "language",
+      "page"
+    ],
+    "stream": false
+  },
+  "documents_page_image": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/documents/readings/{file_id}/pages/{number}/image",
+    "pathParams": [
+      "file_id",
+      "number"
+    ],
+    "query": [
+      "detail"
     ],
     "stream": false
   },

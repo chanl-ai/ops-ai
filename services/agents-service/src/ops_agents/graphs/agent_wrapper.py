@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Mapping
-from dataclasses import replace
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -17,7 +16,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import interrupt
 
 from ops_agent_kernel.types import AttachedFile, Passage, Resume, ToolGrant, TranscriptMessage, TurnRequest
-from ops_agents.activities.attachments import ATTACHMENT_KB, WithAttachments
+from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.gateway import LIVE, TEST, acting_as, current_run_context
 from ops_agents.activities.overrides import limits_for
@@ -124,8 +123,6 @@ def build(
             Passage(p["documentId"], p["title"], p["section"], "attached", p["text"], ATTACHMENT_KB, p.get("page"))
             for p in state.get("attached_passages") or []
         ]
-        if attached:
-            ports = replace(ports, knowledge=WithAttachments(ports.knowledge, attached))
         req = TurnRequest(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
@@ -138,7 +135,8 @@ def build(
             earlier_reads=reads,
             carried_plan=open_plan,
             user_turn=state["message"],
-            kb_ids=[*_granted(state, grants), *([ATTACHMENT_KB] if attached else [])],
+            kb_ids=_granted(state, grants),
+            attached=attached,
             attachments=[
                 AttachedFile(str(f["fileId"]), str(f["name"]), f.get("unread"))
                 for f in state.get("attached_files") or []

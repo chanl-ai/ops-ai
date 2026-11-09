@@ -199,6 +199,15 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         # Lists the files the turn named, as they were named to it.
         block = text.split("<attachments>", 1)[1].split("</attachments>", 1)[0]
         return ModelResponse(parts=[TextPart(" ".join(r[2:] for r in block.splitlines() if r.startswith("- ")))])
+    if "<attachments>" in text and "how many pages did you get" in text.lower():
+        # Counts the attached pages the turn gave it, and the characters on them.
+        rows = re.findall(r"^\[\d+\] [^:\n]*: (.*)$", text, re.MULTILINE)
+        return ModelResponse(parts=[TextPart(f"{len(rows)} pages, {sum(len(r) for r in rows)} characters.")])
+    if "<attachments>" in text and (pages := re.findall(r"^\[(\d+)\] [^:\n]*: (.*)$", text, re.MULTILINE)):
+        # Answers from the attached page sharing the most words with the question, and cites it by its number.
+        asked = {w for w in text.rsplit("</attachments>", 1)[-1].lower().split() if len(w) > 3}
+        n, _ = max(pages, key=lambda p: sum(w in p[1].lower() for w in asked))
+        return ModelResponse(parts=[TextPart(f"Here is what the file says [{n}].")])
     if "<knowledge>" in text:
         # Any other turn with passages answers from the first one and cites it, as a model told to cite would.
         return ModelResponse(parts=[TextPart("Here is what the policy says [1].")])

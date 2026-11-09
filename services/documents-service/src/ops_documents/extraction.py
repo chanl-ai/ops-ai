@@ -30,26 +30,24 @@ from ops_access import team_off, team_on
 from ops_contracts.field_values import FIELD_TYPES
 from ops_documents.errors import IdempotencyConflictError, InvalidRequestError, StateError
 from ops_documents.files import Files, Who
-from ops_documents.layouts import Layouts
+from ops_documents.readings import SYNC_BYTES, SYNC_PAGES, Readings, settings_of
 from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
 from ops_documents.store.extractions import file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
 from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
-from ops_extract.layout import ENGINE as LAYOUT_ENGINE
-from ops_extract.layout import page_text
+from ops_extract.layout import layout_of, page_text
 from ops_extract.pages import Pages
 from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_ingest.reading import Reading, read
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 
 log = get_logger("ops_documents.extraction")
 
-SYNC_PAGES = 5
-SYNC_BYTES = 5 * 1024 * 1024
 ALIAS = "extract"
 FALLBACK_ALIAS = "default"
 
@@ -70,7 +68,7 @@ REFUSALS = {
     "tenant_budget_exhausted": ("budget_exhausted", SPENT),
     "rate_limited": ("model_rate_limited", "The model is busy; try again in a minute."),
 }
-READS = ("fields", "text", "propose")
+READS = ("fields", "propose")
 PROPOSE_PAGES = 5
 # Page text per model token, the estimate a read's token ceiling counts in.
 CHARS_PER_TOKEN = 4
@@ -467,8 +465,8 @@ class Extractor:
     floors: Floors | None
     alias: str = ALIAS
     types: TypeResolver | None = None
-    # The cached layouts extraction reads; without them each extraction reads the file's layout itself.
-    layouts: Layouts | None = None
+    # The stored readings extraction reads; without them (a test app) each extraction reads the file itself.
+    readings: Readings | None = None
     # The team's pageImages policy; without it no read sends a page image.
     page_image_policy: PageImagePolicy | None = None
     # The team's masking of personal data in what people see; without it, masked.
@@ -792,10 +790,16 @@ class Extractor:
             await self.store.finish(row.id, status="failed", at=self.clock(), error_code="failed", error=str(e))
 
     async def _pages(self, who: Who, file: FileInfo, request: dict[str, Any]) -> Pages:
-        """The text the model reads, from the file's layout: titles, headings and each table cell on lines of their
+        """The text the model reads, from the file's reading: titles, headings and each table cell on lines of their
         own, and each OCR'd word's confidence."""
-        layouts = self.layouts or Layouts(self.files)
-        return page_text(await layouts.of(who, file, ocr=bool(request["ocr"])))
+        return page_text(layout_of(await self._reading(who, file, request)))
+
+    async def _reading(self, who: Who, file: FileInfo, request: dict[str, Any]) -> Reading:
+        settings = settings_of(bool(request.get("ocr")))
+        if self.readings is not None:
+            return await self.readings.of(who, file, settings)
+        data = await self.files.read(who, file)
+        return await asyncio.to_thread(read, data, filename=file.name, mime_type=file.mime, settings=settings)
 
     async def _run(self, row: ExtractionRow, file: FileInfo, pages: Pages) -> ExtractionRow:
         tenant, eid = row.tenant_id, row.id
@@ -813,11 +817,6 @@ class Extractor:
                 eid, status="unreadable", outcome="unreadable", at=self.clock(),
                 result={"fileId": row.file_id, "pages": pages.count},
             )  # fmt: skip
-            return await self._row(tenant, eid)
-        if read == "text":
-            # The layout already holds every page's text, in reading order: no model is asked and nothing is charged.
-            out = {"fileId": row.file_id, **_full_text(pages), **limited}
-            await self.store.finish(eid, status="done", outcome="ok", result=out, at=self.clock(), tokens=(0, 0))
             return await self._row(tenant, eid)
         many = bool(request["many"])
         pictures = self._pictures(row, file)
@@ -1050,14 +1049,12 @@ class Extractor:
         return Pictures(load, file.mime, allow)
 
     async def layout_of(self, who: Who, row: ExtractionRow) -> dict[str, Any]:
-        """The layout an extraction read: the cached one for its file's digest, else read again from the file."""
-        ocr = bool(row.request.get("ocr"))
-        layouts = self.layouts or Layouts(self.files)
-        if layouts.store is not None:
-            cached = await layouts.store.get(row.file_digest, LAYOUT_ENGINE, ocr=ocr)
-            if cached is not None:
-                return cached
-        return await layouts.of(who, await self.files.readable(who, row.file_id), ocr=ocr)
+        """The layout an extraction read: from the stored reading of its file's bytes, else read again from the file."""
+        if self.readings is not None and row.file_digest:
+            stored = await self.readings.stored_of(row.file_digest, settings_of(bool(row.request.get("ocr"))))
+            if stored is not None:
+                return layout_of(stored)
+        return layout_of(await self._reading(who, await self.files.readable(who, row.file_id), row.request))
 
     async def _propose(self, row: ExtractionRow, pages: Pages, usage: Usage) -> dict[str, Any]:
         """Fields in the document type's shape and a suggested name, read from the first pages only, so an unknown
@@ -1121,26 +1118,7 @@ def _limited(pages: Pages, request: dict[str, Any]) -> tuple[Pages, dict[str, An
     return replace(pages, texts=texts, ocr={n for n in pages.ocr if n in texts}, confidence=confidence), said
 
 
-def _full_text(pages: Pages) -> dict[str, Any]:
-    """Every page's text in reading order, with its tables' cells, from the layout the read was rendered from."""
-    blocks = cast(list[dict[str, Any]], (pages.layout or {}).get("blocks") or [])
-    out: list[dict[str, Any]] = []
-    for n in sorted(pages.texts):
-        on_page = [b for b in blocks if int(b.get("page") or 0) == n and b.get("kind") == "table"]
-        tables = [
-            {
-                "cells": [
-                    {k: c.get(k) for k in ("row", "col", "text")}
-                    for c in cast(list[dict[str, Any]], b.get("cells") or [])
-                ]
-            }
-            for b in on_page
-        ]
-        out.append({"number": n, "text": pages.texts[n], "tables": tables})
-    return {"text": "\n\n".join(p["text"] for p in out), "pages": out}
-
-
-def default_extractor(files: Files, engine: Any, settings: Settings, *, layouts: Layouts | None = None) -> Extractor:
+def default_extractor(files: Files, engine: Any, settings: Settings, *, readings: Readings | None = None) -> Extractor:
     """On models-service with this process's own model key (OPS_MODELS_KEY) and on platform-service for the floor.
     Without models-service every extraction fails `not_configured` rather than calling a provider; without
     platform-service the catalogue's default floor applies, as it does for the workflow worker."""
@@ -1173,5 +1151,5 @@ def default_extractor(files: Files, engine: Any, settings: Settings, *, layouts:
         except ValueError as e:  # no service signing key outside dev
             log.warning("no service signing key; extractions cannot read the floor", extra={"error": str(e)})
     return Extractor(
-        files, ExtractionsStore(engine), models, floors, layouts=layouts, page_image_policy=pictures, masking=masking
+        files, ExtractionsStore(engine), models, floors, readings=readings, page_image_policy=pictures, masking=masking
     )

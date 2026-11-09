@@ -518,6 +518,25 @@
         "title": "Envelope[ChangeList]",
         "type": "object"
       },
+      "Envelope_EventOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EventOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[EventOut]",
+        "type": "object"
+      },
       "Envelope_ItemWithDetail_": {
         "additionalProperties": false,
         "properties": {
@@ -961,6 +980,85 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "EventIn": {
+        "description": "A service event, as documents-service's relay sends it: the tenant and team come from the token.",
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "teamId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Teamid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "key",
+          "teamId"
+        ],
+        "title": "EventIn",
+        "type": "object"
+      },
+      "EventOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "title": "Items",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "handled",
+              "unhandled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "key",
+          "status",
+          "items"
+        ],
+        "title": "EventOut",
+        "type": "object"
+      },
       "FileIdsIn": {
         "properties": {
           "fileIds": {
@@ -977,6 +1075,19 @@
           "fileIds"
         ],
         "title": "FileIdsIn",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
         "type": "object"
       },
       "Health": {
@@ -4010,6 +4121,46 @@
         "title": "SyncRun",
         "type": "object"
       },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
       "VerifyIn": {
         "properties": {
           "verified": {
@@ -4084,6 +4235,67 @@
           "health"
         ],
         "x-ops-public": "sdk"
+      }
+    },
+    "/v1/events": {
+      "post": {
+        "description": "A service event: reading.finished and reading.failed from documents-service index, or fail with the\nreason, the source items waiting on that file. Service tokens with `events:emit` only, for the team the token\nnames; the same event twice settles nothing more.",
+        "operationId": "events_receive_event",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_EventOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receive Event",
+        "tags": [
+          "events"
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/items/{item_id}": {

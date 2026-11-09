@@ -49,7 +49,7 @@ class GraphDeps:
     models: GraphModels
     replies: ReplySender
     model_alias: str
-    # Reads an attachment's text by file id when state carries a reference instead of the bytes (E4, E6).
+    # An attachment's text by files-service file id, from its reading in documents-service (E4, E6).
     files: FileReader | None = None
     # Checks each model call against the thread's budget and records its usage (E12); None meters nothing.
     meter: Meter | None = None

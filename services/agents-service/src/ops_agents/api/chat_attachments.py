@@ -1,10 +1,12 @@
 """What a chat turn gives the agent about the files attached to its thread. A file is files-service's (uploaded by
 the console as `chat_attachment`, or any file of the team named by its id), read as the person's team; its text is
-documents-service's full-text read, the same read an agent's read_file tool makes, so a file is read once whoever
-asks. A file named on the message being sent that the team does not hold is a 404. Every other problem (a file no
-longer in Files, one the scan has not cleared, one with no text) is told to the agent beside the file's name and id,
-and, for a file on this message, to the person in the reply. The conversation records no reference on the file, so a
-person can delete a file they attached; the message keeps its name and a later turn says it is no longer in Files."""
+the file's reading in documents-service, with OCR on auto so a scan is read, the same reading an agent's read_file tool
+and a knowledge base use, so a file is read once whoever asks. Its pages go to the model whole, within the turn's
+share of attached text. A file named on the message being sent that the team does not hold is a 404. Every other
+problem (a file no longer in Files, one the scan has not cleared, one with no text) is told to the agent beside the
+file's name and id, and, for a file on this message, to the person in the reply. The conversation records no
+reference on the file, so a person can delete a file they attached; the message keeps its name and a later turn says
+it is no longer in Files."""
 
 from __future__ import annotations
 
@@ -14,7 +16,7 @@ from typing import Any
 from ops_agent_kernel.types import AttachedFile
 from ops_agents.activities import attachments
 from ops_contracts.chat import ChatAttachment
-from ops_documents_client import READING, DocumentsClient, DocumentsRefused
+from ops_documents_client import READING_PENDING, DocumentsClient, DocumentsRefused
 from ops_files_client import FileInfo, FileNotFound, FilesClient, FilesRefused
 from ops_identity import ServiceUnreachable
 from ops_service_kit.errors import NotFound, ServiceUnavailable
@@ -27,7 +29,7 @@ SCAN = {
     "infected": "the virus scan quarantined it",
     "failed": "the virus scan could not check it",
 }
-NO_TEXT = "it has no text to read (a scan or photo without a text layer)"
+NO_TEXT = "it has no text to read, even by OCR"
 STILL_READING = "it is still being read; ask again in a moment"
 
 
@@ -42,8 +44,11 @@ class TurnFiles:
 
 
 class ChatAttachmentReader:
-    def __init__(self, files: FilesClient, documents: DocumentsClient, *, wait_s: float = READ_WAIT_S) -> None:
-        self.files, self.documents, self.wait_s = files, documents, wait_s
+    def __init__(
+        self, files: FilesClient, documents: DocumentsClient, *, wait_s: float = READ_WAIT_S, ocr: str = "auto"
+    ) -> None:
+        """`ocr` is the OCR mode attachments are read with (settings.attachments_ocr): auto reads scans."""
+        self.files, self.documents, self.wait_s, self.ocr = files, documents, wait_s, ocr
 
     async def read(
         self,
@@ -96,16 +101,14 @@ class ChatAttachmentReader:
 
     async def _text(self, tenant: str, team: str, file: FileInfo) -> tuple[str | None, list[attachments.Page]]:
         try:
-            read = await self.documents.read_text(tenant, team, file.id, digest=file.digest, wait_s=self.wait_s)
+            read = await self.documents.reading(tenant, team, file.id, ocr=self.ocr, wait_s=self.wait_s)
         except DocumentsRefused as e:
             return e.message.rstrip("."), []
         except ServiceUnreachable:
             return "the document reader cannot be reached", []
         status = read.get("status")
-        if status in READING:
+        if status in READING_PENDING:
             return STILL_READING, []
-        if status == "unreadable":
-            return NO_TEXT, []
         if status != "done":
             error: dict[str, Any] = read.get("error") or {}
             return str(error.get("message") or "the document reader could not read it").rstrip("."), []

@@ -17,7 +17,6 @@ Routing rules: docs/architecture/definitions-and-versions.md.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import operator
 import time
@@ -36,7 +35,6 @@ from ops_agent_kernel.types import Resume, TurnRequest
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.tool_directory import CatalogTools
 from ops_agents.activities.tools import fill
-from ops_ingest.parsers.pdf import parse_pdf
 from ops_service_kit.ids import canonical_json, new_id
 
 from .common import (
@@ -422,19 +420,10 @@ def _failure(outcome: ToolOutcome, tool: str) -> dict[str, Any]:
 
 
 async def attachment_text(deps: GraphDeps, attachment: Mapping[str, Any]) -> str:
-    """An attachment's text from the files stub: a PDF (base64, as Graph sends `contentBytes`) through its text
-    layer, anything else as the text it is."""
+    """An attachment's text: its file's reading in documents-service when it names a file, else the text it carries."""
     if deps.files is None or not attachment.get("file_id"):
         return str(attachment.get("text") or "")
-    content = await deps.files.read_file(str(attachment["file_id"]))
-    name = str(attachment.get("name") or "")
-    if name.lower().endswith(".pdf"):
-        try:
-            data = base64.b64decode(content, validate=True)
-        except (ValueError, TypeError):
-            data = content.encode()
-        return parse_pdf(data, filename=name).plain_text()
-    return content
+    return await deps.files.read_file(str(attachment["file_id"]))
 
 
 async def levy_calls(

@@ -159,6 +159,170 @@
         "title": "BackgroundProcessOut",
         "type": "object"
       },
+      "Block": {
+        "additionalProperties": false,
+        "description": "One run of content in reading order. A paragraph keeps its lines (and their boxes) so the page's text can put\neach on its own line; a table keeps its cells.",
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/Cell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "title",
+              "heading",
+              "paragraph",
+              "table"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/Line"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "order": {
+            "default": 0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "readBy": {
+            "default": "text",
+            "enum": [
+              "text",
+              "ocr"
+            ],
+            "title": "Readby",
+            "type": "string"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "text"
+        ],
+        "title": "Block",
+        "type": "object"
+      },
+      "Cell": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "col": {
+            "title": "Col",
+            "type": "integer"
+          },
+          "colSpan": {
+            "default": 1,
+            "title": "Colspan",
+            "type": "integer"
+          },
+          "header": {
+            "default": false,
+            "title": "Header",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          },
+          "rowSpan": {
+            "default": 1,
+            "title": "Rowspan",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "row",
+          "col",
+          "text"
+        ],
+        "title": "Cell",
+        "type": "object"
+      },
       "Classification": {
         "additionalProperties": false,
         "description": "Which of the team's document types a file is: the model's choice and how sure it is, or none.\n`needsReview` when none fits or the confidence is under the floor.",
@@ -988,6 +1152,25 @@
         "title": "Envelope[Extraction]",
         "type": "object"
       },
+      "Envelope_FileReading_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FileReading"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[FileReading]",
+        "type": "object"
+      },
       "Envelope_Installation_": {
         "additionalProperties": false,
         "properties": {
@@ -1765,7 +1948,6 @@
             "default": "fields",
             "enum": [
               "fields",
-              "text",
               "propose"
             ],
             "title": "Read",
@@ -1801,6 +1983,250 @@
           "fileId"
         ],
         "title": "ExtractionRequest",
+        "type": "object"
+      },
+      "FileFacts": {
+        "additionalProperties": false,
+        "description": "What is known about a file before its pages are read.",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "mimeType": {
+            "title": "Mimetype",
+            "type": "string"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified"
+          },
+          "pageCount": {
+            "title": "Pagecount",
+            "type": "integer"
+          },
+          "paged": {
+            "default": true,
+            "title": "Paged",
+            "type": "boolean"
+          },
+          "removedChars": {
+            "default": 0,
+            "title": "Removedchars",
+            "type": "integer"
+          },
+          "sizeBytes": {
+            "title": "Sizebytes",
+            "type": "integer"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "filename",
+          "mimeType",
+          "sizeBytes",
+          "pageCount"
+        ],
+        "title": "FileFacts",
+        "type": "object"
+      },
+      "FileReading": {
+        "additionalProperties": false,
+        "description": "A file's reading: queued, reading or none (never asked) with its progress, failed with the reason, or done with\nthe file's facts and its pages (all of them, or the one asked for). Keyed by the file's bytes and settings, so every\ncaller that reads the same file gets this one reading.",
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Durationms"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadingError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fileId": {
+            "title": "Fileid",
+            "type": "string"
+          },
+          "pages": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Page"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pages"
+          },
+          "pagesDone": {
+            "title": "Pagesdone",
+            "type": "integer"
+          },
+          "pagesTotal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pagestotal"
+          },
+          "readerVersion": {
+            "title": "Readerversion",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ReadingSettingsOut"
+          },
+          "status": {
+            "enum": [
+              "none",
+              "queued",
+              "reading",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileId",
+          "digest",
+          "status",
+          "readerVersion",
+          "settings",
+          "pagesTotal",
+          "pagesDone"
+        ],
+        "title": "FileReading",
+        "type": "object"
+      },
+      "FormField": {
+        "additionalProperties": false,
+        "description": "A field of a fillable PDF form, read from the form dictionary: values typed into a form are not in the text\nlayer.",
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "checkbox",
+              "choice",
+              "signature"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "kind",
+          "page"
+        ],
+        "title": "FormField",
         "type": "object"
       },
       "Health": {
@@ -2130,6 +2556,7 @@
             "enum": [
               "text",
               "ocr",
+              "mixed",
               "none"
             ],
             "title": "Source",
@@ -2188,6 +2615,34 @@
         "title": "LayoutWord",
         "type": "object"
       },
+      "Line": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Line",
+        "type": "object"
+      },
       "ListResult_Extraction_": {
         "additionalProperties": false,
         "properties": {
@@ -2218,6 +2673,141 @@
           "facets"
         ],
         "title": "ListResult[Extraction]",
+        "type": "object"
+      },
+      "OcrQuality": {
+        "additionalProperties": false,
+        "properties": {
+          "lowShare": {
+            "title": "Lowshare",
+            "type": "number"
+          },
+          "mean": {
+            "title": "Mean",
+            "type": "number"
+          },
+          "words": {
+            "title": "Words",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mean",
+          "lowShare",
+          "words"
+        ],
+        "title": "OcrQuality",
+        "type": "object"
+      },
+      "Page": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/Block"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "durationMs": {
+            "default": 0,
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "formFields": {
+            "items": {
+              "$ref": "#/components/schemas/FormField"
+            },
+            "title": "Formfields",
+            "type": "array"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "imageShare": {
+            "default": 0.0,
+            "title": "Imageshare",
+            "type": "number"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "ocr": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OcrQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "enum": [
+              "text",
+              "ocr",
+              "mixed",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "unreadReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unreadreason"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/Word"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "number",
+          "source"
+        ],
+        "title": "Page",
         "type": "object"
       },
       "Pagination": {
@@ -2277,10 +2867,15 @@
       },
       "Purged": {
         "additionalProperties": false,
-        "description": "What was removed for a deleted file: its extractions (with their corrections) and the samples naming it.",
+        "description": "What was removed for a deleted file: its extractions (with their corrections), the samples naming it, and the\nreadings of its bytes once no other file of the workspace holds them.",
         "properties": {
           "extractions": {
             "title": "Extractions",
+            "type": "integer"
+          },
+          "readings": {
+            "default": 0,
+            "title": "Readings",
             "type": "integer"
           },
           "samples": {
@@ -2293,6 +2888,83 @@
           "samples"
         ],
         "title": "Purged",
+        "type": "object"
+      },
+      "ReadingError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ReadingError",
+        "type": "object"
+      },
+      "ReadingIn": {
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Fileid",
+            "type": "string"
+          },
+          "language": {
+            "default": "eng",
+            "maxLength": 64,
+            "minLength": 2,
+            "pattern": "^[A-Za-z_]+(\\+[A-Za-z_]+)*$",
+            "title": "Language",
+            "type": "string"
+          },
+          "ocr": {
+            "default": "auto",
+            "enum": [
+              "off",
+              "auto",
+              "always"
+            ],
+            "title": "Ocr",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileId"
+        ],
+        "title": "ReadingIn",
+        "type": "object"
+      },
+      "ReadingSettingsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "ocr": {
+            "enum": [
+              "off",
+              "auto",
+              "always"
+            ],
+            "title": "Ocr",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ocr",
+          "language"
+        ],
+        "title": "ReadingSettingsOut",
         "type": "object"
       },
       "Sample": {
@@ -2794,6 +3466,33 @@
           "edits"
         ],
         "title": "UpdateReview",
+        "type": "object"
+      },
+      "Word": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Box",
+            "type": "array"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "box",
+          "confidence"
+        ],
+        "title": "Word",
         "type": "object"
       }
     }
@@ -6739,7 +7438,7 @@
     },
     "/v1/documents/layout": {
       "post": {
-        "description": "The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as\nfractions of the page. Read on the first ask and cached by the file's content digest.",
+        "description": "The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as\nfractions of the page. Drawn from the file's reading, read on the first ask and kept.",
         "operationId": "documents_compute_layout",
         "parameters": [
           {
@@ -7324,6 +8023,650 @@
           }
         },
         "summary": "Purge",
+        "tags": [
+          "documents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/documents/readings": {
+      "post": {
+        "description": "The file's reading: every page's text in reading order, blocks with boxes, words with confidence, form\nfields and OCR quality. Answered at once when it is stored, or when the file is small (5 pages and 5 MB) with no\npage to OCR; otherwise 202 with its status, and reading.finished or reading.failed when it ends.",
+        "operationId": "documents_ask_reading",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FileReading_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FileReading_"
+                }
+              }
+            },
+            "description": "Queued; poll GET /v1/documents/readings/{fileId}"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not ready or already in another state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Ask Reading",
+        "tags": [
+          "documents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/documents/readings/{file_id}": {
+      "get": {
+        "description": "The reading as it is now, with every page or the one asked for once done; status none when never asked\nfor. A file the team cannot see is 404, whoever else holds its bytes.",
+        "operationId": "documents_get_reading",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ocr",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "enum": [
+                "off",
+                "auto",
+                "always"
+              ],
+              "title": "Ocr",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "eng",
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^[A-Za-z_]+(\\+[A-Za-z_]+)*$",
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FileReading_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not ready or already in another state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Get Reading",
+        "tags": [
+          "documents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/documents/readings/{file_id}/pages/{number}/image": {
+      "get": {
+        "description": "One page drawn as an image, on request and never stored: 150 DPI, longest side 1,600 pixels (512 at low).",
+        "operationId": "documents_page_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "detail",
+            "required": false,
+            "schema": {
+              "default": "high",
+              "enum": [
+                "low",
+                "high"
+              ],
+              "title": "Detail",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The page drawn as a PNG"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not ready or already in another state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Page Image",
         "tags": [
           "documents"
         ],

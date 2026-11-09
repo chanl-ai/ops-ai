@@ -18,6 +18,7 @@ from ops_kb.store.fulltext import PostgresFullTextRetriever
 from .conftest import kb_client
 from .files_fake import FakeFilesService
 from .pdfs import RATES
+from .readings_fake import LocalReadings
 from .test_add_existing_files import stored
 from .test_bases_and_sources import data
 from .test_sync import file_source, upload
@@ -37,7 +38,13 @@ async def test_a_start_moves_files_from_kb_services_own_store_into_files_service
     fake = FakeFilesService()
     files = fake.client()
     intake = FilesServiceIntake(files)
-    service = KnowledgeService(KnowledgeStore(engine), intake, PostgresFullTextRetriever(engine), StaticAgents())
+    service = KnowledgeService(
+        KnowledgeStore(engine),
+        intake,
+        PostgresFullTextRetriever(engine),
+        StaticAgents(),
+        readings=LocalReadings(intake),
+    )
     await move_to_files_service(service, old, [tenant])
     async with kb_client(engine, tenant, files=intake) as after:
         moved = data(await after.get(f"/v1/sources/{src['id']}"))

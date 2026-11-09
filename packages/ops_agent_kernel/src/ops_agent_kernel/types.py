@@ -182,10 +182,14 @@ class Resume:
     approval_token: str | None = None
 
 
+# The knowledge id an attached file's passages carry: a citation of one names a Files file, not a knowledge item.
+ATTACHMENT_KB = "attachment"
+
+
 @dataclass(frozen=True)
 class AttachedFile:
     """A file the person attached to the conversation, as the turn names it to the model: its name, its file id, and
-    why it could not be read when it could not. The text that was read arrives as knowledge passages."""
+    why it could not be read when it could not. The text that was read arrives as `TurnRequest.attached`."""
 
     file_id: str
     name: str
@@ -206,6 +210,9 @@ class TurnRequest:
     kb_ids: list[str] = field(default_factory=list[str])
     # Files attached to the conversation, named in their own data block whether or not their text could be read.
     attachments: list[AttachedFile] = field(default_factory=list[AttachedFile])
+    # The attached files' text, page by page (kb_id ATTACHMENT_KB), whole within the turn's share: shown in the
+    # attachments block and numbered before any knowledge passage, so the model cites a page of a file it was given.
+    attached: list[Passage] = field(default_factory=list[Passage])
     # The conversation named knowledge bases and the agent no longer holds any of them: the turn says so and does not
     # call the model, which would otherwise answer from its own knowledge, uncited.
     knowledge_withdrawn: bool = False

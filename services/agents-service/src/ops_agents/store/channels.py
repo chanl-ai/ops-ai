@@ -272,21 +272,3 @@ class ChannelStore:
                     .values(status="delivered", delivered_at=now)
                 )
             return seqs
-
-    # ── files stub ──
-
-    async def put_file(self, file_id: str, *, name: str, content_type: str, content: str, sha256: str) -> None:
-        stmt = (
-            self._insert(channel_files)
-            .values(
-                file_id=file_id, name=name, content_type=content_type, size=len(content), sha256=sha256, content=content
-            )
-            .on_conflict_do_nothing(index_elements=["file_id"])
-        )
-        async with self.engine.begin() as c:
-            await c.execute(stmt)
-
-    async def read_file(self, file_id: str) -> str:
-        async with self.engine.connect() as c:
-            q = sa.select(channel_files.c.content).where(channel_files.c.file_id == file_id)
-            return str((await c.execute(q)).scalar_one())

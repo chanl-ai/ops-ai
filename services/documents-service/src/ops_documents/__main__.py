@@ -18,8 +18,8 @@ from ops_documents.app import create_documents_app
 from ops_documents.document_types import default_document_types
 from ops_documents.extraction import default_extractor
 from ops_documents.files import Files
-from ops_documents.layouts import Layouts
-from ops_documents.store import LayoutsStore, engine_for
+from ops_documents.readings import Readings
+from ops_documents.store import ReadingsStore, engine_for
 from ops_documents.store.event_relay import keep_relaying
 from ops_documents.tools_client import plugin_templates
 from ops_files_client import FilesClient
@@ -36,16 +36,28 @@ def build(settings: Settings) -> FastAPI:
     """The app on its database, files-service and models-service; building it opens no connection."""
     engine = engine_for(settings.database_url)
     files = Files(FilesClient.from_settings(settings, service="documents", scopes=["files:view", "files:edit"]))
-    extractor = default_extractor(files, engine, settings, layouts=Layouts(files, LayoutsStore(engine)))
+    extractor = default_extractor(files, engine, settings, readings=Readings(files, ReadingsStore(engine)))
     types = default_document_types(files, engine, settings, extractor)
     background: list[Callable[[], Coroutine[Any, Any, None]]] = []
+    agents: ServiceClient | None = None
+    kb: ServiceClient | None = None
     if settings.agents_url:
         # A correction's extraction.corrected reaches agents-service, which saves the corrected read on the file.
         http = httpx.AsyncClient(base_url=settings.agents_url, timeout=5)
         agents = ServiceClient.for_settings(
             settings, http, service="documents", audience="agents", scopes=["events:emit"]
         )
-        background.append(lambda: keep_relaying(engine, agents))
+    if settings.kb_url:
+        # A finished reading reaches kb-service, which indexes the knowledge items waiting on it.
+        kb = ServiceClient.for_settings(
+            settings,
+            httpx.AsyncClient(base_url=settings.kb_url, timeout=5),
+            service="documents",
+            audience="kb",
+            scopes=["events:emit"],
+        )
+    if agents is not None or kb is not None:
+        background.append(lambda: keep_relaying(engine, agents, kb))
     return create_documents_app(
         engine=engine,
         extractor=extractor,

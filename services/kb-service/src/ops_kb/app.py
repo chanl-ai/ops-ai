@@ -8,16 +8,20 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 from ops_access import can
-from ops_identity import Auth, CurrentCaller, CurrentTenantCaller, ServiceClient, install_auth
+from ops_documents_client import DocumentsClient
+from ops_identity import Auth, CurrentCaller, CurrentService, CurrentTenantCaller, ServiceClient, install_auth
 from ops_service_kit.background import BackgroundHealthOut
+from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import (
     Envelope,
     ListResult,
@@ -29,12 +33,14 @@ from ops_service_kit.http import (
     operation_id,
 )
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
 from .files import FileIntake, file_intake
+from .readings import DocumentsReadings, Readings
 from .schedule import keep_syncing
 from .schemas import (
     AddedDocuments,
@@ -130,6 +136,38 @@ def _tools_service(settings: Settings) -> ToolReader | None:
     return ToolReader(client)
 
 
+def _documents_service(settings: Settings) -> Readings | None:
+    """documents-service, which reads every file a source holds; unset, file sources cannot be indexed."""
+    if not settings.documents_url:
+        return None
+    return DocumentsReadings(
+        DocumentsClient.from_settings(settings, service="kb", scopes=["documents:view", "documents:run"])
+    )
+
+
+# The events documents-service sends here: a file's reading ended, done or failed.
+READING_EVENTS = ("reading.finished", "reading.failed")
+
+
+class EventIn(BaseModel):
+    """A service event, as documents-service's relay sends it: the tenant and team come from the token."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    name: str = Field(min_length=1, max_length=120)
+    key: str = Field(min_length=1, max_length=200)
+    team_id: str = Field(min_length=1, max_length=64)
+    payload: dict[str, Any] = Field(default_factory=dict[str, Any])
+    actor: str | None = None
+
+
+class EventOut(Out):
+    name: str
+    key: str
+    # handled: the items waiting on the file were settled; unhandled: this service does not act on the event.
+    status: Literal["handled", "unhandled"]
+    items: int
+
+
 def create_kb_app(
     engine: AsyncEngine,
     *,
@@ -137,6 +175,7 @@ def create_kb_app(
     files: FileIntake | None = None,
     agents: AgentDirectory | None = None,
     tools: ToolReader | None = None,
+    readings: Readings | None = None,
     schedule: bool = True,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
@@ -145,12 +184,15 @@ def create_kb_app(
     else under kb_files_dir. `agents` says which agents cite each base; by default agents-service at
     Settings().agents_url."""
     reader = tools or _tools_service(Settings())
+    readings = readings or _documents_service(Settings())
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        # The knowledge schedule runs only where tool sources can be read.
+        # The knowledge schedule runs where tool sources or files can be read: it syncs tool sources and asks again
+        # for the readings items still wait on, in case a reading.finished event was missed.
         stop = asyncio.Event()
-        beat = asyncio.create_task(keep_syncing(service, stop)) if reader is not None and schedule else None
+        runs = (reader is not None or readings is not None) and schedule
+        beat = asyncio.create_task(keep_syncing(service, stop)) if runs else None
         try:
             yield
         finally:
@@ -178,8 +220,29 @@ def create_kb_app(
         PostgresFullTextRetriever(engine),
         agents or _agents_service(Settings()),
         reader,
+        readings=readings,
+        ocr=Settings().kb_ocr,
     )
     errors = error_responses()
+
+    @app.post("/v1/events", status_code=202, tags=["events"], response_model=Envelope[EventOut])
+    async def receive_event(caller: CurrentService, body: EventIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A service event: reading.finished and reading.failed from documents-service index, or fail with the
+        reason, the source items waiting on that file. Service tokens with `events:emit` only, for the team the token
+        names; the same event twice settles nothing more."""
+        if "events:emit" not in caller.scopes:
+            raise Forbidden("This service token does not hold the events:emit scope.", code="scope_required")
+        if not caller.tenant_id or caller.team_id != body.team_id:
+            raise Forbidden("A service event's workspace and team are the ones its token names.", code="team_mismatch")
+        settled, handled = 0, body.name in READING_EVENTS
+        file_id = str(body.payload.get("fileId") or "")
+        if handled and file_id:
+            with isolation.scope(caller.tenant_id, body.team_id):
+                settled = await service.finish_reading(
+                    Who(caller.tenant_id, "documents-service", body.team_id), file_id
+                )
+        out = {"name": body.name, "key": body.key, "status": "handled" if handled else "unhandled", "items": settled}
+        return ok(out, 202)
 
     @app.get(
         "/health",

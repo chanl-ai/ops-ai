@@ -13,7 +13,7 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +35,6 @@ from ops_documents.errors import (
 )
 from ops_documents.extraction import Extractor
 from ops_documents.files import Who
-from ops_documents.layouts import Layouts, page_of
 from ops_documents.models import (
     Classification,
     ClassifyIn,
@@ -48,10 +47,12 @@ from ops_documents.models import (
     DocumentTypeVersionIn,
     Extraction,
     ExtractionRequest,
+    FileReading,
     Layout,
     LayoutIn,
     Purged,
     PurgeIn,
+    ReadingIn,
     Sample,
     SampleIn,
     TemplateOffer,
@@ -60,11 +61,15 @@ from ops_documents.models import (
     TestEstimate,
     TestRun,
 )
-from ops_documents.store import DocumentTypesStore, ExtractionsStore, LayoutsStore, NameTakenError, TemplateCopies
+from ops_documents.readings import Readings, settings_of
+from ops_documents.store import DocumentTypesStore, ExtractionsStore, NameTakenError, ReadingsStore, TemplateCopies
 from ops_documents.store.metadata import reachable
 from ops_documents.templates import templates_router
 from ops_documents.tools_client import PluginTemplates
+from ops_extract import page_images
+from ops_extract.layout import layout_of
 from ops_identity import Auth, CurrentCaller, Principal, install_auth
+from ops_ingest.reading import OcrMode, ocr_installed
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.http import (
@@ -80,6 +85,9 @@ from ops_service_kit.http import (
 from ops_service_kit.settings import Settings
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
+
+# The longest side of a page image asked for at low detail.
+LOW_DETAIL_SIDE = 512
 
 
 class Health(BaseModel):
@@ -167,22 +175,23 @@ def create_documents_app(
     extractor: Extractor,
     document_types: DocumentTypes,
     auth: Auth | None = None,
-    layouts: Layouts | None = None,
+    readings: Readings | None = None,
     plugin_templates: PluginTemplates | None = None,
     type_uses: TypeUses | None = None,
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
 ) -> FastAPI:
     """`extractor` and `document_types` read bytes through files-service as the caller's team; `auth` resolves
-    callers through ops_identity, by default from Settings for audience "documents". `layouts` serves the layout
-    routes, by default the extractor's own, else a cache on `engine`. `plugin_templates` reads the team's plugin
-    templates from tools-service for /v1/templates; without it those routes answer 503. `type_uses` asks
+    callers through ops_identity, by default from Settings for audience "documents". `readings` serves the reading
+    and layout routes, by default the extractor's own, else a store on `engine`. `plugin_templates` reads the team's
+    plugin templates from tools-service for /v1/templates; without it those routes answer 503. `type_uses` asks
     agents-service which workflows read a type before it is deleted; without it (a test app) the delete does not ask."""
     config = Settings()
-    layouts = layouts or extractor.layouts or Layouts(extractor.files, LayoutsStore(engine))
+    readings = readings or extractor.readings or Readings(extractor.files, ReadingsStore(engine))
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        # Extractions and test runs queued or running when the process stopped run again.
+        # Readings, extractions and test runs queued or running when the process stopped run again.
+        await readings.resume()
         await extractor.resume()
         await document_types.resume()
         # Work that runs beside the server, such as the service event relay, stopped with it.
@@ -225,6 +234,9 @@ def create_documents_app(
     async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
             return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
+        if not ocr_installed():
+            # Text files still read; every scanned page fails with "OCR not installed" until Tesseract is there.
+            return {"status": "degraded", "reason": "ocr"}
         return {"status": "ok"}
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
@@ -273,11 +285,68 @@ def create_documents_app(
         file = await extractor.files.readable(who, body.file_id)
         return ok(await extractor.classify(who, file, ocr=body.ocr))
 
+    @docs.post(
+        "/readings",
+        response_model=Envelope[FileReading],
+        responses={
+            202: {"model": Envelope[FileReading], "description": "Queued; poll GET /v1/documents/readings/{fileId}"}
+        },
+        dependencies=[service_scope("run")],
+    )
+    async def ask_reading(body: ReadingIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The file's reading: every page's text in reading order, blocks with boxes, words with confidence, form
+        fields and OCR quality. Answered at once when it is stored, or when the file is small (5 pages and 5 MB) with no
+        page to OCR; otherwise 202 with its status, and reading.finished or reading.failed when it ends."""
+        status, answer = await readings.ask(who, body.file_id, settings_of(body.ocr, body.language))
+        return ok(answer, status)
+
+    @docs.get("/readings/{file_id}", response_model=Envelope[FileReading], dependencies=[service_scope("view")])
+    async def get_reading(  # pyright: ignore[reportUnusedFunction]
+        file_id: str,
+        who: Caller,
+        ocr: OcrMode = "auto",
+        language: str = Query("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$"),
+        page: int | None = Query(None, ge=1),
+    ) -> JSONResponse:
+        """The reading as it is now, with every page or the one asked for once done; status none when never asked
+        for. A file the team cannot see is 404, whoever else holds its bytes."""
+        return ok(await readings.get(who, file_id, settings_of(ocr, language), page=page))
+
+    @docs.get(
+        "/readings/{file_id}/pages/{number}/image",
+        response_class=Response,
+        responses={
+            200: {
+                "content": {"image/png": {"schema": {"type": "string", "format": "binary"}}},
+                "description": "The page drawn as a PNG",
+            }
+        },
+        dependencies=[service_scope("view")],
+    )
+    async def page_image(  # pyright: ignore[reportUnusedFunction]
+        file_id: str,
+        number: int,
+        who: Caller,
+        detail: Literal["low", "high"] = "high",
+    ) -> Response:
+        """One page drawn as an image, on request and never stored: 150 DPI, longest side 1,600 pixels (512 at low)."""
+        file = await extractor.files.readable(who, file_id)
+        data = await extractor.files.read(who, file)
+        drawn = await asyncio.to_thread(page_images.render, data, file.mime, [number])
+        if number not in drawn:
+            raise NotFound(f"Page {number}")
+        image = drawn[number]
+        if detail == "low":
+            image = image.copy()
+            image.thumbnail((LOW_DETAIL_SIDE, LOW_DETAIL_SIDE))
+        return Response(page_images.whole(number, image).png, media_type="image/png")
+
     @docs.post("/layout", response_model=Envelope[Layout], dependencies=[service_scope("run")])
     async def compute_layout(body: LayoutIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as
-        fractions of the page. Read on the first ask and cached by the file's content digest."""
-        return ok(await layouts.compute(who, body.file_id, ocr=body.ocr))
+        fractions of the page. Drawn from the file's reading, read on the first ask and kept."""
+        file = await extractor.files.readable(who, body.file_id)
+        return ok(layout_of(await readings.of(who, file, settings_of(body.ocr))))
 
     @docs.get("/layout/{file_id}", response_model=Envelope[Layout | None], dependencies=[service_scope("view")])
     async def get_layout(  # pyright: ignore[reportUnusedFunction]
@@ -288,10 +357,11 @@ def create_documents_app(
     ) -> JSONResponse:
         """The layout already read for the file, or one page of it; null until POST /v1/documents/layout reads it.
         A file the team cannot see is 404."""
-        found = await layouts.cached(who, file_id, ocr=ocr)
-        if found is None:
+        stored = await readings.stored(who, file_id, settings_of(ocr))
+        if stored is None:
             return ok(None)
-        return ok(page_of(found, page) if page is not None else found)
+        found = layout_of(stored)
+        return ok(_page_of(found, page) if page is not None else found)
 
     @docs.get("/extractions/{extraction_id}", response_model=Envelope[Extraction], dependencies=[service_scope("view")])
     async def get_extraction(extraction_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -323,7 +393,8 @@ def create_documents_app(
             raise StateError(f"{body.file_id} still exists; only a deleted file is purged")
         removed = await extractor.store.purge(who.team, body.file_id)
         samples = await document_types.store.purge_samples(who.team, body.file_id)
-        return ok({"extractions": removed, "samples": samples})
+        read = await readings.purge(who, body.file_id)
+        return ok({"extractions": removed, "samples": samples, "readings": read})
 
     types = APIRouter(prefix="/v1/document-types", tags=["document-types"], responses=errors)
     copies = TemplateCopies(engine)
@@ -481,6 +552,16 @@ def create_documents_app(
         )
     )
     return app
+
+
+def _page_of(layout: dict[str, Any], page: int) -> dict[str, Any]:
+    """One page of a layout: its page entry, blocks and words."""
+    return {
+        "engine": layout["engine"],
+        "pages": [p for p in layout["pages"] if p["number"] == page],
+        "blocks": [b for b in layout["blocks"] if b["page"] == page],
+        "words": [w for w in layout["words"] if w["page"] == page],
+    }
 
 
 def build_stores(engine: Any) -> tuple[ExtractionsStore, DocumentTypesStore]:
