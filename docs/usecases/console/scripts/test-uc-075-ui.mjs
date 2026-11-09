@@ -1,7 +1,7 @@
 // uc-075 a department's PDFs become a cited answer, through the console on kb-service, ui layer:
 // docs/usecases/console/knowledge-from-uploaded-pdfs.md. The ui harness's kb-service and the scripted model; signed in
-// through platform-service as James. He creates a knowledge base, adds a file source and uploads the branch manual PDF
-// into it, syncs and watches it index, finds it by search, asks an agent granted only that base and opens the
+// through platform-service as James. He creates a knowledge base, adds a Files source with the branch manual PDF in
+// three steps, creates and syncs it and watches it index, finds it by search, asks an agent granted only that base and opens the
 // citation's page and document; a second version of the PDF shows on Changes.
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -54,20 +54,31 @@ await withUiStack(
       await page.waitForURL(/\/knowledge\/[^/?]+/, { timeout: 60_000 });
       const kbId = new URL(page.url()).pathname.split('/')[2];
 
+      // Add source: Files, the PDF uploaded to files-service, then Create and sync, which makes the source with the file
+      // by id, attaches it to the base and starts its first sync.
       await page.getByTestId('kb-add-source').click();
-      await page.getByTestId('new-source-type').click();
-      await page.getByRole('option', { name: 'File upload' }).click();
-      await page.getByLabel('Name').fill(`Lending sheets ${TAG}`);
-      await page.getByTestId('new-source-submit').click();
+      const add = page.getByTestId('add-source-wizard');
+      await add.getByTestId('add-source-kind-file').click({ timeout: 60_000 });
+      await add.getByTestId('add-source-next').click();
+      await add.getByTestId('add-source-name').fill(`Lending sheets ${TAG}`);
       const ticketed = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${files}/v1/files/uploads`, { timeout: 60_000 }));
-      await page.locator('input#ns-files').setInputFiles(join(PDFS, 'branch-operations-manual.pdf'));
+      await add.locator('input[type="file"]').first().setInputFiles(join(PDFS, 'branch-operations-manual.pdf'));
       const ticket = await ticketed;
-      await page.getByTestId('new-source-files-items').locator('[data-phase="ready"]').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
-      const adding = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/v1\/sources\/[^/]+\/files$/.test(r.url()), { timeout: 60_000 }));
-      await page.getByTestId('new-source-sync').click();
-      const added = await adding;
-      await page.waitForURL(/\/integrations\/sources\/[^/?]+\?tab=items/, { timeout: 60_000 }).catch(() => undefined);
-      const sourceUrl = page.url();
+      await add.getByTestId('add-source-upload-items').locator('[data-phase="ready"]').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
+      await add.getByTestId('add-source-next').click();
+      await add.getByRole('heading', { name: 'Defaults applied' }).waitFor({ timeout: 30_000 });
+      const creating = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/sources'), { timeout: 60_000 }));
+      await add.getByTestId('add-source-create').click();
+      const created = await creating;
+      const source = created ? (await created.json()).data : undefined;
+      const sentFiles = created ? JSON.parse(created.request().postData() ?? '{}').fileIds : undefined;
+      // The toast's View source opens the source; its Items tab shows the file as the sync reads it.
+      const viewed = await page.locator('[data-sonner-toast]').getByRole('button', { name: 'View source' }).click({ timeout: 30_000 }).then(
+        () => page.waitForURL(/\/integrations\/sources\/[^/?]+/, { timeout: 60_000 }).then(() => true, () => false),
+        () => false,
+      );
+      const sourceUrl = `${consoleUrl}/integrations/sources/${source?.id}?tab=items`;
+      await page.goto(sourceUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       let indexed = false;
       // Each check waits for the page to render (its tabs) after a reload; reading at once would only see the skeleton.
       for (let i = 0; i < 20 && !indexed; i++) {
@@ -79,7 +90,7 @@ await withUiStack(
         }
       }
       if (!indexed) await page.screenshot({ path: join(EVIDENCE, 'uc-075-source.png'), fullPage: true });
-      check('the PDF uploads to files-service, the source adds it by id, and it indexes after the sync', ticket?.status() === 201 && added?.status() === 200 && indexed, { upload: ticket?.status(), added: added?.status(), indexed, sourceUrl, items: indexed ? undefined : (await page.locator('main').innerText().catch(() => '')).slice(-400) });
+      check('the PDF uploads to files-service, the source is created with it by id, and it indexes after the first sync', ticket?.status() === 201 && created?.status() === 201 && sentFiles?.length === 1 && viewed && indexed, { upload: ticket?.status(), created: created?.status(), sentFiles, viewed, indexed, sourceUrl, items: indexed ? undefined : (await page.locator('main').innerText().catch(() => '')).slice(-400) });
 
       // The list finds it by search.
       await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
