@@ -531,6 +531,60 @@
         "title": "AuditEntryOut",
         "type": "object"
       },
+      "AuditEventIn": {
+        "additionalProperties": false,
+        "description": "One audit entry another service recorded in its outbox (ops_store.audit), as its relay delivers it. The tenant\nand team are the service token's.",
+        "properties": {
+          "actor": {
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Actor",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "minLength": 8,
+            "pattern": "^aud_[A-Za-z0-9]+$",
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "const": "audit.recorded",
+            "title": "Name",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AuditPayload"
+          }
+        },
+        "required": [
+          "name",
+          "key",
+          "actor",
+          "payload"
+        ],
+        "title": "AuditEventIn",
+        "type": "object"
+      },
+      "AuditEventOut": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "written": {
+            "title": "Written",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "written"
+        ],
+        "title": "AuditEventOut",
+        "type": "object"
+      },
       "AuditPage": {
         "additionalProperties": false,
         "properties": {
@@ -570,6 +624,55 @@
           "viewCounts"
         ],
         "title": "AuditPage",
+        "type": "object"
+      },
+      "AuditPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.]*$",
+            "title": "Action",
+            "type": "string"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          },
+          "targetId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Targetid",
+            "type": "string"
+          },
+          "targetKind": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Targetkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "targetKind",
+          "targetId",
+          "detail"
+        ],
+        "title": "AuditPayload",
         "type": "object"
       },
       "BackgroundHealthOut": {
@@ -934,6 +1037,25 @@
           "data"
         ],
         "title": "Envelope[ApiKeyOut]",
+        "type": "object"
+      },
+      "Envelope_AuditEventOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuditEventOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AuditEventOut]",
         "type": "object"
       },
       "Envelope_AuditPage_": {
@@ -6275,6 +6397,147 @@
           "audit"
         ],
         "x-ops-public": "sdk"
+      }
+    },
+    "/v1/audit-events": {
+      "post": {
+        "description": "An audit entry another service recorded with the change it describes (ops_store.audit), delivered by that\nservice's relay, so the Audit page reads one log for the whole account. The token holds `audit:create` and\nnames the tenant and team; the same entry twice is kept once.",
+        "operationId": "audit_receive_audit_event",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditEventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AuditEventOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Receive Audit Event",
+        "tags": [
+          "audit"
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/auth/introspect": {

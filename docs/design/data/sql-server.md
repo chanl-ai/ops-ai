@@ -89,7 +89,7 @@ show. Each was checked by compiling statements with SQLAlchemy's SQL Server dial
 | Advisory transaction lock | `sp_getapplock` with a transaction owner | `lock_key` port |
 | `now()`, epoch, intervals | `SYSDATETIMEOFFSET()`, `DATEDIFF_BIG`, `DATEADD` | `db_now`, `db_epoch`, `db_after` ports |
 | `tsvector` with GIN, `ts_rank_cd` | A full-text index; on Linux it needs the `mssql-server-fts` package, which the default image lacks; built into Azure SQL | `full_text` port; a custom image for on-premises installs; tests wait for asynchronous population |
-| pgvector (not used yet) | `VECTOR(n)` on 2025 and Azure SQL; the vector index is preview on 2025 | When knowledge adds embeddings: exact distance over a tenant-filtered set on 2025, an approximate index on Azure SQL |
+| pgvector (knowledge search by meaning) | `VECTOR(n)` on 2025 and Azure SQL; the vector index is preview on 2025 | `Vector` column type, `vector_distance_sql` (cosine distance; SQL Server body is `VECTOR_DISTANCE`) and `vector_index_ddl` (HNSW per width on PostgreSQL, none on SQL Server) in `ops_store.dialect`; kb-service's vector table and search on SQL Server are not built yet |
 | Partial index | Filtered index (simple predicates only) | `mssql_where` beside each `postgresql_where` |
 | Case-sensitive UTF-8 text | A database created with `Latin1_General_100_BIN2_UTF8` | The migrate job refuses any other collation |
 | Readers never block writers | `READ_COMMITTED_SNAPSHOT` is off by default on SQL Server, on by default on Azure SQL | The migrate job sets or checks it |

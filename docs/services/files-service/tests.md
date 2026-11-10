@@ -50,6 +50,7 @@ Without the two containers the LocalStack and Azurite cases skip and say why.
 | L1 | A referenced file is deleted | `test_lifecycle.py::test_delete_while_referenced_refused` |
 | L2 | A file under legal hold is deleted, through the service or directly in storage | `test_lifecycle.py::test_delete_while_held_refused` |
 | L3 | A file is deleted inside a keep-until-end retention period | `test_lifecycle.py::test_delete_within_retention_refused` |
+| L6 | A knowledge snapshot expires while its source still uses it, never starts counting once let go, is never purged, or is purged while in use again | `test_snapshot_retention.py::test_a_snapshot_counts_its_30_days_from_release_not_from_upload` |
 | L4 | Retention on an immutable file is shortened or removed through the service | `test_lifecycle.py::test_retention_not_shortened_on_locked_file` |
 | L5 | Storage accepts an earlier retention date or a weaker mode on a locked object | `test_lifecycle.py::test_storage_refuses_shorter_retention` |
 | L6 | Delete leaves earlier versions in a versioned bucket, so the bytes survive | `test_lifecycle.py::test_delete_removes_every_version` |

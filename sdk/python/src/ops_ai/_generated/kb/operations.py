@@ -10,6 +10,24 @@ from .models import *  # noqa: F403
 
 SERVICE = "kb"
 OPERATIONS: dict[str, Operation] = {
+    "changes_decide_changes": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/knowledge-changes/decide",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "changes_edit_change": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/knowledge-changes/{change_id}",
+        "pathParams": ["change_id"],
+        "query": [],
+        "stream": False,
+    },
     "changes_get_change": {
         "body": None,
         "headers": [],
@@ -25,7 +43,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/knowledge-changes",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "view", "kbId"],
+        "query": ["page", "pageSize", "search", "view", "kbId", "origin"],
         "stream": False,
     },
     "health_health": {
@@ -235,12 +253,39 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_cancel_run": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sync-runs/{run_id}/cancel",
+        "pathParams": ["run_id"],
+        "query": [],
+        "stream": False,
+    },
     "sources_create_source": {
         "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/sources",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "sources_decide_ai_steps": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/{source_id}/ai-approval",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sources_estimate_ai_steps": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/sources/{source_id}/ai-estimate",
+        "pathParams": ["source_id"],
         "query": [],
         "stream": False,
     },
@@ -258,6 +303,15 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "GET",
         "path": "/v1/sources/{source_id}",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sources_lift_tombstones": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/{source_id}/tombstones/lift",
         "pathParams": ["source_id"],
         "query": [],
         "stream": False,
@@ -298,12 +352,30 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search"],
         "stream": False,
     },
+    "sources_list_tombstones": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/sources/{source_id}/tombstones",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
     "sources_pause_source": {
         "body": None,
         "headers": [],
         "method": "POST",
         "path": "/v1/sources/{source_id}/pause",
         "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sources_preview_source": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/preview",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -322,6 +394,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/sources/{source_id}/resume",
         "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sources_source_kinds": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/knowledge/source-kinds",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -489,24 +570,37 @@ class Operations:
         search: str | None = None,
         view: str | None = None,
         kb_id: str | None = None,
+        origin: list[str] | None = None,
     ) -> ChangeList:
         "List Changes"
         return self._t.call(
             SERVICE,
             OPERATIONS["changes_list_changes"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id},
+            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id, "origin": origin},
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def changes_decide_changes(self, body: DecideIn) -> list[KnowledgeChange]:
+        "Decide Changes"
+        return self._t.call(SERVICE, OPERATIONS["changes_decide_changes"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def changes_get_change(self, change_id: str) -> KnowledgeChange:
         "Get Change"
         return self._t.call(SERVICE, OPERATIONS["changes_get_change"], {"change_id": change_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def changes_edit_change(self, change_id: str, body: DraftEdit) -> KnowledgeChange:
+        "Edit Change"
+        return self._t.call(SERVICE, OPERATIONS["changes_edit_change"], {"change_id": change_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def knowledge_bases_lookups(self) -> Lookups:
         "Lookups"
         return self._t.call(SERVICE, OPERATIONS["knowledge_bases_lookups"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sources_source_kinds(self) -> list[SourceKind]:
+        "Source Kinds"
+        return self._t.call(SERVICE, OPERATIONS["sources_source_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def sources_list_sources(
         self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
@@ -529,6 +623,10 @@ class Operations:
         "List Plugin Sources"
         return self._t.call(SERVICE, OPERATIONS["sources_list_plugin_sources"], {}, {"plugin": plugin}, {}, None)  # type: ignore[no-any-return]
 
+    def sources_preview_source(self, body: PreviewIn) -> SourcePreview:
+        "Preview Source"
+        return self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"
         return self._t.call(SERVICE, OPERATIONS["sources_get_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -540,6 +638,14 @@ class Operations:
     def sources_remove_source(self, source_id: str) -> Any:
         "Remove Source"
         return self._t.call(SERVICE, OPERATIONS["sources_remove_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sources_decide_ai_steps(self, source_id: str, body: AiApprovalIn) -> Source:
+        "Decide Ai Steps"
+        return self._t.call(SERVICE, OPERATIONS["sources_decide_ai_steps"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def sources_estimate_ai_steps(self, source_id: str) -> AiEstimate:
+        "Estimate Ai Steps"
+        return self._t.call(SERVICE, OPERATIONS["sources_estimate_ai_steps"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def sources_add_files(self, source_id: str, body: FileIdsIn) -> list[AddedFile]:
         "Add Files"
@@ -583,9 +689,21 @@ class Operations:
         "Sync Source"
         return self._t.call(SERVICE, OPERATIONS["sources_sync_source"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def sources_list_tombstones(self, source_id: str) -> list[Tombstone]:
+        "List Tombstones"
+        return self._t.call(SERVICE, OPERATIONS["sources_list_tombstones"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sources_lift_tombstones(self, source_id: str, body: TombstonesIn) -> list[Tombstone]:
+        "Lift Tombstones"
+        return self._t.call(SERVICE, OPERATIONS["sources_lift_tombstones"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def sources_get_run(self, run_id: str) -> SyncRun:
         "Get Run"
         return self._t.call(SERVICE, OPERATIONS["sources_get_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sources_cancel_run(self, run_id: str) -> SyncRun:
+        "Cancel Run"
+        return self._t.call(SERVICE, OPERATIONS["sources_cancel_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
 
 class AsyncOperations:
@@ -735,24 +853,37 @@ class AsyncOperations:
         search: str | None = None,
         view: str | None = None,
         kb_id: str | None = None,
+        origin: list[str] | None = None,
     ) -> ChangeList:
         "List Changes"
         return await self._t.call(
             SERVICE,
             OPERATIONS["changes_list_changes"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id},
+            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id, "origin": origin},
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def changes_decide_changes(self, body: DecideIn) -> list[KnowledgeChange]:
+        "Decide Changes"
+        return await self._t.call(SERVICE, OPERATIONS["changes_decide_changes"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def changes_get_change(self, change_id: str) -> KnowledgeChange:
         "Get Change"
         return await self._t.call(SERVICE, OPERATIONS["changes_get_change"], {"change_id": change_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def changes_edit_change(self, change_id: str, body: DraftEdit) -> KnowledgeChange:
+        "Edit Change"
+        return await self._t.call(SERVICE, OPERATIONS["changes_edit_change"], {"change_id": change_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def knowledge_bases_lookups(self) -> Lookups:
         "Lookups"
         return await self._t.call(SERVICE, OPERATIONS["knowledge_bases_lookups"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sources_source_kinds(self) -> list[SourceKind]:
+        "Source Kinds"
+        return await self._t.call(SERVICE, OPERATIONS["sources_source_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def sources_list_sources(
         self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
@@ -775,6 +906,10 @@ class AsyncOperations:
         "List Plugin Sources"
         return await self._t.call(SERVICE, OPERATIONS["sources_list_plugin_sources"], {}, {"plugin": plugin}, {}, None)  # type: ignore[no-any-return]
 
+    async def sources_preview_source(self, body: PreviewIn) -> SourcePreview:
+        "Preview Source"
+        return await self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_get_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -786,6 +921,18 @@ class AsyncOperations:
     async def sources_remove_source(self, source_id: str) -> Any:
         "Remove Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_remove_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sources_decide_ai_steps(self, source_id: str, body: AiApprovalIn) -> Source:
+        "Decide Ai Steps"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_decide_ai_steps"], {"source_id": source_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def sources_estimate_ai_steps(self, source_id: str) -> AiEstimate:
+        "Estimate Ai Steps"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_estimate_ai_steps"], {"source_id": source_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def sources_add_files(self, source_id: str, body: FileIdsIn) -> list[AddedFile]:
         "Add Files"
@@ -829,6 +976,22 @@ class AsyncOperations:
         "Sync Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_sync_source"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def sources_list_tombstones(self, source_id: str) -> list[Tombstone]:
+        "List Tombstones"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_list_tombstones"], {"source_id": source_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sources_lift_tombstones(self, source_id: str, body: TombstonesIn) -> list[Tombstone]:
+        "Lift Tombstones"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_lift_tombstones"], {"source_id": source_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     async def sources_get_run(self, run_id: str) -> SyncRun:
         "Get Run"
         return await self._t.call(SERVICE, OPERATIONS["sources_get_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sources_cancel_run(self, run_id: str) -> SyncRun:
+        "Cancel Run"
+        return await self._t.call(SERVICE, OPERATIONS["sources_cancel_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]

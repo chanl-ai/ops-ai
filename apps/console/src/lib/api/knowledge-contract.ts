@@ -1,5 +1,6 @@
 import type { BulkResult } from '@/lib/types/domain';
 import type {
+  AiEstimate,
   HeldPreview,
   HeldPreviewInput,
   DocumentFilters,
@@ -15,19 +16,20 @@ import type {
   KnowledgeBaseRow,
   PlaygroundAnswer,
   QueryInput,
-  RetrieveInput,
   Rule,
   RunFilters,
   Source,
   SourceDetail,
   SourceFilters,
   SourceInput,
+  SourceKindOption,
+  SourceKindPreview,
   SourcePatch,
-  SourcePreview,
   SourceRow,
   SourceType,
   SyncOptions,
   SyncRun,
+  Tombstone,
 } from '@/lib/types/knowledge';
 import type { SampleDocument, SplitPreview, SplitPreviewInput } from '@/lib/types/knowledge-ingest';
 import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/types/query';
@@ -70,23 +72,27 @@ export interface KnowledgeApi {
     sync(id: string, opts?: SyncOptions): Promise<SyncRun>;
     /** Adds files already in Files (the team's, scanned clean) to a file source by id; the next sync indexes them. */
     addFiles(id: string, fileIds: string[]): Promise<{ fileId: string; name: string }[]>;
-    cancelRun(id: string): Promise<void>;
+    /** Stops a running sync or rebuild between two items. */
+    cancelRun(runId: string): Promise<SyncRun>;
     setPaused(id: string, paused: boolean): Promise<Source>;
-    /** Rebuilds every item with the current parsing and chunking settings. */
-    reprocess(id: string): Promise<SyncRun>;
+    /** Addresses removed after answering gone twice, which syncs leave out until lifted. */
+    tombstones(id: string): Promise<Tombstone[]>;
+    liftTombstones(id: string, ids: string[]): Promise<Tombstone[]>;
     items(id: string, params: ListParams<ItemFilters>): Promise<ListResult<Item>>;
     runs(id: string, params: ListParams<RunFilters>): Promise<ListResult<SyncRun>>;
     run(runId: string): Promise<SyncRun>;
-    /** Lists what a source would fetch, without creating it. */
-    preview(input: Pick<SourceInput, 'type' | 'config'>): Promise<SourcePreview>;
+    /** What a website or app source with this `config` ({plugin, source, values}) would take in, without creating it. */
+    preview(config: Record<string, unknown>): Promise<SourceKindPreview>;
     /** Required metadata of the chosen knowledge bases, and how many previewed items each would hold for it. */
     previewHeld(input: HeldPreviewInput): Promise<HeldPreview>;
     /** Seeded documents a split preview can run on; a source's own documents first when `sourceId` is given. */
     samples(sourceId?: string): Promise<SampleDocument[]>;
     /** Splits one sample document with the given settings, without saving anything. */
     previewSplit(input: SplitPreviewInput): Promise<SplitPreview>;
-    /** The knowledge owner approves the source's AI ingestion steps. */
-    approveIngest(id: string): Promise<Source>;
+    /** What the source's AI steps would cost, from a split of up to 20 of its items with no model called. */
+    aiEstimate(id: string): Promise<AiEstimate>;
+    /** The knowledge owner approves the AI steps as now chosen, or takes the approval back. */
+    decideAiSteps(id: string, decision: 'approve' | 'revoke'): Promise<Source>;
     bulkSync(ids: string[]): Promise<BulkResult>;
     bulkSetPaused(ids: string[], paused: boolean): Promise<BulkResult>;
     bulkRemove(ids: string[]): Promise<BulkResult>;
@@ -103,8 +109,8 @@ export interface KnowledgeApi {
     /** Supplies metadata a held item is missing; it becomes searchable when nothing required is left. */
     setMetadata(id: string, values: Record<string, string>): Promise<Item>;
   };
-  /** Searches several knowledge bases with each one's saved settings unless `settings` or `overrides` say otherwise. Used by chat and workflow knowledge steps. */
-  retrieve(input: RetrieveInput): Promise<PlaygroundAnswer>;
+  /** Files, then each knowledge source of the team's apps that are on, with what a new one needs and starts with. */
+  sourceKinds(): Promise<SourceKindOption[]>;
   /** Document owners, tags and source collections, for pickers. */
   lookups(): Promise<{ owners: string[]; tags: string[]; collections: string[] }>;
 }

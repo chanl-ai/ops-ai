@@ -1,8 +1,8 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0013
--- not on SQL Server yet: kb_chunks.tsv (TSVECTOR)
--- not on SQL Server yet: index ix_kb_chunks_tsv
+-- kb-service, stamped at kb_0023
+-- not on SQL Server yet: table kb_unit_vectors (PostgreSQL only)
+-- not on SQL Server yet: kb_units.tsv (TSVECTOR)
 CREATE TABLE kb_bases (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -43,6 +43,11 @@ CREATE TABLE kb_sources (
 	last_run_status VARCHAR(16) NULL, 
 	config NVARCHAR(max) NULL, 
 	lease_until DATETIMEOFFSET NULL, 
+	lease_owner VARCHAR(64) NULL, 
+	settings NVARCHAR(max) NULL, 
+	last_good_sync_at DATETIMEOFFSET NULL, 
+	failing_since DATETIMEOFFSET NULL, 
+	failures_in_row INTEGER NOT NULL DEFAULT '0', 
 	CONSTRAINT kb_sources_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
@@ -70,10 +75,35 @@ CREATE TABLE kb_changes (
 	after VARCHAR(max) NOT NULL, 
 	changed_by VARCHAR(200) NOT NULL, 
 	changed_at DATETIMEOFFSET NOT NULL, 
+	origin VARCHAR(16) NOT NULL DEFAULT 'sync', 
+	status VARCHAR(16) NOT NULL DEFAULT 'applied', 
+	detail NVARCHAR(max) NULL, 
+	decided_by VARCHAR(200) NULL, 
+	decided_at DATETIMEOFFSET NULL, 
 	CONSTRAINT kb_changes_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE INDEX ix_kb_changes_at ON kb_changes (tenant_id, changed_at);
+GO
+CREATE INDEX ix_kb_changes_item_origin ON kb_changes (tenant_id, item_id, origin);
+GO
+CREATE TABLE kb_outbox (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	event_key VARCHAR(200) NOT NULL, 
+	actor VARCHAR(320) NULL, 
+	payload NVARCHAR(max) NOT NULL, 
+	created_at FLOAT NOT NULL, 
+	next_at FLOAT NULL, 
+	sent_at FLOAT NULL, 
+	attempts INTEGER NOT NULL, 
+	last_error VARCHAR(max) NULL, 
+	CONSTRAINT kb_outbox_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_kb_outbox_due ON kb_outbox (sent_at, next_at);
 GO
 CREATE TABLE kb_base_sources (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -113,10 +143,20 @@ CREATE TABLE kb_items (
 	parent_id VARCHAR(64) NULL, 
 	url VARCHAR(max) NULL, 
 	read_with VARCHAR(120) NULL, 
+	indexed_with VARCHAR(32) NULL, 
+	content_digest VARCHAR(80) NULL, 
+	duplicate_of VARCHAR(64) NULL, 
+	folder VARCHAR(400) NULL, 
+	fields NVARCHAR(max) NULL, 
+	tag VARCHAR(200) NULL, 
+	lines NVARCHAR(max) NULL, 
+	gone_count INTEGER NOT NULL DEFAULT '0', 
 	CONSTRAINT kb_items_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT fk_kb_item_source FOREIGN KEY(tenant_id, source_id) REFERENCES kb_sources (tenant_id, id) ON DELETE CASCADE, 
 	CONSTRAINT uq_kb_items_path UNIQUE (tenant_id, source_id, path)
 );
+GO
+CREATE INDEX ix_kb_items_content ON kb_items (tenant_id, content_digest);
 GO
 CREATE TABLE kb_runs (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -131,6 +171,8 @@ CREATE TABLE kb_runs (
 	errors NVARCHAR(max) NOT NULL, 
 	log NVARCHAR(max) NOT NULL, 
 	started_by VARCHAR(200) NOT NULL, 
+	finished_at DATETIMEOFFSET NULL, 
+	cancelled_by VARCHAR(200) NULL, 
 	CONSTRAINT kb_runs_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT fk_kb_run_source FOREIGN KEY(tenant_id, source_id) REFERENCES kb_sources (tenant_id, id) ON DELETE CASCADE
 );
@@ -145,6 +187,7 @@ CREATE TABLE kb_item_versions (
 	file_id VARCHAR(64) NOT NULL, 
 	digest VARCHAR(64) NOT NULL, 
 	status VARCHAR(16) NOT NULL, 
+	allowed NVARCHAR(max) NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
 	CONSTRAINT kb_item_versions_pkey PRIMARY KEY (tenant_id, item_id, version), 
@@ -164,11 +207,36 @@ CREATE TABLE kb_chunks (
 	tokens INTEGER NOT NULL, 
 	text VARCHAR(max) NOT NULL, 
 	withdrawn_at DATETIMEOFFSET NULL, 
+	metadata NVARCHAR(max) NULL, 
 	CONSTRAINT kb_chunks_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT fk_kb_chunk_item FOREIGN KEY(tenant_id, item_id) REFERENCES kb_items (tenant_id, id) ON DELETE CASCADE
 );
 GO
+CREATE TABLE kb_units (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	chunk_id VARCHAR(64) NOT NULL, 
+	item_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	position INTEGER NOT NULL, 
+	heading VARCHAR(800) NOT NULL, 
+	text VARCHAR(max) NOT NULL, 
+	CONSTRAINT kb_units_pkey PRIMARY KEY (tenant_id, id), 
+	CONSTRAINT fk_kb_unit_chunk FOREIGN KEY(tenant_id, chunk_id) REFERENCES kb_chunks (tenant_id, id) ON DELETE CASCADE
+);
+GO
+CREATE INDEX ix_kb_units_chunk ON kb_units (tenant_id, chunk_id);
+GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
+GO
+CREATE FUNCTION ops_security.kb_tenant_read (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+GO
+CREATE FUNCTION ops_security.kb_tenant_write (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
 GO
 CREATE FUNCTION ops_security.kb_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
@@ -202,6 +270,12 @@ CREATE SECURITY POLICY ops_security.kb_changes_isolation
     ADD BLOCK PREDICATE ops_security.kb_team_write(tenant_id, team_id) ON dbo.kb_changes AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.kb_outbox_tenant
+    ADD FILTER PREDICATE ops_security.kb_tenant_read(tenant_id) ON dbo.kb_outbox,
+    ADD BLOCK PREDICATE ops_security.kb_tenant_write(tenant_id) ON dbo.kb_outbox AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.kb_tenant_write(tenant_id) ON dbo.kb_outbox AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.kb_base_sources_isolation
     ADD FILTER PREDICATE ops_security.kb_team_read(tenant_id, team_id) ON dbo.kb_base_sources,
     ADD BLOCK PREDICATE ops_security.kb_team_write(tenant_id, team_id) ON dbo.kb_base_sources AFTER INSERT,
@@ -232,10 +306,16 @@ CREATE SECURITY POLICY ops_security.kb_chunks_isolation
     ADD BLOCK PREDICATE ops_security.kb_team_write(tenant_id, team_id) ON dbo.kb_chunks AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.kb_units_isolation
+    ADD FILTER PREDICATE ops_security.kb_team_read(tenant_id, team_id) ON dbo.kb_units,
+    ADD BLOCK PREDICATE ops_security.kb_team_write(tenant_id, team_id) ON dbo.kb_units AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.kb_team_write(tenant_id, team_id) ON dbo.kb_units AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_kb (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0013');
+INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0023');
 GO

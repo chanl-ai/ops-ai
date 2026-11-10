@@ -35,7 +35,7 @@ class NoTools:
 
 
 class KnowledgeDown:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Any]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Any]:
         raise KnowledgeUnavailableError("kb-service is down")
 
 
@@ -221,3 +221,49 @@ async def test_an_ai_step_whose_team_turned_ai_steps_off_is_refused_at_run() -> 
     request = PromptRequest(instructions="Summarise.", message="x", turn_id="r:s:1", output_schema=SCHEMA, run_id="r")
     result = await port.prompt(request)
     assert (result.ok, result.code, calls) == (False, "ai_steps_off", 0), result
+
+
+class Searches:
+    def __init__(self) -> None:
+        self.asked: list[dict[str, Any]] = []
+
+    async def execute(
+        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+    ) -> ToolOutcome:
+        self.asked.append(dict(arguments))
+        return ToolOutcome(True, {"passages": []})
+
+
+class SearchTool:
+    async def operations(self) -> list[OperationRef]:
+        schema = {"type": "object", "properties": {"query": {"type": "string"}, "collections": {"type": "array"}}}
+        return [OperationRef("search_knowledge", "Search knowledge", "read", schema, False, None, "Knowledge bases")]
+
+
+async def test_a_workflow_agent_step_searches_only_its_agents_bases_whatever_the_model_asks() -> None:
+    """A workflow's agent step ran search_knowledge as the model asked: naming another base, or asking for the whole
+    team's, read knowledge the agent was never given."""
+    asks = {"query": "salary bands", "collections": ["kb_hr_private"], "allTeamKnowledgeBases": True}
+
+    def reply(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if len(messages) == 1:
+            return ModelResponse(parts=[ToolCallPart("search_knowledge", asks)])
+        return structured(info, {"summary": "Nothing found."})
+
+    searches = Searches()
+    db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    async with db.begin() as c:
+        await c.run_sync(metadata.create_all)
+    spec = {"name": "Advisor", "role": "Answers", "instructions": "", "toolIds": ["search_knowledge"],
+            "collections": ["kb_people"]}  # fmt: skip
+    aid = await AgentRegistry(db).create(spec, by="seed", team_id="team_ops", agent_id="ag_w", published=True)
+    ports = KernelPorts(_streamed(reply), searches, NoKnowledge())
+    port = KernelAgents(db, load_catalog(SEED), ports, SearchTool(), "default")  # type: ignore[arg-type]
+    result = await port.turn(AgentRequest(agent_id=aid, message="Salary bands?", turn_id="r:w:1", output_schema=SCHEMA))
+    assert result.ok, result
+    assert searches.asked == [{"query": "salary bands", "collections": ["kb_people"]}], searches.asked
+
+
+class NoKnowledge:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Any]:
+        return []

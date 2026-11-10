@@ -24,7 +24,10 @@ import { auditSink } from '../governance';
 import { bulk, id, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { itemDetail } from './detail';
-import { aiApproved, aiSteps, applyMapping, chunkCountFor, govern, listSamples, previewSplit, settingsDigest, snakeKey, validateIngest } from './ingest';
+import { aiApproved, aiSteps, applyMapping, chunkCountFor, DEFAULT_INGEST_MODEL, govern, listSamples, previewSplit, settingsDigest, snakeKey, validateIngest } from './ingest';
+
+/** What a new mock source splits with when the request names no ingest settings, as kb-service's file default. */
+const MOCK_INGEST: IngestSettings = { preset: 'email_templates', strategies: ['structure', 'context_headers'], size: 400, overlap: 40, childSize: 120, questionsPerSection: 3, columns: [], model: DEFAULT_INGEST_MODEL, approval: { status: 'not_needed', approvedSteps: [] } };
 import { createRetrieval, type IndexSnapshot } from './retrieve';
 import { defaultRetrieval, kbs as SEED_KBS, retrievalPresets, suggestedQuestions } from './seed-kbs';
 import { buildItems, runs as SEED_RUNS, sources as SEED_SOURCES } from './seed-sources';
@@ -58,7 +61,10 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
   const kbs: KnowledgeBase[] = structuredClone(SEED_KBS);
   const sources: Source[] = structuredClone(SEED_SOURCES);
   let items: Item[] = buildItems();
-  const runs: SyncRun[] = structuredClone(SEED_RUNS);
+  /** A run as the mock advances it: its phases and progress move with the clock; the API shows neither. */
+  type MockPhase = { name: string; durationMs: number; status: 'done' | 'running' | 'skipped' | 'failed' };
+  type MockRun = Omit<SyncRun, 'phases'> & { phases: MockPhase[]; progress?: { done: number; total: number; failed: number } };
+  const runs: MockRun[] = structuredClone(SEED_RUNS) as MockRun[];
   let lastTick = Date.now();
 
   // What each source's chunks were last built with. Search and the item page read this, so a saved strategy
@@ -156,8 +162,11 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       .map((r) => r.replace(/^\d+ items? failed to parse/, n(k.stats.failures, 'item', 'items') + ' failed to parse').replace(/^\d+ items? older than/, n(k.stats.stale, 'item', 'items') + ' older than'))
       .filter((r) => !/^0 items (failed|older)/.test(r));
   }
+  /** The AI steps kb-service reports waiting: chosen, and not covered by the knowledge owner's approval. */
+  const waitingSteps = ({ ingest, metadataMapping }: Source) => aiSteps(ingest, metadataMapping).filter((x) => !ingest.approval.approvedSteps.includes(x));
   const sourceRow = (s: Source): SourceRow => ({
     ...s,
+    aiStepsWaiting: waitingSteps({ ...s }),
     connection: deps.connection(s.connectionId),
     usedBy: kbs.filter((k) => k.sources.some((l) => l.sourceId === s.id)).map((k) => ({ id: k.id, name: k.name })),
     running: !!runningRun(s.id),
@@ -219,7 +228,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         else if (r.trigger === 'retry' && it.status === 'failed') Object.assign(it, { status: 'indexed', chunkCount, processedAt: now(), error: undefined, errorClass: undefined });
         else if (r.trigger === 'full' && (it.status === 'indexed' || it.status === 'held' || it.status === 'partial')) Object.assign(it, { chunkCount: it.status === 'held' ? 0 : chunkCount, processedAt: now() });
       }
-      if (src0 && (r.trigger === 'full' || r.trigger === 'manual' || r.trigger === 'schedule' || r.trigger === 'webhook')) {
+      if (src0 && (r.trigger === 'full' || r.trigger === 'manual' || r.trigger === 'schedule')) {
         const before = src0.indexedSettingsDigest;
         reindexed(src0);
         const strategies = src0.ingest.strategies.filter((x) => aiApproved(src0) || (x !== 'topic' && x !== 'faq'));
@@ -237,7 +246,6 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         status,
         progress: undefined,
         durationSec: secondsSince(r.startedAt),
-        cursorAfter: `cursor:${Date.now().toString(36)}`,
         counts: { ...r.counts, listed: r.counts.listed || total, upserted: done - (failedItem ? 1 : 0), failed: failedItem ? 1 : r.trigger === 'retry' ? 0 : failed },
         phases: r.phases.map((p) => ({ ...p, status: 'done' })),
         errors: failedItem ? [{ itemId: failedItem.id, itemTitle: failedItem.title, phase: 'parse', errorClass: 'parse', message: 'PDF is encrypted; upload an unlocked copy' }] : r.trigger === 'retry' ? [] : r.errors,
@@ -278,7 +286,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
     k.jobs.unshift({ id: id('job'), startedAt: now(), durationSec: 0, processed: 0, failed: 0, status: 'running', trigger });
   }
 
-  function startSync(src: Source, opts: { full?: boolean; retry?: boolean } = {}): SyncRun {
+  function startSync(src: Source, opts: { full?: boolean; retry?: boolean } = {}): MockRun {
     const total = opts.retry
       ? Math.max(src.itemsFailed, 1)
       : opts.full
@@ -286,14 +294,13 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         : src.itemsIndexed === 0 && src.itemsPending > 0
           ? src.itemsPending
           : Math.max(Math.round((src.itemsIndexed + src.itemsFailed) * 0.06), src.itemsIndexed === 0 ? 12 : 4);
-    const r: SyncRun = {
+    const r: MockRun = {
       id: id('run'),
       sourceId: src.id,
       trigger: opts.retry ? 'retry' : opts.full ? 'full' : 'manual',
       startedAt: now(),
       durationSec: 0,
       status: 'running',
-      cursorBefore: src.cursor,
       counts: { listed: src.itemsIndexed + src.itemsFailed || total, unchanged: 0, upserted: 0, deleted: 0, failed: 0, skipped: 0 },
       phases: (['list', 'fetch', 'parse', 'chunk', 'embed', 'upsert'] as const).map((name, i) => ({ name, durationMs: 0, status: i === 0 ? 'running' : 'skipped' })),
       errors: [],
@@ -571,7 +578,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             itemCount: items.filter((i) => i.sourceId === sid).length,
             reindexNeeded: s.status !== 'draft' && settingsDigest({ ...s }) !== s.indexedSettingsDigest,
             requiredMetadata: Array.from(new Set(kbs.filter((k) => k.sources.some((l) => l.sourceId === sid)).flatMap((k) => k.metadataProfile.required))).filter((k) => !['owner', 'effective_date', 'version'].includes(k)),
-            aiStepsWaiting: aiSteps(s.ingest, s.metadataMapping).filter((x) => !s.ingest.approval.approvedSteps.includes(x)),
+            aiStepsWaiting: waitingSteps({ ...s }),
             approval: s.ingest.approval.status === 'pending' ? approvalView(sourceOr404(sid)) : undefined,
             governance: {
               excluded: items.filter((i) => i.sourceId === sid && i.status === 'excluded').length,
@@ -584,26 +591,41 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       create: (input, opts) =>
         run(() => {
           if (sources.some((s) => s.name.trim().toLowerCase() === input.name.trim().toLowerCase())) throw new ApiError('A source with this name already exists.', 409);
-          const conn = deps.connection(input.connectionId);
-          if (input.connectionId && !conn) throw new ApiError('That connection no longer exists. Pick another one.', 400);
-          if (conn?.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations or pick another connection.`, 409);
-          validateIngest(input.ingest);
+          validateIngest({ ...MOCK_INGEST, ...input.ingest });
           if (input.type === 'file' && input.status !== 'draft' && !input.fileIds?.length) throw new ApiError('Upload at least one file.', 400);
-          const { fileIds, ...rest } = input;
+          const { fileIds, ingest, ...rest } = input;
           const sid = id('src');
           // Linking first refuses a quarantined or still-scanning file before the source exists.
           for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/integrations/sources/${sid}` }, ['knowledge_source']);
+          const kind = input.type === 'file' ? 'file' : (input.config as { site?: boolean } | undefined)?.site ? 'web' : 'tool';
           const s: Source = {
+            parsing: { ocr: 'auto', tables: true, vision: false },
+            cleaning: { furniture: kind !== 'file', mainContent: kind === 'web', siteRepeats: kind === 'web', duplicates: 'flag' },
+            ingest: { ...structuredClone(MOCK_INGEST), ...ingest },
+            rules: [],
+            metadataMapping: [],
+            tags: [],
+            schedule: { kind: 'manual' },
+            sensitivity: 'internal',
+            collection: 'General',
             ...rest,
+            kind,
+            kindLabel: kind === 'file' ? 'Files' : kind === 'web' ? 'Website' : 'App source',
+            aiStepsWaiting: [],
+            waitingHosts: [],
+            scopeSummary: input.type === 'file' ? `${fileIds?.length ?? 0} uploaded files` : input.name,
+            titleFrom: 'source',
+            permissions: { mode: 'workspace' },
+            deletedAtSource: 'remove',
+            staleAfterDays: 365,
+            notifyOnFailure: false,
             config: { ...rest.config, fileIds },
             id: sid,
-            connectionId: conn?.id,
-            connectionLabel: conn?.name,
             owner: deps.currentUser,
             status: input.status ?? 'active',
             itemsIndexed: 0,
             itemsFailed: 0,
-            itemsPending: input.itemsPending ?? 0,
+            itemsPending: fileIds?.length ?? 0,
             usedByKbIds: [],
             createdAt: now(),
           };
@@ -643,28 +665,24 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           if (blocked) throw new ApiError(blocked, 409);
           return startSync(s, opts);
         }),
-      cancelRun: (sid) =>
+      cancelRun: (rid) =>
         run(() => {
-          const r = runningRun(sid);
-          if (!r) return;
-          Object.assign(r, { status: 'failed', progress: undefined, durationSec: secondsSince(r.startedAt) });
+          const r = runs.find((x) => x.id === rid) ?? notFound('Sync run');
+          if (r.status !== 'running') throw new ApiError('That run is not running.', 409);
+          Object.assign(r, { status: 'cancelled', progress: undefined, durationSec: secondsSince(r.startedAt), cancelledBy: deps.currentUser });
           r.log.push('cancelled by user');
-          const s = sources.find((x) => x.id === sid);
-          if (s) s.lastRunStatus = 'failed';
+          const s = sources.find((x) => x.id === r.sourceId);
+          if (s) s.lastRunStatus = 'cancelled';
+          return r;
         }),
+      tombstones: (sid) => run(() => (sourceOr404(sid), [])),
+      liftTombstones: (sid) => run(() => (sourceOr404(sid), [])),
       setPaused: (sid, paused) =>
         run(() => {
           const s = sourceOr404(sid);
           if (s.status === 'draft' || s.status === 'revoked') throw new ApiError(`A ${s.status === 'draft' ? 'draft' : 'revoked'} source has no schedule to ${paused ? 'pause' : 'resume'}.`, 409);
           s.status = paused ? 'paused' : 'active';
           return s;
-        }),
-      reprocess: (sid) =>
-        run(() => {
-          const s = sourceOr404(sid);
-          const blocked = syncBlocker(s);
-          if (blocked) throw new ApiError(blocked, 409);
-          return startSync(s, { full: true });
         }),
       items: (sid, p) =>
         run((m) => {
@@ -682,20 +700,16 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           return list(rows, p, { text: (r) => r.id, value: (r, key) => String((r as unknown as Record<string, unknown>)[key]), facetKeys: ['status', 'trigger'] }, m);
         }),
       run: (rid) => run(() => runs.find((r) => r.id === rid) ?? notFound('Sync run')),
-      preview: (input) =>
+      preview: (config) =>
         run(() => {
-          const c = input.config as { startUrl?: string };
-          if (input.type === 'crawl' && /\/\/(10\.|192\.168\.|127\.)/.test(c.startUrl ?? '')) {
-            return { ok: false, message: 'URL resolves to a private IP range. Crawls must target a public host.', rows: [] };
-          }
-          const rows = previewRows(input);
-          const n = rows.length;
-          return { ok: true, message: `Connection OK · ${n} item${n === 1 ? '' : 's'} would be fetched`, rows };
+          const rows = previewRows({ type: 'crawl', config });
+          const pages = rows.map((r) => ({ id: r.path, outcome: 'Will fetch', willFetch: true }));
+          return { found: pages.length, willFetch: pages.length, pages, capped: false };
         }),
       previewHeld: (input) =>
         run(() => {
           const rows = previewRows(input);
-          const mapped = new Map(input.metadataMapping.filter((m) => m.key.trim()).map((m) => [snakeKey(m.key), m.from]));
+          const mapped = new Map((input.metadataMapping ?? []).filter((m) => m.key.trim()).map((m) => [snakeKey(m.key), m.from]));
           // Owner and effective date always come with a new item; a source column is absent on some items, and AI extraction waits for approval.
           const has = (key: string, i: number) => {
             const k = snakeKey(key);
@@ -718,10 +732,22 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         }),
       samples: (sid) => run(() => listSamples(sources, sid)),
       previewSplit: (input) => run(() => previewSplit(input)),
-      approveIngest: (sid) =>
+      aiEstimate: (sid) =>
         run(() => {
           const s = sourceOr404(sid);
           const steps = aiSteps(s.ingest, s.metadataMapping);
+          const total = items.filter((i) => i.sourceId === sid).length;
+          const calls = items.filter((i) => i.sourceId === sid).reduce((n, i) => n + i.chunkCount, 0);
+          return { steps, model: s.ingest.model, sampledItems: Math.min(total, 20), totalItems: total, calls, inputTokens: calls * 250, outputTokens: { low: calls * 60, high: calls * 120 }, basis: `A split of ${Math.min(total, 20)} of ${total} indexed items, scaled to all; one call per piece.` };
+        }),
+      decideAiSteps: (sid, decision) =>
+        run(() => {
+          const s = sourceOr404(sid);
+          const steps = aiSteps(s.ingest, s.metadataMapping);
+          if (decision === 'revoke') {
+            s.ingest.approval = { status: steps.length ? 'pending' : 'not_needed', approvedSteps: [] };
+            return s;
+          }
           if (!steps.length) throw new ApiError('This source has no AI ingestion steps to approve.', 409);
           if (selfApproval(s)) throw new ApiError('You requested this change; another knowledge owner must approve.', 403);
           s.ingest.approval = { status: 'approved', approvedSteps: Array.from(new Set([...s.ingest.approval.approvedSteps, ...steps])), requestedBy: s.ingest.approval.requestedBy, decidedBy: deps.currentUser, decidedAt: now() };
@@ -834,8 +860,17 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         }),
     },
 
-    retrieve: (input) => run(() => engine.retrieve(input)),
 
+    sourceKinds: () =>
+      run(() => [
+        {
+          type: 'file' as const,
+          kind: 'file' as const,
+          group: 'built_in' as const,
+          title: 'Files',
+          defaults: { parsing: { ocr: 'auto' as const, tables: true, vision: false }, cleaning: { furniture: false, mainContent: false, siteRepeats: false, duplicates: 'flag' as const }, ingest: structuredClone(MOCK_INGEST), rules: [], metadataMapping: [], schedule: { kind: 'manual' as const } },
+        },
+      ]),
     lookups: () =>
       run(() => ({
         owners: OWNERS,

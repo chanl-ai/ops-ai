@@ -82,7 +82,7 @@ TAG=$(sed -n 's/^OPS_IMAGE_TAG=//p' ops-ai.env.example)
 echo "proof: 3. the database server: PostgreSQL 17 with TLS, an admin that is not a superuser"
 ADMIN_PW=$(secret)
 docker rm -fv $PG >/dev/null 2>&1 || true
-docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 postgres:17 \
+docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 pgvector/pgvector:pg17 \
   -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null
 until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
 docker exec $PG psql -q -U postgres -c "CREATE ROLE opsadmin LOGIN NOSUPERUSER CREATEDB CREATEROLE BYPASSRLS PASSWORD '$ADMIN_PW'"
@@ -100,6 +100,8 @@ pw() { sed -n "s/^$1=//p" "$WORK/passwords"; }
   for login in $LOGINS; do psql -v ON_ERROR_STOP=1 "$ADMIN" -q -c "ALTER ROLE $login PASSWORD '$(pw "$login")'"; done
   psql -v ON_ERROR_STOP=1 "$ADMIN" -q -c "GRANT ops_migrator TO opsadmin"
   psql -v ON_ERROR_STOP=1 "$ADMIN" -q -c "CREATE DATABASE ops OWNER ops_migrator"
+  # pgvector needs a superuser (on Azure, the server admin, where vector is allow-listed).
+  docker exec $PG psql -q -U postgres -d ops -c "CREATE EXTENSION IF NOT EXISTS vector"
   export PGPASSWORD="$(pw ops_migrator)"
   psql -v ON_ERROR_STOP=1 "$(db ops_migrator ops)" -q -f bundle.sql >/dev/null
   psql -v ON_ERROR_STOP=1 "$(db ops_migrator ops)" -q -f grants.sql >/dev/null
@@ -188,6 +190,7 @@ done
 ls -l "$WORK/backup" | awk 'NR > 1 { print "proof: backup " $NF " " $5 " bytes" }'
 $C stop
 PGPASSWORD="$ADMIN_PW" psql -v ON_ERROR_STOP=1 "$ADMIN" -q -c "CREATE DATABASE ops_restored OWNER ops_migrator"
+docker exec $PG psql -q -U postgres -d ops_restored -c "CREATE EXTENSION IF NOT EXISTS vector"
 docker run --rm -e PGPASSWORD="$ADMIN_PW" -v "$WORK/backup:/backup" postgres:17 \
   pg_restore --exit-on-error -d "host=host.docker.internal port=$PG_PORT user=opsadmin dbname=ops_restored sslmode=require" /backup/ops.dump
 for v in files-data kb-data; do

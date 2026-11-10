@@ -6,7 +6,8 @@
 services:
   postgres:
     profiles: [postgres]
-    image: ${OPS_BASE_IMAGE_PREFIX:-}postgres:17-alpine
+    # PostgreSQL 17 with pgvector, for knowledge search by meaning.
+    image: ${OPS_BASE_IMAGE_PREFIX:-}pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ops

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Search on SQL Server names its skipped lanes",
+  "description": "On a database without full-text search, a knowledge search says its keyword lane was skipped instead of failing with a database error.",
+  "tag": "fix"
+}

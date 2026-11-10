@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "A source's reading and splitting settings now apply",
+  "description": "OCR, splitting, include and exclude rules set on a knowledge source are saved, checked and used at the next sync, and the source says when its documents need rebuilding.",
+  "tag": "improved"
+}

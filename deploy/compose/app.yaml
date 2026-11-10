@@ -152,6 +152,7 @@ services:
       OPS_DATABASE_URL: ${OPS_DATABASE_URL_KB:-${OPS_DATABASE_URL}}
       OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_KB:?}
       OPS_SERVICE_SIGNING_KID: svc-kb-1
+      OPS_MODELS_KEY: ${OPS_MODELS_KEY_KB:-}
     volumes:
       - kb-data:/data
       - ${OPS_PLUGINS_HOST_DIR:-../../plugins}:/plugins:ro

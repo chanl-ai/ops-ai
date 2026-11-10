@@ -4,7 +4,9 @@ import { DEFAULT_INGEST_MODEL, digestOf, docText, familyOf } from "./ingest"
 import { docByKey, FEATURED } from "./seed-documents"
 import { ago, daysAgo, inHours, inDays, seeded } from "./time"
 
-const defaultParsing = { ocr: false, tables: true, vision: false }
+const defaultParsing: Source["parsing"] = { ocr: "off", tables: true, vision: false }
+const fileCleaning: Source["cleaning"] = { furniture: false, mainContent: false, siteRepeats: false, duplicates: "flag" }
+const webCleaning: Source["cleaning"] = { furniture: true, mainContent: true, siteRepeats: true, duplicates: "flag" }
 
 const RATE_COLUMNS: TableColumn[] = [
   { name: "Product", role: "searchable", key: true },
@@ -31,16 +33,18 @@ const ingest = (preset: IngestSettings["preset"], strategies: IngestStrategy[], 
   ...extra,
 })
 
-export const sources: Source[] = [
+const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] = [
   {
     id: "src_hr_sharepoint",
     type: "sharepoint",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "AML & KYC procedures",
     connectionId: "int_sharepoint",
     connectionLabel: "harborpine.sharepoint.com (app-only)",
     scopeSummary: "Site: Financial Crime Operations · Documents/Policies, Documents/Forms",
     config: { site: "Financial Crime Operations", libraries: ["Documents/Policies", "Documents/Forms"], includeOffice: true, includePdf: true, auth: "app-only" },
-    parsing: { ...defaultParsing, ocr: true },
+    parsing: { ...defaultParsing, ocr: "auto" },
     ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [{ id: "r1", kind: "exclude", field: "path", value: "**/Archive/**" }],
     metadataMapping: [
@@ -51,7 +55,7 @@ export const sources: Source[] = [
     tags: ["procedure", "aml"],
     titleFrom: "source",
     permissions: { mode: "inherit" },
-    schedule: { kind: "daily", time: "02:00" },
+    schedule: { kind: "daily", time: "02:00", tz: "UTC" },
     deletedAtSource: "remove",
     staleAfterDays: 90,
     notifyOnFailure: true,
@@ -73,6 +77,8 @@ export const sources: Source[] = [
   {
     id: "src_eng_confluence",
     type: "confluence",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Wire fraud playbook",
     connectionId: "int_confluence",
     connectionLabel: "harborpine.atlassian.net",
@@ -88,7 +94,7 @@ export const sources: Source[] = [
     tags: ["fraud", "playbook"],
     titleFrom: "source",
     permissions: { mode: "inherit" },
-    schedule: { kind: "weekly", day: "Mon", time: "03:00" },
+    schedule: { kind: "weekly", day: "mon", time: "03:00", tz: "UTC" },
     deletedAtSource: "remove",
     staleAfterDays: 120,
     notifyOnFailure: true,
@@ -110,6 +116,8 @@ export const sources: Source[] = [
   {
     id: "src_github_docs",
     type: "github",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Model risk documentation",
     connectionId: "int_github",
     connectionLabel: "GitHub app · harborpine-bank",
@@ -125,7 +133,7 @@ export const sources: Source[] = [
     tags: ["docs", "models"],
     titleFrom: "heading",
     permissions: { mode: "workspace" },
-    schedule: { kind: "webhook", safetyNetDaily: true },
+    schedule: { kind: "hourly", every: 4 },
     deletedAtSource: "remove",
     staleAfterDays: 180,
     notifyOnFailure: true,
@@ -147,10 +155,12 @@ export const sources: Source[] = [
   {
     id: "src_contracts",
     type: "file",
+    kind: "file",
+    cleaning: fileCleaning,
     name: "Dispute rights guides",
     scopeSummary: "12 files from Files/Cards/Disputes",
     config: { folderId: "f_contracts" },
-    parsing: { ...defaultParsing, ocr: true },
+    parsing: { ...defaultParsing, ocr: "auto" },
     ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [],
     metadataMapping: [
@@ -180,6 +190,8 @@ export const sources: Source[] = [
   {
     id: "src_pricing_crawl",
     type: "crawl",
+    kind: "web",
+    cleaning: webCleaning,
     name: "Pricing site",
     scopeSummary: "https://www.harborpine.example/sitemap-pricing.xml · depth 3 · 200 pages max",
     config: { startUrl: "https://www.harborpine.example/sitemap-pricing.xml", depth: 3, maxPages: 200, sameDomain: true, include: ["/pricing/**", "/fees/**"], exclude: ["/pricing/archive/**"], respectRobots: true },
@@ -193,7 +205,7 @@ export const sources: Source[] = [
     tags: ["pricing", "public"],
     titleFrom: "source",
     permissions: { mode: "workspace" },
-    schedule: { kind: "daily", time: "05:00" },
+    schedule: { kind: "daily", time: "05:00", tz: "UTC" },
     deletedAtSource: "keep_stale",
     staleAfterDays: 30,
     notifyOnFailure: true,
@@ -215,6 +227,8 @@ export const sources: Source[] = [
   {
     id: "src_lending_policies",
     type: "file",
+    kind: "file",
+    cleaning: fileCleaning,
     name: "Lending policies and fee schedules",
     scopeSummary: "9 files from Files/Lending",
     config: { folderId: "f_lending" },
@@ -249,6 +263,8 @@ export const sources: Source[] = [
   {
     id: "src_branch_faq",
     type: "text",
+    kind: "file",
+    cleaning: fileCleaning,
     name: "Branch FAQ",
     scopeSummary: "Pasted Markdown · 1 document · 2,140 words",
     config: { format: "markdown" },
@@ -279,6 +295,8 @@ export const sources: Source[] = [
   {
     id: "src_zendesk_draft",
     type: "zendesk",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Help centre articles",
     connectionId: "int_zendesk",
     connectionLabel: "harborpine.zendesk.com",
@@ -291,7 +309,7 @@ export const sources: Source[] = [
     tags: ["help-centre"],
     titleFrom: "source",
     permissions: { mode: "workspace" },
-    schedule: { kind: "daily", time: "04:00" },
+    schedule: { kind: "daily", time: "04:00", tz: "UTC" },
     deletedAtSource: "remove",
     staleAfterDays: 90,
     notifyOnFailure: true,
@@ -308,6 +326,8 @@ export const sources: Source[] = [
   {
     id: "src_notion_product",
     type: "notion",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Product wiki",
     connectionId: "int_notion",
     connectionLabel: "Harbor & Pine Product (Notion)",
@@ -320,7 +340,7 @@ export const sources: Source[] = [
     tags: ["product"],
     titleFrom: "source",
     permissions: { mode: "workspace" },
-    schedule: { kind: "daily", time: "06:00" },
+    schedule: { kind: "daily", time: "06:00", tz: "UTC" },
     deletedAtSource: "keep_stale",
     staleAfterDays: 60,
     notifyOnFailure: false,
@@ -339,6 +359,20 @@ export const sources: Source[] = [
     createdAt: daysAgo(100),
   },
 ]
+
+/** What kb-service names each seeded kind: Files, or the plugin's own title for its source. */
+const MOCK_KIND_LABEL: Partial<Record<Source["type"], string>> = {
+  file: "Files",
+  crawl: "Website",
+  text: "Plain text",
+  sharepoint: "SharePoint documents",
+  confluence: "Confluence pages",
+  github: "GitHub files",
+  notion: "Notion pages",
+  zendesk: "Zendesk help centre articles",
+}
+
+export const sources: Source[] = seedRows.map((s) => ({ ...s, kindLabel: MOCK_KIND_LABEL[s.type] ?? "App source", aiStepsWaiting: [], waitingHosts: [] }))
 
 // ---- Items ----------------------------------------------------------------
 
@@ -680,8 +714,6 @@ export const runs: SyncRun[] = [
     startedAt: ago(0.32),
     durationSec: 412,
     status: "partial",
-    cursorBefore: "delta:MzslMjM7MTsy",
-    cursorAfter: "delta:MzslMjM7MTsz",
     counts: { listed: 812, unchanged: 741, upserted: 46, deleted: 0, failed: 3, skipped: 22 },
     phases: [doneP("list", 2100), doneP("fetch", 88000), doneP("parse", 190000), doneP("chunk", 41000), doneP("embed", 79000), doneP("upsert", 12000)],
     errors: [
@@ -716,7 +748,7 @@ export const runs: SyncRun[] = [
   {
     id: "run_hr_3",
     sourceId: "src_hr_sharepoint",
-    trigger: "webhook",
+    trigger: "schedule",
     startedAt: daysAgo(2),
     durationSec: 41,
     status: "success",
@@ -732,7 +764,6 @@ export const runs: SyncRun[] = [
     startedAt: daysAgo(9),
     durationSec: 2410,
     status: "success",
-    cursorRejected: true,
     counts: { listed: 806, unchanged: 0, upserted: 806, deleted: 4, failed: 0, skipped: 22 },
     phases: [doneP("list", 9000), doneP("fetch", 600000), doneP("parse", 1200000), doneP("chunk", 200000), doneP("embed", 380000), doneP("upsert", 21000)],
     errors: [],
@@ -745,7 +776,6 @@ export const runs: SyncRun[] = [
     startedAt: ago(9),
     durationSec: 4,
     status: "failed",
-    cursorBefore: "modified-since:2026-09-22T03:00:00Z",
     counts: { listed: 0, unchanged: 0, upserted: 0, deleted: 0, failed: 0, skipped: 0 },
     phases: [{ name: "list", durationMs: 3900, status: "failed" }, { name: "fetch", durationMs: 0, status: "skipped" }, { name: "parse", durationMs: 0, status: "skipped" }, { name: "chunk", durationMs: 0, status: "skipped" }, { name: "embed", durationMs: 0, status: "skipped" }, { name: "upsert", durationMs: 0, status: "skipped" }],
     errors: [{ itemId: "", itemTitle: "(connection)", phase: "list", errorClass: "permission", message: "401 from Confluence: token expired" }],
@@ -766,12 +796,10 @@ export const runs: SyncRun[] = [
   {
     id: "run_gh_1",
     sourceId: "src_github_docs",
-    trigger: "webhook",
+    trigger: "schedule",
     startedAt: ago(3),
     durationSec: 38,
     status: "success",
-    cursorBefore: "sha:1b77a09",
-    cursorAfter: "sha:9f3c1e2",
     counts: { listed: 214, unchanged: 211, upserted: 3, deleted: 0, failed: 0, skipped: 6 },
     phases: [doneP("list", 900), doneP("fetch", 3000), doneP("parse", 6000), doneP("chunk", 4000), doneP("embed", 20000), doneP("upsert", 4000)],
     errors: [],
@@ -808,7 +836,6 @@ export const runs: SyncRun[] = [
     startedAt: ago(2),
     durationSec: 61,
     status: "success",
-    cursorAfter: "etag-set:96",
     counts: { listed: 96, unchanged: 90, upserted: 6, deleted: 0, failed: 0, skipped: 3 },
     phases: [doneP("list", 1500), doneP("fetch", 30000), doneP("parse", 9000), doneP("chunk", 5000), doneP("embed", 12000), doneP("upsert", 2500)],
     errors: [],
@@ -820,7 +847,7 @@ export const runs: SyncRun[] = [
     trigger: "schedule",
     startedAt: daysAgo(1),
     durationSec: 240,
-    status: "backing_off",
+    status: "partial",
     counts: { listed: 96, unchanged: 60, upserted: 12, deleted: 0, failed: 0, skipped: 3 },
     phases: [doneP("list", 1500), { name: "fetch", durationMs: 200000, status: "failed" }, { name: "parse", durationMs: 0, status: "skipped" }, { name: "chunk", durationMs: 0, status: "skipped" }, { name: "embed", durationMs: 0, status: "skipped" }, { name: "upsert", durationMs: 0, status: "skipped" }],
     errors: [{ itemId: "", itemTitle: "(24 pages)", phase: "fetch", errorClass: "rate_limited", message: "429 from www.harborpine.example; Retry-After 900s" }],

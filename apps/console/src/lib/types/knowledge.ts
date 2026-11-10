@@ -11,20 +11,52 @@ export type Sensitivity = 'internal' | 'confidential' | 'restricted';
 export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce' | 'tool';
 
 export type SourceStatus = 'active' | 'paused' | 'draft' | 'revoked';
-export type RunStatus = 'success' | 'partial' | 'failed' | 'running' | 'backing_off';
+export type RunStatus = 'running' | 'success' | 'partial' | 'failed' | 'cancelled' | 'skipped';
+/** What started a run: a person (manual, full, retry), the schedule, or a settings save that rebuilds items. */
+export type RunTrigger = 'manual' | 'schedule' | 'full' | 'retry' | 'settings';
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+/** When a source syncs on its own; `tz` is an IANA time zone. */
 export type Schedule =
   | { kind: 'manual' }
-  | { kind: 'daily'; time: string }
-  | { kind: 'weekly'; day: string; time: string }
-  | { kind: 'monthly'; day: number; time: string }
-  | { kind: 'webhook'; safetyNetDaily: boolean };
+  | { kind: 'hourly'; every: 1 | 2 | 4 | 6 | 12 }
+  | { kind: 'daily'; time: string; tz: string }
+  | { kind: 'weekly'; day: Weekday; time: string; tz: string };
 
-/** Parsing before splitting. Stripping HTML is the `clean` ingestion strategy. */
+export type OcrMode = 'off' | 'auto' | 'always';
+
+/** How documents-service reads the source's files. */
 export interface ParsingSettings {
-  ocr: boolean;
-  /** Keep tables as tables, so `table_rows` and structured values can read them. */
+  /** `auto` reads scanned pages and the picture parts of mixed pages. */
+  ocr: OcrMode;
   tables: boolean;
   vision: boolean;
+}
+
+/** What is removed between reading and splitting. */
+export interface CleaningSettings {
+  /** Drops menus, footers, banners and other blocks the reading marked as page furniture. */
+  furniture: boolean;
+  /** Keeps a page's main article when it has one. */
+  mainContent: boolean;
+  /** Drops a line found on more than half of a website source's pages. */
+  siteRepeats: boolean;
+  /** An item with the same cleaned text as another in a base it feeds: flag both and search the newer, or skip it. */
+  duplicates: 'flag' | 'skip';
+}
+
+/** What a source is: uploaded files, one website's pages, or another app's knowledge source. */
+export type SourceKind = 'file' | 'web' | 'tool';
+
+/** A source's sync health, kept by kb-service as each run settles. */
+export interface SourceHealth {
+  state: 'never' | 'healthy' | 'failing' | 'needs_reconnect';
+  lastGoodSyncAt?: string;
+  failingSince?: string;
+  daysFailing: number;
+  /** Failed runs in a row. */
+  failedRuns: number;
+  /** Addresses removed for answering gone twice. */
+  tombstoned: number;
 }
 
 export interface Rule {
@@ -49,15 +81,24 @@ export interface Source {
   canPublish?: boolean;
   id: string;
   type: SourceType;
+  kind: SourceKind;
+  /** What the source is, as kb-service names it: Files, or its plugin's own title for the source. */
+  kindLabel: string;
   name: string;
   /** The integration this source reads through; its status shows read-only on the source. */
   connectionId?: string;
   connectionLabel?: string;
   connection?: import('./integrations').ConnectionRef;
+  /** What it takes in, in a few words: a site's start address, an app source's name, or its files. */
   scopeSummary: string;
   config: Record<string, unknown>;
   parsing: ParsingSettings;
+  cleaning: CleaningSettings;
   ingest: IngestSettings;
+  /** AI ingest steps chosen and still waiting for the knowledge owner's approval; syncs run without them. */
+  aiStepsWaiting: string[];
+  /** Hosts of the source's own site an admin has yet to approve, with the Security task each waits on; nothing is fetched until then. */
+  waitingHosts: { host: string; runKey?: string | null }[];
   /** Digest of the ingestion settings the current chunks were built with; differs from the settings when a re-index is needed. */
   indexedSettingsDigest?: string;
   rules: Rule[];
@@ -80,8 +121,12 @@ export interface Source {
   lastSyncAt?: string;
   lastRunStatus?: RunStatus;
   lastRunDurationSec?: number;
+  /** When the schedule syncs it next, from the service. */
   nextSyncAt?: string;
   cursor?: string;
+  health?: SourceHealth;
+  /** The settings rebuild running in the background, when a save started one. */
+  rebuild?: SyncRun | null;
   usedByKbIds: string[];
   createdAt: string;
 }
@@ -104,6 +149,25 @@ export interface Chunk {
   page?: number;
   kind: 'content' | 'question' | 'answer' | 'summary' | 'row';
   text: string;
+  /** What search matches for this piece: its own text, its children, its questions and approved FAQ pairs. */
+  units?: { kind: string; text: string }[];
+  /** Fields kept on the piece for filters. */
+  metadata?: Record<string, string>;
+}
+
+/** How an item's file was read, page by page, and what cleaning removed; null with no file or no finished reading. */
+export interface ItemReading {
+  readerVersion?: string | null;
+  ocr: string;
+  pages: { number: number; readBy?: string | null; blocks: Record<string, number>; removedChars: number; ocrConfidence?: number }[];
+}
+
+/** The settings the item was split under, and whether they are still the source's (false: it waits for a rebuild). */
+export interface ItemSettingsUsed {
+  preset: string;
+  strategies: string[];
+  indexedWith?: string | null;
+  current: boolean;
 }
 
 export interface Revision {
@@ -179,37 +243,62 @@ export interface ItemWithDetail extends Item {
   sourceName: string;
   sourceType: SourceType;
   detail: ItemDetail;
+  reading?: ItemReading | null;
+  settingsUsed?: ItemSettingsUsed | null;
 }
 
-export interface RunPhase {
-  name: 'list' | 'fetch' | 'parse' | 'chunk' | 'embed' | 'upsert';
-  durationMs: number;
-  status: 'done' | 'running' | 'failed' | 'skipped';
-}
-
+/** One item or listing a run could not take in, with the step it failed at and why. */
 export interface RunError {
-  itemId: string;
-  itemTitle: string;
-  phase: RunPhase['name'];
-  errorClass: ErrorClass;
+  itemId?: string;
+  itemTitle?: string;
+  /** The step: list, get, store or parse. */
+  phase: string;
+  errorClass: string;
   message: string;
+}
+
+/**
+ * A run's counts. A sync counts what it listed, left unchanged, took in, removed, failed, skipped or excluded; a
+ * settings rebuild counts its total, checked, rebuilt and failed items. Model use is present when an AI step ran.
+ */
+export interface RunCounts {
+  listed?: number;
+  unchanged?: number;
+  upserted?: number;
+  deleted?: number;
+  failed?: number;
+  skipped?: number;
+  excluded?: number;
+  reading?: number;
+  total?: number;
+  checked?: number;
+  rebuilt?: number;
+  modelCalls?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export interface SyncRun {
   id: string;
   sourceId: string;
-  trigger: 'manual' | 'schedule' | 'webhook' | 'full' | 'retry';
+  trigger: RunTrigger;
   startedAt: string;
+  finishedAt?: string;
   durationSec: number;
   status: RunStatus;
-  cursorBefore?: string;
-  cursorAfter?: string;
-  cursorRejected?: boolean;
-  counts: { listed: number; unchanged: number; upserted: number; deleted: number; failed: number; skipped: number };
-  phases: RunPhase[];
+  counts: RunCounts;
+  phases: unknown[];
   errors: RunError[];
   log: string[];
-  progress?: { done: number; total: number; failed: number };
+  /** Who stopped it, when it was cancelled. */
+  cancelledBy?: string;
+}
+
+/** An address removed after answering gone twice; a sync leaves it out until it is lifted. */
+export interface Tombstone {
+  id: string;
+  at?: string;
+  reason?: string;
 }
 
 export type SearchMode = QueryMode;
@@ -344,10 +433,21 @@ export interface KnowledgeBaseRow extends KnowledgeBase {
 /** One attached source as the knowledge base page shows it. */
 export interface KbSourceView extends KbSourceLink {
   source: Source;
+  /** A sync or rebuild holds the source now; the base's detail polls while any does. */
+  running?: boolean;
+}
+
+/** How many of a base's search units have a vector in the base's embedding model; null with no embedding model. */
+export interface EmbeddingCoverage {
+  model: string;
+  width: number;
+  units: number;
+  embedded: number;
 }
 
 export interface KnowledgeBaseDetail extends KnowledgeBaseRow {
   attached: KbSourceView[];
+  embedding?: EmbeddingCoverage | null;
   /** Metadata keys present on this knowledge base's documents, for filter editors. */
   metadataKeys: string[];
   suggestedQuestions: string[];
@@ -415,12 +515,29 @@ export interface PlaygroundAnswer {
   /** Rows matched by `table_lookup`. */
   rows?: TableRowHit[];
   trace?: RetrievalTrace;
+  /** The search lanes the base asked for, the ones that ran, and each skipped one with its reason. */
+  lanes?: { asked: string[]; ran: string[]; skipped: { lane: string; reason: string }[] };
+  /** Each passage found, best first: its fused score and its score in each lane that found it. */
+  passages?: SearchPassage[];
+  /** What the question cost to search: the tokens embedding it took. */
+  cost?: { embeddingTokens: number };
 }
 
-export interface SourcePreview {
-  ok: boolean;
-  message: string;
-  rows: { title: string; path: string; size: number; modified: string }[];
+export interface SearchPassage {
+  itemId: string;
+  kbId: string;
+  title: string;
+  section: string;
+  version: string;
+  text: string;
+  snippet: string;
+  score: number;
+  lanes?: Record<string, number>;
+  /** The unit it matched by: the piece's own text (`self`), a question, or an approved FAQ pair. */
+  matched?: string;
+  verified?: boolean;
+  page?: number | null;
+  url?: string | null;
 }
 
 /** What a new source's previewed items would look like to the knowledge bases chosen for attachment (spec 5.15.10). */
@@ -437,7 +554,7 @@ export interface HeldPreview {
 /** A source read for its page: knowledge bases that read it, recent runs and error groups come joined. */
 export interface SourceDetail extends Source {
   readers: Pick<KnowledgeBase, 'id' | 'name' | 'slug' | 'color' | 'health'>[];
-  running?: SyncRun;
+  running?: SyncRun | null;
   recentRuns: SyncRun[];
   errorGroups: { message: string; count: number }[];
   itemCount: number;
@@ -447,8 +564,6 @@ export interface SourceDetail extends Source {
   requiredMetadata: string[];
   /** Items excluded by a rule, held for metadata, or indexed once elsewhere. */
   governance: { excluded: number; held: number; duplicates: number; superseded: number };
-  /** AI ingest steps still waiting for approval; syncs and re-indexes run without them. */
-  aiStepsWaiting: string[];
   /** Whether the current user may approve the waiting steps, and what approving starts. */
   approval?: { canApprove: boolean; blockedReason?: string; modelCalls: number; estimatedCost: string; items: number };
 }
@@ -468,34 +583,81 @@ export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'descripti
   retrieval?: Partial<RetrievalSettings>;
 };
 
-export type SourceInput = Pick<
-  Source,
-  | 'type'
-  | 'name'
-  | 'scopeSummary'
-  | 'config'
-  | 'parsing'
-  | 'ingest'
-  | 'rules'
-  | 'metadataMapping'
-  | 'tags'
-  | 'titleFrom'
-  | 'permissions'
-  | 'schedule'
-  | 'deletedAtSource'
-  | 'staleAfterDays'
-  | 'notifyOnFailure'
-  | 'sensitivity'
-  | 'collection'
-  | 'connectionId'
-> & {
-  status?: 'active' | 'draft';
-  itemsPending?: number;
-  /** File sources: ids from the Files API. The source never receives bytes; it reads each file from storage. */
-  fileIds?: string[];
+/** A new source, as `POST /v1/sources` takes it; settings left out start from its kind's defaults. */
+export type SourceInput = Pick<Source, 'type' | 'name'> &
+  Partial<Pick<Source, 'config' | 'parsing' | 'cleaning' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
+    status?: 'active' | 'draft';
+    /** Merged over the kind's defaults, so Add source sends only the steps it switches. */
+    ingest?: Partial<IngestSettings>;
+    /** File sources: ids from the Files API. The source never receives bytes; it reads each file from storage. */
+    fileIds?: string[];
+  };
+
+/** What a save may change. `values` are a website or app source's own settings, checked against what its plugin declares. */
+export type SourcePatch = Partial<Pick<Source, 'name' | 'collection' | 'owner' | 'sensitivity' | 'tags' | 'parsing' | 'cleaning' | 'ingest' | 'rules' | 'metadataMapping' | 'schedule'>> & {
+  values?: Record<string, unknown>;
 };
 
-export type SourcePatch = Partial<Omit<SourceInput, 'type'>>;
+/** One setting an app's knowledge source is set up with, as its plugin declares it. */
+export interface SourceInputField {
+  type?: 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+  enum?: (string | number | boolean)[];
+  items?: SourceInputField;
+}
+
+/** What a new source's settings start as for its kind; Add source's Review shows them. */
+export interface SourceDefaults {
+  parsing: ParsingSettings;
+  cleaning: CleaningSettings;
+  ingest: IngestSettings;
+  rules: Rule[];
+  metadataMapping: MetadataMapping[];
+  schedule: Schedule;
+}
+
+/** A kind of source the team may add: Files, or a knowledge source of one of its apps. */
+export interface SourceKindOption {
+  type: 'file' | 'tool';
+  kind: SourceKind;
+  group: 'built_in' | 'apps';
+  title: string;
+  plugin?: string | null;
+  source?: string | null;
+  /** The items are one website's pages. */
+  site?: boolean;
+  needsConnection?: boolean;
+  connected?: boolean;
+  /** `POST /v1/sources/preview` can say what a source of this kind would take in. */
+  previews?: boolean;
+  pickers?: boolean;
+  inputs?: Record<string, SourceInputField>;
+  defaults: SourceDefaults;
+}
+
+/** What a website or app source with these settings would take in, before anything is stored. */
+export interface SourceKindPreview {
+  found: number;
+  willFetch: number;
+  pages: { id: string; outcome: string; willFetch: boolean }[];
+  /** The listing stopped at its page limit. */
+  capped: boolean;
+}
+
+/** What the AI steps of a source would cost, from a split of up to 20 of its items with no model called. */
+export interface AiEstimate {
+  steps: string[];
+  model: string;
+  sampledItems: number;
+  totalItems: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: { low: number; high: number };
+  /** How the numbers were reached, in words. */
+  basis: string;
+}
 
 export interface SyncOptions {
   full?: boolean;

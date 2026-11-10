@@ -1,12 +1,13 @@
 """Moves every pin in deploy/plugins.json to the plugins repository's current main, or to REF, and prints each
 plugin's old and new commit.
 
-    python scripts/plugins_bump.py [--ref main]
+    python scripts/plugins_bump.py [--ref main] [--path plugins/web]
 
 REF is a branch, tag or commit of the pinned repository; the file always records the full commit it resolves to, since
 bake_plugins.py refuses anything that can move, and the sha256 digest of the plugin's folder at that commit, which
 bake_plugins.py checks every download against. Review the plugins' change between the two commits before committing
-the new pins: the digest makes the image hold exactly what was reviewed."""
+the new pins: the digest makes the image hold exactly what was reviewed. `--path` moves that plugin's pin alone, so a
+plugin changed on a branch is pinned without moving the others."""
 
 from __future__ import annotations
 
@@ -44,10 +45,13 @@ def resolve(source: str, ref: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Move the plugin pins to a newer commit.")
     parser.add_argument("--ref", default="main")
+    parser.add_argument("--path", help="move only the pin of this plugin folder (plugins/<name>)")
     args = parser.parse_args(argv)
     data = json.loads(PINS.read_text())
     resolved: dict[str, str] = {}
     for pin in data["plugins"]:
+        if args.path and pin["path"] != args.path:
+            continue
         source = pin["source"]
         new = resolved.setdefault(source, resolve(source, args.ref))
         sys.stdout.write(

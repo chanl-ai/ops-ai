@@ -97,8 +97,8 @@ do inside a team; they never open another team's data.
 |---|---|---|---|
 | Files | A volume on the host until a Security admin points each upload purpose at a target: local, S3 or an S3-compatible store, or Azure Blob Storage. Each target is tested with a write, a read and a delete before it is saved | Type judged from the bytes; size and type limits per tenant; one stored copy per content per team; storage credentials encrypted with AES-256-GCM; a reference from a case or a run blocks deletion | Built |
 | Malware scanning | A hook your scanner calls back on, with files held as pending until it answers; a test engine that recognises the EICAR test file. Scanning cannot be turned off outside development | No scanner ships in the package | Partial |
-| Knowledge | Source files on the knowledge volume; their text split into chunks in the database. PDF (each file is read once, with OCR for scanned pages, half-scanned pages and images, and filled form fields), Word, Excel, CSV, HTML, text and Markdown, up to 50 MB each | Search with PostgreSQL full-text ranking; every answer cites page and section; a knowledge base belongs to one team | Built |
-| Vector search | Embeddings through an embedding alias on the AI gateway | Same | Planned |
+| Knowledge | Source files on the knowledge volume; their text split into chunks in the database. PDF (each file is read once, with OCR for scanned pages, half-scanned pages and images, and filled form fields), Word, Excel, CSV, HTML, text and Markdown, up to 50 MB each | Search with PostgreSQL full-text ranking and by meaning (below); every answer cites page and section; a knowledge base belongs to one team | Built |
+| Vector search | Each knowledge piece embedded through the environment's embedding alias on the AI gateway, stored in PostgreSQL with pgvector | Searched by meaning and keywords together, each result saying which ran; on SQL Server keywords only for now | Built on PostgreSQL |
 | Documents | Page layouts, extracted fields with the place each came from, corrections. The documents service never holds the bytes and reads them from files | A model may see page images only where the document type, the team's policy and the alias all allow it | Built |
 
 ## Retention
@@ -118,7 +118,7 @@ do inside a team; they never open another team's data.
 
 | Record | What it holds | Where |
 |---|---|---|
-| Audit log | Sign-in, sign-out, step-up and refresh-token reuse; invites, role changes and removals; API keys created and revoked; team renames; team policy changes; access checks. Written in the same transaction as the change it records | platform, `audit_entries` |
+| Audit log | Sign-in, sign-out, step-up and refresh-token reuse; invites, role changes and removals; API keys created and revoked; team renames; team policy changes; access checks. Written in the same transaction as the change it records. Knowledge base and source settings changes too, each field before and after: kb-service writes the entry with the change and its relay delivers it (`ops_store.audit`), so the Audit page reads one log | platform, `audit_entries` |
 | Tool call log | Every tool call: who it was for, which agent or workflow made it, the tool, the input's hash, the decision and its reasons, the approvers, the outcome, the environment and connection used | tools, `gateway_calls` |
 | Security changes | Every credential created, rotated, deleted or used; every allow-list change; every connection change, sign-in and failed refresh; every storage settings change | tools and files audit tables |
 | Run journal | Each step of each run with its input, output and outcome; each event of each conversation; each case event | agents |

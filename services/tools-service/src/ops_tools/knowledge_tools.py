@@ -1,7 +1,9 @@
 """The built-in Knowledge bases tool: `search_knowledge` answers from the calling team's knowledge bases with
 the passages and where each came from, through kb-service's own search, called as the run's tenant and team, so another
-team's knowledge base is never searched. It runs behind the tool gateway as the platform's local tools do, so grants,
-the call log and the team's rules apply as to any tool."""
+team's knowledge base is never searched. A call names its bases (`collections`: an agent's own, which the kernel fills,
+or a workflow step's); every base of the team only with `allTeamKnowledgeBases: true`, which the kernel sets for an
+agent given that option and a workflow step sets on purpose. A call naming neither is refused. It runs behind
+the tool gateway as the platform's local tools do, so grants, the call log and the team's rules apply as to any tool."""
 
 from __future__ import annotations
 
@@ -10,8 +12,10 @@ from typing import Any, cast
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 
-# Passages one search hands the model; enough to cite, few enough not to fill its context.
-LIMIT = 5
+# Every base of the team, asked for explicitly: an agent given the option (the kernel sets it) or a workflow step
+# that says so.
+ALL_TEAM = "allTeamKnowledgeBases"
+NAME_THEM = "Name the knowledge bases to search (collections), or ask for all of the team's (allTeamKnowledgeBases)."
 
 
 class KnowledgeSearch:
@@ -28,7 +32,11 @@ class KnowledgeSearch:
         try:
             bases = cast(list[dict[str, Any]], await self.kb.get("/v1/knowledge-bases/refs", tenant=tenant, team=team))
             named = [str(c).strip() for c in cast(list[Any], arguments.get("collections") or []) if str(c).strip()]
-            # Named by id or by name; none named searches every knowledge base the team has.
+            if not named and arguments.get(ALL_TEAM) is not True:
+                # Every caller names its bases (an agent's own, a workflow's step), or asks for the whole team's
+                # explicitly; leaving them out never widens a search to every base of the team.
+                return ToolOutcome(False, {"error": NAME_THEM})
+            # Named by id or by name; the whole team's only when asked for explicitly.
             by = {str(b["id"]): str(b["id"]) for b in bases} | {str(b["name"]).lower(): str(b["id"]) for b in bases}
             unknown = [n for n in named if n not in by and n.lower() not in by]
             if unknown:
@@ -36,7 +44,8 @@ class KnowledgeSearch:
             ids = list(dict.fromkeys(by.get(n) or by[n.lower()] for n in named)) or [str(b["id"]) for b in bases]
             if not ids:
                 return ToolOutcome(True, {"passages": [], "note": "The team has no knowledge bases yet."})
-            body = {"kbIds": ids, "question": query, "limit": LIMIT}
+            # No count: the bases' own retrieval settings decide how many passages return.
+            body = {"kbIds": ids, "question": query}
             found = cast(
                 dict[str, Any], await self.kb.post("/v1/knowledge-bases/search", body, tenant=tenant, team=team)
             )

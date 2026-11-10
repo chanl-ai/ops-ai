@@ -8,7 +8,7 @@ so turning it on again needs nothing more."""
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, Protocol, cast
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends
@@ -17,15 +17,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from ops_plugin_sdk import Plugin
+from ops_plugin_sdk.knowledge import source_hosts
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
-from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, ok
 
 from ..auth.kinds import Kind, kind_of
 from ..callers import caller_in
 from ..connections.schemas import CREDENTIAL_MAX, AccountIn
 from ..connections.service import ConnectionService, connection_rights
+from ..held_hosts import HostHeld
 from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
@@ -128,6 +130,28 @@ class TakeUpdateIn(_Wire):
     digest: str = Field(min_length=64, max_length=64)
 
 
+class SourceHostsIn(_Wire):
+    plugin: str = Field(min_length=1, max_length=200)
+    source: str = Field(min_length=1, max_length=200)
+    # The source's own values (its start addresses): the hosts asked about are the ones its egress_from input holds.
+    values: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+
+class SourceHost(_Wire):
+    host: str
+    # allowed: listed, or passing under the account's any_public policy; waiting: an admin has yet to approve it;
+    # refused: the Security team refused it, or the account adds no new hosts.
+    state: Literal["allowed", "waiting", "refused"]
+    # The Security task a waiting host is asked on (Human Tasks), when the account's policy asks Security.
+    run_key: str | None = None
+    reason: str | None = None
+
+
+class HostGate(Protocol):
+    async def hold_unless_listed(self, who: Caller, host: str | None, app: str) -> None: ...
+    async def host_passes(self, tenant_id: str, host: str) -> bool: ...
+
+
 class KnowledgeSourceView(_Wire):
     plugin: str
     source: str
@@ -135,6 +159,23 @@ class KnowledgeSourceView(_Wire):
     list_tool: str
     get_tool: str
     deleted_tool: str | None
+    # The contract's optional tools: changes since a cursor, and the pickers a person chooses scopes with.
+    changes_tool: str | None = None
+    scopes_tool: str | None = None
+    preview_tool: str | None = None
+    # Every listing names every item, so each run finds what left the source.
+    lists_whole: bool = False
+    fetch_at_once: int = 4
+    # Its items are pages of one website.
+    site: bool = False
+    # What a source of this kind is set up with, checked by kb-service and sent to each tool as `source`; and the
+    # input whose addresses the source's sync may reach.
+    inputs: dict[str, Any] = Field(default_factory=dict[str, Any])
+    egress_from: str | None = None
+    # Whether the get tool takes the version tag kb-service holds, to answer `unchanged` without the content.
+    get_takes_tag: bool = False
+    # A plugin that signs in to nothing (a public website) needs no connection for a source.
+    needs_connection: bool = True
     schedule: dict[str, Any]
     connection_id: str | None
     sign_in: str | None
@@ -613,8 +654,10 @@ def plugins_router(
     directory: Directory,
     *,
     users: ToolUsers | None = None,
+    hosts: HostGate | None = None,
 ) -> APIRouter:
-    """`users` answers who uses an app's tools (agents-service); without it that route answers 503, never "nobody"."""
+    """`users` answers who uses an app's tools (agents-service); without it that route answers 503, never "nobody".
+    `hosts` decides a knowledge source's new hosts by the account's egress rule; without it that route answers 503."""
     caller = caller_in(directory)
     host = accounts.host
     r = APIRouter(tags=["apps"], responses=ERRORS)
@@ -699,6 +742,35 @@ def plugins_router(
         b = await host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
         return ok(_review(plugin, b))
 
+    @r.post("/v1/knowledge-sources/hosts", response_model=Envelope[list[SourceHost]])
+    async def knowledge_source_hosts(body: SourceHostsIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The hosts a source's values would have its sync reach, each decided as any new outside address is: a
+        person's request (adding the source) lists it where the account lets them, asks the Security team, or is
+        refused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts
+        are never exempt from the account's list."""
+        if hosts is None:
+            raise ServiceUnavailable("This install decides no egress hosts.")
+        plugin = accounts.plugin(f"{PLUGIN_APP}{body.plugin}")
+        source = next((s for s in plugin.manifest.knowledge_sources if s.name == body.source), None)
+        if source is None:
+            raise NotFound(f"{plugin.manifest.title} has no knowledge source {body.source}")
+        person = who.principal is not None and who.principal.kind != "service"
+        out: list[SourceHost] = []
+        for host in source_hosts(source, body.values):
+            if not person:
+                passes = await hosts.host_passes(who.tenant_id, host)
+                out.append(SourceHost(host=host, state="allowed" if passes else "waiting"))
+                continue
+            try:
+                await hosts.hold_unless_listed(who, host, source.title)
+            except HostHeld as e:
+                out.append(SourceHost(host=host, state="waiting", run_key=e.run_key))
+            except (Unprocessable, ValidationFailed) as e:
+                out.append(SourceHost(host=host, state="refused", reason=e.message))
+            else:
+                out.append(SourceHost(host=host, state="allowed"))
+        return ok([h.model_dump(by_alias=True) for h in out])
+
     @r.get("/v1/knowledge-sources", response_model=Envelope[list[KnowledgeSourceView]])
     async def knowledge_sources(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The knowledge sources a team can create from its plugins that are on, with the account each would read
@@ -721,6 +793,16 @@ def plugins_router(
                         list_tool=m.operation(s.list),
                         get_tool=m.operation(s.get),
                         deleted_tool=m.operation(s.deleted) if s.deleted else None,
+                        changes_tool=m.operation(s.changes) if s.changes else None,
+                        scopes_tool=m.operation(s.scopes) if s.scopes else None,
+                        preview_tool=m.operation(s.preview) if s.preview else None,
+                        lists_whole=s.lists_whole,
+                        fetch_at_once=s.fetch_at_once,
+                        site=s.site,
+                        inputs={k: f.model_dump(exclude_none=True) for k, f in s.inputs.items()},
+                        egress_from=s.egress_from,
+                        get_takes_tag=(getter := m.tool(s.get)) is not None and "tag" in getter.input,
+                        needs_connection=m.connection.kinds != ["none"],
                         schedule=s.schedule.model_dump(),
                         connection_id=b.get("connection_id"),
                         sign_in=(conn or {}).get("sign_in"),

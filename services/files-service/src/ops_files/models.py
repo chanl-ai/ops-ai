@@ -19,6 +19,9 @@ FilePurpose = Literal[
     "document_type_sample",
     # An email's text, stored by the Email received trigger so a workflow reads it like an attachment.
     "email_body",
+    # One version of an item a knowledge source fetched (a web page, a connector's page or record), stored before it
+    # is read so a rebuild never fetches it again and a citation opens the exact copy used.
+    "knowledge_snapshot",
     "test_import",
     "evidence_bundle",
     "export",
@@ -208,6 +211,9 @@ class RetentionClass(Model):
     purposes: list[FilePurpose] = Field(default_factory=list[FilePurpose])
     worm: bool = False
     keep_until_end: bool = False
+    # The days count from when the last record using the file lets it go, not from the upload: a knowledge snapshot is
+    # kept while its source holds that version, then for `days` more so a recent answer can still be traced.
+    after_release: bool = False
 
 
 class PurposeLimit(Model):

@@ -25,16 +25,16 @@ import { count, relativeTime } from '@/lib/format';
 
 import { KbDocumentsTab } from '../_parts/kb-documents-tab';
 import { KbPlaygroundTab } from '../_parts/kb-playground-tab';
+import { KbRetrievalTab } from '../_parts/kb-retrieval-tab';
 import { KbSourcesTab } from '../_parts/kb-sources-tab';
 import { KnowledgeChangesQueue } from '@/components/knowledge/knowledge-changes-queue';
 
-// No Retrieval tab: kb-service answers with the base's keyword search and reads no saved retrieval settings yet.
-const TABS = ['overview', 'sources', 'documents', 'changes', 'playground'] as const;
+const TABS = ['overview', 'sources', 'documents', 'changes', 'retrieval', 'playground'] as const;
 type Tab = (typeof TABS)[number];
 // Documents are added and managed under Sources. The documents view stays a route so a citation or a failure
 // count can open a document, but it is not offered as a tab.
 const SHOWN = TABS.filter((t) => t !== 'documents');
-const LABEL: Record<Tab, string> = { overview: 'Overview', sources: 'Sources', documents: 'Documents', changes: 'Changes', playground: 'Playground' };
+const LABEL: Record<Tab, string> = { overview: 'Overview', sources: 'Sources', documents: 'Documents', changes: 'Changes', retrieval: 'Retrieval', playground: 'Playground' };
 
 export default function KnowledgeBasePage() {
   const { id } = useParams<{ id: string }>();
@@ -138,6 +138,7 @@ export default function KnowledgeBasePage() {
             />
           )}
           {tab === 'sources' && <KbSourcesTab kb={kb} />}
+          {tab === 'retrieval' && <KbRetrievalTab kb={kb} />}
           </BuilderFieldset>
           {tab === 'documents' && <KbDocumentsTab kb={kb} />}
           {tab === 'playground' && <KbPlaygroundTab kb={kb} />}

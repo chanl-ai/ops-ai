@@ -4980,6 +4980,29 @@
         "title": "Envelope[list[PluginTemplate]]",
         "type": "object"
       },
+      "Envelope_list_SourceHost__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SourceHost"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[SourceHost]]",
+        "type": "object"
+      },
       "Envelope_list_SystemCard__": {
         "additionalProperties": false,
         "properties": {
@@ -5665,6 +5688,17 @@
       "KnowledgeSourceView": {
         "additionalProperties": false,
         "properties": {
+          "changesTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changestool"
+          },
           "connectionId": {
             "anyOf": [
               {
@@ -5698,22 +5732,80 @@
             ],
             "title": "Deletedtool"
           },
+          "egressFrom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Egressfrom"
+          },
+          "fetchAtOnce": {
+            "default": 4,
+            "title": "Fetchatonce",
+            "type": "integer"
+          },
+          "getTakesTag": {
+            "default": false,
+            "title": "Gettakestag",
+            "type": "boolean"
+          },
           "getTool": {
             "title": "Gettool",
             "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
           },
           "listTool": {
             "title": "Listtool",
             "type": "string"
           },
+          "listsWhole": {
+            "default": false,
+            "title": "Listswhole",
+            "type": "boolean"
+          },
+          "needsConnection": {
+            "default": true,
+            "title": "Needsconnection",
+            "type": "boolean"
+          },
           "plugin": {
             "title": "Plugin",
             "type": "string"
+          },
+          "previewTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previewtool"
           },
           "schedule": {
             "additionalProperties": true,
             "title": "Schedule",
             "type": "object"
+          },
+          "scopesTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopestool"
           },
           "signIn": {
             "anyOf": [
@@ -5725,6 +5817,11 @@
               }
             ],
             "title": "Signin"
+          },
+          "site": {
+            "default": false,
+            "title": "Site",
+            "type": "boolean"
           },
           "source": {
             "title": "Source",
@@ -10197,6 +10294,80 @@
           "reason"
         ],
         "title": "Skipped",
+        "type": "object"
+      },
+      "SourceHost": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "runKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runkey"
+          },
+          "state": {
+            "enum": [
+              "allowed",
+              "waiting",
+              "refused"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "state"
+        ],
+        "title": "SourceHost",
+        "type": "object"
+      },
+      "SourceHostsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "plugin": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Plugin",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": true,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "plugin",
+          "source"
+        ],
+        "title": "SourceHostsIn",
         "type": "object"
       },
       "SubjectBinding": {
@@ -21707,6 +21878,215 @@
           }
         },
         "summary": "Knowledge Sources",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/knowledge-sources/hosts": {
+      "post": {
+        "description": "The hosts a source's values would have its sync reach, each decided as any new outside address is: a\nperson's request (adding the source) lists it where the account lets them, asks the Security team, or is\nrefused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts\nare never exempt from the account's list.",
+        "operationId": "apps_knowledge_source_hosts",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceHostsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_SourceHost__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Knowledge Source Hosts",
         "tags": [
           "apps"
         ],

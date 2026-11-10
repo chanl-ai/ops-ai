@@ -19,7 +19,7 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 | `request_timing` | The request id that follows a call across services; with `OPS_REQUEST_TIMING` a JSON line per request and `Server-Timing` | installed by `install_error_handlers` |
 | `flags` | Feature flags: off unless `OPS_FLAGS` names them; read through `Settings.feature_flags` | services |
 | `credentials` | `credential_store(settings)`: picks the `ops_policy` credential store from settings | services that keep secrets |
-| `model_calls` | `StructuredCalls`: one structured model call through models-service for a service that is not an agent | documents-service |
+| `model_calls` | `ModelCalls`: one structured model call through models-service for a service that is not an agent | documents-service |
 | `background` | The `/health/background` answer shape | services |
 | `contract` | `response_checker(app)`: an httpx hook that checks every test response against the app's own OpenAPI document | service tests (`testing` extra) |
 | `openapi` | `report(...)`: the OpenAPI gate each service's `scripts/check_openapi.py` runs | service scripts (`testing` extra) |

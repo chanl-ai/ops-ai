@@ -1184,7 +1184,7 @@ class ModuleService:
         if not ops_in:
             raise ValidationFailed("Choose at least one operation to expose.")
         await self._names_free(who, ops_in)
-        await self._held_unless_listed(who, urlsplit(endpoint).hostname, conn["name"] if conn else i["display_name"])
+        await self.hold_unless_listed(who, urlsplit(endpoint).hostname, conn["name"] if conn else i["display_name"])
         if conn is None and kind != "code":
             conn = await self._open_connection(who, i["display_name"], endpoint)
         elif conn is not None and endpoint:
@@ -1245,7 +1245,11 @@ class ModuleService:
         sign_in_fits(sign_in_of(sign_in), conn)
         return conn
 
-    async def _held_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
+    async def host_passes(self, tenant_id: str, host: str) -> bool:
+        """Whether `host` passes the account's egress list now (listed, or any public host under any_public)."""
+        return self.egress is not None and await self.egress.host_passes(tenant_id, host)
+
+    async def hold_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
         """An app's address on a host the tenant has not listed, decided by the account's egressNewHosts policy before
         anything is saved. Under `any_public` the host passes as it is. A caller who may manage the egress list, or
         any builder under `builders`, lists it in their own name, audited. Under `block` it is refused. Otherwise it
@@ -1334,7 +1338,7 @@ class ModuleService:
             # A custom app's tools are paths on its connection's base address: it is the module's only one.
             base = connection_base(conn)
             host = urlsplit(base).hostname
-            await self._held_unless_listed(who, host, conn["name"])
+            await self.hold_unless_listed(who, host, conn["name"])
             m.update(
                 connection_id=conn["id"],
                 auth=module_auth(conn),
@@ -1409,7 +1413,7 @@ class ModuleService:
         m = await self._changeable(who, module_id)
         conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m.get("connection_id") else None
         op, origin = self._http_operation(h, connection_base(conn) if conn else "")
-        await self._held_unless_listed(who, urlsplit(origin).hostname, conn["name"] if conn else m["display_name"])
+        await self.hold_unless_listed(who, urlsplit(origin).hostname, conn["name"] if conn else m["display_name"])
         if conn is None:
             # A blank module's first tool with an address makes the connection that address lives on, so a
             # code module never gets an empty app.

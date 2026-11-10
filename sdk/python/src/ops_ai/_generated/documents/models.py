@@ -418,10 +418,12 @@ class Block(TypedDict, closed=True):
     box: NotRequired[list[float] | None]
     caption: NotRequired[str | None]
     cells: NotRequired[list[Cell]]
+    furniture: NotRequired[bool]
     id: str
     kind: Literal["title", "heading", "paragraph", "table"]
     level: NotRequired[int | None]
     lines: NotRequired[list[Line]]
+    main: NotRequired[bool]
     order: NotRequired[int]
     readBy: NotRequired[Literal["text", "ocr"]]
     sheet: NotRequired[str | None]

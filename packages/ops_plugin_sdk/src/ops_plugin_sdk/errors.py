@@ -26,3 +26,15 @@ class DeadlineExceeded(PluginError):
 
 class BadInput(PluginError):
     code = "INVALID_INPUT"
+
+
+class NotFound(PluginError):
+    """The item is gone at its source (a page answering 404 or 410)."""
+
+    code = "NOT_FOUND"
+
+
+class TooLarge(PluginError):
+    """An answer larger than the service reads for one request (its byte cap): refused while it was read."""
+
+    code = "RESPONSE_TOO_LARGE"

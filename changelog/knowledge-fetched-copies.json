@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Answers from connected apps open the exact copy used",
+  "description": "Articles a knowledge source brings in from a connected app are kept as files, so rebuilding needs no new fetch and a citation opens the version the answer came from.",
+  "tag": "improved"
+}

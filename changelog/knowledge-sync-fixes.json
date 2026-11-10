@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Website and app sources sync on a real stack",
+  "description": "A source read through an app no longer fails every call on the run's environment, and a setting saved while a rebuild runs is rebuilt as soon as it ends.",
+  "tag": "fix"
+}

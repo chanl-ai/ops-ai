@@ -705,6 +705,7 @@ def compile_definition(
                     transcript=[],
                     user_turn=text,
                     kb_ids=pinned.default_kb_ids,
+                    all_team_knowledge=pinned.all_team_knowledge,
                 )
                 result = await kernel_turn(nid, req, deps.ports, deps.meter, deps.model_alias)
                 pending = interrupt_to_state(result.interrupt) if result.interrupt else None
@@ -763,6 +764,8 @@ def compile_definition(
                 run_id=new_id("run"),
                 settings=deps.catalog.settings_for(pinned, deps.model_alias),
                 tools=await agent_grants(deps, pinned),
+                kb_ids=pinned.default_kb_ids,
+                all_team_knowledge=pinned.all_team_knowledge,
                 resume=Resume(
                     interrupt=interrupt_from_state(state.get("pending") or {}),
                     decision="approved" if approved else "rejected",

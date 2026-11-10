@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
@@ -26,10 +26,12 @@ import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson
-from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginError, RateLimited, Response
+from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginError, RateLimited, Response, TooLarge
 from ops_plugin_sdk import EgressDenied as PluginEgressDenied
 from ops_plugin_sdk import paging as paged
 from ops_plugin_sdk.formats import InputRefused
+from ops_plugin_sdk.knowledge import source_hosts as knowledge_source_hosts
+from ops_plugin_sdk.knowledge import source_of
 from ops_plugin_sdk.manifest import Tool
 
 from ..auth import AuthFailed, Prepared
@@ -44,6 +46,9 @@ if TYPE_CHECKING:
 
 OURS = "ours"
 DEADLINE_S = 30.0
+# The most one plugin request's answer may hold: read as it streams in and refused past this, so a huge or endless
+# answer never fills the gateway's memory. 25 MB holds any page, document or listing a source fetches.
+MAX_RESPONSE_BYTES = 25 * 1024 * 1024
 
 
 def _failure(code: str, message: str, status: int | None = None, side: str | None = None) -> ToolOutcome:
@@ -53,6 +58,20 @@ def _failure(code: str, message: str, status: int | None = None, side: str | Non
     if side is not None:
         error["side"] = side
     return ToolOutcome(False, {"error": error})
+
+
+async def capped_body(r: httpx.Response, cap: int) -> bytes:
+    """The answer's body, read as it streams in; TooLarge as soon as it passes `cap` bytes, whatever its
+    Content-Length said."""
+    declared = r.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > cap:
+        raise TooLarge(f"{r.url.host} answered {int(declared):,} bytes; at most {cap:,} are read.")
+    got = bytearray()
+    async for chunk in r.aiter_bytes():
+        got += chunk
+        if len(got) > cap:
+            raise TooLarge(f"{r.url.host} answered more than {cap:,} bytes; at most {cap:,} are read.")
+    return bytes(got)
 
 
 class PluginExecutor:
@@ -74,12 +93,21 @@ class PluginExecutor:
         environment: str,
         acting_for: ActingForPerson | None,
         trial: Trial | None = None,
+        source_hosts: bool = False,
     ) -> ToolOutcome:
-        """`trial` is a tool page's Real run: a data tool's request as sent is kept on it for the page to show."""
+        """`trial` is a tool page's Real run: a data tool's request as sent is kept on it for the page to show. With
+        `source_hosts` (a knowledge source's sync), a source tool's call may also ask for the hosts of the addresses its
+        `source` input names under the source's `egress_from`, each still subject to the account's egress list and
+        new-hosts policy."""
         plugin = self.host.by_module(module)
         if plugin is None:
             return _failure("PLUGIN_DISABLED", f"{module['display_name']} is not installed on this service.")
         name = str(op["name"]).removeprefix(f"{plugin.manifest.short}_")
+        source = source_of(plugin.manifest, name) if source_hosts else None
+        values = args.get("source")
+        sites: list[str] = []
+        if source is not None and isinstance(values, dict):
+            sites = knowledge_source_hosts(source, cast(dict[str, Any], values))
         # The team's version of the tool, so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
@@ -95,7 +123,7 @@ class PluginExecutor:
         # A Python tool sees what the system answers, and a system may repeat the request's sign-in back; nothing it
         # returns or raises may carry the connection's credential, as the http executor's answers never do.
         used = scrubbed_values({f"connection:{n}": v for n, v in enumerate(prepared.values if prepared else [])})
-        outcome = await self._python(plugin, tool, module=module, op=op, args=args, prepared=prepared)
+        outcome = await self._python(plugin, tool, module=module, op=op, args=args, prepared=prepared, sites=sites)
         return replace(outcome, output=scrub(outcome.output, used))
 
     async def _python(
@@ -107,27 +135,34 @@ class PluginExecutor:
         op: dict[str, Any],
         args: dict[str, Any],
         prepared: Prepared | None,
+        sites: Sequence[str] = (),
     ) -> ToolOutcome:
-        """One Python tool's call through the SDK's context, its requests sent signed in as `prepared`."""
+        """One Python tool's call through the SDK's context, its requests sent signed in as `prepared`. `sites` (a
+        source sync's own addresses) the tool may ask for beside the plugin's hosts, but unlike those they are not
+        exempt from the account's list: each passes only once listed, or under the account's any_public policy."""
         name = tool.name
         allowed = list(module.get("egress_hosts") or [])
+        reachable = {*allowed, *sites}
         plugin_headers = {h["key"]: h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])}
         loop = asyncio.get_running_loop()
         policy = self.http.policy
         client = self.http.client
         tenant = str(module["tenant_id"])
 
-        async def request(method: str, url: str, params: Mapping[str, Any] | None, body: Any) -> Response:
+        async def request(
+            method: str, url: str, params: Mapping[str, Any] | None, body: Any, asked: Mapping[str, str] | None
+        ) -> Response:
             if policy is None:
                 raise PluginEgressDenied("This gateway has no egress policy, so it calls no external system.")
             try:
                 await policy.check_url(tenant, url, allowed)
             except EgressDenied as e:
                 raise PluginEgressDenied(str(e)) from e
-            # The plugin's headers first, then the connection's, which win over a name they share.
-            headers = {**plugin_headers, **(dict(prepared.headers) if prepared else {})}
+            # The request's own (conditional and accept headers only, the SDK's check), then the plugin's, then the
+            # connection's, which win over a name they share.
+            headers = {**dict(asked or {}), **plugin_headers, **(dict(prepared.headers) if prepared else {})}
             query = {**(dict(params or {})), **(dict(prepared.params) if prepared else {})}
-            r = await client.request(
+            asked_for = client.build_request(
                 method,
                 url,
                 params=query or None,
@@ -136,18 +171,31 @@ class PluginExecutor:
                 timeout=DEADLINE_S,
                 extensions=for_tenant(tenant, prepared.certificate if prepared else None, allowed),
             )
-            if r.status_code == 401:
-                raise NeedsReconnect(f"{urlsplit(url).hostname} refused the connection's sign-in.")
-            if r.status_code == 429:
-                raise RateLimited(f"{urlsplit(url).hostname} answered 429: its rate limit was reached.")
-            return Response(r.status_code, r.text, dict(r.headers))
+            r = await client.send(asked_for, stream=True)
+            try:
+                if r.status_code == 401:
+                    raise NeedsReconnect(f"{urlsplit(url).hostname} refused the connection's sign-in.")
+                if r.status_code == 429:
+                    raise RateLimited(f"{urlsplit(url).hostname} answered 429: its rate limit was reached.")
+                content = await capped_body(r, MAX_RESPONSE_BYTES)
+            finally:
+                await r.aclose()
+            text = content.decode(r.encoding or "utf-8", errors="replace")
+            return Response(r.status_code, text, dict(r.headers), content)
 
-        def send(method: str, url: str, params: Mapping[str, Any] | None, body: Any) -> Response:
+        def send(
+            method: str,
+            url: str,
+            params: Mapping[str, Any] | None,
+            body: Any,
+            asked: Mapping[str, str] | None = None,
+        ) -> Response:
             host = urlsplit(url).hostname
             # Checked here, before the request is built: the module's hosts are the plugin's, from the team's settings.
-            if host not in allowed:
+            if host not in reachable:
                 raise PluginEgressDenied(f"{host} is not one of {plugin.manifest.title}'s hosts.")
-            return asyncio.run_coroutine_threadsafe(request(method, url, params, body), loop).result(DEADLINE_S)
+            pending = request(method, url, params, body, asked)
+            return asyncio.run_coroutine_threadsafe(pending, loop).result(DEADLINE_S)
 
         given = dict(args)
         seal = self._seal(module, op["name"]) if tool.knowledge == "list_items" else None

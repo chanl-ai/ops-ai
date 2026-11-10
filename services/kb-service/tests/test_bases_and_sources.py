@@ -28,7 +28,7 @@ async def test_a_knowledge_base_needs_an_owner(client: httpx.AsyncClient) -> Non
     r = await client.post("/v1/knowledge-bases", json={"name": "Lending policies"})
     assert r.status_code == 400 and r.json()["error"]["code"] == "collection_without_owner", r.text
     kb = data(await client.post("/v1/knowledge-bases", json=POLICIES), 201)
-    assert (kb["owner"], kb["health"], kb["retrieval"]["searchMode"]) == ("maya@harborpine.example", "never", "keyword")
+    assert (kb["owner"], kb["health"], kb["retrieval"]["searchMode"]) == ("maya@harborpine.example", "never", "hybrid")
     again = await client.post("/v1/knowledge-bases", json={**POLICIES, "name": "lending POLICIES"})
     assert again.status_code == 409, again.text
 

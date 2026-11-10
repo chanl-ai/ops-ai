@@ -9,7 +9,9 @@ team of the base, source or document they belong to.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+import hashlib
+from datetime import datetime
+from typing import Any, ClassVar, NamedTuple, cast
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import TSVECTOR
@@ -18,14 +20,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.errors import Conflict
+from ops_service_kit.ids import new_id
 from ops_store import Guarantee, isolation
+from ops_store.audit import record as record_audit
 from ops_store.database import open_database
-from ops_store.dialect import db_now
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.dialect import Vector, db_after, db_now
+from ops_store.outbox import add as add_event
+from ops_store.outbox import outbox_table
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, dialect_indexes, postgres_only
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-__all__ = ["ROLE", "SYSTEM_ROLE", "AsyncEngine", "KnowledgeStore", "engine_for", "metadata", "reachable"]
+__all__ = ["ROLE", "SYSTEM_ROLE", "AsyncEngine", "KnowledgeStore", "engine_for", "kb_outbox", "metadata", "reachable"]
 
 metadata = sa.MetaData()
 
@@ -93,6 +99,14 @@ kb_sources = sa.Table(
     sa.Column("config", sa.JSON),
     # Held by the sync running now, so the schedule never starts a second one on the same source.
     sa.Column("lease_until", sa.DateTime(timezone=True)),
+    # Who holds the lease (a token per sync or rebuild): only its holder renews or releases it.
+    sa.Column("lease_owner", sa.String(64)),
+    # Reading, cleaning, splitting, rules and metadata (source_settings.py); null: the kind's defaults.
+    sa.Column("settings", sa.JSON),
+    # Its health: when a sync last indexed or kept its items, since when its syncs have failed, and how many in a row.
+    sa.Column("last_good_sync_at", sa.DateTime(timezone=True)),
+    sa.Column("failing_since", sa.DateTime(timezone=True)),
+    sa.Column("failures_in_row", sa.Integer, nullable=False, server_default="0"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -166,6 +180,22 @@ kb_items = sa.Table(
     # How a file source's item was read: the reader version and its OCR settings (reading-1:auto:eng), so a change
     # to either asks for a new reading while a chunk-settings change splits the stored one again.
     sa.Column("read_with", sa.String(120)),
+    # The digest of the cleaning, splitting and metadata settings its pieces were built under (index_key).
+    sa.Column("indexed_with", sa.String(32)),
+    # The digest of its text after cleaning, and the newer item in a base it reads into that holds the same text:
+    # search leaves an item out while it names one.
+    sa.Column("content_digest", sa.String(80)),
+    sa.Column("duplicate_of", sa.String(64)),
+    # Where a fetched item sits at its source (a library folder, a space's page tree), and the fields the source gives
+    # it, which the source's metadata mapping reads (`field:<name>`).
+    sa.Column("folder", sa.String(400)),
+    sa.Column("fields", sa.JSON),
+    # The version tag its last fetch gave (ETag, md5, revision), sent back so the system answers `unchanged`.
+    sa.Column("tag", sa.String(200)),
+    # A short digest of each paragraph of its cleaned text, which a website source counts across its pages.
+    sa.Column("lines", sa.JSON),
+    # Syncs in a row the item answered gone (404 or 410) at its source; at two it is removed and tombstoned.
+    sa.Column("gone_count", sa.Integer, nullable=False, server_default="0"),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -173,6 +203,7 @@ kb_items = sa.Table(
         name="fk_kb_item_source",
     ),
     sa.UniqueConstraint("tenant_id", "source_id", "path", name="uq_kb_items_path"),
+    sa.Index("ix_kb_items_content", "tenant_id", "content_digest"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -186,6 +217,8 @@ kb_item_versions = sa.Table(
     sa.Column("file_id", sa.String(64), nullable=False),
     sa.Column("digest", sa.String(64), nullable=False),
     sa.Column("status", sa.String(16), nullable=False),  # current | superseded
+    # The user and group ids the source system lets see this version; stored, enforced once per-item access ships.
+    sa.Column("allowed", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(
@@ -208,23 +241,68 @@ kb_chunks = sa.Table(
     sa.Column("page", sa.Integer),
     sa.Column("tokens", sa.Integer, nullable=False),
     sa.Column("text", sa.Text, nullable=False),
-    # What full-text search matches: the document title and section path weigh above the body.
+    # Set when a newer version replaces the item: a withdrawn chunk is never returned, so no answer cites two versions.
+    sa.Column("withdrawn_at", sa.DateTime(timezone=True)),
+    # The values the source's metadata mapping gives the piece (department, owner, product, ...).
+    sa.Column("metadata", sa.JSON),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "item_id"], ["kb_items.tenant_id", "kb_items.id"], ondelete="CASCADE", name="fk_kb_chunk_item"
+    ),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
+)
+
+# What search matches, apart from what it cites: each piece's own text with its context header, its smaller children
+# under parent and child, and the questions written for it. A match on any unit returns its piece (`chunk_id`), once.
+kb_units = sa.Table(
+    "kb_units",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("chunk_id", sa.String(64), nullable=False),
+    sa.Column("item_id", sa.String(64), nullable=False),
+    sa.Column("kind", sa.String(16), nullable=False),  # self | child | question | faq
+    sa.Column("position", sa.Integer, nullable=False),
+    # The document title and section path, which weigh above the unit's own text.
+    sa.Column("heading", sa.String(800), nullable=False),
+    sa.Column("text", sa.Text, nullable=False),
     sa.Column(
         "tsv",
         TSVECTOR,
         sa.Computed(
-            "setweight(to_tsvector('english', coalesce(title, '') || ' ' || coalesce(section, '')), 'A')"
+            "setweight(to_tsvector('english', coalesce(heading, '')), 'A')"
             " || setweight(to_tsvector('english', text), 'B')",
             persisted=True,
         ),
     ),
-    # Set when a newer version replaces the item: a withdrawn chunk is never returned, so no answer cites two versions.
-    sa.Column("withdrawn_at", sa.DateTime(timezone=True)),
     sa.ForeignKeyConstraint(
-        ["tenant_id", "item_id"], ["kb_items.tenant_id", "kb_items.id"], ondelete="CASCADE", name="fk_kb_chunk_item"
+        ["tenant_id", "chunk_id"], ["kb_chunks.tenant_id", "kb_chunks.id"], ondelete="CASCADE", name="fk_kb_unit_chunk"
     ),
-    sa.Index("ix_kb_chunks_tsv", "tsv", postgresql_using="gin"),
-    info={**TENANT_SCOPED, **TEAM_OWNED},
+    sa.Index("ix_kb_units_chunk", "tenant_id", "chunk_id"),
+    # Its GIN index on tsv is the migration's (kb_0016): PostgreSQL's form only, as search runs there.
+    info={**TENANT_SCOPED, **TEAM_OWNED, **dialect_indexes("ix_kb_units_tsv")},
+)
+
+
+# Each index unit's embedding, with the model and width it was made with (kb_0021, only where pgvector is installed).
+kb_unit_vectors = sa.Table(
+    "kb_unit_vectors",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("unit_id", sa.String(64), primary_key=True),
+    sa.Column("chunk_id", sa.String(64), nullable=False),
+    sa.Column("item_id", sa.String(64), nullable=False),
+    sa.Column("model", sa.String(120), nullable=False),
+    sa.Column("width", sa.Integer, nullable=False),
+    sa.Column("embedding", Vector(), nullable=False),
+    sa.Column("embedded_at", sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "unit_id"], ["kb_units.tenant_id", "kb_units.id"], ondelete="CASCADE", name="fk_kb_vector_unit"
+    ),
+    sa.Index("ix_kb_unit_vectors_chunk", "tenant_id", "chunk_id"),
+    # The HNSW index for the environment's width is made by kb_0021 through ops_store.dialect.
+    info={**TENANT_SCOPED, **TEAM_OWNED, **postgres_only(), **dialect_indexes("ix_kb_unit_vectors_hnsw_")},
 )
 
 
@@ -244,8 +322,17 @@ kb_changes = sa.Table(
     sa.Column("after", sa.Text, nullable=False),
     sa.Column("changed_by", sa.String(200), nullable=False),
     sa.Column("changed_at", sa.DateTime(timezone=True), nullable=False),
+    # sync: a version a sync applied; faq: a drafted question-and-answer pair waiting for, or past, review.
+    sa.Column("origin", sa.String(16), nullable=False, server_default="sync"),
+    # applied (a sync's); pending, approved, rejected, superseded or source_changed (a draft's).
+    sa.Column("status", sa.String(16), nullable=False, server_default="applied"),
+    # A draft's question, answer and quote, its section path and digest, and where the quote sits in its piece.
+    sa.Column("detail", sa.JSON),
+    sa.Column("decided_by", sa.String(200)),
+    sa.Column("decided_at", sa.DateTime(timezone=True)),
     # No foreign key to the item: the record of who changed what outlives the document's removal.
     sa.Index("ix_kb_changes_at", "tenant_id", "changed_at"),
+    sa.Index("ix_kb_changes_item_origin", "tenant_id", "item_id", "origin"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -265,6 +352,10 @@ kb_runs = sa.Table(
     sa.Column("errors", sa.JSON, nullable=False),
     sa.Column("log", sa.JSON, nullable=False),
     sa.Column("started_by", sa.String(200), nullable=False),
+    # A run in the background is written when it starts (status running) and again when it ends.
+    sa.Column("finished_at", sa.DateTime(timezone=True)),
+    # Who asked a running rebuild to stop; it stops between two items.
+    sa.Column("cancelled_by", sa.String(200)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -274,6 +365,96 @@ kb_runs = sa.Table(
     sa.Index("ix_kb_runs_source", "tenant_id", "source_id", "started_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
+
+
+# The audit entries of settings changes, written in the transaction of the change and relayed to platform-service's
+# one audit log (ops_store.audit); read across tenants by the relay as ops_kb_system.
+kb_outbox = outbox_table(metadata, "kb_outbox", info=TENANT_SCOPED)
+
+
+def _with_team(chunks: list[dict[str, Any]], team: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Pieces and their index units (each piece's `units`), both in the team they are written in."""
+    rows: list[dict[str, Any]] = []
+    units: list[dict[str, Any]] = []
+    for ch in chunks:
+        row = {k: v for k, v in ch.items() if k != "units"}
+        rows.append({**row, "team_id": team})
+        units += [{**u, "team_id": team} for u in cast(list[dict[str, Any]], ch.get("units") or [])]
+    return rows, units
+
+
+# What a kept piece takes from the new split: where it sits and the version it now belongs to.
+MOVED = ("version", "position", "title", "section", "page", "metadata", "tokens")
+
+
+def _piece_key(text: str, units: list[tuple[str, str]]) -> str:
+    """What decides a piece is unchanged: its text and what it is searched as (an approved FAQ unit aside, which
+    belongs to the review, not the split)."""
+    body = "\x1f".join([" ".join(text.split()), *sorted(f"{k}\x1e{t}" for k, t in units if k != "faq")])
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+async def _keep_unchanged(
+    c: AsyncConnection, tenant: str, item_id: str, chunks: list[dict[str, Any]], units: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Withdraws the item's live pieces a new split does not keep, and keeps those it does: a new piece with the same
+    text and units as a live one takes over that row (its id, units and vectors), with its new place and version, so a
+    changed page re-embeds only the pieces that changed. Returns the pieces and units still to insert."""
+    ch, u = kb_chunks, kb_units
+    live = (
+        await c.execute(
+            sa.select(ch.c.id, ch.c.text).where(
+                ch.c.tenant_id == tenant, ch.c.item_id == item_id, ch.c.withdrawn_at.is_(None), team_visible(ch)
+            )
+        )
+    ).all()
+    held: dict[str, list[tuple[str, str]]] = {}
+    for chunk_id, kind, text in (
+        await c.execute(
+            sa.select(u.c.chunk_id, u.c.kind, u.c.text).where(
+                u.c.tenant_id == tenant, u.c.chunk_id.in_([r[0] for r in live]), team_visible(u)
+            )
+        )
+    ).all():
+        held.setdefault(str(chunk_id), []).append((str(kind), str(text)))
+    free: dict[str, list[str]] = {}
+    for chunk_id, text in live:
+        free.setdefault(_piece_key(str(text), held.get(str(chunk_id), [])), []).append(str(chunk_id))
+    units_of: dict[str, list[dict[str, Any]]] = {}
+    for unit in units:
+        units_of.setdefault(str(unit["chunk_id"]), []).append(unit)
+    insert: list[dict[str, Any]] = []
+    kept: set[str] = set()
+    for row in chunks:
+        mine = units_of.get(str(row["id"]), [])
+        same = free.get(_piece_key(str(row["text"]), [(str(x["kind"]), str(x["text"])) for x in mine]))
+        if same:
+            old = same.pop()
+            kept.add(old)
+            moved = {
+                k: row[k] for k in ("version", "position", "title", "section", "page", "metadata", "tokens") if k in row
+            }
+            await c.execute(sa.update(ch).where(ch.c.tenant_id == tenant, ch.c.id == old).values(**moved))
+        else:
+            insert.append(row)
+    await c.execute(
+        sa.update(ch)
+        .where(ch.c.tenant_id == tenant, ch.c.item_id == item_id, ch.c.withdrawn_at.is_(None), ch.c.id.notin_(kept))
+        .values(withdrawn_at=db_now())
+    )
+    ids = {str(r["id"]) for r in insert}
+    return insert, [x for x in units if str(x["chunk_id"]) in ids]
+
+
+# A draft's statuses that still wait for its knowledge owner; every other status is resolved.
+DECIDABLE = ("pending", "source_changed")
+
+
+class ChangePage(NamedTuple):
+    rows: list[dict[str, Any]]
+    total: int
+    views: dict[str, int]
+    origins: dict[str, int]
 
 
 class KnowledgeStore:
@@ -395,11 +576,17 @@ class KnowledgeStore:
             # An id is unique in the tenant; one another team holds is not seen before the insert.
             raise Conflict(f"A knowledge base with id {row['id']} already exists.") from e
 
-    async def update_base(self, tenant: str, kb_id: str, values: dict[str, Any]) -> None:
+    async def update_base(
+        self, tenant: str, kb_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
+    ) -> None:
+        """`audit` is the change's entry for the account's audit log, written in the same transaction."""
         async with self._tx() as c:
             await c.execute(
                 sa.update(kb_bases).where(kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id).values(**values)
             )
+            if audit is not None:
+                team = await self._team_of(c, kb_bases, tenant, kb_id)
+                await record_audit(c, kb_outbox, tenant_id=tenant, team_id=team, **audit)
 
     async def attach(self, tenant: str, kb_id: str, source_ids: list[str]) -> None:
         async with self._tx() as c:
@@ -484,7 +671,15 @@ class KnowledgeStore:
     async def chunks(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
         """The item's live chunks, in reading order."""
         q = (
-            sa.select(kb_chunks.c.position, kb_chunks.c.section, kb_chunks.c.page, kb_chunks.c.tokens, kb_chunks.c.text)
+            sa.select(
+                kb_chunks.c.id,
+                kb_chunks.c.position,
+                kb_chunks.c.section,
+                kb_chunks.c.page,
+                kb_chunks.c.tokens,
+                kb_chunks.c.text,
+                kb_chunks.c.metadata,
+            )
             .where(
                 kb_chunks.c.tenant_id == tenant,
                 kb_chunks.c.item_id == item_id,
@@ -492,6 +687,25 @@ class KnowledgeStore:
                 team_visible(kb_chunks),
             )
             .order_by(kb_chunks.c.position)
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def units(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+        """The index units of the item's live pieces: what each is searched as."""
+        q = (
+            sa.select(kb_units.c.chunk_id, kb_units.c.kind, kb_units.c.position, kb_units.c.text)
+            .join(
+                kb_chunks, sa.and_(kb_chunks.c.tenant_id == kb_units.c.tenant_id, kb_chunks.c.id == kb_units.c.chunk_id)
+            )
+            .where(
+                kb_units.c.tenant_id == tenant,
+                kb_units.c.item_id == item_id,
+                kb_chunks.c.withdrawn_at.is_(None),
+                team_visible(kb_units),
+                team_visible(kb_chunks),
+            )
+            .order_by(kb_chunks.c.position, kb_units.c.position)
         )
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -514,7 +728,7 @@ class KnowledgeStore:
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
             item = {**item, "team_id": team}
             version = {**version, "team_id": team}
-            chunks = [{**ch, "team_id": team} for ch in chunks]
+            chunks, units = _with_team(chunks, team)
             change = {**change, "team_id": team} if change is not None else None
             replaced: int | None = None
             if new:
@@ -530,25 +744,44 @@ class KnowledgeStore:
                     .where(kb_item_versions.c.tenant_id == tenant, kb_item_versions.c.item_id == item["id"])
                     .values(status="superseded")
                 )
-                await c.execute(
-                    sa.update(kb_chunks)
-                    .where(
-                        kb_chunks.c.tenant_id == tenant,
-                        kb_chunks.c.item_id == item["id"],
-                        kb_chunks.c.withdrawn_at.is_(None),
-                    )
-                    .values(withdrawn_at=sa.func.now())
-                )
+                chunks, units = await _keep_unchanged(c, tenant, str(item["id"]), chunks, units)
             await c.execute(sa.insert(kb_item_versions).values(**version))
             if chunks:
                 await c.execute(sa.insert(kb_chunks), chunks)
+            if units:
+                await c.execute(sa.insert(kb_units), units)
             if change is not None:
                 await c.execute(sa.insert(kb_changes).values(**change))
             return replaced
 
-    async def mark_synced(self, tenant: str, source_id: str, status: str, *, activate: bool = False) -> None:
-        """Records the run's outcome; `activate` moves a draft source to active in the same statement."""
-        values: dict[str, Any] = {"last_sync_at": sa.func.now(), "last_run_status": status}
+    async def purge_withdrawn(self, tenant: str, *, before: datetime) -> int:
+        """Deletes pieces withdrawn before `before` (their units and vectors go with them); the number deleted. A
+        version's text stays in its change row and its snapshot for as long as those are kept."""
+        ch = kb_chunks
+        async with self._tx() as c:
+            done = await c.execute(
+                sa.delete(ch).where(
+                    ch.c.tenant_id == tenant,
+                    ch.c.withdrawn_at.is_not(None),
+                    ch.c.withdrawn_at < before,
+                    team_visible(ch),
+                )
+            )
+            return int(done.rowcount or 0)  # pyright: ignore[reportAttributeAccessIssue]
+
+    async def mark_synced(self, tenant: str, source_id: str, status: str, *, activate: bool = False) -> int:
+        """Records the run's outcome and the source's health: a success or partial run is a good sync and ends a
+        failing streak; a failed one starts or lengthens it. `activate` moves a draft source to active in the same
+        statement. Returns how many runs in a row have now failed."""
+        good = status in ("success", "partial")
+        src = kb_sources
+        values: dict[str, Any] = {
+            "last_sync_at": db_now(),
+            "last_run_status": status,
+            "last_good_sync_at": db_now() if good else src.c.last_good_sync_at,
+            "failing_since": None if good else sa.func.coalesce(src.c.failing_since, db_now()),
+            "failures_in_row": 0 if good else src.c.failures_in_row + 1,
+        }
         if activate:
             values["status"] = sa.case((kb_sources.c.status == "draft", "active"), else_=kb_sources.c.status)
         async with self._tx() as c:
@@ -557,6 +790,16 @@ class KnowledgeStore:
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
                 .values(**values)
             )
+            q = sa.select(src.c.failures_in_row).where(
+                src.c.tenant_id == tenant, src.c.id == source_id, team_visible(src)
+            )
+            return int((await c.execute(q)).scalar_one_or_none() or 0)
+
+    async def record_event(self, tenant: str, source_id: str, *, name: str, payload: dict[str, Any]) -> None:
+        """A service event about the source (it keeps failing), relayed to agents-service so a workflow can act."""
+        async with self._tx() as c:
+            team = await self._team_of(c, kb_sources, tenant, source_id)
+            await add_event(c, kb_outbox, tenant_id=tenant, team_id=team, name=name, key=new_id("evt"), payload=payload)
 
     async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> None:
         async with self._tx() as c:
@@ -633,19 +876,15 @@ class KnowledgeStore:
         transaction that inserts the new ones."""
         async with self._tx() as c:
             team = await self._team_of(c, kb_items, tenant, item_id)
-            chunks = [{**ch, "team_id": team} for ch in chunks]
+            chunks, units = _with_team(chunks, team)
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
-            await c.execute(
-                sa.update(kb_chunks)
-                .where(
-                    kb_chunks.c.tenant_id == tenant, kb_chunks.c.item_id == item_id, kb_chunks.c.withdrawn_at.is_(None)
-                )
-                .values(withdrawn_at=sa.func.now())
-            )
+            chunks, units = await _keep_unchanged(c, tenant, item_id, chunks, units)
             if chunks:
                 await c.execute(sa.insert(kb_chunks), chunks)
+            if units:
+                await c.execute(sa.insert(kb_units), units)
 
     async def add_item(self, tenant: str, item: dict[str, Any]) -> None:
         """An item with no version yet (waiting for its reading, or failed before one), in its source's team."""
@@ -669,13 +908,19 @@ class KnowledgeStore:
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
 
-    async def update_source(self, tenant: str, source_id: str, values: dict[str, Any]) -> None:
+    async def update_source(
+        self, tenant: str, source_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
+    ) -> None:
+        """`audit` is the change's entry for the account's audit log, written in the same transaction."""
         async with self._tx() as c:
             await c.execute(
                 sa.update(kb_sources)
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
                 .values(**values)
             )
+            if audit is not None:
+                team = await self._team_of(c, kb_sources, tenant, source_id)
+                await record_audit(c, kb_outbox, tenant_id=tenant, team_id=team, **audit)
 
     async def detach(self, tenant: str, kb_id: str, source_id: str) -> None:
         async with self._tx() as c:
@@ -692,27 +937,118 @@ class KnowledgeStore:
         if not item_ids:
             return 0
         async with self._tx() as c:
-            for table, column in ((kb_chunks, kb_chunks.c.item_id), (kb_item_versions, kb_item_versions.c.item_id)):
+            for table, column in (
+                (kb_units, kb_units.c.item_id),
+                (kb_chunks, kb_chunks.c.item_id),
+                (kb_item_versions, kb_item_versions.c.item_id),
+            ):
                 await c.execute(sa.delete(table).where(table.c.tenant_id == tenant, column.in_(item_ids)))
             q = sa.delete(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id.in_(item_ids))
             return (await c.execute(q)).rowcount
 
-    async def claim(self, tenant: str, source_id: str, *, until: Any) -> bool:
-        """Takes the source's sync lease until `until` when nobody holds it (or a holder's ran out): true when taken,
-        so two syncs of one source never run at once."""
+    async def claim(self, tenant: str, source_id: str, *, owner: str, seconds: float) -> bool:
+        """Takes the source's sync lease for `owner` for `seconds` by the database's clock, when nobody holds it (or a
+        holder's ran out): true when taken, so two syncs of one source never run at once."""
         s = kb_sources
         free = sa.or_(s.c.lease_until.is_(None), s.c.lease_until < db_now())
         async with self._tx() as c:
-            q = sa.update(s).where(s.c.tenant_id == tenant, s.c.id == source_id, free).values(lease_until=until)
+            q = (
+                sa.update(s)
+                .where(s.c.tenant_id == tenant, s.c.id == source_id, free, team_visible(s))
+                .values(lease_until=db_after(seconds), lease_owner=owner)
+            )
             return (await c.execute(q)).rowcount == 1
 
-    async def release(self, tenant: str, source_id: str) -> None:
-        await self.update_source(tenant, source_id, {"lease_until": None})
+    async def renew(self, tenant: str, source_id: str, *, owner: str, seconds: float) -> bool:
+        """Extends `owner`'s lease by `seconds` from now; false when it no longer holds it."""
+        s = kb_sources
+        async with self._tx() as c:
+            q = (
+                sa.update(s)
+                .where(s.c.tenant_id == tenant, s.c.id == source_id, s.c.lease_owner == owner, team_visible(s))
+                .values(lease_until=db_after(seconds))
+            )
+            return (await c.execute(q)).rowcount == 1
+
+    async def release(self, tenant: str, source_id: str, *, owner: str) -> None:
+        """Gives up `owner`'s lease; a lease another holder took is left alone."""
+        async with self._tx() as c:
+            await c.execute(_released(tenant, source_id, owner))
 
     async def add_run(self, row: dict[str, Any]) -> None:
         async with self._tx() as c:
             team = await self._team_of(c, kb_sources, str(row["tenant_id"]), str(row["source_id"]))
             await c.execute(sa.insert(kb_runs).values(**row, team_id=team))
+
+    async def same_content(self, tenant: str, item_id: str, digest: str) -> list[dict[str, Any]]:
+        """Indexed items other than `item_id` with the same cleaned content, in a source read by any knowledge base
+        that reads the item's source."""
+        i, other, link, mine = kb_items, kb_items.alias("other"), kb_base_sources, kb_base_sources.alias("mine")
+        bases = sa.select(mine.c.kb_id).where(mine.c.tenant_id == tenant, mine.c.source_id == other.c.source_id)
+        q = (
+            sa.select(i.c.id, i.c.title, i.c.source_id, i.c.processed_at)
+            .join(link, (link.c.tenant_id == i.c.tenant_id) & (link.c.source_id == i.c.source_id))
+            .join(other, (other.c.tenant_id == i.c.tenant_id) & (other.c.id == item_id))
+            .where(
+                i.c.tenant_id == tenant,
+                i.c.id != item_id,
+                i.c.content_digest == digest,
+                i.c.status == "indexed",
+                link.c.kb_id.in_(bases),
+                team_visible(i),
+            )
+            .distinct()
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def update_run(
+        self, tenant: str, run_id: str, values: dict[str, Any], *, release: tuple[str, str] | None = None
+    ) -> None:
+        """`release` (source id, lease owner) frees the source in the same transaction, so a run seen finished never
+        holds its source after."""
+        async with self._tx() as c:
+            await c.execute(
+                sa.update(kb_runs).where(kb_runs.c.tenant_id == tenant, kb_runs.c.id == run_id).values(**values)
+            )
+            if release is not None:
+                await c.execute(_released(tenant, *release))
+
+    async def cancel_run(self, tenant: str, run_id: str, *, by: str) -> bool:
+        """Asks a running run to stop; true when it was running and nobody had asked yet."""
+        r = kb_runs
+        async with self._tx() as c:
+            q = (
+                sa.update(r)
+                .where(r.c.tenant_id == tenant, r.c.id == run_id, r.c.status == "running", r.c.cancelled_by.is_(None))
+                .values(cancelled_by=by)
+            )
+            return (await c.execute(q)).rowcount == 1
+
+    async def running_sources(self, tenant: str) -> set[str]:
+        q = sa.select(kb_runs.c.source_id).where(
+            kb_runs.c.tenant_id == tenant, kb_runs.c.status == "running", team_visible(kb_runs)
+        )
+        async with self._tx() as c:
+            return {str(r[0]) for r in await c.execute(q.distinct())}
+
+    async def end_stale_runs(self, tenant: str, *, reason: str) -> int:
+        """Ends runs still marked running whose source's lease has lapsed: the process running them stopped, since a
+        running sync or rebuild renews its lease for as long as it runs, however long that is."""
+        r, s = kb_runs, kb_sources
+        held = sa.exists().where(
+            s.c.tenant_id == r.c.tenant_id,
+            s.c.id == r.c.source_id,
+            s.c.lease_until.is_not(None),
+            s.c.lease_until >= db_now(),
+        )
+        async with self._tx() as c:
+            q = (
+                sa.update(r)
+                .where(r.c.tenant_id == tenant, r.c.status == "running", ~held)
+                .values(status="failed", finished_at=db_now(), log=[reason])
+            )
+            return int((await c.execute(q)).rowcount or 0)
 
     async def runs(
         self, tenant: str, *, source_id: str | None = None, run_id: str | None = None
@@ -725,12 +1061,131 @@ class KnowledgeStore:
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_runs.c.started_at.desc()))).mappings()]
 
-    async def changes(self, tenant: str, *, item_ids: list[str] | None = None) -> list[dict[str, Any]]:
+    async def drafts(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+        """The item's FAQ drafts in every state, oldest first."""
+        c = kb_changes
+        q = (
+            sa.select(c)
+            .where(c.c.tenant_id == tenant, c.c.item_id == item_id, c.c.origin == "faq", team_visible(c))
+            .order_by(c.c.changed_at, c.c.id)
+        )
+        async with self._tx() as conn:
+            return [dict(r) for r in (await conn.execute(q)).mappings()]
+
+    async def add_drafts(self, tenant: str, rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+        async with self._tx() as conn:
+            team = await self._team_of(conn, kb_items, tenant, str(rows[0]["item_id"]))
+            await conn.execute(sa.insert(kb_changes), [{**r, "tenant_id": tenant, "team_id": team} for r in rows])
+
+    async def update_change(self, tenant: str, change_id: str, values: dict[str, Any]) -> None:
+        c = kb_changes
+        async with self._tx() as conn:
+            await conn.execute(
+                sa.update(c).where(c.c.tenant_id == tenant, c.c.id == change_id, team_visible(c)).values(**values)
+            )
+
+    async def replace_faq_units(self, tenant: str, item_id: str, units: list[dict[str, Any]]) -> None:
+        """The item's approved FAQ pairs as units of its live pieces, in place of the ones it had."""
+        u, ch = kb_units, kb_chunks
+        live = sa.select(ch.c.id).where(
+            ch.c.tenant_id == tenant, ch.c.item_id == item_id, ch.c.withdrawn_at.is_(None), team_visible(ch)
+        )
+        async with self._tx() as conn:
+            await conn.execute(
+                sa.delete(u).where(
+                    u.c.tenant_id == tenant,
+                    u.c.item_id == item_id,
+                    u.c.kind == "faq",
+                    u.c.chunk_id.in_(live),
+                    team_visible(u),
+                )
+            )
+            if units:
+                team = await self._team_of(conn, kb_items, tenant, item_id)
+                await conn.execute(sa.insert(u), [{**x, "tenant_id": tenant, "team_id": team} for x in units])
+
+    async def changes(self, tenant: str, *, ids: list[str] | None = None) -> list[dict[str, Any]]:
         q = sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant, team_visible(kb_changes))
-        if item_ids is not None:
-            q = q.where(kb_changes.c.item_id.in_(item_ids))
+        if ids is not None:
+            q = q.where(kb_changes.c.id.in_(ids))
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_changes.c.changed_at.desc()))).mappings()]
+
+    async def change_page(
+        self,
+        tenant: str,
+        *,
+        view: str,
+        owner: str,
+        kb_id: str | None,
+        search: str | None,
+        origins: list[str] | None,
+        page: int,
+        page_size: int,
+    ) -> ChangePage:
+        """One page of the Changes queue, filtered, counted and paged in the database: `view` open (waiting for a
+        decision), mine (waiting, on a source `owner` answers for), resolved or all; `kb_id` the changes of that base's
+        sources; `search` in the title or section; `origins` (sync, faq) after the origin facet is counted."""
+        c, s = kb_changes, kb_sources
+        waiting = c.c.status.in_(DECIDABLE)
+        mine = sa.and_(waiting, s.c.owner == owner)
+        views: dict[str, sa.ColumnElement[bool]] = {
+            "open": waiting,
+            "mine": mine,
+            "resolved": sa.not_(waiting),
+            "all": sa.true(),
+        }
+        joined = c.outerjoin(s, sa.and_(s.c.tenant_id == c.c.tenant_id, s.c.id == c.c.source_id))
+        scope: list[sa.ColumnElement[bool]] = [c.c.tenant_id == tenant, team_visible(c)]
+        if kb_id is not None:
+            linked = sa.select(kb_base_sources.c.source_id).where(
+                kb_base_sources.c.tenant_id == tenant, kb_base_sources.c.kb_id == kb_id, team_visible(kb_base_sources)
+            )
+            scope.append(c.c.source_id.in_(linked))
+        if search:
+            scope.append(sa.or_(contains(c.c.title, search), contains(c.c.section, search)))
+        shown = [*scope, views.get(view, sa.false())]
+        listed = [*shown, c.c.origin.in_(origins)] if origins else shown
+
+        def tally(when: sa.ColumnElement[bool]) -> sa.ColumnElement[Any]:
+            return sa.func.coalesce(sa.func.sum(sa.case((when, 1), else_=0)), 0)
+
+        async with self._tx() as conn:
+            mine_n, open_n, done_n = (
+                await conn.execute(
+                    sa.select(tally(mine), tally(waiting), tally(sa.not_(waiting))).select_from(joined).where(*scope)
+                )
+            ).one()
+            facet = {
+                str(o): int(n)
+                for o, n in await conn.execute(
+                    sa.select(c.c.origin, sa.func.count()).select_from(joined).where(*shown).group_by(c.c.origin)
+                )
+            }
+            total = int(await conn.scalar(sa.select(sa.func.count()).select_from(joined).where(*listed)) or 0)
+            size = max(1, page_size)
+            page = max(1, min(page, -(-total // size) or 1))
+            q = (
+                sa.select(c)
+                .select_from(joined)
+                .where(*listed)
+                .order_by(c.c.changed_at.desc(), c.c.id)
+                .offset((page - 1) * size)
+                .limit(size)
+            )
+            rows = [dict(r) for r in (await conn.execute(q)).mappings()]
+        return ChangePage(rows, total, {"mine": int(mine_n), "open": int(open_n), "resolved": int(done_n)}, facet)
+
+
+def _released(tenant: str, source_id: str, owner: str) -> sa.Update:
+    s = kb_sources
+    return (
+        sa.update(s)
+        .where(s.c.tenant_id == tenant, s.c.id == source_id, s.c.lease_owner == owner, team_visible(s))
+        .values(lease_until=None, lease_owner=None)
+    )
 
 
 def engine_for(url: str) -> AsyncEngine:

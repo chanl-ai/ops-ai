@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from .errors import DeadlineExceeded
+from .errors import BadInput, DeadlineExceeded
 
 
 @dataclass(frozen=True)
@@ -20,13 +20,20 @@ class Response:
     status_code: int
     text: str
     headers: Mapping[str, str] = field(default_factory=dict[str, str])
+    # The body as sent, for an answer that is not text (a PDF a page links to).
+    content: bytes = b""
 
     def json(self) -> Any:
         return json.loads(self.text)
 
 
-# (method, url, params, json body) -> Response, supplied by the service; it raises the SDK's errors.
-Send = Callable[[str, str, Mapping[str, Any] | None, Any], Response]
+# (method, url, params, json body, headers) -> Response, supplied by the service; it raises the SDK's errors. The
+# headers are the request's own, from ASKED_HEADERS only; the sign-in and the plugin's headers are the service's.
+Send = Callable[[str, str, Mapping[str, Any] | None, Any, Mapping[str, str] | None], Response]
+
+# The headers a function may set on one request: asking for a page only if it changed, and what kind of answer it takes.
+# Anything else (a sign-in, a cookie, a host) is the service's to send.
+ASKED_HEADERS = frozenset({"if-none-match", "if-modified-since", "accept", "accept-language"})
 
 
 class Http:
@@ -34,13 +41,25 @@ class Http:
         self._send = send
         self._deadline = deadline
 
-    def request(self, method: str, url: str, *, params: Mapping[str, Any] | None = None, json: Any = None) -> Response:
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> Response:
         if time.monotonic() > self._deadline:
             raise DeadlineExceeded("The call ran past its deadline.")
-        return self._send(method, url, params, json)
+        if headers and (refused := sorted(h for h in headers if h.lower() not in ASKED_HEADERS)):
+            raise BadInput(f"A tool sets only {', '.join(sorted(ASKED_HEADERS))}, not {', '.join(refused)}.")
+        return self._send(method, url, params, json, dict(headers) if headers else None)
 
-    def get(self, url: str, *, params: Mapping[str, Any] | None = None) -> Response:
-        return self.request("GET", url, params=params)
+    def get(
+        self, url: str, *, params: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None
+    ) -> Response:
+        return self.request("GET", url, params=params, headers=headers)
 
     def post(self, url: str, *, json: Any = None) -> Response:
         return self.request("POST", url, json=json)

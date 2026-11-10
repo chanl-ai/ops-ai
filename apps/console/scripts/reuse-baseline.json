@@ -24,7 +24,6 @@
     "src/components/evals/import-eval-cases-dialog.tsx",
     "src/components/knowledge/document-sheet.tsx",
     "src/components/knowledge/kb-overview.tsx",
-    "src/components/knowledge/query-result.tsx",
     "src/components/knowledge/retrieval-trace.tsx",
     "src/components/logs/audit-sheet.tsx",
     "src/components/reviews/document-read.tsx",
@@ -53,6 +52,7 @@
     "src/app/dev/chat-default-agent/page.tsx",
     "src/components/shared/chat-blocks.tsx"
   ],
+  "appLink": [],
   "dialogColumns": [
     "src/app/settings/account/security/page.tsx",
     "src/app/settings/workspace/storage/page.tsx",
@@ -61,7 +61,6 @@
     "src/components/deployments/deployment-sheet.tsx",
     "src/components/deployments/mcp/endpoint-panel.tsx",
     "src/components/document-types/tests-panel.tsx",
-    "src/components/knowledge/document-sheet.tsx",
     "src/components/skills/generate-skill-dialog.tsx"
   ]
 }

@@ -43,6 +43,29 @@ class PermissionVersionOut(Out):
     permission_version: int
 
 
+class AuditPayload(In):
+    action: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_.]*$")
+    target_kind: str = Field(min_length=1, max_length=40)
+    target_id: str = Field(min_length=1, max_length=64)
+    request_id: str | None = Field(default=None, max_length=64)
+    detail: dict[str, Any]
+
+
+class AuditEventIn(In):
+    """One audit entry another service recorded in its outbox (ops_store.audit), as its relay delivers it. The tenant
+    and team are the service token's."""
+
+    name: Literal["audit.recorded"]
+    key: str = Field(min_length=8, max_length=64, pattern=r"^aud_[A-Za-z0-9]+$")
+    actor: str = Field(min_length=1, max_length=320)
+    payload: AuditPayload
+
+
+class AuditEventOut(Out):
+    id: str
+    written: bool
+
+
 class ActingForIn(In):
     """The person a tool call acts for, by the email a run or chat turn records; the team is the service token's."""
 

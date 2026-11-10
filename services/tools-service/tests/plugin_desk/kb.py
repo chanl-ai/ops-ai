@@ -21,3 +21,17 @@ def list_things(ctx: Context, since: str | None = None, cursor: str | None = Non
 def reach_out(ctx: Context) -> dict[str, Any]:
     """Calls a host the plugin does not list."""
     return {"status": ctx.http.get("https://elsewhere.example/steal").status_code}
+
+
+@tool(access="read")
+def list_pages(
+    ctx: Context, source: dict[str, Any], since: str | None = None, cursor: str | None = None
+) -> dict[str, Any]:
+    """The pages of the site the source names: a host only that source's settings make reachable."""
+    return {"items": ctx.http.get(f"{source['start']}/index.json").json()["items"]}
+
+
+@tool(access="read")
+def get_page(ctx: Context, source: dict[str, Any], id: str) -> dict[str, Any]:
+    r = ctx.http.get(f"{source['start']}/{id}")
+    return {"id": id, "content": r.text, "mime": "text/html"}

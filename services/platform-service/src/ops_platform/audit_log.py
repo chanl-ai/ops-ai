@@ -72,7 +72,8 @@ def summary(row: dict[str, Any]) -> str:
         ),
     }
     line = lines.get(str(row["action"]))
-    return line() if line else str(row["action"])
+    # Another service's entry carries its own line (ops_store.audit), since only that service can word its action.
+    return line() if line else str(d.get("summary") or row["action"])
 
 
 def shown(row: dict[str, Any]) -> dict[str, Any]:

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Cancel a running sync and see removed addresses",
+  "description": "Sync history shows what each run checked, changed, removed and failed, its model use, and each error with its reason, and a running sync can be cancelled. Addresses removed for answering gone twice are listed with Lift, so the next sync takes them in again.",
+  "tag": "improved"
+}

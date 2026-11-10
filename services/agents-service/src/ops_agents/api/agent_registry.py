@@ -83,6 +83,7 @@ def spec_from_seed(a: AgentDefinition, model: str) -> dict[str, Any]:
         "fragments": [f.model_dump() for f in a.instructions],
         "toolIds": list(a.tools),
         "collections": list(a.default_kb_ids),
+        "allTeamKnowledgeBases": a.all_team_knowledge,
         "suggestions": list(a.suggestions),
         # Seeds keep low caps (the seed's tool calls, the kernel's 8 model calls); a real agent sets its own.
         "guardrails": {
@@ -123,6 +124,7 @@ def definition_of(agent_id: str, version: int, spec: dict[str, Any]) -> AgentDef
         instructions=fragments,
         tools=list(spec.get("toolIds") or []),
         default_kb_ids=list(spec.get("collections") or []),
+        all_team_knowledge=bool(spec.get("allTeamKnowledgeBases")),
         suggestions=list(spec.get("suggestions") or []),
         max_tool_calls=_cap(spec, "maxToolCallsPerTurn", None),
         max_model_calls=_cap(spec, "maxModelCallsPerTurn", LEGACY_MODEL_CALLS) or PLATFORM_MODEL_CALLS,
@@ -273,7 +275,16 @@ async def refuse_new_turns(rt: Runtime, agent_id: str) -> None:
 
 
 # What the seed file decides about a seeded agent; the model, pins and limits are left to the version.
-SEED_FIELDS = ("name", "role", "instructions", "fragments", "toolIds", "collections", "suggestions")
+SEED_FIELDS = (
+    "name",
+    "role",
+    "instructions",
+    "fragments",
+    "toolIds",
+    "collections",
+    "allTeamKnowledgeBases",
+    "suggestions",
+)
 
 
 async def follow_seed(rt: Runtime, a: AgentDefinition, row: dict[str, Any]) -> None:
@@ -369,6 +380,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
         "channels": spec.get("channels") or [],
         "toolIds": spec.get("toolIds") or [],
         "collections": spec.get("collections") or [],
+        "allTeamKnowledgeBases": bool(spec.get("allTeamKnowledgeBases")),
         # The owning team comes from the creator's token; the console names it from its teams list.
         "teamId": row["team_id"],
         "paused": bool(row["paused"]),

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Track a website in a knowledge base",
+  "description": "A knowledge base can follow a website through its sitemaps and links, obeying robots.txt and a gentle rate, fetching only pages that changed, with a preview before anything is stored.",
+  "tag": "new"
+}

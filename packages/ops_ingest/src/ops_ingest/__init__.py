@@ -2,7 +2,7 @@
 # Copyright 2026 chanl-ai
 """Knowledge ingestion library: parse, split, map metadata, dedupe and apply source rules."""
 
-from ops_ingest.model_client import ModelClient
+from ops_ingest.model_client import ModelBudgetSpent, ModelClient, ModelUnavailable
 from ops_ingest.models import IngestSettings, ParsedDocument, ParsingSettings, SplitResult
 from ops_ingest.parsers import parse
 from ops_ingest.split import InvalidIngestError, Pipeline, split, validate_settings
@@ -10,7 +10,9 @@ from ops_ingest.split import InvalidIngestError, Pipeline, split, validate_setti
 __all__ = [
     "IngestSettings",
     "InvalidIngestError",
+    "ModelBudgetSpent",
     "ModelClient",
+    "ModelUnavailable",
     "ParsedDocument",
     "ParsingSettings",
     "Pipeline",

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Search finds a passage by its parts and cites it once",
+  "description": "Knowledge search now matches a passage's smaller parts and generated questions, cites the whole passage once, and takes at most two passages from one document.",
+  "tag": "improved"
+}

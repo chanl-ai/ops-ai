@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_identity.fastapi import DEV_TEAM
 from ops_kb.agents import StaticAgents
 from ops_kb.files import KnowledgeFiles
+from ops_kb.search import HybridRetriever
 from ops_kb.seed import seed_demo
 from ops_kb.service import KnowledgeService, Who
 from ops_kb.store import KnowledgeStore
-from ops_kb.store.fulltext import PostgresFullTextRetriever
 from ops_store import isolation
 
 from .conftest import kb_client
@@ -139,7 +139,7 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     service = KnowledgeService(
         store,
         KnowledgeFiles(tmp_path),
-        PostgresFullTextRetriever(engine),
+        HybridRetriever(engine),
         StaticAgents(),
         readings=LocalReadings(KnowledgeFiles(tmp_path)),
     )
@@ -181,7 +181,7 @@ async def test_a_dev_start_leaves_a_persons_source_of_a_demo_sources_name_alone(
     service = KnowledgeService(
         store,
         KnowledgeFiles(tmp_path),
-        PostgresFullTextRetriever(engine),
+        HybridRetriever(engine),
         StaticAgents(),
         readings=LocalReadings(KnowledgeFiles(tmp_path)),
     )
@@ -201,7 +201,7 @@ async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
     """The shared stack moved kb-service from its own store to files-service, so the demo sources held file
     ids the new store had never seen and every sync failed. The next start uploads the demo files again."""
     store = KnowledgeStore(engine)
-    retriever = PostgresFullTextRetriever(engine)
+    retriever = HybridRetriever(engine)
     old, new = KnowledgeFiles(tmp_path / "before"), KnowledgeFiles(tmp_path / "after")
     before = KnowledgeService(store, old, retriever, StaticAgents(), readings=LocalReadings(old))
     after = KnowledgeService(store, new, retriever, StaticAgents(), readings=LocalReadings(new))

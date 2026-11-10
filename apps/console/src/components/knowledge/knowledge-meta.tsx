@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ErrorClass, Item, ItemStatus, KbHealth, RunPhase, RunStatus, Schedule, Sensitivity, SourceStatus, SourceType, SyncRun } from '@/lib/types/knowledge';
+import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceHealth, SourceKind, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
@@ -68,16 +68,17 @@ export function KbHealthBadge({ health }: { health: KbHealth }) {
 }
 
 const RUN: Record<RunStatus, [Tone, LucideIcon, string]> = {
-  success: ['good', CheckCircle2, 'Success'],
-  partial: ['warn', AlertTriangle, 'Partial'],
-  failed: ['bad', XCircle, 'Failed'],
   running: ['info', Loader2, 'Running'],
-  backing_off: ['warn', Clock, 'Backing off'],
+  success: ['good', CheckCircle2, 'Done'],
+  partial: ['warn', AlertTriangle, 'Done with failures'],
+  failed: ['bad', XCircle, 'Failed'],
+  cancelled: ['neutral', MinusCircle, 'Cancelled'],
+  skipped: ['neutral', MinusCircle, 'Skipped'],
 };
 export const RUN_LABEL = Object.fromEntries(Object.entries(RUN).map(([k, v]) => [k, v[2]])) as Record<RunStatus, string>;
 export function RunStatusBadge({ status }: { status?: RunStatus }) {
   if (!status) return <StatusBadge tone="neutral" icon={CircleDashed} label="Never synced" />;
-  const [tone, icon, label] = RUN[status];
+  const [tone, icon, label] = RUN[status] ?? ['neutral', CircleDashed, status];
   return <StatusBadge tone={tone} icon={icon} label={label} spin={status === 'running'} />;
 }
 
@@ -152,86 +153,68 @@ export function KbDot({ color, className }: { color: string; className?: string 
   return <span className={cn('inline-block size-2.5 shrink-0 rounded-full', KB_COLORS[color] ?? 'bg-muted-foreground', className)} />;
 }
 
-export interface SourceTypeMeta {
-  type: SourceType;
-  label: string;
-  short: string;
-  description: string;
-  group: 'Content you provide' | 'Connected apps';
-  icon: LucideIcon;
-  connected: boolean;
-  supportsInherit: boolean;
-  supportsWebhook: boolean;
-  changeDetection: string;
-  scopeLabel: string;
-}
+const KIND_ICON: Record<SourceKind, LucideIcon> = { file: FileUp, web: Globe, tool: Puzzle };
 
-export const SOURCE_TYPES: SourceTypeMeta[] = [
-  { type: 'file', label: 'File upload', short: 'Files', description: 'PDF, DOCX, XLSX, PPTX, CSV, TXT, MD, HTML. 50 MB each.', group: 'Content you provide', icon: FileUp, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'Replace or upload a new version', scopeLabel: 'Files' },
-  { type: 'url', label: 'Single URL', short: 'URL', description: 'One or more page URLs, one per line. Optional header auth for intranets.', group: 'Content you provide', icon: Link2, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'ETag, then content hash', scopeLabel: 'URLs' },
-  { type: 'crawl', label: 'Website crawl or sitemap', short: 'Crawl', description: 'Start URL or sitemap, depth, page limit, path patterns, robots respected.', group: 'Content you provide', icon: Globe, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'Sitemap lastmod, ETag, content hash', scopeLabel: 'Start URL' },
-  { type: 'text', label: 'Plain text or table', short: 'Text', description: 'Paste Markdown, or a CSV where each row becomes a chunk and headers become fields.', group: 'Content you provide', icon: Type, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'Edit in place creates a revision', scopeLabel: 'Content' },
-  { type: 'sharepoint', label: 'SharePoint / OneDrive', short: 'SharePoint', description: 'Sites, then libraries or folders. Office and PDF. App-only or delegated auth.', group: 'Connected apps', icon: Cloud, connected: true, supportsInherit: true, supportsWebhook: true, changeDetection: 'Drive delta queries; webhook subscriptions', scopeLabel: 'Site and libraries' },
-  { type: 'confluence', label: 'Confluence', short: 'Confluence', description: 'Site, spaces, optional parent page, attachments.', group: 'Connected apps', icon: BookOpen, connected: true, supportsInherit: true, supportsWebhook: false, changeDetection: 'Last-modified since cursor', scopeLabel: 'Spaces' },
-  { type: 'gdrive', label: 'Google Drive', short: 'Drive', description: 'Shared drives and folders. Docs, Sheets and Slides exported.', group: 'Connected apps', icon: HardDrive, connected: true, supportsInherit: true, supportsWebhook: true, changeDetection: 'Changes feed with page token', scopeLabel: 'Drives and folders' },
-  { type: 'github', label: 'GitHub', short: 'GitHub', description: 'Installation, repos, branch and path globs.', group: 'Connected apps', icon: Github, connected: true, supportsInherit: true, supportsWebhook: true, changeDetection: 'Head commit compare; push webhooks', scopeLabel: 'Repos and paths' },
-  { type: 'notion', label: 'Notion', short: 'Notion', description: 'Pages and databases, with child pages.', group: 'Connected apps', icon: StickyNote, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Last-edited since cursor', scopeLabel: 'Pages' },
-  { type: 'zendesk', label: 'Zendesk', short: 'Zendesk', description: 'Help centre categories and sections, locales, published only.', group: 'Connected apps', icon: LifeBuoy, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Incremental articles API', scopeLabel: 'Categories' },
-  { type: 'salesforce', label: 'Salesforce Knowledge', short: 'Salesforce', description: 'Org, article types, data categories, language, published channel.', group: 'Connected apps', icon: Building2, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'LastModifiedDate since cursor', scopeLabel: 'Article types' },
-];
-
-/**
- * A source read through an installed plugin's list and get tools. Not in SOURCE_TYPES: the add dialogs offer
- * those, and a plugin source is made through kb-service's API until a Plugins page exists.
- */
-const PLUGIN_SOURCE: SourceTypeMeta = { type: 'tool', label: 'Plugin source', short: 'Plugin', description: "Read through an installed plugin's list and get tools.", group: 'Connected apps', icon: Puzzle, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Each item\'s last-changed time since the last sync', scopeLabel: 'Source' };
-
-/** A type this console does not know reads as a plugin source with its own name, so its pages still open. */
-export const sourceTypeMeta = (type: SourceType): SourceTypeMeta => SOURCE_TYPES.find((t) => t.type === type) ?? (type === 'tool' ? PLUGIN_SOURCE : { ...PLUGIN_SOURCE, type, label: type, short: type });
-
-export function SourceTypeIcon({ type, className }: { type: SourceType; className?: string }) {
-  const Icon = sourceTypeMeta(type).icon;
+/** The icon for what a source is: files, a website, or an app's knowledge source. The console keeps only icons by kind. */
+export function SourceKindIcon({ kind, className }: { kind: SourceKind; className?: string }) {
+  const Icon = KIND_ICON[kind] ?? Puzzle;
   return <Icon className={className ?? 'size-4 shrink-0 text-muted-foreground'} />;
 }
+
+/** A source's health as kb-service reports it, in one cell: healthy, failing with its days and runs, or needs reconnect. */
+export function SourceHealthText({ health }: { health?: SourceHealth }) {
+  const h = health ?? { state: 'never' as const, daysFailing: 0, failedRuns: 0, tombstoned: 0 };
+  const removed = h.tombstoned ? ` · ${h.tombstoned} removed` : '';
+  if (h.state === 'failing')
+    return (
+      <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-destructive-text">
+        <XCircle className="size-3.5" /> Failing {h.daysFailing === 1 ? '1 day' : `${h.daysFailing} days`} · {h.failedRuns === 1 ? '1 run' : `${h.failedRuns} runs`} in a row{removed}
+      </span>
+    );
+  if (h.state === 'needs_reconnect')
+    return (
+      <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-warning-text">
+        <AlertTriangle className="size-3.5" /> Needs reconnect{removed}
+      </span>
+    );
+  if (h.state === 'never')
+    return (
+      <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-muted-foreground">
+        <CircleDashed className="size-3.5" /> Never synced
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-success-text">
+      <CheckCircle2 className="size-3.5" /> Healthy{removed}
+    </span>
+  );
+}
+
+export const WEEKDAY_LABEL: Record<Weekday, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 
 export function scheduleLabel(s: Schedule) {
   switch (s.kind) {
     case 'manual':
       return 'Manual';
+    case 'hourly':
+      return s.every === 1 ? 'Every hour' : `Every ${s.every} h`;
     case 'daily':
       return `Daily ${s.time}`;
     case 'weekly':
-      return `Weekly ${s.day} ${s.time}`;
-    case 'monthly':
-      return `Monthly on day ${s.day} at ${s.time}`;
-    case 'webhook':
-      return s.safetyNetDaily ? 'Webhook + daily' : 'Webhook';
+      return `Weekly ${WEEKDAY_LABEL[s.day]?.slice(0, 3) ?? s.day} ${s.time}`;
   }
 }
 
-export const SCHEDULE_KIND_LABEL: Record<Schedule['kind'], string> = { manual: 'Manual', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', webhook: 'Webhook' };
+export const SCHEDULE_KIND_LABEL: Record<Schedule['kind'], string> = { manual: 'Manual', hourly: 'Every few hours', daily: 'Daily', weekly: 'Weekly' };
 
-export const TRIGGER_LABEL: Record<SyncRun['trigger'], string> = { manual: 'Manual', schedule: 'Schedule', webhook: 'Webhook', full: 'Full resync', retry: 'Retry failed' };
+export const TRIGGER_LABEL: Record<RunTrigger, string> = { manual: 'Sync now', schedule: 'Schedule', full: 'Full resync', retry: 'Retry failed', settings: 'Settings changed' };
+export const triggerLabel = (t: string) => TRIGGER_LABEL[t as RunTrigger] ?? t;
 
 export const ERROR_CLASS_LABEL: Record<ErrorClass, string> = { parse: 'Parse', fetch: 'Fetch', permission: 'Permission', too_large: 'Too large', rate_limited: 'Rate limited' };
 
-export const PHASE_LABEL: Record<RunPhase['name'], string> = { list: 'List changes', fetch: 'Fetch', parse: 'Parse', chunk: 'Chunk', embed: 'Embed', upsert: 'Upsert' };
-
-export function PhaseIcon({ status }: { status: RunPhase['status'] }) {
-  if (status === 'done') return <CheckCircle2 className="size-4 text-success-text" aria-label="Done" />;
-  if (status === 'running') return <Loader2 className="size-4 animate-spin text-blue-600 dark:text-blue-400" aria-label="Running" />;
-  if (status === 'failed') return <XCircle className="size-4 text-destructive-text" aria-label="Failed" />;
-  return <CircleDashed className="size-4 text-muted-foreground" aria-label="Not run" />;
-}
-
-export const phaseStatusLabel = (s: RunPhase['status']) => (s === 'done' ? 'Done' : s === 'running' ? 'Running' : s === 'failed' ? 'Failed' : 'Not run');
-
-/** When a backing-off run retries, from the Retry-After in its error, or 15 minutes. */
-export function backoffRetryAt(run: SyncRun) {
-  const m = run.errors.map((e) => e.message.match(/Retry-After (\d+)s/)).find(Boolean);
-  const wait = m ? Number(m[1]) : 900;
-  return new Date(new Date(run.startedAt).getTime() + (run.durationSec + wait) * 1000).toISOString();
-}
+/** The step of a run an error happened at. */
+const STEP_LABEL: Record<string, string> = { list: 'List', get: 'Fetch', store: 'Store', parse: 'Read' };
+export const stepLabel = (step: string) => STEP_LABEL[step] ?? step;
 
 export const RULE_FIELDS = [
   { value: 'path', label: 'Path glob' },
@@ -249,12 +232,6 @@ export const RULE_PLACEHOLDER: Record<(typeof RULE_FIELDS)[number]['value'], str
   modifiedAfter: 'e.g. 2026-01-01',
   sizeUnder: 'e.g. 50 MB',
 };
-
-export const PARSING_OPTIONS = [
-  { k: 'ocr' as const, label: 'OCR', tip: 'Runs on scanned PDFs and images. Slower and uses credits.' },
-  { k: 'tables' as const, label: 'Keep tables', tip: 'Tables in PDF, DOCX and XLSX keep their columns, so table rows and structured values can read them.' },
-  { k: 'vision' as const, label: 'Vision for figures', tip: 'Describes images and charts into text.' },
-];
 
 // kb-service searches by keyword and does not rerank yet (service.py's defaults), so no preset claims either.
 export const RETRIEVAL_PRESETS = {

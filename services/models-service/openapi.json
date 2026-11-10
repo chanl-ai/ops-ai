@@ -648,6 +648,128 @@
         "title": "ChatUsage",
         "type": "object"
       },
+      "EmbeddingRow": {
+        "additionalProperties": false,
+        "properties": {
+          "embedding": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Embedding",
+            "type": "array"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "object": {
+            "const": "embedding",
+            "title": "Object",
+            "type": "string"
+          }
+        },
+        "required": [
+          "object",
+          "index",
+          "embedding"
+        ],
+        "title": "EmbeddingRow",
+        "type": "object"
+      },
+      "Embeddings": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/EmbeddingRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "object": {
+            "const": "list",
+            "title": "Object",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/EmbeddingsUsage"
+          }
+        },
+        "required": [
+          "object",
+          "model",
+          "data",
+          "usage"
+        ],
+        "title": "Embeddings",
+        "type": "object"
+      },
+      "EmbeddingsRequest": {
+        "additionalProperties": false,
+        "description": "OpenAI's embeddings request: the alias as `model`, one text or a list, and the width when the caller names\none.",
+        "properties": {
+          "dimensions": {
+            "anyOf": [
+              {
+                "maximum": 4096.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Input"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "input"
+        ],
+        "title": "EmbeddingsRequest",
+        "type": "object"
+      },
+      "EmbeddingsUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt_tokens",
+          "total_tokens"
+        ],
+        "title": "EmbeddingsUsage",
+        "type": "object"
+      },
       "Envelope_Admission_": {
         "additionalProperties": false,
         "properties": {
@@ -2509,6 +2631,22 @@
               ],
               "title": "X-Tenant-Id"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-run-spend-cap",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Run-Spend-Cap"
+            }
           }
         ],
         "requestBody": {
@@ -2635,6 +2773,231 @@
           }
         },
         "summary": "Completions",
+        "tags": [
+          "completions"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/models/embeddings": {
+      "post": {
+        "description": "Vectors for one text or a batch, from an alias of kind embedding, through the same key, budget and clearance\nchecks as a completion, and one call-log row per request.",
+        "operationId": "completions_embeddings",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-data-sensitivity",
+            "required": false,
+            "schema": {
+              "default": "internal",
+              "title": "X-Data-Sensitivity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-run-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Run-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-step-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Step-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-tenant-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-run-spend-cap",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Run-Spend-Cap"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Embeddings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The provider refused or failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The provider key the connection names is not saved"
+          }
+        },
+        "summary": "Embeddings",
         "tags": [
           "completions"
         ],

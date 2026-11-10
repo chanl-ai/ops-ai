@@ -251,6 +251,8 @@ export function createHttpApi(baseUrl: string): OpsApi {
       grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}`),
       modelAliases: () => get('/model-aliases'),
+      test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
+      knowledgeUsage: () => get('/knowledge-usage'),
       bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
     },

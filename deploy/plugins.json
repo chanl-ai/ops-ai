@@ -11,6 +11,12 @@
       "ref": "e825c9f77690a660e248ac8e08aef01cc9992f29",
       "path": "plugins/salesforce",
       "sha256": "c934956aee474469ad35ecaa06043b56e75be33ef04c89fb77e6f0dcacc849ab"
+    },
+    {
+      "source": "https://github.com/chanl-ai/ops-ai-plugins",
+      "ref": "a5bfc40c80bd735b46ab132ca77e02e30a7a64d1",
+      "path": "plugins/web",
+      "sha256": "d62dad9c634239b5cfdf8b360ce30e4560b64b42d0e15c052a9e2e817341e32a"
     }
   ]
 }

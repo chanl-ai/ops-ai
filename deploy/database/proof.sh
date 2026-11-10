@@ -22,7 +22,7 @@ cleanup() { [ "${KEEP:-0}" = 1 ] && { echo "proof: kept $NAME and $OUT"; return;
 trap cleanup EXIT
 
 docker rm -fv $NAME >/dev/null 2>&1 || true
-docker run -d --name $NAME -e POSTGRES_PASSWORD=proof -p 127.0.0.1:$PORT:5432 postgres:17-alpine >/dev/null
+docker run -d --name $NAME -e POSTGRES_PASSWORD=proof -p 127.0.0.1:$PORT:5432 pgvector/pgvector:pg17 >/dev/null
 # The image first runs a temporary server on its socket only while it initialises; wait for the real one on TCP.
 until docker exec $NAME pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
 
@@ -34,6 +34,7 @@ install() {
     psql_as "postgresql://postgres:proof@localhost/postgres" -c "ALTER ROLE $role PASSWORD 'proof'"
   done
   psql_as "postgresql://postgres:proof@localhost/postgres" -c "CREATE DATABASE $db OWNER ops_migrator"
+  psql_as "postgresql://postgres:proof@localhost/$db" -c "CREATE EXTENSION IF NOT EXISTS vector"
   psql_as "postgresql://ops_migrator:proof@localhost/$db" < "$dir/bundle.sql" >/dev/null
   psql_as "postgresql://ops_migrator:proof@localhost/$db" < "$dir/grants.sql" >/dev/null
 }

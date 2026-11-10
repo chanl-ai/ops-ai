@@ -59,7 +59,7 @@ class Know:
     def __init__(self, rows: list[Passage] | None = None, boom: bool = False) -> None:
         self.rows, self.boom = rows or [], boom
 
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         if self.boom:
             raise RuntimeError("kb down")
         return self.rows

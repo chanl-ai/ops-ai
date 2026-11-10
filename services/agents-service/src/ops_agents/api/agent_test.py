@@ -63,6 +63,7 @@ async def one_test_turn(
         transcript=[],
         user_turn=message,
         kb_ids=list(collections) if collections else defn.default_kb_ids,
+        all_team_knowledge=defn.all_team_knowledge,
     )
     started = time.perf_counter()
     result: TurnResult | None = None

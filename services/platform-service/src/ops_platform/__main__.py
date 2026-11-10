@@ -53,7 +53,12 @@ async def serve(settings: Settings) -> None:
         token_ttl_s=settings.platform_token_ttl_seconds,
         signin=SignInOptions.from_settings(settings, mail=mail),
     )
-    services = ServiceAuth(audience="platform", verifiers=service_verifiers(settings, "platform"), tenant_scoped=False)
+    services = ServiceAuth(
+        audience="platform",
+        verifiers=service_verifiers(settings, "platform"),
+        tenant_scoped=False,
+        scopes=settings.service_scopes,
+    )
     internal = create_internal_app(store, services=services, signer=signer_from(settings))
     servers = [
         uvicorn.Server(uvicorn.Config(public, host=settings.bind_host, port=settings.platform_port, log_level="info")),

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Documentation sites keep their articles when cleaned",
+  "description": "A website whose layout carries utility classes or wraps its article in a sidebar element no longer has every page cleaned down to nothing.",
+  "tag": "fix"
+}

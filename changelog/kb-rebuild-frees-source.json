@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Sync right after a rebuild finishes",
+  "description": "When a rebuild shows as finished, its source is free: a sync asked at that moment starts instead of saying a run is still going.",
+  "tag": "fix"
+}

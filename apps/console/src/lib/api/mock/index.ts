@@ -1,3 +1,4 @@
+import type { SourcePatch } from '@/lib/types/knowledge';
 import type {
   Agent,
   AgentGuardrails,
@@ -835,6 +836,8 @@ export function createMockApi(): OpsApi {
       // The mock's apps have no catalog to add from, so nothing waits on a Tools tab.
       toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
+      test: (aid, message) => respond(() => ({ reply: `${agents.find((a) => a.id === aid)?.name ?? 'The agent'} would answer “${message}” here.`, tookMs: 0, citations: [], toolCalls: [] })),
+      knowledgeUsage: () => respond(() => []),
       bulkUpdate: (ids, patch) =>
         respond(() =>
           bulk(ids, (aid) => {
@@ -1144,7 +1147,9 @@ export function createMockApi(): OpsApi {
           const s = await knowledge.api.sources.get(sourceId);
           const had = (k: string) => (Array.isArray(s.config[k]) ? (s.config[k] as string[]) : []);
           const fresh = added.filter((f) => !had('fileIds').includes(f.fileId));
-          await knowledge.api.sources.update(sourceId, { config: { ...s.config, fileIds: [...had('fileIds'), ...fresh.map((f) => f.fileId)], fileNames: [...had('fileNames'), ...fresh.map((f) => f.name)] } });
+          // The mock keeps the files on the source's config, which no save offers; the patch says so by its cast.
+          const keep = { config: { ...s.config, fileIds: [...had('fileIds'), ...fresh.map((f) => f.fileId)], fileNames: [...had('fileNames'), ...fresh.map((f) => f.name)] } };
+          await knowledge.api.sources.update(sourceId, keep as SourcePatch);
           return added;
         },
       },

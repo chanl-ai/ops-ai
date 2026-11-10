@@ -39,13 +39,19 @@ async def test_a_dropped_policy_fails_the_suite_naming_its_table(engine: AsyncEn
     assert failures and {f.split(":")[0] for f in failures} == {"files"}, failures
 
 
-async def test_the_relay_role_reads_and_marks_its_outbox_and_nothing_else(engine: AsyncEngine) -> None:
+async def test_the_system_role_reads_its_outbox_and_the_file_list_and_nothing_else(engine: AsyncEngine) -> None:
     async with engine.begin() as c:
         await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
         await c.execute(sa.select(sa.func.count()).select_from(service_outbox))
         await c.execute(service_outbox.update().where(sa.false()).values(attempts=0))
+        # The retention process lists released files past their date; it deletes each as the file's own tenant.
+        await c.execute(sa.select(sa.func.count()).select_from(files))
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        async with engine.begin() as c:
+            await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
+            await c.execute(files.delete().where(sa.false()))
     for table in TABLES:
-        if table.name == service_outbox.name:
+        if table.name in (service_outbox.name, files.name):
             continue
         with pytest.raises(ProgrammingError, match="permission denied"):
             async with engine.begin() as c:

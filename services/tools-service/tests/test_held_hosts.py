@@ -12,12 +12,15 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
+from ops_identity.resolve import mint_service_token
+from ops_identity.service_keys import dev_service_signer
 from ops_service_kit.settings import Settings
 from ops_tools.modules.seed import load
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import Api, FakeReviews, build_app, service_headers
+from .test_plugins import host as plugin_host
 
 # The signed-in people's app, a fixture, used by name below.
 from .test_review_decisions import (
@@ -129,3 +132,49 @@ async def test_only_agents_service_lists_an_approved_host(api: Api) -> None:
     assert {h["host"]: h["addedBy"] for h in hosts}["unlisted-statements.example.com"] == "Sam Adeyemi"
     added = await api.call("POST", "/mod_document_service/operations", json=OP)
     assert added.status_code == 200, "the retry after approval saves"
+
+
+async def test_a_knowledge_sources_new_site_waits_for_an_admin_as_any_new_host_does(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> None:
+    """A source's site was exempt from the account's list: a builder's new site was reached with nobody asked. Now
+    the builder's request asks Security, kb-service's beat reads it waiting, and it passes once an admin lists it."""
+    await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
+    settings = Settings()
+    # An install with plugins caps kb-service at tools:view and tools:run here (Settings._plugin_scopes).
+    services = ServiceAuth(
+        audience="tools",
+        verifiers=service_verifiers(settings, "tools"),
+        scopes={**settings.service_scopes, "kb": ["tools:view", "tools:run"]},
+    )
+    identity = Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0, services=services)
+    auth = Auth(identity, services)
+    store = ModuleStore(engine)
+    app = build_app(engine, seed, tenant, auth=auth, reviews=REVIEWS, plugins=plugin_host(engine, store))
+    james = person(tenant, "James Richardson", {"team_platform": "builder"})
+    sam = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
+    token = mint_service_token(
+        dev_service_signer(),
+        service="kb",
+        audience="tools",
+        tenant_id=tenant,
+        scopes=["tools:view"],
+        team_id="team_platform",
+    )
+    kb = {"Authorization": f"Bearer {token}"}
+    body = {"plugin": "test.desk", "source": "pages", "values": {"start": "https://help.northbank.test/docs"}}
+    REVIEWS.hosts.clear()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as c:
+        asked = await c.post("/v1/knowledge-sources/hosts", json=body, headers=james)
+        assert asked.status_code == 200, asked.text
+        [held] = asked.json()["data"]
+        assert held["host"] == "help.northbank.test" and held["state"] == "waiting" and held["runKey"], held
+        assert [h["host"] for h in REVIEWS.hosts] == ["help.northbank.test"], "Security is asked, as for any app"
+        answer = await c.post("/v1/knowledge-sources/hosts", json=body, headers=kb)
+        assert answer.status_code == 200, answer.text
+        beat = answer.json()["data"]
+        assert beat == [{"host": "help.northbank.test", "state": "waiting", "runKey": None, "reason": None}], beat
+        listed = await c.post("/v1/egress/hosts", json={"value": "help.northbank.test"}, headers=sam)
+        assert listed.status_code in (200, 201), listed.text
+        after = (await c.post("/v1/knowledge-sources/hosts", json=body, headers=kb)).json()["data"]
+        assert after[0]["state"] == "allowed", after

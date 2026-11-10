@@ -9,7 +9,7 @@
  * section path, `parent_child` indexes small chunks and returns their parent section, `clean` strips HTML and
  * boilerplate before splitting.
  */
-export type IngestStrategy = 'structure' | 'fixed' | 'topic' | 'faq' | 'context_headers' | 'parent_child' | 'table_rows' | 'clean';
+export type IngestStrategy = 'structure' | 'fixed' | 'topic' | 'faq' | 'faq_pairs' | 'context_headers' | 'parent_child' | 'table_rows' | 'clean';
 
 export type IngestPresetId = 'policy_manual' | 'help_centre' | 'rate_table' | 'email_templates' | 'custom';
 

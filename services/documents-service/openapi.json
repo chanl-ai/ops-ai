@@ -195,6 +195,11 @@
             "title": "Cells",
             "type": "array"
           },
+          "furniture": {
+            "default": false,
+            "title": "Furniture",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -226,6 +231,11 @@
             },
             "title": "Lines",
             "type": "array"
+          },
+          "main": {
+            "default": false,
+            "title": "Main",
+            "type": "boolean"
           },
           "order": {
             "default": 0,

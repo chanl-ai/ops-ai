@@ -1,4 +1,4 @@
-"""Development seed: the scripted provider, three bank aliases, a key per seeded agent and agents-service's own key.
+"""Development seed: the scripted provider, three bank aliases, a key per seeded agent and each service's own key.
 With the install's model connection in settings (OPENAI_API_TYPE or OPENAI_API_BASE), connection openai-local
 is that provider, rewritten from the settings on every start; otherwise, with a fake OpenAI URL, openai-local is at
 that URL. Either way alias `default` (agents-service's default) is on it. Idempotent: rows that exist are left alone,
@@ -34,6 +34,10 @@ EXTRACT_TENANT_BUDGET = Decimal(10)
 # tools-service's own key for checking writes against a team's sending policy, on its own budget line.
 TOOLS_CHECK_KEY = "tools:check"
 TOOLS_CHECK_SECRET = "mk_dev_tools_check"
+# kb-service's own key for embeddings, likely questions and FAQ drafts, spent per tenant like extractions.
+KB_KEY = "kb:index"
+KB_SECRET = "mk_dev_kb"
+KB_TENANT_BUDGET = Decimal(10)
 OPENAI_LOCAL = "openai-local"
 # The runtime's default alias, and the team assistant's own, served by whatever openai-local points at: the fake in dev,
 # where any model name answers. Pointing one at a real provider means setting its provider model too (PUT the alias);
@@ -80,7 +84,13 @@ def dev_secret(agent: str) -> str:
     return f"mk_dev_{agent}"
 
 
-async def seed(db: Database, fake_openai_url: str | None = None, install: dict[str, str | None] | None = None) -> None:
+async def seed(
+    db: Database,
+    fake_openai_url: str | None = None,
+    install: dict[str, str | None] | None = None,
+    *,
+    kb_daily_cap: float = 50.0,
+) -> None:
     providers, aliases, keys = Providers(db), Aliases(db), ModelKeys(db)
     scripted = {"id": SCRIPTED, "name": "scripted", "type": "scripted", "base_url": None, "key_ref": None}
     await providers.ensure({**scripted, "created_at": now_iso()})
@@ -108,6 +118,7 @@ async def seed(db: Database, fake_openai_url: str | None = None, install: dict[s
         (RUNTIME_KEY, "purpose", RUNTIME_SECRET),
         (EXTRACT_KEY, "purpose", EXTRACT_SECRET),
         (TOOLS_CHECK_KEY, "purpose", TOOLS_CHECK_SECRET),
+        (KB_KEY, "purpose", KB_SECRET),
     ]
     for key_id, kind, secret in identities:
         row = {"id": key_id, "kind": kind, "budget": Decimal(50), "spent": Decimal(0), "status": "active"}
@@ -115,3 +126,6 @@ async def seed(db: Database, fake_openai_url: str | None = None, install: dict[s
     # files-service extracts for every tenant on one key; each tenant spends from its own share. Set on a key
     # seeded before the column existed, too.
     await keys.set_tenant_budget(EXTRACT_KEY, EXTRACT_TENANT_BUDGET)
+    await keys.set_tenant_budget(KB_KEY, KB_TENANT_BUDGET)
+    # The environment's daily ceiling on kb-service's model work.
+    await keys.set_daily_cap(KB_KEY, Decimal(str(kb_daily_cap)))

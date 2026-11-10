@@ -47,14 +47,22 @@ class FakeKb:
         return KnowledgeSearch(ServiceClient(http, dev_service_signer(), "tools", "kb", ["knowledge:view"]))
 
 
+async def test_a_search_names_its_bases_or_asks_for_the_whole_teams_explicitly() -> None:
+    """A call naming no base searched every base of the team, so an agent or a workflow step that left them out read
+    knowledge it was never given."""
+    kb = FakeKb()
+    refused = await kb.tool().run({"query": "How long to file a chargeback?"}, tenant=TENANT, team=OPS)
+    assert not refused.ok and "Name the knowledge bases" in refused.output["error"], refused.output
+    assert kb.asked == []
+
+
 async def test_a_search_reads_only_the_calling_teams_knowledge_bases() -> None:
     kb = FakeKb()
-    out = await kb.tool().run({"query": "How long to file a chargeback?"}, tenant=TENANT, team=OPS)
+    asked = {"query": "How long to file a chargeback?", "allTeamKnowledgeBases": True}
+    out = await kb.tool().run(asked, tenant=TENANT, team=OPS)
     assert out.ok, out.output
     assert [p["text"] for p in out.output["passages"]] == ["File within 120 days."]
-    assert kb.asked == [
-        {"team": OPS, "kbIds": ["kb_policies"], "question": "How long to file a chargeback?", "limit": 5}
-    ]
+    assert kb.asked == [{"team": OPS, "kbIds": ["kb_policies"], "question": "How long to file a chargeback?"}]
 
 
 async def test_a_knowledge_base_is_named_by_its_name_and_another_teams_is_not_found() -> None:

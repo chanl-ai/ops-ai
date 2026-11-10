@@ -54,7 +54,7 @@ if [ -z "${SERVER:-}" ]; then
   # The schema tool makes scratch databases and the chains' roles on this server; roles are server-wide, so it is a
   # throwaway of its own, never the shared dev cluster.
   docker rm -fv $PG >/dev/null 2>&1 || true
-  docker run -d --name $PG -e POSTGRES_PASSWORD=release -p 127.0.0.1:15599:5432 postgres:17-alpine >/dev/null
+  docker run -d --name $PG -e POSTGRES_PASSWORD=release -p 127.0.0.1:15599:5432 pgvector/pgvector:pg17 >/dev/null
   SERVER_STARTED=1
   until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
   SERVER=postgresql://postgres:release@localhost:15599/postgres

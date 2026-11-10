@@ -33,7 +33,7 @@ class ParsedFile:
     have no OCR."""
 
     def __init__(self, data: bytes, *, filename: str, mime_type: str | None) -> None:
-        doc = parse(data, filename=filename, mime_type=mime_type, parsing=ParsingSettings(ocr=False))
+        doc = parse(data, filename=filename, mime_type=mime_type, parsing=ParsingSettings(ocr=False), mark=True)
         by_page: dict[int, list[Block]] = {}
 
         def add(page: int, **values: object) -> None:
@@ -43,14 +43,18 @@ class ParsedFile:
         for section in doc.sections:
             page = section.page or 1
             if section.heading_path:
-                add(page, kind="heading", text=section.heading_path[-1], level=max(section.level, 1))
+                level = max(section.level, 1)
+                marks = {"furniture": section.furniture, "main": section.main}
+                add(page, kind="heading", text=section.heading_path[-1], level=level, **marks)
             for block in section.blocks:
                 at = block.page or page
                 if isinstance(block, Table):
                     on_page = by_page.setdefault(at, [])
-                    on_page.append(_table_block(block, at, len(on_page)))
+                    table = _table_block(block, at, len(on_page))
+                    table.furniture, table.main = block.furniture, block.main
+                    on_page.append(table)
                 else:
-                    add(at, kind="paragraph", text=block.text)
+                    add(at, kind="paragraph", text=block.text, furniture=block.furniture, main=block.main)
         count = max([*by_page, doc.source.page_count or 1])
         self._pages: list[Page] = []
         for number in range(1, count + 1):
@@ -93,15 +97,27 @@ def _rows(cells: list[Cell]) -> list[list[str]]:
 
 
 def to_parsed_document(
-    reading: Reading, *, fields: dict[str, str] | None = None, keep_tables: bool = True
+    reading: Reading,
+    *,
+    fields: dict[str, str] | None = None,
+    keep_tables: bool = True,
+    furniture: bool = False,
+    main_content: bool = False,
 ) -> ParsedDocument:
     """The reading as the `ParsedDocument` that `split` takes: titles and headings by level become heading paths,
-    paragraphs and tables stay as read, and a form's fields become a "Form fields" section of `name: value` lines."""
+    paragraphs and tables stay as read, and a form's fields become a "Form fields" section of `name: value` lines.
+    `furniture` drops the blocks the reading marked as page furniture; `main_content` keeps only the main or article
+    element's blocks when the page has one. What either drops is counted as removed."""
     builder = DocumentBuilder()
     paged = reading.facts.paged
+    has_main = main_content and any(b.main for p in reading.pages for b in p.blocks)
+    dropped = 0
     for page in reading.pages:
         at = page.number if paged else None
         for block in page.blocks:
+            if (furniture and block.furniture) or (has_main and not block.main and block.kind != "title"):
+                dropped += len(block.text)
+                continue
             match block.kind:
                 case "title" | "heading":
                     builder.heading(block.text, block.level or 1, at)
@@ -130,7 +146,7 @@ def to_parsed_document(
         builder.heading(FORM_FIELDS_HEADING, 1, at)
         builder.paragraph("\n".join(f"{f.name}: {f.value}" for f in form), at)
     builder.warnings[:0] = reading.facts.warnings
-    builder.removed_chars = reading.facts.removed_chars
+    builder.removed_chars = reading.facts.removed_chars + dropped
     facts = reading.facts
     source = SourceMetadata(
         filename=facts.filename,

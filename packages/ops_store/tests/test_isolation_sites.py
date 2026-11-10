@@ -58,6 +58,8 @@ WIDENINGS: dict[str, set[str]] = {
     "RUN_RECONCILER": {"services/agents-service/src/ops_agents/api/sweeper.py"},
     "SUITE": {"packages/ops_store/src/ops_store/conformance.py"},
     "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
+    # The retention process lists every tenant's released snapshots past their date, then deletes each in its team.
+    "RETENTION_DUE": {"services/files-service/src/ops_files/store/files.py"},
     # Kb's background processes, the dev demo seed and the start-up move between file stores.
     "MOVE_TENANTS": {"services/kb-service/src/ops_kb/store/knowledge.py"},
     "DEMO_SEED": {"services/kb-service/src/ops_kb/__main__.py"},
@@ -66,6 +68,10 @@ WIDENINGS: dict[str, set[str]] = {
     "FIND_DUE": {"services/kb-service/src/ops_kb/schedule.py"},
     # The schedule finds each tenant's items waiting on a reading, then settles each in its own team.
     "FIND_READING": {"services/kb-service/src/ops_kb/schedule.py"},
+    # And ends each tenant's runs a stopped process left marked running.
+    "FIND_STALE": {"services/kb-service/src/ops_kb/schedule.py"},
+    "PURGE_WITHDRAWN": {"services/kb-service/src/ops_kb/schedule.py"},
+    "FIND_PENDING": {"services/kb-service/src/ops_kb/embedding.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
@@ -95,6 +101,8 @@ ENTRIES: dict[str, set[str]] = {
         "packages/ops_store/src/ops_store/outbox.py",
         "services/documents-service/src/ops_documents/document_types.py",
         "services/documents-service/src/ops_documents/extraction.py",
+        # The retention process deletes each released snapshot as its own tenant and team.
+        "services/files-service/src/ops_files/tenant_files.py",
         # A queued reading is read in the team that asked for it.
         "services/documents-service/src/ops_documents/readings.py",
         # A reading event settles the items of the one team its service token names.

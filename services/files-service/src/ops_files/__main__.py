@@ -15,6 +15,7 @@ import uvicorn
 
 from ops_files.app import create_files_app
 from ops_files.models import PurposeLimit, RetentionClass
+from ops_files.retention import keep_purging
 from ops_files.scanning import EicarScanner
 from ops_files.secrets import CredentialCipher
 from ops_files.service import FilesConfig
@@ -33,6 +34,13 @@ RETENTION_CLASSES = (
     RetentionClass(id="standard", name="Standard", days=None),
     RetentionClass(id="chat-90d", name="Chat attachment, 90 days", days=90, purposes=["chat_attachment"]),
     RetentionClass(id="knowledge", name="Knowledge source", days=None, purposes=["knowledge_source"]),
+    RetentionClass(
+        id="knowledge-snapshot",
+        name="Knowledge snapshot, 30 days after its source lets it go",
+        days=30,
+        purposes=["knowledge_snapshot"],
+        after_release=True,
+    ),
 )
 
 # What each purpose accepts until a tenant saves its own limits in Storage settings. A chat attachment is read for the
@@ -86,7 +94,8 @@ def main() -> None:
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging()
     files = build(settings)
-    background: list[Callable[[], Coroutine[Any, Any, None]]] = []
+    # Released knowledge snapshots are deleted once their days pass.
+    background: list[Callable[[], Coroutine[Any, Any, None]]] = [lambda: keep_purging(files)]
     if settings.agents_url:
         # A deleted file's file.deleted reaches agents-service, which runs the purge workflow.
         http = httpx.AsyncClient(base_url=settings.agents_url, timeout=5)

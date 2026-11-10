@@ -17,7 +17,8 @@ from pathlib import Path
 from ops_service_kit.logging import get_logger
 
 from .files import FileMissing, FileNotScanned
-from .service import KnowledgeService, Who, source_team
+from .origin import source_team
+from .service import KnowledgeService, Who
 
 log = get_logger(__name__)
 PDFS = Path(__file__).resolve().parents[2] / "seed" / "pdfs"

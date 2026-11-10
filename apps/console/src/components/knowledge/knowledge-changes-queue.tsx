@@ -1,32 +1,38 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, BookOpenCheck, CheckCircle2, Inbox, UserCheck } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, Inbox, ListChecks, UserCheck, XCircle } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { ConflictChip, FreshnessChip, ORIGIN_OPTIONS, OriginChip, TrustChip } from '@/components/knowledge/changes/change-chips';
-import { type ChangeRow, changeColumns } from '@/components/knowledge/changes/change-columns';
+import { ORIGIN_OPTIONS, OriginChip, TrustChip } from '@/components/knowledge/changes/change-chips';
+import { type ChangeRow, changeColumns, decidable } from '@/components/knowledge/changes/change-columns';
 import { ChangeDetailBody } from '@/components/knowledge/changes/change-detail';
+import { FaqDraftEditor, needsSave } from '@/components/knowledge/changes/faq-draft-editor';
 import { DetailSheet } from '@/components/shared/detail-sheet';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
-import { useKnowledgeChange, useKnowledgeChanges } from '@/hooks/knowledge-change-queries';
-import { useKnowledgeBases } from '@/hooks/knowledge-queries';
-import { useListParams } from '@/hooks/use-list-params';
-import type { ChangeFilters, ChangeView, KnowledgeChange } from '@/lib/types/knowledge-changes';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { useDecideChanges, useEditChange, useKnowledgeChange, useKnowledgeChanges } from '@/hooks/knowledge-change-queries';
+import { useListParams } from '@/hooks/use-list-params';
+import { plural } from '@/lib/format';
+import type { ChangeFilters, ChangeView, KnowledgeChange } from '@/lib/types/knowledge-changes';
 
 /**
- * Proposed knowledge edits. Rendered across all knowledge bases under Reviews, and for one
- * knowledge base on its Changes tab (`kbId`). The open change lives in `?change=` so notifications link to it.
+ * Knowledge changes: the FAQ drafts waiting for review beside the versions syncs applied. Rendered across all knowledge
+ * bases under Reviews, and for one base on its Changes tab (`kbId`). A draft is approved, rejected or edited here, one
+ * at a time from its sheet or many at once from the selection. The open change lives in `?change=`.
  */
 export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
   const [view, setView] = React.useState<ChangeView>('open');
   const list = useListParams<ChangeFilters>('summary');
   const query = useKnowledgeChanges({ ...list.params, view, kbId });
-  const kbs = useKnowledgeBases({ page: 1, pageSize: 100 });
+  const decide = useDecideChanges();
+  const edit = useEditChange();
+  const [busy, setBusy] = React.useState<'save' | 'approve' | 'reject' | null>(null);
+  const [clearSelection, setClearSelection] = React.useState(0);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -43,11 +49,41 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
     [router, pathname, searchParams],
   );
 
+  const run = React.useCallback(
+    async (ids: string[], decision: 'approve' | 'reject') => {
+      try {
+        await decide.mutateAsync({ ids, decision });
+        toast.success(`${decision === 'approve' ? 'Approved' : 'Rejected'} ${plural(ids.length, 'FAQ draft')}`, { description: decision === 'approve' ? 'Approved pairs are searchable now and cite their passage.' : undefined });
+        setClearSelection((n) => n + 1);
+        return true;
+      } catch (e) {
+        toast.error(`Couldn’t ${decision} ${plural(ids.length, 'draft')}`, { description: (e as Error).message });
+        return false;
+      }
+    },
+    [decide],
+  );
+
   const rows = query.data?.data ?? [];
   const activeIndex = rows.findIndex((r) => r.id === activeId);
   const offPage = useKnowledgeChange(activeId && activeIndex < 0 ? activeId : null);
   const active = activeIndex >= 0 ? rows[activeIndex] : (offPage.data ?? null);
   const tableRows: ChangeRow[] = React.useMemo(() => rows.map((r) => ({ ...r, onRowClick: (x: KnowledgeChange) => setActiveId(x.id), rowTestId: `change-row-${r.id}` })), [rows, setActiveId]);
+  const columns = React.useMemo(() => changeColumns({ onEdit: (c) => setActiveId(c.id), onReject: (c) => void run([c.id], 'reject') }), [setActiveId, run]);
+
+  const act = async (what: 'save' | 'approve' | 'reject', pair: { question: string; answer: string }) => {
+    if (!active) return;
+    setBusy(what);
+    try {
+      if (what !== 'reject' && needsSave(active, pair)) await edit.mutateAsync({ id: active.id, ...pair });
+      if (what === 'save') toast.success('Draft saved', { description: 'It still waits for review.' });
+      else if (await run([active.id], what)) setActiveId(null);
+    } catch (e) {
+      toast.error('Couldn’t save the draft', { description: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const counts = query.data?.viewCounts;
   const facets = query.data?.facets ?? {};
@@ -61,10 +97,10 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
       <SavedViewTabs
         ariaLabel="Change views"
         presets={[
-          { id: 'mine', label: countLabel('Changes', counts?.mine), icon: UserCheck },
-          { id: 'open', label: countLabel('All open', counts?.open), icon: Inbox },
-          { id: 'conflicts', label: countLabel('Conflicts', counts?.conflicts), icon: AlertTriangle },
+          { id: 'open', label: countLabel('Open', counts?.open), icon: Inbox },
+          { id: 'mine', label: countLabel('Mine', counts?.mine), icon: UserCheck },
           { id: 'resolved', label: countLabel('Decided', counts?.resolved), icon: CheckCircle2 },
+          { id: 'all', label: 'All', icon: ListChecks },
         ]}
         savedViews={[]}
         activePresetId={view}
@@ -80,29 +116,30 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
       />
 
       <DataTableWithViews
-        columns={changeColumns}
+        columns={columns}
         data={tableRows}
         getRowId={(r) => r.id}
         searchColumn="summary"
-        searchPlaceholder="Search changes…"
+        searchPlaceholder="Search questions and documents…"
         hideViewSwitcher
-        initialColumnVisibility={kbId ? { kbId: false, citedBy: false } : { citedBy: false }}
-        filters={[
-          { column: 'origin', title: 'From', options: withCounts('origin', ORIGIN_OPTIONS) },
-          ...(kbId ? [] : [{ column: 'kbId', title: 'Knowledge base', options: withCounts('kbId', (kbs.data?.data ?? []).map((k) => ({ label: k.name, value: k.id }))) }]),
-          { column: 'owner', title: 'Owner', options: withCounts('owner', Object.keys(facets.owner ?? {}).map((o) => ({ label: o, value: o }))) },
+        rowNoun="change"
+        filters={[{ column: 'origin', title: 'From', options: withCounts('origin', ORIGIN_OPTIONS) }]}
+        bulkActions={[
+          { label: 'Reject', icon: XCircle, variant: 'outline', onClick: (picked) => void run(picked.filter(decidable).map((r) => r.id), 'reject') },
+          { label: 'Approve', icon: CheckCircle2, onClick: (picked) => void run(picked.filter(decidable).map((r) => r.id), 'approve') },
         ]}
+        selectionResetKey={clearSelection}
         onColumnFiltersChange={list.onColumnFiltersChange}
         serverPagination={serverPagination(list, query)}
         emptyState={
           <ListEmpty
             icon={BookOpenCheck}
-            noun={view === 'resolved' ? 'decided changes' : 'changes'}
+            noun={view === 'resolved' ? 'decided changes' : view === 'open' || view === 'mine' ? 'FAQ drafts waiting' : 'changes'}
             filtered={list.isFiltered}
             description={
               view === 'mine'
-                ? 'Changes to documents you own appear here.'
-                : 'Edits from curation, agents’ suggested fixes and source syncs that change a cited passage appear here before agents see them.'
+                ? 'FAQ drafts of sources whose knowledge you own appear here.'
+                : 'Drafts appear here after a sync of a source with FAQ drafts on. Approved pairs become searchable; each cites its passage.'
             }
           />
         }
@@ -111,15 +148,13 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
       <DetailSheet
         open={!!active}
         onOpenChange={(o) => !o && setActiveId(null)}
-        title={active?.summary}
-        description={active ? `${active.id} · ${active.documentTitle} · owner ${active.owner}` : undefined}
+        title={active?.faq ? 'FAQ draft' : active?.summary}
+        description={active ? `${active.documentTitle} · ${active.sourceName} · ${active.toVersion}` : undefined}
         tags={
           active && (
             <>
               <OriginChip origin={active.origin} />
               <TrustChip state={active.trust} />
-              <FreshnessChip change={active} />
-              {active.conflict && <ConflictChip resolved={!!active.conflict.resolution} />}
             </>
           )
         }
@@ -137,7 +172,7 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
         testId="change-sheet"
         scrollKey={active?.id}
       >
-        {active && <ChangeDetailBody change={active} />}
+        {active && (active.faq ? <FaqDraftEditor change={active} busy={busy} onAct={act} /> : <ChangeDetailBody change={active} />)}
       </DetailSheet>
     </div>
   );

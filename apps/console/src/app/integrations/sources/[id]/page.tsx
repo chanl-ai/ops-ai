@@ -6,7 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { ChevronDown, CircleDashed, Layers, Pause, Play, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { SensitivityBadge, SourceStatusBadge, SourceTypeIcon, sourceTypeMeta } from '@/components/knowledge/knowledge-meta';
+import { SensitivityBadge, SourceKindIcon, SourceStatusBadge } from '@/components/knowledge/knowledge-meta';
+import { SourceHostsWaiting } from '@/components/knowledge/source-hosts-waiting';
 import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { PageLayout } from '@/components/page-layout';
 import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
@@ -21,7 +22,7 @@ import { BuilderFieldset } from '@/components/shared/builder-only';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { strategyMeta } from '@/components/sources/ingest-meta';
+import { STRATEGY_LABEL } from '@/components/sources/ingest-meta';
 import { useDeleteSource, usePauseSource, useSource, useSyncSource } from '@/hooks/knowledge-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { count, plural } from '@/lib/format';
@@ -65,28 +66,26 @@ export default function SourcePage() {
     );
 
   const s = query.data;
-  const meta = sourceTypeMeta(s.type);
   const running = !!s.running;
   const fail = (what: string) => (e: Error) => toast.error(`Couldn’t ${what}`, { description: e.message });
   const startSync = (opts: SyncOptions | undefined, done: string) => sync.mutate({ id: s.id, opts }, { onSuccess: () => toast.success(done), onError: fail('start the sync') });
   const togglePause = () =>
     pause.mutate({ id: s.id, paused: s.status !== 'paused' }, { onSuccess: (x) => toast.success(x.status === 'paused' ? 'Schedule paused' : 'Schedule resumed', { description: s.name }), onError: fail('change the schedule') });
   const tabHref = (t: string, q?: string) => `/integrations/sources/${s.id}?tab=${t}${q ? `&${q}` : ''}`;
-  const syncBlocked = running || s.status === 'revoked' || s.status === 'draft';
-  const stepLabel = (x: string) => (x.startsWith('extract ') ? `extracting ${x.slice(8)} with AI` : midSentence(strategyMeta(x as IngestStrategy).label));
-  const waiting = new Set(s.aiStepsWaiting);
-  const runsNow = s.ingest.strategies.filter((x) => !waiting.has(x)).map(stepLabel);
-  const waits = s.aiStepsWaiting.map(stepLabel);
+  // A source waiting for its site's host to be approved fetches nothing until it is, so its sync waits too.
+  const syncBlocked = running || s.status === 'revoked' || s.status === 'draft' || s.waitingHosts.length > 0;
+  // The AI steps kb-service reports waiting for the knowledge owner's approval.
+  const waits = s.aiStepsWaiting.map((x) => midSentence(STRATEGY_LABEL[x as IngestStrategy] ?? x));
 
   return (
     <PageTabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
       <PageLayout
-        icon={<SourceTypeIcon type={s.type} className="size-5 text-muted-foreground" />}
+        icon={<SourceKindIcon kind={s.kind} className="size-5 text-muted-foreground" />}
         title={s.name}
         badge={<SourceStatusBadge status={s.status} />}
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{meta.label}</span>
+            <span>{s.kindLabel}</span>
             {s.connection && <ConnectionChip connection={s.connection} />}
             <SensitivityBadge level={s.sensitivity} />
             <span>Collection {s.collection}</span>
@@ -139,7 +138,7 @@ export default function SourcePage() {
             {s.status === 'revoked' && (
               <Alert variant="destructive">
                 <ShieldAlert className="size-4" />
-                <AlertTitle>The {meta.short} connection was revoked</AlertTitle>
+                <AlertTitle>The {s.connection?.name ?? s.kindLabel} connection was revoked</AlertTitle>
                 <AlertDescription className="flex flex-col items-start gap-2">
                   <p>Syncs stop until it is reconnected in Integrations. Indexed items stay searchable but will not update.</p>
                   {s.connection && (
@@ -180,30 +179,27 @@ export default function SourcePage() {
               </Alert>
             )}
 
-            {s.reindexNeeded && (
+            {s.reindexNeeded && !s.rebuild && (
               <Alert data-testid="reindex-banner">
                 <Layers className="size-4" />
-                <AlertTitle>Re-index needed</AlertTitle>
-                <AlertDescription className="flex flex-col items-start gap-2">
-                  <p>
-                    The ingestion settings changed since these chunks were built. Search keeps using the old chunks until {plural(s.itemCount, 'item')} are rebuilt.
-                  </p>
-                  <p data-testid="reindex-steps">
-                    Runs now: {runsNow.length ? runsNow.join(', ') : 'structure splitting'}.
-                    {waits.length > 0 && ` Waits for approval: ${waits.join(', ')}. A later re-index adds ${waits.length === 1 ? 'it' : 'them'} once approved.`}
-                  </p>
+                <AlertTitle>Some items wait for a rebuild</AlertTitle>
+                <AlertDescription>
+                  <p>They were built under earlier settings. The next sync rebuilds them from their stored readings; search uses the current pieces until then.</p>
                 </AlertDescription>
               </Alert>
             )}
-            {s.ingest.approval.status === 'pending' && (
-              <Alert>
+            <SourceHostsWaiting source={s} />
+            {waits.length > 0 && tab !== 'settings' && (
+              <Alert data-testid="ai-steps-waiting">
                 <ShieldCheck className="size-4" />
-                <AlertTitle>AI ingestion steps wait for the knowledge owner</AlertTitle>
+                <AlertTitle>AI steps waiting for approval</AlertTitle>
                 <AlertDescription className="flex flex-col items-start gap-2">
                   <p>
-                    {s.ingest.approval.requestedBy ? `${s.ingest.approval.requestedBy} turned on` : 'This source uses'} {waits.join(' and ')}, which {waits.length === 1 ? 'calls' : 'call'} {s.ingest.model} at ingest. Syncs run without{' '}
-                    {waits.length === 1 ? 'it' : 'them'} until another knowledge owner approves.
+                    {waits.join(' and ')} {waits.length === 1 ? 'calls' : 'call'} {s.ingest.model} at each sync. Syncs run without {waits.length === 1 ? 'it' : 'them'} until the knowledge owner approves.
                   </p>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={tabHref('settings')}>Review in Settings</Link>
+                  </Button>
                 </AlertDescription>
               </Alert>
             )}

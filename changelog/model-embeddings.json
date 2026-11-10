@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Embeddings run through the model gateway",
+  "description": "Text is turned into vectors through the same model keys, budgets and data clearance as chat, ready for search by meaning in knowledge bases.",
+  "tag": "new"
+}

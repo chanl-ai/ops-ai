@@ -9,7 +9,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 |---|---|
 | Chat with an agent: streamed answers, citations, tables and charts in the conversation | Built |
 | Tool calls from chat, with a person approving each write and a fresh sign-in for payments | Built |
-| Knowledge bases with answers cited by page and section | Built: full-text search; vector search planned |
+| Knowledge bases with answers cited by page and section | Built: search by meaning and keywords together, each result saying which ran; on PostgreSQL with pgvector, keywords only on SQL Server |
 | Skills: versioned instructions an agent loads when they match, published through review | Built |
 | Guardrails: blocked topics with a written scope, checked before and after each answer, failing closed | Partial: blocked topics; other kinds, such as required citations or an output shape, planned |
 | Personal data masked in what people see | Built: emails, national ID, card, phone and account numbers; names planned |

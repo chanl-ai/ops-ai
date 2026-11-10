@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import dev_service_signer, mint_service_token
-from ops_service_kit.model_calls import ModelCallError, StructuredCalls
+from ops_service_kit.model_calls import ModelCallError, ModelCalls
 from ops_tools.modules.policy import CheckBeforeSend
 from ops_tools.modules.seed import load
 from ops_tools.send_check import NEEDS_REVIEW, NO_JUDGE, SendCheck
@@ -38,7 +38,7 @@ class Setting(CheckBeforeSend):
         return self.value
 
 
-class Judge(StructuredCalls):
+class Judge(ModelCalls):
     """Forbids a subject that promises a refund; counts its calls. `down` stands for models-service out of reach."""
 
     def __init__(self, *, down: bool = False) -> None:
@@ -46,7 +46,17 @@ class Judge(StructuredCalls):
         self.calls = 0
         self.down = down
 
-    async def structured(self, system: str, user: str, schema: dict[str, Any], *, tenant: str, step: str) -> Any:
+    async def structured(
+        self,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        *,
+        tenant: str,
+        step: str,
+        sensitivity: str = "internal",
+    ) -> Any:
+        del sensitivity
         self.calls += 1
         if self.down:
             raise ModelCallError("models-service could not be reached")

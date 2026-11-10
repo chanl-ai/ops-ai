@@ -1,22 +1,23 @@
-"""The knowledge schedule: a beat that syncs each tool source when its schedule says, in the source's team, and asks
-again for the reading of every file source item still waiting on one, so an item is indexed even when
-documents-service's reading.finished event never arrived.
+"""The knowledge schedule: a beat that syncs each source when its schedule says, in the source's team, and asks again
+for the reading of every file source item still waiting on one, so an item is indexed even when documents-service's
+reading.finished event never arrived.
 
-Every minute it reads each tenant's tool sources, and syncs each one that is due: never synced, or a daily source
-whose time of day has passed since its last sync, or a weekly one a week on. The sync takes the source's lease
-(`KnowledgeService.sync_tool`), so a manual sync and the beat, or two kb-service processes, never run one source at
-once. A source paused, waiting for a reconnect, or whose plugin is off answers as its sync would and is tried again
-at the next beat."""
+Every minute it reads each tenant's sources, of every kind, and syncs each one that is due by the one schedule rule
+(ops_store.schedule): manual never, every N hours, daily at a time, or weekly on a day, in the schedule's time zone.
+The sync takes the source's lease, so a manual sync, a rebuild and the beat, or two kb-service processes, never run
+one source at once. A source paused, waiting for a reconnect, or whose plugin is off answers as its sync would and is
+tried again at the next due time."""
 
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, time, timedelta
-from typing import Any, cast
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from ops_service_kit.errors import ApiError
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
+from ops_store.schedule import due as schedule_due
 
 from .service import KnowledgeService, Who
 
@@ -24,38 +25,38 @@ log = get_logger(__name__)
 
 FIND_DUE = "background process: the knowledge schedule reads each tenant's tool sources to find the due ones"
 FIND_READING = "background process: the knowledge schedule reads each tenant's items waiting for their file's reading"
+FIND_STALE = "background process: the knowledge schedule ends each tenant's runs left running by a stopped process"
+PURGE_WITHDRAWN = (
+    "background process: the knowledge schedule deletes each tenant's pieces withdrawn past their retention"
+)
+# How long a withdrawn piece is kept after a newer version replaced it, as a knowledge snapshot is.
+WITHDRAWN_KEPT = timedelta(days=30)
 
 
-def due(s: dict[str, Any], now: datetime) -> bool:
-    cfg = cast(dict[str, Any], s.get("config") or {})
-    schedule = cast(dict[str, Any], cfg.get("schedule") or {})
-    kind = schedule.get("kind", "manual")
-    last: datetime | None = s.get("last_sync_at")
-    if kind == "manual" or s["status"] == "paused":
+def due(service: KnowledgeService, s: dict[str, Any], now: datetime) -> bool:
+    """A source not paused whose schedule (ops_store.schedule, the one rule) asks for a run since its last sync, or
+    one waiting for an admin to approve its site's host: its sync re-reads the host's state and runs once approved, so
+    the source syncs as soon as it may, whatever its schedule."""
+    if s["status"] == "paused":
         return False
-    if last is None:
+    if dict(s.get("config") or {}).get("waitingHosts"):
         return True
-    hour, _, minute = str(schedule.get("time") or "00:00").partition(":")
-    at = datetime.combine(now.date(), time(int(hour or 0), int(minute or 0)), tzinfo=UTC)
-    if at > now:
-        at -= timedelta(days=1)
-    if kind == "weekly":
-        return now - last >= timedelta(days=7) and last < at
-    return last < at
+    return schedule_due(service.schedule_of(s), s.get("last_sync_at"), now)
 
 
 async def run_due(service: KnowledgeService, now: datetime) -> list[str]:
-    """Syncs every tool source that is due; returns the ids it synced."""
+    """Syncs every source that is due, of every kind, each in its own team and under its lease; returns the ids it
+    synced. A tool source is read only where this service reads tools."""
     ran: list[str] = []
     for tenant in await service.store.tenants():
         with isolation.tenant_wide(FIND_DUE, tenant_id=tenant):
-            sources = [s for s in await service.store.sources(tenant) if s["type"] == "tool" and due(s, now)]
+            readable = [s for s in await service.store.sources(tenant) if s["type"] != "tool" or service.tools]
+            sources = [s for s in readable if due(service, s, now)]
         for s in sources:
             with isolation.scope(tenant, str(s["team_id"])):
+                who = Who(tenant, "knowledge schedule", str(s["team_id"]))
                 try:
-                    await service.sync_tool(
-                        Who(tenant, "knowledge schedule", str(s["team_id"])), s, full=False, trigger="schedule"
-                    )
+                    await service.scheduled_sync(who, s)
                     ran.append(str(s["id"]))
                 except ApiError as e:
                     log.info("kb_schedule_skipped", source=s["id"], code=e.code)
@@ -76,12 +77,34 @@ async def finish_readings(service: KnowledgeService) -> int:
     return settled
 
 
+async def end_stale_runs(service: KnowledgeService, now: datetime) -> int:
+    """Ends rebuilds and syncs a stopped process left marked running, saying why; the number ended."""
+    ended = 0
+    for tenant in await service.store.tenants():
+        with isolation.tenant_wide(FIND_STALE, tenant_id=tenant):
+            ended += await service.store.end_stale_runs(
+                tenant, reason="Stopped when the service stopped; sync again to finish."
+            )
+    return ended
+
+
+async def purge_withdrawn(service: KnowledgeService, now: datetime) -> int:
+    """Deletes the pieces newer versions withdrew more than WITHDRAWN_KEPT ago; the number deleted."""
+    deleted = 0
+    for tenant in await service.store.tenants():
+        with isolation.tenant_wide(PURGE_WITHDRAWN, tenant_id=tenant):
+            deleted += await service.store.purge_withdrawn(tenant, before=now - WITHDRAWN_KEPT)
+    return deleted
+
+
 async def keep_syncing(service: KnowledgeService, stop: asyncio.Event) -> None:
     """The listed `knowledge_schedule` process: one pass a minute through the shared runner, which reports it on
     /health/background and backs off after a failed pass."""
 
     async def once() -> int:
-        synced = len(await run_due(service, datetime.now(UTC))) if service.tools is not None else 0
-        return synced + await finish_readings(service)
+        now = datetime.now(UTC)
+        synced = len(await run_due(service, now))
+        settled = await finish_readings(service) + await end_stale_runs(service, now)
+        return synced + settled + await purge_withdrawn(service, now)
 
     await background.run("knowledge_schedule", once, stop=stop, store=background.LOCAL)

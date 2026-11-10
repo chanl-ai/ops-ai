@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Knowledge settings changes show in the audit log",
+  "description": "Changing a knowledge base's or a source's settings now appears in the Audit log with each value before and after.",
+  "tag": "new"
+}

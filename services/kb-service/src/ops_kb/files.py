@@ -20,12 +20,10 @@ from typing import Any, Protocol
 
 import httpx
 
-from ops_files_client import FileNotFound, FileNotReady, FilesClient, FilesRefused
+from ops_files_client import FileNotFound, FileNotReady, FilesClient, FilesRefused, Purpose
 from ops_service_kit.errors import ServiceUnavailable
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
-
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 class FileMissing(Exception):
@@ -47,8 +45,11 @@ class Stored:
 
 
 class FileIntake(Protocol):
-    async def put(self, tenant: str, team: str, data: bytes, *, name: str, mime: str, actor: str) -> Stored:
-        """Stores an upload; ValueError when it is refused (too large, empty, a type files do not take)."""
+    async def put(
+        self, tenant: str, team: str, data: bytes, *, name: str, mime: str, actor: str, purpose: Purpose = ...
+    ) -> Stored:
+        """Stores bytes under `purpose` (`knowledge_source` by default; `knowledge_snapshot` for content a source
+        fetched); ValueError when files refuses them (too large for the purpose, empty, a type it does not take)."""
         ...
 
     async def read(self, tenant: str, team: str, file_id: str) -> tuple[str, str, bytes]:
@@ -70,11 +71,6 @@ class FileIntake(Protocol):
         ...
 
 
-def _too_large(name: str, data: bytes) -> None:
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise ValueError(f"{name} is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
-
-
 def _unavailable(e: FilesRefused | httpx.HTTPError, doing: str) -> ServiceUnavailable:
     """What a person reads when files-service refuses or cannot be reached: which store failed, that nothing changed,
     and what to do, rather than a generic server error."""
@@ -90,11 +86,21 @@ class FilesServiceIntake:
     def __init__(self, client: FilesClient) -> None:
         self._client = client
 
-    async def put(self, tenant: str, team: str, data: bytes, *, name: str, mime: str, actor: str) -> Stored:
-        _too_large(name, data)
+    async def put(
+        self,
+        tenant: str,
+        team: str,
+        data: bytes,
+        *,
+        name: str,
+        mime: str,
+        actor: str,
+        purpose: Purpose = "knowledge_source",
+    ) -> Stored:
+        # files-service's purpose limits decide the size and type; kb-service sets none of its own.
         try:
             stored = await self._client.write(
-                tenant, team, data, name=name, mime=mime, purpose="knowledge_source", uploaded_by=actor
+                tenant, team, data, name=name, mime=mime, purpose=purpose, uploaded_by=actor
             )
         except FileNotReady as e:
             raise ValueError(str(e)) from e
@@ -181,9 +187,19 @@ class KnowledgeFiles:
         stored = Stored(file_id, str(rec["name"]), str(rec["mime"]), int(rec["size"]), str(rec["digest"]), False)
         return _Record(stored, str(rec["team"]), at)
 
-    async def put(self, tenant: str, team: str, data: bytes, *, name: str, mime: str, actor: str) -> Stored:
-        # One store per deployment under kb_files_dir: the tenant is not part of a file's key here.
-        _too_large(name, data)
+    async def put(
+        self,
+        tenant: str,
+        team: str,
+        data: bytes,
+        *,
+        name: str,
+        mime: str,
+        actor: str,
+        purpose: Purpose = "knowledge_source",
+    ) -> Stored:
+        # One store per deployment under kb_files_dir: the tenant is not part of a file's key here, nor the purpose.
+        del purpose
         digest = hashlib.sha256(data).hexdigest()
         for path in self._records.glob("*.json"):
             rec = self._load(path)

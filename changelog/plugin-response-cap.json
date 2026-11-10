@@ -1,0 +1,1 @@
+{"date":"2026-11-09","title":"App answers have a size cap","description":"An answer from an app larger than 25 MB is refused as it arrives, so one huge page can no longer fill the gateway's memory.","tag":"fix"}

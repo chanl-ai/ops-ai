@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Knowledge search finds answers by meaning",
+  "description": "Agents find a knowledge passage even when the question uses other words than the page, by meaning and keywords together; each search says which ran, and a knowledge base's own settings decide how many passages return.",
+  "tag": "new"
+}

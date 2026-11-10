@@ -2,7 +2,16 @@
 commands. The guide is docs/guide/plugins.md."""
 
 from .context import Context, Http, Response, Settings
-from .errors import BadInput, DeadlineExceeded, EgressDenied, NeedsReconnect, PluginError, RateLimited
+from .errors import (
+    BadInput,
+    DeadlineExceeded,
+    EgressDenied,
+    NeedsReconnect,
+    NotFound,
+    PluginError,
+    RateLimited,
+    TooLarge,
+)
 from .manifest import Manifest, ManifestError, read
 from .plugin import Plugin, tool
 
@@ -15,11 +24,13 @@ __all__ = [
     "Manifest",
     "ManifestError",
     "NeedsReconnect",
+    "NotFound",
     "Plugin",
     "PluginError",
     "RateLimited",
     "Response",
     "Settings",
+    "TooLarge",
     "read",
     "tool",
 ]

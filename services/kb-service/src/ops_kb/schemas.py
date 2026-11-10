@@ -63,6 +63,15 @@ class SourceIn(In):
     # A "tool" source's plugin and source names: {"plugin": "opsai.salesforce", "source": "articles"}. Any
     # values: the console's Add source sends its whole draft config for every type, and only a tool source reads it.
     config: dict[str, Any] | None = None
+    # Each stage's settings (source_settings.py), over the kind's defaults; validated as a whole.
+    schedule: Json | None = None
+    parsing: Json | None = None
+    cleaning: Json | None = None
+    ingest: Json | None = None
+    rules: list[Json] | None = None
+    metadata_mapping: list[Json] | None = None
+    # The most one sync may spend on model calls for its AI steps ($5 by default).
+    ai_ceiling: float | None = Field(default=None, ge=0.1, le=500.0)
 
 
 class KbSourceLink(Out):
@@ -112,11 +121,23 @@ class KnowledgeBaseRow(KnowledgeBase):
 class Source(Out):
     id: str
     type: str
+    # file, web (a plugin source of one site's pages) or tool.
+    kind: str
+    # The kind in words: Files, or the plugin's title for the source (what Add source offered it as).
+    kind_label: str
     name: str
     scope_summary: str
     config: Json
     parsing: Json
+    cleaning: Json
     ingest: Json
+    # The most one sync may spend on model calls for its AI steps.
+    ai_ceiling: float = 5.0
+    # The AI steps chosen and not yet approved by the knowledge owner; syncs run without them until then.
+    ai_steps_waiting: list[str]
+    # Each host of the source's own site an admin has yet to approve (`host`, and `runKey`, the Security task it waits
+    # on when the account's policy asks Security); syncs answer 409 host_waiting until none is left.
+    waiting_hosts: list[Json]
     rules: list[Json]
     metadata_mapping: list[Json]
     tags: list[str]
@@ -137,6 +158,11 @@ class Source(Out):
     last_run_status: str | None = None
     used_by_kb_ids: list[str]
     created_at: str
+    # On a settings save: the rebuild it started in the background, when items were built under other settings.
+    rebuild: SyncRun | None = None
+    # When the schedule next syncs it, and its health in one place (state, last good sync, days failing, tombstones).
+    next_sync_at: str | None = None
+    health: Json = Field(default_factory=dict[str, Any])
 
 
 class NamedRef(Out):
@@ -159,10 +185,21 @@ class SourceRow(Source):
 
 class KbSourceView(KbSourceLink):
     source: Source
+    # A sync or rebuild holds the source now.
+    running: bool = False
+
+
+class EmbeddingCoverage(Out):
+    model: str
+    width: int
+    embedded: int
+    units: int
 
 
 class KnowledgeBaseDetail(KnowledgeBaseRow):
     attached: list[KbSourceView]
+    # How many of the base's units have a vector of the environment's model; absent with no embedding model.
+    embedding: EmbeddingCoverage | None = None
     metadata_keys: list[str]
     suggested_questions: list[str]
     held_count: int
@@ -190,7 +227,6 @@ class SourceDetail(Source):
     reindex_needed: bool
     required_metadata: list[str]
     governance: Json
-    ai_steps_waiting: list[str]
     # What the caller may do with it, from the write routes' own check.
     can_edit: bool | None = None
     can_delete: bool | None = None
@@ -208,6 +244,9 @@ class SyncRun(Out):
     phases: list[Json]
     errors: list[Json]
     log: list[str]
+    # A run in the background (a rebuild after a settings change): when it ended, and who asked it to stop.
+    finished_at: str | None = None
+    cancelled_by: str | None = None
 
 
 class Item(Out):
@@ -224,6 +263,10 @@ class Item(Out):
     error_class: str | None = None
     error: str | None = None
     warning: str | None = None
+    # The newer item with the same cleaned text, which search returns instead of this one.
+    duplicate_of: str | None = None
+    # Where a fetched item sits at its source: a library folder, a space's page tree.
+    folder: str | None = None
     chunk_count: int
     tags: list[str]
     metadata: dict[str, str]
@@ -252,6 +295,10 @@ class ItemWithDetail(Item):
     source_name: str
     source_type: str
     detail: Json
+    # How the file was read and what cleaning removed, page by page, from its stored reading.
+    reading: Json | None = None
+    # The splitting it was built under, and whether that is still the source's.
+    settings_used: Json | None = None
 
 
 class QueryIn(In):
@@ -266,7 +313,8 @@ class PageIn(In):
 class SearchIn(In):
     kb_ids: list[str]
     question: str
-    limit: int = 8
+    # At most this many pieces; left out, the bases' own limit (their retrieval settings' chunkLimit) decides.
+    limit: int | None = Field(default=None, ge=1, le=20)
 
 
 class PassageOut(Out):
@@ -279,10 +327,36 @@ class PassageOut(Out):
     snippet: str
     text: str
     score: float
+    # The file the cited version was built from, which a citation opens; the item's address at its source.
+    file_id: str | None = None
+    url: str | None = None
+    # What matched: the piece's own text, a smaller child, or a question written for it.
+    matched: str = "self"
+    # Each lane's own score: keyword, the share of the question's terms; meaning, cosine similarity.
+    lanes: dict[str, float] = Field(default_factory=dict[str, float])
+    verified: bool = False
+
+
+class SkippedLane(Out):
+    lane: str
+    # no_embedding_model, no_vector_store, no_vectors, or embedding_unavailable with the model's code.
+    reason: str
+
+
+class Lanes(Out):
+    asked: list[str]
+    ran: list[str]
+    skipped: list[SkippedLane]
+
+
+class SearchCost(Out):
+    embedding_tokens: int
 
 
 class SearchOut(Out):
     passages: list[PassageOut]
+    lanes: Lanes
+    cost: SearchCost
 
 
 class PlaygroundAnswer(Out):
@@ -293,9 +367,32 @@ class PlaygroundAnswer(Out):
     citations: list[Json]
     chunks: list[Json]
     no_answer: bool | None = None
+    passages: list[PassageOut]
+    lanes: Lanes
+    cost: SearchCost
     retrieval_ms: int
     synthesis_ms: int
     shape: str
+
+
+class FaqDraft(Out):
+    question: str
+    answer: str
+    quote: str
+    section_path: list[str]
+    # Words the answer uses that its passage does not (beyond common words): an answer that may say more than its
+    # source. Empty when every word is the passage's.
+    adds_words: list[str] = Field(default_factory=list[str])
+
+
+class DecideIn(In):
+    ids: list[str] = Field(min_length=1, max_length=200)
+    decision: Literal["approve", "reject"]
+
+
+class DraftEdit(In):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1, max_length=4000)
 
 
 class KnowledgeChange(Out):
@@ -324,6 +421,8 @@ class KnowledgeChange(Out):
     created_at: str
     decided_at: str | None = None
     decided_by: str | None = None
+    # An FAQ draft's pair and the passage it quotes; absent for a sync's change.
+    faq: FaqDraft | None = None
 
 
 class ChangeViewCounts(Out):
@@ -346,12 +445,97 @@ class SyncIn(BaseModel):
     retry: bool = False
 
 
+class SourceKind(Out):
+    # `file` for the built-in kind; `tool` for an app's knowledge source, named by its plugin and source.
+    type: str
+    group: Literal["built_in", "apps"]
+    title: str
+    plugin: str | None = None
+    source: str | None = None
+    # Its items are one website's pages.
+    site: bool = False
+    # It needs the team's connection, and whether the team has one that works.
+    needs_connection: bool = False
+    connected: bool = False
+    previews: bool = False
+    pickers: bool = False
+    # What a source of this kind is set up with (start addresses, sites, spaces).
+    inputs: Json = Field(default_factory=dict[str, Any])
+    # file, web or tool: the kind its defaults are chosen by.
+    kind: str
+    # The settings and schedule a new source of this kind starts with, as create applies them.
+    defaults: Json
+
+
+class AiApprovalIn(In):
+    decision: Literal["approve", "revoke"]
+
+
+class TokenRange(Out):
+    low: int
+    high: int
+
+
+class AiEstimate(Out):
+    steps: list[str]
+    model: str
+    sampled_items: int
+    total_items: int
+    calls: int
+    input_tokens: int
+    output_tokens: TokenRange
+    # What the numbers rest on and what they leave out, in words.
+    basis: str
+
+
+class Tombstone(Out):
+    id: str
+    at: str | None = None
+    reason: str | None = None
+
+
+class TombstonesIn(In):
+    ids: list[str] = Field(min_length=1, max_length=200)
+
+
+class PreviewIn(In):
+    # The plugin, its source and the source's own settings, as a create would send them.
+    config: dict[str, Any]
+
+
+class PreviewPage(Out):
+    id: str
+    # Will fetch, excluded by a rule, refused by robots.txt, needs JavaScript, ...
+    outcome: str
+    will_fetch: bool
+
+
+class SourcePreview(Out):
+    found: int
+    will_fetch: int
+    pages: list[PreviewPage]
+    # The listing stopped at the source's page cap.
+    capped: bool
+
+
 class SourcePatch(In):
     name: str | None = None
+    # A source read through an app: its own settings (a site's start, include and exclude, depth, pace), merged over
+    # the saved ones and checked against what the plugin declares.
+    values: Json | None = None
     collection: str | None = None
     owner: str | None = None
     sensitivity: str | None = None
     tags: list[str] | None = None
+    # Each stage's settings; a part sent is merged into the saved one key by key and validated as a whole.
+    schedule: Json | None = None
+    parsing: Json | None = None
+    cleaning: Json | None = None
+    ingest: Json | None = None
+    rules: list[Json] | None = None
+    metadata_mapping: list[Json] | None = None
+    # The most one sync may spend on model calls for its AI steps ($5 by default).
+    ai_ceiling: float | None = Field(default=None, ge=0.1, le=500.0)
 
 
 class FileIdsIn(In):

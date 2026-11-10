@@ -147,7 +147,7 @@ async def test_with_the_setting_off_nothing_is_masked() -> None:
 
 
 class Knowledge:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         return [
             Passage("doc_1", "Customer notes", "Contact", "1", "Ann Lee, SSN 123-45-6789, ann.lee@example.com.", "kb_1")
         ]

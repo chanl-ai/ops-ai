@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ops_service_kit.http import Out
 
@@ -166,3 +166,32 @@ class ChatCompletion(_OpenAI):
     model: str
     choices: list[ChatChoice]
     usage: ChatUsage
+
+
+class EmbeddingsRequest(BaseModel):
+    """OpenAI's embeddings request: the alias as `model`, one text or a list, and the width when the caller names
+    one."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    input: str | list[str]
+    dimensions: int | None = Field(default=None, ge=1, le=4096)
+
+
+class EmbeddingRow(_OpenAI):
+    object: Literal["embedding"]
+    index: int
+    embedding: list[float]
+
+
+class EmbeddingsUsage(_OpenAI):
+    prompt_tokens: int
+    total_tokens: int
+
+
+class Embeddings(_OpenAI):
+    object: Literal["list"]
+    model: str
+    data: list[EmbeddingRow]
+    usage: EmbeddingsUsage

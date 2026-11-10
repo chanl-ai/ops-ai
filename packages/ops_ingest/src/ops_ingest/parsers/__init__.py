@@ -61,8 +61,10 @@ def parse(
     clean: bool = False,
     fields: dict[str, str] | None = None,
     ocr_engine: WordOcr | None = None,
+    mark: bool = False,
 ) -> ParsedDocument:
-    """Parse a file. `clean` is the `clean` ingestion strategy: page furniture is removed from HTML."""
+    """Parse a file. `clean` is the `clean` ingestion strategy: page furniture is removed from HTML. `mark` keeps
+    HTML furniture and marks it on each block instead, for the shared reading."""
     if len(data) > MAX_FILE_BYTES:
         raise TooLargeError(f"{filename} is {len(data)} bytes; the limit is {MAX_FILE_BYTES}")
     parsing = parsing or ParsingSettings()
@@ -77,7 +79,7 @@ def parse(
         case "text/csv":
             return parse_csv(data, filename=filename, parsing=parsing, fields=fields)
         case "text/html" | "application/xhtml+xml":
-            return parse_html(data, filename=filename, clean=clean, parsing=parsing, fields=fields)
+            return parse_html(data, filename=filename, clean=clean, parsing=parsing, fields=fields, mark=mark)
         case "text/plain" | "text/markdown":
             return parse_text(data, filename=filename, mime_type=mime, parsing=parsing, fields=fields)
         case _:

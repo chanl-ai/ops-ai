@@ -21,7 +21,7 @@ from ops_identity import Auth, ServiceClient
 from ops_identity.fastapi import DEV_TENANT
 from ops_service_kit.credentials import credential_store
 from ops_service_kit.logging import configure_logging, get_logger
-from ops_service_kit.model_calls import StructuredCalls
+from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings, require_keys
 from ops_store.database import open_database
 from ops_store.schema_version import require_current_schema
@@ -254,7 +254,7 @@ def main() -> None:
         send_check=SendCheck(
             SendPolicies(engine),
             CheckBeforeSend(client("platform", settings.platform_url, ["settings:view"])),
-            StructuredCalls(
+            ModelCalls(
                 httpx.AsyncClient(base_url=settings.models_url, timeout=30), settings.models_key.get_secret_value()
             )
             if settings.models_url and settings.models_key
@@ -307,6 +307,7 @@ def main() -> None:
                         apps.plugin_accounts,
                         directory,
                         users=tool_users,
+                        hosts=modules,
                     )
                 ]
                 if apps.plugin_accounts

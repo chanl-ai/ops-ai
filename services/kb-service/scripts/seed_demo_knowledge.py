@@ -234,7 +234,8 @@ async def ask(kb_for: dict[str, httpx.AsyncClient], seeded: Seeded) -> list[dict
         kb_id, owner = (seeded.retail_kb, JAMES) if base == "retail" else (seeded.branch_kb, NADIA)
         answer = data(await kb_for[owner].post(f"/v1/knowledge-bases/{kb_id}/query", json={"question": question}))
         chunks: list[dict[str, Any]] = list(answer.get("chunks") or [])
-        best = max((float(c["score"]) for c in chunks), default=None)
+        # A lane's own score is what its threshold reads; the fused score only orders the pieces.
+        best = max((max(c["lanes"].values()) for c in chunks if c.get("lanes")), default=None)
         cite = answer["citations"][0] if answer.get("citations") else None
         out.append(
             {

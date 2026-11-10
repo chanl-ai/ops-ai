@@ -99,6 +99,9 @@ class AgentDefinition(_Model):
     instructions: list[Fragment]
     tools: list[str]
     default_kb_ids: list[str]
+    # Its search_knowledge calls may search every knowledge base of its team, not only default_kb_ids (decision D19,
+    # off by default; the Ops Assistant has it, as it answers from all of its team's knowledge).
+    all_team_knowledge: bool = False
     suggestions: list[str]
     # Per turn. Tool calls may be uncapped (the model-call cap still bounds the turn); model calls are always a number.
     max_tool_calls: int | None = 6

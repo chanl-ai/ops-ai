@@ -17,10 +17,11 @@ from ops_store.schema_version import require_current_schema
 from .agents import StaticAgents
 from .app import _documents_service, create_kb_app  # pyright: ignore[reportPrivateUsage]
 from .files import KnowledgeFiles, file_intake, move_files
+from .origin import source_team
+from .search import HybridRetriever
 from .seed import TENANT, seed_demo
-from .service import KnowledgeService, source_team
+from .service import KnowledgeService
 from .store import KnowledgeStore, engine_for
-from .store.fulltext import PostgresFullTextRetriever
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
@@ -39,7 +40,7 @@ async def _seed(settings: Settings) -> None:
     service = KnowledgeService(
         KnowledgeStore(engine),
         file_intake(settings),
-        PostgresFullTextRetriever(engine),
+        HybridRetriever(engine),
         StaticAgents(),
         readings=_documents_service(settings),
         ocr=settings.kb_ocr,

@@ -56,11 +56,16 @@ _HEADINGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 _BLOCK_TEXT = {"p", "li", "pre", "blockquote", "dt", "dd", "figcaption", "address"}
 
 
+# A utility class with an arbitrary value or a variant (Tailwind's `[--fd-sidebar-width:0px]`, `md:px-6`) names a style,
+# not what the element is: its parts ("sidebar") say nothing about the element.
+_UTILITY = re.compile(r"[\[\]():/!]")
+
+
 def _tokens(tag: Tag) -> set[str]:
     values: list[str] = []
     classes = tag.get("class")
     if isinstance(classes, list):
-        values.extend(str(c) for c in classes)
+        values.extend(str(c) for c in classes if not _UTILITY.search(str(c)))
     elif isinstance(classes, str):
         values.append(classes)
     tag_id = tag.get("id")
@@ -78,7 +83,10 @@ def _is_furniture(tag: Tag) -> bool:
     role = tag.get("role")
     if isinstance(role, str) and role.lower() in _FURNITURE_ROLES:
         return True
-    return bool(_tokens(tag) & _FURNITURE_TOKENS)
+    if not _tokens(tag) & _FURNITURE_TOKENS:
+        return False
+    # An element holding the page's main content or article is its layout, whatever its class names say.
+    return tag.find(["main", "article"]) is None
 
 
 def _text(tag: Tag) -> str:
@@ -95,7 +103,7 @@ def _remove(tags: list[Tag]) -> int:
     return removed
 
 
-def _table(tag: Tag, builder: DocumentBuilder, keep: bool) -> None:
+def _table(tag: Tag, builder: DocumentBuilder, keep: bool, *, furniture: bool = False, main: bool = False) -> None:
     rows: list[list[str]] = []
     headers: list[str] = []
     for tr in tag.find_all("tr"):
@@ -109,15 +117,20 @@ def _table(tag: Tag, builder: DocumentBuilder, keep: bool) -> None:
         headers, rows = rows[0], rows[1:]
     caption_tag = tag.find("caption")
     caption = _text(caption_tag) if caption_tag else None
-    builder.table(headers, rows, caption=caption, keep_as_table=keep)
+    builder.table(headers, rows, caption=caption, keep_as_table=keep, furniture=furniture, main=main)
 
 
-def _walk(node: Tag, builder: DocumentBuilder, keep_tables: bool) -> None:
+def _walk(node: Tag, builder: DocumentBuilder, keep_tables: bool, *, mark: bool = False) -> None:
+    """Content in reading order. With `mark`, page furniture is kept and each block says whether it sits in furniture
+    or in the main element, so cleaning can decide later without reading the page again."""
     loose: list[str] = []
+    furniture = mark and any(_is_furniture(t) for t in (node, *node.parents))
+    main = mark and any(t.name in ("main", "article") for t in (node, *node.parents))
+    flags = {"furniture": furniture, "main": main} if mark else {}
 
     def flush() -> None:
         if loose:
-            builder.paragraph(" ".join(loose))
+            builder.paragraph(" ".join(loose), **flags)
             loose.clear()
 
     for child in node.children:
@@ -128,18 +141,24 @@ def _walk(node: Tag, builder: DocumentBuilder, keep_tables: bool) -> None:
             continue
         if not isinstance(child, Tag):
             continue
-        if child.name in _HEADINGS:
+        if mark and child.name not in _HEADINGS and child.name != "table" and _is_furniture(child) and not furniture:
             flush()
-            builder.heading(_text(child), _HEADINGS[child.name])
+            _walk(child, builder, keep_tables, mark=mark)
+        elif child.name in _HEADINGS:
+            flush()
+            builder.heading(_text(child), _HEADINGS[child.name], **flags)
         elif child.name == "table":
             flush()
-            _table(child, builder, keep_tables)
+            _table(child, builder, keep_tables, **flags)
         elif child.name in _BLOCK_TEXT:
             flush()
-            builder.paragraph(_text(child))
-        elif child.name in ("ul", "ol", "dl", "div", "section", "article", "main", "header", "body", "figure"):
+            builder.paragraph(_text(child), **flags)
+        elif child.name in (
+            "ul", "ol", "dl", "div", "section", "article", "main", "header", "body", "figure",
+            *_FURNITURE_TAGS,
+        ):  # fmt: skip
             flush()
-            _walk(child, builder, keep_tables)
+            _walk(child, builder, keep_tables, mark=mark)
         else:
             text = _text(child)
             if text:
@@ -154,7 +173,10 @@ def parse_html(
     clean: bool = True,
     parsing: ParsingSettings | None = None,
     fields: dict[str, str] | None = None,
+    mark: bool = False,
 ) -> ParsedDocument:
+    """With `clean`, furniture and everything outside the main element are dropped here. With `mark` (and no
+    `clean`), they are kept and marked on each block, which is how the shared reading reads HTML."""
     parsing = parsing or ParsingSettings()
     soup = BeautifulSoup(decode(data), "html.parser")
     builder = DocumentBuilder()
@@ -175,7 +197,7 @@ def parse_html(
             root = main
         builder.removed_chars = removed
 
-    _walk(root, builder, parsing.tables)
+    _walk(root, builder, parsing.tables, mark=mark and not clean)
     source = SourceMetadata(
         filename=filename, mime_type="text/html", size_bytes=len(data), title=title, fields=fields or {}
     )

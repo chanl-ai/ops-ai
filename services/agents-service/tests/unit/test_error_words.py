@@ -83,7 +83,7 @@ async def test_a_failure_already_in_plain_words_reaches_the_model_as_it_is() -> 
 
 
 class NoKnowledge:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         return []
 
 

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Moving the local database checks every row",
+  "description": "make db-move-image counts every table's rows before and after, refuses a dump that holds fewer rows than it counted, and stops the restore at its first error.",
+  "tag": "fix"
+}

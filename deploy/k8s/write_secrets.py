@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 SERVICES = ("platform", "agents", "tools", "models", "kb", "files", "documents", "runner")
 # Services with no tables, so no database login.
 NO_DATABASE = {"runner"}
-MODELS_KEYS = {"agents": "OPS_MODELS_KEY_AGENTS", "documents": "OPS_MODELS_KEY_DOCUMENTS"}
+MODELS_KEYS = {"agents": "OPS_MODELS_KEY_AGENTS", "documents": "OPS_MODELS_KEY_DOCUMENTS", "kb": "OPS_MODELS_KEY_KB"}
 
 
 def _load(path: Path, name: str) -> Any:
@@ -57,7 +57,9 @@ def main() -> None:
     ap.add_argument("--db-name", required=True)
     ap.add_argument("--logins", type=Path, required=True, help="ops_migrator= and ops_<service>_runtime= lines")
     ap.add_argument("--admin", type=Path, required=True, help="OPS_BOOTSTRAP_* lines for the first admin")
-    ap.add_argument("--models", type=Path, help="OPS_MODELS_KEY_AGENTS and OPS_MODELS_KEY_DOCUMENTS lines")
+    ap.add_argument(
+        "--models", type=Path, help="OPS_MODELS_KEY_AGENTS, OPS_MODELS_KEY_DOCUMENTS and OPS_MODELS_KEY_KB lines"
+    )
     a = ap.parse_args()
     uses = cast(dict[str, tuple[str, ...]], _load(HERE.parent / "images" / "service_keys.py", "service_keys").USES)
     kept = a.overlay / "keys.env"

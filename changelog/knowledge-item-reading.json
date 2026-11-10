@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "See how each document was read and cleaned",
+  "description": "A knowledge document now shows, page by page, how it was read and what cleaning removed, with each passage's searchable parts and the settings that built it.",
+  "tag": "improved"
+}

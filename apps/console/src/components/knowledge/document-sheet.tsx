@@ -17,16 +17,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { bytes, dateTime, mimeLabel, shortDate, dateOnly } from '@/lib/format';
+import { bytes, count, mimeLabel, plural, shortDate, dateOnly } from '@/lib/format';
 import type { ItemWithDetail } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
+import { PRESET_LABEL, STRATEGY_LABEL } from '@/components/sources/ingest-meta';
+
 import { ERROR_CLASS_LABEL, FreshnessBadge, ItemStatusBadge, MimeIcon, SensitivityBadge } from './knowledge-meta';
+
+const READ_BY: Record<string, string> = { text: 'Text', ocr: 'OCR', mixed: 'Mixed: text and OCR' };
+const BLOCK_WORD: Record<string, [string, string]> = { title: ['title', 'titles'], heading: ['heading', 'headings'], paragraph: ['paragraph', 'paragraphs'], table: ['table', 'tables'], list: ['list', 'lists'], image: ['image', 'images'] };
+
+/** A page's kept blocks in words, such as "1 title, 2 headings, 6 paragraphs". */
+const blocksText = (blocks: Record<string, number>) =>
+  Object.entries(blocks)
+    .map(([k, n]) => plural(n, BLOCK_WORD[k]?.[0] ?? k, BLOCK_WORD[k]?.[1]))
+    .join(', ') || 'No text';
+
+/** What search matches a piece as, counted by kind: "1 piece · 3 questions". */
+function unitsText(units: { kind: string }[]) {
+  const by = units.reduce<Record<string, number>>((m, u) => ({ ...m, [u.kind]: (m[u.kind] ?? 0) + 1 }), {});
+  const word: Record<string, [string, string]> = { self: ['piece', 'pieces'], text: ['piece', 'pieces'], child: ['child', 'children'], question: ['question', 'questions'], faq: ['FAQ pair', 'FAQ pairs'] };
+  return Object.entries(by).map(([k, n]) => plural(n, word[k]?.[0] ?? k, word[k]?.[1])).join(' · ') || 'Its text';
+}
 
 const VERSION_TONE = { current: 'border-success/40 text-success-text', superseded: 'text-muted-foreground', scheduled: 'border-blue-200 text-blue-700 dark:border-blue-900 dark:text-blue-300' } as const;
 const VERSION_LABEL = { current: 'In force', superseded: 'Superseded', scheduled: 'Scheduled' } as const;
 
-/** One document or source item: its content, chunks, governance metadata and revision history. */
+/** One document or source item, all from `GET /v1/items/{id}`: the reading page by page, its pieces with what each is searched as, its questions, metadata and versions. */
 export function DocumentSheet({
   open,
   item,
@@ -57,22 +75,22 @@ export function DocumentSheet({
   page?: number;
 }) {
   const [chunkQuery, setChunkQuery] = React.useState('');
-  const [diffRev, setDiffRev] = React.useState<number | null>(null);
   const [ownerOpen, setOwnerOpen] = React.useState(false);
   const [owner, setOwner] = React.useState('');
   const [tab, setTab] = React.useState('content');
   React.useEffect(() => {
     setChunkQuery('');
-    setTab(page ? 'chunks' : 'content');
+    setTab(page ? 'pieces' : 'content');
   }, [item?.id, page]);
   const citedRef = React.useRef<HTMLLIElement>(null);
   const cited = page ? item?.detail?.chunks.find((c) => c.page === page)?.index : undefined;
   React.useEffect(() => {
-    if (tab === 'chunks' && cited !== undefined) citedRef.current?.scrollIntoView({ block: 'center' });
+    if (tab === 'pieces' && cited !== undefined) citedRef.current?.scrollIntoView({ block: 'center' });
   }, [tab, cited]);
 
   const d = item?.detail;
   const synced = item && !['file', 'text'].includes(item.sourceType);
+  const questions = (d?.chunks ?? []).flatMap((c) => (c.units ?? []).filter((u) => u.kind === 'question').map((u) => ({ text: u.text, piece: c })));
   const chunks = d?.chunks.filter((c) => !chunkQuery || `${c.text} ${c.location}`.toLowerCase().includes(chunkQuery.toLowerCase())) ?? [];
 
   return (
@@ -190,8 +208,11 @@ export function DocumentSheet({
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList>
                 <TabsTrigger value="content">Content</TabsTrigger>
-                <TabsTrigger value="chunks">
-                  Chunks <span className="ml-1 text-muted-foreground">{d.chunks.length}</span>
+                <TabsTrigger value="pieces">
+                  Pieces <span className="ml-1 text-muted-foreground">{d.chunks.length}</span>
+                </TabsTrigger>
+                <TabsTrigger value="questions">
+                  Questions <span className="ml-1 text-muted-foreground">{questions.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value="metadata">Metadata</TabsTrigger>
                 <TabsTrigger value="history">
@@ -208,6 +229,51 @@ export function DocumentSheet({
                   <span>Modified at source {shortDate(item.modifiedAt)}</span>
                   <span>From {item.sourceName}</span>
                 </div>
+                {item.settingsUsed && (
+                  <div className="flex flex-col">
+                    <FieldRow label="Settings used" value={`${PRESET_LABEL[item.settingsUsed.preset as keyof typeof PRESET_LABEL] ?? item.settingsUsed.preset} · ${item.settingsUsed.strategies.map((x) => STRATEGY_LABEL[x as keyof typeof STRATEGY_LABEL] ?? x).join(', ')}`} />
+                    <FieldRow label="Split under" value={item.settingsUsed.current ? 'The source’s current settings' : 'Earlier settings; it is split again on the next rebuild'} />
+                  </div>
+                )}
+                {item.reading ? (
+                  <div className="flex flex-col gap-1.5" data-testid="item-reading">
+                    <p className="text-sm font-medium">
+                      The reading · OCR {item.reading.ocr}
+                      {item.reading.readerVersion ? <span className="font-normal text-muted-foreground"> · {item.reading.readerVersion}</span> : null}
+                    </p>
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Page</TableHead>
+                            <TableHead>Read by</TableHead>
+                            <TableHead>Blocks</TableHead>
+                            <TableHead className="text-right">Removed by cleaning</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {item.reading.pages.map((pg) => (
+                            <TableRow key={pg.number}>
+                              <TableCell className="tabular-nums">{pg.number}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="font-normal">
+                                  {READ_BY[pg.readBy ?? ''] ?? pg.readBy ?? 'Text'}
+                                  {pg.ocrConfidence !== undefined ? ` · ${pg.ocrConfidence.toFixed(2)}` : ''}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs whitespace-normal">{blocksText(pg.blocks)}</TableCell>
+                              <TableCell className="text-right text-xs tabular-nums">{pg.removedChars ? `${count(pg.removedChars)} characters` : 'Nothing'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground" data-testid="item-no-reading">
+                    No page-by-page reading is kept for this item: it has no file, or its reading is not finished. The text below is what was indexed.
+                  </p>
+                )}
                 <article className="text-sm">
                   {d.content.split('\n').map((line, i) =>
                     line.startsWith('# ') ? (
@@ -231,33 +297,60 @@ export function DocumentSheet({
                 </article>
               </TabsContent>
 
-              <TabsContent value="chunks" className="flex flex-col gap-2 pt-3">
+              <TabsContent value="pieces" className="flex flex-col gap-2 pt-3">
                 <div className="relative">
                   <Search className="pointer-events-none absolute top-2 left-2.5 size-3.5 text-muted-foreground" />
-                  <Input value={chunkQuery} onChange={(e) => setChunkQuery(e.target.value)} placeholder="Search within chunks" className="h-8 pl-8" aria-label="Search within chunks" />
+                  <Input value={chunkQuery} onChange={(e) => setChunkQuery(e.target.value)} placeholder="Search within pieces" className="h-8 pl-8" aria-label="Search within pieces" />
                 </div>
-                <ol className="divide-y">
+                <ol className="divide-y" data-testid="item-pieces">
                   {chunks.map((c) => (
                     <li
                       key={c.index}
                       ref={c.index === cited ? citedRef : undefined}
-                      className={cn('flex flex-col gap-1 py-3', page && c.page === page && '-mx-2 rounded-md bg-primary/5 px-2')}
+                      className={cn('flex flex-col gap-1.5 py-3', page && c.page === page && '-mx-2 rounded-md bg-primary/5 px-2')}
                       data-testid={page && c.page === page ? 'cited-page-chunk' : undefined}
                     >
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span className="font-mono">#{c.index + 1}</span>
-                        <span className="tabular-nums">{c.tokens} tokens</span>
                         <span>{c.location}</span>
+                        <span className="tabular-nums">{c.tokens} tokens</span>
                         {page && c.page === page && <Badge className="h-4 px-1 text-[10px]">Cited page</Badge>}
-                        <Badge variant="outline" className="h-4 px-1 text-[10px] font-normal">
-                          {c.kind}
-                        </Badge>
                       </div>
                       <p className="text-xs leading-relaxed whitespace-pre-wrap">{c.text}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="text-muted-foreground">Searched as</span>
+                        <span>{unitsText(c.units ?? [])}</span>
+                        {Object.entries(c.metadata ?? {})
+                          .filter(([, v]) => v)
+                          .map(([k, v]) => (
+                          <Badge key={k} variant="outline" className="h-5 px-1.5 font-mono text-[10px] font-normal">
+                            {k}: {v}
+                          </Badge>
+                        ))}
+                      </div>
                     </li>
                   ))}
-                  {chunks.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">No chunks match.</li>}
+                  {chunks.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">{d.chunks.length ? 'No piece matches.' : 'No pieces yet.'}</li>}
                 </ol>
+              </TabsContent>
+
+              <TabsContent value="questions" className="flex flex-col gap-2 pt-3">
+                {questions.length ? (
+                  <ol className="divide-y" data-testid="item-questions">
+                    {questions.map((q, i) => (
+                      <li key={i} className="flex flex-col gap-0.5 py-2.5">
+                        <span className="text-sm">{q.text}</span>
+                        <span className="text-xs text-muted-foreground">
+                          Piece #{q.piece.index + 1} · {q.piece.location}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="py-6 text-center text-sm text-muted-foreground" data-testid="item-no-questions">
+                    No questions. Likely questions are off for {item.sourceName}, or its pieces are still waiting for them.
+                  </p>
+                )}
               </TabsContent>
 
               <TabsContent value="metadata" className="flex flex-col pt-1">
@@ -341,90 +434,11 @@ export function DocumentSheet({
                     </TableBody>
                   </Table>
                 </div>
-                <FieldSectionLabel>Changes to this version</FieldSectionLabel>
-                {synced ? (
-                  <ul className="divide-y text-sm">
-                    {d.revisions.map((r) => (
-                      <li key={r.n} className="flex items-center gap-3 py-2">
-                        <History className="size-4 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <div>Sync picked up a change</div>
-                          <div className="text-xs text-muted-foreground">
-                            {dateTime(r.date)} · {r.sizeDelta >= 0 ? '+' : '−'}
-                            {bytes(Math.abs(r.sizeDelta))}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Revision</TableHead>
-                          <TableHead>Author</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Size change</TableHead>
-                          <TableHead />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {d.revisions.map((r) => (
-                          <TableRow key={r.n}>
-                            <TableCell className="font-mono text-xs">
-                              {r.n}
-                              {r.note && (
-                                <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] font-normal">
-                                  {r.note}
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>{r.author}</TableCell>
-                            <TableCell className="text-muted-foreground">{shortDate(r.date)}</TableCell>
-                            <TableCell className={cn('text-right tabular-nums', r.sizeDelta < 0 && 'text-destructive-text')}>
-                              {r.sizeDelta >= 0 ? '+' : '−'}
-                              {bytes(Math.abs(r.sizeDelta))}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="ghost" size="sm" className="h-7" onClick={() => setDiffRev(r.n)}>
-                                Compare
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
               </TabsContent>
             </Tabs>
           </div>
         )}
       </DetailSheet>
-
-      <DialogShell
-        open={diffRev !== null}
-        onOpenChange={(o) => !o && setDiffRev(null)}
-        size="lg"
-        title={`Revision ${diffRev} compared with the current version`}
-        footer={
-          <div className="flex w-full justify-end">
-            <Button variant="outline" onClick={() => setDiffRev(null)}>
-              Close
-            </Button>
-          </div>
-        }
-      >
-        <div className="grid gap-3 md:grid-cols-2">
-          <pre className="overflow-auto rounded-md border bg-destructive/10 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-            {'- Top-up is 85% of base salary for 16 weeks.\n- Employees must have 6 months of service.\n  Requests go through the People portal.'}
-          </pre>
-          <pre className="overflow-auto rounded-md border bg-success/10 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-            {'+ Top-up is 90% of base salary for 18 weeks (birth parent) and 8 weeks (other parent).\n+ Employees must have 12 months of continuous service.\n  Requests go through the People portal.'}
-          </pre>
-        </div>
-      </DialogShell>
 
       <DialogShell
         open={ownerOpen}

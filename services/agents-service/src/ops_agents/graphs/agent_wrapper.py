@@ -136,6 +136,7 @@ def build(
             carried_plan=open_plan,
             user_turn=state["message"],
             kb_ids=_granted(state, grants),
+            all_team_knowledge=a.all_team_knowledge,
             attached=attached,
             attachments=[
                 AttachedFile(str(f["fileId"]), str(f["name"]), f.get("unread"))
@@ -193,6 +194,9 @@ def build(
                 deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
             ),
             tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
+            # The same bases as the turn it resumes, so a search after the approval keeps to them.
+            kb_ids=_granted(state, _kb_grants(a, deps.model_alias, effective)),
+            all_team_knowledge=a.all_team_knowledge,
             resume=Resume(
                 interrupt=interrupt_from_state(state.get("pending") or {}),
                 decision="approved" if approved else "rejected",

@@ -35,6 +35,8 @@ _PLATFORM_SEED = _REPO_ROOT / "services" / "platform-service" / "seed" / "people
 # The entry point group installed plugin packages register under; equals ops_plugin_sdk.loader.GROUP (a tools-service
 # test holds the two together, since this package does not import the plugin kit).
 PLUGIN_ENTRY_POINTS = "ops_ai.plugins"
+# The widest vector an index takes on both supported databases (Azure SQL's vector type; pgvector's HNSW takes 2,000).
+MAX_EMBEDDING_WIDTH = 1998
 
 
 @cache
@@ -263,6 +265,15 @@ class Settings(BaseSettings):
     # models_url, every model call runs through models-service on its alias, and no process needs a provider key
     # (ADR-0008). Unset, agents-service's turns use the direct provider and files-service cannot extract.
     models_key: SecretStr | None = None
+    # The environment's one embedding model: a models-service alias of kind embedding and the width its vectors are
+    # asked at. Every knowledge piece is embedded with it; changing either embeds every piece again and reads nothing
+    # again. Widths above 1,998 are refused here, at start-up, because the vector index caps them (pgvector's HNSW
+    # index at 2,000, Azure SQL's vector type at 1,998).
+    embedding_alias: str = "bank-embed"
+    # What kb-service's key may spend on likely questions, FAQ drafts and embeddings in one UTC day, across every
+    # tenant (models-service refuses past it); each source's own ceiling per run is a source setting ($5 by default).
+    kb_ai_daily_cap: float = 50.0
+    embedding_width: int = 1536
     # Dev only: provider credentials by the name a provider connection's `keyRef` gives, as JSON in
     # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key
     # here stops models-service's start-up.
@@ -360,8 +371,20 @@ class Settings(BaseSettings):
             # runner-service sends a running code operation's calls back to tools-service.
             "runner": ["tools:run"],
             # documents:view, documents:run: kb-service indexes each file of a source from its reading in
-            # documents-service.
-            "kb": ["files:view", "files:create", "files:edit", "agents:view", "documents:view", "documents:run"],
+            # documents-service. audit:create: its relay writes its settings changes to the account's audit log.
+            # knowledge:run: a source's sync reaches the addresses the source names (a crawled site) through tools.
+            "kb": [
+                "files:view",
+                "files:create",
+                "files:edit",
+                "agents:view",
+                "documents:view",
+                "documents:run",
+                "audit:create",
+                "knowledge:run",
+                # events:emit: it reports a source that keeps failing as a service event.
+                "events:emit",
+            ],
             # The workflow worker reads a file an Extract from file step names.
             # It also stores the attachments of mail that starts a workflow.
             # deployments:run: it reads the IMAP mailboxes workflows watch through tools-service.
@@ -453,6 +476,16 @@ class Settings(BaseSettings):
     # Dev only: the access policies the dev caller's identity carries, as a platform token would, e.g.
     # OPS_DEV_POLICIES='{"requesterMayDecide": false}'. Empty: every policy at its open default.
     dev_policies: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+    @field_validator("embedding_width")
+    @classmethod
+    def _indexable_width(cls, v: int) -> int:
+        if not 1 <= v <= MAX_EMBEDDING_WIDTH:
+            raise ValueError(
+                f"OPS_EMBEDDING_WIDTH is {v}; a vector index takes at most {MAX_EMBEDDING_WIDTH} dimensions. Ask the "
+                "embedding model for a narrower vector (OpenAI's text-embedding-3 models take a width)."
+            )
+        return v
 
     @field_validator("bind_host")
     @classmethod

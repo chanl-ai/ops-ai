@@ -494,14 +494,24 @@ class KindField(TypedDict, closed=True):
 
 
 class KnowledgeSourceView(TypedDict, closed=True):
+    changesTool: NotRequired[str | None]
     connectionId: str | None
     connectionStatus: str | None
     deletedTool: str | None
+    egressFrom: NotRequired[str | None]
+    fetchAtOnce: NotRequired[int]
+    getTakesTag: NotRequired[bool]
     getTool: str
+    inputs: NotRequired[dict[str, Any]]
     listTool: str
+    listsWhole: NotRequired[bool]
+    needsConnection: NotRequired[bool]
     plugin: str
+    previewTool: NotRequired[str | None]
     schedule: dict[str, Any]
+    scopesTool: NotRequired[str | None]
     signIn: str | None
+    site: NotRequired[bool]
     source: str
     title: str
 
@@ -976,6 +986,19 @@ class SigningCertificate(TypedDict, closed=True):
 class Skipped(TypedDict, closed=True):
     id: str
     reason: str
+
+
+class SourceHost(TypedDict, closed=True):
+    host: str
+    reason: NotRequired[str | None]
+    runKey: NotRequired[str | None]
+    state: Literal["allowed", "waiting", "refused"]
+
+
+class SourceHostsIn(TypedDict, closed=True):
+    plugin: str
+    source: str
+    values: NotRequired[dict[str, Any]]
 
 
 class SubjectBinding(TypedDict, closed=True):
@@ -1562,6 +1585,11 @@ class EnvelopeListMyAccount(TypedDict, closed=True):
 
 class EnvelopeListMyConnector(TypedDict, closed=True):
     data: list[MyConnector]
+    success: Literal[True]
+
+
+class EnvelopeListSourceHost(TypedDict, closed=True):
+    data: list[SourceHost]
     success: Literal[True]
 
 

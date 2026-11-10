@@ -30,8 +30,11 @@ export const kk = {
   items: (id: string, p: unknown) => ['knowledge', 'source', id, 'items', p] as const,
   runs: (id: string, p: unknown) => ['knowledge', 'source', id, 'runs', p] as const,
   run: (id: string) => ['knowledge', 'run', id] as const,
+  tombstones: (id: string) => ['knowledge', 'source', id, 'tombstones'] as const,
+  aiEstimate: (id: string) => ['knowledge', 'source', id, 'ai-estimate'] as const,
   item: (id: string) => ['knowledge', 'item', id] as const,
   lookups: ['knowledge', 'lookups'] as const,
+  sourceKinds: ['knowledge', 'source-kinds'] as const,
 };
 
 /** While an index refresh or sync runs, poll so progress moves without a reload. */
@@ -41,15 +44,15 @@ const pollWhile = (running: boolean) => (running ? POLL_MS : false);
 export const useKnowledgeBases = (p: ListParams<KbFilters>) =>
   usePagedQuery({ queryKey: kk.kbs(p), queryFn: () => api.knowledge.kbs.list(p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((k) => k.indexing)) });
 export const useKnowledgeBase = (id: string) =>
-  useTeamQuery({ queryKey: kk.kb(id), queryFn: () => api.knowledge.kbs.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.indexing) });
+  useTeamQuery({ queryKey: kk.kb(id), queryFn: () => api.knowledge.kbs.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.indexing || !!q.state.data?.attached.some((a) => a.running)) });
 export const useAddPage = (id: string) => useWrite((i: { title: string; text: string }) => api.knowledge.kbs.addPage(id, i));
 export const useAddDocuments = (id: string) => useWrite((fileIds: string[]) => api.knowledge.kbs.addDocuments(id, fileIds), ['files']);
 export const useKbDocuments = (id: string, p: ListParams<DocumentFilters>, polling = false) =>
   usePagedQuery({ queryKey: kk.documents(id, p), queryFn: () => api.knowledge.kbs.documents(id, p), refetchInterval: pollWhile(polling) });
 export const useSourcesList = (p: ListParams<SourceFilters>) =>
   usePagedQuery({ queryKey: kk.sources(p), queryFn: () => api.knowledge.sources.list(p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((s) => s.running)) });
-export const useSource = (id: string) =>
-  useTeamQuery({ queryKey: kk.source(id), queryFn: () => api.knowledge.sources.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.running) });
+export const useSource = (id: string, enabled = true) =>
+  useTeamQuery({ queryKey: kk.source(id), queryFn: () => api.knowledge.sources.get(id), enabled: enabled && !!id, refetchInterval: (q) => pollWhile(!!q.state.data?.running) });
 export const useSourceItems = (id: string, p: ListParams<ItemFilters>, polling = false) =>
   usePagedQuery({
     queryKey: kk.items(id, p),
@@ -62,6 +65,15 @@ export const useSyncRun = (id: string | null) =>
   useTeamQuery({ queryKey: kk.run(id ?? ''), queryFn: () => api.knowledge.sources.run(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'running') });
 export const useItem = (id: string | null) =>
   useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
+export const useSourceKinds = (enabled = true) => useTeamQuery({ queryKey: kk.sourceKinds, queryFn: api.knowledge.sourceKinds, enabled, staleTime: 60_000 });
+/** What a website or app source with `config` would take in, before it exists; asked only while the settings are valid. */
+export const useSourcePreview = (config: Record<string, unknown>, enabled: boolean) =>
+  useTeamQuery({ queryKey: ['knowledge', 'source-preview', config], queryFn: () => api.knowledge.sources.preview(config), enabled, retry: false, staleTime: 60_000 });
+/** The caller's team's agents citing knowledge base `kbId`, from agents-service's knowledge usage. */
+export const useAgentsCiting = (kbId: string) =>
+  useTeamQuery({ queryKey: ['agents', 'knowledge-usage'], queryFn: api.agents.knowledgeUsage, staleTime: 60_000, select: (rows) => rows.find((r) => r.kbId === kbId)?.agents ?? [] });
+/** One kernel turn of an agent, as the Playground's answer: what the agent would say, nothing kept. */
+export const useAgentTurn = () => useMutation({ mutationFn: ({ agentId, message }: { agentId: string; message: string }) => api.agents.test(agentId, message) });
 export const useKnowledgeLookups = () => useTeamQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
 
 /** Knowledge base names are agent collections, so writes also refresh the shared lookups and agent pages. */
@@ -89,6 +101,13 @@ export const useUpdateSource = (id: string) => useWrite((p: SourcePatch) => api.
 export const useDeleteSource = () => useWrite((id: string) => api.knowledge.sources.remove(id));
 export const useAddSourceFiles = () => useWrite(({ id, fileIds }: { id: string; fileIds: string[] }) => api.knowledge.sources.addFiles(id, fileIds), ['files']);
 export const useSyncSource = () => useWrite(({ id, opts }: { id: string; opts?: SyncOptions }) => api.knowledge.sources.sync(id, opts));
+export const useAiEstimate = (id: string, enabled = true) => useTeamQuery({ queryKey: kk.aiEstimate(id), queryFn: () => api.knowledge.sources.aiEstimate(id), enabled });
+/** Approves a new source's AI steps right after Add source creates it; refused unless the caller owns the knowledge. */
+export const useApproveAiSteps = () => useWrite((id: string) => api.knowledge.sources.decideAiSteps(id, 'approve'));
+export const useDecideAiSteps = (id: string) => useWrite((decision: 'approve' | 'revoke') => api.knowledge.sources.decideAiSteps(id, decision));
+export const useCancelRun = () => useWrite((runId: string) => api.knowledge.sources.cancelRun(runId));
+export const useTombstones = (id: string) => useTeamQuery({ queryKey: kk.tombstones(id), queryFn: () => api.knowledge.sources.tombstones(id) });
+export const useLiftTombstones = (id: string) => useWrite((ids: string[]) => api.knowledge.sources.liftTombstones(id, ids));
 export const usePauseSource = () => useWrite(({ id, paused }: { id: string; paused: boolean }) => api.knowledge.sources.setPaused(id, paused));
 
 export const useVerifyItem = () => useWrite(({ id, verified }: { id: string; verified: boolean }) => api.knowledge.items.verify(id, verified));

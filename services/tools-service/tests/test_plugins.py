@@ -6,11 +6,12 @@ does not list; and a caller forges a next-page address that the team's token is 
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from shutil import copytree, ignore_patterns
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -23,7 +24,7 @@ from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
 from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
-from ops_tools.egress import EgressPolicy
+from ops_tools.egress import EgressDenied, EgressPolicy
 from ops_tools.executor import Executor, HttpExecutor
 from ops_tools.gateway_calls import _before_policy, sign_in_details  # pyright: ignore[reportPrivateUsage]
 from ops_tools.graph_mailbox import CursorSeal
@@ -188,6 +189,53 @@ async def test_a_python_tool_reaches_only_the_plugins_hosts(
     )
     assert not out.ok and out.output["error"]["code"] == "EGRESS_DENIED", out
     assert seen == []
+
+
+class Listed:
+    """The account's egress check as EgressPolicy makes it: a host passes when the plugin owns it or the account lists
+    it."""
+
+    def __init__(self) -> None:
+        self.hosts: set[str] = set()
+
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> None:
+        host = urlsplit(url).hostname or ""
+        if host not in set(also) | self.hosts:
+            raise EgressDenied(f"{host} is not an allowed address.")
+
+
+async def test_a_source_sync_reaches_its_own_site_only_once_the_account_lists_it(
+    engine: AsyncEngine, store: ModuleStore, tenant: str
+) -> None:
+    """A source's site was exempt from the account's egress list on a sync, so a builder's new site was fetched with
+    no admin's approval."""
+    seen: list[str] = []
+    ex = plugin_executor(engine, store, seen)
+    policy = Listed()
+    ex.http.policy = policy  # type: ignore[assignment]
+    args = {"source": {"start": "https://help.northbank.test"}}
+
+    async def sync() -> Any:
+        return await ex.run(
+            module_for(tenant), {"name": "desk_list_pages"}, args, actor="t", environment="test", acting_for=None,
+            source_hosts=True,
+        )  # fmt: skip
+
+    waiting = await sync()
+    assert not waiting.ok and waiting.output["error"]["code"] == "EGRESS_DENIED" and seen == [], (waiting, seen)
+    policy.hosts.add("help.northbank.test")
+    synced = await sync()
+    assert synced.ok and seen == ["https://help.northbank.test/index.json"], (synced, seen)
+    other = await ex.run(
+        module_for(tenant), {"name": "desk_list_pages"}, args, actor="t", environment="test", acting_for=None
+    )
+    assert not other.ok and other.output["error"]["code"] == "EGRESS_DENIED", other
+    assert len(seen) == 1
+    service = ToolCaller.of(type("P", (), {"tenant_id": tenant, "team_id": "team_ops", "sub": "service:kb",
+                                         "kind": "service", "scopes": ["knowledge:run"]})())  # fmt: skip
+    person = ToolCaller.of(type("P", (), {"tenant_id": tenant, "team_id": "team_ops", "sub": "usr_1",
+                                        "kind": "person", "scopes": ["knowledge:run"]})())  # fmt: skip
+    assert (service.scopes, person.scopes) == (("knowledge:run",), ())
 
 
 async def test_a_listing_cursor_is_sealed_and_a_forged_one_refused(
@@ -400,3 +448,28 @@ async def test_a_declarative_plugin_tool_reaches_its_own_host_with_nothing_liste
         moved, "desk_get_case", {"id": "c1"}, key="k3", caller=caller, environment="test"
     )
     assert not refused.ok and "EGRESS_DENIED" in str(refused.output), refused
+
+
+async def test_an_answer_past_the_byte_cap_is_refused_while_it_streams_in(
+    engine: AsyncEngine, store: ModuleStore, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole answer was read into memory before anything was checked, so one huge or endless page could fill the
+    gateway's memory."""
+    monkeypatch.setattr("ops_tools.plugins.executor.MAX_RESPONSE_BYTES", 1024)
+    sent: list[int] = []
+
+    async def endless() -> AsyncIterator[bytes]:
+        for _ in range(10_000):
+            sent.append(1)
+            yield b"x" * 512
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=endless())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    ex = PluginExecutor(host(engine, store), HttpExecutor(client, AllowAll()), b"k" * 32)  # type: ignore[arg-type]
+    out = await ex.run(
+        module_for(tenant), {"name": "desk_list_things"}, {}, actor="t", environment="test", acting_for=None
+    )
+    assert not out.ok and out.output["error"]["code"] == "RESPONSE_TOO_LARGE", out
+    assert len(sent) < 10, "reading stopped just past the cap, not at the end of the answer"

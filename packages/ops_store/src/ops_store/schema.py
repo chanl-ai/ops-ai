@@ -86,7 +86,11 @@ def differences(conn: sa.Connection, metadatas: Sequence[sa.MetaData], exclude: 
     tenant, from its markings) against what the database enforces."""
     ours = tables(metadatas, exclude)
 
-    def include(name: str | None, type_: str, _parent: dict[str, str | None]) -> bool:
+    def include(name: str | None, type_: str, parent: dict[str, str | None]) -> bool:
+        if type_ == "index" and name:
+            table = ours.get(parent.get("table_name") or "")
+            made = table.info.get(DIALECT_INDEXES, ()) if table is not None else ()
+            return not any(name.startswith(prefix) for prefix in made)
         return type_ != "table" or name in ours
 
     context = MigrationContext.configure(
@@ -275,6 +279,24 @@ def isolation_drop_ddl(table: sa.Table, dialect: str) -> list[str]:
     raise NotImplementedError(f"isolation_drop_ddl: no policies for {dialect}")
 
 
+def backfill_ddl(
+    tables: Iterable[sa.Table], dialect: str, *, chain: str, kind: IsolationKind = "team"
+) -> tuple[list[str], list[str]]:
+    """(before, after) a migration's backfill over every tenant's rows of `tables`, which already carry `kind`'s
+    isolation. PostgreSQL: row security off for the transaction, which is refused for a login without BYPASSRLS, so a
+    migration run under the wrong role fails instead of moving only the rows it sees. SQL Server: a security policy
+    filters every login but a chain's system user, and the migrator is none, so each table's policy is dropped before
+    and created again after; the predicate functions stay."""
+    marked = list(tables)
+    if dialect == "postgresql":
+        return ["SET LOCAL row_security = off"], []
+    if dialect == "mssql":
+        before = [s for t in marked for s in isolation_drop_ddl(t, "mssql")]
+        after = [isolation_ddl(t, "mssql", kind=kind, chain=chain)[-1] for t in marked]
+        return before, after
+    return [], []
+
+
 def security_ddl(
     chain: str, tables: Iterable[sa.Table], *, column_type: Callable[[sa.Column[Any]], str], system_user: str | None
 ) -> list[str]:
@@ -414,6 +436,24 @@ def _describe(diff: Any) -> str:
         return f"{kind} {table}.{column}: database {rest[-2]!r}, metadata {rest[-1]!r}"
     side = "in metadata, not in the database" if kind.startswith("add_") else "in the database, not in metadata"
     return f"{kind} {where} {side}"
+
+
+# Tables and indexes one database holds ------------------------------------------------------------------------------
+
+# A table only PostgreSQL holds for now: its columns have no SQL Server form yet (pgvector's vector), so SQL Server's
+# DDL leaves it out and says so, and the store that reads it checks the table is there.
+POSTGRES_ONLY = "postgres_only"
+# Indexes a migration makes per database with raw DDL (a GIN or HNSW index, which no portable Index declares), by name
+# prefix: the model comparison (differences) leaves them to the migration.
+DIALECT_INDEXES = "dialect_indexes"
+
+
+def postgres_only() -> dict[str, Any]:
+    return {POSTGRES_ONLY: True}
+
+
+def dialect_indexes(*prefixes: str) -> dict[str, Any]:
+    return {DIALECT_INDEXES: tuple(prefixes)}
 
 
 # Full-text search on SQL Server ----------------------------------------------------------------------------------

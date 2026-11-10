@@ -298,7 +298,7 @@ get_images() {
       for s in platform agents tools models kb files documents opa proxy console; do targets="$targets $s"; done
       [ "$DB_MODE" = dba ] && targets="$targets db-scripts"
       TARGETS=$targets IMAGE_PREFIX=$PREFIX sh "$ROOT/deploy/release/images.sh" HEAD "$TAG"
-      if [ "$DB_KIND" = builtin ]; then docker pull -q postgres:17-alpine >/dev/null; fi
+      if [ "$DB_KIND" = builtin ]; then docker pull -q pgvector/pgvector:pg17 >/dev/null; fi
       ;;
     offline)
       step "Images: loading $A_OFFLINE"
@@ -308,7 +308,7 @@ get_images() {
       PREFIX=${s% *}
       TAG=${s#* }
       say "loaded $PREFIX/*:$TAG"
-      if [ "$DB_KIND" = builtin ]; then docker pull -q postgres:17-alpine >/dev/null; fi
+      if [ "$DB_KIND" = builtin ]; then docker pull -q pgvector/pgvector:pg17 >/dev/null; fi
       ;;
   esac
 }
@@ -422,11 +422,12 @@ dba_install() {
 Ask your DBA to run these three commands from this folder ($ROOT), as the server admin ($admin):
 
   1. psql "$(libpq postgres "$admin")" -v ON_ERROR_STOP=1 -f dba/1-server.sql
-  2. psql "$(libpq "$DB_NAME" "$admin")" -v ON_ERROR_STOP=1 -c "SET ROLE ops_migrator" -f dba/postgres/bundle.sql
+  2. psql "$(libpq "$DB_NAME" "$admin")" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector" -c "SET ROLE ops_migrator" -f dba/postgres/bundle.sql
   3. psql "$(libpq "$DB_NAME" "$admin")" -v ON_ERROR_STOP=1 -c "SET ROLE ops_migrator" -f dba/postgres/grants.sql
 
-1 makes the roles, sets each service's login password and creates database $DB_NAME owned by ops_migrator; 2 applies
-the schema as ops_migrator; 3 grants each service's login its own tables. The files are in dba/postgres for review
+1 makes the roles, sets each service's login password and creates database $DB_NAME owned by ops_migrator; 2 creates
+the pgvector extension (a superuser's step; on Azure the admin may, as vector is allow-listed) and applies the schema as
+ops_migrator; 3 grants each service's login its own tables. The files are in dba/postgres for review
 (manifest.json, SHA256SUMS). No container gets a login that may change the schema.
 EOF
   wait_for_dba "the three commands above"

@@ -1,3 +1,4 @@
+import type { KnowledgeUsage } from '@/lib/types/knowledge-usage';
 import type { PublishPreview } from '@/lib/types/publish-preview';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
@@ -132,6 +133,10 @@ export interface OpsApi {
     toolOptions(p: OptionsParams): Promise<ToolOptionsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
+    /** One kernel turn on the agent's newest version, nothing kept; a write tool stops at its gate. */
+    test(id: string, message: string): Promise<AgentTestTurn>;
+    /** For each knowledge base, the caller's team's agents citing it. */
+    knowledgeUsage(): Promise<KnowledgeUsage[]>;
     /** Absent when the backend has no bulk route (the agents-service registry); the list then offers no bulk actions. */
     bulkUpdate?(ids: string[], patch: { paused?: boolean; owner?: string }): Promise<BulkResult>;
     bulkRemove?(ids: string[]): Promise<BulkResult>;

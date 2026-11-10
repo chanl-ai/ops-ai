@@ -1,10 +1,10 @@
 'use client';
 
-import { Bot, PencilLine, RefreshCw } from 'lucide-react';
+import { Bot, MessageSquareQuote, PencilLine, RefreshCw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { dateOnly } from '@/lib/format';
-import type { ChangeOrigin, KnowledgeChange, TrustState } from '@/lib/types/knowledge-changes';
+import type { ChangeOrigin, ChangeStatus, KnowledgeChange, TrustState } from '@/lib/types/knowledge-changes';
 import { cn } from '@/lib/utils';
 
 /** Adapted from the shared component library's trust chips: same palette for verified / changed / unverified and conflict. */
@@ -21,9 +21,15 @@ export function TrustChip({ state, className }: { state: TrustState; className?:
         Changed since verified
       </Badge>
     );
+  if (state === 'source_changed')
+    return (
+      <Badge variant="outline" className={cn('border-destructive/40 bg-destructive/10 text-destructive-text', className)}>
+        Source changed
+      </Badge>
+    );
   return (
     <Badge variant="outline" className={cn('text-muted-foreground', className)}>
-      Unverified
+      {state === 'draft' ? 'Draft' : 'Unverified'}
     </Badge>
   );
 }
@@ -52,10 +58,35 @@ export function ConflictChip({ resolved, className }: { resolved?: boolean; clas
   );
 }
 
+const STATUS_WORD: Record<ChangeStatus, string> = { pending: 'Waiting', approved: 'Approved', rejected: 'Rejected', applied: 'Applied', superseded: 'Superseded', source_changed: 'Source changed' };
+export const statusWord = (s: ChangeStatus) => STATUS_WORD[s] ?? s;
+
+/**
+ * The check on an FAQ draft, from the draft itself: the source changed since it was drafted, or its answer uses words its
+ * passage lacks, or nothing found.
+ */
+export function FaqCheck({ change, className }: { change: Pick<KnowledgeChange, 'status' | 'faq'>; className?: string }) {
+  if (change.status === 'source_changed')
+    return (
+      <Badge variant="outline" className={cn('border-destructive/40 bg-destructive/10 text-destructive-text', className)}>
+        Source changed
+      </Badge>
+    );
+  const adds = change.faq?.addsWords ?? [];
+  if (adds.length)
+    return (
+      <Badge variant="outline" className={cn('max-w-56 border-warning/40 bg-warning/10 whitespace-normal text-warning-text', className)}>
+        Answer adds {adds.map((w) => `“${w}”`).join(', ')}; the passage does not say {adds.length === 1 ? 'it' : 'them'}
+      </Badge>
+    );
+  return <span className={cn('text-xs text-muted-foreground', className)}>No issues found</span>;
+}
+
 const ORIGIN: Record<ChangeOrigin, { label: string; icon: typeof Bot }> = {
   curation: { label: 'Curation', icon: PencilLine },
   agent_fix: { label: 'Agent fix', icon: Bot },
   source_sync: { label: 'Source sync', icon: RefreshCw },
+  generated_faq: { label: 'Generated FAQ', icon: MessageSquareQuote },
 };
 export const ORIGIN_OPTIONS = (Object.keys(ORIGIN) as ChangeOrigin[]).map((value) => ({ value, label: ORIGIN[value].label }));
 

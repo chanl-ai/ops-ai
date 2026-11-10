@@ -17,7 +17,7 @@ from pydantic.alias_generators import to_camel
 
 #: Part of every stored reading's key. Raised whenever the output for the same bytes and settings changes, so an old
 #: reading is read again rather than served.
-READER_VERSION = "reading-1"
+READER_VERSION = "reading-3"
 
 OcrMode = Literal["off", "auto", "always"]
 #: How a page was read: its text layer, OCR of the whole page, its text layer plus OCR of its picture areas, or not at
@@ -89,6 +89,10 @@ class Block(_Model):
     sheet: str | None = None
     #: Whether the block came from the text layer or from OCR.
     read_by: Literal["text", "ocr"] = "text"
+    #: An HTML block inside page furniture (navigation, banners, footers), or inside the main or article element. Kept
+    #: in the reading so a cleaning change splits it again without reading the page again.
+    furniture: bool = False
+    main: bool = False
 
 
 class Word(_Model):

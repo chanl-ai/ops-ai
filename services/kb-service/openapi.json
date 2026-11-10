@@ -46,6 +46,74 @@
         "title": "AddedFile",
         "type": "object"
       },
+      "AiApprovalIn": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "revoke"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "AiApprovalIn",
+        "type": "object"
+      },
+      "AiEstimate": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "inputTokens": {
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "outputTokens": {
+            "$ref": "#/components/schemas/TokenRange"
+          },
+          "sampledItems": {
+            "title": "Sampleditems",
+            "type": "integer"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "totalItems": {
+            "title": "Totalitems",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "model",
+          "sampledItems",
+          "totalItems",
+          "calls",
+          "inputTokens",
+          "outputTokens",
+          "basis"
+        ],
+        "title": "AiEstimate",
+        "type": "object"
+      },
       "AttachIn": {
         "properties": {
           "sourceIds": {
@@ -266,6 +334,33 @@
         "title": "ChangeViewCounts",
         "type": "object"
       },
+      "DecideIn": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids",
+          "decision"
+        ],
+        "title": "DecideIn",
+        "type": "object"
+      },
       "DocumentRow": {
         "additionalProperties": false,
         "properties": {
@@ -287,6 +382,17 @@
           "digest": {
             "title": "Digest",
             "type": "string"
+          },
+          "duplicateOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicateof"
           },
           "effectiveDate": {
             "title": "Effectivedate",
@@ -332,6 +438,17 @@
               }
             ],
             "title": "Fileid"
+          },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
           },
           "freshness": {
             "title": "Freshness",
@@ -480,6 +597,57 @@
         "title": "DocumentRow",
         "type": "object"
       },
+      "DraftEdit": {
+        "properties": {
+          "answer": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Answer",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "answer"
+        ],
+        "title": "DraftEdit",
+        "type": "object"
+      },
+      "EmbeddingCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "embedded": {
+            "title": "Embedded",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "units": {
+            "title": "Units",
+            "type": "integer"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "width",
+          "embedded",
+          "units"
+        ],
+        "title": "EmbeddingCoverage",
+        "type": "object"
+      },
       "Envelope_AddedDocuments_": {
         "additionalProperties": false,
         "properties": {
@@ -497,6 +665,25 @@
           "data"
         ],
         "title": "Envelope[AddedDocuments]",
+        "type": "object"
+      },
+      "Envelope_AiEstimate_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AiEstimate"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AiEstimate]",
         "type": "object"
       },
       "Envelope_ChangeList_": {
@@ -822,6 +1009,25 @@
         "title": "Envelope[SourceDetail]",
         "type": "object"
       },
+      "Envelope_SourcePreview_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SourcePreview"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SourcePreview]",
+        "type": "object"
+      },
       "Envelope_Source_": {
         "additionalProperties": false,
         "properties": {
@@ -883,6 +1089,29 @@
         "title": "Envelope[list[AddedFile]]",
         "type": "object"
       },
+      "Envelope_list_KnowledgeChange__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeChange"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[KnowledgeChange]]",
+        "type": "object"
+      },
       "Envelope_list_NamedRef__": {
         "additionalProperties": false,
         "properties": {
@@ -927,6 +1156,52 @@
           "data"
         ],
         "title": "Envelope[list[PluginSource]]",
+        "type": "object"
+      },
+      "Envelope_list_SourceKind__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SourceKind"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[SourceKind]]",
+        "type": "object"
+      },
+      "Envelope_list_Tombstone__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Tombstone"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[Tombstone]]",
         "type": "object"
       },
       "ErrorBody": {
@@ -1059,6 +1334,45 @@
         "title": "EventOut",
         "type": "object"
       },
+      "FaqDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "addsWords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addswords",
+            "type": "array"
+          },
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "sectionPath": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sectionpath",
+            "type": "array"
+          }
+        },
+        "required": [
+          "question",
+          "answer",
+          "quote",
+          "sectionPath"
+        ],
+        "title": "FaqDraft",
+        "type": "object"
+      },
       "FileIdsIn": {
         "properties": {
           "fileIds": {
@@ -1107,6 +1421,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "unitsNotEmbedded": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitsnotembedded"
           }
         },
         "required": [
@@ -1136,6 +1461,17 @@
           "digest": {
             "title": "Digest",
             "type": "string"
+          },
+          "duplicateOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicateof"
           },
           "effectiveDate": {
             "title": "Effectivedate",
@@ -1181,6 +1517,17 @@
               }
             ],
             "title": "Fileid"
+          },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
           },
           "id": {
             "title": "Id",
@@ -1346,6 +1693,17 @@
             "title": "Digest",
             "type": "string"
           },
+          "duplicateOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicateof"
+          },
           "effectiveDate": {
             "title": "Effectivedate",
             "type": "string"
@@ -1390,6 +1748,17 @@
               }
             ],
             "title": "Fileid"
+          },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
           },
           "id": {
             "title": "Id",
@@ -1444,6 +1813,18 @@
             "title": "Queries30D",
             "type": "integer"
           },
+          "reading": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading"
+          },
           "reviewBy": {
             "title": "Reviewby",
             "type": "string"
@@ -1451,6 +1832,18 @@
           "sensitivity": {
             "title": "Sensitivity",
             "type": "string"
+          },
+          "settingsUsed": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settingsused"
           },
           "sizeBytes": {
             "title": "Sizebytes",
@@ -1581,6 +1974,11 @@
             },
             "title": "Rules",
             "type": "array"
+          },
+          "running": {
+            "default": false,
+            "title": "Running",
+            "type": "boolean"
           },
           "source": {
             "$ref": "#/components/schemas/Source"
@@ -1866,6 +2264,16 @@
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "embedding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbeddingCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "health": {
             "title": "Health",
@@ -2514,6 +2922,16 @@
             "title": "Documenttitle",
             "type": "string"
           },
+          "faq": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FaqDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "freshness": {
             "title": "Freshness",
             "type": "string"
@@ -2608,6 +3026,39 @@
           "createdAt"
         ],
         "title": "KnowledgeChange",
+        "type": "object"
+      },
+      "Lanes": {
+        "additionalProperties": false,
+        "properties": {
+          "asked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Asked",
+            "type": "array"
+          },
+          "ran": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ran",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedLane"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "asked",
+          "ran",
+          "skipped"
+        ],
+        "title": "Lanes",
         "type": "object"
       },
       "ListResult_DocumentRow_": {
@@ -2968,12 +3419,35 @@
       "PassageOut": {
         "additionalProperties": false,
         "properties": {
+          "fileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fileid"
+          },
           "itemId": {
             "title": "Itemid",
             "type": "string"
           },
           "kbId": {
             "title": "Kbid",
+            "type": "string"
+          },
+          "lanes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Lanes",
+            "type": "object"
+          },
+          "matched": {
+            "default": "self",
+            "title": "Matched",
             "type": "string"
           },
           "page": {
@@ -3006,6 +3480,22 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "verified": {
+            "default": false,
+            "title": "Verified",
+            "type": "boolean"
           },
           "version": {
             "title": "Version",
@@ -3048,9 +3538,15 @@
             "title": "Citations",
             "type": "array"
           },
+          "cost": {
+            "$ref": "#/components/schemas/SearchCost"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "lanes": {
+            "$ref": "#/components/schemas/Lanes"
           },
           "matchers": {
             "items": {
@@ -3069,6 +3565,13 @@
               }
             ],
             "title": "Noanswer"
+          },
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/PassageOut"
+            },
+            "title": "Passages",
+            "type": "array"
           },
           "question": {
             "title": "Question",
@@ -3094,6 +3597,9 @@
           "answer",
           "citations",
           "chunks",
+          "passages",
+          "lanes",
+          "cost",
           "retrievalMs",
           "synthesisMs",
           "shape"
@@ -3131,6 +3637,44 @@
           "kbIds"
         ],
         "title": "PluginSource",
+        "type": "object"
+      },
+      "PreviewIn": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          }
+        },
+        "required": [
+          "config"
+        ],
+        "title": "PreviewIn",
+        "type": "object"
+      },
+      "PreviewPage": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "willFetch": {
+            "title": "Willfetch",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "outcome",
+          "willFetch"
+        ],
+        "title": "PreviewPage",
         "type": "object"
       },
       "QueryIn": {
@@ -3180,6 +3724,20 @@
         "title": "Reader",
         "type": "object"
       },
+      "SearchCost": {
+        "additionalProperties": false,
+        "properties": {
+          "embeddingTokens": {
+            "title": "Embeddingtokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "embeddingTokens"
+        ],
+        "title": "SearchCost",
+        "type": "object"
+      },
       "SearchIn": {
         "properties": {
           "kbIds": {
@@ -3190,9 +3748,17 @@
             "type": "array"
           },
           "limit": {
-            "default": 8,
-            "title": "Limit",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
           },
           "question": {
             "title": "Question",
@@ -3209,6 +3775,12 @@
       "SearchOut": {
         "additionalProperties": false,
         "properties": {
+          "cost": {
+            "$ref": "#/components/schemas/SearchCost"
+          },
+          "lanes": {
+            "$ref": "#/components/schemas/Lanes"
+          },
           "passages": {
             "items": {
               "$ref": "#/components/schemas/PassageOut"
@@ -3218,14 +3790,52 @@
           }
         },
         "required": [
-          "passages"
+          "passages",
+          "lanes",
+          "cost"
         ],
         "title": "SearchOut",
+        "type": "object"
+      },
+      "SkippedLane": {
+        "additionalProperties": false,
+        "properties": {
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lane",
+          "reason"
+        ],
+        "title": "SkippedLane",
         "type": "object"
       },
       "Source": {
         "additionalProperties": false,
         "properties": {
+          "aiCeiling": {
+            "default": 5.0,
+            "title": "Aiceiling",
+            "type": "number"
+          },
+          "aiStepsWaiting": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aistepswaiting",
+            "type": "array"
+          },
+          "cleaning": {
+            "additionalProperties": true,
+            "title": "Cleaning",
+            "type": "object"
+          },
           "collection": {
             "title": "Collection",
             "type": "string"
@@ -3242,6 +3852,11 @@
           "deletedAtSource": {
             "title": "Deletedatsource",
             "type": "string"
+          },
+          "health": {
+            "additionalProperties": true,
+            "title": "Health",
+            "type": "object"
           },
           "id": {
             "title": "Id",
@@ -3263,6 +3878,14 @@
           "itemsPending": {
             "title": "Itemspending",
             "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kindLabel": {
+            "title": "Kindlabel",
+            "type": "string"
           },
           "lastRunStatus": {
             "anyOf": [
@@ -3298,6 +3921,17 @@
             "title": "Name",
             "type": "string"
           },
+          "nextSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextsyncat"
+          },
           "notifyOnFailure": {
             "title": "Notifyonfailure",
             "type": "boolean"
@@ -3315,6 +3949,16 @@
             "additionalProperties": true,
             "title": "Permissions",
             "type": "object"
+          },
+          "rebuild": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "rules": {
             "items": {
@@ -3366,16 +4010,29 @@
             },
             "title": "Usedbykbids",
             "type": "array"
+          },
+          "waitingHosts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Waitinghosts",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "type",
+          "kind",
+          "kindLabel",
           "name",
           "scopeSummary",
           "config",
           "parsing",
+          "cleaning",
           "ingest",
+          "aiStepsWaiting",
+          "waitingHosts",
           "rules",
           "metadataMapping",
           "tags",
@@ -3401,6 +4058,11 @@
       "SourceDetail": {
         "additionalProperties": false,
         "properties": {
+          "aiCeiling": {
+            "default": 5.0,
+            "title": "Aiceiling",
+            "type": "number"
+          },
           "aiStepsWaiting": {
             "items": {
               "type": "string"
@@ -3441,6 +4103,11 @@
             ],
             "title": "Canpublish"
           },
+          "cleaning": {
+            "additionalProperties": true,
+            "title": "Cleaning",
+            "type": "object"
+          },
           "collection": {
             "title": "Collection",
             "type": "string"
@@ -3471,6 +4138,11 @@
             "title": "Governance",
             "type": "object"
           },
+          "health": {
+            "additionalProperties": true,
+            "title": "Health",
+            "type": "object"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -3495,6 +4167,14 @@
           "itemsPending": {
             "title": "Itemspending",
             "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kindLabel": {
+            "title": "Kindlabel",
+            "type": "string"
           },
           "lastRunDurationSec": {
             "anyOf": [
@@ -3541,6 +4221,17 @@
             "title": "Name",
             "type": "string"
           },
+          "nextSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextsyncat"
+          },
           "notifyOnFailure": {
             "title": "Notifyonfailure",
             "type": "boolean"
@@ -3565,6 +4256,16 @@
             },
             "title": "Readers",
             "type": "array"
+          },
+          "rebuild": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "recentRuns": {
             "items": {
@@ -3647,16 +4348,29 @@
             },
             "title": "Usedbykbids",
             "type": "array"
+          },
+          "waitingHosts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Waitinghosts",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "type",
+          "kind",
+          "kindLabel",
           "name",
           "scopeSummary",
           "config",
           "parsing",
+          "cleaning",
           "ingest",
+          "aiStepsWaiting",
+          "waitingHosts",
           "rules",
           "metadataMapping",
           "tags",
@@ -3681,14 +4395,38 @@
           "itemCount",
           "reindexNeeded",
           "requiredMetadata",
-          "governance",
-          "aiStepsWaiting"
+          "governance"
         ],
         "title": "SourceDetail",
         "type": "object"
       },
       "SourceIn": {
         "properties": {
+          "aiCeiling": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aiceiling"
+          },
+          "cleaning": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleaning"
+          },
           "collection": {
             "default": "",
             "title": "Collection",
@@ -3714,6 +4452,18 @@
             "title": "Fileids",
             "type": "array"
           },
+          "ingest": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingest"
+          },
           "kbIds": {
             "default": [],
             "items": {
@@ -3721,6 +4471,21 @@
             },
             "title": "Kbids",
             "type": "array"
+          },
+          "metadataMapping": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatamapping"
           },
           "name": {
             "title": "Name",
@@ -3736,6 +4501,45 @@
               }
             ],
             "title": "Owner"
+          },
+          "parsing": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsing"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule"
           },
           "sensitivity": {
             "default": "internal",
@@ -3778,8 +4582,124 @@
         "title": "SourceIn",
         "type": "object"
       },
+      "SourceKind": {
+        "additionalProperties": false,
+        "properties": {
+          "connected": {
+            "default": false,
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "defaults": {
+            "additionalProperties": true,
+            "title": "Defaults",
+            "type": "object"
+          },
+          "group": {
+            "enum": [
+              "built_in",
+              "apps"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "needsConnection": {
+            "default": false,
+            "title": "Needsconnection",
+            "type": "boolean"
+          },
+          "pickers": {
+            "default": false,
+            "title": "Pickers",
+            "type": "boolean"
+          },
+          "plugin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin"
+          },
+          "previews": {
+            "default": false,
+            "title": "Previews",
+            "type": "boolean"
+          },
+          "site": {
+            "default": false,
+            "title": "Site",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "group",
+          "title",
+          "kind",
+          "defaults"
+        ],
+        "title": "SourceKind",
+        "type": "object"
+      },
       "SourcePatch": {
         "properties": {
+          "aiCeiling": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aiceiling"
+          },
+          "cleaning": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleaning"
+          },
           "collection": {
             "anyOf": [
               {
@@ -3790,6 +4710,33 @@
               }
             ],
             "title": "Collection"
+          },
+          "ingest": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingest"
+          },
+          "metadataMapping": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatamapping"
           },
           "name": {
             "anyOf": [
@@ -3812,6 +4759,45 @@
               }
             ],
             "title": "Owner"
+          },
+          "parsing": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsing"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule"
           },
           "sensitivity": {
             "anyOf": [
@@ -3837,14 +4823,75 @@
               }
             ],
             "title": "Tags"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
           }
         },
         "title": "SourcePatch",
         "type": "object"
       },
+      "SourcePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "capped": {
+            "title": "Capped",
+            "type": "boolean"
+          },
+          "found": {
+            "title": "Found",
+            "type": "integer"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "willFetch": {
+            "title": "Willfetch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "found",
+          "willFetch",
+          "pages",
+          "capped"
+        ],
+        "title": "SourcePreview",
+        "type": "object"
+      },
       "SourceRow": {
         "additionalProperties": false,
         "properties": {
+          "aiCeiling": {
+            "default": 5.0,
+            "title": "Aiceiling",
+            "type": "number"
+          },
+          "aiStepsWaiting": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aistepswaiting",
+            "type": "array"
+          },
+          "cleaning": {
+            "additionalProperties": true,
+            "title": "Cleaning",
+            "type": "object"
+          },
           "collection": {
             "title": "Collection",
             "type": "string"
@@ -3861,6 +4908,11 @@
           "deletedAtSource": {
             "title": "Deletedatsource",
             "type": "string"
+          },
+          "health": {
+            "additionalProperties": true,
+            "title": "Health",
+            "type": "object"
           },
           "id": {
             "title": "Id",
@@ -3882,6 +4934,14 @@
           "itemsPending": {
             "title": "Itemspending",
             "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kindLabel": {
+            "title": "Kindlabel",
+            "type": "string"
           },
           "lastRunStatus": {
             "anyOf": [
@@ -3917,6 +4977,17 @@
             "title": "Name",
             "type": "string"
           },
+          "nextSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextsyncat"
+          },
           "notifyOnFailure": {
             "title": "Notifyonfailure",
             "type": "boolean"
@@ -3934,6 +5005,16 @@
             "additionalProperties": true,
             "title": "Permissions",
             "type": "object"
+          },
+          "rebuild": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "rules": {
             "items": {
@@ -3996,16 +5077,29 @@
             },
             "title": "Usedbykbids",
             "type": "array"
+          },
+          "waitingHosts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Waitinghosts",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "type",
+          "kind",
+          "kindLabel",
           "name",
           "scopeSummary",
           "config",
           "parsing",
+          "cleaning",
           "ingest",
+          "aiStepsWaiting",
+          "waitingHosts",
           "rules",
           "metadataMapping",
           "tags",
@@ -4051,6 +5145,17 @@
       "SyncRun": {
         "additionalProperties": false,
         "properties": {
+          "cancelledBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelledby"
+          },
           "counts": {
             "additionalProperties": {
               "type": "integer"
@@ -4069,6 +5174,17 @@
             },
             "title": "Errors",
             "type": "array"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
           },
           "id": {
             "title": "Id",
@@ -4119,6 +5235,79 @@
           "log"
         ],
         "title": "SyncRun",
+        "type": "object"
+      },
+      "TokenRange": {
+        "additionalProperties": false,
+        "properties": {
+          "high": {
+            "title": "High",
+            "type": "integer"
+          },
+          "low": {
+            "title": "Low",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "low",
+          "high"
+        ],
+        "title": "TokenRange",
+        "type": "object"
+      },
+      "Tombstone": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "Tombstone",
+        "type": "object"
+      },
+      "TombstonesIn": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "TombstonesIn",
         "type": "object"
       },
       "ValidationError": {
@@ -8047,6 +9236,7 @@
     },
     "/v1/knowledge-changes": {
       "get": {
+        "description": "The Changes queue: `view` open, mine, resolved or all; `origin` (source_sync, generated_faq) filters on the\nserver, and the origin facet counts the view before that filter.",
         "operationId": "changes_list_changes",
         "parameters": [
           {
@@ -8112,6 +9302,26 @@
                 }
               ],
               "title": "Kbid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
             }
           },
           {
@@ -8282,6 +9492,195 @@
           }
         },
         "summary": "List Changes",
+        "tags": [
+          "changes"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/knowledge-changes/decide": {
+      "post": {
+        "description": "Approves or rejects FAQ drafts, one or many; an approved pair is searchable at once and cites its passage.",
+        "operationId": "changes_decide_changes",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_KnowledgeChange__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Decide Changes",
         "tags": [
           "changes"
         ],
@@ -8473,6 +9872,202 @@
           "changes"
         ],
         "x-ops-public": "sdk"
+      },
+      "patch": {
+        "description": "Edits an FAQ draft's question and answer; it still waits for review. The quote stays the source's.",
+        "operationId": "changes_edit_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_id",
+            "required": true,
+            "schema": {
+              "title": "Change Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_KnowledgeChange_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Edit Change",
+        "tags": [
+          "changes"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge/lookups": {
@@ -8649,6 +10244,185 @@
         "summary": "Lookups",
         "tags": [
           "knowledge-bases"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/knowledge/source-kinds": {
+      "get": {
+        "description": "What a team can add as a source: the built-in kinds, then each knowledge source of the team's apps that are\non, with whether it is connected and what it asks for. Add source lists exactly these.",
+        "operationId": "sources_source_kinds",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_SourceKind__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Source Kinds",
+        "tags": [
+          "sources"
         ],
         "x-ops-public": "sdk"
       }
@@ -9246,6 +11020,195 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/sources/preview": {
+      "post": {
+        "description": "What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of\nthe plugin's preview tool. Nothing is stored.",
+        "operationId": "sources_preview_source",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SourcePreview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Preview Source",
+        "tags": [
+          "sources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/sources/{source_id}": {
       "delete": {
         "operationId": "sources_remove_source",
@@ -9800,6 +11763,392 @@
           }
         },
         "summary": "Update Source",
+        "tags": [
+          "sources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/sources/{source_id}/ai-approval": {
+      "post": {
+        "description": "The knowledge owner approves the source's AI steps (likely questions) as now chosen, or takes the approval\nback; the change goes to the audit log, and approving rebuilds the pieces in the background.",
+        "operationId": "sources_decide_ai_steps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiApprovalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Source_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Decide Ai Steps",
+        "tags": [
+          "sources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/sources/{source_id}/ai-estimate": {
+      "get": {
+        "description": "What the source's chosen AI steps would cost, from a split of up to 20 of its items with no model called:\ncalls and tokens for the sample and the whole source, with the basis.",
+        "operationId": "sources_estimate_ai_steps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AiEstimate_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Estimate Ai Steps",
         "tags": [
           "sources"
         ],
@@ -11018,6 +13367,391 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/sources/{source_id}/tombstones": {
+      "get": {
+        "description": "Addresses removed after answering gone twice at their source; a sync leaves them out until lifted.",
+        "operationId": "sources_list_tombstones",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_Tombstone__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List Tombstones",
+        "tags": [
+          "sources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/sources/{source_id}/tombstones/lift": {
+      "post": {
+        "operationId": "sources_lift_tombstones",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TombstonesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_Tombstone__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Lift Tombstones",
+        "tags": [
+          "sources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/sync-runs/{run_id}": {
       "get": {
         "operationId": "sources_get_run",
@@ -11199,6 +13933,194 @@
           }
         },
         "summary": "Get Run",
+        "tags": [
+          "sources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/sync-runs/{run_id}/cancel": {
+      "post": {
+        "description": "Stops a running rebuild between two items; 409 `run_not_running` when it is not running.",
+        "operationId": "sources_cancel_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SyncRun_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Cancel Run",
         "tags": [
           "sources"
         ],

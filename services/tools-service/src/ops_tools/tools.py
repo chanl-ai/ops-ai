@@ -37,6 +37,8 @@ class ToolCaller:
     approvers: tuple[str, ...] = ()
     # The person the call acts for, from a verified acting-for token; None for a call with nobody behind it.
     acting_for: ActingForPerson | None = None
+    # A service caller's signed scopes (empty for a person): a knowledge source's sync holds knowledge:run.
+    scopes: tuple[str, ...] = ()
 
     @classmethod
     def of(cls, p: Any, *, approvers: tuple[str, ...] = (), acting_for: ActingForPerson | None = None) -> ToolCaller:
@@ -50,6 +52,7 @@ class ToolCaller:
             kind=str(p.kind),
             approvers=approvers,
             acting_for=acting_for,
+            scopes=tuple(str(x) for x in (getattr(p, "scopes", None) or ())) if str(p.kind) == "service" else (),
         )
 
 

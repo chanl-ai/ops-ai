@@ -16,7 +16,7 @@ import time
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, cast
 
 import httpx
@@ -48,6 +48,8 @@ from .schemas import (
     CallPage,
     ChatCompletion,
     ChatCompletionRequest,
+    Embeddings,
+    EmbeddingsRequest,
     Health,
     KeyOut,
     KeyRotated,
@@ -147,6 +149,8 @@ class AdmitIn(_Wire):
 
 
 ERRORS = error_responses()
+# The most texts one embeddings request carries, as OpenAI's own limit: a sync embeds its pieces in batches of this.
+MAX_EMBED_INPUTS = 2048
 
 
 def secret_hash(secret: str) -> str:
@@ -558,6 +562,165 @@ def create_models_app(
                     return refused(429, "key_budget_exhausted", f"The estimate {estimate} exceeds {remaining} left.")
         return ok({"admitted": True, "remaining": str(remaining)})
 
+    class Gate:
+        """One authenticated call on its way to a provider: the key, the alias version it is served by, its price, and
+        the one call-log row it writes, whether it is refused here, fails at the provider or settles."""
+
+        def __init__(self, key: Mapping[str, Any], row: dict[str, Any], tenant: str | None) -> None:
+            self.key, self.row, self.tenant = key, row, tenant
+            self.started = time.perf_counter()
+            self.version: dict[str, Any] = {}
+            self.alias_row: Mapping[str, Any] = {}
+            self.price = Price(Decimal(0))
+            self.provider: Any = None
+
+        async def log(self, outcome: str, reason: str | None = None, **values: Any) -> None:
+            await call_log.record(
+                {
+                    "id": new_id("mc"),
+                    "input_tokens": values.pop("input_tokens", 0),
+                    "output_tokens": values.pop("output_tokens", 0),
+                    "cost": values.pop("cost", Decimal(0)),
+                    "latency_ms": int((time.perf_counter() - self.started) * 1000),
+                    "outcome": outcome,
+                    "reason": reason,
+                    **self.row,
+                    **values,
+                }
+            )
+
+        async def refuse(self, status: int, code: str, message: str, *, versioned: bool = True) -> JSONResponse:
+            await self.log("error" if status >= 500 else "denied", code, **(self.version if versioned else {}))
+            return refused(status, code, message)
+
+        async def settle(self, input_tokens: int, output_tokens: int) -> None:
+            spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), self.price)
+            tenant = self.tenant if self.key["tenant_budget"] is not None else None
+            if tenant is not None:
+                with isolation.scope(tenant, None):
+                    await key_store.spend(self.key["id"], spend, tenant_id=tenant)
+            else:
+                await key_store.spend(self.key["id"], spend)
+            # An Azure answer from another region than its connection names is recorded on the row, not refused.
+            provider = self.provider
+            mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
+            values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+            await self.log("ok", mismatch[:64] if mismatch else None, **values, **self.version)
+
+        async def observed(self) -> None:
+            """Records the region an Azure resource answered from on its connection, when it changed."""
+            provider = self.provider
+            seen = provider.observed_region if isinstance(provider, AzureOpenAIProvider) else None
+            if seen and seen != self.alias_row.get("observed_region"):
+                await providers.observe(str(self.alias_row["provider_id"]), seen)
+
+        async def failed(self, e: Exception) -> JSONResponse:
+            await self.observed()
+            await self.log("error", "provider_error", **self.version)
+            return refused(502, "provider_error", str(e) or "The provider answered with an empty stream.")
+
+    async def open_gate(
+        authorization: str | None,
+        alias_name: str,
+        kind: str,
+        *,
+        sensitivity: str,
+        tenant: str | None,
+        images: int = 0,
+        run_cap: str | None = None,
+        **row: str | None,
+    ) -> Gate | JSONResponse:
+        """Every check a model call passes before it reaches a provider, in one order for chat and embeddings: the
+        key, its budget and the tenant's share, the rate limit, the alias and its kind, the data's sensitivity, images,
+        and the account's provider key."""
+        presented = (authorization or "").removeprefix("Bearer ").strip()
+        now = datetime.now(UTC)
+        key = await key_store.by_secret(secret_hash(presented) if presented else "", now)
+        if key is None:
+            return refused(401, "invalid_key", "The model key is unknown, or a rotated secret past its overlap.")
+        row_values = {"key_id": key["id"], "alias": alias_name, "sensitivity": sensitivity, "tenant_id": tenant}
+        gate = Gate(key, {**row_values, **row, "images": images}, tenant)
+        if (why := _key_refusal(key, now)) is not None:
+            return await gate.refuse(*why)
+        if key["tenant_budget"] is not None:
+            # A key one service spends for many tenants: the tenant names its own budget row.
+            if not tenant:
+                return await gate.refuse(
+                    400, "tenant_required", f"Model key {key['id']} spends per tenant; send X-Tenant-Id."
+                )
+            # The share is the named tenant's: read as that tenant, which the database holds the row to.
+            with isolation.scope(tenant, None):
+                share = await key_store.tenant_share(key["id"], tenant, key["tenant_budget"])
+            if share["spent"] >= share["budget"]:
+                return await gate.refuse(
+                    429,
+                    "tenant_budget_exhausted",
+                    f"Tenant {tenant} has spent its budget of {share['budget']} on model key {key['id']}.",
+                )
+        if key.get("daily_cap") is not None:
+            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            if await call_log.spent(key["id"], since=today) >= key["daily_cap"]:
+                return await gate.refuse(
+                    429, "daily_spend_cap", f"Model key {key['id']} has spent its {key['daily_cap']} for today."
+                )
+        if run_cap is not None and row.get("run_id"):
+            try:
+                cap = Decimal(run_cap)
+            except InvalidOperation:
+                return await gate.refuse(400, "invalid_spend_cap", "X-Run-Spend-Cap is an amount, such as 5.00.")
+            if await call_log.spent(key["id"], run_id=row["run_id"]) >= cap:
+                return await gate.refuse(
+                    429, "run_spend_cap", f"Run {row['run_id']} has spent its {cap} on model key {key['id']}."
+                )
+        # The log's times are the database's, so the one-minute window is measured on the database's clock too.
+        recent = await call_log.recent(key["id"])
+        alias_row = await aliases.current(alias_name)
+        if recent >= key["rate_limit_per_minute"]:
+            return await gate.refuse(
+                429, "rate_limited", f"Model key {key['id']} is over {key['rate_limit_per_minute']} calls a minute."
+            )
+        if alias_row is None:
+            return await gate.refuse(404, "alias_not_found", f"No current version of alias {alias_name}.")
+        gate.alias_row = alias_row
+        gate.version = {"alias_version": alias_row["version"], "provider_model": alias_row["model_id"]}
+        if alias_row["kind"] != kind:
+            return await gate.refuse(
+                400, "alias_kind_mismatch", f"Alias {alias_name} is a {alias_row['kind']} alias, not {kind}."
+            )
+        if sensitivity not in SENSITIVITY or not cleared(alias_row["cleared_sensitivity"], sensitivity):
+            return await gate.refuse(
+                403,
+                "sensitivity_not_cleared",
+                f"Alias {alias_name} is cleared for {alias_row['cleared_sensitivity']} data, not {sensitivity}.",
+            )
+        if images and not alias_row["images"]:
+            return await gate.refuse(
+                403, "images_not_cleared", f"Alias {alias_name} is not cleared for images or files."
+            )
+        gate.price = Price(alias_row["input_per_million"], alias_row["output_per_million"])
+        ref = alias_row.get("key_ref")
+        if ref and not tenant:
+            # A provider key is an account's own: a call that names no account signs in with none.
+            return await gate.refuse(
+                400,
+                "tenant_required",
+                f"Alias {alias_name} signs in with an account's model provider key {ref}; send X-Tenant-Id.",
+            )
+        provider_key = await keys.get(str(ref), str(tenant)) if ref else None
+        if ref and provider_key is None:
+            # Calling the provider without its key would only come back as its own 401, after a network round trip.
+            return await gate.refuse(
+                503,
+                "provider_key_missing",
+                f"Alias {alias_name} signs in with model provider key {ref}, which the account has not saved. An "
+                "account admin adds it on Settings > Model providers.",
+            )
+        try:
+            gate.provider = provider_for(alias_row, {str(ref): provider_key} if ref and provider_key else {}, http)
+        except ProviderError as e:
+            return await gate.refuse(502, "provider_error", str(e))
+        return gate
+
     async def completions(
         request: ChatCompletionRequest,
         *,
@@ -568,137 +731,31 @@ def create_models_app(
         x_thread_id: Annotated[str | None, Header()] = None,
         x_request_hash: Annotated[str | None, Header()] = None,
         x_tenant_id: Annotated[str | None, Header()] = None,
+        x_run_spend_cap: Annotated[str | None, Header()] = None,
     ) -> Response:
-        presented = (authorization or "").removeprefix("Bearer ").strip()
-        now = datetime.now(UTC)
-        digest = secret_hash(presented) if presented else ""
-        key = await key_store.by_secret(digest, now)
-        if key is None:
-            return refused(401, "invalid_key", "The model key is unknown, or a rotated secret past its overlap.")
         body = request.model_dump(exclude_unset=True)
         alias_name = request.model
-        started = time.perf_counter()
-        row: dict[str, Any] = {
-            "key_id": key["id"],
-            "alias": alias_name,
-            "sensitivity": x_data_sensitivity,
-            "run_id": x_run_id,
-            "step_id": x_step_id,
-            "thread_id": x_thread_id,
-            "request_hash": x_request_hash,
-            "tenant_id": x_tenant_id,
-            "images": images_in(request.messages),
-        }
-
-        async def log(outcome: str, reason: str | None = None, **values: Any) -> None:
-            await call_log.record(
-                {
-                    "id": new_id("mc"),
-                    "input_tokens": values.pop("input_tokens", 0),
-                    "output_tokens": values.pop("output_tokens", 0),
-                    "cost": values.pop("cost", Decimal(0)),
-                    "latency_ms": int((time.perf_counter() - started) * 1000),
-                    "outcome": outcome,
-                    "reason": reason,
-                    **row,
-                    **values,
-                }
-            )
-
-        if (why := _key_refusal(key, now)) is not None:
-            await log("denied", why[1])
-            return refused(*why)
-        if key["tenant_budget"] is not None:
-            # A key one service spends for many tenants: the tenant names its own budget row.
-            if not x_tenant_id:
-                await log("denied", "tenant_required")
-                return refused(400, "tenant_required", f"Model key {key['id']} spends per tenant; send X-Tenant-Id.")
-            # The share is the named tenant's: read as that tenant, which the database holds the row to.
-            with isolation.scope(x_tenant_id, None):
-                share = await key_store.tenant_share(key["id"], x_tenant_id, key["tenant_budget"])
-            if share["spent"] >= share["budget"]:
-                await log("denied", "tenant_budget_exhausted")
-                return refused(
-                    429,
-                    "tenant_budget_exhausted",
-                    f"Tenant {x_tenant_id} has spent its budget of {share['budget']} on model key {key['id']}.",
-                )
-        # The log's times are the database's, so the one-minute window is measured on the database's clock too.
-        recent = await call_log.recent(key["id"])
-        alias_row = await aliases.current(alias_name)
-        if recent >= key["rate_limit_per_minute"]:
-            await log("denied", "rate_limited")
-            return refused(
-                429, "rate_limited", f"Model key {key['id']} is over {key['rate_limit_per_minute']} calls a minute."
-            )
-        if alias_row is None:
-            await log("denied", "alias_not_found")
-            return refused(404, "alias_not_found", f"No current version of alias {alias_name}.")
-        version = {"alias_version": alias_row["version"], "provider_model": alias_row["model_id"]}
-        if x_data_sensitivity not in SENSITIVITY or not cleared(alias_row["cleared_sensitivity"], x_data_sensitivity):
-            await log("denied", "sensitivity_not_cleared", **version)
-            return refused(
-                403,
-                "sensitivity_not_cleared",
-                f"Alias {alias_name} is cleared for {alias_row['cleared_sensitivity']} data, not {x_data_sensitivity}.",
-            )
-        if row["images"] and not alias_row["images"]:
-            await log("denied", "images_not_cleared", **version)
-            return refused(403, "images_not_cleared", f"Alias {alias_name} is not cleared for images or files.")
-        price = Price(alias_row["input_per_million"], alias_row["output_per_million"])
-
-        async def settle(input_tokens: int, output_tokens: int) -> None:
-            spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), price)
-            tenant = x_tenant_id if key["tenant_budget"] is not None else None
-            if tenant is not None:
-                with isolation.scope(tenant, None):
-                    await key_store.spend(key["id"], spend, tenant_id=tenant)
-            else:
-                await key_store.spend(key["id"], spend)
-            # An Azure answer from another region than its connection names is recorded on the row, not refused.
-            mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
-            values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
-            await log("ok", mismatch[:64] if mismatch else None, **values, **version)
-
-        ref = alias_row.get("key_ref")
-        if ref and not x_tenant_id:
-            # A provider key is an account's own: a call that names no account signs in with none.
-            await log("denied", "tenant_required", **version)
-            return refused(
-                400,
-                "tenant_required",
-                f"Alias {alias_name} signs in with an account's model provider key {ref}; send X-Tenant-Id.",
-            )
-        provider_key = await keys.get(str(ref), str(x_tenant_id)) if ref else None
-        if ref and provider_key is None:
-            # Calling the provider without its key would only come back as its own 401, after a network round trip.
-            await log("error", "provider_key_missing", **version)
-            return refused(
-                503,
-                "provider_key_missing",
-                f"Alias {alias_name} signs in with model provider key {ref}, which the account has not saved. An "
-                "account admin adds it on Settings > Model providers.",
-            )
-        try:
-            provider = provider_for(alias_row, {str(ref): provider_key} if ref and provider_key else {}, http)
-        except ProviderError as e:
-            await log("error", "provider_error", **version)
-            return refused(502, "provider_error", str(e))
+        gate = await open_gate(
+            authorization,
+            alias_name,
+            "chat",
+            sensitivity=x_data_sensitivity,
+            tenant=x_tenant_id,
+            images=images_in(request.messages),
+            run_cap=x_run_spend_cap,
+            run_id=x_run_id,
+            step_id=x_step_id,
+            thread_id=x_thread_id,
+            request_hash=x_request_hash,
+        )
+        if isinstance(gate, JSONResponse):
+            return gate
+        alias_row, provider, version = gate.alias_row, gate.provider, gate.version
+        log, settle, observed, failed = gate.log, gate.settle, gate.observed, gate.failed
         if alias_row.get("reasoning_effort") and "reasoning_effort" not in body:
             body["reasoning_effort"] = alias_row["reasoning_effort"]
         call_id = new_id("chatcmpl")
         created = int(time.time())
-
-        async def observed() -> None:
-            """Records the region an Azure resource answered from on its connection, when it changed."""
-            seen = provider.observed_region if isinstance(provider, AzureOpenAIProvider) else None
-            if seen and seen != alias_row.get("observed_region"):
-                await providers.observe(str(alias_row["provider_id"]), seen)
-
-        async def failed(e: Exception) -> JSONResponse:
-            await observed()
-            await log("error", "provider_error", **version)
-            return refused(502, "provider_error", str(e) or "The provider answered with an empty stream.")
 
         if request.stream:
             usage = StreamUsage()
@@ -767,6 +824,57 @@ def create_models_app(
         response_model=ChatCompletion,
         responses={200: {"content": {"text/event-stream": {}}}, **error_responses(provider_errors)},
     )(completions)
+
+    async def embeddings(
+        request: EmbeddingsRequest,
+        *,
+        authorization: Annotated[str | None, Header()] = None,
+        x_data_sensitivity: Annotated[str, Header()] = "internal",
+        x_run_id: Annotated[str | None, Header()] = None,
+        x_step_id: Annotated[str | None, Header()] = None,
+        x_tenant_id: Annotated[str | None, Header()] = None,
+        x_run_spend_cap: Annotated[str | None, Header()] = None,
+    ) -> Response:
+        """Vectors for one text or a batch, from an alias of kind embedding, through the same key, budget and clearance
+        checks as a completion, and one call-log row per request."""
+        inputs = [request.input] if isinstance(request.input, str) else list(request.input)
+        gate = await open_gate(
+            authorization,
+            request.model,
+            "embedding",
+            sensitivity=x_data_sensitivity,
+            tenant=x_tenant_id,
+            run_cap=x_run_spend_cap,
+            run_id=x_run_id,
+            step_id=x_step_id,
+        )
+        if isinstance(gate, JSONResponse):
+            return gate
+        if not inputs or len(inputs) > MAX_EMBED_INPUTS:
+            return await gate.refuse(
+                400, "invalid_input", f"Send 1 to {MAX_EMBED_INPUTS} texts to embed, not {len(inputs)}."
+            )
+        try:
+            done = await gate.provider.embed(str(gate.alias_row["model_id"]), inputs, request.dimensions)
+        except ProviderError as e:
+            return await gate.failed(e)
+        await gate.observed()
+        await gate.settle(done.input_tokens, 0)
+        return JSONResponse(
+            {
+                "object": "list",
+                "model": request.model,
+                "data": [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(done.vectors)],
+                "usage": {"prompt_tokens": done.input_tokens, "total_tokens": done.input_tokens},
+            }
+        )
+
+    app.post(
+        "/v1/models/embeddings",
+        tags=["completions"],
+        response_model=Embeddings,
+        responses=error_responses(provider_errors),
+    )(embeddings)
 
     return app
 

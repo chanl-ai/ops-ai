@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, Query, Response
+from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -32,22 +32,30 @@ from ops_service_kit.http import (
     ok,
     operation_id,
 )
+from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings
 from ops_store import isolation
+from ops_store.audit import AUDIT_SCOPE
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
+from .ai import AiClients, models_clients
+from .embedding import Backlog, Embedder, ModelsEmbedder, keep_embedding
 from .files import FileIntake, file_intake
 from .readings import DocumentsReadings, Readings
 from .schedule import keep_syncing
 from .schemas import (
     AddedDocuments,
     AddedFile,
+    AiApprovalIn,
+    AiEstimate,
     AttachIn,
     ChangeList,
+    DecideIn,
     DocumentRow,
+    DraftEdit,
     FileIdsIn,
     Item,
     ItemWithDetail,
@@ -63,30 +71,47 @@ from .schemas import (
     PageIn,
     PlaygroundAnswer,
     PluginSource,
+    PreviewIn,
     QueryIn,
     SearchIn,
     SearchOut,
     Source,
     SourceDetail,
     SourceIn,
+    SourceKind,
     SourcePatch,
+    SourcePreview,
     SourceRow,
     SyncIn,
     SyncRun,
+    Tombstone,
+    TombstonesIn,
     VerifyIn,
 )
+from .search import HybridRetriever
 from .service import KnowledgeService, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
-from .store.fulltext import PostgresFullTextRetriever
+from .store.event_relay import keep_relaying
+from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader
 
 
 class Health(Out):
     status: str
     reason: str | None = None
+    # Knowledge units with no vector of the environment's embedding model at the last embedding pass, every tenant.
+    units_not_embedded: int | None = None
 
 
-async def who(p: CurrentCaller) -> Who:
+# The headers that say who a person is, passed on when kb-service asks another service as them.
+FORWARDED = ("authorization", "x-api-key", "x-dev-user", "x-team-id")
+
+
+def person_headers(request: Request) -> dict[str, str]:
+    return {k: v for k in FORWARDED if (v := request.headers.get(k))}
+
+
+async def who(p: CurrentCaller, held: Annotated[dict[str, str] | None, Depends(person_headers)] = None) -> Who:
     """The caller; what it may change is `can()`'s, from its verified roles. The provisioning service may call
     with a token scoped to one team; like any service it needs `knowledge:view` even to read."""
     if p.kind == "service":
@@ -94,7 +119,8 @@ async def who(p: CurrentCaller) -> Who:
     # A person, key or dev caller reads as the team it acts in; a service reads the tenant's, as
     # knowledge_reader says.
     set_acting_team(acting_team_of(p, services=False))
-    return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p)
+    credentials = {} if p.kind == "service" else (held or {})
+    return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p, credentials=credentials)
 
 
 Caller = Annotated[Who, Depends(who)]
@@ -131,9 +157,41 @@ def _tools_service(settings: Settings) -> ToolReader | None:
         return None
     http = httpx.AsyncClient(base_url=settings.tools_url, timeout=60)
     client = ServiceClient.for_settings(
-        settings, http, service="kb", audience="tools", scopes=["tools:view", "tools:run"], timeout=60
+        settings, http, service="kb", audience="tools", scopes=["tools:view", "tools:run", "knowledge:run"], timeout=60
     )
     return ToolReader(client)
+
+
+def _platform_service(settings: Settings) -> ServiceClient | None:
+    """platform-service's internal port, which keeps the account's audit log; None on a stack without it."""
+    if not settings.platform_url:
+        return None
+    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+    http = httpx.AsyncClient(base_url=internal, timeout=10)
+    return ServiceClient.for_settings(settings, http, service="kb", audience="platform", scopes=[AUDIT_SCOPE])
+
+
+def _embedder(settings: Settings) -> Embedder | None:
+    """The environment's embedding model through models-service with kb-service's own key; None when this stack has
+    no models-service or no key for kb-service, and search then runs on keywords and says why."""
+    if not settings.models_url or settings.models_key is None:
+        return None
+    http = httpx.AsyncClient(base_url=settings.models_url, timeout=60)
+    calls = ModelCalls(http, settings.models_key.get_secret_value())
+    return ModelsEmbedder(calls, settings.embedding_alias, settings.embedding_width)
+
+
+def _ai_clients(settings: Settings) -> AiClients | None:
+    """The sources' AI steps through models-service with kb-service's own key; None without either."""
+    if not settings.models_url or settings.models_key is None:
+        return None
+    return models_clients(settings.models_url, settings.models_key.get_secret_value())
+
+
+def _events_service(settings: Settings) -> ServiceClient:
+    """agents-service, which runs the workflows that listen to kb-service's events (a source that keeps failing)."""
+    http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=10)
+    return ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["events:emit"])
 
 
 def _documents_service(settings: Settings) -> Readings | None:
@@ -177,14 +235,25 @@ def create_kb_app(
     tools: ToolReader | None = None,
     readings: Readings | None = None,
     schedule: bool = True,
+    platform: ServiceClient | None = None,
+    events_to: ServiceClient | None = None,
+    embedder: Embedder | None = None,
+    ai_clients: AiClients | None = None,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
     no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files_url names it,
     else under kb_files_dir. `agents` says which agents cite each base; by default agents-service at
-    Settings().agents_url."""
+    Settings().agents_url. `platform` receives the audit entries of settings changes; by default platform-service's
+    internal port when Settings().platform_url names it, else the entries wait in the outbox."""
     reader = tools or _tools_service(Settings())
     readings = readings or _documents_service(Settings())
+    audit_log = platform or _platform_service(Settings())
+    events = events_to or _events_service(Settings())
+    embedder = embedder or _embedder(Settings())
+    ai_clients = ai_clients or _ai_clients(Settings())
+    vectors = PgVectorStore(engine)
+    backlog = Backlog()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -193,12 +262,21 @@ def create_kb_app(
         stop = asyncio.Event()
         runs = (reader is not None or readings is not None) and schedule
         beat = asyncio.create_task(keep_syncing(service, stop)) if runs else None
+        hand_off = asyncio.create_task(keep_relaying(engine, audit_log, events, stop))
+        embeds = (
+            asyncio.create_task(keep_embedding(service.store, vectors, embedder, backlog, stop))
+            if embedder is not None and schedule
+            else None
+        )
         try:
             yield
         finally:
             stop.set()
-            if beat is not None:
-                await asyncio.wait({beat}, timeout=5)
+            for rebuild in list(service.rebuilds):
+                rebuild.cancel()
+            tasks = {t for t in (beat, hand_off, embeds, *service.rebuilds) if t is not None}
+            if tasks:
+                await asyncio.wait(tasks, timeout=5)
 
     app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id, lifespan=lifespan)
     install_error_handlers(app)
@@ -217,11 +295,14 @@ def create_kb_app(
     service = KnowledgeService(
         KnowledgeStore(engine),
         files or file_intake(Settings()),
-        PostgresFullTextRetriever(engine),
+        HybridRetriever(engine, embedder),
         agents or _agents_service(Settings()),
         reader,
         readings=readings,
         ocr=Settings().kb_ocr,
+        embedder=embedder,
+        vectors=vectors,
+        ai_clients=ai_clients,
     )
     errors = error_responses()
 
@@ -251,9 +332,11 @@ def create_kb_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health() -> dict[str, Any] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
             return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
+        if backlog.pending is not None:
+            return {"status": "ok", "unitsNotEmbedded": backlog.pending}
         return {"status": "ok"}
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
@@ -295,9 +378,7 @@ def create_kb_app(
     async def search_knowledge(body: SearchIn, caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Passages for an agent's turn (agents-service sends only the bases the agent is granted) or for a person, who
         searches only bases they may read."""
-        limit = max(1, min(body.limit, 20))
-        passages = await service.search(caller, body.kb_ids, body.question, limit=limit)
-        return ok({"passages": passages})
+        return ok(await service.search(caller, body.kb_ids, body.question, limit=body.limit))
 
     @kbs.get("/{kb_id}", response_model=Envelope[KnowledgeBaseDetail])
     async def get_knowledge_base(kb_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -375,6 +456,33 @@ def create_kb_app(
     async def create_source(body: SourceIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.create_source(who, body.model_dump(by_alias=True)), 201)
 
+    @sources.post("/preview", response_model=Envelope[SourcePreview])
+    async def preview_source(body: PreviewIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
+        the plugin's preview tool. Nothing is stored."""
+        return ok(await service.preview_source(who, body.model_dump(by_alias=True)))
+
+    @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
+    async def list_tombstones(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Addresses removed after answering gone twice at their source; a sync leaves them out until lifted."""
+        return ok(await service.tombstones(who, source_id))
+
+    @sources.post("/{source_id}/tombstones/lift", response_model=Envelope[list[Tombstone]])
+    async def lift_tombstones(source_id: str, body: TombstonesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        return ok(await service.lift_tombstones(who, source_id, body.ids))
+
+    @sources.post("/{source_id}/ai-approval", response_model=Envelope[Source])
+    async def decide_ai_steps(source_id: str, body: AiApprovalIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The knowledge owner approves the source's AI steps (likely questions) as now chosen, or takes the approval
+        back; the change goes to the audit log, and approving rebuilds the pieces in the background."""
+        return ok(await service.decide_ai_steps(who, source_id, approve=body.decision == "approve"))
+
+    @sources.get("/{source_id}/ai-estimate", response_model=Envelope[AiEstimate])
+    async def estimate_ai_steps(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What the source's chosen AI steps would cost, from a split of up to 20 of its items with no model called:
+        calls and tokens for the sample and the whole source, with the basis."""
+        return ok(await service.estimate_ai_steps(who, source_id))
+
     @sources.post("/{source_id}/files", response_model=Envelope[list[AddedFile]])
     async def add_files(source_id: str, body: FileIdsIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Files already in Files, by id: each must be the team's and scanned clean, and is referenced there so it is
@@ -394,7 +502,7 @@ def create_kb_app(
 
     @sources.patch("/{source_id}", response_model=Envelope[Source])
     async def update_source(source_id: str, body: SourcePatch, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.update_source(who, source_id, body.model_dump(exclude_none=True)))
+        return ok(await service.update_source(who, source_id, body.model_dump(exclude_none=True, by_alias=True)))
 
     @sources.post("/{source_id}/pause", response_model=Envelope[Source])
     async def pause_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -440,10 +548,25 @@ def create_kb_app(
         search: str | None = None,
         view: str = "resolved",
         kb_id: Annotated[str | None, Query(alias="kbId")] = None,
+        origin: Annotated[list[str] | None, Query(max_length=4)] = None,
     ) -> JSONResponse:
-        return ok(
-            await service.list_changes(who, view=view, kb_id=kb_id, page=page, page_size=page_size, search=search)
+        """The Changes queue: `view` open, mine, resolved or all; `origin` (source_sync, generated_faq) filters on the
+        server, and the origin facet counts the view before that filter."""
+        found = await service.list_changes(
+            who, view=view, kb_id=kb_id, page=page, page_size=page_size, search=search, origin=origin
         )
+        return ok(found)
+
+    @changes.post("/decide", response_model=Envelope[list[KnowledgeChange]])
+    async def decide_changes(body: DecideIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Approves or rejects FAQ drafts, one or many; an approved pair is searchable at once and cites its passage."""
+        return ok(await service.decide_drafts(who, body.ids, decision=body.decision))
+
+    @changes.patch("/{change_id}", response_model=Envelope[KnowledgeChange])
+    async def edit_change(change_id: str, body: DraftEdit, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Edits an FAQ draft's question and answer; it still waits for review. The quote stays the source's."""
+        [edited] = await service.decide_drafts(who, [change_id], decision="edit", edit=body.model_dump())
+        return ok(edited)
 
     @changes.get("/{change_id}", response_model=Envelope[KnowledgeChange])
     async def get_change(change_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -454,6 +577,19 @@ def create_kb_app(
     @runs.get("/{run_id}", response_model=Envelope[SyncRun])
     async def get_run(run_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_run(who, run_id))
+
+    @runs.post("/{run_id}/cancel", response_model=Envelope[SyncRun])
+    async def cancel_run(run_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Stops a running rebuild between two items; 409 `run_not_running` when it is not running."""
+        return ok(await service.cancel_run(who, run_id))
+
+    @app.get(
+        "/v1/knowledge/source-kinds", tags=["sources"], response_model=Envelope[list[SourceKind]], responses=errors
+    )
+    async def source_kinds(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What a team can add as a source: the built-in kinds, then each knowledge source of the team's apps that are
+        on, with whether it is connected and what it asks for. Add source lists exactly these."""
+        return ok(await service.source_kinds(who))
 
     @app.get("/v1/knowledge/lookups", tags=["knowledge-bases"], response_model=Envelope[Lookups], responses=errors)
     async def lookups(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

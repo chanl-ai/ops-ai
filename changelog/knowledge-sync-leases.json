@@ -1,0 +1,1 @@
+{"date":"2026-11-09","title":"Long syncs keep their source to themselves","description":"A sync or rebuild renews its hold on its source while it runs, so a long one is never overlapped by another sync or ended as stopped.","tag":"fix"}

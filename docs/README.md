@@ -507,3 +507,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/documents-service/files-read-once.md` | uc-672: A scan, a half scan and a filled form are each read once by documents-service and cited from a knowledge base by the OCR'd page |
 | `usecases/agents-service/scanned-chat-attachment.md` | uc-673: A scanned file attached in chat is read with OCR and reaches the agent whole |
 | `usecases/tools-service/app-page-one-state.md` | uc-674: An app's page shows one state and its next action |
+| `usecases/kb-service/a-website-source-keeps-a-knowledge.md` | uc-675: A website source keeps a knowledge base current, and answers cite it |

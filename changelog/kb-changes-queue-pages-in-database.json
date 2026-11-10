@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "The Changes queue stays quick as it grows",
+  "description": "The Changes queue filters, counts and pages in the database, so a long history of changes no longer slows each page.",
+  "tag": "improved"
+}

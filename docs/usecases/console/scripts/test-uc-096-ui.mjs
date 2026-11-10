@@ -1,7 +1,7 @@
 // uc-096 knowledge bases work end to end from the console, ui layer: docs/usecases/console/knowledge-bases-end-to-end.md.
 // Signed in through platform-service as James, every step clicked as a person would: create a base, add files and a
-// page, watch them index (one fails with its reason), ask the playground a question and see a cited answer, retire the
-// base. Each step is checked on its own, so one failing step still lets the later ones report.
+// page, watch them index (one fails with its reason), ask the playground a question and see the passage by page and
+// section, retire the base. Each step is checked on its own, so one failing step still lets the later ones report.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -64,32 +64,31 @@ await withUiStack(
         check('1 James creates a knowledge base and lands on it', res?.status() === 201 && landed && title, { status: res?.status(), url: page.url(), title });
       });
 
-      // 2. Add files from the base's Sources tab: a file source, two PDFs, synced on add.
+      // 2. Add files from the base's Sources tab: Add source, Files, two PDFs, then Create and sync on the review step.
       await step('2 James adds two PDFs from the Sources tab and syncs them', async () => {
         await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByRole('button', { name: 'Add source' }).first().click({ timeout: 120_000 });
-        const add = page.getByRole('dialog', { name: 'Add source' });
-        await add.locator('#ns-type').click();
-        await page.getByRole('option', { name: /File/ }).first().click();
-        await add.locator('#ns-name').fill(`Teller PDFs ${TAG}`);
-        await add.getByTestId('new-source-submit').click();
-        const files = page.getByRole('dialog', { name: /^Add files to/ });
-        await files.waitFor({ timeout: 60_000 });
-        await files.locator('input[type="file"]').setInputFiles([
+        await page.getByTestId('kb-add-source').click({ timeout: 120_000 });
+        const add = page.getByTestId('add-source-wizard');
+        await add.getByTestId('add-source-kind-file').click({ timeout: 60_000 });
+        await add.getByTestId('add-source-next').click();
+        await add.getByTestId('add-source-name').fill(`Teller PDFs ${TAG}`);
+        await add.locator('input[type="file"]').first().setInputFiles([
           { name: 'branch-operations-manual.pdf', mimeType: 'application/pdf', buffer: readFileSync(join(PDFS, 'branch-operations-manual.pdf')) },
           { name: 'scanned-notice.pdf', mimeType: 'application/pdf', buffer: SCAN },
         ]);
-        await files.getByTestId('new-source-files-items').getByText('scanned-notice.pdf').waitFor({ timeout: 60_000 });
-        // Sync refuses while any file is still uploading, as a person would see; wait until both are stored.
-        const busy = files.getByTestId('new-source-files-items').getByText(/Preparing|Uploading/);
-        for (let i = 0; i < 120 && (await busy.count()) > 0; i++) await page.waitForTimeout(500);
-        const synced = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/v1\/sources\/[^/]+\/sync$/.test(r.url()), { timeout: 120_000 }));
-        await files.getByTestId('new-source-sync').click();
-        const res = await synced;
-        const run = res ? (await res.json()).data : undefined;
-        // The scan needs OCR, so it is read in the background: the sync answers with it reading or already failed.
-        const scanSettled = (run?.counts?.failed ?? 0) + (run?.counts?.reading ?? 0) === 1;
-        check('2 James adds two PDFs from the Sources tab and syncs them', res?.status() === 200 && run?.counts?.upserted === 1 && scanSettled, { status: res?.status(), counts: run?.counts });
+        // Next refuses while a file is still uploading or being scanned, as a person would see; wait until both are stored.
+        const ready = add.getByTestId('add-source-upload-items').locator('[data-phase="ready"]');
+        for (let i = 0; i < 120 && (await ready.count()) < 2; i++) await page.waitForTimeout(500);
+        await add.getByTestId('add-source-next').click();
+        await add.getByRole('heading', { name: 'Defaults applied' }).waitFor({ timeout: 30_000 });
+        const created = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/sources'), { timeout: 120_000 }));
+        await add.getByTestId('add-source-create').click();
+        const res = await created;
+        const sent = res ? JSON.parse(res.request().postData() ?? '{}') : {};
+        // Create and sync attaches the source to this base and starts its first sync in the background; step 3 checks
+        // what that sync made of each file.
+        const closed = await add.waitFor({ state: 'detached', timeout: 30_000 }).then(() => true, () => false);
+        check('2 James adds two PDFs from the Sources tab and syncs them', res?.status() === 201 && sent.type === 'file' && sent.fileIds?.length === 2 && sent.sync === true && sent.kbIds?.[0] === kbId && closed, { status: res?.status(), fileIds: sent.fileIds?.length, sync: sent.sync, kbIds: sent.kbIds, closed });
       });
 
       // 3. Watch ingestion on the base: the manual indexed, the scan failed with its reason; the list counts one document and
@@ -133,16 +132,21 @@ await withUiStack(
         check('4 James writes a page in the console and it indexes', res?.status() === 201 && row, { status: res?.status(), row });
       });
 
-      // 5. Test a question in the playground: a cited answer by page and section, and no control that is not built.
-      await step('5 the playground answers with a citation by page and section', async () => {
+      // 5. Test a question in the playground: the search's passages name the manual by page and section, and no control
+      // that is not built is offered. An agent's answer needs an agent citing the base, which this base has none of yet.
+      await step('5 the playground finds the cited passage by page and section', async () => {
         await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=playground`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        const unbuilt = await page.getByText(/^(Hybrid|Semantic|Rerank|Compare two configurations)$/).count();
+        const unbuilt = await page.getByText(/^(Rerank|Rewritten|Compare two configurations)$/).count();
         await page.getByLabel('Question').fill('What is the daily ATM withdrawal limit?');
         const asked = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/query$/.test(r.url()), { timeout: 60_000 }));
         await page.keyboard.press('Enter');
         const res = await asked;
-        const cited = await page.getByText(/Branch Operations Manual.*p\.\s?\d+/).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
-        check('5 the playground answers with a citation by page and section', res?.status() === 200 && cited && unbuilt === 0, { status: res?.status(), cited, unbuilt });
+        const passages = page.getByTestId('search-trace').getByRole('row').filter({ hasText: /Branch Operations Manual · v\d+ · page \d+/ });
+        const cited = await passages.first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+        const passage = cited ? (await passages.first().innerText()).replace(/\s+/g, ' ') : '';
+        // The first cell is the passage's section, then the document, its version and page.
+        const section = passage.split('Branch Operations Manual')[0].trim();
+        check('5 the playground finds the cited passage by page and section', res?.status() === 200 && cited && !!section && unbuilt === 0, { status: res?.status(), passage: passage.slice(0, 200), unbuilt });
       });
 
       // 6. Retire a base an agent cites: the name must be typed, the dialog names the agent, the base leaves the list,

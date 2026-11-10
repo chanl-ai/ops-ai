@@ -135,7 +135,11 @@ KNOWLEDGE_TOOLS: list[dict[str, Any]] = [
                 "collections": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "The team's knowledge bases to search, by id or name; all of them when left out",
+                    "description": "The team's knowledge bases to search, by id or name",
+                },
+                "allTeamKnowledgeBases": {
+                    "type": "boolean",
+                    "description": "Search every knowledge base of the team instead of naming them",
                 },
             },
         },

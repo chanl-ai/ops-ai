@@ -26,7 +26,7 @@ import mssql_live
 from models import chain_metadata, chains
 from schema import Checkout
 
-from ops_store.schema import isolation_kind, team_column, tenant_column
+from ops_store.schema import POSTGRES_ONLY, isolation_kind, team_column, tenant_column
 
 HERE = mssql.here()
 READY = chains()
@@ -79,7 +79,10 @@ def test_every_marked_table_and_no_other_has_the_policy_its_markings_ask_for(
     text = compiled.files[f"{chains().index(chain) + 1:02d}-{chain}.sql"]
     policies = {table: (kind, body) for table, kind, body in _POLICY.findall(text)}
     marked = {
-        t.name: t for m in chain_metadata(chain) for t in m.tables.values() if isolation_kind(t) in ("team", "tenant")
+        t.name: t
+        for m in chain_metadata(chain)
+        for t in m.tables.values()
+        if isolation_kind(t) in ("team", "tenant") and not t.info.get(POSTGRES_ONLY)
     }
     assert {t: k for t, (k, _) in policies.items()} == {
         n: "isolation" if isolation_kind(t) == "team" else "tenant" for n, t in marked.items()

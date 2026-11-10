@@ -37,7 +37,7 @@ fi
 
 echo "proof: the baseline installed on a throwaway PostgreSQL, one login per service"
 docker rm -fv $PG >/dev/null 2>&1 || true
-docker run -d --name $PG -e POSTGRES_PASSWORD=proof -p 127.0.0.1:$PG_PORT:5432 postgres:17-alpine >/dev/null
+docker run -d --name $PG -e POSTGRES_PASSWORD=proof -p 127.0.0.1:$PG_PORT:5432 pgvector/pgvector:pg17 >/dev/null
 # The image first runs a temporary server on its socket only while it initialises; wait for the real one on TCP.
 until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
 SERVER=postgresql://postgres:proof@localhost:$PG_PORT/postgres

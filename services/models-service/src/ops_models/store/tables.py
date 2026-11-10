@@ -97,6 +97,8 @@ model_keys = sa.Table(
     # Set for a key one service uses for many tenants (files-service's extractions): each tenant then spends
     # from its own row in model_key_tenants, starting at this budget, so one tenant cannot use up the others' share.
     sa.Column("tenant_budget", MONEY),
+    # What the key may spend in one UTC day, from the call log (models_0011); null for no daily cap.
+    sa.Column("daily_cap", MONEY),
     info=system("one identity's model key, spent for many tenants; each tenant's share is held by tenant"),
 )
 
@@ -134,4 +136,6 @@ model_call_log = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), index=True),
     # How many images the request carried, refused or sent.
     sa.Column("images", sa.Integer, nullable=False, server_default="0"),
+    # A run's spend, which a caller's per-run cap (X-Run-Spend-Cap) reads before each call.
+    sa.Index("ix_model_call_log_key_run", "key_id", "run_id"),
 )

@@ -24,7 +24,9 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 async def _seed(engine: Database, settings: Settings, connection: ModelConnectionSettings) -> None:
     """Seeds on this short-lived loop, then empties the pool: its connections belong to this loop, and uvicorn serves
     on another, where reusing one fails with "attached to a different loop"."""
-    await seed(engine, settings.models_fake_openai_url, install_connection(connection))
+    await seed(
+        engine, settings.models_fake_openai_url, install_connection(connection), kb_daily_cap=settings.kb_ai_daily_cap
+    )
     await engine.dispose()
 
 

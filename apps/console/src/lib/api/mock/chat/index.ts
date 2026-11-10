@@ -558,7 +558,7 @@ export function createChatMock(deps: Deps): ChatApi {
         } else {
           try {
             // One search across every attached knowledge base, with each one's saved settings and precedence rules.
-            const ans = await deps.knowledge.retrieve({ question, kbIds: t.kbIds, overrides: CHAT_OVERRIDES });
+            const ans = deps.ground({ question, kbIds: t.kbIds, overrides: CHAT_OVERRIDES });
             if (stopped()) return;
             msg.trace = ans.trace;
             if (ans.noAnswer || !ans.answer) {

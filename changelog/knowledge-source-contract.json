@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Connected apps sync only what changed",
+  "description": "Knowledge sources from connected apps now list only what changed since the last sync, skip items the app says are unchanged, and drop items deleted in the app at once.",
+  "tag": "improved"
+}

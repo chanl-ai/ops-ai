@@ -38,6 +38,7 @@ from models import chain_metadata
 from schema import MIGRATOR, ONLINE_ONLY, Checkout, chains, exported, runtime_role, sha256, write_sums
 
 from ops_store.schema import MSSQL_SECURITY, mssql_full_text_ddl, security_ddl
+from ops_store.schema import POSTGRES_ONLY as POSTGRES_ONLY_TABLE
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "mssql"
 OFFLINE_URL = "mssql+aioodbc://offline:offline@localhost:1/offline"
@@ -78,7 +79,11 @@ Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 # documents' restart. Held equal to the PostgreSQL grants by test_model_parity.py.
 SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
     SYSTEM_CHAIN: (SYSTEM_USER, SYSTEM_READS),
-    "files": ("ops_files_system", {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ())}),
+    # files: the retention purge reads which snapshots were released (files_0014).
+    "files": (
+        "ops_files_system",
+        {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ()), "files": (("SELECT",), ())},
+    ),
     "documents": (
         "ops_documents_system",
         {
@@ -199,7 +204,9 @@ def chain_tables(chain: str, metadatas: Iterable[sa.MetaData]) -> Chain:
             for c in copy.constraints:
                 c._creation_order = order[_identity(c)]  # pyright: ignore[reportPrivateUsage]
             copies.append(copy)
-    found = Chain(chain, list(sort_tables(copies)))
+    kept = [t for t in copies if not t.info.get(POSTGRES_ONLY_TABLE)]
+    found = Chain(chain, list(sort_tables(kept)))
+    found.omitted += [f"table {t.name} (PostgreSQL only)" for t in copies if t.info.get(POSTGRES_ONLY_TABLE)]
     refused: list[str] = []
     for t in found.tables:
         dropped = {c.name for c in t.columns if _postgres_only(c)}

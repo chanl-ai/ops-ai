@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "A new website waits for an admin's approval",
+  "description": "A website source on an address the account has not allowed waits for an admin to approve its host, as any new outside address does. Nothing is fetched until then, and it syncs once approved.",
+  "tag": "fix"
+}

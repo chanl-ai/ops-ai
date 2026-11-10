@@ -58,7 +58,7 @@ ready = "http://127.0.0.1:8720/health"
 
 [process.kb]
 command = ["/app/.venv/bin/python", "-m", "ops_kb"]
-env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_KB}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_KB}", OPS_SERVICE_SIGNING_KID = "svc-kb-1" }
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_KB}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_KB}", OPS_SERVICE_SIGNING_KID = "svc-kb-1", OPS_MODELS_KEY = "${OPS_MODELS_KEY_KB}" }
 ready = "http://127.0.0.1:8740/health"
 
 [process.documents]

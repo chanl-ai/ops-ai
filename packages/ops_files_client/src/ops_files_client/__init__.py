@@ -26,6 +26,7 @@ __all__ = [
     "FileScan",
     "FilesClient",
     "FilesRefused",
+    "Purpose",
     "StoredFile",
 ]
 
@@ -36,6 +37,7 @@ Purpose = Literal[
     "case_attachment",
     "document_type_sample",
     "email_body",
+    "knowledge_snapshot",
     "test_import",
     "evidence_bundle",
     "export",

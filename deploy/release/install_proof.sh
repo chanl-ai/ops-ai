@@ -110,7 +110,7 @@ stat -f '%Lp %N' "$CLONE/ops-ai.env" 2>/dev/null || stat -c '%a %n' "$CLONE/ops-
 docker ps --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Image}}' | sort -u | while read -r image; do
   case $image in
     ghcr.io/chanl-ai/ops-ai/*:"$VERSION") echo "proof: running $image  $(docker image inspect --format '{{index .RepoDigests 0}} {{.Os}}/{{.Architecture}}' "$image")" ;;
-    postgres:17-alpine) echo "proof: running $image (the built-in trial database)" ;;
+    pgvector/pgvector:pg17) echo "proof: running $image (the built-in trial database)" ;;
     *) fail "a container runs $image, from outside ghcr.io/chanl-ai/ops-ai/*:$VERSION" ;;
   esac
 done
@@ -182,7 +182,7 @@ say "9. DBA mode against a separate PostgreSQL 17 (TLS, admin without superuser)
 say "uninstall: no container or volume of $PROJECT is left"
 DBA_ADMIN_PW=$(secret)
 docker rm -fv $PG $FAKE >/dev/null 2>&1 || true
-docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 postgres:17 \
+docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 pgvector/pgvector:pg17 \
   -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null
 until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
 docker exec $PG psql -q -U postgres -c "CREATE ROLE opsadmin LOGIN NOSUPERUSER CREATEDB CREATEROLE BYPASSRLS PASSWORD '$DBA_ADMIN_PW'"

@@ -18,6 +18,7 @@ scripts.
 |---|---|---|---|
 | Roles, once per server and again when a release adds one | DBA | a superuser | `roles.sql`, `upgrade-roles.sql` |
 | Create the database | DBA | a superuser | `CREATE DATABASE <name> OWNER ops_migrator;` |
+| Create pgvector in it (knowledge search by meaning) | DBA | a superuser; on Azure Database for PostgreSQL the server admin, with `vector` in `azure.extensions` | `CREATE EXTENSION IF NOT EXISTS vector;` in the new database. An upgrade carries it in `upgrade-roles.sql` |
 | Fresh install | DBA | `ops_migrator` | `bundle.sql`, then `grants.sql` |
 | Upgrade | DBA | `ops_migrator` | `upgrade.sql`, then the new release's `grants.sql` |
 | Run the services | the platform team | one login per service, `ops_<service>_runtime` | none: each refuses to start on a schema behind it |
@@ -52,6 +53,7 @@ The DBA then runs, with their own tools:
 ```
 psql -v ON_ERROR_STOP=1 "postgresql://<superuser>@<host>/postgres" -f roles.sql
 psql "postgresql://<superuser>@<host>/postgres" -c "CREATE DATABASE ops OWNER ops_migrator"
+psql "postgresql://<superuser>@<host>/ops" -c "CREATE EXTENSION IF NOT EXISTS vector"
 psql -v ON_ERROR_STOP=1 "postgresql://ops_migrator@<host>/ops" -f bundle.sql
 psql -v ON_ERROR_STOP=1 "postgresql://ops_migrator@<host>/ops" -f grants.sql
 ```

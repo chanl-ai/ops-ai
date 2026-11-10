@@ -3266,6 +3266,11 @@ export interface components {
         };
         /** Agent */
         Agent: {
+            /**
+             * Allteamknowledgebases
+             * @default false
+             */
+            allTeamKnowledgeBases: boolean;
             /** Autoresolvedrate */
             autoResolvedRate: number;
             /**
@@ -3404,6 +3409,8 @@ export interface components {
         };
         /** AgentPatch */
         AgentPatch: {
+            /** Allteamknowledgebases */
+            allTeamKnowledgeBases?: boolean | null;
             /** Channels */
             channels?: ("voice" | "chat" | "email" | "api")[] | null;
             /** Collections */

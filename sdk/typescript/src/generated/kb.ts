@@ -322,10 +322,34 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Changes */
+        /**
+         * List Changes
+         * @description The Changes queue: `view` open, mine, resolved or all; `origin` (source_sync, generated_faq) filters on the
+         *     server, and the origin facet counts the view before that filter.
+         */
         get: operations["changes_list_changes"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge-changes/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Changes
+         * @description Approves or rejects FAQ drafts, one or many; an approved pair is searchable at once and cites its passage.
+         */
+        post: operations["changes_decide_changes"];
         delete?: never;
         options?: never;
         head?: never;
@@ -346,7 +370,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit Change
+         * @description Edits an FAQ draft's question and answer; it still waits for review. The quote stays the source's.
+         */
+        patch: operations["changes_edit_change"];
         trace?: never;
     };
     "/v1/knowledge/lookups": {
@@ -358,6 +386,27 @@ export interface paths {
         };
         /** Lookups */
         get: operations["knowledge_bases_lookups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge/source-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Source Kinds
+         * @description What a team can add as a source: the built-in kinds, then each knowledge source of the team's apps that are
+         *     on, with whether it is connected and what it asks for. Add source lists exactly these.
+         */
+        get: operations["sources_source_kinds"];
         put?: never;
         post?: never;
         delete?: never;
@@ -405,6 +454,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Source
+         * @description What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
+         *     the plugin's preview tool. Nothing is stored.
+         */
+        post: operations["sources_preview_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/{source_id}": {
         parameters: {
             query?: never;
@@ -422,6 +492,48 @@ export interface paths {
         head?: never;
         /** Update Source */
         patch: operations["sources_update_source"];
+        trace?: never;
+    };
+    "/v1/sources/{source_id}/ai-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Ai Steps
+         * @description The knowledge owner approves the source's AI steps (likely questions) as now chosen, or takes the approval
+         *     back; the change goes to the audit log, and approving rebuilds the pieces in the background.
+         */
+        post: operations["sources_decide_ai_steps"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/{source_id}/ai-estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estimate Ai Steps
+         * @description What the source's chosen AI steps would cost, from a split of up to 20 of its items with no model called:
+         *     calls and tokens for the sample and the whole source, with the basis.
+         */
+        get: operations["sources_estimate_ai_steps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/sources/{source_id}/files": {
@@ -530,6 +642,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/{source_id}/tombstones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tombstones
+         * @description Addresses removed after answering gone twice at their source; a sync leaves them out until lifted.
+         */
+        get: operations["sources_list_tombstones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/{source_id}/tombstones/lift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lift Tombstones */
+        post: operations["sources_lift_tombstones"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sync-runs/{run_id}": {
         parameters: {
             query?: never;
@@ -541,6 +690,26 @@ export interface paths {
         get: operations["sources_get_run"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sync-runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Run
+         * @description Stops a running rebuild between two items; 409 `run_not_running` when it is not running.
+         */
+        post: operations["sources_cancel_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -565,6 +734,32 @@ export interface components {
             fileId: string;
             /** Name */
             name: string;
+        };
+        /** AiApprovalIn */
+        AiApprovalIn: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "revoke";
+        };
+        /** AiEstimate */
+        AiEstimate: {
+            /** Basis */
+            basis: string;
+            /** Calls */
+            calls: number;
+            /** Inputtokens */
+            inputTokens: number;
+            /** Model */
+            model: string;
+            outputTokens: components["schemas"]["TokenRange"];
+            /** Sampleditems */
+            sampledItems: number;
+            /** Steps */
+            steps: string[];
+            /** Totalitems */
+            totalItems: number;
         };
         /** AttachIn */
         AttachIn: {
@@ -632,6 +827,16 @@ export interface components {
             /** Resolved */
             resolved: number;
         };
+        /** DecideIn */
+        DecideIn: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Ids */
+            ids: string[];
+        };
         /** DocumentRow */
         DocumentRow: {
             /** Acl */
@@ -642,6 +847,8 @@ export interface components {
             collection: string;
             /** Digest */
             digest: string;
+            /** Duplicateof */
+            duplicateOf?: string | null;
             /** Effectivedate */
             effectiveDate: string;
             /** Error */
@@ -654,6 +861,8 @@ export interface components {
             family: string;
             /** Fileid */
             fileId?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Freshness */
             freshness: string;
             /** Id */
@@ -701,9 +910,36 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** DraftEdit */
+        DraftEdit: {
+            /** Answer */
+            answer: string;
+            /** Question */
+            question: string;
+        };
+        /** EmbeddingCoverage */
+        EmbeddingCoverage: {
+            /** Embedded */
+            embedded: number;
+            /** Model */
+            model: string;
+            /** Units */
+            units: number;
+            /** Width */
+            width: number;
+        };
         /** Envelope[AddedDocuments] */
         Envelope_AddedDocuments_: {
             data: components["schemas"]["AddedDocuments"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AiEstimate] */
+        Envelope_AiEstimate_: {
+            data: components["schemas"]["AiEstimate"];
             /**
              * Success
              * @constant
@@ -863,6 +1099,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SourcePreview] */
+        Envelope_SourcePreview_: {
+            data: components["schemas"]["SourcePreview"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Source] */
         Envelope_Source_: {
             data: components["schemas"]["Source"];
@@ -891,6 +1136,16 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[list[KnowledgeChange]] */
+        Envelope_list_KnowledgeChange__: {
+            /** Data */
+            data: components["schemas"]["KnowledgeChange"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[NamedRef]] */
         Envelope_list_NamedRef__: {
             /** Data */
@@ -905,6 +1160,26 @@ export interface components {
         Envelope_list_PluginSource__: {
             /** Data */
             data: components["schemas"]["PluginSource"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[SourceKind]] */
+        Envelope_list_SourceKind__: {
+            /** Data */
+            data: components["schemas"]["SourceKind"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[Tombstone]] */
+        Envelope_list_Tombstone__: {
+            /** Data */
+            data: components["schemas"]["Tombstone"][];
             /**
              * Success
              * @constant
@@ -965,6 +1240,19 @@ export interface components {
              */
             status: "handled" | "unhandled";
         };
+        /** FaqDraft */
+        FaqDraft: {
+            /** Addswords */
+            addsWords?: string[];
+            /** Answer */
+            answer: string;
+            /** Question */
+            question: string;
+            /** Quote */
+            quote: string;
+            /** Sectionpath */
+            sectionPath: string[];
+        };
         /** FileIdsIn */
         FileIdsIn: {
             /** Fileids */
@@ -981,6 +1269,8 @@ export interface components {
             reason?: string | null;
             /** Status */
             status: string;
+            /** Unitsnotembedded */
+            unitsNotEmbedded?: number | null;
         };
         /** Item */
         Item: {
@@ -992,6 +1282,8 @@ export interface components {
             collection: string;
             /** Digest */
             digest: string;
+            /** Duplicateof */
+            duplicateOf?: string | null;
             /** Effectivedate */
             effectiveDate: string;
             /** Error */
@@ -1004,6 +1296,8 @@ export interface components {
             family: string;
             /** Fileid */
             fileId?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Id */
             id: string;
             /** Metadata */
@@ -1061,6 +1355,8 @@ export interface components {
             };
             /** Digest */
             digest: string;
+            /** Duplicateof */
+            duplicateOf?: string | null;
             /** Effectivedate */
             effectiveDate: string;
             /** Error */
@@ -1073,6 +1369,8 @@ export interface components {
             family: string;
             /** Fileid */
             fileId?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Id */
             id: string;
             /** Metadata */
@@ -1093,10 +1391,18 @@ export interface components {
             processedAt?: string | null;
             /** Queries30D */
             queries30d: number;
+            /** Reading */
+            reading?: {
+                [key: string]: unknown;
+            } | null;
             /** Reviewby */
             reviewBy: string;
             /** Sensitivity */
             sensitivity: string;
+            /** Settingsused */
+            settingsUsed?: {
+                [key: string]: unknown;
+            } | null;
             /** Sizebytes */
             sizeBytes: number;
             /** Sourceid */
@@ -1139,6 +1445,11 @@ export interface components {
             rules: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Running
+             * @default false
+             */
+            running: boolean;
             source: components["schemas"]["Source"];
             /** Sourceid */
             sourceId: string;
@@ -1242,6 +1553,7 @@ export interface components {
             createdAt: string;
             /** Description */
             description: string;
+            embedding?: components["schemas"]["EmbeddingCoverage"] | null;
             /** Health */
             health: string;
             /** Healthreasons */
@@ -1456,6 +1768,7 @@ export interface components {
             documentId: string;
             /** Documenttitle */
             documentTitle: string;
+            faq?: components["schemas"]["FaqDraft"] | null;
             /** Freshness */
             freshness: string;
             /** Fromversion */
@@ -1488,6 +1801,15 @@ export interface components {
             toVersion: string;
             /** Trust */
             trust: string;
+        };
+        /** Lanes */
+        Lanes: {
+            /** Asked */
+            asked: string[];
+            /** Ran */
+            ran: string[];
+            /** Skipped */
+            skipped: components["schemas"]["SkippedLane"][];
         };
         /** ListResult[DocumentRow] */
         ListResult_DocumentRow_: {
@@ -1620,10 +1942,21 @@ export interface components {
         };
         /** PassageOut */
         PassageOut: {
+            /** Fileid */
+            fileId?: string | null;
             /** Itemid */
             itemId: string;
             /** Kbid */
             kbId: string;
+            /** Lanes */
+            lanes?: {
+                [key: string]: number;
+            };
+            /**
+             * Matched
+             * @default self
+             */
+            matched: string;
             /** Page */
             page?: number | null;
             /** Score */
@@ -1636,6 +1969,13 @@ export interface components {
             text: string;
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
             /** Version */
             version: string;
         };
@@ -1651,12 +1991,16 @@ export interface components {
             citations: {
                 [key: string]: unknown;
             }[];
+            cost: components["schemas"]["SearchCost"];
             /** Id */
             id: string;
+            lanes: components["schemas"]["Lanes"];
             /** Matchers */
             matchers: string[];
             /** Noanswer */
             noAnswer?: boolean | null;
+            /** Passages */
+            passages: components["schemas"]["PassageOut"][];
             /** Question */
             question: string;
             /** Retrievalms */
@@ -1677,6 +2021,22 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** PreviewIn */
+        PreviewIn: {
+            /** Config */
+            config: {
+                [key: string]: unknown;
+            };
+        };
+        /** PreviewPage */
+        PreviewPage: {
+            /** Id */
+            id: string;
+            /** Outcome */
+            outcome: string;
+            /** Willfetch */
+            willFetch: boolean;
+        };
         /** QueryIn */
         QueryIn: {
             /** Question */
@@ -1695,25 +2055,47 @@ export interface components {
             /** Slug */
             slug: string;
         };
+        /** SearchCost */
+        SearchCost: {
+            /** Embeddingtokens */
+            embeddingTokens: number;
+        };
         /** SearchIn */
         SearchIn: {
             /** Kbids */
             kbIds: string[];
-            /**
-             * Limit
-             * @default 8
-             */
-            limit: number;
+            /** Limit */
+            limit?: number | null;
             /** Question */
             question: string;
         };
         /** SearchOut */
         SearchOut: {
+            cost: components["schemas"]["SearchCost"];
+            lanes: components["schemas"]["Lanes"];
             /** Passages */
             passages: components["schemas"]["PassageOut"][];
         };
+        /** SkippedLane */
+        SkippedLane: {
+            /** Lane */
+            lane: string;
+            /** Reason */
+            reason: string;
+        };
         /** Source */
         Source: {
+            /**
+             * Aiceiling
+             * @default 5
+             */
+            aiCeiling: number;
+            /** Aistepswaiting */
+            aiStepsWaiting: string[];
+            /** Cleaning */
+            cleaning: {
+                [key: string]: unknown;
+            };
             /** Collection */
             collection: string;
             /** Config */
@@ -1724,6 +2106,10 @@ export interface components {
             createdAt: string;
             /** Deletedatsource */
             deletedAtSource: string;
+            /** Health */
+            health?: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: string;
             /** Ingest */
@@ -1736,6 +2122,10 @@ export interface components {
             itemsIndexed: number;
             /** Itemspending */
             itemsPending: number;
+            /** Kind */
+            kind: string;
+            /** Kindlabel */
+            kindLabel: string;
             /** Lastrunstatus */
             lastRunStatus?: string | null;
             /** Lastsyncat */
@@ -1746,6 +2136,8 @@ export interface components {
             }[];
             /** Name */
             name: string;
+            /** Nextsyncat */
+            nextSyncAt?: string | null;
             /** Notifyonfailure */
             notifyOnFailure: boolean;
             /** Owner */
@@ -1758,6 +2150,7 @@ export interface components {
             permissions: {
                 [key: string]: unknown;
             };
+            rebuild?: components["schemas"]["SyncRun"] | null;
             /** Rules */
             rules: {
                 [key: string]: unknown;
@@ -1782,9 +2175,18 @@ export interface components {
             type: string;
             /** Usedbykbids */
             usedByKbIds: string[];
+            /** Waitinghosts */
+            waitingHosts: {
+                [key: string]: unknown;
+            }[];
         };
         /** SourceDetail */
         SourceDetail: {
+            /**
+             * Aiceiling
+             * @default 5
+             */
+            aiCeiling: number;
             /** Aistepswaiting */
             aiStepsWaiting: string[];
             /** Candelete */
@@ -1793,6 +2195,10 @@ export interface components {
             canEdit?: boolean | null;
             /** Canpublish */
             canPublish?: boolean | null;
+            /** Cleaning */
+            cleaning: {
+                [key: string]: unknown;
+            };
             /** Collection */
             collection: string;
             /** Config */
@@ -1811,6 +2217,10 @@ export interface components {
             governance: {
                 [key: string]: unknown;
             };
+            /** Health */
+            health?: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: string;
             /** Ingest */
@@ -1825,6 +2235,10 @@ export interface components {
             itemsIndexed: number;
             /** Itemspending */
             itemsPending: number;
+            /** Kind */
+            kind: string;
+            /** Kindlabel */
+            kindLabel: string;
             /** Lastrundurationsec */
             lastRunDurationSec?: number | null;
             /** Lastrunstatus */
@@ -1837,6 +2251,8 @@ export interface components {
             }[];
             /** Name */
             name: string;
+            /** Nextsyncat */
+            nextSyncAt?: string | null;
             /** Notifyonfailure */
             notifyOnFailure: boolean;
             /** Owner */
@@ -1851,6 +2267,7 @@ export interface components {
             };
             /** Readers */
             readers: components["schemas"]["Reader"][];
+            rebuild?: components["schemas"]["SyncRun"] | null;
             /** Recentruns */
             recentRuns: {
                 [key: string]: unknown;
@@ -1887,9 +2304,19 @@ export interface components {
             type: string;
             /** Usedbykbids */
             usedByKbIds: string[];
+            /** Waitinghosts */
+            waitingHosts: {
+                [key: string]: unknown;
+            }[];
         };
         /** SourceIn */
         SourceIn: {
+            /** Aiceiling */
+            aiCeiling?: number | null;
+            /** Cleaning */
+            cleaning?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Collection
              * @default
@@ -1904,15 +2331,35 @@ export interface components {
              * @default []
              */
             fileIds: string[];
+            /** Ingest */
+            ingest?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Kbids
              * @default []
              */
             kbIds: string[];
+            /** Metadatamapping */
+            metadataMapping?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Name */
             name: string;
             /** Owner */
             owner?: string | null;
+            /** Parsing */
+            parsing?: {
+                [key: string]: unknown;
+            } | null;
+            /** Rules */
+            rules?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Schedule */
+            schedule?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Sensitivity
              * @default internal
@@ -1933,21 +2380,124 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** SourceKind */
+        SourceKind: {
+            /**
+             * Connected
+             * @default false
+             */
+            connected: boolean;
+            /** Defaults */
+            defaults: {
+                [key: string]: unknown;
+            };
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "built_in" | "apps";
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Kind */
+            kind: string;
+            /**
+             * Needsconnection
+             * @default false
+             */
+            needsConnection: boolean;
+            /**
+             * Pickers
+             * @default false
+             */
+            pickers: boolean;
+            /** Plugin */
+            plugin?: string | null;
+            /**
+             * Previews
+             * @default false
+             */
+            previews: boolean;
+            /**
+             * Site
+             * @default false
+             */
+            site: boolean;
+            /** Source */
+            source?: string | null;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
         /** SourcePatch */
         SourcePatch: {
+            /** Aiceiling */
+            aiCeiling?: number | null;
+            /** Cleaning */
+            cleaning?: {
+                [key: string]: unknown;
+            } | null;
             /** Collection */
             collection?: string | null;
+            /** Ingest */
+            ingest?: {
+                [key: string]: unknown;
+            } | null;
+            /** Metadatamapping */
+            metadataMapping?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Name */
             name?: string | null;
             /** Owner */
             owner?: string | null;
+            /** Parsing */
+            parsing?: {
+                [key: string]: unknown;
+            } | null;
+            /** Rules */
+            rules?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Schedule */
+            schedule?: {
+                [key: string]: unknown;
+            } | null;
             /** Sensitivity */
             sensitivity?: string | null;
             /** Tags */
             tags?: string[] | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** SourcePreview */
+        SourcePreview: {
+            /** Capped */
+            capped: boolean;
+            /** Found */
+            found: number;
+            /** Pages */
+            pages: components["schemas"]["PreviewPage"][];
+            /** Willfetch */
+            willFetch: number;
         };
         /** SourceRow */
         SourceRow: {
+            /**
+             * Aiceiling
+             * @default 5
+             */
+            aiCeiling: number;
+            /** Aistepswaiting */
+            aiStepsWaiting: string[];
+            /** Cleaning */
+            cleaning: {
+                [key: string]: unknown;
+            };
             /** Collection */
             collection: string;
             /** Config */
@@ -1958,6 +2508,10 @@ export interface components {
             createdAt: string;
             /** Deletedatsource */
             deletedAtSource: string;
+            /** Health */
+            health?: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: string;
             /** Ingest */
@@ -1970,6 +2524,10 @@ export interface components {
             itemsIndexed: number;
             /** Itemspending */
             itemsPending: number;
+            /** Kind */
+            kind: string;
+            /** Kindlabel */
+            kindLabel: string;
             /** Lastrunstatus */
             lastRunStatus?: string | null;
             /** Lastsyncat */
@@ -1980,6 +2538,8 @@ export interface components {
             }[];
             /** Name */
             name: string;
+            /** Nextsyncat */
+            nextSyncAt?: string | null;
             /** Notifyonfailure */
             notifyOnFailure: boolean;
             /** Owner */
@@ -1992,6 +2552,7 @@ export interface components {
             permissions: {
                 [key: string]: unknown;
             };
+            rebuild?: components["schemas"]["SyncRun"] | null;
             /** Rules */
             rules: {
                 [key: string]: unknown;
@@ -2020,6 +2581,10 @@ export interface components {
             usedBy: components["schemas"]["NamedRef"][];
             /** Usedbykbids */
             usedByKbIds: string[];
+            /** Waitinghosts */
+            waitingHosts: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * SyncIn
@@ -2040,6 +2605,8 @@ export interface components {
         };
         /** SyncRun */
         SyncRun: {
+            /** Cancelledby */
+            cancelledBy?: string | null;
             /** Counts */
             counts: {
                 [key: string]: number;
@@ -2050,6 +2617,8 @@ export interface components {
             errors: {
                 [key: string]: unknown;
             }[];
+            /** Finishedat */
+            finishedAt?: string | null;
             /** Id */
             id: string;
             /** Log */
@@ -2066,6 +2635,27 @@ export interface components {
             status: string;
             /** Trigger */
             trigger: string;
+        };
+        /** TokenRange */
+        TokenRange: {
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+        };
+        /** Tombstone */
+        Tombstone: {
+            /** At */
+            at?: string | null;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** TombstonesIn */
+        TombstonesIn: {
+            /** Ids */
+            ids: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -4147,6 +4737,7 @@ export interface operations {
                 search?: string | null;
                 view?: string;
                 kbId?: string | null;
+                origin?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -4161,6 +4752,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ChangeList_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    changes_decide_changes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_KnowledgeChange__"];
                 };
             };
             /** @description Invalid request */
@@ -4349,6 +5045,113 @@ export interface operations {
             };
         };
     };
+    changes_edit_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_KnowledgeChange_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     knowledge_bases_lookups: {
         parameters: {
             query?: never;
@@ -4365,6 +5168,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Lookups_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_source_kinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_SourceKind__"];
                 };
             };
             /** @description Invalid request */
@@ -4763,6 +5667,111 @@ export interface operations {
             };
         };
     };
+    sources_preview_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SourcePreview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     sources_get_source: {
         parameters: {
             query?: never;
@@ -4989,6 +5998,216 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Source_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_decide_ai_steps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiApprovalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Source_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_estimate_ai_steps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AiEstimate_"];
                 };
             };
             /** @description Invalid request */
@@ -5707,7 +6926,320 @@ export interface operations {
             };
         };
     };
+    sources_list_tombstones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_Tombstone__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_lift_tombstones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TombstonesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_Tombstone__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     sources_get_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SyncRun_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_cancel_run: {
         parameters: {
             query?: never;
             header?: never;

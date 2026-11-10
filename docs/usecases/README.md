@@ -306,3 +306,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-672 | documents-service | A scan, a half scan and a filled form are each read once by documents-service and cited from a knowledge base by the OCR'd page | api, sdk | passing |
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | current |
+| uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing |

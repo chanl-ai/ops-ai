@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_kb.__main__ import move_to_files_service
 from ops_kb.agents import StaticAgents
 from ops_kb.files import FilesServiceIntake, KnowledgeFiles
+from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
-from ops_kb.store.fulltext import PostgresFullTextRetriever
 
 from .conftest import kb_client
 from .files_fake import FakeFilesService
@@ -41,7 +41,7 @@ async def test_a_start_moves_files_from_kb_services_own_store_into_files_service
     service = KnowledgeService(
         KnowledgeStore(engine),
         intake,
-        PostgresFullTextRetriever(engine),
+        HybridRetriever(engine),
         StaticAgents(),
         readings=LocalReadings(intake),
     )
