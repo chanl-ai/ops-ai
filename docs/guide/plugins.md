@@ -151,6 +151,7 @@ paging, knowledge sources and templates.
 | `connection.health_check` | The path Test connection calls |
 | `connection.sign_in_errors` | What a refused sign-in says, by the system's error code: `{error, description_contains?, say, who}`; see Where a team signs in |
 | `connection.credential_settings` | Settings that belong to the OAuth app's registration (a Microsoft tenant, an Okta domain): the team's app credential holds them, and every account signing in with it reads them from there |
+| `connection.identity` | Up to three settings whose values tell one account of the app from another (Salesforce's `instance_url`), shown under each account's name on every screen and in what the model is told. Never a secret. With none declared, the platform shows what the sign-in filled, then the account's own sign-in address, then who signed in, so every account shows something |
 | `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), `from_token` or `after_sign_in` (only the sign-in sets it), and `choices` and `other` (the only values it takes; see Where a team signs in), and `asked` (which window asks for it; see Where a setting is asked) |
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |

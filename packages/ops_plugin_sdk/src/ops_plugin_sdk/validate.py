@@ -353,6 +353,26 @@ def _function(root: Path, path: str) -> tuple[Any, str | None]:
     return fn, None
 
 
+# Shown under an account's name on one line, so a few values at most.
+IDENTITY_MAX = 3
+
+
+def _identity(manifest: Manifest) -> list[Problem]:
+    """Each `connection.identity` name is one of the plugin's settings and never a secret, since it is shown under the
+    account's name to everyone who sees the account; at most IDENTITY_MAX."""
+    names = manifest.connection.identity
+    out: list[Problem] = []
+    if len(names) > IDENTITY_MAX:
+        out.append(Problem("connection.identity", f"names {len(names)} settings; at most three fit under a name"))
+    for name in names:
+        setting = manifest.settings.get(name)
+        if setting is None:
+            out.append(Problem(f"connection.identity.{name}", f"{name} is not one of the plugin's settings"))
+        elif setting.secret:
+            out.append(Problem(f"connection.identity.{name}", f"{name} is a secret, which is never shown"))
+    return out
+
+
 def check(manifest: Manifest, root: Path) -> list[Problem]:
     out: list[Problem] = []
     if manifest.sdk != SDK_MAJOR:
@@ -380,6 +400,7 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
         out.append(
             Problem("connection.token_hosts", "a setting read from the token needs the host suffixes it may name")
         )
+    out += _identity(manifest)
     for i, host in enumerate(manifest.egress):
         out += _placeholders(manifest, host, f"egress[{i}]")
     out += _placeholders(manifest, manifest.endpoint, "endpoint")

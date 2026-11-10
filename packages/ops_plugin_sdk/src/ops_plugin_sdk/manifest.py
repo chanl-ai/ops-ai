@@ -137,6 +137,10 @@ class Connection(Strict):
     # The settings that belong to the OAuth app's registration (a Microsoft tenant, an Okta domain), not to one account:
     # a team's app credential holds them, and every account signing in with that credential reads them from it.
     credential_settings: list[str] = Field(default_factory=list[str])
+    # The settings whose values tell one account of the app from another (Salesforce's instance_url, an org's address),
+    # shown under each account's name, in this order. None declared: the host shows what the sign-in filled, the
+    # account's own sign-in address and who signed in (tools-service host.account_identity).
+    identity: list[str] = Field(default_factory=list[str])
 
     def sign_in_error(self, error: str, description: str | None) -> SignInError | None:
         """The first `sign_in_errors` entry for this error code and description; None when none matches."""
