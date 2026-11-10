@@ -5,9 +5,8 @@ chat; and choosing connectors wipes a tool the person switched off one by one in
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import AsyncClient
@@ -177,6 +176,12 @@ async def test_an_app_the_person_has_not_signed_in_to_is_in_the_sign_in_group_no
     assert refused.status_code == 422, refused.text
 
 
+def _fields(record: logging.LogRecord) -> dict[str, Any]:
+    """A structlog record's message is its fields."""
+    msg: object = record.msg
+    return cast(dict[str, Any], msg) if isinstance(msg, dict) else {}
+
+
 class Unreachable:
     """tools-service not answering the app list."""
 
@@ -209,11 +214,12 @@ async def test_an_empty_picker_with_tools_held_logs_why(
     tid = (await new_thread(client))["id"]
     with caplog.at_level(logging.WARNING, logger="ops_agents.chat_connectors"):
         assert await connectors(client, tid) == {}
-    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("chat.connectors.empty")]
+    lines = [f for f in map(_fields, caplog.records) if f.get("event") == "chat.connectors.empty"]
     assert len(lines) == 1, caplog.text
-    assert f"reason={reason}" in lines[0] and f"cards={cards}" in lines[0], lines[0]
-    assert "agent=ag_" in lines[0] and "team=team_" in lines[0], lines[0]
-    assert re.search(r"held=[1-9]", lines[0]), lines[0]
+    line = lines[0]
+    assert (line["reason"], line["cards"]) == (reason, cards), line
+    assert str(line["agent"]).startswith("ag_") and str(line["team"]).startswith("team_"), line
+    assert line["held"] >= 1, line
 
 
 async def test_a_picker_with_apps_logs_nothing(
