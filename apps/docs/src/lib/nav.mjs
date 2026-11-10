@@ -102,6 +102,7 @@ export const SITE = [
           { page: 'deploy/database.md', title: 'Database', icon: 'database-zap' },
           { page: 'guide/azure-sql.md', icon: 'database' },
           { page: 'deploy/release-package.md', title: 'Release package', icon: 'package' },
+          { page: 'deploy/security-scanning.md', title: 'Security scanning', icon: 'scan-search' },
         ],
       },
       {

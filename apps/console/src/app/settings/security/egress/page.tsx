@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAddEgress, useEgress, useEgressHosts, useRemoveEgress } from '@/hooks/egress-queries';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
 import { shortDate } from '@/lib/format';
 import type { EgressKind, ListedHost, ListedRange } from '@/lib/types/egress';
@@ -94,6 +95,8 @@ export default function EgressPage() {
   // Hosts grow with every module and page on the server; private ranges stay few and come whole with the list.
   const hostList = useListParams('host');
   const hostPage = useEgressHosts(hostList.params);
+  const newHosts = useCreatedRows<ListedHost>();
+  const newRanges = useCreatedRows<ListedRange>();
   const [hostFilterResetKey, setHostFilterResetKey] = React.useState(0);
   const remove = useRemoveEgress();
   // The allow-list decides what every tool may reach, so only the Security team's admins change it; everyone else reads it.
@@ -142,6 +145,7 @@ export default function EgressPage() {
                 columns={hosts}
                 data={hostPage.data?.data ?? []}
                 getRowId={(h) => h.host}
+                created={newHosts}
                 searchColumn="host"
                 searchPlaceholder="Search hosts or notes…"
                 onColumnFiltersChange={hostList.onColumnFiltersChange}
@@ -158,6 +162,7 @@ export default function EgressPage() {
               columns={ranges}
               data={query.data?.ranges ?? []}
               getRowId={(r) => r.cidr}
+              created={newRanges}
               searchColumn="cidr"
               searchPlaceholder="Search ranges…"
               hideViewSwitcher
@@ -167,7 +172,11 @@ export default function EgressPage() {
         </>
       )}
 
-      <EgressAddDialog kind={adding} onOpenChange={(o) => !o && setAdding(null)} />
+      <EgressAddDialog
+        kind={adding}
+        onOpenChange={(o) => !o && setAdding(null)}
+        onAdded={({ kind, entry }) => entry && (kind === 'host' ? newHosts.show(entry as ListedHost) : newRanges.show(entry as ListedRange))}
+      />
       <DeleteDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}

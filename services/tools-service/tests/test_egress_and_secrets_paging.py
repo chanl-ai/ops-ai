@@ -64,3 +64,31 @@ async def test_wildcards_in_the_search_match_only_themselves(
     assert [s["name"] for s in secrets["data"]] == ["A_B"]
     hosts = _data(await client.get("/v1/egress/hosts", params={"search": "100%"}, headers=sam))
     assert [h["host"] for h in hosts["data"]] == ["wild-1.example.com"]
+
+
+async def test_an_add_returns_the_entry_as_its_list_shows_it(
+    client: httpx.AsyncClient,  # noqa: F811
+    tenant: str,
+) -> None:
+    """A screen shows a new row on whatever page the list is on only when the add returns that row; an add of a value
+    already listed returns it too, so the screen can point at the existing row."""
+    sam = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
+    added = await client.post("/v1/egress/hosts", json={"value": "Zz-New.example.com", "note": " core "}, headers=sam)
+    again = await client.post("/v1/egress/hosts", json={"value": "zz-new.example.com"}, headers=sam)
+    host = _data(added)["entry"]
+    assert added.status_code == 201 and again.status_code == 200
+    assert set(host) == {"host", "note", "addedBy", "addedAt", "modules", "templateId", "protection"}
+    assert {k: host[k] for k in ("host", "note", "addedBy", "modules")} == {
+        "host": "zz-new.example.com",
+        "note": "core",
+        "addedBy": "Sam Adeyemi",
+        "modules": [],
+    }
+    listed = _data(await client.get("/v1/egress/hosts", params={"search": "zz-new"}, headers=sam))["data"]
+    assert _data(again)["entry"] == host == listed[0]
+
+    ranged = await client.post("/v1/egress/ranges", json={"value": "10.42.0.0/16"}, headers=sam)
+    assert ranged.status_code == 201, ranged.text
+    cidr = _data(ranged)["entry"]
+    assert (cidr["cidr"], cidr["addedBy"]) == ("10.42.0.0/16", "Sam Adeyemi")
+    assert set(cidr) == {"cidr", "note", "addedBy", "addedAt", "templateId", "protection"}

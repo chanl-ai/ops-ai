@@ -20,7 +20,7 @@ export const usersText = (s: SecretMeta) => {
 };
 
 /** Create (no `rotating`) or rotate one secret. The value field is write-only and cleared on every open. */
-export function SecretDialog({ open, rotating, onOpenChange, onSaved }: { open: boolean; rotating: SecretMeta | null; onOpenChange: (open: boolean) => void; /** Called with the name once a new secret is saved, so a picker can use it. */ onSaved?: (name: string) => void }) {
+export function SecretDialog({ open, rotating, onOpenChange, onSaved }: { open: boolean; rotating: SecretMeta | null; onOpenChange: (open: boolean) => void; /** Called with the new secret once it is saved, so a picker can use its name or a list can show its row. */ onSaved?: (secret: SecretMeta) => void }) {
   const create = useCreateSecret();
   const rotate = useRotateSecret();
   const [name, setName] = React.useState('');
@@ -39,7 +39,7 @@ export function SecretDialog({ open, rotating, onOpenChange, onSaved }: { open: 
       const saved = rotating ? await rotate.mutateAsync({ name: rotating.name, value }) : await create.mutateAsync({ name, value });
       setValue('');
       toast.success(rotating ? `Rotated ${rotating.name}` : `Saved ${(saved as SecretMeta).name}`, { description: rotating ? 'The next call sends the new value.' : `Reference it in a header as {{${(saved as SecretMeta).name}}}.` });
-      if (!rotating) onSaved?.((saved as SecretMeta).name);
+      if (!rotating) onSaved?.(saved as SecretMeta);
       onOpenChange(false);
     } catch (err) {
       setErrors({ submit: (err as Error).message });

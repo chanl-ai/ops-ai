@@ -73,6 +73,35 @@ class Change(Out):
     kind: Literal["host", "range"]
     value: str
     changed: bool
+    # An add returns the entry as its list shows it, so a screen can show the new row on whatever page it is on.
+    entry: ListedHost | ListedRange | None = None
+
+
+def _host_out(h: dict[str, object]) -> dict[str, object]:
+    """A stored host row as the lists and an add return it."""
+    at = h["added_at"]
+    return {
+        "host": h["host"],
+        "note": h["note"],
+        "addedBy": h["added_by"],
+        "addedAt": at.isoformat() if isinstance(at, datetime) else at,
+        "modules": h["modules"],
+        "templateId": h.get("template_id"),
+        "protection": h.get("protection"),
+    }
+
+
+def _range_out(x: dict[str, object]) -> dict[str, object]:
+    """A stored range row as the list and an add return it."""
+    at = x["added_at"]
+    return {
+        "cidr": x["cidr"],
+        "note": x["note"],
+        "addedBy": x["added_by"],
+        "addedAt": at.isoformat() if isinstance(at, datetime) else at,
+        "templateId": x.get("template_id"),
+        "protection": x.get("protection"),
+    }
 
 
 class HeldHostDecisionIn(_In):
@@ -97,34 +126,7 @@ def egress_router(store: EgressStore) -> APIRouter:
 
     async def _listed(who: Person) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
         listed = await store.allow_list(who.tenant_id)
-        stamp = {"hosts": listed["hosts"], "ranges": listed["ranges"]}
-        for rows in stamp.values():
-            for row in rows:
-                row["added_at"] = row["added_at"].isoformat()
-        hosts: list[dict[str, object]] = [
-            {
-                "host": h["host"],
-                "note": h["note"],
-                "addedBy": h["added_by"],
-                "addedAt": h["added_at"],
-                "modules": h["modules"],
-                "templateId": h.get("template_id"),
-                "protection": h.get("protection"),
-            }
-            for h in stamp["hosts"]
-        ]
-        ranges: list[dict[str, object]] = [
-            {
-                "cidr": x["cidr"],
-                "note": x["note"],
-                "addedBy": x["added_by"],
-                "addedAt": x["added_at"],
-                "templateId": x.get("template_id"),
-                "protection": x.get("protection"),
-            }
-            for x in stamp["ranges"]
-        ]
-        return hosts, ranges
+        return [_host_out(h) for h in listed["hosts"]], [_range_out(x) for x in listed["ranges"]]
 
     @r.post("/held-hosts/decisions", response_model=Envelope[Change])
     async def decide_held_host(body: HeldHostDecisionIn, svc: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -163,19 +165,7 @@ def egress_router(store: EgressStore) -> APIRouter:
         total = await store.hosts_count(who.tenant_id, search, template_id)
         page, offset = page_window(total, page, page_size)
         rows = await store.hosts_page(who.tenant_id, search, offset, page_size, template_id)
-        hosts = [
-            {
-                "host": h["host"],
-                "note": h["note"],
-                "addedBy": h["added_by"],
-                "addedAt": h["added_at"].isoformat(),
-                "modules": h["modules"],
-                "templateId": h.get("template_id"),
-                "protection": h.get("protection"),
-            }
-            for h in rows
-        ]
-        return ok(paged(hosts, total, page, page_size))
+        return ok(paged([_host_out(h) for h in rows], total, page, page_size))
 
     async def _add(kind: str, body: EntryIn, who: Person) -> JSONResponse:
         value = _valid(kind, body.value)
@@ -185,7 +175,9 @@ def egress_router(store: EgressStore) -> APIRouter:
         changed = await store.add(
             who.tenant_id, kind, value, actor=who.name, note=body.note.strip(), at=datetime.now(UTC), template=template
         )
-        return ok({"kind": kind, "value": value, "changed": changed}, 201 if changed else 200)
+        row = await store.entry(who.tenant_id, kind, value)
+        entry = None if row is None else _host_out(row) if kind == "host" else _range_out(row)
+        return ok({"kind": kind, "value": value, "changed": changed, "entry": entry}, 201 if changed else 200)
 
     async def _remove(kind: str, body: RemoveIn, who: Person) -> JSONResponse:
         value = _valid(kind, body.value)
@@ -206,7 +198,12 @@ def egress_router(store: EgressStore) -> APIRouter:
             raise NotFound(f"{value} on the egress allow-list")
         return ok({"kind": kind, "value": value, "changed": True})
 
-    @r.post("/hosts", response_model=Envelope[Change], status_code=201)
+    @r.post(
+        "/hosts",
+        response_model=Envelope[Change],
+        status_code=201,
+        responses={200: {"model": Envelope[Change], "description": "Already listed; nothing was written"}},
+    )
     async def add_host(body: EntryIn, who: Annotated[Person, Depends(changer)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return await _add("host", body, who)
 
@@ -214,7 +211,12 @@ def egress_router(store: EgressStore) -> APIRouter:
     async def remove_host(body: RemoveIn, who: Annotated[Person, Depends(changer)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return await _remove("host", body, who)
 
-    @r.post("/ranges", response_model=Envelope[Change], status_code=201)
+    @r.post(
+        "/ranges",
+        response_model=Envelope[Change],
+        status_code=201,
+        responses={200: {"model": Envelope[Change], "description": "Already listed; nothing was written"}},
+    )
     async def add_range(body: EntryIn, who: Annotated[Person, Depends(changer)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return await _add("range", body, who)
 

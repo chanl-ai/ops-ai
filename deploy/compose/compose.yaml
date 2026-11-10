@@ -27,7 +27,7 @@ services:
   # The tool gateway's policy engine: the official OPA image serving services/tools-service/policy. Port 8181 is OPA's
   # default; only the gateway calls it.
   opa:
-    image: ${OPS_BASE_IMAGE_PREFIX:-}openpolicyagent/opa:1.21.1
+    image: ${OPS_BASE_IMAGE_PREFIX:-}openpolicyagent/opa:1.21.4
     command: ["run", "--server", "--watch", "--addr", "0.0.0.0:8181", "--log-level", "error", "/policy"]
     ports:
       - "${OPS_OPA_PORT:-8181}:8181"

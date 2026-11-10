@@ -2830,6 +2830,20 @@
             "title": "Changed",
             "type": "boolean"
           },
+          "entry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListedHost"
+              },
+              {
+                "$ref": "#/components/schemas/ListedRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry"
+          },
           "kind": {
             "enum": [
               "host",
@@ -20659,6 +20673,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Change_"
+                }
+              }
+            },
+            "description": "Already listed; nothing was written"
+          },
           "201": {
             "content": {
               "application/json": {
@@ -21035,6 +21059,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Change_"
+                }
+              }
+            },
+            "description": "Already listed; nothing was written"
+          },
           "201": {
             "content": {
               "application/json": {

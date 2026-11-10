@@ -24,7 +24,7 @@ from ops_service_kit.settings import Settings
 
 # The directory compose mounts at /policy: gateway.rego and data.json (the registered identities).
 POLICY_DIR = Path(__file__).resolve().parents[4] / "services" / "tools-service" / "policy"
-IMAGE = "openpolicyagent/opa:1.21.1"
+IMAGE = "openpolicyagent/opa:1.21.4"
 
 
 def start() -> tuple[str, str]:

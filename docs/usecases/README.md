@@ -329,4 +329,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api, ui | current |
 | uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api | current |
 | uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
+| uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |

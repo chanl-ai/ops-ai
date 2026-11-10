@@ -187,8 +187,8 @@ function OffAction({ c, manages, go }: { c: ChatConnector; manages: boolean; go:
         {label}
       </Button>
     );
-  // Below the name on a narrow screen: sharing the row left the name only an initial.
-  return <span className="text-xs text-muted-foreground max-sm:basis-full max-sm:pl-6">{labelFor(c.appState, manages)} · ask an admin</span>;
+  // Below the name at every screen width: the list is a fixed w-80, and beside the name this line left it an initial.
+  return <span className="basis-full pl-6 text-xs text-muted-foreground">{labelFor(c.appState, manages)} · ask an admin</span>;
 }
 
 /** The whole set an unchecked or checked connector makes: the apps left out, as the chat's PUT takes them. */

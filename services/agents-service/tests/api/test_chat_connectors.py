@@ -4,12 +4,14 @@ chat; and choosing connectors wipes a tool the person switched off one by one in
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
+import pytest
 from httpx import AsyncClient
 
-from ops_agents.activities.tool_directory import CatalogTools, OperationRef
+from ops_agents.activities.tool_directory import CatalogTools, OperationRef, ToolsUnavailable
 from ops_agents.api.deps import Runtime
 from tests.api.test_chat import new_thread, send
 from tests.api.test_chat_on_graph import stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
@@ -202,3 +204,61 @@ async def test_a_chat_lists_an_apps_accounts_and_keeps_the_one_picked(
     assert (await settings(client, tid))["overrides"]["accounts"] == {CRM: "EU desk"}
     refused = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [], "accounts": {CRM: "Ghost desk"}})
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "account_unknown", refused.text
+
+
+def _fields(record: logging.LogRecord) -> dict[str, Any]:
+    """A structlog record's message is its fields."""
+    msg: object = record.msg
+    return cast(dict[str, Any], msg) if isinstance(msg, dict) else {}
+
+
+class Unreachable:
+    """tools-service not answering the app list."""
+
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        raise ToolsUnavailable("tools-service did not answer")
+
+
+class Unrelated:
+    """An app list with no app for any tool the agent holds."""
+
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        return [{"id": "plugin:test.other", "kind": "plugin", "name": "Other", "appState": "connected",
+                 "appGroup": "on", "moduleIds": ["mod_other"]}]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("states", "reason", "cards"),
+    [(Unreachable(), "tools_unavailable", 0), (None, "no_app_states", 0), (Unrelated(), "no_app_for_held_tools", 1)],
+)
+async def test_an_empty_picker_with_tools_held_logs_why(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    caplog: pytest.LogCaptureFixture,
+    states: Any,
+    reason: str,
+    cards: int,
+) -> None:
+    # The picker reads "This agent uses no connector." for each of these; only the log says which one happened.
+    client, rt = stack
+    rt.tool_directory, rt.app_states = Modules(rt), states
+    tid = (await new_thread(client))["id"]
+    with caplog.at_level(logging.WARNING, logger="ops_agents.chat_connectors"):
+        assert await connectors(client, tid) == {}
+    lines = [f for f in map(_fields, caplog.records) if f.get("event") == "chat.connectors.empty"]
+    assert len(lines) == 1, caplog.text
+    line = lines[0]
+    assert (line["reason"], line["cards"]) == (reason, cards), line
+    assert str(line["agent"]).startswith("ag_") and str(line["team"]).startswith("team_"), line
+    assert line["held"] >= 1, line
+
+
+async def test_a_picker_with_apps_logs_nothing(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client, rt = stack
+    wire(rt)
+    tid = (await new_thread(client))["id"]
+    with caplog.at_level(logging.WARNING, logger="ops_agents.chat_connectors"):
+        assert await connectors(client, tid)
+    assert "chat.connectors.empty" not in caplog.text

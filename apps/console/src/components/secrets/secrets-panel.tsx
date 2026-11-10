@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useStorageCredentials } from '@/hooks/file-queries';
 import { useDeleteSecret, useRenameSecret, useSecretsPage } from '@/hooks/secrets-queries';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime, shortDate } from '@/lib/format';
 import type { SecretMeta } from '@/lib/types/secrets';
@@ -151,6 +152,7 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
  */
 export function SecretsPanel() {
   const list = useListParams('name');
+  const created = useCreatedRows<SecretMeta>();
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const query = useSecretsPage(list.params);
   const remove = useDeleteSecret();
@@ -182,6 +184,7 @@ export function SecretsPanel() {
           columns={cols}
           data={query.data?.data ?? []}
           getRowId={(s) => s.name}
+          created={created}
           searchColumn="name"
           searchPlaceholder="Search secrets…"
           onColumnFiltersChange={list.onColumnFiltersChange}
@@ -212,7 +215,7 @@ export function SecretsPanel() {
           }}
         />
       )}
-      <SecretDialog open={!!dialog} rotating={dialog?.rotating ?? null} onOpenChange={(o) => !o && setDialog(null)} />
+      <SecretDialog open={!!dialog} rotating={dialog?.rotating ?? null} onOpenChange={(o) => !o && setDialog(null)} onSaved={created.show} />
       <DeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}

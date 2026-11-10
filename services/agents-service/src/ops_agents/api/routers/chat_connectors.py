@@ -23,6 +23,7 @@ from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
+from ops_service_kit.logging import get_logger
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...domain.accounts import chosen_accounts
@@ -34,6 +35,7 @@ from ..envelope import ok
 from ..runs import graph_store
 from .chat_settings import _thread, merge  # pyright: ignore[reportPrivateUsage] - one reader of a thread's settings
 
+log = get_logger("ops_agents.chat_connectors")
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
@@ -85,12 +87,20 @@ class ConnectorsIn(WireModel):
     accounts: dict[str, Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=50)
 
 
-async def _by_app(rt: Runtime, me: Principal, team: str, held: list[str]) -> list[dict[str, Any]]:
-    """The apps whose tools the agent holds, each with those tools, then the installed apps the team has off."""
+async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: list[str]) -> list[dict[str, Any]]:
+    """The apps whose tools the agent holds, each with those tools, then the installed apps the team has off.
+
+    An empty answer for an agent that holds tools reads "This agent uses no connector." in the picker, which is also
+    what an unreachable app list or an unwired one looks like, so each of those is logged as chat.connectors.empty.
+    """
+    reason: str | None = None
     try:
-        cards = await rt.app_states.cards(me.email or None, team) if rt.app_states is not None else []
+        if rt.app_states is None:
+            cards, reason = [], "no_app_states"
+        else:
+            cards = await rt.app_states.cards(me.email or None, team)
     except ToolsUnavailable:
-        cards = []
+        cards, reason = [], "tools_unavailable"
     module_of = {o.name: o.module_id for o in await rt.directory().operations()}
     out: list[dict[str, Any]] = []
     for card in cards:
@@ -103,6 +113,15 @@ async def _by_app(rt: Runtime, me: Principal, team: str, held: list[str]) -> lis
             out.append({**card, "tools": []})
         elif tools:
             out.append({**card, "tools": tools})
+    if not out and (reason or held):
+        log.warning(
+            "chat.connectors.empty",
+            team=team,
+            agent=agent_id,
+            held=len(held),
+            cards=len(cards),
+            reason=reason or "no_app_for_held_tools",
+        )
     return out
 
 
@@ -166,7 +185,7 @@ async def new_chat_connectors(
     if agent is not None:
         require_chat_use(me, team_id=await agent_team(rt, agent.id))
     held = list(limits_for(agent, rt.settings.model_alias).switchable_tool_ids) if agent is not None else []
-    apps = await _by_app(rt, me, me.team_id, held) if agent is not None else []
+    apps = await _by_app(rt, me, me.team_id, agent.id, held) if agent is not None else []
     # A new chat starts on the agent's accounts, else each app's default, so the picker names the one in use.
     if agent is not None:
         apps = await _with_accounts(rt, me, me.team_id, apps, dict(agent.accounts))
@@ -178,7 +197,7 @@ async def get_connectors(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """The chat's connectors for the composer's picker: each app the agent holds tools of, with its state for the
     person and whether this chat uses it, then the apps the team has off."""
     row, agent, limits = await _thread(rt, me, thread_id)
-    apps = await _by_app(rt, me, str(row["team_id"]), list(limits.switchable_tool_ids))
+    apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
     stored = cast(dict[str, Any], row.get("overrides") or {})
     chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], stored.get("accounts") or {}))
     apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen)
@@ -191,7 +210,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     back on gets every tool back, and a tool the settings panel switched off one by one stays off while its app is
     on. 422 naming the app for one this chat does not hold."""
     row, agent, limits = await _thread(rt, me, thread_id)
-    apps = await _by_app(rt, me, str(row["team_id"]), list(limits.switchable_tool_ids))
+    apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
     held = {str(a["id"]): a for a in apps if a["appGroup"] != ADMIN}
     if unknown := [a for a in body.off if a not in held]:
         raise Unprocessable(
