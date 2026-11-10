@@ -436,7 +436,7 @@ how to talk to its system. Every tool is a read, called through tools-service, s
 | Changes since | `changes` (`list_changes`), takes `cursor` | Items added or changed since the cursor, deleted ones as `{id, deleted: true}`, and the next `cursor` | No: without it each run lists from the watermark |
 | Deleted | `deleted` (`list_deleted`) | Ids removed since a time | No: the weekly full listing finds deletes |
 | Who can see | `allowed` on a fetched item | User and group ids from the system, stored per version, not yet enforced | No |
-| Pickers | `scopes` (`list_scopes`), takes `query` | What a person picks when adding the source: sites and libraries, spaces | No |
+| Pickers | `scopes` (`list_scopes`), takes `query`, and `parent` for what one picked scope holds, and `cursor` | `{scopes: [{id, title, kind, parent?, detail?}], next_cursor?}`: sites by name, a site's libraries, spaces. An input naming `picker: <kind>` is filled from the scopes of that kind in Add source, through kb-service's `POST /v1/sources/scopes` | No |
 | Preview | `preview` (`preview`), takes `source` | What a source with these settings would take in, before anything is stored: `{found, will_fetch, pages: [{id, outcome, will_fetch}], capped}` | No |
 
 `inputs` describes what a source of this kind is set up with (start addresses, sites, spaces); kb-service checks a
@@ -458,6 +458,14 @@ true` says the items are one website's pages, so a source starts with a website'
 A Python tool may set its own `If-None-Match`, `If-Modified-Since`, `Accept` and `Accept-Language` on a request
 (`ctx.http.get(url, headers=...)`); any other header is refused. `Response.content` holds the body's bytes for an
 answer that is not text, and a function raises `NotFound` (NOT_FOUND) for an item gone at its source. The answer to one request is read as it streams in and refused past 25 MB with `RESPONSE_TOO_LARGE` (`TooLarge` in the SDK); redirects are not followed for a tool, which follows them itself (the website plugin follows up to five on its own site).
+
+SharePoint and OneDrive (`plugins/sharepoint`) and Confluence Cloud and Data Center (`plugins/confluence`) are on the
+same contract, pinned in `deploy/plugins.json`. SharePoint lists picked sites' document libraries (or picked libraries)
+through Microsoft Graph, finds changes and deletes with one delta token per library, stores each file's permissions as
+`allowed`, and picks sites then libraries; Confluence lists picked spaces' pages (and their attachments when
+`attachments` is on), finds changes with CQL `lastmodified` and picks spaces. Both pass `knowledge_contract` against a
+fake of their system in their own tests, and kb-service's `tests/test_connector_plugins.py` syncs each through its one
+sync path; neither has been run against a real tenant or site.
 
 The Website plugin (`plugins/web` in the plugins repository, pinned in `deploy/plugins.json`) is the first source on
 this contract: a site's pages from its sitemaps and links, robots.txt obeyed, one request a second, a conditional

@@ -307,6 +307,9 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | current |
 | uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing |
+| uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, ui | passing |
+| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | passing |
+| uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | passing |
 | uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current |
 | uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current |
 | uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |

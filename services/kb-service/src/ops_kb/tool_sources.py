@@ -108,15 +108,13 @@ class ToolReader:
         return Answer(True, answer.get("output"))
 
 
-async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) -> dict[str, Any]:
-    """A new tool source's config, from what tools-service declares for the team: refused unless the plugin is on,
+async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name: str) -> dict[str, Any]:
+    """The plugin's knowledge source as tools-service declares it for the team: refused unless the plugin is on,
     names the source, and its connection signs in with the team's account, since a sync has no person behind it."""
     if reader is None:
         raise ValidationFailed(
             "This service reads no tools, so a tool source cannot be made.", code="tools_unavailable"
         )
-    wanted = cast(dict[str, Any], i.get("config") or {})
-    plugin, name = str(wanted.get("plugin") or ""), str(wanted.get("source") or "")
     team = str(who.team_id or "")
     found = next(
         (d for d in await reader.declared(who.tenant_id, team) if d["plugin"] == plugin and d["source"] == name), None
@@ -135,6 +133,15 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
                 "This connection signs in each person. A knowledge source needs a team sign-in.",
                 code="sign_in_not_team",
             )
+    return found
+
+
+async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) -> dict[str, Any]:
+    """A new tool source's config, from what tools-service declares for the team: refused unless the plugin is on,
+    names the source, and its connection signs in with the team's account, since a sync has no person behind it."""
+    wanted = cast(dict[str, Any], i.get("config") or {})
+    plugin, name = str(wanted.get("plugin") or ""), str(wanted.get("source") or "")
+    found = await declared_source(reader, who, plugin, name)
     cfg: dict[str, Any] = {
         "plugin": plugin,
         "source": name,
@@ -156,7 +163,7 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
         # and sent to each of its tools as `source`.
         "values": source_values(found, wanted.get("values")),
     }
-    return {**cfg, "waitingHosts": await waiting_hosts(reader, who, cfg)}
+    return {**cfg, "waitingHosts": await waiting_hosts(cast(ToolReader, reader), who, cfg)}
 
 
 async def waiting_hosts(reader: ToolReader, who: Who, cfg: dict[str, Any]) -> list[dict[str, Any]]:

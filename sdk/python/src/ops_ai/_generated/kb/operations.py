@@ -379,6 +379,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_put_item": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/{source_id}/items",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
     "sources_remove_source": {
         "body": None,
         "headers": [],
@@ -402,6 +411,15 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "GET",
         "path": "/v1/knowledge/source-kinds",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "sources_source_scopes": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/scopes",
         "pathParams": [],
         "query": [],
         "stream": False,
@@ -627,6 +645,10 @@ class Operations:
         "Preview Source"
         return self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def sources_source_scopes(self, body: ScopesIn) -> ScopesPage:
+        "Source Scopes"
+        return self._t.call(SERVICE, OPERATIONS["sources_source_scopes"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"
         return self._t.call(SERVICE, OPERATIONS["sources_get_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -663,6 +685,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def sources_put_item(self, source_id: str, body: WrittenItemIn) -> WrittenItem:
+        "Put Item"
+        return self._t.call(SERVICE, OPERATIONS["sources_put_item"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def sources_pause_source(self, source_id: str) -> Source:
         "Pause Source"
@@ -910,6 +936,10 @@ class AsyncOperations:
         "Preview Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def sources_source_scopes(self, body: ScopesIn) -> ScopesPage:
+        "Source Scopes"
+        return await self._t.call(SERVICE, OPERATIONS["sources_source_scopes"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_get_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -950,6 +980,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def sources_put_item(self, source_id: str, body: WrittenItemIn) -> WrittenItem:
+        "Put Item"
+        return await self._t.call(SERVICE, OPERATIONS["sources_put_item"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def sources_pause_source(self, source_id: str) -> Source:
         "Pause Source"

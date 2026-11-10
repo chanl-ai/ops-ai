@@ -2,12 +2,10 @@
 
 import * as React from 'react';
 
+import { PageFields } from '@/components/knowledge/page-fields';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 
 /**
  * Write a page into a knowledge base: a title and its text, Markdown allowed (a `##` heading starts a section that
@@ -51,12 +49,7 @@ export function AddPageDialog({ open, onOpenChange, onSubmit, saving }: { open: 
       }
     >
       <div className="flex flex-col gap-4">
-        <FormField id="page-title" label="Title">
-          <Input id="page-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Cash drawer limits" autoFocus />
-        </FormField>
-        <FormField id="page-text" label="Text" hint="Markdown: a line starting with ## begins a section that citations name." error={error}>
-          <Textarea id="page-text" rows={10} value={text} onChange={(e) => setText(e.target.value)} className="font-mono text-sm" aria-invalid={!!error} />
-        </FormField>
+        <PageFields idPrefix="page" title={title} text={text} onTitle={setTitle} onText={setText} textError={error} autoFocus />
       </div>
     </DialogShell>
   );

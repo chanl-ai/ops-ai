@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
+import { ScopePicker } from '@/components/sources/scope-picker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -64,6 +65,7 @@ export function SourceValuesForm({
   errors = {},
   only,
   disabled,
+  scopeSource,
 }: {
   idPrefix: string;
   inputs: Record<string, SourceInputField>;
@@ -72,6 +74,8 @@ export function SourceValuesForm({
   errors?: Record<string, string>;
   only?: string[];
   disabled?: boolean;
+  /** The plugin source whose scopes tool fills inputs that declare a `picker`; without it they are typed. */
+  scopeSource?: { plugin: string; source: string };
 }) {
   const set = (name: string, v: unknown) => onChange({ ...values, [name]: v });
   const names = Object.keys(inputs).filter((n) => !only || only.includes(n));
@@ -96,6 +100,15 @@ export function SourceValuesForm({
               <Switch id={id} checked={!!v} disabled={disabled} onCheckedChange={(x) => set(name, x)} />
             </div>
           );
+        if (f.type === 'array' && f.picker && scopeSource) {
+          // What the other pickers hold so far are the parents this one lists the contents of (a site's libraries).
+          const parents = names.filter((n) => n !== name && inputs[n].picker).flatMap((n) => (Array.isArray(values[n]) ? (values[n] as unknown[]).map(String) : []));
+          return (
+            <FormField key={name} id={id} label={label(name)} hint={hint} error={error} optional={f.required === false}>
+              <ScopePicker id={id} plugin={scopeSource.plugin} source={scopeSource.source} kind={f.picker} parents={parents} value={Array.isArray(v) ? v.map(String) : []} onChange={(x) => set(name, x)} disabled={disabled} />
+            </FormField>
+          );
+        }
         if (f.type === 'array') {
           const list = Array.isArray(v) ? v.map(String) : [];
           return (

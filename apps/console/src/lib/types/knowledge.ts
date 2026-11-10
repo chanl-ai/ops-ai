@@ -8,7 +8,7 @@ import type { AnswerShape, FilterGroup, QueryMode, RetrievalTrace, RewriteMode, 
 
 export type Sensitivity = 'internal' | 'confidential' | 'restricted';
 
-export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce' | 'tool';
+export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'push' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce' | 'tool';
 
 export type SourceStatus = 'active' | 'paused' | 'draft' | 'revoked';
 export type RunStatus = 'running' | 'success' | 'partial' | 'failed' | 'cancelled' | 'skipped';
@@ -45,7 +45,7 @@ export interface CleaningSettings {
 }
 
 /** What a source is: uploaded files, one website's pages, or another app's knowledge source. */
-export type SourceKind = 'file' | 'web' | 'tool';
+export type SourceKind = 'file' | 'text' | 'push' | 'web' | 'tool';
 
 /** A source's sync health, kept by kb-service as each run settles. */
 export interface SourceHealth {
@@ -318,6 +318,8 @@ export interface RetrievalSettings {
   /** Phrasings searched when `rewrite` is `expand`, including the original. */
   expandCount: number;
   rewriteInstructions: string;
+  /** The models-service chat alias rerank and rewrite call; empty uses the installation's default. */
+  queryModel?: string;
   /** Empty means every attached source. */
   scopeSourceIds: string[];
   answerShape: AnswerShape;
@@ -521,6 +523,10 @@ export interface PlaygroundAnswer {
   passages?: SearchPassage[];
   /** What the question cost to search: the tokens embedding it took. */
   cost?: { embeddingTokens: number };
+  /** Present when the base rewrites questions: as asked, as searched (null when the rewrite was skipped, with why). */
+  rewrite?: { asked: string; rewritten: string | null; skipped?: string | null; ms: number };
+  /** Present when the base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped. */
+  rerank?: { ran: boolean; model: string; scored: number; skipped?: string | null; ms: number };
 }
 
 export interface SearchPassage {
@@ -535,6 +541,8 @@ export interface SearchPassage {
   lanes?: Record<string, number>;
   /** The unit it matched by: the piece's own text (`self`), a question, or an approved FAQ pair. */
   matched?: string;
+  /** The reranker's score from 0 to 10, when a rerank ran. */
+  reranked?: number;
   verified?: boolean;
   page?: number | null;
   url?: string | null;
@@ -606,6 +614,26 @@ export interface SourceInputField {
   default?: unknown;
   enum?: (string | number | boolean)[];
   items?: SourceInputField;
+  /** The kind of scope (site, library, space) this input's values are picked from through the source's scopes tool. */
+  picker?: string;
+}
+
+/** One thing a plugin source can be pointed at, as its scopes tool answers: a site, a library, a space. */
+export interface ScopeOption {
+  id: string;
+  title: string;
+  kind: string;
+  parent?: string;
+  detail?: string;
+}
+
+export interface ScopesInput {
+  plugin: string;
+  source: string;
+  query?: string;
+  /** What one picked scope holds (a site's libraries). */
+  parent?: string;
+  cursor?: string;
 }
 
 /** What a new source's settings start as for its kind; Add source's Review shows them. */
@@ -620,7 +648,7 @@ export interface SourceDefaults {
 
 /** A kind of source the team may add: Files, or a knowledge source of one of its apps. */
 export interface SourceKindOption {
-  type: 'file' | 'tool';
+  type: 'file' | 'text' | 'push' | 'tool';
   kind: SourceKind;
   group: 'built_in' | 'apps';
   title: string;
@@ -690,3 +718,19 @@ export type ItemFilters = { status?: string[]; mime?: string[]; errorClass?: str
 
 export type { HeldReason, IngestSettings, ItemVersionRow, VersionStatus } from './knowledge-ingest';
 export type RunFilters = { status?: string[]; trigger?: string[] };
+
+/** One item written into a typed text or push source, by name: the same name and content again changes nothing. */
+export interface WrittenItemInput {
+  name: string;
+  title?: string;
+  /** Markdown unless `mime` names another text type. */
+  text?: string;
+  /** A file's bytes in base64, with its `mime`. */
+  content?: string;
+  mime?: string;
+}
+
+export interface WrittenItem {
+  outcome: 'created' | 'updated' | 'unchanged';
+  item: Item;
+}

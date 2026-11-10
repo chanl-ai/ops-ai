@@ -212,6 +212,9 @@ class InputField(Strict):
     properties: dict[str, InputField] | None = None
     items: InputField | None = None
     max_items: int = MAX_ITEMS
+    # For a knowledge source's input: the kind of scope (site, library, space) its values are picked from through the
+    # source's scopes tool, so Add source offers a searched picker for it instead of a text field.
+    picker: str | None = None
 
 
 class Paging(Strict):

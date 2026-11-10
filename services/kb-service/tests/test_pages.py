@@ -28,3 +28,15 @@ async def test_an_empty_page_is_refused(client: httpx.AsyncClient) -> None:
     kb = data(await client.post("/v1/knowledge-bases", json=BASE), 201)
     empty = await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json={"title": "Blank", "text": "  "})
     assert empty.status_code == 400 and "text" in empty.json()["error"]["message"], empty.text
+
+
+async def test_a_base_whose_pages_source_holds_files_takes_its_next_page(client: httpx.AsyncClient) -> None:
+    kb = data(await client.post("/v1/knowledge-bases", json=BASE), 201)
+    body = {"type": "file", "name": f"{BASE['name']} pages", "collection": "Pages", "kbIds": [kb["id"]]}
+    data(await client.post("/v1/sources", json=body), 201)
+    page = await client.post(
+        f"/v1/knowledge-bases/{kb['id']}/pages", json={"title": "Vault", "text": "## Vault\n\nOpen at 8."}
+    )
+    assert page.status_code == 201 and page.json()["data"]["status"] == "indexed", page.text
+    sources = data(await client.get("/v1/sources"))["data"]
+    assert [s["type"] for s in sources if s["name"] == body["name"]] == ["text"], sources

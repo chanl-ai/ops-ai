@@ -467,6 +467,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/agents-service/experiments/chat-on-graph.md` | Console chat as a facade over agent_wrapper threads: a message is a run, approvals go through decide, the old chat tables are dropped |
 | `services/agents-service/workflow-node-coverage.md` | Which seeded workflow runs each node type and which use-case check proves it (customer_hold uc-248, complaint_triage uc-249) |
 | `services/kb-service/overview.md` | kb-service: knowledge bases with owners, file sources, sync into page and section passages, full-text retrieval, changes, and what is not built |
+| `services/kb-service/experiments/meaning-threshold.md` | Meaning threshold: where the meaning lane's floor sits, from real embeddings |
 | `services/models-service/overview.md` | models-service: aliases, keys with budgets, admission and OpenAI-compatible egress with a metadata-only call log |
 | `services/platform-service/overview.md` | platform-service: sign-in, sessions, members, invites, API keys and audit; the only token issuer, verified elsewhere through ops_identity |
 | `services/tools-service/design.md` | tools-service design: the flow, the API, the data and the sequences; the console's screens are the Apps menu (guide/apps.md) |
@@ -520,3 +521,6 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/a-person-adds-a-second-account-of-their-own.md` | uc-702: A person adds a second account of their own at their own address and makes it their default |
 | `usecases/tools-service/callers-from-before-several-accounts-keep-working.md` | uc-705: Callers from before several accounts keep working |
 | `usecases/tools-service/add-account-lives-on-the-accounts-tab.md` | uc-703: Add account is on the Accounts tab for whoever manages apps, and never for a member |
+| `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
+| `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
+| `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
