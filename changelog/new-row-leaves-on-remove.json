@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "A row you remove right after adding it leaves the list",
+  "description": "A row you add shows first, marked New, and now leaves the list as soon as you remove, revoke or archive it, instead of staying on screen until you page, search or sort.",
+  "tag": "fix"
+}

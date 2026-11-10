@@ -168,6 +168,11 @@ for (const f of files) {
   const adds = [...text.matchAll(/\buse(?:Create|Add|Invite|Import)(?!Param\b)[A-Z]\w*\(|<\w*(?:Add|Create|New|Invite|Import)\w*Dialog\b|\bon(?:Added|Created|Saved)=/g)];
   if (adds.length && /<DataTableWithViews\b/.test(text) && /\buseListParams[<(]/.test(text) && !/\bcreated=\{/.test(text) && !(f.rel in OPENS_THE_NEW_ITEM))
     report(f, adds[0].index, 'adds rows to a paged list without showing the new row (pass useCreatedRows to the table as `created`)');
+  //     The table lets a created row go when a query hook's write names it, so a list wired with `created` removes,
+  //     revokes or archives through a query hook; a call straight to the API would leave the removed row on screen.
+  if (/\bcreated=\{/.test(text))
+    for (const m of text.matchAll(/\bapi\.[\w.]+\.(remove|revoke|archive|bulkRemove|delete)\(/g))
+      report(f, m.index, `calls api.….${m[1]} outside a query hook, so the table cannot let a removed new row go (use the area's mutation hook)`);
 
   // 11. No ad-hoc state switches from copied projects.
   for (const m of text.matchAll(/usePageState|PageStateGate|[?&]state=(empty|loading|error)/g)) report(f, m.index, 'copied ?state= switch (use React Query states and ?mock=)');
