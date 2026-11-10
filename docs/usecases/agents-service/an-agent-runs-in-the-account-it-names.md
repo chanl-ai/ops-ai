@@ -1,9 +1,7 @@
 # An agent runs in the account it names, and a step it starts runs in the step's
 
-Status: step 1 current; step 2 blocked by a separate bug: a workflow an agent starts from a chat is refused at its
-first tool call with `acting_for_refused` on a platform-auth stack, before any account is chosen. Until that is
-fixed, the step-over-agent order is proved by `services/agents-service/tests/unit/test_merged_accounts.py` (red with
-`merged_accounts` reversed); a workflow run started directly carries no agent's accounts, so it cannot prove it. Id:
+Status: current on main behind the `OPS_PLUGINS` switch; step 2 runs a workflow the agent starts from a chat, which acts for
+the person behind the chat. Id:
 `uc-696`. Service: `agents-service` with tools-service, platform-service and an engine worker. Layers: api. Guide:
 `docs/guide/plugins.md`, Several accounts of one app. Design: the several accounts per app design, AC3 and AC11.
 
