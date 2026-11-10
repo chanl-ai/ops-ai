@@ -14,7 +14,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@ops-ai/usecase-runner": "workspace:*",
-    "marked": "18.0.14",
-    "mermaid": "12.0.0"
+    "marked": "18.1.0",
+    "mermaid": "12.1.0"
   }
 }
