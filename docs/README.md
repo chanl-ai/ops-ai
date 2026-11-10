@@ -521,6 +521,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-step-runs-in-the-account-it-names.md` | uc-695: A workflow step that names an account runs in that account |
 | `usecases/agents-service/a-rename-changes-no-published-version.md` | uc-701: Renaming an account changes no published version, and the next publish names the dead name |
 | `usecases/agents-service/an-agent-runs-in-the-account-it-names.md` | uc-696: An agent runs in the account it names, and a step it starts runs in the step's |
+| `usecases/agents-service/a-chat-uses-the-account-picked-for-it.md` | uc-697: A chat uses the account picked for it, and a new chat starts on the default |
 | `usecases/agents-service/the-model-is-told-the-account-in-use.md` | uc-704: The model is told the account each app uses and cannot switch it in words |
 | `usecases/tools-service/a-person-adds-a-second-account-of-their-own.md` | uc-702: A person adds a second account of their own at their own address and makes it their default |
 | `usecases/tools-service/callers-from-before-several-accounts-keep-working.md` | uc-705: Callers from before several accounts keep working |

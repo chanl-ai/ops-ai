@@ -166,6 +166,9 @@ async def new_chat_connectors(
         require_chat_use(me, team_id=await agent_team(rt, agent.id))
     held = list(limits_for(agent, rt.settings.model_alias).switchable_tool_ids) if agent is not None else []
     apps = await _by_app(rt, me, me.team_id, held) if agent is not None else []
+    # A new chat starts on the agent's accounts, else each app's default, so the picker names the one in use.
+    if agent is not None:
+        apps = await _with_accounts(rt, me, me.team_id, apps, dict(agent.accounts))
     return ok(_view("", apps, set()))
 
 
