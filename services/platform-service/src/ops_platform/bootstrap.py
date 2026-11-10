@@ -113,7 +113,7 @@ async def bootstrap(database_url: str, admin: FirstAdmin, *, iterations: int) ->
 
 
 def main() -> None:
-    configure_logging()
+    configure_logging(service="platform-service")
     settings = Settings()
     try:
         admin = FirstAdmin.from_settings(settings)

@@ -49,7 +49,7 @@ settings class in `ops_service_kit`. Locally a gitignored `.env` (contract: `.en
 | agents-service `GET /health` | Process up, database reachable, and whether a model key is configured (`model` reports the error when not) |
 | tools-service `GET /health` | Process up only; it does not probe OPA or the database |
 | `make health` | Every service, OPA and PostgreSQL, with who owns each listener |
-| `.logs/<svc>.log` | stdout and stderr of `make up` processes; structured events such as `model_call`, `timer_sync_failed`, `unhandled_error` |
+| `.logs/<svc>.log` | stdout and stderr of `make up` processes: one JSON object per line with the request id, tenant and team, one `http.request` line per request, and events such as `model_call`, `timer_sync_failed`, `unhandled_error` ([logging](../packages/ops_service_kit/logging.md)) |
 | `GET /v1/threads/{id}/runs` | A thread's journal: runs, node sequences, owner, generation, crash records, SLA and lease rows |
 | `GET /v1/threads/{id}/state` | Status, next node, pending interrupt, pinned version, SLA timers, cost and budget |
 

@@ -303,7 +303,7 @@ and use cases make their own throwaway databases and never touch the stack's.
 | `make review BRANCH=feat/x` | Runs that branch from the review worktree on the same ports |
 | `make test PKG=services/tools-service` | One package's or service's tests; `make test` alone runs what changed since `origin/main` |
 | `make health` | Each service's port, whether it answers and who started it |
-| `make logs SVC=agents` | Follows one service's log |
+| `make logs SVC=agents` | Follows one service's log, one JSON object per line ([logging](docs/packages/ops_service_kit/logging.md)) |
 | `make down KEEP_DB=1` | Stops the services and keeps the database |
 | `make verify` | Everything a commit must pass, on the scripted model |
 | `make usecase-test UC=uc-010` | Runs one end-to-end use case on its own database and free ports |

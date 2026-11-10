@@ -58,7 +58,7 @@ only, so `make api` as a person gets 401 there. Reference:
 |---|---|
 | Every completion is logged | One `model_call_log` row per authenticated completion, a refusal included, with no text |
 | Order of checks | Key status, expiry and budget, rate limit, alias, cleared sensitivity, then image clearance, then the provider call |
-| Refusals | In the platform error envelope, which OpenAI clients read as `error.code` (`key_budget_exhausted`, `images_not_cleared`, `provider_key_missing`, ...) |
+| Refusals | In the platform error envelope, which OpenAI clients read as `error.code` (`key_budget_exhausted`, `images_not_cleared`, `provider_key_missing`, ...). A provider's failure is classified once, in `providers.py` `PROVIDER_FAILURES` (`provider_unreachable`, `provider_timeout`, `provider_auth_failed`, `provider_rate_limited`, `provider_bad_request`, `provider_error`); its message never quotes the provider's body |
 | Versions are immutable | A change to an alias is a new version; the newest current one serves |
 | Real calls | Tests and use cases use the scripted provider or the fake OpenAI; real calls are capped per experiment |
 

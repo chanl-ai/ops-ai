@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { useBulkDeletePolicies, useBulkUpdatePolicies, useCreatePolicy, useDeletePolicy, useLookups, usePolicies, useUpdatePolicy } from '@/hooks/queries';
 import { useCan } from '@/hooks/me-queries';
 import { useSticky } from '@/hooks/use-sticky';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { conditionInWords } from '@/lib/condition-words';
 import { count } from '@/lib/format';
@@ -113,6 +114,7 @@ export default function GatePoliciesPage() {
   const query = usePolicies(list.params);
   const { data: lookups } = useLookups();
   const create = useCreatePolicy();
+  const created = useCreatedRows<Row>();
   const update = useUpdatePolicy();
   const remove = useDeletePolicy();
   const [dialog, setDialog] = React.useState<{ open: boolean; policy: GatePolicy | null }>({ open: false, policy: null });
@@ -159,6 +161,7 @@ export default function GatePoliciesPage() {
           columns={cols}
           data={rows}
           getRowId={(r) => r.id}
+          created={created}
           initialColumnVisibility={{ onTimeout: false, sla: false }}
           searchColumn="name"
           searchPlaceholder="Search gates…"
@@ -201,7 +204,8 @@ export default function GatePoliciesPage() {
             await update.mutateAsync({ id: dialog.policy.id, ...input });
             toast.success(`Saved ${input.name}`, { description: 'New runs use the updated gate.' });
           } else {
-            await create.mutateAsync(input);
+            const p = await create.mutateAsync(input);
+            created.show({ ...p, onRowClick: openEdit });
             toast.success(`Created ${input.name}`);
           }
         }}

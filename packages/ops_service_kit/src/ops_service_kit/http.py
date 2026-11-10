@@ -224,7 +224,7 @@ def install_error_handlers(app: FastAPI) -> None:
     # Just outside the envelope, so the request's id is still set when the 500 envelope is built.
     if not any(m.cls is RequestTimingMiddleware for m in app.user_middleware):
         at = next(i for i, m in enumerate(app.user_middleware) if m.cls is _UnhandledAsEnvelope)
-        timing = Middleware(RequestTimingMiddleware, enabled=Settings().request_timing, service=app.title)
+        timing = Middleware(RequestTimingMiddleware, enabled=Settings().request_timing)
         app.user_middleware.insert(at, timing)
 
     @app.exception_handler(ApiError)
@@ -255,5 +255,6 @@ def install_error_handlers(app: FastAPI) -> None:
     # Still needed for an exception raised in a user middleware outside _UnhandledAsEnvelope.
     @app.exception_handler(Exception)
     async def unexpected(_: Request, e: Exception) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        log.exception("unhandled_error", error=type(e).__name__)
+        # An exception handler is not an except block, so the exception is passed, not read from sys.exc_info().
+        log.error("unhandled_error", error=type(e).__name__, exc_info=e)
         return JSONResponse(error_body(500, "internal", "Something went wrong on the server."), status_code=500)

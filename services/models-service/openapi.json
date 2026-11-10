@@ -2739,7 +2739,7 @@
                 }
               }
             },
-            "description": "Over a budget or rate limit"
+            "description": "Over the model key's rate limit or a spend cap (`rate_limited`, ...), or the provider limits the account's key (`provider_rate_limited`, with the provider's Retry-After)"
           },
           "500": {
             "content": {
@@ -2759,7 +2759,7 @@
                 }
               }
             },
-            "description": "The provider refused or failed"
+            "description": "The provider could not be reached (`provider_unreachable`), refused the account's key (`provider_auth_failed`), refused the request as sent (`provider_bad_request`) or failed (`provider_error`)"
           },
           "503": {
             "content": {
@@ -2769,7 +2769,17 @@
                 }
               }
             },
-            "description": "The provider key the connection names is not saved"
+            "description": "The provider key the connection names is not saved (`provider_key_missing`)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The provider did not answer in time (`provider_timeout`)"
           }
         },
         "summary": "Completions",
@@ -2964,7 +2974,7 @@
                 }
               }
             },
-            "description": "Over a budget or rate limit"
+            "description": "Over the model key's rate limit or a spend cap (`rate_limited`, ...), or the provider limits the account's key (`provider_rate_limited`, with the provider's Retry-After)"
           },
           "500": {
             "content": {
@@ -2984,7 +2994,7 @@
                 }
               }
             },
-            "description": "The provider refused or failed"
+            "description": "The provider could not be reached (`provider_unreachable`), refused the account's key (`provider_auth_failed`), refused the request as sent (`provider_bad_request`) or failed (`provider_error`)"
           },
           "503": {
             "content": {
@@ -2994,7 +3004,17 @@
                 }
               }
             },
-            "description": "The provider key the connection names is not saved"
+            "description": "The provider key the connection names is not saved (`provider_key_missing`)"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The provider did not answer in time (`provider_timeout`)"
           }
         },
         "summary": "Embeddings",

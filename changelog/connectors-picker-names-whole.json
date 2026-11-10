@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "App names read in full in the chat connectors list",
+  "description": "For someone who cannot set an app up, the reason to ask an admin now sits under the app's name at every screen width, so the name is no longer cut to a letter or two on a desktop.",
+  "tag": "fix"
+}

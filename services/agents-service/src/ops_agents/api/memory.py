@@ -286,7 +286,7 @@ async def extract_memories(
     try:
         answer = await extractor.structured(EXTRACT_SYSTEM, prompt, SCHEMA, key=f"memory:{thread_id}")
     except Exception as e:
-        log.warning("memory extraction failed", extra={"thread": thread_id, "error": str(e)})
+        log.warning("memory.extraction.failed", thread_id=thread_id, error=str(e))
         return Extraction(offered=ids, theirs=theirs, remember=remember)
     found = cast(dict[str, Any], answer).get("memories") if isinstance(answer, dict) else None
     return Extraction(list(cast(list[dict[str, Any]], found or [])), ids, theirs, remember)
@@ -328,7 +328,8 @@ async def finish_learning(
     try:
         found = await asyncio.wait_for(learning, EXTRACTION_DEADLINE_SECONDS)
     except TimeoutError:
-        log.warning("memory extraction timed out", extra={"thread": thread_id})
+        # A slow model call: the turn goes on without new memories, and nothing needs a person.
+        log.info("memory.extraction.timed_out", thread_id=thread_id)
         return []
     return await save_memories(rt, me, agent, found, team_id=team_id, thread_id=thread_id, run_id=run_id)
 
