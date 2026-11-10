@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import yaml from 'js-yaml';
+import { load } from 'js-yaml';
 
 import { DIAGRAM_CSS, renderBoxDiagram, SITE_COLOURS_CSS } from '@/lib/box-diagram.mjs';
 import { repoIndex } from '@/lib/repo.mjs';
@@ -12,7 +12,7 @@ import { repoIndex } from '@/lib/repo.mjs';
  */
 export function BoxDiagram({ name, caption }: { name: string; caption?: string }) {
   const { root, pages } = repoIndex();
-  const data = yaml.load(fs.readFileSync(path.join(root, 'docs/diagrams', `${name}.yaml`), 'utf8')) as object;
+  const data = load(fs.readFileSync(path.join(root, 'docs/diagrams', `${name}.yaml`), 'utf8')) as object;
   const svg = renderBoxDiagram(data, {
     linkHref: (href: string) => {
       const page = pages[`docs/${href}`];

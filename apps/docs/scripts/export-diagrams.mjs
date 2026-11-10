@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import yaml from 'js-yaml';
+import { load } from 'js-yaml';
 
 import { renderBoxDiagram } from '../src/lib/box-diagram.mjs';
 import { repoRoot } from '../src/lib/repo.mjs';
@@ -13,7 +13,7 @@ const dir = path.join(repoRoot(), 'docs/diagrams');
 const check = process.argv.includes('--check');
 const stale = [];
 for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.yaml')).sort()) {
-  const svg = `${renderBoxDiagram(yaml.load(fs.readFileSync(path.join(dir, f), 'utf8')), { standalone: true })}\n`;
+  const svg = `${renderBoxDiagram(load(fs.readFileSync(path.join(dir, f), 'utf8')), { standalone: true })}\n`;
   const out = path.join(dir, f.replace(/\.yaml$/, '.svg'));
   const current = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
   if (current === svg) continue;
