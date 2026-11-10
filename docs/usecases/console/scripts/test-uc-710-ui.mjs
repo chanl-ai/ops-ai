@@ -60,6 +60,8 @@ await withUiStack(
         const status = (await res)?.status();
         const row = hosts.locator('tr[data-created]', { hasText: value });
         const shown = await row.waitFor({ timeout: 15_000 }).then(() => true, () => false);
+        // While the dialog is closing the page behind it is still hidden from roles, so a row count would read 0.
+        await d.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => undefined);
         return { status, shown, marked: shown && (await row.innerText()).includes('New'), hosts: (await hosts.innerText()).slice(0, 500) };
       };
 
@@ -99,6 +101,7 @@ await withUiStack(
       const rangeStatus = (await rangeRes)?.status();
       const rangeRow = admin.getByTestId('egress-ranges').locator('tr[data-created]', { hasText: '10.77.0.0/16' });
       const rangeShown = await rangeRow.waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      await rd.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => undefined);
       check('a new private range shows right after it is added, marked New', rangeStatus === 201 && rangeShown && (await rangeRow.innerText()).includes('New'), { rangeStatus, rangeShown });
       check('no page errors for the admin', admin.errors.length === 0, admin.errors);
 
