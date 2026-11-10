@@ -467,6 +467,16 @@ def test_database(profile: Profile, root: Path) -> dict[str, str]:
     return env
 
 
+# (cwd, tests folder, module) → the coverage database and the seconds its baseline took, for the life of one audit.
+_BASELINES: dict[tuple[str, str, str], tuple[Path, float]] = {}
+
+
+def drop_baselines() -> None:
+    for cov_file, _ in _BASELINES.values():
+        shutil.rmtree(cov_file.parent, ignore_errors=True)
+    _BASELINES.clear()
+
+
 def baseline_command(runner: list[str], module: str, tests_dir: str) -> list[str]:
     """The runner's command with coverage contexts; `uv run` gets pytest-cov as an extra, a plain python needs it."""
     cmd = list(runner)
@@ -487,26 +497,31 @@ def run_python_mutants(
     cwd = root / tests_path.parent
     tests_dir = tests_path.name
     module = rel.rsplit("/src/", maxsplit=1)[-1].split("/", maxsplit=1)[0] if "/src/" in rel else src.stem
-    cov_file = Path(tempfile.mkdtemp(prefix="ops-audit-")) / ".coverage"
     # A mutant the same size as the original, written within the same second, matches the cached bytecode's header,
     # and Python would import the unmutated .pyc: no bytecode is written or read for these runs.
     env = {**env, "PYTHONDONTWRITEBYTECODE": "1"}
     for cache in src.parent.rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
-    started = time.monotonic()
-    base = subprocess.run(
-        baseline_command(home.runner, module, tests_dir),
-        cwd=cwd,
-        env={**env, "COVERAGE_FILE": str(cov_file)},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    baseline_s = time.monotonic() - started
-    if base.returncode != 0:
-        tail = (base.stdout + base.stderr).strip().splitlines()[-5:]
-        shutil.rmtree(cov_file.parent, ignore_errors=True)
-        return [], "baseline suite is red or coverage could not run: " + " | ".join(tail)
+    # One baseline per tests folder, shared by every changed file it covers: the suite with coverage is the slow part.
+    key = (str(cwd), tests_dir, module)
+    if key not in _BASELINES:
+        cov_file = Path(tempfile.mkdtemp(prefix="ops-audit-")) / ".coverage"
+        started = time.monotonic()
+        base = subprocess.run(
+            baseline_command(home.runner, module, tests_dir),
+            cwd=cwd,
+            env={**env, "COVERAGE_FILE": str(cov_file)},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        baseline_s = time.monotonic() - started
+        if base.returncode != 0:
+            tail = (base.stdout + base.stderr).strip().splitlines()[-5:]
+            shutil.rmtree(cov_file.parent, ignore_errors=True)
+            return [], "baseline suite is red or coverage could not run: " + " | ".join(tail)
+        _BASELINES[key] = (cov_file, baseline_s)
+    cov_file, baseline_s = _BASELINES[key]
     by_line = covering_tests(cov_file, src)
     original = src.read_text(encoding="utf-8")
     results: list[Mutant] = []
@@ -540,8 +555,7 @@ def run_python_mutants(
             results.append(mutant)
     finally:
         src.write_text(original, encoding="utf-8")
-        shutil.rmtree(cov_file.parent, ignore_errors=True)
-    return results, f"baseline {baseline_s:.0f}s on {tests_path}"
+    return results, f"baseline {baseline_s:.0f}s on {tests_path}, shared by every changed file under it"
 
 
 def run_node_mutants(root: Path, home: TestHome, rel: str, lines: set[int], budget: int) -> tuple[list[Mutant], str]:
@@ -625,19 +639,22 @@ def audit(
     notes: list[str] = []
     if mutate and code_files:
         env = None
-        for rel in code_files:
-            home = test_home(profile, rel)
-            assert home is not None
-            if home.kind == "python":
-                if env is None:
-                    env = test_database(profile, root)
-                found, note = run_python_mutants(
-                    root, home, rel, changed[rel], env=env, budget=budget, timeout_factor=timeout_factor
-                )
-            else:
-                found, note = run_node_mutants(root, home, rel, changed[rel], budget)
-            mutants += found
-            notes.append(f"{rel}: {note}")
+        try:
+            for rel in code_files:
+                home = test_home(profile, rel)
+                assert home is not None
+                if home.kind == "python":
+                    if env is None:
+                        env = test_database(profile, root)
+                    found, note = run_python_mutants(
+                        root, home, rel, changed[rel], env=env, budget=budget, timeout_factor=timeout_factor
+                    )
+                else:
+                    found, note = run_node_mutants(root, home, rel, changed[rel], budget)
+                mutants += found
+                notes.append(f"{rel}: {note}")
+        finally:
+            drop_baselines()
     elif mutate:
         notes.append("no changed code file maps to a tests folder in the profile")
     counts = Counter(m.status for m in mutants)
@@ -826,6 +843,7 @@ def self_test() -> bool:
         # Remove every test that calls `label` and the same faults must now go unkilled: the measure can go down.
         weak_tests = re.sub(r"\n\ndef test_(plural|sleepy|sleepy_twin)\(\):\n(?:    .*\n)+", "\n", FIXTURE_TESTS + "\n")
         (tmp / rel_tests).write_text(weak_tests)
+        drop_baselines()
         weaker, weaker_note = run_python_mutants(
             tmp, home, rel_code, {12}, env=dict(os.environ), budget=40, timeout_factor=5.0
         )
