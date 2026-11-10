@@ -2,7 +2,8 @@
 
 Status: current. Id: `uc-560`. Service: `console` with every service through `ops_service_kit`. Layers: api, ui.
 
-Every service writes one `http.request` JSON line per request on stdout, and with `OPS_REQUEST_TIMING=1` it also
+Every service writes one `http.request` JSON line per request on stdout
+([logging](../../packages/ops_service_kit/logging.md)), and with `OPS_REQUEST_TIMING=1` it also
 returns a `Server-Timing` header with the time spent in the app and in the database. A request id follows the request
 from the first service to the next, so their lines can be joined, and an error envelope's `requestId` names the same
 id. The console saves what its screens read to the browser, keyed by person, team and app version, and shows it at
