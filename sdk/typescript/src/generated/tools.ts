@@ -2209,6 +2209,8 @@ export interface components {
         Change: {
             /** Changed */
             changed: boolean;
+            /** Entry */
+            entry?: components["schemas"]["ListedHost"] | components["schemas"]["ListedRange"] | null;
             /**
              * Kind
              * @enum {string}
@@ -9373,6 +9375,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already listed; nothing was written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Change_"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -9583,6 +9594,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already listed; nothing was written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Change_"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {

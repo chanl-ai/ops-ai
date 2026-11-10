@@ -209,12 +209,6 @@ class CardCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
-class Change(TypedDict, closed=True):
-    changed: bool
-    kind: Literal["host", "range"]
-    value: str
-
-
 class CheckedCredential(TypedDict, closed=True):
     account: NotRequired[str | None]
     at: str
@@ -375,11 +369,6 @@ class EnvelopeAppUsers(TypedDict, closed=True):
 
 class EnvelopeCallResult(TypedDict, closed=True):
     data: CallResult
-    success: Literal[True]
-
-
-class EnvelopeChange(TypedDict, closed=True):
-    data: Change
     success: Literal[True]
 
 
@@ -1973,6 +1962,13 @@ class AuthConfig(TypedDict, closed=True):
     type: Literal["ops_ai", "own", "account"]
 
 
+class Change(TypedDict, closed=True):
+    changed: bool
+    entry: NotRequired[ListedHost | ListedRange | None]
+    kind: Literal["host", "range"]
+    value: str
+
+
 class EnvelopeAllowList(TypedDict, closed=True):
     data: AllowList
     success: Literal[True]
@@ -1990,6 +1986,11 @@ class EnvelopeAppCredentialDetail(TypedDict, closed=True):
 
 class EnvelopeAppTool(TypedDict, closed=True):
     data: AppTool
+    success: Literal[True]
+
+
+class EnvelopeChange(TypedDict, closed=True):
+    data: Change
     success: Literal[True]
 
 

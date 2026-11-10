@@ -310,4 +310,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, ui | passing |
 | uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | passing |
 | uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | passing |
+| uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |

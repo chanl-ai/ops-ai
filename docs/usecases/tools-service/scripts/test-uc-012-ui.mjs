@@ -76,7 +76,9 @@ await withUiStack(
       await page.goto(`${consoleUrl}/settings/egress`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const hostRow = page.getByTestId('egress-hosts').getByRole('row', { name: new RegExp(bank.host.replace(/\./g, '\\.')) });
       await hostRow.waitFor({ timeout: 60_000 });
-      check('the host links the module that calls it', (await hostRow.getByRole('link', { name: forgedModule?.id }).count()) === 1, { row: await hostRow.innerText(), forged: forgedModule?.id });
+      // The link reads the module's name and opens its page by id.
+      const moduleLink = hostRow.getByRole('link', { name: forgedModule?.displayName, exact: true });
+      check('the host links the module that calls it', (await moduleLink.count()) === 1 && (await moduleLink.getAttribute('href')) === `/tools/${forgedModule?.id}`, { row: await hostRow.innerText(), forged: forgedModule?.id, href: await moduleLink.getAttribute('href').catch(() => null) });
       await hostRow.getByRole('button').last().click();
       await page.getByRole('menuitem', { name: 'Remove' }).click();
       const removed = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/egress/hosts/remove`, { timeout: 60_000 }));

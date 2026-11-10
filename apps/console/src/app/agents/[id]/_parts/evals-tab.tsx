@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkDeleteEvalCases, useCreateEvalCase, useDeleteEvalCase, useEvalCases, useEvalOptions, useEvalRun, useEvalRuns, useEvalSuites, useImportEvalCases, useLatestEvalRun, useRunEvals } from '@/hooks/eval-queries';
 import { useSticky } from '@/hooks/use-sticky';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { pct, relativeTime, shortId } from '@/lib/format';
 import type { Agent } from '@/lib/types/domain';
@@ -183,6 +184,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
   const options = useEvalOptions(agent.id);
   const runEvals = useRunEvals(agent.id);
   const create = useCreateEvalCase(agent.id);
+  const createdCases = useCreatedRows<CaseRow>();
   const importRows = useImportEvalCases(agent.id);
   const remove = useDeleteEvalCase(agent.id);
   const bulkRemove = useBulkDeleteEvalCases(agent.id);
@@ -286,6 +288,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             columns={caseCols}
             data={caseRows}
             getRowId={(r) => r.id}
+            created={createdCases}
             searchColumn="name"
             searchPlaceholder="Search cases…"
             filters={[
@@ -365,7 +368,8 @@ export function EvalsTab({ agent }: { agent: Agent }) {
         options={options.data}
         isPending={create.isPending}
         onSubmit={async (i) => {
-          await create.mutateAsync(i);
+          const c = await create.mutateAsync(i);
+          createdCases.show({ ...c, rowTestId: `eval-case-${c.id}` });
           toast.success(`Added ${i.name}`, { description: 'It runs on the next save or when you run evals.' });
         }}
       />

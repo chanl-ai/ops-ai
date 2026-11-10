@@ -21,6 +21,8 @@ import { Button } from '@/components/ui/button';
 import { useNavAllows } from '@/hooks/me-queries';
 import { useCreateWebhook, useDeleteWebhook, useSetWebhookStatus, useResendDelivery, useSettingsLookups, useWebhookDeliveries, useWebhooks } from '@/hooks/settings-queries';
 import { WEBHOOKS } from '@/lib/settings-tree';
+
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { count, pct, relativeTime } from '@/lib/format';
@@ -85,6 +87,7 @@ export default function WebhooksPage() {
   const query = useWebhooks(list.params, may === true);
   const lookups = useSettingsLookups();
   const create = useCreateWebhook();
+  const created = useCreatedRows<Row>();
   const setStatus = useSetWebhookStatus();
   const remove = useDeleteWebhook();
   const resend = useResendDelivery();
@@ -130,6 +133,7 @@ export default function WebhooksPage() {
           columns={cols}
           data={rows}
           getRowId={(w) => w.id}
+          created={created}
           searchColumn="name"
           searchPlaceholder="Search names, URLs or events…"
           initialColumnVisibility={{ events: false }}
@@ -217,6 +221,7 @@ export default function WebhooksPage() {
         isPending={create.isPending}
         onSubmit={async (input) => {
           const w = await create.mutateAsync(input);
+          created.show({ ...w, onRowClick: () => undefined });
           toast.success(`Added ${w.name}`, { description: `Signing secret starts ${w.secretPrefix}. Verify the signature on every request.` });
         }}
       />

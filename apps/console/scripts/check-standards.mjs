@@ -149,6 +149,26 @@ for (const f of files) {
   if (!/^src\/components\/reviews\/(task-decision|decision-panel|use-review-decider|option-decision-form|review-detail|model-validation)\.tsx$|^src\/components\/chat\/record-cards\.tsx$|^src\/hooks\/queries\.ts$/.test(f.rel))
     for (const m of text.matchAll(/import\s*\{[^}]*\b(OptionDecisionForm|ReviewDecisionForm|ModelValidationDecisionForm|useDecideReview)\b[^}]*\}\s*from/g)) report(f, m.index, `imports ${m[1]} (decide through components/reviews/task-decision.tsx)`);
 
+  // 22. A paged list that adds rows in place shows each new row right after the add: paged by name or narrowed by a
+  //     search, the new row would sit on another page. The page passes `useCreatedRows` to the table as `created`. An
+  //     add is a create, add, invite or import hook, a dialog named for one (the hook may live in the dialog), or an
+  //     onAdded, onCreated or onSaved prop. A list that opens the new item's own page instead is listed with its reason.
+  const OPENS_THE_NEW_ITEM = {
+    'src/app/agents/page.tsx': 'opens the new agent',
+    'src/app/skills/page.tsx': 'opens the new skill',
+    'src/app/tools/custom/page.tsx': 'opens the new module',
+    'src/app/guardrails/page.tsx': 'opens the new guardrail',
+    'src/app/knowledge/page.tsx': 'opens the new knowledge base',
+    'src/app/widgets/page.tsx': 'opens the new widget',
+    // Not yet: the invite answers with links, not the invited members' rows (platform-service), so there is no row to show.
+    'src/components/access/members-panel.tsx': 'invite returns links, not member rows',
+    // Not yet: an upload returns ids, and a file is listed once it has been scanned, so there is no row to show.
+    'src/app/files/page.tsx': 'upload returns ids; a file is listed once scanned',
+  };
+  const adds = [...text.matchAll(/\buse(?:Create|Add|Invite|Import)(?!Param\b)[A-Z]\w*\(|<\w*(?:Add|Create|New|Invite|Import)\w*Dialog\b|\bon(?:Added|Created|Saved)=/g)];
+  if (adds.length && /<DataTableWithViews\b/.test(text) && /\buseListParams[<(]/.test(text) && !/\bcreated=\{/.test(text) && !(f.rel in OPENS_THE_NEW_ITEM))
+    report(f, adds[0].index, 'adds rows to a paged list without showing the new row (pass useCreatedRows to the table as `created`)');
+
   // 11. No ad-hoc state switches from copied projects.
   for (const m of text.matchAll(/usePageState|PageStateGate|[?&]state=(empty|loading|error)/g)) report(f, m.index, 'copied ?state= switch (use React Query states and ?mock=)');
 }
