@@ -16,6 +16,7 @@ accounts of one app. Design: the several accounts per app design, D1 and D10.
 | S6 | Changing who signs in first says how many drafts and published versions name the account | ui | 8 | 8 |
 | S7 | While that count loads, or when it cannot be read, the dialog says so instead of a number | ui | 9 | 9 |
 | S8 | Saving a new name in Settings renames the account | ui | 10 | 10 |
+| S10 | An agent's Account picker says when the team's apps cannot be read, and lists each org with where it points | ui | 12 | 12 |
 | S9 | The app page says so when it cannot load, and shows the empty state when the app has no account | ui | 11 | 11 |
 
 ## Preconditions
@@ -42,6 +43,7 @@ accounts of one app. Design: the several accounts per app design, D1 and D10.
 | 9 | With the count held then refused, she renames EU org | "Checking which workflows and agents name it…", then "Couldn’t check …" |
 | 10 | She saves Europe org | The row and GET /v1/apps/{app} read Europe org and Retail org |
 | 11 | The app read is refused 503, then answered with no accounts | "Couldn’t load this app"; then the Accounts tab's empty state |
+| 12 | Priya makes an agent; its Tools section's Account picker with GET /v1/apps refused, then answered | "Couldn’t load the team’s apps"; then Salesforce lists EU org with kestrel-eu.my.salesforce.test |
 
 ## What would make a step pass with the code broken
 

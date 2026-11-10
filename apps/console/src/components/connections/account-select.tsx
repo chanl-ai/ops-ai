@@ -24,9 +24,16 @@ export function AccountSelect({ id, value, onChange }: { id: string; value: Reco
   const fallback = (accounts.data ?? []).find((a) => a.default);
   return (
     <div className="flex flex-col gap-2 sm:flex-row" data-field={id}>
-      <Select value={app || NONE} onValueChange={(v) => (setApp(v === NONE ? '' : v), onChange({}))}>
-        <SelectTrigger className="w-full sm:w-1/2" aria-label="App" data-testid={`${id}-app`}>
-          <SelectValue placeholder={apps.isPending ? 'Loading…' : 'Choose an app'} />
+      <Select value={app || NONE} onValueChange={(v) => (setApp(v === NONE ? '' : v), onChange({}))} disabled={apps.isError || (!apps.isPending && plugins.length === 0)}>
+        <SelectTrigger className="w-full sm:w-1/2" aria-label="App" aria-busy={apps.isPending || undefined} data-testid={`${id}-app`}>
+          {/* Loading, a refused read and a team with no app each say so in the trigger, so nothing reads as a choice. */}
+          {apps.isError ? (
+            <span className="text-destructive-text" data-testid={`${id}-app-error`}>Couldn’t load the team’s apps</span>
+          ) : !apps.isPending && plugins.length === 0 ? (
+            <span className="text-muted-foreground" data-testid={`${id}-app-empty`}>No app is on for the team</span>
+          ) : (
+            <SelectValue placeholder={apps.isPending ? 'Loading…' : 'Choose an app'} />
+          )}
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={NONE}>Each app’s default</SelectItem>
@@ -40,7 +47,11 @@ export function AccountSelect({ id, value, onChange }: { id: string; value: Reco
       {app && (
         <Select value={named || NONE} onValueChange={(v) => onChange(v === NONE ? {} : { [key]: v })}>
           <SelectTrigger id={id} className="w-full sm:w-1/2" aria-busy={accounts.isFetching || undefined} data-testid={`${id}-account`}>
-            <SelectValue placeholder={accounts.isPending ? 'Loading…' : 'Choose'} />
+            {accounts.isError && !named ? (
+              <span className="text-destructive-text" data-testid={`${id}-account-error`}>{`Couldn’t load ${appName}’s accounts`}</span>
+            ) : (
+              <SelectValue placeholder={accounts.isPending ? 'Loading…' : 'Choose'} />
+            )}
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={NONE}>

@@ -7,9 +7,10 @@ import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
+const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const PRIYA = 'p.shah@harborpine.example';
@@ -186,8 +187,34 @@ try {
               await page.getByTestId('app-tab-accounts').click({ timeout: 90_000 });
               const empty = await page.getByTestId('app-accounts-empty').waitFor({ timeout: 60_000 }).then(() => true, () => false);
               await shot(page, `accounts-empty-${width}`);
-              await page.unroute(route, { behavior: 'ignoreErrors' });
+              await page.unrouteAll({ behavior: 'ignoreErrors' });
               check('11 an app page that cannot load says so, and an app with no accounts shows the empty state', empty, { empty });
+            }, page);
+            await step('12 an agent’s Account picker says when the team’s apps cannot be read, and otherwise lists each org with where it points', async () => {
+              const made = await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: priya, body: JSON.stringify({ name: 'Case desk', role: 'Answers the team about cases' }) });
+              const agent = (await made.json())?.data;
+              const appsList = (url) => new URL(url).pathname === '/v1/apps';
+              await page.route(appsList, (r) => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'unavailable', message: 'down' } }) }));
+              await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+              const refused = await page.getByTestId('agent-accounts-app-error').waitFor({ timeout: 90_000 }).then(() => true, () => false);
+              await page.getByTestId('agent-accounts-app').scrollIntoViewIfNeeded().catch(() => {});
+              await page.screenshot({ path: join(SHOTS, `agent-account-error-${width}.png`) });
+              await page.unrouteAll({ behavior: 'ignoreErrors' });
+              const seen = [];
+              page.on('response', async (r) => { if (appsList(r.url())) seen.push([r.status(), r.url().slice(0, 120), (await r.text().catch(() => '')).slice(0, 200)]); });
+              await page.reload({ waitUntil: 'domcontentloaded' });
+              const trigger = page.getByTestId('agent-accounts-app');
+              await trigger.waitFor({ timeout: 90_000 });
+              await page.waitForFunction(() => !document.querySelector('[data-testid="agent-accounts-app"]')?.hasAttribute('aria-busy'), null, { timeout: 60_000 }).catch(() => {});
+              const said = ((await trigger.innerText()) ?? '').trim();
+              if (await trigger.isDisabled()) throw new Error(`the App picker is disabled and reads "${said}"; GET /v1/apps answered ${JSON.stringify(seen)}`);
+              await trigger.click({ timeout: 30_000 });
+              await page.getByRole('option', { name: 'Salesforce' }).click();
+              await page.getByTestId('agent-accounts-account').click();
+              const eu = ((await page.getByTestId('agent-accounts-account-EU org').innerText({ timeout: 30_000 })) ?? '').replace(/\s+/g, ' ');
+              await page.screenshot({ path: join(SHOTS, `agent-account-picker-${width}.png`) });
+              await page.keyboard.press('Escape');
+              check('12 an agent’s Account picker says when the team’s apps cannot be read, and otherwise lists each org with where it points', made.status === 201 && refused && eu.includes('kestrel-eu.my.salesforce.test'), { made: made.status, refused, eu });
             }, page);
           } else {
             await step(`7 at ${width} Settings fits the phone with every field reachable`, async () => {
