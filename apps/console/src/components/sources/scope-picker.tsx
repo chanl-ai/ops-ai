@@ -29,13 +29,18 @@ export function ScopePicker({ id, plugin, source, kind, parents, value, onChange
   const heldMatching = options.scopes.filter((s) => !searched || matches(s, searched));
   const offered = dedupe([...(found.data?.scopes ?? []), ...heldMatching]).filter((s) => s.kind === kind);
   const picked = new Set(value);
+  const kinds = kind.endsWith('y') ? `${kind.slice(0, -1)}ies` : `${kind}s`;
+  // Titles of every scope seen, so a pick the current search hides is still named, not shown by its id.
+  const seen = React.useRef(new Map<string, string>());
+  for (const s of offered) seen.current.set(s.id, s.title);
+  const hidden = value.filter((v) => !offered.some((s) => s.id === v));
   const toggle = (s: ScopeOption) => onChange(picked.has(s.id) ? value.filter((v) => v !== s.id) : [...value, s.id]);
   const error = found.error ?? options.error;
   return (
     <div className="flex flex-col gap-2" data-testid={`${id}-picker`}>
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
-          {picked.size} of {offered.length} picked
+          {picked.size} picked{offered.length ? ` · ${offered.length} listed` : ''}
         </span>
         <span className="flex gap-1">
           <Button variant="ghost" size="sm" className="h-7" disabled={disabled || !offered.length} onClick={() => onChange([...new Set([...value, ...offered.map((s) => s.id)])])}>
@@ -47,12 +52,12 @@ export function ScopePicker({ id, plugin, source, kind, parents, value, onChange
         </span>
       </div>
       <Command shouldFilter={false} className="rounded-md border">
-        <CommandInput id={id} placeholder={`Search ${kind}s by name…`} value={query} onValueChange={setQuery} aria-label={`Search ${kind}s`} disabled={disabled} />
+        <CommandInput id={id} placeholder={`Search ${kinds} by name…`} value={query} onValueChange={setQuery} aria-label={`Search ${kinds}`} disabled={disabled} />
         <CommandList className="max-h-64">
           {pending ? (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">Asking the app for its {kind}s…</p>
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">Asking the app for its {kinds}…</p>
           ) : error ? (
-            <p className="px-3 py-6 text-center text-sm text-destructive-text">Couldn’t list the {kind}s: {(error as Error).message}</p>
+            <p className="px-3 py-6 text-center text-sm text-destructive-text">Couldn’t list the {kinds}: {(error as Error).message}</p>
           ) : (
             <>
               <CommandEmpty>{searched ? `No ${kind} called “${searched}” that this connection can read.` : `No ${kind} this connection can read.`}</CommandEmpty>
@@ -71,7 +76,7 @@ export function ScopePicker({ id, plugin, source, kind, parents, value, onChange
           )}
         </CommandList>
       </Command>
-      {value.some((v) => !offered.some((s) => s.id === v)) && <p className="text-xs text-muted-foreground">Also picked: {value.filter((v) => !offered.some((s) => s.id === v)).join(', ')}</p>}
+      {hidden.length > 0 && <p className="text-xs text-muted-foreground">Also picked: {hidden.map((v) => seen.current.get(v) ?? v).join(', ')}</p>}
     </div>
   );
 }

@@ -85,17 +85,17 @@ try {
         check('10 the sites picker searched for "human" lists Human Resources only', offered.length === 1 && offered[0].includes('Human Resources'), offered);
 
         await sites.getByRole('button', { name: 'Select all' }).click();
-        await libraries.getByText(/^0 of 2 picked/).waitFor({ timeout: 60_000 });
+        await libraries.getByText(/^0 picked · 2 listed/).waitFor({ timeout: 60_000 });
         await libraries.getByRole('button', { name: 'Select all' }).click();
         const libs = await libraries.getByTestId('as-libraries-option').allInnerTexts();
-        const sitesCount = await sites.getByText(/of \d+ picked/).innerText();
-        const libsCount = await libraries.getByText(/of \d+ picked/).innerText();
+        const sitesCount = await sites.getByText(/^\d+ picked/).innerText();
+        const libsCount = await libraries.getByText(/^\d+ picked/).innerText();
         // Picking libraries asks the sites picker again for what they hold; it settles back on the site.
         await sites.getByTestId('as-sites-option').filter({ hasText: 'Human Resources' }).waitFor({ timeout: 60_000 });
         await add.screenshot({ path: join(SHOTS, 'sharepoint-picker-select-all.png') });
         check(
           '11 Select all picks the site, and the libraries picker lists its two libraries, both picked by Select all',
-          sitesCount.startsWith('1 of 1') && libsCount.startsWith('2 of 2') && libs.some((t) => t.includes('Policies Library')) && libs.some((t) => t.includes('Handbook')),
+          sitesCount.startsWith('1 picked · 1 listed') && libsCount.startsWith('2 picked · 2 listed') && libs.some((t) => t.includes('Policies Library')) && libs.some((t) => t.includes('Handbook')),
           { sitesCount, libsCount, libs },
         );
 
