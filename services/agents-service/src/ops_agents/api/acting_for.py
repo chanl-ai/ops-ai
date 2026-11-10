@@ -19,6 +19,7 @@ from ops_service_kit.settings import Settings
 
 from ..activities.gateway import GatewayRefused, RunContext
 from ..store.engine import AsyncEngine, EngineTransactions
+from .actors import parse
 from .child_runs import TURN_PERSON
 from .engine_runs import first_run
 from .run_person import RUN_PERSON
@@ -27,9 +28,11 @@ PERSON_UNKNOWN = "this chat's person is not known, so the call was not made; ask
 
 
 def person_of(created_by: object) -> str | None:
-    """A run's starter when it is a person (an email), not `key:<id>`, `run:<parent>` or a trigger's name."""
-    text = str(created_by or "")
-    return text if "@" in text and ":" not in text.split("@", 1)[0] else None
+    """A run's starter when it is a person: their email, also when they asked through an agent, an event or a start
+    form (`<email> via agent:<id>`); None for `key:<id>`, `run:<parent>` or a trigger. Read through actors.parse, the
+    one reader of what `created_by` holds, so the email minted for is never the whole string."""
+    who = parse(str(created_by or ""))
+    return who.id if who.kind == "person" and "@" in who.id and ":" not in who.id.split("@", 1)[0] else None
 
 
 class CallPeople:
