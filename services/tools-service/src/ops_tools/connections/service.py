@@ -244,6 +244,9 @@ class ConnectionService:
         # The permissions a plugin account's sign-in asks for, from the tools its team added
         # (PluginHost.sign_in_scopes); set once the plugin host is up.
         self.sign_in_scopes: Callable[[str, str], Awaitable[list[str] | None]] | None = None
+        # The package apps that run on an account's app and the path that checks each of their objects
+        # (PluginHost.package_checks); a passing Test reads them. Set once the plugin host is up.
+        self.package_checks: Callable[[str, str], Awaitable[list[dict[str, Any]]]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
         self._after_sign_in: set[asyncio.Task[None]] = set()
 
@@ -1573,6 +1576,9 @@ class ConnectionService:
                     named = None
                 if named:
                     await self.store.name_token(who.tenant_id, connection_id, own_key(who) if own else SHARED, named)
+                packages = await self._packages(who.tenant_id, connection_id, str(settings["baseUrl"]), prepared, hosts)
+                if packages:
+                    health["packages"] = packages
             else:
                 message = f"{urlsplit(url).hostname} answered {res.status_code} to the test address."
                 health |= {"status": "failed", "code": "UPSTREAM_STATUS", "message": message}
@@ -1595,6 +1601,34 @@ class ConnectionService:
         )
         await self.store.note(who.tenant_id, connection_id, self._event(who, "tested", detail))
         return await self.detail(who, connection_id)
+
+    async def _packages(
+        self, tenant_id: str, connection_id: str, base: str, prepared: Prepared | None, hosts: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Which package apps running on the account are installed there: each required object read through the
+        account's sign-in, as the test read was. A 404 or 400 marks the object missing; a package whose check could
+        not run is left out, so it is neither refused nor shown as installed on a guess."""
+        if self.package_checks is None or self.egress is None:
+            return {}
+        out: dict[str, dict[str, Any]] = {}
+        for package in await self.package_checks(tenant_id, connection_id):
+            missing: list[str] = []
+            try:
+                for name, path in dict(package["paths"]).items():
+                    url = base.rstrip("/") + str(path)
+                    await self.egress.check_url(tenant_id, url, hosts)
+                    res = await self._probe(url, prepared, tenant_id, hosts)
+                    if res.status_code in (400, 404):
+                        missing.append(str(name))
+                    elif res.status_code >= 300:
+                        raise httpx.HTTPStatusError("unchecked", request=res.request, response=res)
+            except (EgressDenied, httpx.HTTPError) as e:
+                log.warning(
+                    "package_check_failed", connection=connection_id, package=package["id"], error=type(e).__name__
+                )
+                continue
+            out[str(package["id"])] = {"title": package["title"], "missing": missing}
+        return out
 
     async def _probe(
         self, url: str, prepared: Prepared | None, tenant_id: str, hosts: list[str] | None = None, *, mcp: bool = False

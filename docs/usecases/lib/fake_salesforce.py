@@ -67,6 +67,11 @@ SANDBOX_HOST = "kestrel--uat.sandbox.my.salesforce.test"
 EU_ID = "eu"
 EU_ISSUER = f"https://{LOGIN_HOST}/{EU_ID}"
 EU_HOST = "kestrel-eu.my.salesforce.test"
+# A lending package's loan object, installed in the EU org only, so a package app's call on the production org finds
+# no such object, as Salesforce answers for a package an org never installed.
+LOAN_OBJECT = "LNDK__Loan__c"
+LOAN_ID = "a0LEU0000000001"
+PACKAGES = {EU_HOST: {LOAN_OBJECT}}
 INSTANCES = {ISSUER: API_HOST, SANDBOX_ISSUER: SANDBOX_HOST, EU_ISSUER: EU_HOST}
 # Each org also signs in at its own My Domain, `https://<my domain>/services/oauth2/...`, as Salesforce's do: the path
 # the server serves the org's sign-in under, by host.
@@ -321,6 +326,9 @@ class Salesforce:
             status, self.fail_next = self.fail_next, None
             code = "REQUEST_LIMIT_EXCEEDED" if status == 429 else "INVALID_SESSION_ID"
             return JSONResponse([{"errorCode": code}], status)
+        found = self._package_api(host, path)
+        if found is not None:
+            return found
         found = self._org_api(request, path, body, who, scopes)
         if found is not None:
             return found
@@ -377,6 +385,24 @@ class Salesforce:
             self.case["LastModifiedBy"] = who
             self.edits.append({"by": who, "change": change})
             return Response(status_code=204)
+        return JSONResponse([{"errorCode": "NOT_FOUND", "message": path}], 404)
+
+    def _package_api(self, host: str, path: str) -> Response | None:
+        """The loan package's object at an org that installed it (describe and one record), Salesforce's NOT_FOUND at
+        one that did not; None for any other path."""
+        from starlette.responses import JSONResponse
+
+        prefix = f"{API}/sobjects/{LOAN_OBJECT}"
+        if not path.startswith(prefix):
+            return None
+        if LOAN_OBJECT not in PACKAGES.get(host, set()):
+            return JSONResponse([{"errorCode": "NOT_FOUND", "message": "The requested resource does not exist"}], 404)
+        if path == f"{prefix}/describe":
+            fields = [{"name": f} for f in ("Id", "Name", "LNDK__Stage__c", "LNDK__Amount__c")]
+            return JSONResponse({"name": LOAN_OBJECT, "custom": True, "fields": fields})
+        if path == f"{prefix}/{LOAN_ID}":
+            loan = {"Id": LOAN_ID, "Name": "Harbor bakery expansion", "LNDK__Stage__c": "Underwriting"}
+            return JSONResponse({"attributes": {"type": LOAN_OBJECT}, **loan, "LNDK__Amount__c": 250000})
         return JSONResponse([{"errorCode": "NOT_FOUND", "message": path}], 404)
 
     def _signer(self, request: Any, host: str) -> tuple[str, set[str]] | Response:

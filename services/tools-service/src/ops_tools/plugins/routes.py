@@ -264,7 +264,18 @@ class PluginAccounts:
         if connection_id is not None and await store.get(who.tenant_id, str(connection_id)) is None:
             # Removed, as the connect dialog's Cancel removes the one it made: the next turn-on makes another.
             connection_id = None
-        if body.enabled and connection_id is None:
+        package = m.connection.runs_on is not None
+        if package and body.enabled and m.connection.runs_on not in self.host.plugins:
+            raise ValidationFailed(
+                f"{m.title} runs inside an app this install does not have; the person who runs Ops AI installs it "
+                "first.",
+                code="host_app_missing",
+            )
+        if package:
+            # A package app has no account of its own: each call signs in with the chosen account of the app it
+            # runs on (PluginHost.for_call).
+            connection_id = None
+        elif body.enabled and connection_id is None:
             connection_id = await self.connect(
                 who, plugin, settings, own, body, account_name=body.account_name, sandbox=body.sandbox
             )
@@ -285,7 +296,7 @@ class PluginAccounts:
             await self._first_binding(who, plugin)
         elif self.host.versions and not before.get("version"):
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
-        if body.enabled and not before.get("connection_id") and body.credential_id is None:
+        if body.enabled and not package and not before.get("connection_id") and body.credential_id is None:
             await self._fix_first_place(who, plugin, own)
 
     async def _fix_first_place(self, who: Caller, plugin: Plugin, own: dict[str, Any]) -> None:

@@ -702,6 +702,37 @@ their own accounts are on Connectors › Mine. A first turn-on through Ops AI's 
 a default on Ops AI's auth config, so a second account may type its own; a team whose first turn-on kept it fixed keeps
 it fixed, and adds an auth config holding the address as a default for a second org.
 
+### Package apps
+
+A package app is a plugin whose tools run inside another app, such as a lending or life-sciences package installed in
+a Salesforce org. It has no accounts of its own: each call signs in with the chosen account of the app it runs on and
+reaches that account's address. The manifest says so in `connection`:
+
+| Field | What it does |
+|---|---|
+| `kinds: [none]` | Required with `runs_on`: the package never signs in by itself |
+| `runs_on` | The plugin id of the app it runs inside (`opsai.salesforce`). `endpoint`, `egress` and headers render with that app's settings for the chosen account, so `{instance_url}` is the org's |
+| `requires` | The objects the package installs in the app. Optional |
+| `requires_check` | A path from `/`, with `{name}` for each required object, that answers 404 or 400 where the object is missing (`/services/data/v{api_version}/sobjects/{name}/describe`). Required with `requires` |
+
+`opsai plugin validate` refuses `runs_on` with another kind, `runs_on` naming the plugin itself, `requires` without
+`runs_on`, and a check path that names no object. Turning a package on for a team makes no account, and is refused
+409 `host_app_missing` when the install lacks the app it runs on.
+
+| Case | What happens (`plugins/host.py` `PluginHost.for_call`) |
+|---|---|
+| A call names an account under the app it runs on (`runContext.accounts: {"plugin:opsai.salesforce": "EU org"}`) | The package's tool signs in with that account, chosen as that app's own calls choose one (`_choose`) |
+| A call names an account under the package's own app id | 404 `ACCOUNT_NOT_FOUND`: the package has none |
+| The app it runs on is off for the team, or not installed | 403 `APP_OFF_FOR_TEAM` naming that app, or `PLUGIN_DISABLED` |
+| The chosen account's last Test found a required object missing | 409 `PACKAGE_MISSING` naming the account, before any request leaves tools-service |
+| The account was never checked (signed in before the package was installed) | The call runs; its next Test records the check |
+
+The check runs with every passing Test, which also runs after each sign-in (`connections/service.py` `_packages`): it
+reads each object's path through the account's sign-in and saves `health.packages` on the account, by package id, with
+the objects missing. `GET /v1/apps/plugin:{package}/accounts` lists the accounts of the app it runs on, each with
+`appId` (the key a step or agent names it under) and `missingObjects`, so a picker shows an account unavailable.
+`docs/usecases/lib/plugins/loan_desk` is a fictional package for the use cases (uc-706).
+
 After that, builders grant the plugin's tools to agents as any other tool, and a knowledge base adds a source with
 `POST /v1/sources` and `{type: "tool", config: {plugin: "opsai.salesforce", source: "articles"}}`. Nobody can edit,
 publish or delete the plugin's tool module; a new plugin version replaces it.

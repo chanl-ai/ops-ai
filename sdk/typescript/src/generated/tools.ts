@@ -1406,6 +1406,8 @@ export interface components {
          * @description One account a step, an agent or a chat may name for an app's calls, with what tells it apart.
          */
         AccountChoice: {
+            /** Appid */
+            appId?: string | null;
             /**
              * Default
              * @default false
@@ -1415,6 +1417,8 @@ export interface components {
             id: string;
             /** Identity */
             identity?: components["schemas"]["IdentityEntry"][];
+            /** Missingobjects */
+            missingObjects?: string[];
             /** Name */
             name: string;
             /**
@@ -2485,6 +2489,10 @@ export interface components {
             latencyMs?: number | null;
             /** Message */
             message?: string | null;
+            /** Packages */
+            packages?: {
+                [key: string]: components["schemas"]["PackageCheck"];
+            };
             /**
              * Status
              * @enum {string}
@@ -4312,6 +4320,16 @@ export interface components {
             stub?: unknown;
             /** Timeoutms */
             timeoutMs?: number | null;
+        };
+        /**
+         * PackageCheck
+         * @description One package app's check on an account: the objects it requires that the account's system does not have.
+         */
+        PackageCheck: {
+            /** Missing */
+            missing?: string[];
+            /** Title */
+            title: string;
         };
         /** PageOut */
         PageOut: {

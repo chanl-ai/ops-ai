@@ -108,6 +108,17 @@
         "additionalProperties": false,
         "description": "One account a step, an agent or a chat may name for an app's calls, with what tells it apart.",
         "properties": {
+          "appId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appid"
+          },
           "default": {
             "default": false,
             "title": "Default",
@@ -122,6 +133,13 @@
               "$ref": "#/components/schemas/IdentityEntry"
             },
             "title": "Identity",
+            "type": "array"
+          },
+          "missingObjects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missingobjects",
             "type": "array"
           },
           "name": {
@@ -3352,6 +3370,13 @@
               }
             ],
             "title": "Message"
+          },
+          "packages": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PackageCheck"
+            },
+            "title": "Packages",
+            "type": "object"
           },
           "status": {
             "enum": [
@@ -8585,6 +8610,28 @@
           }
         },
         "title": "OperationPatchIn",
+        "type": "object"
+      },
+      "PackageCheck": {
+        "additionalProperties": false,
+        "description": "One package app's check on an account: the objects it requires that the account's system does not have.",
+        "properties": {
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "PackageCheck",
         "type": "object"
       },
       "PageOut": {

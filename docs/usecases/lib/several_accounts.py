@@ -44,6 +44,8 @@ AUTH = {
 PLUGINS = Path(os.environ.get("OPS_PLUGINS_REPO") or REPO.parent / "ops-ai-plugins") / "plugins"
 SALESFORCE = PLUGINS / "salesforce/src/ops_plugin_salesforce"
 SF = "plugin:opsai.salesforce"
+LOAN_DESK = Path(__file__).parent / "plugins/loan_desk"
+LOANS = "plugin:demo.loan-desk"
 CLIENTS = {"opsai.salesforce": {"id": "ops-ai-acme", "secret": "acme-app"}}
 QUERY = "SELECT Id, CaseNumber, Status FROM Case WHERE CaseNumber = '00044818'"
 QUERY_PATH = "/query"
@@ -144,15 +146,16 @@ def code_of(r: httpx.Response) -> str:
 
 
 @contextmanager
-def rig(note: str, *, with_agents: bool = False) -> Generator[Rig]:
+def rig(note: str, *, with_agents: bool = False, with_package: bool = False) -> Generator[Rig]:
     """The services and people; Salesforce is not yet turned on. `with_agents` adds agents-service and an engine
-    worker on the same gateway, for runs of workflows and agents."""
+    worker on the same gateway, for runs of workflows and agents; `with_package` installs the loan package app that
+    runs on Salesforce's accounts (lib/plugins/loan_desk)."""
     with ExitStack() as stack:
         sf = stack.enter_context(salesforce())
         api, inner = stack.enter_context(platform())
         plugins = {
             "OPS_PLUGINS": "true",
-            "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)]),
+            "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE), *([str(LOAN_DESK)] if with_package else [])]),
             "OPS_PLUGIN_CLIENTS": json.dumps(CLIENTS),
         }
         gw = stack.enter_context(

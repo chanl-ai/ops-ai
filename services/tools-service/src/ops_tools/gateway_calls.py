@@ -173,6 +173,10 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if module.get("sandbox_required"):
         # A test run named a live account and the app has no test account to use in its place.
         return 409, "SANDBOX_REQUIRED", str(module["sandbox_required"]), {}
+    if module.get("package_missing"):
+        # A package app on an account whose last Test found the package's objects missing: refused before the call
+        # reaches the system, which would answer with an error naming an object nobody chose.
+        return 409, "PACKAGE_MISSING", str(module["package_missing"]), {}
     if not op["enabled"]:
         why = op.get("hidden_reason") or f"{op['name']} is hidden in {module['display_name']}"
         return 403, "operation_hidden", str(why), {}

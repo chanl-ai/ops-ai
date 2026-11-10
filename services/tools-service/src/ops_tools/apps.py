@@ -53,6 +53,7 @@ from .plugins.host import (
     PluginHost,
     account_identity,
     fixed_fields,
+    missing_objects,
     module_id_of,
     offered,
     own_and_registration,
@@ -452,6 +453,12 @@ class AccountChoice(Out):
     sandbox: bool = False
     # One of the caller's own accounts (only with `mine`), which only their own chats use.
     own: bool = False
+    # The app whose accounts these are, the key a step's or agent's `accounts` names it under: the app itself, or for
+    # a package app the app it runs on. Optional so older readers keep parsing.
+    app_id: str | None = None
+    # For a package app, the objects of the package this account's last Test found missing; a picker shows the
+    # account unavailable while any are, and the call is refused (PACKAGE_MISSING).
+    missing_objects: list[str] = Field(default_factory=list[str])
 
 
 class AppAccount(Out):
@@ -1759,9 +1766,15 @@ async def account_choices(
     by itself). `mine` adds the caller's own accounts, which their own chats may name. `name` keeps the one so named,
     compared as calls compare it (trimmed, case-folded)."""
     store = apps.connections.store
-    found = await store.accounts(who.tenant_id, who.team.id, app_id)
     pid = plugin_of({"app_id": app_id})
     plugin = apps.plugins.plugins.get(pid) if apps.plugins and pid else None
+    package: str | None = None
+    if plugin is not None and plugin.manifest.connection.runs_on:
+        # A package app has no accounts: it lists those of the app it runs on, each marked where it is missing.
+        package, pid = plugin.manifest.id, plugin.manifest.connection.runs_on
+        plugin = apps.plugins.plugins.get(pid) if apps.plugins else None
+        app_id = plugin_app(pid)
+    found = await store.accounts(who.tenant_id, who.team.id, app_id)
     if not found or (pid is not None and plugin is None):
         raise NotFound(f"App {app_id}")
     b = await apps.plugins.bindings.get(who.tenant_id, who.team.id, pid) if apps.plugins and pid else None
@@ -1790,6 +1803,8 @@ async def account_choices(
                 "default": aid == default,
                 "sandbox": bool(a.get("sandbox")),
                 "own": own,
+                "app_id": app_id,
+                "missing_objects": missing_objects(a, package) if package else [],
             }
         )
     return out

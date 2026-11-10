@@ -212,6 +212,13 @@ class SignedIn(Out):
     scopes: list[str]
 
 
+class PackageCheck(Out):
+    """One package app's check on an account: the objects it requires that the account's system does not have."""
+
+    title: str
+    missing: list[str] = Field(default_factory=list[str])
+
+
 class ConnectionHealth(Out):
     """The last Test connection: a read of the system's test address, signed in with `account`'s sign-in."""
 
@@ -223,6 +230,8 @@ class ConnectionHealth(Out):
     http_status: int | None = None
     code: str | None = None
     message: str | None = None
+    # Each package app that runs on the account's app, by plugin id, as the test found it; absent when none runs on it.
+    packages: dict[str, PackageCheck] = Field(default_factory=dict[str, PackageCheck])
 
 
 class SigningCertificate(Out):

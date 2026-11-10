@@ -1,0 +1,26 @@
+# A fictional package app for the use cases: loan objects a Salesforce org may have installed. It runs on the
+# Salesforce plugin's accounts (connection.runs_on), so each call signs in with the chosen org's account and reaches
+# that org's address; tools-service checks each org for the loan object at sign-in and on Test.
+schema: ops-ai/plugin@2
+id: demo.loan-desk
+title: Loan desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [none]
+  sign_in: [team]
+  runs_on: opsai.salesforce
+  requires: [LNDK__Loan__c]
+  requires_check: "/services/data/v{api_version}/sobjects/{name}/describe"
+egress: ["{instance_url}"]
+endpoint: "{instance_url}/services/data/v{api_version}"
+tools:
+  - name: get_loan
+    title: Read a loan
+    description: One loan record by its Salesforce id
+    access: read
+    input: { id: { type: string, pattern: "^[A-Za-z0-9]{15,18}$", description: "The loan's record id" } }
+    request: { method: GET, path: "/sobjects/LNDK__Loan__c/{id}" }
+display:
+  category: Lending
+  description: Loan records kept in a Salesforce org by a lending package
