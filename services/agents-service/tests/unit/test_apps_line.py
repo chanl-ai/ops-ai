@@ -146,3 +146,15 @@ def test_an_app_this_chat_left_out_reads_as_left_out_not_as_on() -> None:
     assert "Salesforce: left out of this chat" in text and "GitHub: on" in text, text
     # One of an app's tools switched off in the settings panel leaves the app in the chat.
     assert "left out" not in (render(left_out(cards, held, module_of, {"salesforce_query"})) or "")
+
+
+def test_an_app_with_a_chosen_account_names_it_and_where_it_points_and_an_app_off_does_not() -> None:
+    """Failure modes: the model is not told which org a chat's calls run in, so it says the wrong one; or it is told
+    an account for an app that is not on, which reads as if that app could be used."""
+    eu_host = "kestrel-eu.my.salesforce.test"
+    eu = {**card("Salesforce", "connected"), "usesAccount": "EU org", "usesAccountShown": eu_host}
+    off = {**card("Google Calendar", "off"), "usesAccount": "Team calendar"}
+    text = render([eu, off])
+    assert text is not None
+    assert "Salesforce: on · you are signed in · uses EU org (kestrel-eu.my.salesforce.test)" in text
+    assert "Team calendar" not in text, text

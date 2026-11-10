@@ -312,13 +312,10 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |
 | uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current |
 | uc-695 | agents-service | A workflow step that names an account runs in that account | api | current |
-| uc-696 | agents-service | An agent's account is used, and a step's account wins over the agent's | api | draft |
-| uc-697 | agents-service | A chat starts on the person's default account and runs in the one they pick | ui | draft |
 | uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current |
 | uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current |
 | uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current |
 | uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current |
 | uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current |
 | uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current |
-| uc-704 | agents-service | The model is told which account each app uses and cannot switch it | api | draft |
 | uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current |
