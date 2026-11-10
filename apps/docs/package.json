@@ -14,7 +14,7 @@
   "dependencies": {
     "beautiful-mermaid": "^1.1.3",
     "fumadocs-core": "^16.15.15",
-    "fumadocs-mdx": "^14.3.2",
+    "fumadocs-mdx": "^15.4.7",
     "fumadocs-openapi": "^12.0.4",
     "fumadocs-ui": "^16.15.15",
     "github-slugger": "^2.0.0",
