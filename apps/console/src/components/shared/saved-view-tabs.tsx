@@ -75,7 +75,7 @@ export function SavedViewTabs({
         ref={strip}
         role="tablist"
         aria-label={ariaLabel}
-        className="inline-flex h-9 min-w-0 max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-[3px] text-muted-foreground [scrollbar-width:thin]"
+        className="inline-flex h-9 min-w-0 max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-[3px] text-muted-foreground"
       >
         {presets.map((p) => {
           const active = activePresetId === p.id;
