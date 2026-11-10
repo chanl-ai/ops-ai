@@ -72,7 +72,7 @@ DEFAULT_RETRIEVAL: dict[str, Any] = {
     "reranker": "hosted",
     "chunkLimit": 8,
     "threshold": 0.5,
-    "meaningThreshold": 0.3,
+    "meaningThreshold": 0.38,
     "asOf": "",
     "rewrite": "off",
     "expandCount": 3,
@@ -94,9 +94,9 @@ DEFAULT_RETRIEVAL: dict[str, Any] = {
     "structuredTables": False,
 }
 PRESETS: dict[str, dict[str, Any]] = {
-    "balanced": {"chunkLimit": 8, "threshold": 0.5, "meaningThreshold": 0.3, "answerShape": "answer_with_citations"},
-    "precise": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.4, "answerShape": "answer_with_citations"},
-    "raw": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.25, "answerShape": "chunks"},
+    "balanced": {"chunkLimit": 8, "threshold": 0.5, "meaningThreshold": 0.38, "answerShape": "answer_with_citations"},
+    "precise": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.45, "answerShape": "answer_with_citations"},
+    "raw": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.3, "answerShape": "chunks"},
 }
 SOURCE_TYPES_IN_PHASE = ("file", "text", "push", "tool")
 # Kinds whose items are written through the API (POST /v1/sources/{id}/items) and kept as files like uploads: typed
