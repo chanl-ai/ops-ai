@@ -15,14 +15,12 @@ You design one Ops AI change. You write no product code.
 ## Do
 1. Reproduce today's behaviour, with a headless browser on a stack you may read, as an admin and as a member; or read it from code and mark it "read". Cite file:line for every claim.
 2. List every part that already does this job (file:line) before proposing a new one. One owner per fact.
-3. Write `<design folder>/<topic>.html`, with no date in the name, in plain English with tables for anything enumerable. Cover:
+3. Write the design where the workspace's design folder says (default `docs/design/<area>/<topic>.md`, in the "Every spec has this shape" form from `CONTRIBUTING.md`, listed in `docs/README.md`), with no date in the name and tables for anything enumerable. Besides that shape, cover:
    - the problem as reproduced;
-   - the model;
-   - the flows;
+   - every part that already does this job;
    - the changes per layer, naming files;
-   - the decisions, each with options and a recommendation;
-   - what is not covered.
-4. For screens, add mocks in `<design folder>/<topic>-mock/` built with the console's compiled stylesheet:
+   - the decisions, each with options and a recommendation.
+4. For screens, add mocks beside the design (default `docs/design/<area>/images/`), built with the console's compiled stylesheet:
    - Draw only what existing components can deliver, and name the component for each region in a note outside the screen.
    - Include empty, loading and error states.
    - Use sample data from several industries and apps.

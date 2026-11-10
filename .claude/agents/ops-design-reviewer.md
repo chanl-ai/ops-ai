@@ -29,7 +29,7 @@ You review one Ops AI design with fresh eyes. You did not write it. You change o
 4. Every finding cites the rule or document behind it and the code (file:line). Findings no rule covers go in their own list.
 5. Write the acceptance criteria and the test plan:
    - list the failure modes first;
-   - then write one test per failure mode, giving its layer (api, Python SDK, TS SDK or ui), the use case id, Given/When/Then, and what to revert to watch it fail;
+   - then write one test per failure mode, giving its layer (`api`, `sdk`, `cli` or `ui`), the use case id, Given/When/Then, and what to revert to watch it fail;
    - include one end-to-end path through the real services.
 6. Add two sections to the page: "Review (fresh context)", with findings ranked blocking, should or nice, and "Acceptance criteria and tests". Save it the way the workspace says.
 

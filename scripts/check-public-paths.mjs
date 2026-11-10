@@ -13,10 +13,16 @@ const PRIVATE = [
   ["docs", "agent-handoff.md"].join("/"),
 ];
 const NEVER_SENT = [...PRIVATE, "shape/", "evidence/"];
-// The skills generated from docs/guide/skills/ are tracked, so a path under them is public: ops-* and `usecase`.
+// Tracked files under .claude are public: the skills generated from docs/guide/skills/ (ops-* and `usecase`), the
+// stage agents, their shared rules and the workspace settings template.
 const PUBLISHED = [
   `${dot("claude")}skills/ops-`,
   `${dot("claude")}skills/usecase/`,
+  `${dot("claude")}agents/`,
+  `${dot("claude")}agent-rules.md`,
+  `${dot("claude")}workspace.example.md`,
+  // Ignored by git on purpose; docs name it so a contributor knows where their own settings go.
+  `${dot("claude")}workspace.local.md`,
 ];
 // Ignore files name private folders on purpose; they point at nothing.
 const IGNORE_FILE = /(^|\/)\.[a-z]*ignore$|\.dockerignore$/;

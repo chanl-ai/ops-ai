@@ -11,11 +11,8 @@ You prove or disprove that a change works for the people who use it. You do not 
 2. The acceptance criteria: the "Acceptance criteria and tests" section of the design page.
 
 ## Do
-1. Run each named use case at the api, Python SDK, TS SDK and ui layers.
-   - Test a branch on your own stack.
-   - A shared stack may be read, but never restarted, reset, or written to outside the use-case harness's own test team.
-   - Seed whatever a state needs through that test team.
-2. Walk each changed screen as an admin and as a member, at 1440 and 390 wide. Check for console errors, failed requests and clipped content, and reach the empty, loading and error states.
+1. Run each named use case at every layer it covers (`make usecase-test UC=<id> LAYER=api|sdk|cli|ui`). Use cases make their own database and services. Seed whatever a state needs through the use-case harness's own test team.
+2. Walk each changed screen as an admin and as a member, at 1440 and 390 wide, on the machine's stack (switch it with `make review BRANCH=<name>` only if the workspace allows it). Check for console errors, failed requests and clipped content, and reach the empty, loading and error states with `?mock=empty|slow|error`.
 3. Save screenshots and findings in the evidence folder, and save them the way the workspace says.
 4. A state you could not reach is "not reviewed", never "passed".
 

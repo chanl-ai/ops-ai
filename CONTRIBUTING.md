@@ -21,6 +21,12 @@ prompts of the same names, with the rules in `.github/copilot-instructions.md`. 
 `docs/guide/skills/`; change the page, run `python3 scripts/agent_skills.py`, and `make skills-proof` runs every
 skill's commands in a fresh devcontainer.
 
+Claude Code also has five agents for the stages of a change, in `.claude/agents/`: `ops-designer` and
+`ops-design-reviewer` (design and acceptance criteria before code), `ops-builder`, `ops-qa` (use cases and screen walks)
+and `ops-reviewer`. They share the rules in `.claude/agent-rules.md`. Settings for one machine, such as where designs
+and evidence go, live in `.claude/workspace.local.md`, which git ignores; `.claude/workspace.example.md` lists them
+with their defaults.
+
 Decision records in `docs/architecture/decisions/` are binding on the specs. A spec that needs a
 decision changed says so under "Open questions" and proposes a new or superseding ADR; it does not
 re-decide the matter inline.
@@ -91,7 +97,7 @@ Conventional commits: `type(scope): subject`.
 | Type | `feat`, `fix`, `chore`, `docs`, `refactor`, `perf`, `test` |
 | Scope | The area changed, for example `console`, `specs`, `contracts` |
 | Subject | Imperative, lowercase after the colon, no trailing period, under 72 characters; describes the change |
-| Body | What was wrong before and why, then how the change was verified (the command run and its result). Six lines or fewer; no headings, tables or code blocks |
+| Body | What was wrong before and why, then how the change was verified (the command run and its result). At most three lines and 320 characters (`scripts/commit-message-check.mjs`); no headings, tables or code blocks |
 | Changelog | A feat or fix that changes `apps/` or `services/` names its What's new entry in a `Changelog: <topic>` trailer, for `changelog/<topic>.json` staged in the same commit |
 
 ## Everything here is public
@@ -103,7 +109,7 @@ and to coding agents alike.
 
 | Rule | Detail |
 |---|---|
-| Tone | Plain, neutral and factual. State what the code does and why. No blame, sarcasm, jokes at anyone's expense or frustration ("hack", "stupid", "garbage", "this is a mess"); describe the constraint instead |
+| Tone | Plain, neutral and factual. State what the code does and why. No blame, sarcasm, insults, profanity or jokes at anyone's expense; describe the constraint instead. CI refuses the words listed under `tone` in `config/leak-patterns.txt` |
 | Other parties | Say nothing unkind or unverified about customers, prospects, vendors, competitors or other projects. Name a third-party product only for a fact a reader needs, such as a supported version or a known bug with a link |
 | Customers and people | No names of real customers, prospects, partners or people, and nothing that identifies them: no account names, org addresses, email addresses, ticket numbers or quotes from their messages. Use roles ("an admin", "the account owner") |
 | Sample data | Fictional and generic, from several industries, never shaped after one real organisation. Domains use `example.com`, `example.org` or `.test`; phone numbers use reserved fictional ranges; no real-looking card, account or national id numbers. "Harbor & Pine Bank" is the console's fictional tenant |
@@ -114,7 +120,8 @@ and to coding agents alike.
 | Claims | Only claims the repository can back: a test, a command or a linked source. Mark anything unconfirmed as **unverified**. No promises about dates or customers |
 
 `scripts/leak_scan.py` (run in CI by `.github/workflows/leak-scan.yml`) fails a change that adds home-directory paths,
-tracker ids or tracker trailers. The rest of this table is checked in review.
+tracker ids or trailers, session links or the tone words in `config/leak-patterns.txt`. The rest of this table is
+checked in review.
 
 ## Doc standards
 
@@ -171,7 +178,7 @@ rules, a `CLAUDE.md`. `node scripts/check-docs.mjs` enforces this.
 | `docs/deploy/` | Runbooks for the VM, Compose and Kubernetes targets |
 | `docs/plan/` | Plans, named for their topic |
 | `docs/artifacts/` | Published HTML design artifacts |
-| `docs/usecases/` | Use case registry, one doc per use case under `<service>/`, and their scripts under `<service>/scripts/` |
+| `docs/usecases/` | Use case registry, one doc per use case under `<service>/`, their scripts under `<service>/scripts/` and their screenshots under `<service>/media/` |
 
 Every doc under `docs/` is listed in `docs/README.md`.
 
