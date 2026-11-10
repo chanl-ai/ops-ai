@@ -16,8 +16,8 @@
 
 ARG IMAGE_REGISTRY=
 FROM ${IMAGE_REGISTRY}node:22-bookworm-slim AS node-image
-FROM ${IMAGE_REGISTRY}caddy:2.11.9 AS caddy-image
-FROM ${IMAGE_REGISTRY}openpolicyagent/opa:1.21.4-static AS opa-image
+FROM ${IMAGE_REGISTRY}caddy:2.11.9@sha256:0c2243efcf437ab7f7a978f1027fcf0d4f9be8a75df27b1b3fbc5dbe0ffa8cf0 AS caddy-image
+FROM ${IMAGE_REGISTRY}openpolicyagent/opa:1.21.4-static@sha256:47f93480b09e24c220ae75f1e9133585ba6d698059951668d35e6a4fc32ebc82 AS opa-image
 FROM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-image
 
 # The console's JavaScript is built on the build machine's own platform: `next build` under emulation (an arm64 laptop
