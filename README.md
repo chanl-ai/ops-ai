@@ -179,7 +179,9 @@ The rest of what that dispute touched, and what a review asks about next:
   answers for test, and a review before it is published; approvals are off until a team turns them on.
 - **Guardrails and skills.** Pinned to an agent's version and checked before and after each answer; a check fails
   closed.
-- **Knowledge.** Knowledge bases built from uploads or synced sources, served to the agents granted each base.
+- **Knowledge.** Knowledge bases built from uploads, typed text, items your systems push, websites, SharePoint and
+  Confluence, searched by meaning and by keyword with an optional rerank and question rewrite, and served to the agents
+  granted each base. The SharePoint and Confluence plugins are tested against fakes of those systems, not a real tenant.
 - **Files and document types.** Every upload and attachment with its purpose, sensitivity, scan, versions and legal
   hold. Each file is read once per team, scans with OCR, and that one reading feeds extraction, knowledge bases, chat
   attachments and an agent's `read_file`; another team holding the same file reads it itself. Reads keep quotes and
@@ -205,7 +207,6 @@ together.
 | Ready-made workflows | Governed flows to start from: card disputes, fraud alerts, loan packets, KYC refresh, claims intake, complaints |
 | Templates and agent cards | Teams publish agents and workflows to a catalog, and other teams install a copy of their own |
 | SQL Server | The store packages are being extended from PostgreSQL to SQL Server ([design](docs/design/data/sql-server.md)) |
-| Semantic knowledge search | Retrieval by meaning next to today's PostgreSQL full-text search ([today](services/kb-service/src/ops_kb/retrieval.py)) |
 | SDK and more channels | A generated TypeScript and Python SDK; Slack and Teams ([today](apps/console/src/lib/types/channels.ts)) |
 
 Limits worth knowing today: a mailbox is proven on a local IMAP server and a test provider, and a Microsoft 365 or

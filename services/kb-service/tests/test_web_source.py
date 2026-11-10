@@ -227,10 +227,12 @@ async def test_a_line_on_most_pages_of_the_site_is_dropped_and_pages_rebuilt_wit
     assert await search(kb, base["id"], "loan step 2 borrowers")
 
 
-async def test_source_kinds_list_files_then_each_apps_knowledge_source(kb: httpx.AsyncClient) -> None:
+async def test_source_kinds_list_the_built_in_kinds_then_each_apps_knowledge_source(kb: httpx.AsyncClient) -> None:
     kinds = data(await kb.get("/v1/knowledge/source-kinds"))
-    assert [(k["type"], k["title"]) for k in kinds] == [("file", "Files"), ("tool", "Website")]
-    web_kind = kinds[1]
+    assert [(k["type"], k["title"]) for k in kinds] == [
+        ("file", "Files"), ("text", "Typed text"), ("push", "Pushed by API"), ("tool", "Website"),
+    ]  # fmt: skip
+    web_kind = kinds[3]
     assert (web_kind["site"], web_kind["needsConnection"], web_kind["connected"], web_kind["previews"]) == (
         True, False, True, True,
     )  # fmt: skip

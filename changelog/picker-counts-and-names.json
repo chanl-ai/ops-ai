@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Clearer counts in Add source pickers",
+  "description": "Add source's site, library and space pickers say how many you picked and how many are listed, spell libraries correctly, and name a pick the current search hides.",
+  "tag": "fix"
+}
