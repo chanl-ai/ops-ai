@@ -1426,6 +1426,8 @@ export interface components {
              * @default false
              */
             own: boolean;
+            /** Pointsat */
+            pointsAt?: string | null;
             /**
              * Sandbox
              * @default false

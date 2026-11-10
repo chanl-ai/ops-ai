@@ -59,6 +59,7 @@ from .plugins.host import (
     own_and_registration,
     per_account,
     plugin_id_of,
+    points_at,
     same_place,
     shown_value,
     sign_in_values,
@@ -459,6 +460,8 @@ class AccountChoice(Out):
     # For a package app, the objects of the package this account's last Test found missing; a picker shows the
     # account unavailable while any are, and the call is refused (PACKAGE_MISSING).
     missing_objects: list[str] = Field(default_factory=list[str])
+    # Where it points, who signed in left out (plugins/host.py points_at); null when it names no place.
+    points_at: str | None = None
 
 
 class AppAccount(Out):
@@ -1936,7 +1939,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
         )
         place = same_place(row["identity"])
         row["samePlaceAs"] = places.get(place) if place else None
-        row["pointsAt"] = place[0] if place else None
+        row["pointsAt"] = points_at(row["identity"])
         if place:
             places.setdefault(place, str(row["name"]))
     # Each person's own sign-in on a team account is a row of its own, under that account's auth config. A person who
@@ -2223,7 +2226,8 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         only, which a workflow step or an agent names; with `mine`, also the caller's own, which their chats name;
         with `name`, the one so named (an empty list when none is), which the publish check reads."""
         rows = await account_choices(apps, who, app_id, usable=usable, name=name, mine=mine)
-        return ok([AccountChoice(**r).model_dump(by_alias=True) for r in rows])
+        out = [AccountChoice(**r, pointsAt=points_at(r.get("identity") or [])) for r in rows]
+        return ok([c.model_dump(by_alias=True) for c in out])
 
     @r.post("/v1/apps/{app_id}/accounts", response_model=Envelope[AccountDetail], status_code=201)
     async def add_account(  # pyright: ignore[reportUnusedFunction]

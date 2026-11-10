@@ -151,6 +151,17 @@
             "title": "Own",
             "type": "boolean"
           },
+          "pointsAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pointsat"
+          },
           "sandbox": {
             "default": false,
             "title": "Sandbox",

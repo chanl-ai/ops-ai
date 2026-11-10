@@ -179,6 +179,13 @@ def same_place(identity: Sequence[Mapping[str, str]]) -> tuple[str, ...]:
     return tuple(e["shown"] for e in identity if e["label"] != SIGNED_IN)
 
 
+def points_at(identity: Sequence[Mapping[str, str]]) -> str | None:
+    """Where an account points, as shown, with who signed in left out; None when it names no place. Text a model reads
+    uses this, never the identity, so a person's email stays out of it."""
+    place = same_place(identity)
+    return place[0] if place else None
+
+
 def offered(setting: Setting, value: object) -> bool:
     """Whether a team's value is one the setting offers: one of its choices, or a host typed for its `other`. A setting
     that declares neither takes any value."""

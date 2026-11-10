@@ -1234,6 +1234,7 @@ class AccountChoice(TypedDict, closed=True):
     missingObjects: NotRequired[list[str]]
     name: str
     own: NotRequired[bool]
+    pointsAt: NotRequired[str | None]
     sandbox: NotRequired[bool]
 
 
