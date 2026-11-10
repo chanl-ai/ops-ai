@@ -39,7 +39,7 @@ Status: current. Id: `uc-678`. Service: `kb-service` with tools-service. Layers:
 | 9 | TypeScript SDK: `ops.raw.kb.sources_source_scopes` for the site's libraries and for Confluence spaces | Both libraries under the site; ENG |
 | 10 | Console, as James: New knowledge base, Add source, SharePoint and OneDrive; type "human" in the sites picker | Human Resources listed (screenshot `sharepoint-picker-search.png`) |
 | 11 | Select all | The site picked; the libraries picker lists Policies Library and Handbook; Select all there picks both (`sharepoint-picker-select-all.png`) |
-| 12 | Create and sync | The source's run indexes the libraries' files |
+| 12 | Create and sync | The source is made on the site and both libraries, and its first sync indexes the text files; the ui run keeps the fake's PDF and Word placeholders, which fail to parse (the api run swaps in real documents) |
 | 13 | A sites search nothing matches, and one Graph refuses | "No site called ..." (`sharepoint-picker-empty.png`); "Couldn't list the sites: ..." (`sharepoint-picker-error.png`) |
 | 14 | Add source, Confluence; type "eng" in the spaces picker | Engineering alone listed (`confluence-spaces-picker.png`) |
 
