@@ -15,15 +15,15 @@
 # COREPACK_NPM_REGISTRY, UV_DEFAULT_INDEX, UV_PYTHON_INSTALL_MIRROR, OPS_RUNNER_WASM_URL, APT_MIRROR and APK_MIRROR the rest.
 
 ARG IMAGE_REGISTRY=
-FROM ${IMAGE_REGISTRY}node:22-bookworm-slim AS node-image
+FROM ${IMAGE_REGISTRY}node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS node-image
 FROM ${IMAGE_REGISTRY}caddy:2.11.9@sha256:0c2243efcf437ab7f7a978f1027fcf0d4f9be8a75df27b1b3fbc5dbe0ffa8cf0 AS caddy-image
 FROM ${IMAGE_REGISTRY}openpolicyagent/opa:1.21.4-static@sha256:47f93480b09e24c220ae75f1e9133585ba6d698059951668d35e6a4fc32ebc82 AS opa-image
-FROM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-image
+FROM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4@sha256:40775a79214294fb51d097c9117592f193bcfdfc634f4daa0e169ee965b10ef0 AS uv-image
 
 # The console's JavaScript is built on the build machine's own platform: `next build` under emulation (an arm64 laptop
 # building for amd64 Fly machines) dies with a segfault. Its output is platform-free apart from sharp, which only
 # next/image's optimizer loads; the console does not use it, so the console stage drops it.
-FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}node:22-bookworm-slim AS console-deps
+FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS console-deps
 ARG NPM_CONFIG_REGISTRY=
 ARG COREPACK_NPM_REGISTRY=
 WORKDIR /app
@@ -100,7 +100,7 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3016/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["node", "--experimental-strip-types", "--no-warnings", "/app/deploy/images/console-start.mjs"]
 
-FROM ${IMAGE_REGISTRY}python:3.12-slim-bookworm AS python-base
+FROM ${IMAGE_REGISTRY}python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS python-base
 ARG APT_MIRROR=
 ARG UV_DEFAULT_INDEX=
 ARG OPS_RUNNER_WASM_URL=
@@ -227,7 +227,7 @@ COPY deploy deploy
 # machine's own platform: the SQL is the same for every platform, and migrating under emulation only costs time.
 # uv for the build machine's platform: a plain COPY --from an image takes the target's, which runs under emulation and
 # fetches that platform's Python.
-FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-build
+FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4@sha256:40775a79214294fb51d097c9117592f193bcfdfc634f4daa0e169ee965b10ef0 AS uv-build
 
 # PostgreSQL 17 with pgvector: the schema creates the vector extension (kb_0021), which the plain postgres image lacks.
 FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}pgvector/pgvector:pg17-bookworm@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8 AS db-scripts-build

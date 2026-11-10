@@ -1,7 +1,7 @@
 # SQL Server 2025 Developer edition with Full-Text Search, which the stock image leaves out: memory search uses
 # CONTAINSTABLE where the server has it and counts words where it does not, and the test machine proves the first.
 # Installing mssql-server-fts brings the mssql-server build it was released with.
-FROM mcr.microsoft.com/mssql/server:2025-latest
+FROM mcr.microsoft.com/mssql/server:2025-latest@sha256:21cba63f9e5f93ae72d211e50bceca8f047a6233da18ed5ecb497152f97eca7b
 USER root
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates \
