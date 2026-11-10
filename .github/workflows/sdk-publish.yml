@@ -111,7 +111,7 @@ jobs:
         run: |
           # pnpm pack, as pnpm publish does: it rewrites workspace: ranges that npm pack would leave in.
           mkdir -p dist && (cd sdk/typescript && pnpm pack --pack-destination ../../dist)
-          mkdir -p /tmp/npm-smoke && npm install --prefix /tmp/npm-smoke --omit dev --no-audit --no-fund dist/*.tgz
+          mkdir -p /tmp/npm-smoke && npm install --prefix /tmp/npm-smoke --omit dev --no-audit --no-fund "$PWD"/dist/*.tgz
       - uses: ./.github/actions/trivy
       - name: SBOM of the installed package
         env:
