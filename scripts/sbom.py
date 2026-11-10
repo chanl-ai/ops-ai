@@ -73,6 +73,7 @@ NOTES: dict[str, tuple[str, str]] = {
     "griffelib": ("No", "Reads tool docstrings for Pydantic AI tool descriptions"),
     "fastapi": ("No", "HTTP API framework (spec 17 section 3)"),
     "starlette": ("No", "ASGI toolkit under FastAPI"),
+    "structlog": ("No", "Structured JSON log lines for every service (ops_service_kit.logging)"),
     "uvicorn": ("No outbound calls; serves the API", "ASGI server"),
     "sse-starlette": ("No", "Server-sent events for the chat reply stream"),
     "sqlalchemy": (

@@ -17,11 +17,12 @@ password `northfield-demo`), the public app and the internal one. No model is ca
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya invites a viewer; read the audit | One `member.invite` entry with Priya as actor, a request id and the member as target |
+| 1 | Priya, acting in team_ops, invites a viewer with her own X-Request-Id; read the audit | One `member.invite` entry with Priya as actor, a request id and the member as target |
 | 2 | The invitee accepts | A `member.accept` entry |
 | 3 | Priya changes the member's role | A `member.role` entry |
 | 4 | Priya removes the member | A `member.remove` entry |
 | 5 | Maya, made a viewer, reads `/v1/audit` | 403 |
+| 6 | Read platform-service's log of the run | Every line is one JSON object; the invite's lines carry its X-Request-Id, tenant `local` and team `team_ops` ([logging](../../packages/ops_service_kit/logging.md)) |
 
 ## UI layer
 
@@ -41,6 +42,7 @@ password `northfield-demo`), the public app and the internal one. No model is ca
 ## Non-vacuous check
 
 `a viewer reading the audit is 403`: with the admin check on the audit route removed, Maya reads it (200) and the
-check fails.
+check fails. Step 6 failed while uvicorn printed its own text lines (every line parses) and while the request line
+could not see the caller's context (tenant and team null).
 
 UI layer: with the console's platform adapter not applied, steps 1 to 3 fail.
