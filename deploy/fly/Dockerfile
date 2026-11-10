@@ -229,7 +229,8 @@ COPY deploy deploy
 # fetches that platform's Python.
 FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-build
 
-FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}postgres:17-bookworm AS db-scripts-build
+# PostgreSQL 17 with pgvector: the schema creates the vector extension (kb_0021), which the plain postgres image lacks.
+FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}pgvector/pgvector:pg17-bookworm AS db-scripts-build
 ARG UV_DEFAULT_INDEX=
 ARG UV_PYTHON_INSTALL_MIRROR=
 COPY --from=uv-build /uv /usr/local/bin/uv
@@ -239,7 +240,10 @@ COPY pyproject.toml uv.lock ./
 COPY packages packages
 COPY services services
 COPY sdk/python sdk/python
-RUN --mount=type=cache,target=/root/.cache/uv ${UV_PYTHON_INSTALL_MIRROR:+env UV_PYTHON_INSTALL_MIRROR=$UV_PYTHON_INSTALL_MIRROR} uv python install 3.12 && ${UV_DEFAULT_INDEX:+env UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX} uv sync --frozen --no-dev --python 3.12 \
+# An ARG is in the RUN environment even when empty, and uv reads an empty UV_PYTHON_INSTALL_MIRROR as a relative
+# download URL ("relative URL without a base"), so it is removed unless a mirror was given.
+RUN --mount=type=cache,target=/root/.cache/uv { [ -n "$UV_PYTHON_INSTALL_MIRROR" ] || unset UV_PYTHON_INSTALL_MIRROR; } \
+ && uv python install 3.12 && ${UV_DEFAULT_INDEX:+env UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX} uv sync --frozen --no-dev --python 3.12 \
  && chmod -R a+rX /opt/uv-python
 COPY deploy deploy
 RUN mkdir -p /out/postgres && chown -R postgres /out
