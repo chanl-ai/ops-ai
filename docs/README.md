@@ -519,6 +519,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/every-account-says-what-it-points-at.md` | uc-693: Every account row says what it points at, also for an app that declares nothing and a custom app |
 | `usecases/tools-service/a-call-never-uses-someone-elses-account.md` | uc-694: A call naming another person's own account or another team's account is refused |
 | `usecases/tools-service/a-deleted-account-name-is-refused.md` | uc-698: A call naming an account that no longer exists is refused, never sent to the default |
+| `usecases/tools-service/changing-who-signs-in-to-each-person.md` | uc-709: Changing who signs in to each person makes calls act as the person, and schedules keep the shared login |
 | `usecases/tools-service/two-accounts-never-share-a-name.md` | uc-699: Two accounts of one app in one team never share a name |
 | `usecases/tools-service/a-test-run-never-uses-a-named-live-account.md` | uc-700: A test run that names a live account uses the test account or is refused |
 | `usecases/agents-service/a-step-runs-in-the-account-it-names.md` | uc-695: A workflow step that names an account runs in that account |
