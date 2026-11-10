@@ -54,7 +54,8 @@ try {
   };
 
   async function signedIn(browser, consoleUrl, email, width) {
-    const context = await browser.newContext({ viewport: { width, height: 900 }, ignoreHTTPSErrors: true });
+    // Reduced motion, so a dialog or list is drawn whole when a screenshot is taken.
+    const context = await browser.newContext({ viewport: { width, height: 900 }, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
     const page = await context.newPage();
     page.errors = [];
     page.on('pageerror', (e) => page.errors.push(e.message));
@@ -80,7 +81,12 @@ try {
     await page.getByTestId('app-tab-accounts').click({ timeout: 90_000 });
     await page.getByTestId('account-Retail org').waitFor({ timeout: 60_000 });
   };
-  const shot = (page, name) => page.screenshot({ path: join(SHOTS, `${name}.png`), fullPage: true });
+  // Every animation finished first, so a dialog opening or a list sliding in is never caught half drawn.
+  const settled = (page) => page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => null))));
+  const shot = async (page, name) => {
+    await settled(page);
+    await page.screenshot({ path: join(SHOTS, `${name}.png`), fullPage: true });
+  };
 
   await withUiStack(
     async (consoleUrl) => {
@@ -104,20 +110,25 @@ try {
             const eu = ((await page.getByTestId('account-org-EU org').innerText({ timeout: 10_000 })) ?? '').trim();
             const retail = ((await page.getByTestId('account-org-Retail org').innerText({ timeout: 10_000 })) ?? '').trim();
             let stacked = true;
+            let reach = true;
             if (width === 390) {
+              // The row's menu, its state and its Sign in are on screen without scrolling the table sideways.
+              const boxes = await Promise.all(['account-menu-EU org', 'account-state-EU org', 'account-sign-in-EU org'].map((t) => page.getByTestId(t).boundingBox()));
+              reach = boxes.every((b) => b && b.x >= 0 && b.x + b.width <= width);
               // The button has its own row under the search, so the search keeps its width.
               const search = await page.getByPlaceholder('Search accounts…').boundingBox();
               const button = await add.boundingBox();
               stacked = Boolean(search && button && button.y >= search.y + search.height - 1 && search.width > 200);
             }
             await shot(page, `accounts-admin-${width}`);
-            check(`1 at ${width} an admin's Accounts tab has Add account in its toolbar, each row says where it points, and the header adds nothing`, enabled && header === 0 && eu.includes('kestrel-eu.my.salesforce.test') && retail.includes('kestrel.my.salesforce.test') && stacked, { enabled, header, eu, retail, stacked });
+            check(`1 at ${width} an admin's Accounts tab has Add account in its toolbar, each row says where it points, and the header adds nothing`, enabled && header === 0 && eu.includes('kestrel-eu.my.salesforce.test') && retail.includes('kestrel.my.salesforce.test') && stacked && reach, { enabled, header, eu, retail, stacked, reach });
           }, page);
           if (width === 1440) {
             await step('2 Add account opens the Connect window asking the account name first', async () => {
               await page.getByTestId('app-add-account').click();
               const name = page.getByTestId('connect-window-name');
-              await name.waitFor({ timeout: 30_000 });
+              await name.waitFor({ state: 'visible', timeout: 30_000 });
+              await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 30_000 });
               await shot(page, `add-account-admin-${width}`);
               check('2 Add account opens the Connect window asking the account name first', await name.isVisible(), 'name field visible');
               await page.keyboard.press('Escape');
@@ -136,13 +147,18 @@ try {
               check('7 Settings opens apart from Connect with where the account points, who signs in and how many of the team signed in', points.includes('kestrel.my.salesforce.test') && /^0 of \d+ people signed in$/.test(count) && connect === 0, { points, count, connect });
             }, page);
             await step('8 changing who signs in warns with the count of what names the account before saving', async () => {
+              // An agent naming Retail org, so the warning counts it.
+              const desk = (await (await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: priya, body: JSON.stringify({ name: 'Claims desk', role: 'Answers about claims' }) })).json())?.data;
+              await fetch(`${agentsUrl}/v1/agents/${desk?.id}`, { method: 'PATCH', headers: priya, body: JSON.stringify({ accounts: { [APP]: 'Retail org' } }) });
+              await page.keyboard.press('Escape');
+              await settings('Retail org');
               await page.getByText('Shared team login').click();
               const warn = page.getByTestId('account-who-uses');
               await warn.waitFor({ timeout: 30_000 });
               await page.waitForFunction(() => !document.querySelector('[data-testid="account-who-uses"]')?.textContent?.startsWith('Checking'), null, { timeout: 30_000 });
               const text = (await warn.innerText()).trim();
               await shot(page, `account-settings-who-warning-${width}`);
-              check('8 changing who signs in warns with the count of what names the account before saving', text === 'No workflow or agent names it.' || /published and \d+ draft versions name Retail org/.test(text), text);
+              check('8 changing who signs in warns with the count of what names the account before saving', /^0 published and 1 draft versions name Retail org\. Each one’s calls change to the login you pick here once you save\.$/.test(text) && (await warn.isVisible()), text);
               await page.keyboard.press('Escape');
             }, page);
             await step('9 while the count loads and when it cannot be read the dialog says so instead of a number', async () => {
@@ -211,7 +227,10 @@ try {
               await trigger.click({ timeout: 30_000 });
               await page.getByRole('option', { name: 'Salesforce' }).click();
               await page.getByTestId('agent-accounts-account').click();
-              const eu = ((await page.getByTestId('agent-accounts-account-EU org').innerText({ timeout: 30_000 })) ?? '').replace(/\s+/g, ' ');
+              const option = page.getByTestId('agent-accounts-account-EU org');
+              await option.waitFor({ state: 'visible', timeout: 30_000 });
+              const eu = ((await option.innerText({ timeout: 30_000 })) ?? '').replace(/\s+/g, ' ');
+              await settled(page);
               await page.screenshot({ path: join(SHOTS, `agent-account-picker-${width}.png`) });
               await page.keyboard.press('Escape');
               check('12 an agent’s Account picker says when the team’s apps cannot be read, and otherwise lists each org with where it points', made.status === 201 && refused && eu.includes('kestrel-eu.my.salesforce.test'), { made: made.status, refused, eu });

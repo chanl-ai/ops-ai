@@ -118,7 +118,7 @@ export function AppPageView({ appId }: { appId: string }) {
       case 'connect':
         return connectButton('Connect');
       case 'reconnect':
-        return connectButton('Reconnect');
+        return connectButton('Sign in');
       case 'ask_admin':
         return <AskAnAdmin testId="app-admin-connects" />;
       default:

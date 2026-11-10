@@ -8,14 +8,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { FieldRow } from '@/components/shared/field-row';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import type { AuthConfig, ConfigAccount } from '@/components/connections/app-auth-configs';
 import { type SignIn, WhoSignsIn } from '@/components/connections/who-signs-in';
-import { type AppPage, useChangeAccount, useMakeTeamDefault } from '@/hooks/systems-queries';
+import { type AppPage, useChangeAccount } from '@/hooks/systems-queries';
 import { useAccountUses } from '@/hooks/plugin-update-queries';
 import { useTeam } from '@/hooks/use-team';
 
@@ -23,8 +21,8 @@ import { useTeam } from '@/hooks/use-team';
 const shownAs = (a: ConfigAccount) => a.account ?? a.name;
 
 /**
- * One team account's settings, apart from Connect (which signs it in): its name, what it points at and who it signs in
- * as, who signs in to it, its auth config and whether it is the team's default. Each field shows only where the API
+ * One team account's settings, apart from Connect (which signs it in): its name, what it points at, who signs in to it
+ * and its auth config. The team's default is the star on the account's row. Each field shows only where the API
  * offers its action on the row. Renaming and changing who signs in rewrite no workflow or agent version, so both say
  * first how many name the account; changing the auth config signs the account in again.
  */
@@ -48,17 +46,15 @@ export function AccountSettingsDialog({
   const mayMove = can('move') && choices.length > 1;
   const { team } = useTeam();
   const change = useChangeAccount();
-  const teamDefault = useMakeTeamDefault();
   const [name, setName] = React.useState(a.name);
   const [who, setWho] = React.useState<SignIn>((a.signIn as SignIn | null | undefined) ?? 'team');
   const [config, setConfig] = React.useState(a.configId ?? '');
-  const [makeDefault, setMakeDefault] = React.useState(false);
   const next = name.trim();
   const renamed = mayRename && next !== a.name;
   const whoChanged = asksWho && who !== a.signIn;
   const moved = mayMove && config !== (a.configId ?? '');
-  const dirty = renamed || whoChanged || moved || makeDefault;
-  const busy = change.isPending || teamDefault.isPending;
+  const dirty = renamed || whoChanged || moved;
+  const busy = change.isPending;
 
   const save = async () => {
     const body: Parameters<typeof change.mutateAsync>[0]['body'] = { revision: a.revision };
@@ -68,8 +64,7 @@ export function AccountSettingsDialog({
     if (moved) body.credentialId = choices.find((c) => c.id === config)?.type === 'ops_ai' ? null : config;
     try {
       if (renamed || whoChanged || moved) await change.mutateAsync({ appId: app.card.id, accountId: a.id, body });
-      if (makeDefault) await teamDefault.mutateAsync({ appId: app.card.id, accountId: a.id });
-      toast.success(`${renamed ? next : a.name} is saved`, moved ? { description: 'It signs in again with Reconnect.' } : undefined);
+      toast.success(`${renamed ? next : a.name} is saved`, moved ? { description: 'Sign it in again from its row.' } : undefined);
       onClose();
     } catch (e) {
       toast.error('Couldn’t save the account', { description: e instanceof Error ? e.message : String(e) });
@@ -83,7 +78,7 @@ export function AccountSettingsDialog({
       onOpenChange={(o) => !o && onClose()}
       size="md"
       title={a.name}
-      description={`Settings for this ${app.card.name} account. Signing in again is Reconnect, in the row’s menu.`}
+      description={`Settings for this ${app.card.name} account. Signing in again is Sign in, on the row.`}
       data-testid="account-settings"
       onSubmit={() => dirty && !busy && next && void save()}
       footer={
@@ -110,10 +105,11 @@ export function AccountSettingsDialog({
         </FormField>
       )}
       {(renamed || whoChanged) && <NamedBy app={app.card.id} name={a.name} change={renamed ? 'rename' : 'who'} />}
-      <div className="flex flex-col">
-        <FieldRow label="Points at" value={points} testId="account-settings-points" />
-        <FieldRow label="Signs in as" value={shownAs(a) === a.name ? '' : shownAs(a)} emptyHint="Not signed in yet" testId="account-settings-signs-in-as" />
-      </div>
+      <FormField id="account-settings-points" label="Points at">
+        <p id="account-settings-points" className="text-sm text-muted-foreground" data-testid="account-settings-points">
+          {points || 'Nothing it names yet'}
+        </p>
+      </FormField>
       {asksWho && (
         <FormField id="account-settings-who" label="Who signs in">
           <WhoSignsIn
@@ -139,27 +135,6 @@ export function AccountSettingsDialog({
             </SelectContent>
           </Select>
         </FormField>
-      )}
-      {(a.default || can('make_team_default')) && (
-        <div className="flex items-center gap-3">
-          <label htmlFor="account-settings-default" className="min-w-0 flex-1 text-sm">
-            <span className="block font-medium">The team’s default</span>
-            <span className="block text-xs text-muted-foreground">
-              {a.default
-                ? `Calls that name no account use ${a.name}. Make another account the default to change it.`
-                : makeDefault
-                  ? `Calls that name no account use ${a.name} once saved.`
-                  : 'Calls that name no account use the team’s default.'}
-            </span>
-          </label>
-          <Switch
-            id="account-settings-default"
-            checked={a.default || makeDefault}
-            disabled={a.default || !can('make_team_default')}
-            onCheckedChange={setMakeDefault}
-            data-testid="account-settings-default"
-          />
-        </div>
       )}
     </DialogShell>
   );

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
  * stop mid-word or mid-sentence, so a row says all it holds. Numbers and money on one line, right-aligned. A kind cell that draws nothing shows a dash:
  * it is the drawn cell that is checked, not the row's value, so a column wording its own empty state ("Not read") keeps it.
  */
-export type ColumnKind = 'id' | 'date' | 'status' | 'name' | 'description' | 'number' | 'money';
+export type ColumnKind = 'id' | 'date' | 'status' | 'name' | 'description' | 'number' | 'money' | 'actions';
 
 export interface ColumnMeta {
   className?: string;
@@ -22,6 +22,8 @@ const KIND: Record<ColumnKind, string> = {
   description: 'min-w-48 max-w-96 whitespace-normal break-words',
   number: 'w-px whitespace-nowrap text-right tabular-nums',
   money: 'w-px whitespace-nowrap text-right tabular-nums',
+  // A row's menu stays at the right edge on a phone, so it is in reach while the columns before it scroll.
+  actions: 'w-px whitespace-nowrap max-sm:sticky max-sm:right-0 max-sm:z-[1] max-sm:bg-card max-sm:shadow-[-8px_0_8px_-8px_var(--color-border)]',
 };
 
 const DASH = "empty:after:text-muted-foreground empty:after:content-['—'] [&>:empty]:after:text-muted-foreground [&>:empty]:after:content-['—']";
@@ -41,7 +43,7 @@ const PHONE_NAME = 'max-sm:w-1/2 max-sm:min-w-40 max-sm:max-w-0 max-sm:whitespac
 export function kindClass(meta: ColumnMeta | undefined, pin: 'select' | 'name' | null, afterSelect: boolean): string {
   return cn(
     meta?.kind && KIND[meta.kind],
-    meta?.kind && DASH,
+    meta?.kind && meta.kind !== 'actions' && DASH,
     // The select box is 2.5rem wide on a phone, so the pinned name after it starts exactly at its edge (left-10).
     pin === 'select' && cn(PINNED, 'max-sm:left-0 max-sm:w-10 max-sm:min-w-10'),
     pin === 'name' && cn(PINNED, EDGE, afterSelect ? 'max-sm:left-10' : 'max-sm:left-0', meta?.kind !== 'name' && PHONE_NAME),

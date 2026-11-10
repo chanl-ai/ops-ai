@@ -680,10 +680,11 @@ moment make one account and the other is refused 409 `account_name_taken`.
 | A delete | `DELETE /v1/apps/{app}/accounts/{id}` | Refused 409 `account_in_use` while a workflow draft or published version, or an agent, names the account, with `published`, `drafts`, `workflows` and `agents` in the details; tools-service asks agents-service's `GET /v1/account-uses` (the same count as below), and refuses 503 when it cannot answer |
 | Before a rename | `GET /v1/workflows/definitions/account-uses?app=…&name=…` | How many drafts and published versions name the account. A rename rewrites none of them: a published version is refused at its next call until its next publish names the new name |
 
-Agents-service sends what was chosen and never picks or compares names itself: a step's choice over the agent's,
-and a chat's over its agent's (`api/engine_host.py` merged_accounts, `graphs/agent_wrapper.py` turn_accounts); a call
-run as the team account keeps only the step's. The model is told the account in use on its apps line ("Salesforce:
-on · uses EU org (kestrel-eu.my.salesforce.test)", `api/apps_line.py`) and has no tool input to change it. How a call's
+Agents-service sends what was chosen and never picks or compares names itself: a step's choice over a chat's over
+the agent's, decided in one place (`domain/accounts.py` chosen_accounts); a call run as the team account keeps only
+the step's. The model is told the account in use and where it points on its apps line ("Salesforce: on · uses EU org
+(kestrel-eu.my.salesforce.test)", `api/apps_line.py`), read from the row's `pointsAt` (the first identity entry that
+is not who signed in), so a person's email never reaches the prompt; it has no tool input to change the account. How a call's
 account is chosen, in tools-service only (`plugins/host.py` `PluginHost.for_call` and `_named`):
 
 | Case | Account used |
@@ -693,6 +694,10 @@ account is chosen, in tools-service only (`plugins/host.py` `PluginHost.for_call
 | A test run names a live account | The app's test account; with none, 409 `SANDBOX_REQUIRED` |
 | It names none and acts for a person with their own sign-ins | Their default; with two or more and none chosen, `ACCOUNT_CHOICE_NEEDED` |
 | Otherwise | The team's default |
+| The named account's team sign-in ended (expired, refused or revoked) | None: 200 with `AUTH_FAILED` in the output, its details naming the account (`connection`) and `connectedEvent`. A run waits on that event ("Sign in to EU org again to continue"), a chat draws the sign-in card, and an admin's new sign-in reports the event so the run goes on. No other account is tried |
+
+Changing an account's who signs in from `team` to `person_or_team` with `teamBackup` makes a call acting for a person
+sign in as that person, and a call acting for nobody (a schedule) keep the team's login (uc-709).
 
 Every account row (the app's Accounts list, Connectors › Mine, the account pickers) carries `identity`: what tells it
 apart, built once in `plugins/host.py` `account_identity`. A plugin's `connection.identity` names the settings to show;
@@ -702,7 +707,7 @@ name, a warning only. A member's Accounts tab lists the team's accounts and coun
 their own accounts are on Connectors › Mine. Each team row also carries `signIn` (whose login its calls use: `team`,
 `person` or `person_or_team`) and `peopleSignedIn` (how many people hold their own sign-in on that account). The row's
 Settings dialog (`components/connections/account-settings-dialog.tsx`, apart from Connect, which signs in) changes the
-name, who signs in, the auth config and the team default in one place; "Each person signs in" shows the count against
+name, who signs in and the auth config; the team default is the star on the row; "Each person signs in" shows the count against
 the team's members, and a rename or a change of who signs in first shows how many drafts and published versions name
 the account. A first turn-on through Ops AI's app keeps the sign-in address it asked as
 a default on Ops AI's auth config, so a second account may type its own; a team whose first turn-on kept it fixed keeps

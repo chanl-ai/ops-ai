@@ -61,7 +61,7 @@ function NextAction({ card, onConnect }: { card: SystemCard; onConnect: (s: Syst
   const again = action === 'reconnect' || (card.appState === 'needs_sign_in' && ENDED.has(String(card.state)));
   return (
     <Button size="sm" variant="outline" onClick={(e) => (e.stopPropagation(), onConnect(card, again ? 'reconnect' : 'connect'))} data-testid={`${again ? 'reconnect' : 'connect'}-${card.id}`}>
-      {again ? 'Reconnect' : 'Connect'}
+      {again ? 'Sign in' : 'Connect'}
     </Button>
   );
 }

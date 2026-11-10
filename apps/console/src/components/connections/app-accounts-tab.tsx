@@ -80,7 +80,8 @@ export function AccountsTab({
         id: 'signsInAs',
         accessorFn: (a) => `${shownAs(a)} ${a.name}`,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Signs in as" />,
-        meta: { kind: 'name' },
+        // Narrower on a phone so the state, its Sign in and the row's menu fit beside it without scrolling.
+        meta: { kind: 'name', className: 'max-sm:min-w-32' },
         cell: ({ row: { original: a } }) => (
           <span className="flex min-w-0 items-center gap-3" data-testid={`account-${a.name}`}>
             <Avatar className="size-7">
@@ -113,7 +114,7 @@ export function AccountsTab({
         ),
       },
       // Auth configs are shown only to whoever manages the team's apps; the API names none to anyone else.
-      ...(seesConfigs
+      ...(seesConfigs && config
         ? ([
             {
               id: 'config',
@@ -129,7 +130,8 @@ export function AccountsTab({
         id: 'who',
         accessorFn: (a) => (a.owner.kind === 'team' ? 'Team' : 'Personal'),
         header: ({ column }) => <DataTableColumnHeader column={column} title="Who can use it" />,
-        meta: { kind: 'status' },
+        // On a phone its filter stays in the toolbar and the column gives its room to the state and the menu.
+        meta: { kind: 'status', className: 'max-md:hidden' },
         cell: ({ row }) => <span className="whitespace-nowrap text-sm">{whoCan(row.original)}</span>,
         filterFn: facetFilterFn,
       },
@@ -137,7 +139,7 @@ export function AccountsTab({
         id: 'run',
         accessorFn: (a) => (a.sandbox ? 'Test' : 'Live'),
         header: ({ column }) => <DataTableColumnHeader column={column} title="Test or live" />,
-        meta: { kind: 'status' },
+        meta: { kind: 'status', className: 'max-md:hidden' },
         cell: ({ row }) => <span className="whitespace-nowrap text-sm">{row.original.sandbox ? 'Test' : 'Live'}</span>,
         filterFn: facetFilterFn,
       },
@@ -154,6 +156,7 @@ export function AccountsTab({
       {
         id: 'actions',
         enableHiding: false,
+        meta: { kind: 'actions' },
         cell: ({ row: { original: a } }) => (
           <StopRowClick>
             <AccountActions
@@ -166,7 +169,7 @@ export function AccountsTab({
         ),
       },
     ],
-    [seesConfigs],
+    [seesConfigs, config],
   );
   const facet = (id: 'config' | 'who' | 'run' | 'state', title: string, values: string[]) => ({
     column: id,
@@ -210,7 +213,7 @@ export function AccountsTab({
       toolbarExtra={add || undefined}
       initialColumnFilters={filtered}
       filters={[
-        ...(seesConfigs ? [facet('config', 'Auth config', rows.map((a) => a.configName ?? '—'))] : []),
+        ...(seesConfigs && config ? [facet('config', 'Auth config', rows.map((a) => a.configName ?? '—'))] : []),
         facet('who', 'Who can use it', rows.map((a) => (a.owner.kind === 'team' ? 'Team' : 'Personal'))),
         facet('run', 'Test or live', rows.map((a) => (a.sandbox ? 'Test' : 'Live'))),
         facet('state', 'State', rows.map((a) => STATE[a.state].label)),
@@ -261,16 +264,16 @@ function StateCell({
         <Badge variant="outline" className={STATE[a.state].className} data-testid={`account-state-${a.name}`} data-state={a.state}>
           {STATE[a.state].label}
         </Badge>
-        {can('sign_in') && (
-          <Button size="sm" variant="outline" onClick={() => onSignIn(as, a.id)} data-testid={`account-sign-in-${a.name}`}>
-            <ExternalLink />
+        {/* One sign-in control: a first sign-in and a sign-in again read the same word. */}
+        {(can('sign_in') || (can('reconnect') && (a.state !== 'connected' || failed))) && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onSignIn(as, a.id)}
+            data-testid={can('sign_in') ? `account-sign-in-${a.name}` : `account-reconnect-${a.name}`}
+          >
+            {can('sign_in') ? <ExternalLink /> : <RefreshCw />}
             Sign in
-          </Button>
-        )}
-        {can('reconnect') && (a.state !== 'connected' || failed) && (
-          <Button size="sm" variant="outline" onClick={() => onSignIn(as, a.id)} data-testid={`account-reconnect-${a.name}`}>
-            <RefreshCw />
-            Reconnect
           </Button>
         )}
       </span>
@@ -309,7 +312,7 @@ function TeamDefaultStar({ appId, account: a }: { appId: string; account: Config
 }
 
 /**
- * A row's menu: Test now, Settings (name, who signs in, auth config, team default), Reconnect, Make my default,
+ * A row's menu: Test now, Settings (name, who signs in, auth config), Sign in again, Make my default,
  * Disconnect and Delete, each only where the API offers it.
  */
 function AccountActions({
@@ -356,9 +359,9 @@ function AccountActions({
             },
           ),
       },
-    can('reconnect') && a.state === 'connected' && { label: 'Reconnect', onClick: () => onSignIn(own ? 'self' : 'team', a.id) },
+    can('reconnect') && a.state === 'connected' && { label: 'Sign in again', onClick: () => onSignIn(own ? 'self' : 'team', a.id) },
     a.kind === 'team' &&
-      (can('rename') || can('move') || can('make_team_default')) && { label: 'Settings', onClick: () => setDialog('settings') },
+      (can('rename') || can('move')) && { label: 'Settings', onClick: () => setDialog('settings') },
     can('make_default') && {
       label: 'Make my default',
       onClick: () => pin.mutate(ref, { onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) }),

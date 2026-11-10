@@ -111,7 +111,7 @@ function ConnectorsMenu({
                             <div className="flex items-center gap-1 pb-1.5 pl-8 pr-2 text-xs text-muted-foreground" data-testid={`connector-account-${c.appId}`}>
                               <span className="min-w-0 flex-1 truncate">{inUse ? `Uses ${inUse}` : 'Uses your default'}</span>
                               {onPick && (
-                                <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setChanging(changing === c.appId ? null : c.appId)} data-testid={`connector-change-${c.appId}`}>
+                                <Button type="button" variant="link" size="sm" className="h-6 min-w-6 px-1 text-xs" onClick={() => setChanging(changing === c.appId ? null : c.appId)} data-testid={`connector-change-${c.appId}`}>
                                   Change
                                 </Button>
                               )}
