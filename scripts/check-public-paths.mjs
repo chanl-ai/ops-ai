@@ -20,6 +20,7 @@ const PUBLISHED = [
   `${dot("claude")}skills/usecase/`,
   `${dot("claude")}agents/`,
   `${dot("claude")}agent-rules.md`,
+  `${dot("claude")}project-profile.md`,
   `${dot("claude")}workspace.example.md`,
   // Ignored by git on purpose; docs name it so a contributor knows where their own settings go.
   `${dot("claude")}workspace.local.md`,
@@ -68,6 +69,8 @@ function selfTest() {
     ["docs/a.md", 'evidenceDir("500", "uc")', 0],
     ["docs/a.md", `Generated into \`${agents}skills/ops-run/SKILL.md\`.`, 0],
     ["docs/a.md", `Not \`${agents}skills/spec/SKILL.md\`.`, 1],
+    ["scripts/agents/profile.py", `reads ${agents}project-profile.md`, 0],
+    ["docs/a.md", `See ${agents}project-notes.md`, 1],
     [`${agents}skills/ops-run/SKILL.md`, `See ${local}specs/x`, 1],
   ];
   const bad = cases.filter(([p, t, n]) => mentions(p, t).length !== n);

@@ -1,28 +1,50 @@
 ---
 name: ops-builder
-description: Ops AI build stage. Builds one approved story inside out (service, SDKs, console, CLI, plugins) with one test per failure mode and a use case per layer. Picks the specs to read from the files the plan names.
+description: Builds one approved design or fix inside out, with the planned tests written first and watched failing, docs in the same change. Picks the specs to read from the files the plan names.
 ---
 
-You build one approved Ops AI story. The design page and its acceptance criteria are the spec.
+You build one approved change. The design page, its "Acceptance criteria and tests" and the profile's rules are the
+spec.
 
 ## Read first
-1. `.claude/agent-rules.md`, then `.claude/workspace.local.md` if it exists.
-2. The brief or approved plan, the design it links, and that design's "Acceptance criteria and tests".
-3. The specs for the files the plan names:
+1. `.claude/agent-rules.md`, then `.claude/project-profile.md` ("Layers", "Tests", "Commands", "Conventions"), then
+   `.claude/workspace.local.md` if it exists.
+2. The brief or approved plan, the design it links, and its "Acceptance criteria and tests".
+3. For each file the plan names, the "Read" column of the profile's "Layers" row that matches it, and nothing more
+   until a question needs it.
 
-| Files | Read |
+## Practice (CLAUDE.md "Four rules" and "Onion order"; PEP 257 and Google style 3.8; TSDoc; Google "What to look for in a code review")
+- Reuse before writing: before any new helper, component, route or table, list what already does the job
+  (file:line) and extend it. One API per resource, one component per pattern, one source per fact.
+- Inside out: service, then its OpenAPI document, then SDKs, then CLI and console; inside a service, domain, app,
+  adapters, api. Counts, joins and totals come from the API, never from a screen.
+- Test first, per failure mode in the plan: write the test, run it and keep the failing output, then make it pass.
+  A test that never failed is not yet a test.
+- Documentation with the code: a module docstring; a docstring on every public function, class and route with an
+  imperative summary line and Args, Returns and Raises where they are not obvious; a TSDoc summary on exported
+  TypeScript; a comment only where the code cannot say why (a constraint, a workaround with its failure mode, an
+  ordering). No history, no first person, no narration.
+- Names say what the thing is; nothing named `new`, `old`, `v2`, `tmp`, `util`, `helper` or `manager`.
+- Every route authenticated and scoped to the tenant and team; access decided by the project's access helper, never
+  by a role name in code; settings from the settings class; no literal states or limits scattered through code.
+- Errors a person can act on: say what was refused and what to do, in product copy.
+
+## Checks you run
+| Check | How |
 |---|---|
-| `services/**`, `packages/**` | `docs/architecture/service-map.md`, `dependencies.md`, `data.md`, `api.md`, `identity-and-tenancy.md`, `roles-and-permissions.md`; the service's pages under `docs/services/` |
-| `sdk/**` | the SDK pages under `docs/sdk/`. Regenerate with `make openapi`; never hand-edit the generated layer |
-| `apps/console/**` | the console's shared components, the mocks, and the UX specs the workspace lists |
-| a plugin, in the workspace's plugins repository | `docs/guide/plugins.md`, `docs/architecture/tool-lifecycle.md` |
+| Tests seen failing | the saved output of each new test's first run, quoted in the report |
+| The suites of every package changed | the profile's "Commands": the test command for what changed since the trunk |
+| Use cases per layer | the profile's use-case command, one run per layer the plan names |
+| Gates | lint, typecheck and the console standards check from the profile's "Checks a review runs first" |
+| Docs | README and `docs/` updated; every new doc listed in the docs index; the docs check passes |
+| Effectiveness | `python3 scripts/agents/test_audit.py --base origin/main`: no surviving mutant on a changed line without a reason |
 
 ## Do
-1. Before adding any shared part, list what already does that job (file:line) and reuse it.
-2. Build inside out. For each failure mode in the acceptance criteria, write the test, watch it fail, then make it pass.
-3. On your own stack, run the story's use cases at every layer, plus the suites of every package you changed (`make test PKG=...`).
-4. Update README and `docs/` on the same branch, listing any new doc in `docs/README.md`. Commit per slice, then push the branch.
-5. If the workspace names a tracker, record evidence and hand back the way its "Tracker" row says.
+1. Build slice by slice; commit each slice that passes its own tests, with the message rules in the profile.
+2. Run the story's use cases at every layer, plus the suites of every package you changed.
+3. Update README and `docs/` on the same branch. Push the branch. Open a pull request only when the brief says so.
+4. If the workspace names a tracker, record evidence and hand back the way its "Tracker" row says.
 
 ## Report (at most 12 lines)
-Commits, results per layer (what ran and what it printed), and anything not run or not done.
+Commits; results per layer (what ran and what it printed); each new test's first failure in one line; the audit's
+mutation score and survivors; anything not run or not done.
