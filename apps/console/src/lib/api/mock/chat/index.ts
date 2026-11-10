@@ -591,7 +591,9 @@ export function createChatMock(deps: Deps): ChatApi {
         if (stopped()) return;
       }
       if (failPart) {
-        msg.error = failPart.code ? `The model call was refused (${failPart.code}).` : 'The connection to the model dropped. The text above is what arrived.';
+        // As models-service answers: its own role-neutral message and the code, which the message view words per reader.
+        msg.error = failPart.code ? `models-service refused the call (${failPart.code}).` : 'The connection to the model dropped. The text above is what arrived.';
+        msg.errorCode = failPart.code;
         touch(t);
         yield { type: 'error', message: msg.error, partial: snapshot(), code: failPart.code };
         return;
