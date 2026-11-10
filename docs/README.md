@@ -339,7 +339,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/real-pages-not-mocks.md` | uc-517: the console has no preview mock pages; the pieces they drew that the real pages lacked are built |
 | `usecases/console/wait-for-long-work.md` | uc-525: a workflow waits for long-running work and carries on when it finishes |
 | `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop |
-| `usecases/console/screen-speed.md` | uc-560: with OPS_REQUEST_TIMING on, each request's JSON line and Server-Timing, one request id across services and in the error envelope; screens open from saved data, wiped on sign-out and team switch |
+| `usecases/console/screen-speed.md` | uc-560: each request's http.request line, and with OPS_REQUEST_TIMING on its Server-Timing, one request id across services and in the error envelope; screens open from saved data, wiped on sign-out and team switch |
 | `usecases/console/connect-every-system.md` | uc-580, superseded by uc-607: kept for the record; its steps moved to uc-607 |
 | `usecases/console/connect-apps.md` | uc-607: a team connects apps from one catalog; a catalog of apps, Connect in a small window, and an app's page where a person connects their own account |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
@@ -413,6 +413,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |
 | `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
 | `usecases/models-service/an-account-admin-saves-a-model.md` | uc-532: An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one |
+| `usecases/models-service/a-refused-model-call-says-what-to-do.md` | uc-720: A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member |
 | `usecases/models-service/a-team-connects-azure-openai.md` | uc-605: A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region |
 | `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
 | `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
@@ -482,6 +483,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `packages/ops_email/overview.md` | Email library: mail in and out behind two protocols, providers picked by settings |
 | `packages/ops_email/test-with-gmail.md` | Steps to run the Email received trigger from a real Gmail mailbox with an app password |
 | `packages/ops_signin/overview.md` | Sign-in library: password hashing, OIDC with PKCE, SAML, and a fake identity provider |
+| `packages/ops_service_kit/logging.md` | Logging: one JSON line per event on stdout, its fields and ids, what is redacted, the rules and checks |
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |

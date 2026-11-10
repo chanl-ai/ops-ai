@@ -80,12 +80,12 @@ def main() -> None:
         cors_origins=args.cors or ["http://localhost:3016"],
         timer_poll_seconds=args.timer_poll_seconds,
     )
-    configure_logging()
+    configure_logging(service="agents-service")
     # With OPS_MODELS_URL and OPS_MODELS_KEY in the environment, turns go to models-service, whose dev seed answers
     # every alias with its scripted provider; still no provider call.
     through_models = settings.models_url is not None and settings.models_key is not None
     app = create_app(settings, model=None if through_models else scripted_model(), graph_models=FakeGraphModels())
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

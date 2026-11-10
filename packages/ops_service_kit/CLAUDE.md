@@ -15,8 +15,8 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 | `http` | `Envelope`, `ErrorEnvelope`, `ListResult`, `Pagination`, `ok()`, `paged()`, `page_window()`, `options_page()`, `install_error_handlers()`, `mark_public()`, `operation_id()` | every service's routes |
 | `errors` | `ApiError` and its subclasses (`ValidationFailed`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Unprocessable`, `TooManyRequests`, `ServiceUnavailable`, `StepUpRequired`), turned into `{success: false, error: {code, message, status}}` | services and packages |
 | `ids` | `new_id`, `now_iso`, `canonical_json`, `input_hash`, `action_id` | kernel and services |
-| `logging` | `get_logger` (bound context fields), `configure_logging`, `request_logger` | services |
-| `request_timing` | The request id that follows a call across services; with `OPS_REQUEST_TIMING` a JSON line per request and `Server-Timing` | installed by `install_error_handlers` |
+| `logging` | `get_logger`, `configure_logging(service=)`, `add_context`, `json_formatter`, `redact`: one JSON line per event on stdout ([docs/packages/ops_service_kit/logging.md](../../docs/packages/ops_service_kit/logging.md)) | services |
+| `request_timing` | The request id that follows a call across services, one `http.request` line per request, `note_caller` for its tenant and team; with `OPS_REQUEST_TIMING` also `Server-Timing` | installed by `install_error_handlers` |
 | `flags` | Feature flags: off unless `OPS_FLAGS` names them; read through `Settings.feature_flags` | services |
 | `credentials` | `credential_store(settings)`: picks the `ops_policy` credential store from settings | services that keep secrets |
 | `model_calls` | `ModelCalls`: one structured model call through models-service for a service that is not an agent | documents-service |
@@ -39,19 +39,19 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 - `contract`, `openapi`, `opa_server`, `harness_containers` and `testdb` are for scripts and tests; the `testing` extra
   (`pyproject.toml:10`) installs their dependencies, and a running service never imports them.
 
-Depends on `ops_policy` and lists `ops_contracts`, though no module here imports it. Every Python service and seven
+Depends on `ops_policy`, `ops_pii` and structlog, and lists `ops_contracts`, though no module here imports it. Every Python service and seven
 packages depend on it, so a change here runs nearly every suite under `make test` with no `PKG`.
 
 ## Run and test
 
 | Task | Command |
 |---|---|
-| Its own tests (flags only, 11 tests) | `make test PKG=packages/ops_service_kit` |
+| Its own tests (flags, embedding settings, logging) | `make test PKG=packages/ops_service_kit` |
 | One file | `make test PKG=packages/ops_service_kit T=tests/test_flags.py` |
 | Lint, format, types | `uv run ruff check packages/ops_service_kit`, `uv run ruff format --check packages/ops_service_kit`, `uv run pyright packages/ops_service_kit` |
 | The OpenAPI gate on one service | `make -C services/files-service openapi-check` (each service with a committed `openapi.json` has the target) |
 
-Most of this package is tested through the services: only `flags` has tests here.
+Most of this package is tested through the services; `flags`, embedding settings and `logging` have tests here.
 
 ## Gotchas
 

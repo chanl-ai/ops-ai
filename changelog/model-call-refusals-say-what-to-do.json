@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "A refused model call says what went wrong and what to do",
+  "description": "When an agent's model provider refuses a reply, chat and the agent test panel now say whether the provider could not be reached, refused the account's key, limited calls, refused the request or failed, instead of one generic refusal. An admin who manages settings is told to fix it on Settings > Model providers and offered the page; anyone else is told to ask an admin.",
+  "tag": "improved"
+}

@@ -45,7 +45,7 @@ if (hasBox) {
   await page.keyboard.press('Enter');
   await page.locator('[aria-label="Answering"]').first().waitFor({ timeout: 20_000 }).catch(() => {});
   await page.locator('[aria-label="Answering"]').first().waitFor({ state: 'detached', timeout: 120_000 }).catch(() => {});
-  const failedMark = (await page.locator('[data-testid="send-failed"]').count()) + (await page.getByText(/answer stopped part-way|model call was refused/i).count());
+  const failedMark = (await page.locator('[data-testid="send-failed"]').count()) + (await page.locator('[data-testid="reply-error"]').count());
   const after = (await page.locator('main').innerText()).length;
   report('chat turn answered', !failedMark && after > before + 40, failedMark ? 'send failed' : `answer ${after - before} chars`);
 } else report('chat composer shown', false, 'no composer');

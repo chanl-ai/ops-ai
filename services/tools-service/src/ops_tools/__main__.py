@@ -95,7 +95,7 @@ def main() -> None:
     settings = Settings()
     require_keys(settings, "review_key", "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
-    configure_logging()
+    configure_logging(service="tools-service")
     catalog = load_catalog(settings.seed_dir)
     seed = json.loads(settings.tools_seed_file.read_text())
     dev = settings.environment == "dev"
@@ -325,7 +325,7 @@ def main() -> None:
             ),
         ),
     )
-    uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

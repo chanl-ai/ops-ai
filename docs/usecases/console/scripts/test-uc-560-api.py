@@ -1,7 +1,8 @@
 """uc-560 every request shows where its time went, api layer: docs/usecases/console/screen-speed.md. platform-service
 and agents-service with platform sign-in and OPS_REQUEST_TIMING on: a database route's JSON line and Server-Timing,
 a malformed X-Request-Id replaced, one id across agents → platform and in the error envelope, and two overlapping
-requests each counting only their own queries. Then a platform-service with timing off writes no line. No model call."""
+requests each counting only their own queries. Then a platform-service with timing off still writes the request's line
+but sends no Server-Timing. No model call."""
 
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ from usecase_harness import (
 )
 
 from ops_service_kit.http import install_error_handlers, ok
+from ops_service_kit.logging import json_formatter
 from ops_store.database import open_database
 
 JAMES = "j.richardson@harborpine.example"
@@ -60,11 +62,13 @@ def lines_since(log: Path, at: int) -> list[str]:
 
 
 def request_lines(log: Path, at: int, request_id: str) -> list[dict[str, Any]]:
-    """The ops.request lines for `request_id`: each must parse whole, as one JSON object on its own line."""
+    """The http.request lines for `request_id`: each must parse whole, as one JSON object on its own line."""
     found: list[dict[str, Any]] = []
     for line in lines_since(log, at):
         if request_id in line and line.startswith("{"):
-            found.append(json.loads(line))
+            row = json.loads(line)
+            if row.get("event") == "http.request" and row.get("request_id") == request_id:
+                found.append(row)
     return found
 
 
@@ -136,14 +140,21 @@ async def overlapping() -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
     seen: list[dict[str, Any]] = []
 
+    rendered = json_formatter()
+
     class Keep(logging.Handler):
         def emit(self, record: logging.LogRecord) -> None:
-            seen.append(json.loads(record.getMessage()))
+            row = json.loads(rendered.format(record))
+            if row.get("event") == "http.request":
+                seen.append(row)
 
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://overlap") as c:
-            await c.get("/fast")  # builds the middleware, and with it the ops.request logger
-            logging.getLogger("ops.request").addHandler(Keep())
+            await c.get("/fast")  # builds the middleware
+            # The request line's logger, at INFO: this process never called configure_logging.
+            lines = logging.getLogger("ops_service_kit.request_timing")
+            lines.setLevel(logging.INFO)
+            lines.addHandler(Keep())
             seen.clear()
 
             async def fast_after_start() -> httpx.Response:
@@ -179,7 +190,7 @@ with platform() as (api, _), agents(env=AUTH) as ag:
         and line.get("http.response.status_code") == 200
         and line.get("db.query_count", 0) >= 1
         and line.get("db.duration_ms", -1) >= 0
-        and line.get("team") == "team_ops",
+        and line.get("team_id") == "team_ops",
         logged,
     )
 
@@ -237,11 +248,11 @@ with platform(env={"OPS_REQUEST_TIMING": ""}) as (api, _):
         "/v1/auth/sign-in", json={"email": JAMES, "password": "northfield-demo"}, headers={"X-Request-Id": quiet}
     )
     check(
-        "5 with timing off the id is returned, with no Server-Timing and no JSON line",
+        "5 with timing off the id is returned with no Server-Timing, and the request's line is still written",
         r.status_code == 200
         and r.headers.get("x-request-id") == quiet
         and "server-timing" not in r.headers
-        and not request_lines(PLATFORM_LOG, at, quiet),
+        and len(request_lines(PLATFORM_LOG, at, quiet)) == 1,
         {"status": r.status_code, "headers": dict(r.headers)},
     )
 

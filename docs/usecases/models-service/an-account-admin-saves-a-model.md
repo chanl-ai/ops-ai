@@ -23,7 +23,7 @@ real model is called.
 |---|---|---|
 | 1 | Call the alias before any key is saved | 503 `provider_key_missing` naming `OPENAI`; the provider is not called |
 | 2 | Sam opens Model providers, adds `OPENAI` with the stub key, and the alias is called | The page lists `OPENAI` without its value; the call answers 200 with the fake's text; the API's list holds no value |
-| 3 | Sam replaces the value with a wrong key, calls, then puts the stub back and calls | 502 `provider_error` (the fake refused the credential), then 200; the key is at version 3 |
+| 3 | Sam replaces the value with a wrong key, calls, then puts the stub back and calls | 502 `provider_auth_failed` (the fake refused the credential), whose message says an account admin checks the key on Settings > Model providers and never quotes it; then 200; the key is at version 3 |
 | 4 | Delete `OPENAI` while the connection names it | 409 `key_in_use` |
 | 5 | James, a builder of Operations, opens the page and tries the API | The page says only an account admin sees keys and shows no key; list and save answer 403; calls still answer |
 

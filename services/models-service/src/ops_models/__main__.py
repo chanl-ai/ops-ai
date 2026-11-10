@@ -50,7 +50,7 @@ def main() -> None:
     # Provider keys are sealed with it: the public dev default would let anyone with the database read them.
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
-    configure_logging()
+    configure_logging(service="models-service")
     engine = open_database(settings.database_url)
     if settings.environment == "dev":
         asyncio.run(_seed(engine, settings, connection))
@@ -60,7 +60,7 @@ def main() -> None:
         provider_secrets=dev_provider_keys(settings),
         overlap_seconds=settings.model_key_overlap_seconds,
     )
-    uvicorn.run(app, host=settings.bind_host, port=settings.models_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.models_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":
