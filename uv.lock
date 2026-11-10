@@ -2190,6 +2190,7 @@ testing = [
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "openapi-spec-validator" },
+    { name = "opentelemetry-api" },
 ]
 
 [package.metadata]
@@ -2199,6 +2200,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'testing'", specifier = ">=0.27" },
     { name = "jsonschema", marker = "extra == 'testing'", specifier = ">=4.23" },
     { name = "openapi-spec-validator", marker = "extra == 'testing'", specifier = ">=0.7" },
+    { name = "opentelemetry-api", marker = "extra == 'testing'", specifier = ">=1.30" },
     { name = "ops-contracts", editable = "packages/contracts" },
     { name = "ops-pii", editable = "packages/ops_pii" },
     { name = "ops-policy", editable = "packages/ops_policy" },

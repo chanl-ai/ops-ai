@@ -34,11 +34,14 @@ IDS = ("request_id", "tenant_id", "team_id")
 _FIRST = ("ts", "level", "event", "logger", SERVICE, *IDS, "trace_id", "span_id")
 # The handler configure_logging owns on the root logger; a second call replaces it instead of adding another.
 _HANDLER = "ops-json"
-# Keys whose value is never printed. Numbers stay (input_tokens is a count, not a token).
-_SECRET_KEY = re.compile(r"token|secret|passw|authorization|api_?key|cookie", re.IGNORECASE)
+# Keys whose value is never printed: header and keyword spellings alike (X-Api-Key, api_key, apikey, a key ending
+# -key or _key). Numbers stay (input_tokens is a count, not a token).
+_SECRET_KEY = re.compile(r"token|secret|passw|authorization|api[-_]?key|[-_]key$|cookie", re.IGNORECASE)
 REDACTED = "[redacted]"
 # A query string (it can carry an API key): from `?` to the next space or quote, when it holds a `name=value`.
 _QUERY = re.compile(r"\?[^\s\"'<>#]*=[^\s\"'<>#]*")
+# A bearer token written into text: a message, a detail, an exception.
+_BEARER = re.compile(r"(?i)\b(bearer)\s+[^\s\"',;]+")
 # Fields this module writes: ids and names, never personal data, so they are not masked.
 _UNMASKED = frozenset({"ts", "level", "logger", SERVICE, *IDS, "trace_id", "span_id"})
 
@@ -99,7 +102,7 @@ def _add_trace(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
 
 def _scrub(value: Any) -> Any:
     if isinstance(value, str):
-        return mask(_QUERY.sub("", value))
+        return mask(_BEARER.sub(rf"\1 {REDACTED}", _QUERY.sub("", value)))
     if isinstance(value, Mapping):
         return {str(k): REDACTED if _secret(str(k), v) else _scrub(v) for k, v in value.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
     if isinstance(value, list | tuple | set | frozenset):
@@ -115,7 +118,7 @@ def redact(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
     """Drops the value of any secret-named key, strips query strings and masks personal data (`ops_pii.mask`) in every
     other string, nested values included. It runs last before rendering, so nothing a later step adds escapes it."""
     for key, value in list(event.items()):
-        if key.startswith("_") or key in _UNMASKED:
+        if key in _UNMASKED:
             continue
         event[key] = REDACTED if _secret(key, value) else _scrub(value)
     return event

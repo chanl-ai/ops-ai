@@ -29,7 +29,6 @@ log = get_logger(__name__)
 HEADER = "x-request-id"
 # A caller's own id is kept only in this form: anything else (a line break, a 10 kB value) would land in the logs.
 _WELL_FORMED = re.compile(r"[A-Za-z0-9_-]{8,64}")
-_TEAM = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 @dataclass
@@ -118,13 +117,12 @@ class RequestTimingMiddleware:
             await self.app(scope, receive, timed)
         finally:
             # Before the reset, so the line carries the request's id.
-            _request_line(scope, incoming, timing, status)
+            _request_line(scope, timing, status)
             _current.reset(token)
 
 
-def _request_line(scope: Scope, incoming: dict[bytes, bytes], timing: RequestTiming, status: int) -> None:
+def _request_line(scope: Scope, timing: RequestTiming, status: int) -> None:
     route = scope.get("route")
-    team = incoming.get(b"x-team-id", b"").decode("latin-1")
     fields = {
         "http.request.method": scope.get("method", ""),
         # The route's template, never the raw path: a path can carry ids, names and a query string.
@@ -133,7 +131,6 @@ def _request_line(scope: Scope, incoming: dict[bytes, bytes], timing: RequestTim
         "duration_ms": round((time.perf_counter() - timing.started) * 1000, 1),
         "db.duration_ms": round(timing.db_ms, 1),
         "db.query_count": timing.db_queries,
-        "team": team if _TEAM.fullmatch(team) else None,
         "tenant_id": timing.tenant_id,
         "team_id": timing.team_id,
     }

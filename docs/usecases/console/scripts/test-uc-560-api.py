@@ -190,7 +190,7 @@ with platform() as (api, _), agents(env=AUTH) as ag:
         and line.get("http.response.status_code") == 200
         and line.get("db.query_count", 0) >= 1
         and line.get("db.duration_ms", -1) >= 0
-        and line.get("team") == "team_ops",
+        and line.get("team_id") == "team_ops",
         logged,
     )
 

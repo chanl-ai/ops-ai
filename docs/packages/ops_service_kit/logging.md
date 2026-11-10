@@ -9,7 +9,7 @@ Status: current. Every Python service writes one JSON object per line on stdout,
 {"ts":"2026-11-10T03:54:42.660099Z","level":"info","event":"http.request","logger":"ops_service_kit.request_timing",
  "service.name":"platform-service","request_id":"req_uc025_9f031f","tenant_id":"local","team_id":"team_ops",
  "http.request.method":"POST","http.route":"/v1/settings/members/invite","http.response.status_code":200,
- "duration_ms":27.2,"db.duration_ms":11.5,"db.query_count":19,"team":"team_ops"}
+ "duration_ms":27.2,"db.duration_ms":11.5,"db.query_count":19}
 ```
 
 | Field | Where it comes from |
@@ -46,7 +46,7 @@ log.error("unhandled_error", error=type(e).__name__, exc_info=e)   # outside an 
 
 `RequestTimingMiddleware` writes one `http.request` line per request, after the response, whatever
 `OPS_REQUEST_TIMING` says; that setting only adds the Server-Timing header. It names the route template, never the raw
-path or its query string. The middleware runs outside the route's context, so the auth dependency's isolation context
+path or its query string, and carries the verified `team_id`, never the X-Team-Id header as sent. The middleware runs outside the route's context, so the auth dependency's isolation context
 is not visible to it: `request_timing.note_caller(tenant, team)` puts the verified caller's ids on the request's shared
 timing object instead. `ops_store.isolation` calls it for every service on `ops_identity`; platform-service, which
 resolves its own sessions, calls it where it picks the acting team.
@@ -57,12 +57,14 @@ The `redact` processor runs last before rendering, on every record.
 
 | What | How |
 |---|---|
-| The value of a key matching `token`, `secret`, `passw`, `authorization`, `api_key` or `apikey`, `cookie` (any case, at any depth) | Replaced with `[redacted]`; numbers and booleans stay, so `input_tokens=12` is kept |
+| The value of a key matching `token`, `secret`, `passw`, `authorization`, `api-key`, `api_key` or `apikey`, any key ending `-key` or `_key` (so the `X-Api-Key` header), `cookie` (any case, at any depth) | Replaced with `[redacted]`; numbers and booleans stay, so `input_tokens=12` is kept |
 | A query string in any string value or message (`?name=value...`) | Removed up to the next space or quote |
-| Emails, SSNs, card, account and phone numbers in any other string | `ops_pii.mask`: `[email]`, `[SSN]`, `[card]`, `[account]`, `[phone]`; ids are left alone |
+| `Bearer <token>` in any string: a message, a field, an exception's text | The token becomes `[redacted]` |
+| Emails, SSNs, card and phone numbers in any other string | `ops_pii.mask`: `[email]`, `[SSN]`, `[card]`, `[phone]` |
+| A bare run of 8 to 17 digits (not glued to letters, `_`, `.` or `,`) | `ops_pii.mask` reads it as an account number: `[account]`. An id like `fil_13cf…` and a number after case, ticket, order or invoice are left alone, but a numeric id logged on its own is masked |
 
-Names are not masked: no pattern finds them. The fields the kit writes itself (`ts`, `level`, `logger`, the ids) are
-not masked.
+Names are not masked: no pattern finds them. The fields the kit writes itself (`ts`, `level`, `logger`,
+`service.name`, the ids, the trace ids) are not masked; every other field is, including one whose name starts with `_`.
 
 ## Reading the logs
 
