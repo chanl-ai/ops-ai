@@ -95,7 +95,7 @@ jobs:
             echo "Deploying $ASKED ($sha) to the staging app"
           fi
       - if: steps.plan.outputs.ready == 'true'
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@98172f70657cb3e15db199af139be99bd3e61200 # master
       - if: steps.plan.outputs.ready == 'true'
         uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
       - if: steps.plan.outputs.ready == 'true'
