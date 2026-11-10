@@ -91,11 +91,11 @@ async def _files_ready(settings: Settings) -> None:
 def main() -> None:
     settings = Settings()
     require_current_schema(settings.database_url, MIGRATIONS)
-    configure_logging()
+    configure_logging(service="kb-service")
     if settings.environment == "dev":
         asyncio.run(_seed(settings))
     app = create_kb_app(engine_for(settings.database_url), auth=Auth.from_settings(settings, audience="kb"))
-    uvicorn.run(app, host=settings.bind_host, port=settings.kb_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.kb_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

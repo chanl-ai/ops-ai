@@ -9,7 +9,7 @@ from __future__ import annotations
 import contextvars
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -85,8 +85,15 @@ async def test_sql_server_sets_and_clears_all_three_keys_in_one_batch_each() -> 
     assert left == {"tenant_id": None, "team_id": None, "scope": None}
 
 
-def _widened(caplog: pytest.LogCaptureFixture) -> list[tuple[int, str]]:
-    return [(r.levelno, r.getMessage()) for r in caplog.records if r.getMessage().startswith("isolation.widen")]
+def _fields(record: logging.LogRecord) -> dict[str, Any]:
+    """A structlog record's message is its fields."""
+    msg: object = record.msg
+    return cast(dict[str, Any], msg) if isinstance(msg, dict) else {}
+
+
+def _widened(caplog: pytest.LogCaptureFixture) -> list[tuple[int, dict[str, Any]]]:
+    """Each `isolation.widen` line's level and fields."""
+    return [(r.levelno, _fields(r)) for r in caplog.records if _fields(r).get("event") == "isolation.widen"]
 
 
 def test_a_widening_names_its_reason_and_logs_it(caplog: pytest.LogCaptureFixture) -> None:
@@ -103,7 +110,7 @@ def test_a_widening_names_its_reason_and_logs_it(caplog: pytest.LogCaptureFixtur
         contextvars.copy_context().run(request)
     ((level, line),) = _widened(caplog)
     assert level == logging.INFO
-    assert "reason=admin_platform_resource" in line and "tenant=tenant-a" in line and "caller=person" in line
+    assert (line["reason"], line["tenant"], line["caller"]) == ("admin_platform_resource", "tenant-a", "person")
 
 
 def test_a_loops_widening_is_logged_below_info(caplog: pytest.LogCaptureFixture) -> None:
@@ -116,7 +123,7 @@ def test_a_loops_widening_is_logged_below_info(caplog: pytest.LogCaptureFixture)
     with caplog.at_level(logging.DEBUG, logger="ops_store.isolation"):
         contextvars.Context().run(loop)
     ((level, line),) = _widened(caplog)
-    assert level == logging.DEBUG and "reason=outbox_relay" in line and "caller=task" in line
+    assert level == logging.DEBUG and (line["reason"], line["caller"]) == ("outbox_relay", "task")
 
 
 def test_a_widening_with_no_tenant_named_keeps_the_callers_tenant() -> None:
@@ -138,4 +145,4 @@ async def test_a_system_transaction_needs_a_reason(engine: AsyncEngine, caplog: 
     with caplog.at_level(logging.DEBUG, logger="ops_store.isolation"):
         async with isolation.system_tx(engine, "claim_work") as c:
             assert (await c.execute(sa.select(1))).scalar_one() == 1
-    assert any(level == logging.DEBUG and "reason=claim_work" in line for level, line in _widened(caplog))
+    assert any(level == logging.DEBUG and line["reason"] == "claim_work" for level, line in _widened(caplog))

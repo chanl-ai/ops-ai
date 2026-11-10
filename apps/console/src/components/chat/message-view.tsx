@@ -13,7 +13,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
+import { useCan } from '@/hooks/me-queries';
 import { bytes } from '@/lib/format';
+import { modelRefusal } from '@/lib/model-refusals';
 import { foldedLine, orderReply } from '@/lib/reply-order';
 import type { ChatMessage, MessageFeedback, ToolCall, WidgetAction } from '@/lib/types/chat';
 import { isLayoutPart, type MessagePart } from '@/lib/types/widgets';
@@ -151,6 +153,9 @@ export function AssistantMessage({
     return c ? <CitationPopover citation={c} onOpenDocument={onOpenDocument} onOpenTrace={message.trace && onOpenTrace ? () => onOpenTrace(message.trace!) : undefined} /> : null;
   };
   const settled = !streaming && !phaseLabel;
+  // A refused model call reads by its code, worded for whether this reader manages settings; live and on reload alike.
+  const managesSettings = useCan('settings', 'manage') === true;
+  const refusal = message.error ? modelRefusal(message.errorCode, managesSettings) : undefined;
   // What the reply suggests keeping asks its own line; what it kept, or anyone else's suggestion, is told in one line.
   const suggested = (message.remembered ?? []).filter((r) => r.status === 'suggested' && !!r.value);
   const kept = (message.remembered ?? []).filter((r) => !suggested.includes(r));
@@ -273,12 +278,19 @@ export function AssistantMessage({
           <AlertTriangle className="size-4" />
           <AlertTitle>The answer stopped part-way</AlertTitle>
           <AlertDescription className="space-y-2">
-            <p>{message.error}</p>
-            {onRegenerate && !readOnly && (
-              <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" onClick={onRegenerate}>
-                <RefreshCw className="size-3.5" /> Retry
-              </Button>
-            )}
+            <p data-testid="reply-error">{refusal?.text ?? message.error}</p>
+            <div className="flex flex-wrap gap-2">
+              {refusal?.fixAt && (
+                <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
+                  <Link href={refusal.fixAt}>Open Model providers</Link>
+                </Button>
+              )}
+              {onRegenerate && !readOnly && (
+                <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" onClick={onRegenerate}>
+                  <RefreshCw className="size-3.5" /> Retry
+                </Button>
+              )}
+            </div>
           </AlertDescription>
         </Alert>
       )}

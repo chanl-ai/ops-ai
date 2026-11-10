@@ -262,7 +262,7 @@ def email_listener(settings: Settings, db: AsyncEngine, owner: str, stack: Async
 
 
 def main() -> None:
-    configure_logging()
+    configure_logging(service="agents-worker")
     settings = Settings()
     require_keys(settings, "review_key")
     require_current_schema(settings.database_url, MIGRATIONS)
