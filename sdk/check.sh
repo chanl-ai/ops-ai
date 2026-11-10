@@ -16,7 +16,7 @@ uv venv --quiet "$tmp/venv"
 VIRTUAL_ENV="$tmp/venv" uv pip install --quiet "$tmp"/py/*.whl
 "$tmp/venv/bin/python" -c "import ops_ai; ops_ai.OpsAI(base_url='https://ops.example.com', api_key='k'); print('sdk-check: python wheel installs and imports')"
 (cd sdk/typescript && pnpm --silent pack --pack-destination "$tmp/ts" >/dev/null)
-mkdir -p "$tmp/ts-app" && cd "$tmp/ts-app" && npm init -y >/dev/null && npm install --silent "$tmp"/ts/*.tgz
+mkdir -p "$tmp/ts-app" && cd "$tmp/ts-app" && echo '{"private":true}' > package.json && pnpm --silent add --ignore-scripts "$tmp"/ts/*.tgz
 node --input-type=module -e "import { OpsAI } from '@chanl-ai/ops-ai'; new OpsAI({ baseUrl: 'https://ops.example.com' }); console.log('sdk-check: npm package installs and imports')"
 cd "$root"
 

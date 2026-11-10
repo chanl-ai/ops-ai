@@ -22,6 +22,11 @@
   <a href="package.json"><img src="https://img.shields.io/badge/Node-20%2B-339933?logo=nodedotjs&logoColor=white" alt="Node 20 or newer" /></a>
   <a href="apps/console"><img src="https://img.shields.io/badge/Next.js-console-000000?logo=nextdotjs&logoColor=white" alt="Next.js console" /></a>
   <a href="docs/deploy/database.md"><img src="https://img.shields.io/badge/PostgreSQL-15%2B-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 15 or newer" /></a>
+  <br />
+  <a href="https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml"><img src="https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/chanl-ai/ops-ai"><img src="https://api.scorecard.dev/projects/github.com/chanl-ai/ops-ai/badge" alt="OpenSSF Scorecard" /></a>
+  <a href="https://github.com/chanl-ai/ops-ai/actions/workflows/dependency-check.yml"><img src="https://github.com/chanl-ai/ops-ai/actions/workflows/dependency-check.yml/badge.svg?branch=main" alt="Dependency check" /></a>
+  <a href="docs/deploy/security-scanning.md"><img src="https://img.shields.io/badge/releases-signed%20%C2%B7%20SBOM%20%C2%B7%20provenance-2ea44f" alt="Releases signed, with SBOM and provenance" /></a>
 </p>
 
 <p align="center">
@@ -349,6 +354,7 @@ file (`scripts/sample-team/admin.env.example`) to `uv run python scripts/sample_
 | [`docs/architecture/README.md`](docs/architecture/README.md) | The system as built, what is proven and the decision records |
 | [`docs/usecases/README.md`](docs/usecases/README.md) | The end-to-end checks behind each feature and how to run them |
 | [`docs/deploy/install-guide.md`](docs/deploy/install-guide.md) | Installing and running Ops AI |
+| [`docs/deploy/security-scanning.md`](docs/deploy/security-scanning.md) | Every security scan, signed releases and how to verify them; reporting a vulnerability is in [`SECURITY.md`](SECURITY.md) |
 
 ## Contributing
 

@@ -449,7 +449,7 @@ async function startOpa(): Promise<{ url: string; stop: () => void }> {
   if (process.env.OPS_INFRA === 'external') return { url: process.env.OPS_OPA_URL ?? 'http://opa:8181', stop: () => {} };
   const policy = join(ROOT, 'services/tools-service/policy');
   reapHarnessContainers();
-  const cid = execFileSync('docker', ['run', '-d', '--rm', '--label', `ops.harness.owner=${process.pid}`, '-p', '127.0.0.1::8181', '-v', `${policy}:/policy:ro`, 'openpolicyagent/opa:1.21.1', 'run', '--server', '--addr', '0.0.0.0:8181', '--log-level', 'error', '/policy'], { encoding: 'utf8' }).trim();
+  const cid = execFileSync('docker', ['run', '-d', '--rm', '--label', `ops.harness.owner=${process.pid}`, '-p', '127.0.0.1::8181', '-v', `${policy}:/policy:ro`, 'openpolicyagent/opa:1.21.4', 'run', '--server', '--addr', '0.0.0.0:8181', '--log-level', 'error', '/policy'], { encoding: 'utf8' }).trim();
   const stopOpa = () => {
     cleanups.delete(stopOpa);
     try {

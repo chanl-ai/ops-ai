@@ -1,0 +1,40 @@
+# Weekly version updates, one grouped pull request per ecosystem. The 30-day cooldown matches the lockfiles' own rule
+# that a version is at least 30 days old before it is locked (pyproject.toml exclude-newer, pnpm-workspace.yaml
+# minimumReleaseAge). Security updates are not held back by the cooldown; they need Dependabot alerts and security
+# updates switched on in the repository settings.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    cooldown: { default-days: 30 }
+    open-pull-requests-limit: 5
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    cooldown: { default-days: 30 }
+    open-pull-requests-limit: 5
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories: ["/deploy/fly", "/deploy/fly/mssql", "/.devcontainer"]
+    schedule: { interval: weekly, day: monday }
+    cooldown: { default-days: 30 }
+    groups:
+      base-images:
+        patterns: ["*"]

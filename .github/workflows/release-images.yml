@@ -2,6 +2,13 @@
 # with the version and latest. Runs on a version tag (v0.1.0 publishes 0.1.0) or by hand with a version; the date tags
 # every merge gets (release-tag.yml) do not start it.
 # The build is deploy/release/images.sh, the same script the release package and install.sh --build use.
+#
+# After the push, each image by digest gets a CycloneDX SBOM, a Trivy scan that fails the run on a critical finding
+# with a fix available, a keyless cosign signature, and a GitHub build provenance attestation. On a tag the SBOMs are
+# attached to that tag's GitHub release (made as a draft when there is none). docs/security.md shows how to verify.
+#
+# Proof mode (run by hand with proof set) builds for linux/amd64 and pushes to a registry inside the runner, so every
+# step runs and nothing reaches ghcr.io.
 name: release-images
 
 on:
@@ -13,24 +20,49 @@ on:
       version:
         description: "Image version to publish (default: deploy/release/version)"
         required: false
+      proof:
+        description: "Push to a registry inside the runner instead of ghcr.io (checks the release steps)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: release-images-${{ github.ref }}
+  group: release-images-${{ github.ref }}-${{ inputs.proof || false }}
   cancel-in-progress: false
 
 jobs:
   images:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: read
+      packages: write # push images and their signatures to ghcr.io
+      id-token: write # keyless signing and provenance: the runner's OIDC identity
+      attestations: write
+    services:
+      # Used only in proof mode; idle otherwise.
+      registry:
+        image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+        ports: ["5000:5000"]
+    env:
+      PROOF: ${{ inputs.proof && 'true' || 'false' }}
+      IMAGE_PREFIX: ${{ inputs.proof && 'localhost:5000/ops-ai' || 'ghcr.io/chanl-ai/ops-ai' }}
+      TARGETS: platform agents tools models kb files documents runner opa proxy console db-scripts
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        with:
+          # The builder runs in a container; host networking lets it reach the proof registry on localhost:5000.
+          driver-opts: network=host
+      - if: env.PROOF != 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -41,17 +73,104 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then v=${GITHUB_REF_NAME#v}; else v=${INPUT_VERSION:-$(tr -d ' \n' < deploy/release/version)}; fi
+          case "$v" in *[!0-9A-Za-z.-]*|"") echo "::error::Version '$v' has characters a tag cannot hold"; exit 1 ;; esac
           echo "version=$v" >> "$GITHUB_OUTPUT"
       - name: Build and push
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: sh deploy/release/images.sh "$GITHUB_SHA" "$VERSION" --platforms linux/amd64,linux/arm64 --push --latest
-      - name: Images published
+        run: |
+          if [ "$PROOF" = true ]; then
+            sh deploy/release/images.sh "$GITHUB_SHA" "$VERSION" --platforms linux/amd64 --push
+          else
+            sh deploy/release/images.sh "$GITHUB_SHA" "$VERSION" --platforms linux/amd64,linux/arm64 --push --latest
+          fi
+      - name: Digests
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          for t in platform agents tools models kb files documents opa proxy console db-scripts; do
-            docker buildx imagetools inspect "ghcr.io/chanl-ai/ops-ai/$t:$VERSION" --format '{{json .Manifest.Manifests}}' \
-              | grep -o '"architecture":"[a-z0-9]*"' | sort -u | tr '\n' ' '
-            echo " ghcr.io/chanl-ai/ops-ai/$t:$VERSION"
+          # One "<sha256 hex>  <image>" line per image, the format the provenance step reads. Everything after this
+          # step addresses an image by digest, so a tag moved in between cannot change what is scanned or signed.
+          : > digests.txt
+          for t in $TARGETS; do
+            digest=$(docker buildx imagetools inspect "$IMAGE_PREFIX/$t:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
+            platforms=$(docker buildx imagetools inspect "$IMAGE_PREFIX/$t:$VERSION" --format '{{json .Manifest.Manifests}}' \
+              | grep -o '"architecture":"[a-z0-9]*"' | sort -u | cut -d'"' -f4 | tr '\n' ' ')
+            echo "${digest#sha256:}  $IMAGE_PREFIX/$t" >> digests.txt
+            echo "$IMAGE_PREFIX/$t:$VERSION $digest $platforms"
           done
+      - uses: ./.github/actions/trivy
+      - name: SBOM and vulnerability scan
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          # The proof registry speaks plain HTTP.
+          TRIVY_INSECURE: ${{ env.PROOF }}
+          TRIVY_NO_PROGRESS: "true"
+        run: |
+          mkdir -p sbom
+          failed=""
+          while read -r hex image; do
+            t=${image##*/}
+            out="sbom/ops-ai-$t-$VERSION.cdx.json"
+            trivy image --quiet --format cyclonedx --output "$out" "$image@sha256:$hex"
+            echo "::group::$t: critical findings with a fix"
+            # A critical advisory with no fixed version yet is reported by Dependabot and the dependency check; it
+            # cannot be fixed by a rebuild, so it does not stop a release.
+            trivy sbom --quiet --scanners vuln --severity CRITICAL --ignore-unfixed --exit-code 1 "$out" || failed="$failed $t"
+            echo "::endgroup::"
+          done < digests.txt
+          if [ -n "$failed" ]; then
+            echo "::error title=Critical vulnerabilities::Fixed versions exist for critical findings in:$failed. Upgrade the base image or package, then release again; these images are not signed."
+            exit 1
+          fi
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Sign and verify
+        run: |
+          flags=""
+          [ "$PROOF" = true ] && flags="--allow-http-registry --allow-insecure-registry"
+          identity="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-images.yml@"
+          while read -r hex image; do
+            # shellcheck disable=SC2086
+            cosign sign --yes $flags "$image@sha256:$hex"
+            # shellcheck disable=SC2086
+            cosign verify $flags --certificate-identity-regexp "$identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$image@sha256:$hex" >/dev/null
+            echo "signed and verified: $image@sha256:$hex"
+          done < digests.txt
+      - name: Build provenance
+        id: provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: digests.txt
+      - name: Provenance recorded
+        env:
+          URL: ${{ steps.provenance.outputs.attestation-url }}
+        run: |
+          echo "provenance attestation for $(wc -l < digests.txt) images: $URL"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-images-${{ steps.version.outputs.version }}
+          path: |
+            sbom/
+            digests.txt
+
+  release:
+    # Its own job, so the only step holding a token that can write the repository is this upload.
+    needs: images
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sbom-images-${{ needs.images.outputs.version }}
+      - name: Attach the SBOMs to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "$GITHUB_REF_NAME" \
+              --notes "Images: ghcr.io/chanl-ai/ops-ai/<image>:${GITHUB_REF_NAME#v}. Each is signed with cosign and has build provenance; the CycloneDX SBOMs are attached."
+          gh release upload "$GITHUB_REF_NAME" sbom/*.cdx.json digests.txt --clobber

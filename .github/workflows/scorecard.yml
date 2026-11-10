@@ -1,0 +1,47 @@
+# OpenSSF Scorecard: scores the repository's security practices (pinned dependencies, token permissions, branch
+# protection, signed releases and more) and uploads each finding to code scanning. On main the result is also
+# published to api.scorecard.dev, which serves the README badge. A pull request that changes this file runs it
+# unpublished, so a change to a workflow, a Dockerfile or an install script is checked before it merges.
+name: scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 5 * * 1"
+  branch_protection_rule:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "**/Dockerfile"
+      - "**/*.Dockerfile"
+      - "sdk/check.sh"
+
+permissions: read-all
+
+jobs:
+  analysis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      # Signs the published result so api.scorecard.dev can tell it came from this workflow on main.
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: ${{ github.event_name != 'pull_request' }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 7
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: results.sarif
+          category: scorecard
