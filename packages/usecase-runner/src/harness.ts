@@ -327,6 +327,11 @@ export interface StackOptions {
   /** Settings for platform-service when `platform` is on, e.g. `{ OPS_TEAM_DELETE_AFTER_DAYS: '0' }`. */
   platformEnv?: Record<string, string>;
   /**
+   * Settings for kb-service, applied last: the tools-service it reads plugin sources through (OPS_TOOLS_URL) and the
+   * plugins it may read (OPS_PLUGIN_PATHS), for a use case whose sources come from a plugin.
+   */
+  kbEnv?: Record<string, string>;
+  /**
    * Also start platform-service on the run's database (its own migration chain, the dev seed of team_ops with Priya,
    * James and Maya) and sign the console in through it, so every call carries a person's token.
    */
@@ -823,6 +828,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...(options.kbModels && modelsRoute.OPS_MODELS_URL ? { OPS_MODELS_URL: modelsRoute.OPS_MODELS_URL, OPS_MODELS_KEY: 'mk_dev_kb' } : {}),
       ...auth,
+      ...options.kbEnv,
     });
     await runToEnd('kb-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], kbDir, kbEnv);
     kbProc = await serve('kb', KB_PORT, ['uv', 'run', 'python', '-m', 'ops_kb'], kbDir, kbEnv, `http://127.0.0.1:${KB_PORT}/health`, 90_000);
