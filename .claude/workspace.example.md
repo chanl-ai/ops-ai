@@ -1,7 +1,7 @@
 # Workspace settings for Ops AI agents (example)
 
 Copy this file to `.claude/workspace.local.md` in the main checkout and fill it in. Git ignores the copy. Every agent
-in `.claude/agents/` reads it after `.claude/agent-rules.md`. A row left out uses its default.
+in `.claude/agents/` reads it after `.claude/agent-rules.md` and `.claude/project-profile.md`. A row left out uses its default.
 
 | Setting | Default |
 |---|---|

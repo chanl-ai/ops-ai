@@ -570,7 +570,8 @@ def run_node_mutants(root: Path, home: TestHome, rel: str, lines: set[int], budg
             m.status = "no coverage"
             m.detail = f"no test beside it ({home.tests})"
         return [m for m, _ in candidates], f"no test file at {home.tests}"
-    cmd = [c for c in home.runner if not c.startswith("<")] + [home.tests]
+    # The runner names its argument as `<test file>`, which shlex splits into two tokens; both go.
+    cmd = [c for c in home.runner if "<" not in c and ">" not in c] + [home.tests]
     original = src.read_text(encoding="utf-8")
     results = []
     try:

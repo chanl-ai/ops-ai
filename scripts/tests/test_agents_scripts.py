@@ -84,4 +84,6 @@ def test_the_walk_s_own_cases_pass() -> None:
     done = subprocess.run(
         ["node", str(AGENTS / "ui_walk.mjs"), "--self-test"], cwd=ROOT, capture_output=True, text=True, check=False
     )
+    if "Executable doesn't exist" in done.stderr or "browserType.launch" in done.stderr:
+        pytest.skip("no Chromium for Playwright here: run npx playwright install chromium")
     assert done.returncode == 0 and "FAIL" not in done.stdout, done.stdout + done.stderr

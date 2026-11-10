@@ -66,7 +66,7 @@ How tests are laid out and run, per kind of code. The test-audit script mutates 
 |---|---|---|---|
 | `services/<name>/src/<module>/**` | `services/<name>/tests/` | `uv run pytest -q -x -p no:cacheprovider` | `OPS_TEST_DATABASE_URL` and `OPS_DATABASE_URL` set to the same throwaway PostgreSQL database, made by `uv run python scripts/test_db.py <url>` (`make test` sets both) |
 | `packages/<name>/src/<module>/**` | `packages/<name>/tests/` | `uv run pytest -q -x -p no:cacheprovider` | the same two variables for `ops_store`, `ops_engine` and `ops_checkpointer`; the rest run on SQLite |
-| `apps/console/src/lib/<file>.ts` | `apps/console/src/lib/<file>.test.ts` beside it | `node --test <test file>` | nothing |
+| `apps/console/src/lib/<file>.ts` | `apps/console/src/lib/<file>.test.ts` | `node --test <test file>` | nothing; the test sits beside the code |
 | `packages/usecase-runner/src/<file>.ts` | `packages/usecase-runner/src/<file>.test.ts` | `node --test <test file>` | nothing |
 | `scripts/<file>.py` | `scripts/tests/test_<file>.py` | `uv run pytest -q <test file>` | nothing |
 | a use case (`docs/usecases/<service>/scripts/test-uc-NNN-<layer>.*`) | itself | `make usecase-test UC=<id> LAYER=<layer>` | PostgreSQL :5477 (`make db-up`) |
