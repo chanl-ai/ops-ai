@@ -98,11 +98,14 @@ with (
     api.put("/v1/models/providers/openai-local", json={"baseUrl": fake_url}, headers=SERVICE)
     back = ask(api, "Is wire W-1001 still pending?")
     check(
-        "rebinding openai-local to a closed port fails default with 502 provider_error; rebinding back restores it",
+        "rebinding openai-local to a closed port fails default with 502 provider_unreachable, saying where an admin "
+        "checks the connection; rebinding back restores it",
         moved.status_code == 200
         and data(moved)["baseUrl"] == dead
         and broken.status_code == 502
-        and broken.json()["error"]["code"] == "provider_error"
+        and broken.json()["error"]["code"] == "provider_unreachable"
+        and "Settings > Model providers" in broken.json()["error"]["message"]
+        and dead not in broken.json()["error"]["message"]
         and back.status_code == 200
         and back.json()["choices"][0]["message"]["content"] == expected,
         (moved.text[:200], broken.text[:200], back.text[:200]),

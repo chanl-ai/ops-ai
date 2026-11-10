@@ -155,7 +155,7 @@ def main(clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
     p.add_argument("--dry-run", action="store_true", help="log what would change and write nothing")
     p.add_argument("--tenant", help="only this tenant's modules")
     args = p.parse_args()
-    configure_logging()
+    configure_logging(service="tools-service")
 
     async def run() -> None:
         engine = open_database(Settings().database_url)

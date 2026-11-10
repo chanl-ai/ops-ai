@@ -2,12 +2,13 @@
 
 Status: current. Id: `uc-560`. Service: `console` with every service through `ops_service_kit`. Layers: api, ui.
 
-With `OPS_REQUEST_TIMING=1`, every service writes one JSON line per request on the `ops.request` logger and returns
-a `Server-Timing` header with the time spent in the app and in the database. A request id follows the request from the
-first service to the next, so their lines can be joined, and an error envelope's `requestId` names the same id. The
-console saves what its screens read to the browser, keyed by person, team and app version, and shows it at once on a
-reload before refreshing it; Human Tasks and unfinished runs always load fresh, and nothing saved survives sign-out or
-a team switch.
+Every service writes one `http.request` JSON line per request on stdout
+([logging](../../packages/ops_service_kit/logging.md)), and with `OPS_REQUEST_TIMING=1` it also
+returns a `Server-Timing` header with the time spent in the app and in the database. A request id follows the request
+from the first service to the next, so their lines can be joined, and an error envelope's `requestId` names the same
+id. The console saves what its screens read to the browser, keyed by person, team and app version, and shows it at
+once on a reload before refreshing it; Human Tasks and unfinished runs always load fresh, and nothing saved survives
+sign-out or a team switch.
 
 ## Stories
 
@@ -15,7 +16,7 @@ a team switch.
 |---|---|---|---|---|
 | S1 | James lists his workflows and the answer says how long the app and the database took, under his own request id | api | 1-2 | 1 |
 | S2 | A save that is refused carries one request id through two services and into the error James sees | api | 3 | 3 |
-| S3 | Two requests at the same moment each count only their own database time, and with timing off nothing extra is written | api | 4-5 | 4 |
+| S3 | Two requests at the same moment each count only their own database time, and with timing off no Server-Timing is sent | api | 4-5 | 4 |
 | S4 | James reloads Workflows and his workflow shows at once from what the browser saved, never from another app version | ui | 6-8 | 6 |
 | S5 | Signing out, signing out in another tab, or switching team leaves nothing saved | ui | 9-11 | 11 |
 | S6 | James changes an agent's name, reloads at once, and sees the new name | ui | 13 | 13 |
@@ -38,7 +39,7 @@ a team switch.
 | 2 | He sends a 10 kB X-Request-Id, then one with a space in it | Each is replaced by a minted `req_` id on the response, and neither value appears in the log |
 | 3 | He saves a workflow with a Classify step while AI steps are off, with his id | The 422 envelope's requestId is his id; agents-service and platform-service (its `/v1/policies/{key}` read) each log a line with that id |
 | 4 | Two requests overlap: one sleeps 0.6 s in SQL, three answer fast with three queries each | The slow line counts one query and at least 500 ms; each fast line counts its own three queries and well under 500 ms |
-| 5 | A platform-service with timing off answers a database route | It returns X-Request-Id and no Server-Timing, and logs no JSON line |
+| 5 | A platform-service with timing off answers a database route | It returns X-Request-Id and no Server-Timing, and still logs its one `http.request` line |
 | 6 | James opens Workflows, reads it a moment, and reloads with every agents-service read held for 20 s | His workflow's row shows within 12 s, from the browser's saved copy |
 | 7 | The saved copy is read from IndexedDB | Every key ends with team_ops; nothing for `me`, `teams`, the sign-in policy, Human Tasks or file preview links |
 | 8 | The saved copy is rewritten under another app version, and he reloads | Nothing shows before agents-service answers |
