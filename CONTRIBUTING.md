@@ -21,15 +21,51 @@ prompts of the same names, with the rules in `.github/copilot-instructions.md`. 
 `docs/guide/skills/`; change the page, run `python3 scripts/agent_skills.py`, and `make skills-proof` runs every
 skill's commands in a fresh devcontainer.
 
-Claude Code also has five agents for the stages of a change, in `.claude/agents/`: `ops-designer` and
-`ops-design-reviewer` (design and acceptance criteria before code), `ops-builder`, `ops-qa` (use cases and screen walks)
-and `ops-reviewer`. They share the rules in `.claude/agent-rules.md`. Settings for one machine, such as where designs
-and evidence go, live in `.claude/workspace.local.md`, which git ignores; `.claude/workspace.example.md` lists them
-with their defaults.
+Claude Code also has agents for the stages of a change, in `.claude/agents/`, one narrow job each; see "Agents and
+their scripts" below.
 
 Decision records in `docs/architecture/decisions/` are binding on the specs. A spec that needs a
 decision changed says so under "Open questions" and proposes a new or superseding ADR; it does not
 re-decide the matter inline.
+
+## Agents and their scripts
+
+Each agent in `.claude/agents/` does one job and names the practice it follows (the sources are listed at the end of
+`.claude/agent-rules.md`). The agents hold no fact about this repository: `.claude/agent-rules.md` holds the rules
+every agent follows, `.claude/project-profile.md` holds every Ops AI fact they read (layers and their docs, tests and
+how they run, the checks, the console's sign-in and roles, where designs live), and `.claude/workspace.local.md`
+(ignored by git; template in `.claude/workspace.example.md`) holds what is true for one machine. To use the agents on
+another repository, replace the profile.
+
+| Stage | Agent | Job |
+|---|---|---|
+| Design | `ops-architect` | Owners, flows, data and decision records for a change; a fresh-eyes review of a design |
+| Design | `ops-mock-designer` | Mocks from the console's existing components, every state, both widths |
+| Test design | `ops-test-designer` | Failure modes first, one test per failure mode with what to revert to see it fail |
+| Build | `ops-builder` | The code, tests and docs of one approved change, inside out |
+| Test audit | `ops-test-auditor` | How effective the tests are: mutation score on the changed lines, tests that cannot fail, failure modes with no test |
+| Browser test | `ops-browser-tester` | The few end-to-end paths through a headless browser as each role at both widths |
+| UX review | `ops-ux-reviewer` | A mock or a built screen against the UI standard, the usability heuristics and WCAG 2.2 AA |
+| Code review | `ops-code-reviewer` | One built branch against its design, the rules and its evidence; also security reviews |
+| Triage | `ops-triage` | A reported bug reproduced read-only: cause, every place with the same problem, risk class, duplicates |
+
+The repeatable part of each job is a script under `scripts/agents/`, run before the agent reads anything, with a
+make target each (`make/agents.mk`). Every path and command the scripts use comes from the profile.
+
+| Target | What it writes |
+|---|---|
+| `make agent-review-context [BASE=origin/main]` | `.logs/agents/review-context.md`: diff stat, changed files by layer with the docs to read, tests added, new routes, models, migrations and console routes, and the leak scan, public-path, docs and lint results on the changed files |
+| `make agent-test-audit [BASE=] [DESIGN=docs/design/<area>/<topic>.md] [PATHS="…"]` | `.logs/agents/test-audit.md`: the mutation score on the changed lines (each fault runs only the tests that reach its line, found with coverage contexts; faults no test reaches are listed apart), every surviving fault with its file and line, tests that cannot fail (no assertion, always true, mock-only, duplicates), fixed waits, and the design's acceptance rows no test names |
+| `make agent-ui-walk ROUTES="/a /b" [AS=admin,member] [WIDTHS=1440,390] [STATES=1]` | `.logs/agents/ui-walk/`: a screenshot per route, role and width, and a report of page errors, console errors, failed requests, sideways overflow, error text and unnamed controls; `STATES=1` adds the `?mock=slow\|error\|empty` variants |
+| `make agent-canary [COUNT=6] [SEED=n]`, `make agent-canary-score REPORT= KEY=` | A throwaway worktree branch with five to eight known bugs planted from a catalogue (a role gate removed, a wrong plural, a fixed width that clips at 390, a raw id shown, a swallowed error, an empty state never reached, an unguarded write route, a tautological test, a team filter dropped); the answer key lands in `.logs/agents/canary-keys/`, outside the finder's reach; the score lists caught, missed and false findings with recall and precision |
+| `make agent-scripts-test` | Every script's own red and green cases (`--self-test`) |
+
+A report from the test audit gives effectiveness, never counts: the mutation score on the changed lines with its
+survivors, the failure modes with no test, and the tests worth deleting. Mutation testing with `mutmut` was tried
+first and does not fit this tree as it stands: it copies a service's `src/` into `mutants/` and runs pytest there,
+which loses the package's other modules, `alembic.ini` and the migrations unless every one is listed in `also_copy`,
+and it mutates whole files rather than changed lines. The audit script mutates the changed lines in place, restores
+the file after each fault, and runs only the tests that reached the line.
 
 ## Verify and the pre-commit hook
 

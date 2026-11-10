@@ -22,9 +22,13 @@ const flag = (name) => {
   const i = args.indexOf(`--${name}`);
   return i < 0 ? undefined : args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true;
 };
+/** Every value after `--name` up to the next flag, split on commas and spaces. */
 const list = (name, fallback) => {
-  const v = flag(name);
-  return typeof v === 'string' ? v.split(/[,\s]+/).filter(Boolean) : fallback;
+  const i = args.indexOf(`--${name}`);
+  if (i < 0) return fallback;
+  const values = [];
+  for (let j = i + 1; j < args.length && !args[j].startsWith('--'); j++) values.push(...args[j].split(/[,\s]+/));
+  return values.filter(Boolean);
 };
 
 /** Facts the walk needs, read from the profile with the flags on top. */
@@ -37,9 +41,9 @@ function settings(profile) {
   return {
     origin: flag('origin') ?? process.env.OPS_CONSOLE_ORIGIN ?? value('console origin').split(/\s/)[0],
     loginPath: (signIn.match(/^(\/\S*)/) ?? [, '/login'])[1],
-    emailLabel: (signIn.match(/labelled (\S+) and (\S+)/) ?? [, 'Email', 'Password'])[1],
-    passwordLabel: (signIn.match(/labelled (\S+) and (\S+)/) ?? [, 'Email', 'Password'])[2],
-    signInButton: (signIn.match(/starts with (\S+)/) ?? [, 'Sign in'])[1],
+    emailLabel: (signIn.match(/labelled (\w+) and (\w+)/) ?? [, 'Email', 'Password'])[1],
+    passwordLabel: (signIn.match(/labelled (\w+) and (\w+)/) ?? [, 'Email', 'Password'])[2],
+    signInButton: (signIn.match(/starts with ([^;.]+)/) ?? [, 'Sign in'])[1].trim(),
     widths: list('widths', value('widths').split(/\D+/).filter(Boolean)).map(Number),
     states: [...states.matchAll(/\?mock=(\w+)/g)].map((m) => m[1]).filter((s) => s !== 'off'),
     roles: list('as', ['admin', 'member']).map((name) => {
@@ -59,10 +63,17 @@ export async function inspect(page, url, { settleMs = 800 } = {}) {
   const onConsole = (m) => {
     if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 160));
   };
+  const seen = []; // every response, so a 401 that the console renews and retries is not a finding
   const onResp = (r) => {
-    if (r.status() >= 400) failed.push(`${r.status()} ${new URL(r.url()).pathname}`);
+    const path = new URL(r.url()).pathname;
+    seen.push({ path, status: r.status() });
+    if (r.status() >= 400) failed.push(`${r.status()} ${path}`);
   };
-  const onReqFailed = (r) => failed.push(`failed ${new URL(r.url()).pathname} ${r.failure()?.errorText ?? ''}`.trim());
+  // A navigation the page itself cancels (a redirect after sign-in) is not a failed request.
+  const onReqFailed = (r) => {
+    const why = r.failure()?.errorText ?? '';
+    if (why !== 'net::ERR_ABORTED') failed.push(`failed ${new URL(r.url()).pathname} ${why}`.trim());
+  };
   page.on('pageerror', onErr);
   page.on('console', onConsole);
   page.on('response', onResp);
@@ -99,8 +110,14 @@ export async function inspect(page, url, { settleMs = 800 } = {}) {
   page.off('console', onConsole);
   page.off('response', onResp);
   page.off('requestfailed', onReqFailed);
-  const ok = status < 400 && !errors.length && !consoleErrors.length && !failed.length && !facts.scrollsSideways && !facts.errorText;
-  return { url, status, ok, errors, consoleErrors, failed: [...new Set(failed)], ...facts };
+  const renewed = (entry) => {
+    const m = /^401 (.+)$/.exec(entry);
+    return m && seen.some((s) => s.path === m[1] && s.status < 400);
+  };
+  const real = [...new Set(failed)].filter((f) => !renewed(f));
+  const consoleReal = consoleErrors.filter((e) => !(/status of 401/.test(e) && real.every((f) => !f.startsWith('401'))));
+  const ok = status < 400 && !errors.length && !consoleReal.length && !real.length && !facts.scrollsSideways && !facts.errorText;
+  return { url, status, ok, errors, consoleErrors: consoleReal, failed: real, ...facts };
 }
 
 async function signIn(page, s, role) {
