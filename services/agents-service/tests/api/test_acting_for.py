@@ -28,7 +28,7 @@ RUNS = {
     "wfrun_top": {"id": "wfrun_top", "team_id": "team_a", "created_by": "j.richardson@bank.test"},
     "wfrun_child": {"id": "wfrun_child", "team_id": "team_a", "created_by": "run:wfrun_top"},
     "wfrun_key": {"id": "wfrun_key", "team_id": "team_a", "created_by": "key:key_abc"},
-    "wfrun_mail": {"id": "wfrun_mail", "team_id": "team_a", "created_by": "mailbox:claims"},
+    "wfrun_mail": {"id": "wfrun_mail", "team_id": "team_a", "created_by": "mailbox:claims@bank.test"},
 }
 
 
