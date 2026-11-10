@@ -5,7 +5,7 @@ go that never starts counting down, and one past its days that is never deleted 
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -43,6 +43,9 @@ async def test_a_snapshot_counts_its_30_days_from_release_not_from_upload(
         assert retention["classId"] == "knowledge-snapshot", retention
         return retention.get("deleteAfter")
 
+    # files-service dates retention by its UTC clock, so the test does too: a local date is a day off in the hours
+    # between local and UTC midnight.
+    today = datetime.now(UTC).date()
     stored = await client.write(
         tenant, "team_ops", PAGE, name="late.html", mime="text/html", purpose="knowledge_snapshot", uploaded_by="kb"
     )
@@ -50,13 +53,13 @@ async def test_a_snapshot_counts_its_30_days_from_release_not_from_upload(
     await client.attach(tenant, "team_ops", file_id, type="source", ref_id="src_web", name="Claims help")
     assert await kept_until() is None, "kept with no end date while the source holds it"
     await client.detach(tenant, "team_ops", file_id, type="source", ref_id="src_web")
-    assert await kept_until() == (date.today() + timedelta(days=30)).isoformat()
+    assert await kept_until() == (today + timedelta(days=30)).isoformat()
     await client.attach(tenant, "team_ops", file_id, type="source", ref_id="src_web", name="Claims help")
     assert await kept_until() is None, "taken back into use, the count stops"
-    assert await files.purge_released(date.today() + timedelta(days=60)) == 0, "a snapshot in use is never purged"
+    assert await files.purge_released(today + timedelta(days=60)) == 0, "a snapshot in use is never purged"
     await client.detach(tenant, "team_ops", file_id, type="source", ref_id="src_web")
-    assert await files.purge_released(date.today() + timedelta(days=29)) == 0
-    assert await files.purge_released(date.today() + timedelta(days=31)) == 1
+    assert await files.purge_released(today + timedelta(days=29)) == 0
+    assert await files.purge_released(today + timedelta(days=31)) == 1
     gone = await http.get(f"/v1/files/{file_id}", headers={"X-Team-Id": "team_ops"})
     assert gone.status_code == 404, gone.text
     await client.aclose()
