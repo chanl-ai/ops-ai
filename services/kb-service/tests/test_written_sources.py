@@ -82,3 +82,13 @@ async def test_add_source_lists_typed_text_and_push_beside_files(client: httpx.A
     kinds = data(await client.get("/v1/knowledge/source-kinds"))
     built_in = [(k["type"], k["title"]) for k in kinds if k["group"] == "built_in"]
     assert built_in == [("file", "Files"), ("text", "Typed text"), ("push", "Pushed by API")], built_in
+
+
+async def test_writing_one_item_reads_only_that_item(client: httpx.AsyncClient) -> None:
+    _, src = await written_source(client)
+    other = {"name": "fees", "title": "Fees", "text": "A dispute fee of 15 dollars applies to a lost dispute."}
+    data(await client.post(f"/v1/sources/{src['id']}/items", json=ITEM))
+    data(await client.post(f"/v1/sources/{src['id']}/items", json=other))
+    data(await client.post(f"/v1/sources/{src['id']}/items", json={**ITEM, "text": "Within 90 days."}))
+    latest = data(await client.get(f"/v1/sources/{src['id']}/runs"))["data"][0]
+    assert latest["counts"]["listed"] == 1 and latest["counts"]["upserted"] == 1, latest["counts"]

@@ -976,16 +976,24 @@ class KnowledgeService:
         return Lease(self.store, tenant, source_id, owner)
 
     async def _held_sync(
-        self, who: Who, s: dict[str, Any], *, full: bool, retry: bool, trigger: str | None = None
+        self,
+        who: Who,
+        s: dict[str, Any],
+        *,
+        full: bool,
+        retry: bool,
+        trigger: str | None = None,
+        only: str | None = None,
     ) -> dict[str, Any]:
-        """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once."""
+        """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once.
+        `only` names the one item to read (an item just written), so a write costs one file, not the whole source."""
         source_id = str(s["id"])
         lease = await self.take_lease(who.tenant_id, source_id)
         if lease is None:
             raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
-                return await self._sync(who, s, full=full, retry=retry, trigger=trigger)
+                return await self._sync(who, s, full=full, retry=retry, trigger=trigger, only=only)
         finally:
             await lease.release()
 
@@ -1183,7 +1191,14 @@ class KnowledgeService:
         return _run((await self.store.runs(who.tenant_id, run_id=run_id))[0])
 
     async def _sync(
-        self, who: Who, s: dict[str, Any], *, full: bool, retry: bool, trigger: str | None = None
+        self,
+        who: Who,
+        s: dict[str, Any],
+        *,
+        full: bool,
+        retry: bool,
+        trigger: str | None = None,
+        only: str | None = None,
     ) -> dict[str, Any]:
         """Reads every file of the source and indexes what changed: a new name is a new document, a known name with
         different content is its next version, identical content is unchanged. `full` rebuilds every document from its
@@ -1204,7 +1219,7 @@ class KnowledgeService:
         superseded: set[str] = set()
         uploaded: dict[str, str] = s.get("file_names") or {}
         counts["reading"] = 0
-        for file_id in s["file_ids"]:
+        for file_id in s["file_ids"] if only is None else [f for f in s["file_ids"] if uploaded.get(f) == only]:
             try:
                 found = await self.files.describe(who.tenant_id, source_team(s), file_id)
             except FileMissing:
@@ -2308,7 +2323,8 @@ class KnowledgeService:
         stored_file = await self.upload(who, source_id, data, name=name, mime=mime)
         same = before is not None and before["digest"] == stored_file["digest"] and before["status"] == "indexed"
         if not same:
-            await self.sync(who, source_id)
+            # The same run as a sync, reading only this item: the source's other items are as they were.
+            await self._held_sync(who, await self._source_row(who, source_id), full=False, retry=False, only=name)
         found = (await self.store.sources(who.tenant_id, [source_id]))[0]
         item = next(x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name)
         outcome = "unchanged" if same else "created" if before is None else "updated"
