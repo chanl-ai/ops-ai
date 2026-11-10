@@ -47,6 +47,8 @@ class Passage:
     chunk_id: str = ""
     # A person marked the item checked (its Verify action).
     verified: bool = False
+    # The reranker's score from 0 to 10 when a rerank ran (query_steps.py).
+    reranked: float | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,9 @@ class Found:
     skipped: dict[str, str]
     # Input tokens the question's embedding cost, charged to kb-service's key at models-service.
     embedding_tokens: int = 0
+    # The optional steps around the lanes (query_steps.py), as the answer shows them; None when not asked for.
+    rewrite: dict[str, Any] | None = None
+    rerank: dict[str, Any] | None = None
 
     def lanes_out(self) -> dict[str, Any]:
         return {

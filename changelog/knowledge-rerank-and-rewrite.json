@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Rerank and question rewrite on knowledge search",
+  "description": "A knowledge base's Retrieval tab can turn on a model that reranks the best pieces and one that rewrites the question with your instruction. The Playground shows the rewritten question and each piece's rerank score.",
+  "tag": "new"
+}

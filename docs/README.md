@@ -509,3 +509,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/app-page-one-state.md` | uc-674: An app's page shows one state and its next action |
 | `usecases/kb-service/a-website-source-keeps-a-knowledge.md` | uc-675: A website source keeps a knowledge base current, and answers cite it |
 | `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
+| `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |

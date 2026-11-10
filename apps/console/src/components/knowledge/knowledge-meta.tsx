@@ -235,13 +235,6 @@ export const RULE_PLACEHOLDER: Record<(typeof RULE_FIELDS)[number]['value'], str
   sizeUnder: 'e.g. 50 MB',
 };
 
-// kb-service searches by keyword and does not rerank yet (service.py's defaults), so no preset claims either.
-export const RETRIEVAL_PRESETS = {
-  balanced: { searchMode: 'keyword', rerank: false, chunkLimit: 8, threshold: 0.5, answerShape: 'answer_with_citations', temperature: 0.1 },
-  precise: { searchMode: 'keyword', rerank: false, chunkLimit: 5, threshold: 0.65, answerShape: 'answer_with_citations', temperature: 0 },
-  raw: { searchMode: 'keyword', rerank: false, chunkLimit: 10, threshold: 0.4, answerShape: 'chunks' },
-} as const;
-
 /** Why an item is not searched as-is: the rule, the missing metadata, the copy it duplicates or the version that replaced it. */
 export function itemReason(i: Item): string | undefined {
   if (i.status === 'excluded') return i.excludedBy ?? 'Excluded by hand';

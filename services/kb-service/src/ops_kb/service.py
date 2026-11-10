@@ -12,7 +12,9 @@ import asyncio
 import base64
 import binascii
 import contextlib
+import dataclasses
 import re
+import time
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -39,6 +41,7 @@ from .ai import AiClients, ai_run, spent_on
 from .embedding import Embedder, EmbedFailed, embed_pending
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .origin import Origin, source_team
+from .query_steps import RERANK_POOL, REWRITE_MODES, QueryModel, QueryStepFailed, ms_since, steps_for
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .repeats import lines_of, repeated, without
 from .retrieval import Found, Lane, Passage, Retriever, Search
@@ -59,8 +62,9 @@ from .store import DECIDABLE, KnowledgeStore
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, source_config, sync_tool_source
 
-# A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and threshold decide every search of
-# it (retrieval.py); the rest are the console's.
+# A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and the thresholds decide every search
+# of it (retrieval.py); rerank, rewrite and rewriteInstructions turn on the steps around it (query_steps.py), on the
+# chat-model alias queryModel (empty: the environment's kb_query_alias); the rest are the console's.
 DEFAULT_RETRIEVAL: dict[str, Any] = {
     "searchMode": "hybrid",
     "hybridWeight": 0.6,
@@ -73,6 +77,7 @@ DEFAULT_RETRIEVAL: dict[str, Any] = {
     "rewrite": "off",
     "expandCount": 3,
     "rewriteInstructions": "",
+    "queryModel": "",
     "scopeSourceIds": [],
     "answerShape": "answer_with_citations",
     "model": "bank-standard",
@@ -262,6 +267,8 @@ class KnowledgeService:
         embedder: Embedder | None = None,
         vectors: PgVectorStore | None = None,
         ai_clients: AiClients | None = None,
+        query_model: QueryModel | None = None,
+        query_alias: str = "default",
     ) -> None:
         """`tools` reads "tool" sources through tools-service's gateway; without it none can be made. `readings` gives
         each file's reading from documents-service, read with OCR mode `ocr` (settings.kb_ocr); without it a file
@@ -278,6 +285,11 @@ class KnowledgeService:
         self.vectors = vectors
         # Each run's model client for the sources' approved AI steps (ai.py); None in a stack with no models-service.
         self.ai_clients = ai_clients
+        # Rerank and rewrite through models-service (query_steps.py); None in a stack with no models-service, where a
+        # base asking for either is searched without it and the answer says why. `query_alias` is the environment's
+        # chat-model alias for both, used by a base that names none.
+        self.query_model = query_model
+        self.query_alias = query_alias
         # Rebuilds running in this process, so stopping the service ends them and their runs say why.
         self.rebuilds: set[asyncio.Task[None]] = set()
 
@@ -607,7 +619,7 @@ class KnowledgeService:
             if patch.get(key) is not None:
                 values[key] = patch[key]
         if patch.get("retrieval") is not None:
-            values["retrieval"] = {**b["retrieval"], **patch["retrieval"]}
+            values["retrieval"] = checked_retrieval({**b["retrieval"], **patch["retrieval"]})
         if values:
             entry = audit_entry(who, "knowledge.base.settings", "knowledge_base", kb_id, b["name"], b, values)
             await self.store.update_base(who.tenant_id, kb_id, values, audit=entry)
@@ -1722,9 +1734,59 @@ class KnowledgeService:
         if missing := [k for k in kb_ids if k not in readable and k not in retired]:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
         live = [k for k in dict.fromkeys(kb_ids) if k in readable]
-        how = search_settings([readable[k] for k in live], limit=limit)
-        found = await self.retriever.search(tenant, live, question, how)
+        found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit)
         return found_out(found)
+
+    async def _retrieve(
+        self, tenant: str, bases: list[dict[str, Any]], question: str, *, limit: int | None = None
+    ) -> Found:
+        """The one search every caller goes through: the question rewritten when a base asks, the lanes, then the best
+        fused pieces reranked when a base asks. A step that fails leaves the search as it was and says why."""
+        how = search_settings(bases, limit=limit)
+        steps = steps_for([{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases], self.query_alias)
+        searched: str = question
+        rewrite: dict[str, Any] | None = None
+        if steps.rewrite_alias is not None:
+            started = time.monotonic()
+            rewrite = {"asked": question, "rewritten": None}
+            try:
+                if self.query_model is None:
+                    raise QueryStepFailed("no_query_model")
+                searched = await self.query_model.rewrite(
+                    question, steps.instruction, alias=steps.rewrite_alias, tenant=tenant
+                )
+                rewrite["rewritten"] = searched
+            except QueryStepFailed as e:
+                rewrite["skipped"] = e.reason
+            rewrite["ms"] = ms_since(started)
+        pool = dataclasses.replace(how, limit=max(how.limit, RERANK_POOL)) if steps.rerank_alias else how
+        found = await self.retriever.search(tenant, [b["id"] for b in bases], searched, pool)
+        found = dataclasses.replace(found, rewrite=rewrite)
+        if steps.rerank_alias is None:
+            return found
+        return await self._reranked(tenant, found, searched, steps.rerank_alias, how.limit)
+
+    async def _reranked(self, tenant: str, found: Found, question: str, alias: str, limit: int) -> Found:
+        """The fused pieces in the order the reranker scores them, cut to the bases' limit; the fused order cut to it
+        when the reranker cannot answer."""
+        started = time.monotonic()
+        pool = found.passages
+        rerank: dict[str, Any] = {"ran": False, "model": alias, "scored": 0}
+        passages = pool[:limit]
+        if pool:
+            try:
+                if self.query_model is None:
+                    raise QueryStepFailed("no_query_model")
+                scores = await self.query_model.scores(question, [p.text for p in pool], alias=alias, tenant=tenant)
+                ranked = sorted(
+                    zip(pool, scores, strict=True), key=lambda ps: ps[1], reverse=True
+                )  # sorted is stable, so equal scores keep the fused order
+                passages = [dataclasses.replace(p, reranked=s) for p, s in ranked[:limit]]
+                rerank |= {"ran": True, "scored": len(pool)}
+            except QueryStepFailed as e:
+                rerank["skipped"] = e.reason
+        rerank["ms"] = ms_since(started)
+        return dataclasses.replace(found, passages=passages, rerank=rerank)
 
     async def query(self, who: Who, kb_id: str, question: str) -> dict[str, Any]:
         """The query route and the console's Playground: the passages one knowledge base returns for a question, with
@@ -1736,7 +1798,7 @@ class KnowledgeService:
         if b["last_refreshed_at"] is None:
             raise Conflict("This knowledge base has not indexed anything yet; sync a source first.", code="not_indexed")
         started = datetime.now(UTC)
-        found = await self.retriever.search(who.tenant_id, [kb_id], question, search_settings([b]))
+        found = await self._retrieve(who.tenant_id, [b], question)
         passages = found.passages
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
         items = {i["id"]: i for i in await self.store.items(who.tenant_id)}
@@ -2758,7 +2820,23 @@ def found_out(found: Found) -> dict[str, Any]:
         "passages": [passage_out(p) for p in found.passages],
         "lanes": found.lanes_out(),
         "cost": {"embeddingTokens": found.embedding_tokens},
+        **({"rewrite": found.rewrite} if found.rewrite is not None else {}),
+        **({"rerank": found.rerank} if found.rerank is not None else {}),
     }
+
+
+def checked_retrieval(r: dict[str, Any]) -> dict[str, Any]:
+    """A base's retrieval settings as saved: the steps around the search refused when they are not ones it runs."""
+    if r.get("rewrite") not in REWRITE_MODES:
+        raise ValidationFailed(
+            f"Rewrite is one of {', '.join(REWRITE_MODES)}; expanding a question into several is not built.",
+            code="invalid_retrieval",
+        )
+    if not isinstance(r.get("rerank"), bool):
+        raise ValidationFailed("Rerank is on or off.", code="invalid_retrieval")
+    if len(str(r.get("rewriteInstructions") or "")) > 1000:
+        raise ValidationFailed("Keep the rewrite instruction under 1,000 characters.", code="invalid_retrieval")
+    return r
 
 
 def passage_out(p: Passage) -> dict[str, Any]:
@@ -2777,4 +2855,5 @@ def passage_out(p: Passage) -> dict[str, Any]:
         "matched": p.matched,
         "lanes": p.lanes,
         "verified": p.verified,
+        **({"reranked": p.reranked} if p.reranked is not None else {}),
     }

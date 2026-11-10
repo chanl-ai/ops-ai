@@ -318,6 +318,8 @@ export interface RetrievalSettings {
   /** Phrasings searched when `rewrite` is `expand`, including the original. */
   expandCount: number;
   rewriteInstructions: string;
+  /** The models-service chat alias rerank and rewrite call; empty uses the installation's default. */
+  queryModel?: string;
   /** Empty means every attached source. */
   scopeSourceIds: string[];
   answerShape: AnswerShape;
@@ -521,6 +523,10 @@ export interface PlaygroundAnswer {
   passages?: SearchPassage[];
   /** What the question cost to search: the tokens embedding it took. */
   cost?: { embeddingTokens: number };
+  /** Present when the base rewrites questions: as asked, as searched (null when the rewrite was skipped, with why). */
+  rewrite?: { asked: string; rewritten: string | null; skipped?: string | null; ms: number };
+  /** Present when the base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped. */
+  rerank?: { ran: boolean; model: string; scored: number; skipped?: string | null; ms: number };
 }
 
 export interface SearchPassage {
@@ -535,6 +541,8 @@ export interface SearchPassage {
   lanes?: Record<string, number>;
   /** The unit it matched by: the piece's own text (`self`), a question, or an approved FAQ pair. */
   matched?: string;
+  /** The reranker's score from 0 to 10, when a rerank ran. */
+  reranked?: number;
   verified?: boolean;
   page?: number | null;
   url?: string | null;

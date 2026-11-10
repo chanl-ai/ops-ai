@@ -354,6 +354,28 @@ class PassageOut(Out):
     # Each lane's own score: keyword, the share of the question's terms; meaning, cosine similarity.
     lanes: dict[str, float] = Field(default_factory=dict[str, float])
     verified: bool = False
+    # The reranker's score from 0 to 10, when a rerank ran; the order then follows it.
+    reranked: float | None = None
+
+
+class RewriteOut(Out):
+    """The question as asked and as searched, present when a base rewrites questions."""
+
+    asked: str
+    # None when the rewrite was skipped; the question was then searched as asked.
+    rewritten: str | None = None
+    skipped: str | None = None
+    ms: int = 0
+
+
+class RerankOut(Out):
+    """Present when a base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped."""
+
+    ran: bool
+    model: str
+    scored: int = 0
+    skipped: str | None = None
+    ms: int = 0
 
 
 class SkippedLane(Out):
@@ -376,6 +398,8 @@ class SearchOut(Out):
     passages: list[PassageOut]
     lanes: Lanes
     cost: SearchCost
+    rewrite: RewriteOut | None = None
+    rerank: RerankOut | None = None
 
 
 class PlaygroundAnswer(Out):
@@ -389,6 +413,8 @@ class PlaygroundAnswer(Out):
     passages: list[PassageOut]
     lanes: Lanes
     cost: SearchCost
+    rewrite: RewriteOut | None = None
+    rerank: RerankOut | None = None
     retrieval_ms: int
     synthesis_ms: int
     shape: str

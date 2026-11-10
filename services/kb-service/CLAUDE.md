@@ -20,6 +20,7 @@ It does not own agents or their grants: "used by" asks agents-service (`agents.p
 | `src/ops_kb/app.py` | The FastAPI app and every route; models in `schemas.py`, mirroring `apps/console/src/lib/types/knowledge.ts` |
 | `src/ops_kb/service.py` | Bases and sources as the console reads them, joined and counted on the server |
 | `src/ops_kb/retrieval.py`, `store/fulltext.py` | The `Retriever` port and its one adapter, PostgreSQL full-text search with a score floor |
+| `src/ops_kb/query_steps.py` | Rerank and question rewrite around a search, through models-service on a chat-model alias |
 | `src/ops_kb/files.py` | Where a source's files are kept, through files-service |
 | `src/ops_kb/readings.py` | A file's reading from documents-service and its split; `POST /v1/events` takes `reading.finished` and `reading.failed`, and the knowledge schedule asks again for items still `reading` |
 | `src/ops_kb/tool_sources.py`, `schedule.py` | Knowledge read through a connection's tools, and the beat that syncs them on schedule |

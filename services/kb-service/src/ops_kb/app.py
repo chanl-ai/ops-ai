@@ -44,6 +44,7 @@ from .agents import AgentDirectory, AgentsUsage
 from .ai import AiClients, models_clients
 from .embedding import Backlog, Embedder, ModelsEmbedder, keep_embedding
 from .files import FileIntake, file_intake
+from .query_steps import ModelsQuery, QueryModel
 from .readings import DocumentsReadings, Readings
 from .schedule import keep_syncing
 from .schemas import (
@@ -183,6 +184,15 @@ def _embedder(settings: Settings) -> Embedder | None:
     return ModelsEmbedder(calls, settings.embedding_alias, settings.embedding_width)
 
 
+def _query_model(settings: Settings) -> QueryModel | None:
+    """Rerank and rewrite through models-service with kb-service's own key; None without either, and a base asking
+    for them is searched without them, saying why."""
+    if not settings.models_url or settings.models_key is None:
+        return None
+    http = httpx.AsyncClient(base_url=settings.models_url, timeout=30)
+    return ModelsQuery(ModelCalls(http, settings.models_key.get_secret_value()))
+
+
 def _ai_clients(settings: Settings) -> AiClients | None:
     """The sources' AI steps through models-service with kb-service's own key; None without either."""
     if not settings.models_url or settings.models_key is None:
@@ -241,6 +251,7 @@ def create_kb_app(
     events_to: ServiceClient | None = None,
     embedder: Embedder | None = None,
     ai_clients: AiClients | None = None,
+    query_model: QueryModel | None = None,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
@@ -254,6 +265,7 @@ def create_kb_app(
     events = events_to or _events_service(Settings())
     embedder = embedder or _embedder(Settings())
     ai_clients = ai_clients or _ai_clients(Settings())
+    query_model = query_model or _query_model(Settings())
     vectors = PgVectorStore(engine)
     backlog = Backlog()
 
@@ -305,6 +317,8 @@ def create_kb_app(
         embedder=embedder,
         vectors=vectors,
         ai_clients=ai_clients,
+        query_model=query_model,
+        query_alias=Settings().kb_query_alias,
     )
     errors = error_responses()
 

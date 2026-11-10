@@ -1973,6 +1973,8 @@ export interface components {
             matched: string;
             /** Page */
             page?: number | null;
+            /** Reranked */
+            reranked?: number | null;
             /** Score */
             score: number;
             /** Section */
@@ -2017,8 +2019,10 @@ export interface components {
             passages: components["schemas"]["PassageOut"][];
             /** Question */
             question: string;
+            rerank?: components["schemas"]["RerankOut"] | null;
             /** Retrievalms */
             retrievalMs: number;
+            rewrite?: components["schemas"]["RewriteOut"] | null;
             /** Shape */
             shape: string;
             /** Synthesisms */
@@ -2069,6 +2073,45 @@ export interface components {
             /** Slug */
             slug: string;
         };
+        /**
+         * RerankOut
+         * @description Present when a base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped.
+         */
+        RerankOut: {
+            /** Model */
+            model: string;
+            /**
+             * Ms
+             * @default 0
+             */
+            ms: number;
+            /** Ran */
+            ran: boolean;
+            /**
+             * Scored
+             * @default 0
+             */
+            scored: number;
+            /** Skipped */
+            skipped?: string | null;
+        };
+        /**
+         * RewriteOut
+         * @description The question as asked and as searched, present when a base rewrites questions.
+         */
+        RewriteOut: {
+            /** Asked */
+            asked: string;
+            /**
+             * Ms
+             * @default 0
+             */
+            ms: number;
+            /** Rewritten */
+            rewritten?: string | null;
+            /** Skipped */
+            skipped?: string | null;
+        };
         /** SearchCost */
         SearchCost: {
             /** Embeddingtokens */
@@ -2089,6 +2132,8 @@ export interface components {
             lanes: components["schemas"]["Lanes"];
             /** Passages */
             passages: components["schemas"]["PassageOut"][];
+            rerank?: components["schemas"]["RerankOut"] | null;
+            rewrite?: components["schemas"]["RewriteOut"] | null;
         };
         /** SkippedLane */
         SkippedLane: {

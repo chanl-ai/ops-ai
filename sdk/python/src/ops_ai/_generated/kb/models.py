@@ -358,6 +358,7 @@ class PassageOut(TypedDict, closed=True):
     lanes: NotRequired[dict[str, float]]
     matched: NotRequired[str]
     page: NotRequired[int | None]
+    reranked: NotRequired[float | None]
     score: float
     section: str
     snippet: str
@@ -395,6 +396,21 @@ class Reader(TypedDict, closed=True):
     id: str
     name: str
     slug: str
+
+
+class RerankOut(TypedDict, closed=True):
+    model: str
+    ms: NotRequired[int]
+    ran: bool
+    scored: NotRequired[int]
+    skipped: NotRequired[str | None]
+
+
+class RewriteOut(TypedDict, closed=True):
+    asked: str
+    ms: NotRequired[int]
+    rewritten: NotRequired[str | None]
+    skipped: NotRequired[str | None]
 
 
 class SearchCost(TypedDict, closed=True):
@@ -702,7 +718,9 @@ class PlaygroundAnswer(TypedDict, closed=True):
     noAnswer: NotRequired[bool | None]
     passages: list[PassageOut]
     question: str
+    rerank: NotRequired[RerankOut | None]
     retrievalMs: int
+    rewrite: NotRequired[RewriteOut | None]
     shape: str
     synthesisMs: int
 
@@ -711,6 +729,8 @@ class SearchOut(TypedDict, closed=True):
     cost: SearchCost
     lanes: Lanes
     passages: list[PassageOut]
+    rerank: NotRequired[RerankOut | None]
+    rewrite: NotRequired[RewriteOut | None]
 
 
 class Source(TypedDict, closed=True):

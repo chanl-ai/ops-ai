@@ -3480,6 +3480,17 @@
             ],
             "title": "Page"
           },
+          "reranked": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reranked"
+          },
           "score": {
             "title": "Score",
             "type": "number"
@@ -3596,9 +3607,29 @@
             "title": "Question",
             "type": "string"
           },
+          "rerank": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RerankOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "retrievalMs": {
             "title": "Retrievalms",
             "type": "integer"
+          },
+          "rewrite": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RewriteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "shape": {
             "title": "Shape",
@@ -3743,6 +3774,89 @@
         "title": "Reader",
         "type": "object"
       },
+      "RerankOut": {
+        "additionalProperties": false,
+        "description": "Present when a base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped.",
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "ms": {
+            "default": 0,
+            "title": "Ms",
+            "type": "integer"
+          },
+          "ran": {
+            "title": "Ran",
+            "type": "boolean"
+          },
+          "scored": {
+            "default": 0,
+            "title": "Scored",
+            "type": "integer"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          }
+        },
+        "required": [
+          "ran",
+          "model"
+        ],
+        "title": "RerankOut",
+        "type": "object"
+      },
+      "RewriteOut": {
+        "additionalProperties": false,
+        "description": "The question as asked and as searched, present when a base rewrites questions.",
+        "properties": {
+          "asked": {
+            "title": "Asked",
+            "type": "string"
+          },
+          "ms": {
+            "default": 0,
+            "title": "Ms",
+            "type": "integer"
+          },
+          "rewritten": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rewritten"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          }
+        },
+        "required": [
+          "asked"
+        ],
+        "title": "RewriteOut",
+        "type": "object"
+      },
       "SearchCost": {
         "additionalProperties": false,
         "properties": {
@@ -3806,6 +3920,26 @@
             },
             "title": "Passages",
             "type": "array"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RerankOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rewrite": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RewriteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

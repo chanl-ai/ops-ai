@@ -367,6 +367,9 @@ export interface StackOptions {
    * for a use case whose model calls the demo does not answer (documents' Detect, say).
    */
   fakeModelRules?: string;
+  /** With `demo`, kb-service calls models-service too (its own key), so its embeddings, rerank and rewrite run on the
+   * fake OpenAI; off, kb-service runs without models as before. */
+  kbModels?: boolean;
   /**
    * The demo stack, with mail, plus the sample team installed in one call by scripts/sample_team.py (`make sample-team`, without the
    * levy story), as the workspace admin: its team, people, agents and workflows. Opt-in, since no default seed reads it
@@ -818,6 +821,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       // A knowledge base's "used by" comes from agents-service, on this run's port.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
+      ...(options.kbModels && modelsRoute.OPS_MODELS_URL ? { OPS_MODELS_URL: modelsRoute.OPS_MODELS_URL, OPS_MODELS_KEY: 'mk_dev_kb' } : {}),
       ...auth,
     });
     await runToEnd('kb-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], kbDir, kbEnv);
