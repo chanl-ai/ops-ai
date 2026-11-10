@@ -87,6 +87,8 @@ async def test_an_add_returns_the_entry_as_its_list_shows_it(
     listed = _data(await client.get("/v1/egress/hosts", params={"search": "zz-new"}, headers=sam))["data"]
     assert _data(again)["entry"] == host == listed[0]
 
-    cidr = _data(await client.post("/v1/egress/ranges", json={"value": "10.42.0.0/16"}, headers=sam))["entry"]
+    ranged = await client.post("/v1/egress/ranges", json={"value": "10.42.0.0/16"}, headers=sam)
+    assert ranged.status_code == 201, ranged.text
+    cidr = _data(ranged)["entry"]
     assert (cidr["cidr"], cidr["addedBy"]) == ("10.42.0.0/16", "Sam Adeyemi")
     assert set(cidr) == {"cidr", "note", "addedBy", "addedAt", "templateId", "protection"}
