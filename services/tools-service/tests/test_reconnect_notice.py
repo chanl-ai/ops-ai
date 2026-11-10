@@ -44,8 +44,11 @@ async def test_a_refused_team_account_names_the_app_to_reconnect_and_tells_admin
         # The account's app, under which the console's Reconnect opens it.
         "appId": "plugin:test.client",
         "app": "Client desk",
+        "connection": "Client desk",
         "account": "team",
         "state": "refused",
+        # What a run waits on until an admin signs the team account in again.
+        "connectedEvent": {"name": "app_account.connected", "key": f"{connection_id}:team"},
     }, error
     await call_as_team(rig, tenant, "test.client")
     told = await notices(rig, tenant)
