@@ -23,6 +23,7 @@ One agent per job. A stage names the agent that does it; the agent's file says w
 | Browser test | The few end-to-end paths through a real browser, as each role, at both widths, with the states | `ops-browser-tester` |
 | UX review | A built screen judged against the spec, the heuristics and WCAG 2.2 AA | `ops-ux-reviewer` |
 | Code review | One built branch against its design, the rules and the evidence; a security review uses the same agent | `ops-code-reviewer` |
+| Triage | A reported bug reproduced read-only: the cause (file:line), every place with the same problem, its risk class, and whether it is already open | `ops-triage` |
 
 A change to a screen, an API contract, a data model or a flow across services goes through Design, Design review and
 Test design before Build. A bug fix or a docs-only change goes to Build with the test designer's list of failure modes
@@ -38,7 +39,8 @@ profile's "Commands an agent runs" table names the make targets.
 |---|---|---|
 | `scripts/agents/review_context.py` | One bundle: diff stat, changed files by layer with the docs they map to, tests added or changed, new public surface, the leak scan and lint results | `ops-code-reviewer`, `ops-architect` in review, `ops-test-auditor` |
 | `scripts/agents/test_audit.py` | Test effectiveness: mutation score on the changed lines with each surviving mutant, tests that cannot fail, duplicates, timing smells, failure modes in the design with no test | `ops-test-auditor`, `ops-test-designer` |
-| `scripts/agents/ui_walk.mjs` | Screenshots of the given routes as each role at each width, with page errors, failed requests, overflow and the loading, error and empty states | `ops-browser-tester`, `ops-ux-reviewer`, `ops-mock-designer` |
+| `scripts/agents/ui_walk.mjs` | Screenshots of the given routes as each role at each width, with page errors, failed requests, overflow and the loading, error and empty states | `ops-browser-tester`, `ops-ux-reviewer`, `ops-mock-designer`, `ops-triage` |
+| `scripts/agents/seed_canaries.py` | A throwaway worktree branch with known bugs planted from a catalogue, the answer key kept outside the finder's reach, and a score of a finder's report against it (caught, missed, false) | the finder scorecard for `ops-triage`, `ops-code-reviewer`, `ops-ux-reviewer` and `ops-test-auditor` |
 
 ## Working
 
@@ -56,6 +58,17 @@ profile's "Commands an agent runs" table names the make targets.
 | Model calls in tests are scripted; real calls are capped by the project's rule | profile "Tests" |
 | An agent that reviews, audits or tests does not change product code; it reports, with file:line | here |
 | Tell the reader what to do, with the reason, in plain words; no narration of how the result was reached | here |
+
+## Fixing a bug: cause first, once
+
+`ops-triage` finds the cause and `ops-builder` fixes it; both follow these rows.
+
+| Rule | Detail |
+|---|---|
+| Root cause first | Name the cause (file:line) with a confidence score from 0 to 100 percent and the evidence behind it: what was reproduced, which log line or test showed it, what else was ruled out |
+| Fix the cause once, at the lowest shared layer that owns it | A package, the service kit, a shared hook or component, or a policy default, so every place with the same problem is fixed by one change, and a test or check stops it coming back. Never a patch on one screen or one call site |
+| Under 80 percent confidence, reproduce first | Try to show the failure in an isolated harness (a unit test, a use case, a scratch headless script). If it still cannot be shown, do not fix it: add a log line or probe at the suspected seam, mark the item "waiting for recurrence" with what the probe will show, and fix when it recurs |
+| A fix that reopens scores nothing | The finder scorecard (`scripts/agents/seed_canaries.py`) counts a bug as caught only while its fix holds; a reopened bug is a miss |
 
 ## Everything you write is public
 

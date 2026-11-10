@@ -5,7 +5,7 @@ Every fact about this repository that an agent or an agent script needs lives he
 conventions of Ops AI; `.claude/agent-rules.md` holds the rules every agent follows; `.claude/workspace.local.md`
 holds what is true for one machine. To use the agents on another repository, replace this file.
 
-The scripts under `scripts/agents/` read the tables below (`scripts/agents/profile.py`, `profile.mjs`). A table a
+The scripts under `scripts/agents/` read the tables below (`scripts/agents/project_profile.py`, `project_profile.mjs`). A table a
 script reads keeps its heading and columns; a flag on the command line overrides a row. `OPS_AGENT_PROFILE` names
 another profile file. Paths are relative to the repository root.
 
@@ -26,6 +26,7 @@ Which files belong to which layer, what a change to them must read, and the gate
 | console | `apps/console/src/**`, `apps/embed/src/**` | `apps/console/CLAUDE.md`, `docs/console/page-plan.md` | `pnpm verify` |
 | plugins | `plugins/**`, `packages/ops_plugin_sdk/**` | `docs/guide/plugins.md`, `docs/architecture/tool-lifecycle.md` | `make test PKG=packages/ops_plugin_sdk` |
 | deploy | `deploy/**`, `.github/**`, `Makefile`, `make/**` | `deploy/CLAUDE.md`, `docs/architecture/make.md`, `docs/deploy/` | `make verify` |
+| agents | `.claude/agents/**`, `.claude/agent-rules.md`, `.claude/project-profile.md`, `.claude/workspace.example.md` | `.claude/agent-rules.md` | `node scripts/check-public-paths.mjs <files>` |
 | docs | `docs/**`, `*.md` | `CONTRIBUTING.md` "Doc standards" | `node scripts/check-docs.mjs` |
 | scripts | `scripts/**` | `scripts/CLAUDE.md` | `uv run pytest -q scripts/tests` |
 | changelog | `changelog/**`, `roadmap.json` | `CLAUDE.md` "Commits" | `make changelog-verify` |
@@ -47,10 +48,10 @@ The scripts run these before an agent reads anything; a `make` target wraps each
 
 What the review-context script lists as new public surface, found on added lines of the diff.
 
-| Surface | Pattern (Python regex on an added line) | Files |
+| Surface | Pattern (Python regex on an added line; a bar inside it is written `\|`) | Files |
 |---|---|---|
-| HTTP route | `@(?:router|app|[a-z_]+_router)\.(get|post|put|patch|delete)\(\s*["']([^"']+)` | `services/*/src/**/*.py` |
-| Response or request model | `^class\s+(\w+)\((?:[\w.]*BaseModel|[\w.]*Schema)[^)]*\):` | `services/*/src/**/*.py`, `packages/*/src/**/*.py` |
+| HTTP route | `@(?:router\|app\|[a-z_]+_router)\.(get\|post\|put\|patch\|delete)\(\s*["']([^"']+)` | `services/*/src/**/*.py` |
+| Response or request model | `^class\s+(\w+)\((?:[\w.]*BaseModel\|[\w.]*Schema)[^)]*\):` | `services/*/src/**/*.py`, `packages/*/src/**/*.py` |
 | Migration | `migrations/versions/` | path contains it |
 | OpenAPI document | `openapi.json` | path ends with it |
 | Console route | `apps/console/src/app/**/page.tsx` | path matches |
@@ -118,7 +119,8 @@ What a browser walk needs. The dev password is the seed's, in the public reposit
 
 | Setting | Value |
 |---|---|
-| Console origin | `http://localhost:3016` (`OPS_CONSOLE_PORT` in `make/env.mk`) |
+| Console origin | `http://localhost:3016` |
+| Console port variable | `OPS_CONSOLE_PORT` in `make/env.mk`; `OPS_CONSOLE_ORIGIN` overrides the origin for the walk script |
 | Sign-in page | `/login`; fields labelled `Email` and `Password`; the button's name starts with `Sign in` |
 | Signed in when | the URL leaves `/login` |
 | Loading, error and empty states | `?mock=slow`, `?mock=error`, `?mock=empty` on any route when the console runs on the mock (`pnpm dev`); `?mock=off` resets |
