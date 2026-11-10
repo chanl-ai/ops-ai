@@ -692,7 +692,8 @@ class Apps:
                         "kind": "plugin",
                         # The account the plugin made carries its title, which outlives the manifest.
                         "name": str(row["display_name"]) if row else str(conn["name"]) if conn else pid,
-                        "toolsCount": 0,
+                        # The tools it listed, so the card and the Tools tab count the same ones.
+                        "toolsCount": ops.get(str(row["id"]), 0) if row else 0,
                         "connectionId": conn["id"] if conn else None,
                         "pluginId": pid,
                         "moduleIds": [str(row["id"])] if row else [],

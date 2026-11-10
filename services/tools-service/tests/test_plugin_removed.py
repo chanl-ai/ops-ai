@@ -72,6 +72,11 @@ async def test_a_removed_plugin_keeps_its_card_and_says_it_is_no_longer_installe
     assert page.json()["data"]["card"]["appState"] == "removed"
     rows = page.json()["data"]["accounts"]
     assert rows and all(r["actions"] == [] and r["test"] is None for r in rows), "read-only, with no stale test"
+    # The card counts the tools the page lists, not zero.
+    assert card["toolsCount"] == len(page.json()["data"]["tools"]) > 0, (
+        card["toolsCount"],
+        page.json()["data"]["tools"],
+    )
 
 
 async def test_a_removed_plugins_tool_refuses_with_that_reason(rig: Rig, engine: AsyncEngine, tenant: str) -> None:
