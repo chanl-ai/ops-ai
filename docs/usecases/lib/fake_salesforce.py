@@ -275,6 +275,9 @@ class Salesforce:
         self.records = self.org.records
         self.unparsed = self.org.unparsed
         self.revoked: list[str] = []
+        # Tokens an org stopped taking (revoke_sessions): its API answers them 401, as Salesforce does once a session is
+        # revoked or has expired.
+        self.dead: set[str] = set()
         # The OAuth app each token exchange came from, (client id, client secret): which app a team's sign-in used.
         self.clients: list[tuple[str, str]] = []
         # The scopes asked for at sign-in, by the code the server returned, then by the access token issued for it.
@@ -411,6 +414,9 @@ class Salesforce:
 
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
+        if token in self.dead:
+            self.refused.append("revoked")
+            return JSONResponse([{"errorCode": "INVALID_SESSION_ID", "message": "Session expired or invalid"}], 401)
         try:
             said = str(jwt.decode(token, options={"verify_signature": False}).get("iss") or "")
             if said not in self._jwks:
@@ -424,6 +430,17 @@ class Salesforce:
             self.refused.append(type(e).__name__)
             return JSONResponse([{"errorCode": "INVALID_SESSION_ID", "message": str(e)}], 401)
         return str(claims["sub"]), set(self._scope_by_token.get(token, "").split())
+
+    def revoke_sessions(self, host: str) -> None:
+        """Every token issued so far for the org at `host` stops working, as when an admin revokes its sessions; a
+        later sign-in gets a working one. Refreshes are refused only while `refuse_refresh` is set."""
+        for token in list(self._scope_by_token):
+            try:
+                said = str(jwt.decode(token, options={"verify_signature": False}).get("iss") or "")
+            except jwt.PyJWTError:
+                continue  # a refresh token, which is not a JWT
+            if INSTANCES.get(said) == host:
+                self.dead.add(token)
 
     def _org_api(self, request: Any, path: str, body: bytes, who: str, scopes: set[str]) -> Response | None:
         """The advisor org's calls, or None for a path the case handlers answer. A Case call comes here only when it

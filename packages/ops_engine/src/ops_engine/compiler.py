@@ -464,11 +464,15 @@ def _error_code(output: Any) -> str | None:
 # The gateway's refusal for a call acting for a person who has not connected their own account (tools-service
 # auth._not_linked); its details name the event their connecting reports, absent when nobody acts behind the call.
 NOT_LINKED = "CONNECTION_NOT_LINKED"
+# The gateway's refusal for a call on a team account whose sign-in ended (tools-service auth._team_account_stopped);
+# its details name the event an admin's new sign-in reports.
+SIGN_IN_ENDED = "AUTH_FAILED"
 
 
 def connect_wait(output: Any) -> dict[str, Any] | None:
-    """The event and key to wait on when `output` is a refusal a person answers by connecting; None otherwise."""
-    if _error_code(output) != NOT_LINKED:
+    """The event and key to wait on when `output` is a refusal a person answers by signing in: their own account not
+    connected yet, or a team account whose sign-in ended. None otherwise, and for any refusal naming no event."""
+    if _error_code(output) not in (NOT_LINKED, SIGN_IN_ENDED):
         return None
     details: Any = cast(dict[str, Any], cast(dict[str, Any], output)["error"]).get("details")
     if not isinstance(details, dict):
@@ -486,6 +490,8 @@ def connect_wait(output: Any) -> dict[str, Any] | None:
         # The account's app, under which the person's Connect my account opens it.
         "appId": d.get("appId"),
         "teamAccount": bool(d.get("teamAccount")),
+        # The team account itself needs signing in again, by an admin, rather than a person's own account.
+        "again": d.get("account") == "team",
     }
 
 
@@ -546,7 +552,9 @@ async def gateway_call(call: NodeCall) -> Outcome:
             call,
             event=wait["name"],
             key=wait["key"],
-            title=f"Connect your {app} account to continue",
+            title=f"Sign in to {app} again to continue"
+            if wait.get("again")
+            else f"Connect your {app} account to continue",
             timeout_seconds=0,
             app=app,
             connectionId=wait.get("connectionId"),

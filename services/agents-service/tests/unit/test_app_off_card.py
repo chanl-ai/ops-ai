@@ -78,3 +78,15 @@ def test_a_team_account_not_signed_in_yet_reads_as_a_card_naming_the_app() -> No
     refused = {"error": {"code": "NOT_SIGNED_IN", "message": "x", "details": {"app": "Desk", "appId": "plugin:desk"}}}
     said = str(carded(refused))
     assert "Desk is on for this team" in said and "team admin connects it" in said and "NOT_SIGNED_IN" not in said, said
+
+
+def test_a_team_account_whose_sign_in_ended_reads_as_the_sign_in_card_and_any_other_auth_failure_does_not() -> None:
+    """Failure mode: an account a chat or agent names lost its team sign-in, and the model reads the raw refusal
+    (and may offer another account) instead of pointing to the card that signs that account in again."""
+    details = {"app": "EU org", "connection": "EU org", "account": "team", "state": "refused",
+               "connectedEvent": {"name": "app_account.connected", "key": "con_eu:team"}}  # fmt: skip
+    ended = {"error": {"code": "AUTH_FAILED", "message": "EU org needs reconnecting.", "details": details}}
+    said = str(carded(ended))
+    assert "EU org" in said and "card above" in said and "AUTH_FAILED" not in said, said
+    other = {"error": {"code": "AUTH_FAILED", "message": "The signing certificate expired."}}
+    assert carded(other) is None

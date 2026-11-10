@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "A run waits when a named account's sign-in ends",
+  "description": "When the team sign-in of an account a step, agent or chat names expires or is revoked, the run waits until an admin signs that account in again and then goes on, and the chat shows a card to sign it in. No call moves to another account.",
+  "tag": "fix"
+}

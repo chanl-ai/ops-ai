@@ -983,7 +983,8 @@ class ConnectionService:
                 detail={"settings": sorted(extra)},
             )
         detail = {"account": token.account, **({"own": True} if token_for != SHARED else {})}
-        own = connected_event(conn, token_for) if token_for != SHARED else None
+        # A person's own sign-in, or the team's signed in again: either wakes a run waiting on it.
+        own = connected_event(conn, token_for)
         event = self._event(who, "signed_in", detail)
         await self.store.note(who.tenant_id, connection_id, event, report=own)
         now_set = {**settings, **extra}

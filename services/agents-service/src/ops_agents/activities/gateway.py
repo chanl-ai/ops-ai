@@ -280,8 +280,15 @@ TEAM_SIGN_IN_LINE = (
     "Not run: {app} is on for this team, but its team account is not signed in yet. Reply with one sentence saying a "
     "team admin connects it from the card above, then you carry on with this ask; offer no other steps or help."
 )
+# A team account whose sign-in ended (tools-service auth._team_account_stopped, which names the event its next sign-in
+# reports): the card above sends an admin to sign that account in again. Any other AUTH_FAILED is read as it is.
+SIGN_IN_ENDED = "AUTH_FAILED"
+SIGN_IN_ENDED_LINE = (
+    "Not run: {app}'s team sign-in has ended. Reply with one sentence saying a team admin signs it in again from the "
+    "card above, then you carry on with this ask; do not use another account and offer no other steps or help."
+)
 # The refusals the chat draws as a card (carded).
-CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN)
+CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN, SIGN_IN_ENDED)
 
 
 def _object(value: Any) -> dict[str, Any] | None:
@@ -297,6 +304,10 @@ def carded(output: Any) -> str | None:
     if error is None or error.get("code") not in CARD_CODES:
         return None
     details = _object(error.get("details")) or {}
+    if error.get("code") == SIGN_IN_ENDED:
+        if details.get("account") != "team" or not _object(details.get("connectedEvent")):
+            return None
+        return SIGN_IN_ENDED_LINE.format(app=str(details.get("connection") or details.get("app") or "this app"))
     if error.get("code") == CHOICE:
         accounts = details.get("accounts")
         n = len(cast(list[Any], accounts)) if isinstance(accounts, list) else 2

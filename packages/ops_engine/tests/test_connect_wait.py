@@ -92,3 +92,40 @@ async def test_run_as_the_team_account_sends_the_call_acting_for_nobody() -> Non
     state = await g.aget_state(config("c4"))
     assert state.values[channel("lookup")]["port"] == "ok", state.values[channel("lookup")]
     assert tools.as_team[-1] is True and AS_TEAM_ACCOUNT.get() is False, tools.as_team
+
+
+class TeamSignInEnded(FakeTools):
+    """Refuses the first call as tools-service does once the team account's sign-in ended
+    (auth._team_account_stopped), then answers."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.calls.append(key)
+        if len(self.calls) == 1:
+            details = {
+                "connectionId": "con_eu", "appId": "plugin:opsai.salesforce", "app": "EU org", "connection": "EU org",
+                "account": "team", "state": "refused",
+                "connectedEvent": {"name": "app_account.connected", "key": "con_eu:team"},
+            }  # fmt: skip
+            message = "EU org needs reconnecting: the org refused the sign-in."
+            return ToolResult(False, {"error": {"code": "AUTH_FAILED", "message": message, "details": details}})
+        return ToolResult(True, {"id": input.get("customer_id"), "name": "Ana"})
+
+
+async def test_a_team_account_whose_sign_in_ended_waits_for_an_admin_to_sign_it_in_again() -> None:
+    """Failure mode: a step naming an account whose team sign-in ended fails at once (or moves to another account)
+    instead of waiting until an admin signs that account in again."""
+    tools, saver = TeamSignInEnded(), InMemorySaver()
+    g = build(tools, MemoryJournal(), saver)
+    await g.ainvoke({"input": PAYLOAD}, config("c5"), durability="sync")
+    [paused] = (await g.aget_state(config("c5"))).interrupts
+    wait = paused.value
+    assert (wait["event"], wait["key"]) == ("app_account.connected", "con_eu:team"), wait
+    assert wait["title"] == "Sign in to EU org again to continue" and not wait.get("teamAccount"), wait
+    await g.ainvoke(Command(resume={"event": {"connectionId": "con_eu"}}), config("c5"), durability="sync")
+    state = await g.aget_state(config("c5"))
+    assert state.values[channel("lookup")]["port"] == "ok", state.values[channel("lookup")]
