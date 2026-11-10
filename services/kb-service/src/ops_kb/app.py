@@ -87,6 +87,8 @@ from .schemas import (
     Tombstone,
     TombstonesIn,
     VerifyIn,
+    WrittenItem,
+    WrittenItemIn,
 )
 from .search import HybridRetriever
 from .service import KnowledgeService, Who
@@ -511,6 +513,12 @@ def create_kb_app(
     @sources.post("/{source_id}/resume", response_model=Envelope[Source])
     async def resume_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.set_paused(who, source_id, paused=False))
+
+    @sources.post("/{source_id}/items", response_model=Envelope[WrittenItem])
+    async def put_item(source_id: str, body: WrittenItemIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Writes one item into a typed text or push source by its name, kept as a file and indexed at once. Sending
+        the same name and content again changes nothing and starts no sync; new content is the item's next version."""
+        return ok(await service.put_item(who, source_id, body.model_dump(exclude_none=True)))
 
     @sources.get("/{source_id}/items", response_model=Envelope[ListResult[Item]])
     async def list_items(  # pyright: ignore[reportUnusedFunction]

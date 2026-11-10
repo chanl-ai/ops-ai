@@ -9,6 +9,8 @@ docs/services/kb-service/overview.md gives the designed surface and says which p
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import re
 from collections.abc import Coroutine
@@ -91,7 +93,12 @@ PRESETS: dict[str, dict[str, Any]] = {
     "precise": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.4, "answerShape": "answer_with_citations"},
     "raw": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.25, "answerShape": "chunks"},
 }
-SOURCE_TYPES_IN_PHASE = ("file", "tool")
+SOURCE_TYPES_IN_PHASE = ("file", "text", "push", "tool")
+# Kinds whose items are written through the API (POST /v1/sources/{id}/items) and kept as files like uploads: typed
+# text from the console's editor, and items another system pushes. A file source's items come from Files instead.
+WRITTEN_TYPES = ("text", "push")
+# The mime an item written as text is stored under unless the caller names another text type.
+WRITTEN_TEXT_MIMES = {"text/markdown": ".md", "text/plain": ".txt", "text/html": ".html"}
 SENSITIVITIES = ("internal", "confidential", "restricted")
 MAX_PAGE_SIZE = 100
 # A sync or rebuild holds its source's lease this long at a time and renews it every third of that while it runs, so
@@ -770,7 +777,8 @@ class KnowledgeService:
     async def source_kinds(self, who: Who) -> list[dict[str, Any]]:
         """Files, then each knowledge source the team's apps offer (none when this service reads no tools)."""
         out: list[dict[str, Any]] = [
-            {"type": "file", "kind": "file", "group": "built_in", "title": "Files", **kind_defaults("file", self.ocr)}
+            {"type": t, "kind": t, "group": "built_in", "title": KIND_LABEL[t], **kind_defaults(t, self.ocr)}
+            for t in ("file", *WRITTEN_TYPES)
         ]
         if self.tools is None or not who.team_id:
             return out
@@ -1089,7 +1097,7 @@ class KnowledgeService:
                 else:
                     found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
                                    str(item["digest"]), False)  # fmt: skip
-                    origin = Origin(str(item["path"]), str(item["title"])) if s["type"] != "file" else None
+                    origin = Origin(str(item["path"]), str(item["title"])) if s["type"] == "tool" else None
                     done = await self._read_file(
                         who, s, item, name=str(item["path"]), found=found, rebuild=True, origin=origin
                     )
@@ -1451,7 +1459,7 @@ class KnowledgeService:
         settings = self.settings_of(s)
         built = item.get("indexed_with") or index_key(stored(kind_of(s), None, ocr=self.ocr))
         read_ocr = str(item.get("read_with") or "").split(":")
-        reread = s["type"] == "file" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
+        reread = s["type"] != "tool" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
         return built != self.key_of(s) or reread
 
     async def _read_file(
@@ -1559,7 +1567,7 @@ class KnowledgeService:
             found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
                            str(item["digest"]), False)  # fmt: skip
             # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
-            origin = Origin(str(item["path"]), str(item["title"])) if source["type"] != "file" else None
+            origin = Origin(str(item["path"]), str(item["title"])) if source["type"] == "tool" else None
             done = await self._read_file(
                 who, source, item, name=str(item["path"]), found=found, rebuild=False, origin=origin
             )
@@ -2174,17 +2182,43 @@ class KnowledgeService:
         source = next((x for x in attached if x["name"] == name), None)
         if source is None:
             source = await self.create_source(
-                who, {"type": "file", "name": name, "collection": "Pages", "owner": b["owner"], "kbIds": [kb_id]}
+                who, {"type": "text", "name": name, "collection": "Pages", "owner": b["owner"], "kbIds": [kb_id]}
             )
-        path = f"{_slug(title) or 'page'}.md"
-        body = f"# {title}\n\n{text}\n".encode()
-        await self.upload(who, str(source["id"]), body, name=path, mime="text/markdown")
-        await self.sync(who, str(source["id"]))
-        found = await self.store.sources(who.tenant_id, [str(source["id"])])
-        item = next(
-            i for i in await self.store.items(who.tenant_id, source_ids=[str(source["id"])]) if i["path"] == path
+        put = await self.put_item(who, str(source["id"]), {"name": f"{_slug(title) or 'page'}.md", "title": title,
+                                                            "text": text})  # fmt: skip
+        return cast(dict[str, Any], put["item"])
+
+    async def put_item(self, who: Who, source_id: str, i: dict[str, Any]) -> dict[str, Any]:
+        """One item written into a typed text or push source, by its `name`: stored as a file through files-service
+        like an upload, then indexed by the source's sync. The same name with the same content is `unchanged` and
+        starts no run, so a caller may send it again safely; the same name with new content is its next version.
+        `text` is Markdown (a `title` becomes its heading) or another text type by `mime`; `content` is base64 bytes
+        of a file such as a PDF, with its `mime`."""
+        s = await self._changeable_source(who, source_id)
+        if s["type"] not in WRITTEN_TYPES:
+            raise ValidationFailed(
+                f"{s['name']} takes its items from {KIND_LABEL.get(kind_of(s), s['type'])}; items are written only "
+                "into a typed text or push source.",
+                code="source_not_written",
+            )
+        name, title = str(i.get("name") or "").strip(), str(i.get("title") or "").strip()
+        if not name:
+            raise ValidationFailed("Give the item a name, such as escrow-analysis.md.")
+        data, mime = written_bytes(i, title)
+        if not name.endswith(tuple(WRITTEN_TEXT_MIMES.values())) and mime in WRITTEN_TEXT_MIMES:
+            # The reader takes a written item's type from its name, as it does an upload's.
+            name = f"{name}{WRITTEN_TEXT_MIMES[mime]}"
+        before = next(
+            (x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name), None
         )
-        return self._item(item, found[0])
+        stored_file = await self.upload(who, source_id, data, name=name, mime=mime)
+        same = before is not None and before["digest"] == stored_file["digest"] and before["status"] == "indexed"
+        if not same:
+            await self.sync(who, source_id)
+        found = (await self.store.sources(who.tenant_id, [source_id]))[0]
+        item = next(x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name)
+        outcome = "unchanged" if same else "created" if before is None else "updated"
+        return {"outcome": outcome, "item": self._item(item, found)}
 
     async def add_documents(self, who: Who, kb_id: str, file_ids: list[str]) -> dict[str, Any]:
         """Files from Files added to the base: into its own documents source, made and attached the first
@@ -2499,6 +2533,8 @@ def kind_defaults(kind: str, ocr: str, *, plugin_schedule: Any = None) -> dict[s
 
 def scope_summary(s: dict[str, Any]) -> str:
     """What a source takes in, in a few words: a site's start address, or a plugin source's name, or its files."""
+    if s["type"] in WRITTEN_TYPES:
+        return f"{len(s['file_ids'])} {'pages' if s['type'] == 'text' else 'pushed items'}"
     if s["type"] != "tool":
         return f"{len(s['file_ids'])} uploaded files"
     cfg = dict(s.get("config") or {})
@@ -2511,7 +2547,7 @@ def scope_summary(s: dict[str, Any]) -> str:
 
 
 # A source's kind in words, when its plugin's own title for it is not kept (a source made before titles were).
-KIND_LABEL = {"file": "Files", "web": "Website", "tool": "App source"}
+KIND_LABEL = {"file": "Files", "text": "Typed text", "push": "Pushed by API", "web": "Website", "tool": "App source"}
 
 
 def kind_label(s: dict[str, Any]) -> str:
@@ -2525,6 +2561,34 @@ def ai_steps_waiting(settings: IngestSettings) -> list[str]:
     return [
         step for step in settings.strategies if step in AI_STEPS and not ai_step_allowed(settings, step, preview=False)
     ]
+
+
+def written_bytes(i: dict[str, Any], title: str) -> tuple[bytes, str]:
+    """The bytes and mime of an item written through the API: its `text` (Markdown by default, headed by its title) or
+    its base64 `content`, one of the two."""
+    text, content = i.get("text"), i.get("content")
+    if (text is None) == (content is None):
+        raise ValidationFailed("Send the item's text or its base64 content, one of the two.")
+    if content is not None:
+        mime = str(i.get("mime") or "")
+        if not mime:
+            raise ValidationFailed("Name the content's type in mime, such as application/pdf.")
+        try:
+            data = base64.b64decode(str(content), validate=True)
+        except (ValueError, binascii.Error) as e:
+            raise ValidationFailed("The content is not base64.") from e
+        if not data:
+            raise ValidationFailed("The content is empty.")
+        return data, mime
+    mime = str(i.get("mime") or "text/markdown")
+    if mime not in WRITTEN_TEXT_MIMES:
+        raise ValidationFailed(f"Text is one of {', '.join(WRITTEN_TEXT_MIMES)}; send other files as content.")
+    body = str(text).strip()
+    if not body:
+        raise ValidationFailed("Write the item's text.")
+    if title and mime == "text/markdown" and not body.startswith("# "):
+        body = f"# {title}\n\n{body}"
+    return f"{body}\n".encode(), mime
 
 
 def kind_of(s: dict[str, Any]) -> str:

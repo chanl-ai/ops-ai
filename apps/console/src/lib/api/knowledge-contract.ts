@@ -30,6 +30,8 @@ import type {
   SyncOptions,
   SyncRun,
   Tombstone,
+  WrittenItem,
+  WrittenItemInput,
 } from '@/lib/types/knowledge';
 import type { SampleDocument, SplitPreview, SplitPreviewInput } from '@/lib/types/knowledge-ingest';
 import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/types/query';
@@ -72,6 +74,8 @@ export interface KnowledgeApi {
     sync(id: string, opts?: SyncOptions): Promise<SyncRun>;
     /** Adds files already in Files (the team's, scanned clean) to a file source by id; the next sync indexes them. */
     addFiles(id: string, fileIds: string[]): Promise<{ fileId: string; name: string }[]>;
+    /** Writes one item into a typed text or push source by its name, indexed at once; the same content is unchanged. */
+    putItem(id: string, input: WrittenItemInput): Promise<WrittenItem>;
     /** Stops a running sync or rebuild between two items. */
     cancelRun(runId: string): Promise<SyncRun>;
     setPaused(id: string, paused: boolean): Promise<Source>;

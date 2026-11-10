@@ -8,7 +8,7 @@ import type { AnswerShape, FilterGroup, QueryMode, RetrievalTrace, RewriteMode, 
 
 export type Sensitivity = 'internal' | 'confidential' | 'restricted';
 
-export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce' | 'tool';
+export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'push' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce' | 'tool';
 
 export type SourceStatus = 'active' | 'paused' | 'draft' | 'revoked';
 export type RunStatus = 'running' | 'success' | 'partial' | 'failed' | 'cancelled' | 'skipped';
@@ -45,7 +45,7 @@ export interface CleaningSettings {
 }
 
 /** What a source is: uploaded files, one website's pages, or another app's knowledge source. */
-export type SourceKind = 'file' | 'web' | 'tool';
+export type SourceKind = 'file' | 'text' | 'push' | 'web' | 'tool';
 
 /** A source's sync health, kept by kb-service as each run settles. */
 export interface SourceHealth {
@@ -620,7 +620,7 @@ export interface SourceDefaults {
 
 /** A kind of source the team may add: Files, or a knowledge source of one of its apps. */
 export interface SourceKindOption {
-  type: 'file' | 'tool';
+  type: 'file' | 'text' | 'push' | 'tool';
   kind: SourceKind;
   group: 'built_in' | 'apps';
   title: string;
@@ -690,3 +690,19 @@ export type ItemFilters = { status?: string[]; mime?: string[]; errorClass?: str
 
 export type { HeldReason, IngestSettings, ItemVersionRow, VersionStatus } from './knowledge-ingest';
 export type RunFilters = { status?: string[]; trigger?: string[] };
+
+/** One item written into a typed text or push source, by name: the same name and content again changes nothing. */
+export interface WrittenItemInput {
+  name: string;
+  title?: string;
+  /** Markdown unless `mime` names another text type. */
+  text?: string;
+  /** A file's bytes in base64, with its `mime`. */
+  content?: string;
+  mime?: string;
+}
+
+export interface WrittenItem {
+  outcome: 'created' | 'updated' | 'unchanged';
+  item: Item;
+}

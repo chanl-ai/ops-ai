@@ -38,6 +38,7 @@ export function createKnowledgeHttp(get: Get, send: Send, qs: (p: ListParams) =>
       remove: (id) => send('DELETE', `/sources/${id}`),
       sync: (id, opts) => send('POST', `/sources/${id}/sync`, opts),
       addFiles: (id, fileIds) => send('POST', `/sources/${id}/files`, { fileIds }),
+      putItem: (id, input) => send('POST', `/sources/${id}/items`, input),
       cancelRun: (runId) => send('POST', `/sync-runs/${runId}/cancel`),
       setPaused: (id, paused) => send('POST', `/sources/${id}/${paused ? 'pause' : 'resume'}`),
       tombstones: (id) => get(`/sources/${id}/tombstones`),

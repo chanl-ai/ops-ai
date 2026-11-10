@@ -310,6 +310,25 @@ class PageIn(In):
     text: str = Field(max_length=100_000)
 
 
+class WrittenItemIn(In):
+    """One item written into a typed text or push source. `name` is its key: sent again with the same content it is
+    unchanged, with new content it is the item's next version."""
+
+    name: str = Field(min_length=1, max_length=200)
+    title: str | None = Field(default=None, max_length=200)
+    # Markdown by default; `mime` text/plain or text/html for other text.
+    text: str | None = Field(default=None, max_length=1_000_000)
+    # A file's bytes in base64 (a PDF, a Word document), with its `mime`.
+    content: str | None = Field(default=None, max_length=30_000_000)
+    mime: str | None = Field(default=None, max_length=120)
+
+
+class WrittenItem(Out):
+    # created: a new item; updated: its next version; unchanged: the same content, so no sync ran.
+    outcome: Literal["created", "updated", "unchanged"]
+    item: Item
+
+
 class SearchIn(In):
     kb_ids: list[str]
     question: str

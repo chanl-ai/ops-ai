@@ -379,6 +379,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_put_item": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/{source_id}/items",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
     "sources_remove_source": {
         "body": None,
         "headers": [],
@@ -663,6 +672,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def sources_put_item(self, source_id: str, body: WrittenItemIn) -> WrittenItem:
+        "Put Item"
+        return self._t.call(SERVICE, OPERATIONS["sources_put_item"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def sources_pause_source(self, source_id: str) -> Source:
         "Pause Source"
@@ -950,6 +963,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def sources_put_item(self, source_id: str, body: WrittenItemIn) -> WrittenItem:
+        "Put Item"
+        return await self._t.call(SERVICE, OPERATIONS["sources_put_item"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def sources_pause_source(self, source_id: str) -> Source:
         "Pause Source"

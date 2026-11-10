@@ -519,6 +519,19 @@ class VerifyIn(TypedDict):
     verified: bool
 
 
+class WrittenItem(TypedDict, closed=True):
+    item: Item
+    outcome: Literal["created", "updated", "unchanged"]
+
+
+class WrittenItemIn(TypedDict):
+    content: NotRequired[str | None]
+    mime: NotRequired[str | None]
+    name: str
+    text: NotRequired[str | None]
+    title: NotRequired[str | None]
+
+
 class AddedDocuments(TypedDict, closed=True):
     files: list[AddedFile]
     run: SyncRun
@@ -587,6 +600,11 @@ class EnvelopeSourcePreview(TypedDict, closed=True):
 
 class EnvelopeSyncRun(TypedDict, closed=True):
     data: SyncRun
+    success: Literal[True]
+
+
+class EnvelopeWrittenItem(TypedDict, closed=True):
+    data: WrittenItem
     success: Literal[True]
 
 

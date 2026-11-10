@@ -458,6 +458,17 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "sources_put_item": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sources/{source_id}/items",
+    "pathParams": [
+      "source_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sources_remove_source": {
     "body": null,
     "headers": [],

@@ -7,7 +7,8 @@ pages, and sources read through a connection's tools), sync runs, documents and 
 section, change rows, and cited retrieval. An agent granted a knowledge base cites passages from it by document,
 version, page and section. A file source's files are read by documents-service (their reading, OCR on auto by
 `kb_ocr`), which kb-service splits with `packages/ops_ingest`; file bytes live in files-service and kb-service holds file
-ids, writing bytes itself only for pasted pages and the dev seed.
+ids, writing bytes itself only for items written into typed text and push sources (`POST /v1/sources/{id}/items`) and
+the dev seed.
 
 It does not own agents or their grants: "used by" asks agents-service (`agents.py`). Shared service rules:
 [services/CLAUDE.md](../CLAUDE.md). Cross-folder rules: [root guide](../../CLAUDE.md#folder-guides).
@@ -68,5 +69,5 @@ To check a cited answer end to end, attach a base to a chat turn: `make chat AS=
 |---|---|
 | [docs/services/kb-service/overview.md](../../docs/services/kb-service/overview.md) | What is built: bases, sources, sync, retrieval, changes, team rules |
 | [docs/packages/ops_ingest/](../../docs/packages/ops_ingest/) | Parsing and splitting |
-| [docs/usecases/kb-service/](../../docs/usecases/README.md) | 3 use cases, including cited answers from uploaded PDFs |
+| [docs/usecases/kb-service/](../../docs/usecases/README.md) | Use cases, including cited answers from uploaded PDFs, a website source, and typed text and pushed items |
 | [openapi.json](openapi.json) | The API |

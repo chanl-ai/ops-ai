@@ -567,7 +567,12 @@ export interface paths {
         /** List Items */
         get: operations["sources_list_items"];
         put?: never;
-        post?: never;
+        /**
+         * Put Item
+         * @description Writes one item into a typed text or push source by its name, kept as a file and indexed at once. Sending
+         *     the same name and content again changes nothing and starts no sync; new content is the item's next version.
+         */
+        post: operations["sources_put_item"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1120,6 +1125,15 @@ export interface components {
         /** Envelope[SyncRun] */
         Envelope_SyncRun_: {
             data: components["schemas"]["SyncRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[WrittenItem] */
+        Envelope_WrittenItem_: {
+            data: components["schemas"]["WrittenItem"];
             /**
              * Success
              * @constant
@@ -2674,6 +2688,32 @@ export interface components {
         VerifyIn: {
             /** Verified */
             verified: boolean;
+        };
+        /** WrittenItem */
+        WrittenItem: {
+            item: components["schemas"]["Item"];
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "created" | "updated" | "unchanged";
+        };
+        /**
+         * WrittenItemIn
+         * @description One item written into a typed text or push source. `name` is its key: sent again with the same content it is
+         *     unchanged, with new content it is the item's next version.
+         */
+        WrittenItemIn: {
+            /** Content */
+            content?: string | null;
+            /** Mime */
+            mime?: string | null;
+            /** Name */
+            name: string;
+            /** Text */
+            text?: string | null;
+            /** Title */
+            title?: string | null;
         };
     };
     responses: never;
@@ -6422,6 +6462,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ListResult_Item__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_put_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WrittenItemIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WrittenItem_"];
                 };
             };
             /** @description Invalid request */

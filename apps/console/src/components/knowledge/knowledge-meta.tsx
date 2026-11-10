@@ -19,8 +19,10 @@ import {
   Loader2,
   MinusCircle,
   PauseCircle,
+  PenLine,
   Presentation,
   Puzzle,
+  Send,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -153,7 +155,7 @@ export function KbDot({ color, className }: { color: string; className?: string 
   return <span className={cn('inline-block size-2.5 shrink-0 rounded-full', KB_COLORS[color] ?? 'bg-muted-foreground', className)} />;
 }
 
-const KIND_ICON: Record<SourceKind, LucideIcon> = { file: FileUp, web: Globe, tool: Puzzle };
+const KIND_ICON: Record<SourceKind, LucideIcon> = { file: FileUp, text: PenLine, push: Send, web: Globe, tool: Puzzle };
 
 /** The icon for what a source is: files, a website, or an app's knowledge source. The console keeps only icons by kind. */
 export function SourceKindIcon({ kind, className }: { kind: SourceKind; className?: string }) {

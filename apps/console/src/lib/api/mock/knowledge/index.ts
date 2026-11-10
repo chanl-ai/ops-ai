@@ -658,6 +658,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         }),
       // Overridden in mock/index.ts, which holds the files the ids name.
       addFiles: () => Promise.reject(new ApiError('Files are added on kb-service.', 501)),
+      putItem: () => Promise.reject(new ApiError('Items are written to kb-service; the mock does not index them.', 501)),
       sync: (sid, opts) =>
         run(() => {
           const s = sourceOr404(sid);
