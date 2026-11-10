@@ -20,8 +20,10 @@ from ops_service_kit.errors import ServiceUnavailable
 from ops_service_kit.http import Out
 
 from .app_states import AppGroup, AppState
+from .connections.records import PERSON_ORIGIN, connection_base
 from .connections.service import own_key
 from .modules.policy import app_ids
+from .plugins.host import account_identity, own_and_registration
 
 if TYPE_CHECKING:
     from .apps import Apps
@@ -44,6 +46,12 @@ class ConnectorTool(Out):
     reviewed: bool = False
 
 
+class ConnectorIdentity(Out):
+    label: str
+    value: str
+    shown: str
+
+
 class ConnectorAccount(Out):
     # The team's account (a connection) the person signed in to; Connect, Test and Disconnect act on it.
     connection_id: str
@@ -55,6 +63,10 @@ class ConnectorAccount(Out):
     # The person's default account of the app (their saved one, or their only one): calls naming no account use it.
     # With two connected and none saved, no account is the default and a call asks which.
     primary: bool = False
+    # What tells it apart from the person's other accounts of the app (plugins.host.account_identity).
+    identity: list[ConnectorIdentity] = Field(default_factory=list["ConnectorIdentity"])
+    # One the person added for themselves (Add another account), as opposed to a team account they signed in to.
+    own: bool = False
 
 
 class ConnectorUse(Out):
@@ -188,6 +200,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
     by_app: dict[str, list[dict[str, Any]]] = {}
     for m in mine:
         by_app.setdefault(str(m["appId"]), []).append(m)
+    conns = await apps.connections.store.by_ids(who.tenant_id, [str(m["connectionId"]) for m in mine])
     may = apps.connections.may_manage(who)
     policy = await _policy(apps, who)
     rows: list[dict[str, Any]] = []
@@ -235,6 +248,10 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
                         state=a["state"],
                         since=a.get("since"),
                         primary=a["connectionId"] in defaults,
+                        identity=[
+                            ConnectorIdentity(**e) for e in _identity(apps, card, conns.get(a["connectionId"]), a)
+                        ],
+                        own=(conns.get(a["connectionId"]) or {}).get("origin") == PERSON_ORIGIN,
                     )
                     for a in accounts
                 ],
@@ -250,6 +267,18 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
             ).model_dump(by_alias=True)
         )
     return sorted(rows, key=lambda r: (RANK.get(r["appGroup"], 3), str(r["name"]).lower()))
+
+
+def _identity(
+    apps: Apps, card: dict[str, Any], conn: dict[str, Any] | None, row: dict[str, Any]
+) -> list[dict[str, str]]:
+    """What tells one of the person's accounts apart, as every account row reads it."""
+    if conn is None:
+        return []
+    plugin = apps.plugins.plugins.get(str(card.get("pluginId"))) if apps.plugins and card.get("pluginId") else None
+    signed = str(row["account"]) if row.get("account") else None
+    base = "" if plugin else connection_base(conn)
+    return account_identity(plugin.manifest if plugin else None, own_and_registration(conn), signed, base)
 
 
 async def apps_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:

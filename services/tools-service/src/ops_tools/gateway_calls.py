@@ -117,6 +117,19 @@ def _approvers(token: str | None) -> list[str]:
 WRITES = {"write"}
 
 
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def chosen_accounts(value: object) -> dict[str, str]:
+    """The run context's `accounts`, app id to account name, keeping only text entries: what a step, an agent or a
+    chat chose for each app. The registry reads the entry for the call's own app (PluginHost.for_call)."""
+    if not isinstance(value, dict):
+        return {}
+    given = cast(dict[object, object], value)
+    return {k: v.strip() for k, v in given.items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
+
+
 def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int, str, str, dict[str, Any]] | None:
     """Registry checks that need no decision from OPA: a hidden operation, an unpublished or drifted module, or input
     that fails the operation's schema, or an amount over its limit, is refused before the policy is asked and before
@@ -154,6 +167,12 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if module.get("account_missing"):
         # The account a call named is not one of the team's accounts of the app: refused, never defaulted.
         return 404, "ACCOUNT_NOT_FOUND", str(module["account_missing"]), {}
+    if module.get("account_not_yours"):
+        # One person's own account, named by a call that does not act for them (a step, a schedule, someone else).
+        return 403, "ACCOUNT_NOT_YOURS", str(module["account_not_yours"]), {}
+    if module.get("sandbox_required"):
+        # A test run named a live account and the app has no test account to use in its place.
+        return 409, "SANDBOX_REQUIRED", str(module["sandbox_required"]), {}
     if not op["enabled"]:
         why = op.get("hidden_reason") or f"{op['name']} is hidden in {module['display_name']}"
         return 403, "operation_hidden", str(why), {}
@@ -295,7 +314,8 @@ class GatewayCalls:
             tenant_id=caller.tenant_id,
             team_id=caller.team_id,
             run=run,
-            account=req.run_context.get("account"),
+            account=_text(req.run_context.get("account")),
+            accounts=chosen_accounts(req.run_context.get("accounts")),
             person=req.acting_for.sub if req.acting_for else None,
         )
         access = resolved.access if resolved else "unknown"

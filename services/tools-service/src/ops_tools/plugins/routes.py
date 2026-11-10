@@ -32,10 +32,11 @@ from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
-from ..store.connections import PLUGIN_APP, split_config
+from ..store.connections import DEFAULT_VALUE, PLUGIN_APP, AccountNameTaken, plugin_of, split_config
 from .host import (
     PluginHost,
     default_tools_added,
+    filled_at_sign_in,
     fixed_fields,
     offered,
     per_account,
@@ -289,8 +290,9 @@ class PluginAccounts:
 
     async def _fix_first_place(self, who: Caller, plugin: Plugin, own: dict[str, Any]) -> None:
         """The first turn-on on Ops AI's app: where it signs in (the plugin's `asked: config` values the window asked)
-        is fixed on Ops AI's auth config for the team, so it is asked once and every account after signs in there. A
-        value the team already set on that config is kept."""
+        is kept on Ops AI's auth config for the team as a default, so the next account's window offers it and a second
+        org can sign in at its own address. A value the team already set on that config, and its mode, are kept: a team
+        that turned the app on while the first value was fixed stays fixed."""
         m = plugin.manifest
         given = {k: v for k, v in own.items() if k in m.config_settings and v not in (None, "")}
         b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
@@ -298,7 +300,7 @@ class PluginAccounts:
         fresh = {k: v for k, v in given.items() if k not in held}
         if not fresh:
             return
-        modes = {**dict(b.get("setting_modes") or {}), **dict.fromkeys(fresh, "fixed")}
+        modes = {**dict(b.get("setting_modes") or {}), **dict.fromkeys(fresh, DEFAULT_VALUE)}
         await self.host.bindings.set_config(who.tenant_id, who.team.id, m.id, {**held, **fresh}, modes, by=who.name)
 
     async def make_team_default(self, who: Caller, app_id: str, account_id: str) -> None:
@@ -336,7 +338,7 @@ class PluginAccounts:
         if not name:
             raise ValidationFailed("Name the account.", details={"field": "name"})
         if await self.host.account_named(who.tenant_id, who.team.id, plugin, name) is not None:
-            raise Conflict(f"{m.title} already has an account named {name}.")
+            raise AccountNameTaken(name)
         first = b.get("connection_id") if b else None
         if first is None or await self.connections.store.get(who.tenant_id, str(first)) is None:
             # The team has no account of the app yet: this one is its first, made as turning the app on makes it.
@@ -381,7 +383,10 @@ class PluginAccounts:
             kind=body.kind,
             credentials=dict(body.credentials),
         )
-        return await self.connect(who, plugin, settings, own, given, account_name=name, sandbox=body.sandbox)
+        made = await self.connect(who, plugin, settings, own, given, account_name=name, sandbox=body.sandbox)
+        if body.make_default and not body.sandbox:
+            await self.make_team_default(who, app_id, made)
+        return made
 
     def _kind(self, plugin: Plugin, body: TeamPluginIn) -> Kind:
         """The sign-in kind the team chose, one the plugin offers; the first it lists when none is named."""
@@ -504,9 +509,60 @@ class PluginAccounts:
         team's credentials over what the account already holds, and for a kind that holds a token the OAuth app (the
         team's own first, else the platform's, set up once by an account admin) and its addresses, rendered with
         the account's settings."""
+        conn = await self.connections.store.get(who.tenant_id, connection_id)
+        keys, secret, client, platform_id, mine = await self._rendered(who, plugin, conn, settings, body, own=own)
+        if platform_id is not None:
+            await self.connections.use_platform_app(who, connection_id, plugin.manifest.id, keys, plugin_settings=mine)
+            return
+        await self.connections.change(
+            who,
+            connection_id,
+            {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": secret, **client},
+            plugin_settings=mine,
+        )
+
+    async def own_place(
+        self, who: Caller, src: dict[str, Any], given: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """A person's second account of their own on the app of account `src`, signing in where `given` says (the
+        app's per-account settings, such as a company server's address): its sign-in settings and its own plugin
+        settings, rendered as the team's turn-on renders an account's, with the same auth config as `src`. What
+        `src`'s sign-in filled (its org's instance) is never carried over. Raises for a setting that is the team's
+        or a value the plugin does not offer."""
+        pid = plugin_of(src)
+        plugin = self.host.plugins.get(pid) if pid else None
+        if plugin is None:
+            raise ValidationFailed(f"{src['name']} is not a plugin's account, so it keeps its own address.")
+        m = plugin.manifest
+        self._checked_settings(plugin, given)
+        team, own = _split(plugin, given)
+        if team:
+            raise ValidationFailed(
+                f"{', '.join(sorted(team))} is the team's setting of {m.title}, not one account's.",
+                code="setting_not_per_account",
+            )
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
+        settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
+        held = {k: v for k, v in dict(src.get("plugin_settings") or {}).items() if k in per_account(m)}
+        start = {**src, "plugin_settings": {k: v for k, v in held.items() if k not in filled_at_sign_in(m)}}
+        keys, _, _, _, mine = await self._rendered(who, plugin, start, settings, TeamPluginIn(enabled=True), own=own)
+        return keys, mine
+
+    async def _rendered(
+        self,
+        who: Caller,
+        plugin: Plugin,
+        conn: dict[str, Any] | None,
+        settings: dict[str, Any],
+        body: TeamPluginIn,
+        *,
+        own: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, str], dict[str, Any], str | None, dict[str, Any]]:
+        """What `keys` writes on account `conn` (None for one not made yet): its sign-in settings, its secret parts,
+        its own app credential when it changes, Ops AI's app's client id when it signs in with that, and its own plugin
+        settings."""
         m = plugin.manifest
         c = m.connection
-        conn = await self.connections.store.get(who.tenant_id, connection_id)
         kind = kind_of(str(conn["auth_kind"])) if conn else self._kind(plugin, body)
         if body.kind and body.kind != kind.id:
             raise ValidationFailed(
@@ -586,15 +642,7 @@ class PluginAccounts:
         if kind.id == "api_key" and c.api_key is not None:
             keys |= {"placement": c.api_key.placement, "name": c.api_key.name}
         keys |= plain
-        if platform_id is not None:
-            await self.connections.use_platform_app(who, connection_id, m.id, keys, plugin_settings=mine)
-            return
-        await self.connections.change(
-            who,
-            connection_id,
-            {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": secret, **client},
-            plugin_settings=mine,
-        )
+        return keys, secret, client, platform_id, mine
 
     async def config_values(
         self, who: Caller, plugin: Plugin, cred: dict[str, Any] | None

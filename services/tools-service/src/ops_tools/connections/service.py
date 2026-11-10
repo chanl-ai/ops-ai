@@ -47,15 +47,17 @@ from ..modules.service import Caller
 from ..secrets import SecretResolver
 from ..store.connections import (
     SHARED,
+    AccountNameTaken,
     ConnectionInUse,
     ConnectionStore,
     StaleConnection,
+    name_key,
     plugin_app,
     plugin_of,
     verifier_context,
 )
 from .account_events import connected_event
-from .records import status_of
+from .records import PERSON_ORIGIN, status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.
@@ -72,6 +74,7 @@ OWN = "own"
 # tenant, account, the token answer, and whether it is a person's own sign-in, which may not change what the
 # team's sign-in set -> account settings to add, or None. A ValueError with a `code` names why for the event.
 OnToken = Callable[[str, str, dict[str, Any], bool], Awaitable[dict[str, Any] | None]]
+OwnPlace = Callable[[Caller, dict[str, Any], dict[str, Any]], Awaitable[tuple[dict[str, Any], dict[str, Any]]]]
 # tenant, account, who signed in -> after a finished sign-in: the account's app is turned on for its team.
 OnSignedIn = Callable[[str, str, str], Awaitable[None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
@@ -153,9 +156,6 @@ def mcp_error(res: httpx.Response) -> str | None:
     return None if "result" in answer else "its answer had no result"
 
 
-# An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
-# team, and removed when its sign-in turns out to be an identity they already linked.
-PERSON_ORIGIN = "person"
 # Set on a finished sign-in's account when the system named an identity already linked on that account of the app.
 ALREADY = "_alreadyConnectedAs"
 
@@ -237,6 +237,10 @@ class ConnectionService:
         # A plugin app's title and logo by its app id (PluginHost.display_of), for My accounts; set once the plugin
         # host is up.
         self.app_display: Callable[[str], tuple[str, str | None] | None] | None = None
+        # Where a person's second account of a plugin's app signs in, from the place they gave
+        # (PluginAccounts.own_place): its sign-in settings and own plugin settings. None without plugins, where a
+        # second account signs in where the first does.
+        self.own_place: OwnPlace | None = None
         # The permissions a plugin account's sign-in asks for, from the tools its team added
         # (PluginHost.sign_in_scopes); set once the plugin host is up.
         self.sign_in_scopes: Callable[[str, str], Awaitable[list[str] | None]] | None = None
@@ -465,6 +469,10 @@ class ConnectionService:
             if not i["name"].strip():
                 raise ValidationFailed("Name the connection.")
             values["name"] = i["name"].strip()
+            if conn.get("account_name") is not None:
+                # The name steps, agents and chats pick the account by is the one renamed, so no second name drifts
+                # from it; another account of the app holding it refuses the rename (AccountNameTaken).
+                values["account_name"] = values["name"]
         if i.get("sign_in") is not None:
             self._sign_in_fits(kind_of(str(conn["auth_kind"])), str(i["sign_in"]))
             values["sign_in"] = i["sign_in"]
@@ -1316,12 +1324,17 @@ class ConnectionService:
         first = await self.store.get(who.tenant_id, app_id)
         return str((first or row)["name"]), None
 
-    async def add_own_account(self, who: Caller, connection_id: str) -> dict[str, Any]:
+    async def add_own_account(
+        self, who: Caller, connection_id: str, given: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Another account of the caller's own on the app of `connection_id`, signed in through the same auth config
-        (the same app credential or Ops AI's app): a personal and an office login side by side. The account is made
-        now and the sign-in starts on it; a sign-in that names an identity the caller already linked lands on that
-        account instead and this one is removed (`complete_sign_in`), so no duplicate is kept. An earlier one the
-        caller started and never signed in to is removed first."""
+        (the same app credential or Ops AI's app): a personal and an office login side by side. `given` names it
+        (`name`, which no other account of the app in the team holds) and says where it signs in (`settings`, the
+        app's per-account settings); with none it is named "<person>'s other account" and signs in where
+        `connection_id` does, as older callers expect. The account is made now and the sign-in starts on it; a
+        sign-in that names an identity the caller already linked lands on that account instead and this one is
+        removed (`complete_sign_in`), so no duplicate is kept. An earlier one the caller started and never signed in
+        to is removed first."""
         self._can(who, OWN)
         src = await self._get(who, connection_id)
         if (src.get("sign_in") or "team") == "team":
@@ -1346,14 +1359,24 @@ class ConnectionService:
         now = self.clock()
         new = new_id("ca")
         settings = {k: v for k, v in dict(src.get("settings") or {}).items() if k not in ("clientId", "clientSecret")}
+        name = str((given or {}).get("name") or "").strip() or f"{who.name}'s other account"
+        own_settings: dict[str, Any] | None = None
+        if given is not None:
+            others = await self.store.accounts(who.tenant_id, who.team.id, str(src["app_id"]))
+            taken = {name_key(a.get("account_name")) for a in others}
+            if name_key(name) in taken:
+                raise AccountNameTaken(name)
+            if given.get("settings") and self.own_place is not None:
+                settings, own_settings = await self.own_place(who, src, dict(given["settings"]))
+                settings = {k: v for k, v in settings.items() if k not in ("clientId", "clientSecret")}
         row: dict[str, Any] = {
             "tenant_id": who.tenant_id,
             "id": new,
             "team_id": who.team.id,
-            "name": f"{src.get('account_name') or src['name']} · {who.name}",
+            "name": name if given is not None else f"{src.get('account_name') or src['name']} · {who.name}",
             "app_id": src["app_id"],
             "sandbox": False,
-            "account_name": f"{who.name}'s other account",
+            "account_name": name,
             "auth_kind": src["auth_kind"],
             "sign_in": "person",
             "team_backup": False,
@@ -1364,6 +1387,7 @@ class ConnectionService:
             "secrets": {},
             "credential_id": src.get("credential_id"),
             "platform_app": src.get("platform_app"),
+            **({"plugin_settings": own_settings} if own_settings is not None else {}),
             "origin": PERSON_ORIGIN,
             "status": src.get("status") or "draft",
             "status_detail": None,

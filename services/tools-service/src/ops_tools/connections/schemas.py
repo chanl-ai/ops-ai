@@ -66,6 +66,18 @@ class AccountIn(_In):
     credentials: dict[str, Annotated[str, Field(max_length=CREDENTIAL_MAX)]] = Field(
         default_factory=dict[str, str], max_length=20
     )
+    # Make it the team's default (the one calls naming no account use); refused on a sandbox. The first account of an
+    # app is its default whatever this says.
+    make_default: bool = False
+
+
+class AnotherOwnIn(_In):
+    """A person's second account of their own on an app: its name, which steps and chats pick it by and which no other
+    account of the app in the team holds, and where it signs in (the app's per-account settings, such as a company
+    server's address), kept as given rather than copied from the account it starts from."""
+
+    name: str = Field(min_length=1, max_length=200)
+    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
 class AccountPatchIn(_In):

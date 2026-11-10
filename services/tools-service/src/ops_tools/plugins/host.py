@@ -29,10 +29,11 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
 from ..auth.tokens import SIGNED_IN_AS, person_named
-from ..connections.records import account_for, choice_needed, default_sign_in
+from ..connections.records import PERSON_ORIGIN, account_for, choice_needed, default_sign_in
 from ..egress import EgressDenied, EgressPolicy, for_tenant
+from ..environments import LIVE
 from ..modules.seed import blank
-from ..store.connections import ConnectionStore, plugin_app, plugin_of
+from ..store.connections import ConnectionStore, name_key, plugin_app, plugin_of
 from ..store.modules import Aggregate, ModuleStore, StaleModuleError
 from ..store.plugin_bindings import PluginBindings
 
@@ -127,6 +128,55 @@ def sign_in_values(manifest: Manifest, held: Mapping[str, Any]) -> list[dict[str
                 {"name": k, "label": s.title or k, "kind": kind, "value": str(value), "shown": shown_value(s, value)}
             )
     return out
+
+
+SIGNED_IN = "Signed in as"
+
+
+def _entry(label: str, value: object, shown: str) -> dict[str, str]:
+    return {"label": label, "value": str(value), "shown": shown}
+
+
+def account_identity(
+    manifest: Manifest | None, held: Mapping[str, Any], signed_in_as: str | None, base: str = ""
+) -> list[dict[str, str]]:
+    """What tells one account of an app from its others, shown under its name on every screen: the settings the
+    plugin's `connection.identity` names, in its order; with none declared, what the sign-in filled, then where the
+    account signs in (its sign-in address, as its host); a custom app's address host (`base`); and last who signed in.
+    Built on sign_in_values, so the place and the found value have one source. A secret is never among them."""
+    out: list[dict[str, str]] = []
+    if manifest is not None:
+        own = per_account(manifest)
+        # A per-account address left at the plugin's default (GitHub's github.com) still tells the account apart.
+        given = {k: s.default for k, s in manifest.settings.items() if k in own and s.default not in (None, "")}
+        values = {**given, **{k: v for k, v in held.items() if v not in (None, "")}}
+        if manifest.connection.identity:
+            for name in manifest.connection.identity:
+                setting = manifest.settings.get(name)
+                if setting is not None and not setting.secret and values.get(name) not in (None, ""):
+                    value = values[name]
+                    out.append(_entry(setting.title or name, value, shown_value(setting, value)))
+        else:
+            listed = sign_in_values(manifest, values)
+            out += [{k: v[k] for k in ("label", "value", "shown")} for v in listed if v["kind"] == "found"]
+            out += [{k: v[k] for k in ("label", "value", "shown")} for v in listed if v["kind"] == "place"]
+            if not out:
+                for name in sorted(own):
+                    setting, value = manifest.settings[name], values.get(name)
+                    if not setting.secret and isinstance(value, str) and "://" in value:
+                        out.append(_entry(setting.title or name, value, shown_value(setting, value)))
+    elif base:
+        out.append({"label": "Address", "value": base, "shown": urlsplit(base).hostname or base})
+    if signed_in_as:
+        out.append({"label": SIGNED_IN, "value": signed_in_as, "shown": signed_in_as})
+    seen: set[str] = set()
+    return [e for e in out if not (e["shown"] in seen or seen.add(e["shown"]))]
+
+
+def same_place(identity: Sequence[Mapping[str, str]]) -> tuple[str, ...]:
+    """The part of an identity that says where an account points (who signed in left out): two accounts with the same
+    non-empty one point at the same org."""
+    return tuple(e["shown"] for e in identity if e["label"] != SIGNED_IN)
 
 
 def offered(setting: Setting, value: object) -> bool:
@@ -720,9 +770,9 @@ class PluginHost:
         """The team's account of the app with this name, within the team only; None when there is none."""
         if self.connections is None:
             return None
-        wanted = name.strip().casefold()
+        wanted = name_key(name)
         found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
-        return next((a for a in found if str(a.get("account_name") or "").casefold() == wanted), None)
+        return next((a for a in found if wanted and name_key(a.get("account_name")) == wanted), None)
 
     async def person_default(self, tenant_id: str, team_id: str, plugin: Plugin, person: str) -> str | None:
         """A person's default live account of the app: their pinned sign-in, else their newest one the system
@@ -755,6 +805,33 @@ class PluginHost:
         ]
         return {"app": plugin.manifest.title, "appId": plugin_app(plugin.manifest.id), "accounts": accounts}
 
+    async def _named(
+        self, tenant_id: str, team_id: str, plugin: Plugin, name: str, *, run: str, person: str | None
+    ) -> dict[str, Any]:
+        """The account a call naming `name` signs in with (`id`), or why it is refused (`refused`). The name is one of
+        the team's accounts, never another team's (account_named); an unknown name is refused rather than falling back
+        to the default, so a call never acts in an org nobody chose. One person's own account signs only that person's
+        calls: a call acting for nobody (a schedule, a step) or for anyone else is refused, whoever wrote the name.
+        A test run never acts in a named live account: it takes the app's test account (records.account_for), and is
+        refused when the team has none."""
+        title = plugin.manifest.title
+        named = await self.account_named(tenant_id, team_id, plugin, name)
+        if named is None or self.connections is None:
+            return {"refused": {"account_missing": f"{title} has no account named {name} in this team."}}
+        if named.get("origin") == PERSON_ORIGIN:
+            mine = await self.connections.own_sign_ins(tenant_id, person, [str(named["id"])]) if person else []
+            if not mine:
+                why = f"{title}'s account {name} is one person's own, so only their own calls use it."
+                return {"refused": {"account_not_yours": why}}
+        if run != LIVE and not named.get("sandbox"):
+            found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
+            test = account_for(None, found, run)
+            if test is None:
+                why = f"{title} has no test account, so a test run cannot use {name}, a live one."
+                return {"refused": {"sandbox_required": why}}
+            return {"id": test["id"]}
+        return {"id": named["id"]}
+
     async def for_call(
         self,
         tenant_id: str,
@@ -763,6 +840,7 @@ class PluginHost:
         run: str,
         *,
         account: str | None = None,
+        accounts: Mapping[str, str] | None = None,
         person: str | None = None,
     ) -> Aggregate:
         """The module as this team's call made in `run` (test or live) sees it: the account it signs in with
@@ -790,14 +868,14 @@ class PluginHost:
             }
         b: dict[str, Any] = await self.bindings.get(tenant_id, team_id, plugin.manifest.id) or {}
         module = {**module, **tools_added_view(plugin.manifest, b)}
+        # The caller sends every app's choice (`accounts`, app id to name); this call reads its own app's entry. The
+        # single `account` string older callers send names the account for whichever app the call is for.
+        account = (accounts or {}).get(plugin_app(plugin.manifest.id)) or account
         if account:
-            # A call naming an account uses that account of the team's, never another team's; an unknown name
-            # is refused rather than falling back to the default, so a step never acts in the wrong org.
-            named = await self.account_named(tenant_id, team_id, plugin, account)
-            if named is None:
-                why = f"{plugin.manifest.title} has no account named {account} in this team."
-                return {**module, "account_missing": why, "connection_id": None, "egress_hosts": []}
-            b = {**b, "connection_id": named["id"]}
+            refused = await self._named(tenant_id, team_id, plugin, account, run=run, person=person)
+            if "refused" in refused:
+                return {**module, **refused["refused"], "connection_id": None, "egress_hosts": []}
+            b = {**b, "connection_id": refused["id"]}
         else:
             if person:
                 # A call naming no account, for a person signed in to several: the one they pinned as their default;

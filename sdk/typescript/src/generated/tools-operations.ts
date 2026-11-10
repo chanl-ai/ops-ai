@@ -21,7 +21,7 @@ export const toolsOperations = {
     "stream": false
   },
   "apps_add_own_account": {
-    "body": null,
+    "body": "json",
     "headers": [],
     "method": "POST",
     "path": "/v1/me/accounts/{account_id}/another",
@@ -235,6 +235,21 @@ export const toolsOperations = {
     "path": "/v1/knowledge-sources",
     "pathParams": [],
     "query": [],
+    "stream": false
+  },
+  "apps_list_account_choices": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/apps/{app_id}/accounts",
+    "pathParams": [
+      "app_id"
+    ],
+    "query": [
+      "usable",
+      "name",
+      "mine"
+    ],
     "stream": false
   },
   "apps_list_app_credentials": {

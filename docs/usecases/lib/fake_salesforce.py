@@ -63,10 +63,16 @@ ISSUER = f"https://{LOGIN_HOST}/{ISSUER_ID}"
 SANDBOX_ID = "sandbox"
 SANDBOX_ISSUER = f"https://{LOGIN_HOST}/{SANDBOX_ID}"
 SANDBOX_HOST = "kestrel--uat.sandbox.my.salesforce.test"
-INSTANCES = {ISSUER: API_HOST, SANDBOX_ISSUER: SANDBOX_HOST}
+# A second production org, as a company with a European org beside its main one has: its own My Domain and tokens.
+EU_ID = "eu"
+EU_ISSUER = f"https://{LOGIN_HOST}/{EU_ID}"
+EU_HOST = "kestrel-eu.my.salesforce.test"
+INSTANCES = {ISSUER: API_HOST, SANDBOX_ISSUER: SANDBOX_HOST, EU_ISSUER: EU_HOST}
 # Each org also signs in at its own My Domain, `https://<my domain>/services/oauth2/...`, as Salesforce's do: the path
 # the server serves the org's sign-in under, by host.
-MY_DOMAIN_LOGIN = {API_HOST: ISSUER_ID, SANDBOX_HOST: SANDBOX_ID}
+MY_DOMAIN_LOGIN = {API_HOST: ISSUER_ID, SANDBOX_HOST: SANDBOX_ID, EU_HOST: EU_ID}
+# The OAuth server's path prefix of each org other than production's, to its issuer.
+ISSUER_BY_PATH = {f"/{SANDBOX_ID}/": SANDBOX_ISSUER, f"/{EU_ID}/": EU_ISSUER}
 OAUTH = "/services/oauth2/"
 AUDIENCE = "salesforce-api"
 IMAGE = "ghcr.io/navikt/mock-oauth2-server:2.1.10"
@@ -122,7 +128,7 @@ def _certificate(folder: Path) -> tuple[Path, Path]:
         .not_valid_before(now - timedelta(minutes=5))
         .not_valid_after(now + timedelta(days=1))
         .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(h) for h in (LOGIN_HOST, API_HOST, SANDBOX_HOST)]), critical=False
+            x509.SubjectAlternativeName([x509.DNSName(h) for h in (LOGIN_HOST, *INSTANCES.values())]), critical=False
         )
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         .sign(key, hashes.SHA256())
@@ -148,7 +154,7 @@ def oauth_server(token_expiry_s: int = 300) -> Generator[str]:
                 "tokenExpiry": token_expiry_s,
                 "requestMappings": [{"requestParam": "grant_type", "match": "*", "claims": {"aud": [AUDIENCE]}}],
             }
-            for issuer in (ISSUER_ID, SANDBOX_ID)
+            for issuer in (ISSUER_ID, SANDBOX_ID, EU_ID)
         ],
     }
     name = f"uc-salesforce-idp-{uuid.uuid4().hex[:8]}"
@@ -274,7 +280,10 @@ class Salesforce:
         self._jwks = {
             ISSUER: jwt.PyJWKClient(f"{upstream}/{ISSUER_ID}/jwks"),
             SANDBOX_ISSUER: jwt.PyJWKClient(f"{upstream}/{SANDBOX_ID}/jwks"),
+            EU_ISSUER: jwt.PyJWKClient(f"{upstream}/{EU_ID}/jwks"),
         }
+        # Every API call an org answered, by its host, so a use case can tell which org a call reached.
+        self.calls: list[dict[str, str]] = []
 
     def app(self) -> Any:
         from starlette.applications import Starlette
@@ -304,6 +313,7 @@ class Salesforce:
             return signer
         who, scopes = signer
         path = request.url.path
+        self.calls.append({"host": host, "path": path, "who": who})
         if path == "/services/oauth2/userinfo":
             # On a My Domain this is also the sign-in host's UserInfo, which names the org's address.
             return self._userinfo(request)
@@ -623,7 +633,7 @@ class Salesforce:
                 scope = self._scope_by_token.get(form.get("refresh_token", [""])[0], "")
             answer["scope"] = scope
             # Salesforce names the org's own address in every token answer; a plugin reads its instance from here.
-            issuer = SANDBOX_ISSUER if path.startswith(f"/{SANDBOX_ID}/") else ISSUER
+            issuer = next((i for p, i in ISSUER_BY_PATH.items() if path.startswith(p)), ISSUER)
             answer["instance_url"] = "https://evil.example" if self.bad_instance else f"https://{INSTANCES[issuer]}"
             self._scope_by_token[answer["access_token"]] = scope
             if answer.get("refresh_token"):
@@ -683,6 +693,7 @@ class Salesforce:
             "clients": list(self.clients),
             "records": copy.deepcopy(self.records),
             "unparsed": list(self.unparsed),
+            "calls": list(self.calls),
         }
 
 
@@ -1912,16 +1923,18 @@ def salesforce(token_expiry_s: int = 300) -> Generator[dict[str, Any]]:
                 "settings": {
                     "OPS_EGRESS_CA_FILE": str(cert),
                     "OPS_EGRESS_RESOLVE": json.dumps(
-                        dict.fromkeys((LOGIN_HOST, API_HOST, SANDBOX_HOST), f"{address}:{port}")
+                        dict.fromkeys((LOGIN_HOST, *INSTANCES.values()), f"{address}:{port}")
                     ),
                 },
-                "hosts": [LOGIN_HOST, API_HOST, SANDBOX_HOST],
+                "hosts": [LOGIN_HOST, *INSTANCES.values()],
                 "sandbox_login": SANDBOX_ISSUER,
                 # Where the Salesforce plugin signs in to each org: its company address (My Domain), one of the
                 # places the plugin takes.
                 "login_url": f"https://{API_HOST}/services/oauth2",
                 "sandbox_login_url": f"https://{SANDBOX_HOST}/services/oauth2",
                 "sandbox_base": f"https://{SANDBOX_HOST}",
+                "eu_login_url": f"https://{EU_HOST}/services/oauth2",
+                "eu_base": f"https://{EU_HOST}",
                 "range": f"{address}/32",
                 "authorize_url": f"{ISSUER}/authorize",
                 "token_url": f"{ISSUER}/token",

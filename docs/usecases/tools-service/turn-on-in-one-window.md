@@ -8,7 +8,7 @@ Design: the app set-up design (one Turn on window, two questions and one choice)
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | An admin turns Salesforce or GitHub on in one window: where the team signs in is asked once and fixed on Ops AI's auth config, tools use each person's own account with the team account for runs nobody started, the app's read tools are added, and the team's assistant gets them when the admin leaves the box ticked. Turn on saves and opens no sign-in window; connecting an account is an optional button after it. Someone without the permission can do none of it | ui | 1-4, 7-9 | 2 |
+| S1 | An admin turns Salesforce or GitHub on in one window: where the team signs in is asked once and kept on Ops AI's auth config as a default the next account's window offers, tools use each person's own account with the team account for runs nobody started, the app's read tools are added, and the team's assistant gets them when the admin leaves the box ticked. Turn on saves and opens no sign-in window; connecting an account is an optional button after it. Someone without the permission can do none of it | ui | 1-4, 7-9 | 2 |
 | S3 | On Connectors › Mine, an app the team has not set up never leads to a 404: a member reads Not set up for your team yet with the admins to ask and stays on Mine, and an admin's Turn on opens the app's own page | ui | 11-12 | 11 |
 | S2 | The admin signs the team account in, the org address comes from the token, and a person who has not connected their own account meets the Connect card in chat, never the team account | api | 5-6, 10 | 5 |
 
@@ -26,7 +26,7 @@ Design: the app set-up design (one Turn on window, two questions and one choice)
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya turns Salesforce on with each person's own account and the company's My Domain | The address reads fixed on Ops AI's auth config; the account signs in as each person with the team account for unattended runs; every read tool is added and no write tool |
+| 1 | Priya turns Salesforce on with each person's own account and the company's My Domain | The address reads as a default on Ops AI's auth config; the account signs in as each person with the team account for unattended runs; every read tool is added and no write tool |
 | 2 | She gives the team's assistant Salesforce's read tools, then asks again | Given at once, exactly the read tools; the second time changes nothing |
 | 3 | She turns GitHub on and gives the assistant its tools | Its two read tools, never its write tool |
 | 4 | Ravi tries to turn an app off and to change the assistant's tools | Both refused 403 |

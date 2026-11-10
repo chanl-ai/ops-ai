@@ -654,6 +654,39 @@ never answered back. `GET /v1/me/accounts?every=true` lists every account of the
 nobody behind it is refused with reason `no_person`. A wrong key fails that person's call with the system's 401 and
 leaves everyone else's working; Disconnect removes it.
 
+### Several accounts of one app
+
+A team keeps several named accounts of one app: two Salesforce orgs, two GitHub servers. Each account has a name that
+no other account of the app in the team holds (case and spaces aside), held by a filtered unique index on
+`connections.account_key` (`services/tools-service/migrations/versions/0071_account_key.py`), so two adds at the same
+moment make one account and the other is refused 409 `account_name_taken`.
+
+| Who | Call | What it does |
+|---|---|---|
+| Whoever holds `connections.manage` | `POST /v1/apps/{app}/accounts` with `{name, settings, makeDefault}` | Adds a live account signing in where its `settings` say (its own sign-in address); `makeDefault` makes it the team's default. A test account cannot be the default |
+| Any member | `POST /v1/me/accounts/{id}/another` with `{name, settings}` | Adds a second account of their own, signing in where `settings` say. Only for apps that sign in with an account; with no body it is named "<person>'s other account" and signs in where `{id}` does |
+| Any caller | `GET /v1/apps/{app}/accounts?usable=1&name=…&mine=1` | The accounts a call may name, each with `identity`: `usable` keeps the team's live accounts (what a workflow step or an agent names), `mine` adds the caller's own, `name` keeps the one so named |
+| A run | `POST /v1/calls` with `runContext.accounts: {appId: name}` | Each app's call uses the account named for its app; `runContext.account` (one name) is still read |
+
+How a call's account is chosen, in tools-service only (`plugins/host.py` `PluginHost.for_call` and `_named`):
+
+| Case | Account used |
+|---|---|
+| The call names an account for its app | That account of the call's team. An unknown name is refused 404 `ACCOUNT_NOT_FOUND`, never the default |
+| It names one person's own account | Only when the call acts for that person; otherwise 403 `ACCOUNT_NOT_YOURS`, so a step or schedule never signs in as someone |
+| A test run names a live account | The app's test account; with none, 409 `SANDBOX_REQUIRED` |
+| It names none and acts for a person with their own sign-ins | Their default; with two or more and none chosen, `ACCOUNT_CHOICE_NEEDED` |
+| Otherwise | The team's default |
+
+Every account row (the app's Accounts list, Connectors › Mine, the account pickers) carries `identity`: what tells it
+apart, built once in `plugins/host.py` `account_identity`. A plugin's `connection.identity` names the settings to show;
+with none declared it shows what the sign-in filled, then the account's own sign-in address, and for a custom app its
+address; who signed in comes last. A second account pointing at the same place carries `samePlaceAs` with the first's
+name, a warning only. A member's Accounts tab lists the team's accounts and counts their own sign-ins (`me.signIns`);
+their own accounts are on Connectors › Mine. A first turn-on through Ops AI's app keeps the sign-in address it asked as
+a default on Ops AI's auth config, so a second account may type its own; a team whose first turn-on kept it fixed keeps
+it fixed, and adds an auth config holding the address as a default for a second org.
+
 After that, builders grant the plugin's tools to agents as any other tool, and a knowledge base adds a source with
 `POST /v1/sources` and `{type: "tool", config: {plugin: "opsai.salesforce", source: "articles"}}`. Nobody can edit,
 publish or delete the plugin's tool module; a new plugin version replaces it.

@@ -170,7 +170,7 @@ async def test_an_apps_page_is_one_answer_with_its_card_connection_tools_and_who
         desk.manifest.tools
     )
     assert all(t["title"] and t["access"] in ("read", "write") for t in page["tools"]), page["tools"]
-    assert page["me"] == {"connected": False, "account": None} and page["peopleCount"] == 0, page
+    assert page["me"] == {"connected": False, "account": None, "signIns": 0} and page["peopleCount"] == 0, page
     assert page["usage"] == [] and page["skills"] == []
     # A custom app's id is its first account's: its own team reads its page, another team finds nothing.
     made = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "bearer"}, headers=admin(tenant))

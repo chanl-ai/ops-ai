@@ -29,7 +29,7 @@ OPERATIONS: dict[str, Operation] = {
         "stream": False,
     },
     "apps_add_own_account": {
-        "body": None,
+        "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/me/accounts/{account_id}/another",
@@ -206,6 +206,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/knowledge-sources",
         "pathParams": [],
         "query": [],
+        "stream": False,
+    },
+    "apps_list_account_choices": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/{app_id}/accounts",
+        "pathParams": ["app_id"],
+        "query": ["usable", "name", "mine"],
         "stream": False,
     },
     "apps_list_app_credentials": {
@@ -855,6 +864,19 @@ class Operations:
         "Delete App"
         return self._t.call(SERVICE, OPERATIONS["apps_delete_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def apps_list_account_choices(
+        self, app_id: str, *, usable: bool | None = None, name: str | None = None, mine: bool | None = None
+    ) -> list[AccountChoice]:
+        "List Account Choices"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["apps_list_account_choices"],
+            {"app_id": app_id},
+            {"usable": usable, "name": name, "mine": mine},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
         "Add Account"
         return self._t.call(SERVICE, OPERATIONS["apps_add_account"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1040,9 +1062,9 @@ class Operations:
         "Disconnect"
         return self._t.call(SERVICE, OPERATIONS["apps_disconnect"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def apps_add_own_account(self, account_id: str) -> SignInStart:
+    def apps_add_own_account(self, account_id: str, body: AnotherOwnIn) -> SignInStart:
         "Add Own Account"
-        return self._t.call(SERVICE, OPERATIONS["apps_add_own_account"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_add_own_account"], {"account_id": account_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def apps_give_own_credentials(self, account_id: str, body: PersonCredentialsIn) -> MyAccount:
         "Give Own Credentials"
@@ -1381,6 +1403,19 @@ class AsyncOperations:
         "Delete App"
         return await self._t.call(SERVICE, OPERATIONS["apps_delete_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def apps_list_account_choices(
+        self, app_id: str, *, usable: bool | None = None, name: str | None = None, mine: bool | None = None
+    ) -> list[AccountChoice]:
+        "List Account Choices"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["apps_list_account_choices"],
+            {"app_id": app_id},
+            {"usable": usable, "name": name, "mine": mine},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
         "Add Account"
         return await self._t.call(SERVICE, OPERATIONS["apps_add_account"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1568,9 +1603,9 @@ class AsyncOperations:
         "Disconnect"
         return await self._t.call(SERVICE, OPERATIONS["apps_disconnect"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def apps_add_own_account(self, account_id: str) -> SignInStart:
+    async def apps_add_own_account(self, account_id: str, body: AnotherOwnIn) -> SignInStart:
         "Add Own Account"
-        return await self._t.call(SERVICE, OPERATIONS["apps_add_own_account"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_add_own_account"], {"account_id": account_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def apps_give_own_credentials(self, account_id: str, body: PersonCredentialsIn) -> MyAccount:
         "Give Own Credentials"

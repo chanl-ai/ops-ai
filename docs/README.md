@@ -508,3 +508,10 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/scanned-chat-attachment.md` | uc-673: A scanned file attached in chat is read with OCR and reaches the agent whole |
 | `usecases/tools-service/app-page-one-state.md` | uc-674: An app's page shows one state and its next action |
 | `usecases/kb-service/a-website-source-keeps-a-knowledge.md` | uc-675: A website source keeps a knowledge base current, and answers cite it |
+| `usecases/tools-service/a-second-org-signs-in-at-its-own-address.md` | uc-691: A second live org signs in at its own address and a call naming it reaches it |
+| `usecases/tools-service/a-second-server-signs-in-at-its-own-address.md` | uc-692: A second account of an app that is not Salesforce signs in at its own server |
+| `usecases/tools-service/every-account-says-what-it-points-at.md` | uc-693: Every account row says what it points at, also for an app that declares nothing and a custom app |
+| `usecases/tools-service/a-call-never-uses-someone-elses-account.md` | uc-694: A call naming another person's own account or another team's account is refused |
+| `usecases/tools-service/a-deleted-account-name-is-refused.md` | uc-698: A call naming an account that no longer exists is refused, never sent to the default |
+| `usecases/tools-service/two-accounts-never-share-a-name.md` | uc-699: Two accounts of one app in one team never share a name |
+| `usecases/tools-service/a-test-run-never-uses-a-named-live-account.md` | uc-700: A test run that names a live account uses the test account or is refused |

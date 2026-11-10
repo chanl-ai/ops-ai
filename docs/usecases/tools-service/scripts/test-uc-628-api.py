@@ -63,7 +63,7 @@ with ExitStack() as stack:
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-628"}, headers=sam)
 
     # 1. S1: the window's answer turns Salesforce on: each person's own account with the team account for runs
-    # nobody started, the sign-in address fixed on Ops AI's auth config, and the read tools added.
+    # nobody started, the sign-in address kept as a default on Ops AI's auth config, and the read tools added.
     body = {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": sf["login_url"]}}
     on = gw.put(f"/v1/apps/{SF}/team", json=body, headers=priya)
     card = data(on) or {}
@@ -72,9 +72,9 @@ with ExitStack() as stack:
     place = next((f for f in config.get("fields") or [] if f.get("name") == "login_url"), {})
     account = data(gw.get(f"/v1/apps/{SF}/accounts/{card.get('connectionId')}", headers=priya)) or {}
     check(
-        "1 Turn on Salesforce: the address is fixed on Ops AI's auth config, each person's own account with the team "
+        "1 Turn on Salesforce: the address is a default on Ops AI's auth config, each person's own account with the team "
         "account for unattended runs, and every read tool added",
-        on.status_code == 200 and (place.get("value"), place.get("mode")) == (sf["login_url"], "fixed")
+        on.status_code == 200 and (place.get("value"), place.get("mode")) == (sf["login_url"], "default")
         and card.get("toolsAdded") == len(reads(page)) > 0 and account.get("signIn") == "person_or_team",
         {"place": (place.get("value"), place.get("mode")), "added": card.get("toolsAdded"), "reads": len(reads(page)),
          "signIn": account.get("signIn"), "configs": [(c.get("type"), c.get("fields")) for c in page.get("authConfigs") or []]},
