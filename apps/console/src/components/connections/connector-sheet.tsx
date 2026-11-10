@@ -10,6 +10,7 @@ import { DetailSheet } from '@/components/shared/detail-sheet';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { AppStateBadge } from '@/components/connections/app-state-badge';
 import type { MyConnector } from '@/hooks/connections-queries';
+import { DefaultStar } from '@/components/shared/default-star';
 import { usePinDefault, useTestAccount } from '@/hooks/systems-queries';
 import { plural, shortDate } from '@/lib/format';
 import { appPageHref } from '@/lib/app-links';
@@ -174,36 +175,33 @@ export function ConnectorSheet({
                 .filter((a) => a.state === 'connected')
                 .map((a) => (
                   <div key={a.connectionId} className="flex flex-wrap items-center justify-between gap-2" data-testid={`connector-account-${a.connectionId}`}>
-                    <span className="flex min-w-0 flex-col">
-                      <span className="flex flex-wrap items-center gap-2 text-sm">
-                        {a.name}
-                        {a.primary && c.accountCount > 1 && <Badge variant="secondary">My default</Badge>}
-                      </span>
-                      {(a.identity ?? []).length > 0 && (
-                        <span className="truncate text-xs text-muted-foreground" data-testid={`connector-account-points-${a.connectionId}`}>
-                          {(a.identity ?? []).map((e) => e.shown).join(' · ')}
-                        </span>
+                    <span className="flex min-w-0 items-start gap-2">
+                      {c.accountCount > 1 && (
+                        <DefaultStar
+                          on={a.primary}
+                          label="your default"
+                          busy={pin.isPending}
+                          testId={`connector-make-default-${a.connectionId}`}
+                          onSet={() =>
+                            pin.mutate(
+                              { appId: c.appId, accountId: a.connectionId },
+                              {
+                                onSuccess: () => toast.success(`${a.name} is your default`, { description: 'Your calls that name no account use it.' }),
+                                onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }),
+                              },
+                            )
+                          }
+                        />
                       )}
+                      <span className="flex min-w-0 flex-col">
+                        <span className="text-sm">{a.name}</span>
+                        {(a.identity ?? []).length > 0 && (
+                          <span className="truncate text-xs text-muted-foreground" data-testid={`connector-account-points-${a.connectionId}`}>
+                            {(a.identity ?? []).map((e) => e.shown).join(' · ')}
+                          </span>
+                        )}
+                      </span>
                     </span>
-                    {c.accountCount > 1 && !a.primary && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={pin.isPending}
-                        data-testid={`connector-make-default-${a.connectionId}`}
-                        onClick={() =>
-                          pin.mutate(
-                            { appId: c.appId, accountId: a.connectionId },
-                            {
-                              onSuccess: () => toast.success(`${a.name} is your default`, { description: 'Your calls that name no account use it.' }),
-                              onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }),
-                            },
-                          )
-                        }
-                      >
-                        Make my default
-                      </Button>
-                    )}
                   </div>
                 ))}
               {connected ? (

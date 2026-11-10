@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { DefaultStar } from '@/components/shared/default-star';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StopRowClick } from '@/components/shared/form-field';
@@ -28,6 +29,7 @@ import {
   useSignOutTeam,
   useTestAccount,
 } from '@/hooks/systems-queries';
+import { useAccountUses } from '@/hooks/plugin-update-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { initials } from '@/lib/format';
 import { accountOwnerWords } from '@/lib/app-state';
@@ -89,7 +91,7 @@ export function AccountsTab({
             <span className="flex min-w-0 flex-col">
               <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="truncate">{shownAs(a)}</span>
-                {a.default && <Badge variant="secondary">Default</Badge>}
+                {a.kind === 'team' && !a.sandbox && <TeamDefaultStar appId={latest.current.app.card.id} account={a} />}
                 {a.sandbox && (
                   <Badge variant="outline" data-testid={`account-sandbox-${a.name}`}>
                     Test
@@ -284,6 +286,53 @@ function StateCell({
   );
 }
 
+/**
+ * What still names the account, before a rename: a rename rewrites no workflow or agent version, so each one counted
+ * keeps the old name and its next publish is refused until it names the new one. Says so while the count loads or
+ * cannot be read, so nobody renames on a guess.
+ */
+function NamedBy({ app, name }: { app: string; name: string }) {
+  const uses = useAccountUses(app, name);
+  const n = uses.data ? uses.data.published + uses.data.drafts : 0;
+  const text = uses.isPending
+    ? 'Checking which workflows and agents name it…'
+    : uses.isError
+      ? 'Couldn’t check which workflows and agents name it. Each one that does keeps the old name until it is changed.'
+      : n === 0
+        ? 'No workflow or agent names it.'
+        : `${uses.data?.published ?? 0} published and ${uses.data?.drafts ?? 0} draft versions name ${name}. They keep the old name: each one’s next publish is refused until its step or agent names the new one.`;
+  return (
+    <p className={n > 0 || uses.isError ? 'flex gap-2 text-sm text-warning-text' : 'text-sm text-muted-foreground'} role={n > 0 ? 'alert' : undefined} data-testid="account-rename-uses">
+      {(n > 0 || uses.isError) && <TriangleAlert className="mt-0.5 size-4 shrink-0" />}
+      <span>{text}</span>
+    </p>
+  );
+}
+
+/** The team-default star on a team row: a button for whoever may change the default, else a mark on the default. */
+function TeamDefaultStar({ appId, account: a }: { appId: string; account: ConfigAccount }) {
+  const teamDefault = useMakeTeamDefault();
+  const set = () =>
+    teamDefault.mutate(
+      { appId, accountId: a.id },
+      {
+        onSuccess: () => toast.success(`${shownAs(a)} is the team’s default`, { description: 'Calls that name no account use it.' }),
+        onError: (e) => toast.error('Couldn’t make it the default', { description: e.message }),
+      },
+    );
+  return (
+    <StopRowClick>
+      <DefaultStar
+        on={a.default}
+        label="the team’s default"
+        onSet={(a.actions ?? []).includes('make_team_default') ? set : undefined}
+        busy={teamDefault.isPending}
+        testId={`account-default-${a.name}`}
+      />
+    </StopRowClick>
+  );
+}
+
 /** A row's menu: Test now, Rename, defaults, Move, Disconnect and Delete, each only where the API offers it. */
 function AccountActions({
   app,
@@ -377,6 +426,7 @@ function AccountActions({
         <RenameDialog
           name={a.name}
           description="Steps and tools pick an account by this name."
+          notice={<NamedBy app={app.card.id} name={a.name} />}
           testId="account-rename"
           busy={change.isPending}
           onClose={() => setDialog(null)}

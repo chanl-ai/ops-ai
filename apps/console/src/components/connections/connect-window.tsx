@@ -387,7 +387,7 @@ export function ConnectWindow({
     <label className="flex items-start gap-2">
       <Checkbox checked={testAccount} onCheckedChange={(v) => setTestAccount(v === true)} className="mt-0.5" data-testid="connect-window-test-account" />
       <span className="grid gap-1">
-        <span className="text-sm">Test account</span>
+        <span className="text-sm">Use only for test runs</span>
         <span className="text-xs text-muted-foreground">Test runs use this account; live runs never do.</span>
       </span>
     </label>
@@ -464,7 +464,7 @@ export function ConnectWindow({
 
         {turningOn && plugin.signIn.length > 1 && (
           <div className="flex flex-col gap-2" data-testid="connect-window-whose">
-            <span className="text-sm font-medium">Whose account do tools use?</span>
+            <span className="text-sm font-medium">Who signs in?</span>
             <WhoSignsIn value={whose} onChange={setWhose} offered={plugin.signIn} />
           </div>
         )}
