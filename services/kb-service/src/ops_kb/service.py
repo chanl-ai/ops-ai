@@ -2274,6 +2274,10 @@ class KnowledgeService:
             source = await self.create_source(
                 who, {"type": "text", "name": name, "collection": "Pages", "owner": b["owner"], "kbIds": [kb_id]}
             )
+        elif source["type"] == "file":
+            # A base's pages source made before typed text existed holds its pages as files; it becomes the typed text
+            # source it always was, keeping its files and versions, so the next page is written into it.
+            await self.store.update_source(who.tenant_id, str(source["id"]), {"type": "text"})
         put = await self.put_item(who, str(source["id"]), {"name": f"{_slug(title) or 'page'}.md", "title": title,
                                                             "text": text})  # fmt: skip
         return cast(dict[str, Any], put["item"])
