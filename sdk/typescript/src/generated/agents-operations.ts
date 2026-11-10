@@ -1787,6 +1787,18 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_list_account_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/account-uses",
+    "pathParams": [],
+    "query": [
+      "app",
+      "name"
+    ],
+    "stream": false
+  },
   "workflows_list_definitions": {
     "body": null,
     "headers": [],

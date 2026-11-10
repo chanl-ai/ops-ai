@@ -10,9 +10,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any, cast
 
+from ops_engine.store import DefinitionStore
 from ops_service_kit.errors import Unprocessable
 
 from ..activities.tool_directory import ToolsUnavailable
+from ..store.engine import EngineTransactions
+from .agent_registry import registry as agent_registry
 from .deps import Runtime
 
 # The engine's tool step, whose `accounts` parameter names an account per app.
@@ -68,3 +71,38 @@ def uses_of(definitions: Iterable[tuple[str, Mapping[str, Any]]], app: str, name
     case-folded as tools-service compares them, for the rename warning's count."""
     key = name.strip().casefold()
     return [i for i, d in definitions if any(a == app and n.casefold() == key for _, a, n in step_names(d))]
+
+
+async def account_uses_in(rt: Runtime, team: str, app: str, name: str) -> dict[str, Any]:
+    """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`: the
+    counts and ids a rename warns with and a delete is refused with. Names compare trimmed and case-folded, as calls
+    compare them."""
+    store = DefinitionStore(EngineTransactions(rt.db))
+    drafts = published = 0
+    workflows: list[str] = []
+    for row in await store.summaries(team=team):
+        wid = str(row["workflow_id"])
+        latest = uses_of([(wid, cast(dict[str, Any], row.get("definition") or {}))], app, name)
+        live_version = row.get("current_version")
+        live = await store.get(wid, int(live_version), team=team) if live_version else None
+        named_live = bool(live and uses_of([(wid, cast(dict[str, Any], live["definition"]))], app, name))
+        drafts += int(bool(latest) and row.get("stage") == "draft")
+        published += int(named_live)
+        if latest or named_live:
+            workflows.append(wid)
+    agents: list[str] = []
+    reg = agent_registry(rt)
+    key = name.strip().casefold()
+    for a in await reg.rows():
+        if a.get("team_id") != team:
+            continue
+        for v in await reg.versions(str(a["id"])):
+            named = cast(dict[str, str], cast(dict[str, Any], v.get("spec") or {}).get("accounts") or {})
+            if str(named.get(app) or "").strip().casefold() != key:
+                continue
+            is_live = a.get("published_version") is not None and int(v["version"]) <= int(a["published_version"])
+            published += int(is_live)
+            drafts += int(not is_live)
+            if str(a["id"]) not in agents:
+                agents.append(str(a["id"]))
+    return {"drafts": drafts, "published": published, "workflows": workflows, "agents": agents}

@@ -8,7 +8,7 @@ from __future__ import annotations
 from several_accounts import SF, add_org, code_of, retail_on, rig
 from usecase_harness import check, finish
 
-with rig("uc-700") as r:
+with rig("uc-700", with_agents=True) as r:
     sf = r.sf
     retail_on(r)
     add_org(r, "EU org", sf["eu_login_url"], "kestrel.eu")

@@ -677,6 +677,7 @@ moment make one account and the other is refused 409 `account_name_taken`.
 | A run | `POST /v1/calls` with `runContext.accounts: {appId: name}` | Each app's call uses the account named for its app; `runContext.account` (one name) is still read |
 | A builder | an `ops.action.tool` step's `accounts` parameter, or an agent's `accounts` (`PATCH /v1/agents/{id}`) | The step's or agent's choice per app. Publishing checks each against tools-service (`?usable=1&name=`) and refuses 422 `account_name_unknown`; a draft may name one not made yet |
 | A person | `PUT /chat/threads/{id}/connectors` with `{off, accounts}` | The chat's choice per app, kept on the chat; `GET` lists each app's accounts when it has two or more, and `account` in use |
+| A delete | `DELETE /v1/apps/{app}/accounts/{id}` | Refused 409 `account_in_use` while a workflow draft or published version, or an agent, names the account, with `published`, `drafts`, `workflows` and `agents` in the details; tools-service asks agents-service's `GET /v1/account-uses` (the same count as below), and refuses 503 when it cannot answer |
 | Before a rename | `GET /v1/workflows/definitions/account-uses?app=…&name=…` | How many drafts and published versions name the account. A rename rewrites none of them: a published version is refused at its next call until its next publish names the new name |
 
 Agents-service sends what was chosen and never picks or compares names itself: a step's choice over the agent's,

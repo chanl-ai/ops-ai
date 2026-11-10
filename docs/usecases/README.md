@@ -325,3 +325,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api | current |
 | uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current |
 | uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api | current |
+| uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api | current |

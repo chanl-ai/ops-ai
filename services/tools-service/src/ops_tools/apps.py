@@ -596,6 +596,7 @@ class Apps:
         self.connections = connections
         # Who uses each of an app's tools (agents-service), for the app page's Tools tab.
         self.users = users
+        connections.account_users = users.accounts if users is not None else None
         self.modules = modules
         self.plugins = plugins
         # A plugin's turn-on and accounts, when the install has plugins.

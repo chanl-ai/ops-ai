@@ -206,3 +206,20 @@ async def test_the_first_turn_on_names_the_teams_account(world: World, tenant: s
         headers=admin(tenant),
     )
     assert detail.json()["data"]["accountName"] == "Billing desk", detail.text
+
+
+async def test_an_account_a_step_or_agent_names_is_not_deleted_until_nothing_names_it(
+    world: World, tenant: str
+) -> None:
+    await connected(world, tenant)
+    made = await another(world, tenant, "EU org")
+    eu = str(made.json()["data"]["id"])
+    world.users.account_uses[(APP, "eu org")] = {"drafts": 1, "published": 2, "workflows": ["wf_a"], "agents": ["ag_b"]}
+    refused = await world.client.delete(f"/v1/apps/plugin:{ID}/accounts/{eu}", headers=admin(tenant))
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "account_in_use", refused.text
+    error = refused.json()["error"]
+    assert (error["details"]["published"], error["details"]["drafts"]) == (2, 1), error
+    assert "2 published" in error["message"] and "1 draft" in error["message"], error
+    world.users.account_uses.clear()
+    gone = await world.client.delete(f"/v1/apps/plugin:{ID}/accounts/{eu}", headers=admin(tenant))
+    assert gone.status_code == 204, gone.text

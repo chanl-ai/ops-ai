@@ -532,6 +532,7 @@ def create_app(
     mount(tool_uses_routes.router, "Agents")
     mount(team_assistant_routes.router, "Agents")
     mount(tool_uses_routes.document_type_router, "Workflows")
+    mount(tool_uses_routes.account_router, "Workflows")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
     mount(guardrail_routes.router, "Agents")

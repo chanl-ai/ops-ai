@@ -8,6 +8,13 @@ from typing import Any, Literal, NotRequired, TypeAlias
 from typing_extensions import TypedDict
 
 
+class AccountUsers(TypedDict, closed=True):
+    agents: list[str]
+    drafts: int
+    published: int
+    workflows: list[str]
+
+
 class AccountUses(TypedDict, closed=True):
     agents: list[str]
     drafts: int
@@ -614,6 +621,11 @@ class EngineRunInput(TypedDict, closed=True):
     runKey: NotRequired[str | None]
     version: NotRequired[int | None]
     workflowId: str
+
+
+class EnvelopeAccountUsers(TypedDict, closed=True):
+    data: AccountUsers
+    success: Literal[True]
 
 
 class EnvelopeAccountUses(TypedDict, closed=True):

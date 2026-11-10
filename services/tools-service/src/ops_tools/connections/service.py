@@ -247,6 +247,9 @@ class ConnectionService:
         # The package apps that run on an account's app and the path that checks each of their objects
         # (PluginHost.package_checks); a passing Test reads them. Set once the plugin host is up.
         self.package_checks: Callable[[str, str], Awaitable[list[dict[str, Any]]]] | None = None
+        # The team's workflows and agents that name an account of an app (ToolUsers.accounts, agents-service); a
+        # delete is refused while any do. Set with the app routes (Apps).
+        self.account_users: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
         self._after_sign_in: set[asyncio.Task[None]] = set()
 
@@ -673,6 +676,24 @@ class ConnectionService:
     async def delete(self, who: Caller, connection_id: str) -> None:
         self._can(who, "manage")
         conn = await self._get(who, connection_id)
+        named = str(conn.get("account_name") or "")
+        if named and self.account_users is not None:
+            # A step or agent naming a deleted account is refused at its next call (ACCOUNT_NOT_FOUND), so the delete
+            # waits until nothing names it.
+            uses = await self.account_users(who.tenant_id, str(conn["team_id"]), str(conn["app_id"]), named)
+            published, drafts = int(uses.get("published") or 0), int(uses.get("drafts") or 0)
+            if published or drafts:
+                raise Conflict(
+                    f"{named} is named by {published} published and {drafts} draft workflow or agent "
+                    f"version{'s' if published + drafts != 1 else ''}. Change those to another account first.",
+                    code="account_in_use",
+                    details={
+                        "published": published,
+                        "drafts": drafts,
+                        "workflows": list(uses.get("workflows") or []),
+                        "agents": list(uses.get("agents") or []),
+                    },
+                )
         try:
             deleted = await self.store.delete(who.tenant_id, connection_id, actor=who.name, at=self.clock())
         except ConnectionInUse as e:

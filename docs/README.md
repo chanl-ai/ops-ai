@@ -511,6 +511,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/kb-service/a-website-source-keeps-a-knowledge.md` | uc-675: A website source keeps a knowledge base current, and answers cite it |
 | `usecases/tools-service/a-second-org-signs-in-at-its-own-address.md` | uc-691: A second live org signs in at its own address and a call naming it reaches it |
 | `usecases/tools-service/a-package-app-runs-on-the-chosen-org.md` | uc-706: A package app runs on the chosen org and never on one without the package |
+| `usecases/agents-service/an-account-in-use-is-not-deleted.md` | uc-707: An account a workflow or agent names is not deleted until nothing names it |
 | `usecases/tools-service/a-second-server-signs-in-at-its-own-address.md` | uc-692: A second account of an app that is not Salesforce signs in at its own server |
 | `usecases/tools-service/every-account-says-what-it-points-at.md` | uc-693: Every account row says what it points at, also for an app that declares nothing and a custom app |
 | `usecases/tools-service/a-call-never-uses-someone-elses-account.md` | uc-694: A call naming another person's own account or another team's account is refused |
