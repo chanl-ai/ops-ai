@@ -73,7 +73,8 @@ function useWatchedRun(kbId: string) {
  * The sources that feed this knowledge base, each with its kind, schedule, last sync, health as kb-service keeps it,
  * items and FAQ steps. Read from the base's own detail, which lists every attached source.
  */
-export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
+/** `canBuild` is the knowledge base's own edit flag; adding, attaching, syncing and detaching are hidden from anyone without it. */
+export function KbSourcesTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBuild: boolean }) {
   const router = useRouter();
   const addDocuments = useAddDocuments(kb.id);
   const addPage = useAddPage(kb.id);
@@ -192,8 +193,12 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
               row={row}
               actions={[
                 { label: 'Open source', icon: ExternalLink, onClick: (r) => openSource(r.original) },
-                { label: 'Sync now', icon: RefreshCw, onClick: (r) => syncNow(r.original) },
-                { label: 'Detach', icon: Unlink, variant: 'destructive', onClick: (r) => setDetaching(r.original) },
+                ...(canBuild
+                  ? [
+                      { label: 'Sync now', icon: RefreshCw, onClick: (r: { original: KbSourceView }) => syncNow(r.original) },
+                      { label: 'Detach', icon: Unlink, variant: 'destructive' as const, onClick: (r: { original: KbSourceView }) => setDetaching(r.original) },
+                    ]
+                  : []),
               ]}
             />
           </StopRowClick>
@@ -201,7 +206,7 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
         enableHiding: false,
       },
     ],
-    [openSource, syncNow, watched.run, watched.sourceId],
+    [openSource, syncNow, canBuild, watched.run, watched.sourceId],
   );
 
   const lastWithPublicLink = kb.sources.length === 1 && kb.access.publicLink.enabled;
@@ -226,6 +231,7 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
           { column: 'health', title: 'Health', options: HEALTH_OPTIONS },
         ]}
         toolbarExtra={
+          canBuild && (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setAddOpen(true)} data-testid="kb-add-source">
               <Plus className="size-4" /> Add source
@@ -249,14 +255,15 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
               <Plus className="size-4" /> Attach sources
             </Button>
           </div>
+          )
         }
         emptyState={
           <EmptyState
             icon={Plug}
             title="No sources yet"
-            description="Add a website, connect an app, or upload files."
-            action={{ label: 'Add source', onClick: () => setAddOpen(true) }}
-            secondaryAction={{ label: 'Attach existing source', onClick: () => (setPicked([]), setAttachOpen(true)) }}
+            description={canBuild ? 'Add a website, connect an app, or upload files.' : 'Nobody has added a source here yet.'}
+            action={canBuild ? { label: 'Add source', onClick: () => setAddOpen(true) } : undefined}
+            secondaryAction={canBuild ? { label: 'Attach existing source', onClick: () => (setPicked([]), setAttachOpen(true)) } : undefined}
           />
         }
       />

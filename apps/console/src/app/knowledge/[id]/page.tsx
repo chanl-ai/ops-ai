@@ -137,10 +137,10 @@ export default function KnowledgeBasePage() {
               tabHref={tabHref}
             />
           )}
-          {tab === 'sources' && <KbSourcesTab kb={kb} />}
+          {tab === 'sources' && <KbSourcesTab kb={kb} canBuild={canBuild} />}
           {tab === 'retrieval' && <KbRetrievalTab kb={kb} />}
           </BuilderFieldset>
-          {tab === 'documents' && <KbDocumentsTab kb={kb} />}
+          {tab === 'documents' && <KbDocumentsTab kb={kb} canBuild={canBuild} />}
           {tab === 'playground' && <KbPlaygroundTab kb={kb} />}
           {tab === 'changes' && <KnowledgeChangesQueue kbId={kb.id} />}
 

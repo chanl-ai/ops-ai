@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Knowledge bases show only what you can change",
+  "description": "People who can read a knowledge base no longer see Add source, Add documents, Add page, Attach sources, Sync now or Detach. Off-for-team apps in the chat picker keep their names on narrow screens, and tab rows show when there is more to scroll to.",
+  "tag": "fix"
+}
