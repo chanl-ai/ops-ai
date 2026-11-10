@@ -25,6 +25,7 @@ from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 
 from ...activities.tool_directory import ToolsUnavailable
+from ...domain.accounts import chosen_accounts
 from ...store.team_defaults import TeamDefaults
 from ..agent_calls import agent_team
 from ..auth import Principal, principal, require_chat_use
@@ -179,7 +180,7 @@ async def get_connectors(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     row, agent, limits = await _thread(rt, me, thread_id)
     apps = await _by_app(rt, me, str(row["team_id"]), list(limits.switchable_tool_ids))
     stored = cast(dict[str, Any], row.get("overrides") or {})
-    chosen = {**agent.accounts, **cast(dict[str, str], stored.get("accounts") or {})}
+    chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], stored.get("accounts") or {}))
     apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen)
     return ok(_view(thread_id, apps, set(cast(list[str], stored.get("toolsOff") or []))))
 
@@ -216,7 +217,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     resolve(limits, agent.default_kb_ids, thread=merged, widgets_per_turn=agent.widgets_per_turn)
     saved = (merged.model_dump(mode="json", by_alias=True, exclude_none=True) if merged else None) or None
     await graph_store(rt).set_overrides(thread_id, saved, updated_at=now_iso())
-    apps = await _with_accounts(rt, me, str(row["team_id"]), apps, {**agent.accounts, **accounts})
+    apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen_accounts(agent=agent.accounts, chat=accounts))
     return ok(_view(thread_id, apps, set(off)))
 
 

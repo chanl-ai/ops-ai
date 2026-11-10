@@ -36,6 +36,7 @@ from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.logging import get_logger
 
+from ..domain.accounts import chosen_accounts
 from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.events import EventLog
 from ..store.leases import LeaseHeldError, Leases
@@ -94,15 +95,6 @@ async def run_workflow(db: AsyncEngine, run_id: str) -> tuple[str, bool]:
     return workflow, bool(handler and stored is not None and stored.get("team_id") is None)
 
 
-def merged_accounts(
-    run: Mapping[str, str], step: Mapping[str, str] | None, *, team_account: bool = False
-) -> dict[str, str]:
-    """The account each app's call uses: the step's choice over the run's (an agent's, or a chat's over its agent's).
-    A call sent on the team's account in place of a person's (Run as the team account) keeps only the step's choice,
-    so a person's own pick from their chat never travels into a call that acts for nobody."""
-    return {**({} if team_account else dict(run)), **dict(step or {})}
-
-
 class GatewayTools:
     def __init__(self, gateway: GatewayClient | None, minter: ApprovalMinter | None = None) -> None:
         self.gateway = gateway
@@ -138,7 +130,8 @@ class GatewayTools:
                 environment=run.environment,
                 run_id=run.run_id,
                 team_account=team_account,
-                accounts=merged_accounts(run.accounts, accounts, team_account=team_account),
+                # The run's accounts are the choice of the chat or agent that started it; the step's wins.
+                accounts=chosen_accounts(agent=run.accounts, step=accounts, team_account=team_account),
             )
         )
         try:

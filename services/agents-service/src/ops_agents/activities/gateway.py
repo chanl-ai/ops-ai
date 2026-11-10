@@ -75,11 +75,11 @@ def current_run_context() -> RunContext:
 @contextmanager
 def acting_as(act: str, environment: str | None = None, accounts: Mapping[str, str] | None = None) -> Generator[None]:
     """Calls made inside name `act` (e.g. `agent:ag_dispute`) as their actor in the gateway's log, on the run's thread
-    and lease generation, in `environment` when given, else the run's, on `accounts` (app id to account name) over the
-    run's own."""
+    and lease generation, in `environment` when given, else the run's, on `accounts` (app id to account name, as
+    domain/accounts.py chose them) when given, else the run's."""
     base = current_run_context()
     env = environment or base.environment
-    chosen = {**base.accounts, **(accounts or {})}
+    chosen = base.accounts if accounts is None else accounts
     token = RUN_CONTEXT.set(replace(base, act=act, environment=env, accounts=chosen))
     try:
         yield
@@ -89,13 +89,10 @@ def acting_as(act: str, environment: str | None = None, accounts: Mapping[str, s
 
 @contextmanager
 def using_accounts(accounts: Mapping[str, str] | None) -> Generator[None]:
-    """Calls made inside use `accounts` (app id to account name) over the run's own choice, as a step's setting asks;
-    nothing else about the run changes."""
-    if not accounts:
-        yield
-        return
+    """Calls made inside use `accounts` (app id to account name, as domain/accounts.py chose them, the run's own
+    choice included); nothing else about the run changes."""
     base = current_run_context()
-    token = RUN_CONTEXT.set(replace(base, accounts={**base.accounts, **accounts}))
+    token = RUN_CONTEXT.set(replace(base, accounts=dict(accounts or {})))
     try:
         yield
     finally:

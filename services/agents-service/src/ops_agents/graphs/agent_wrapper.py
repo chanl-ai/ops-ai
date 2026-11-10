@@ -21,6 +21,7 @@ from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.gateway import LIVE, TEST, acting_as, current_run_context
 from ops_agents.activities.overrides import limits_for
 from ops_agents.activities.tools import fill
+from ops_agents.domain.accounts import chosen_accounts
 from ops_contracts.chat import EffectiveSettings
 from ops_service_kit.ids import new_id
 
@@ -236,7 +237,7 @@ def build(
 def turn_accounts(agent: AgentDefinition, state: Mapping[str, Any]) -> dict[str, str]:
     """The account each app's calls use in a turn: the chat's pick (its thread's `accounts`) over the agent's own."""
     chosen = cast(dict[str, Any], (state.get("thread_overrides") or {}).get("accounts") or {})
-    return {**agent.accounts, **{str(k): str(v) for k, v in chosen.items() if v}}
+    return chosen_accounts(agent=agent.accounts, chat=chosen)
 
 
 def _effective(state: AgentState) -> EffectiveSettings | None:

@@ -25,6 +25,7 @@ from ops_agents.activities.overrides import Overrides, limits_for
 from ops_agents.activities.overrides import resolve as resolve_settings
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, ToolsOperations, grants_for
 from ops_agents.activities.tools import LocalToolExecutor
+from ops_agents.domain.accounts import chosen_accounts
 from ops_engine.ports import AgentRequest, AgentResult, PromptRequest
 from ops_identity import ServiceClient
 from ops_metering import PriceTable
@@ -182,8 +183,8 @@ class KernelAgents:
             output_schema=request.output_schema,
         )
         result: TurnResult | None = None
-        # The agent's own account per app, under any the run already chose.
-        with using_accounts({**agent.accounts, **current_run_context().accounts}):
+        # The agent's own account per app, under the choice of the chat or agent that started the run.
+        with using_accounts(chosen_accounts(agent=agent.accounts, chat=current_run_context().accounts)):
             async for event in run_turn(req, self.ports):
                 if isinstance(event, TurnFinished):
                     result = event.result
