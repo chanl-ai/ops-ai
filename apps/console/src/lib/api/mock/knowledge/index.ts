@@ -13,6 +13,7 @@ import type {
   SourceRow,
   SyncRun,
 } from '@/lib/types/knowledge';
+import { plural } from '@/lib/format';
 import type { IngestSettings, ItemVersionRow } from '@/lib/types/knowledge-ingest';
 import type { ConnectionRef } from '@/lib/types/integrations';
 
@@ -613,7 +614,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             kindLabel: kind === 'file' ? 'Files' : kind === 'web' ? 'Website' : 'App source',
             aiStepsWaiting: [],
             waitingHosts: [],
-            scopeSummary: input.type === 'file' ? `${fileIds?.length ?? 0} uploaded files` : input.name,
+            scopeSummary: input.type === 'file' ? plural(fileIds?.length ?? 0, 'uploaded file') : input.name,
             titleFrom: 'source',
             permissions: { mode: 'workspace' },
             deletedAtSource: 'remove',

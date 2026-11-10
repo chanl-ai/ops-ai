@@ -189,3 +189,13 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+
+/* A sideways-scrolling row shows a soft edge on each side that has more to scroll to. Pure CSS: the cover gradients
+   scroll with the content and hide the shadow once the edge is reached. */
+.scroll-edge-x {
+  background:
+    linear-gradient(to right, var(--background), var(--background)) left center / 24px 100% local no-repeat,
+    linear-gradient(to left, var(--background), var(--background)) right center / 24px 100% local no-repeat,
+    linear-gradient(to right, oklch(0 0 0 / 0.18), transparent) left center / 14px 100% scroll no-repeat,
+    linear-gradient(to left, oklch(0 0 0 / 0.18), transparent) right center / 14px 100% scroll no-repeat;
+}

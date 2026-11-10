@@ -2646,7 +2646,8 @@ def scope_summary(s: dict[str, Any]) -> str:
     if s["type"] in WRITTEN_TYPES:
         return f"{len(s['file_ids'])} {'pages' if s['type'] == 'text' else 'pushed items'}"
     if s["type"] != "tool":
-        return f"{len(s['file_ids'])} uploaded files"
+        n = len(s["file_ids"])
+        return f"{n} uploaded file" if n == 1 else f"{n} uploaded files"
     cfg = dict(s.get("config") or {})
     values = cast(dict[str, Any], cfg.get("values") or {})
     start = cast(list[Any], values.get("start") or [])
