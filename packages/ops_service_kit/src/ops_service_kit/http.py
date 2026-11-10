@@ -255,5 +255,6 @@ def install_error_handlers(app: FastAPI) -> None:
     # Still needed for an exception raised in a user middleware outside _UnhandledAsEnvelope.
     @app.exception_handler(Exception)
     async def unexpected(_: Request, e: Exception) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        log.exception("unhandled_error", error=type(e).__name__)
+        # An exception handler is not an except block, so the exception is passed, not read from sys.exc_info().
+        log.error("unhandled_error", error=type(e).__name__, exc_info=e)
         return JSONResponse(error_body(500, "internal", "Something went wrong on the server."), status_code=500)

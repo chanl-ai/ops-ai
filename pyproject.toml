@@ -85,12 +85,23 @@ src = ["packages/*/src", "services/*/src", "services/agents-service"]
 extend-exclude = ["examples", "docs/usecases"]
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF", "PL", "N"]
+# T20 no print, G no f-string or % log messages, LOG standard-library logging mistakes (check_standards rule 6b
+# checks the rest of the logging rules).
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF", "PL", "N", "T20", "G", "LOG"]
 ignore = ["PLR0913", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "N818"]
 
 [tool.ruff.lint.per-file-ignores]
-"examples/**" = ["E402", "E501", "PLC0415", "SIM102", "SIM105"]
-"docs/usecases/**" = ["E402", "E501", "PLC0415"]
+"examples/**" = ["E402", "E501", "PLC0415", "SIM102", "SIM105", "T20"]
+"docs/usecases/**" = ["E402", "E501", "PLC0415", "T20"]
+# Command-line tools, experiments and migrations print their output; a service logs.
+"scripts/**" = ["T20"]
+"deploy/**" = ["T20"]
+"sdk/**" = ["T20"]
+"services/*/scripts/**" = ["T20"]
+"**/experiments/**" = ["T20"]
+"**/migrations/**" = ["T20"]
+# Code the sandbox runner executes; its print is the output a test reads.
+"services/runner-service/tests/fixtures/**" = ["T20"]
 
 [tool.pyright]
 include = ["packages", "services/agents-service", "services/tools-service", "services/files-service", "services/kb-service", "services/runner-service"]
