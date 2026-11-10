@@ -10,7 +10,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 // architecture diagrams' data files and their exported SVGs (apps/docs draws them).
 const DOC_FOLDERS = ['background', 'architecture', 'design', 'console', 'services', 'packages', 'deploy', 'guide', 'plan', 'artifacts', 'usecases', 'media', 'diagrams', 'sdk'];
 // Use case scripts and their shared harness live beside the use case docs; only the docs follow the naming rules.
-const USECASE_CODE = /^docs\/usecases\/(lib|[a-z0-9-]+\/scripts)\/[^/]+\.(py|mjs)$/;
+// Fixture plugins the use cases install (lib/plugins/<package>/) are Python packages with a plugin.yaml.
+const USECASE_CODE = /^docs\/usecases\/(lib|lib\/plugins\/[a-z0-9_]+|[a-z0-9-]+\/scripts)\/[^/]+\.(py|mjs|yaml)$/;
 // Mapped folders: docs/services/<x> needs services/<x>, docs/packages/<x> needs packages/<x>.
 const MAPPED = ['services', 'packages'];
 const ROOT_FILES = new Set(['README.md', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', 'CHANGELOG.md']);
