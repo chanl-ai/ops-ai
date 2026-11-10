@@ -122,10 +122,26 @@ class EgressStore:
         )
         async with self.engine.connect() as c:
             hosts = [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
-            users_q = _users(tenant_id).where(module_egress_hosts.c.host.in_([h["host"] for h in hosts]))
-            used: dict[str, list[dict[str, str]]] = {}
-            for host, module_id, name in await c.execute(users_q):
-                used.setdefault(host, []).append({"id": module_id, "name": name or module_id})
+            return await self._with_modules(c, tenant_id, hosts)
+
+    async def entry(self, tenant_id: str, kind: str, value: str) -> dict[str, Any] | None:
+        """One listed host, with the modules that use it, or one listed range, in the shape the lists return; None
+        when it is not listed. An add returns it, so a screen can show the new row wherever its list is paged."""
+        table, col = TABLES[kind]
+        q = table.select().where(table.c.tenant_id == tenant_id, col == value)
+        async with self.engine.connect() as c:
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            if kind == "host":
+                rows = await self._with_modules(c, tenant_id, rows)
+        return rows[0] if rows else None
+
+    @staticmethod
+    async def _with_modules(c: AsyncConnection, tenant_id: str, hosts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """`hosts`, each with the modules that use it; only these hosts' modules are read."""
+        users_q = _users(tenant_id).where(module_egress_hosts.c.host.in_([h["host"] for h in hosts]))
+        used: dict[str, list[dict[str, str]]] = {}
+        for host, module_id, name in await c.execute(users_q):
+            used.setdefault(host, []).append({"id": module_id, "name": name or module_id})
         return [{**h, "modules": _by_name(used.get(h["host"], []))} for h in hosts]
 
     async def hosts_count(self, tenant_id: str, search: str, template_id: str | None = None) -> int:

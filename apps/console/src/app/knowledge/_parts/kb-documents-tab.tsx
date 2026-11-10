@@ -14,6 +14,7 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAddPage, useKbDocuments } from '@/hooks/knowledge-queries';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, shortDate, dateOnly } from '@/lib/format';
 import type { DocumentFilters, DocumentRow, ItemStatus, KnowledgeBaseDetail, Sensitivity } from '@/lib/types/knowledge';
@@ -31,6 +32,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
   const router = useRouter();
   const pathname = usePathname();
   const addPage = useAddPage(kb.id);
+  const created = useCreatedRows<Row>();
   const [pageOpen, setPageOpen] = React.useState(false);
   const initialFilters = React.useMemo(
     () => (['status', 'freshness'] as const).flatMap((k) => (params.get(k) ? [{ id: k, value: [params.get(k)!] }] : [])),
@@ -137,6 +139,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
         columns={columns}
         data={rows}
         getRowId={(r) => r.id}
+        created={created}
         searchColumn="title"
         searchPlaceholder="Search by title or path…"
         hideViewSwitcher
@@ -187,7 +190,12 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
         open={pageOpen}
         onOpenChange={setPageOpen}
         saving={addPage.isPending}
-        onSubmit={(input) => addPage.mutateAsync(input).then((d) => toast.success(`Added ${d.title}`, { description: d.status === 'indexed' ? 'Indexed; agents can cite it now.' : d.error }))}
+        onSubmit={(input) =>
+          addPage.mutateAsync(input).then((d) => {
+            created.show({ ...d, onRowClick: (x: DocumentRow) => setDoc(x.id) });
+            toast.success(`Added ${d.title}`, { description: d.status === 'indexed' ? 'Indexed; agents can cite it now.' : d.error });
+          })
+        }
       />
     </>
   );

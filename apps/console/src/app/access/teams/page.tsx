@@ -19,6 +19,7 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
 import { useArchiveWorkspaceTeam, useCreateWorkspaceTeam, useRenameWorkspaceTeam, useRestoreWorkspaceTeam, useWorkspaceTeams, useWorkspaceTeamsEditor } from '@/hooks/workspace-team-queries';
 import { shortDate } from '@/lib/format';
@@ -91,6 +92,7 @@ export default function TeamsPage() {
   const canManage = !!editor.data?.canManage;
   const query = useWorkspaceTeams(list.params, canView);
   const create = useCreateWorkspaceTeam();
+  const created = useCreatedRows<WorkspaceTeam>();
   const rename = useRenameWorkspaceTeam();
   const archive = useArchiveWorkspaceTeam();
   const restore = useRestoreWorkspaceTeam();
@@ -123,6 +125,7 @@ export default function TeamsPage() {
         columns={cols}
         data={query.data?.data ?? []}
         getRowId={(t) => t.id}
+        created={created}
         searchColumn="name"
         searchPlaceholder="Search teams…"
         filters={[{ column: 'status', title: 'Status', options: [{ label: 'Active', value: 'active' }, { label: 'Archived', value: 'archived' }] }]}
@@ -157,7 +160,7 @@ export default function TeamsPage() {
             await rename.mutateAsync({ id: dialog.team.id, name: input.name });
             toast.success(`Renamed to ${input.name}`);
           } else {
-            await create.mutateAsync(input);
+            created.show(await create.mutateAsync(input));
             toast.success(`Created ${input.name}`);
           }
         }}

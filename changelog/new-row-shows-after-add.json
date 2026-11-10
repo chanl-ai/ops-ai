@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "A row you add shows right away",
+  "description": "When you add a host, a webhook, a team, a key or another row to a list, it shows at the top marked New, even when the list is sorted or searched so it would land on another page.",
+  "tag": "fix"
+}

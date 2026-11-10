@@ -21,6 +21,7 @@ import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useSettingsLookups } from '@/hooks/settings-queries';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { relativeTime, shortDate } from '@/lib/format';
@@ -107,6 +108,7 @@ export default function ApiKeysPage() {
   const query = useApiKeys(params, may === true && (!showTeam || !!covered));
   const lookups = useSettingsLookups();
   const create = useCreateApiKey();
+  const created = useCreatedRows<ApiKey>();
   const revoke = useRevokeApiKey();
   const [createOpen, setCreateOpen] = React.useState(false);
   const [revoking, setRevoking] = React.useState<ApiKey | null>(null);
@@ -137,6 +139,7 @@ export default function ApiKeysPage() {
           columns={cols}
           data={query.data?.data ?? []}
           getRowId={(k) => k.id}
+          created={created}
           searchColumn="name"
           searchPlaceholder="Search names, prefixes or creators…"
           onColumnFiltersChange={list.onColumnFiltersChange}
@@ -152,7 +155,7 @@ export default function ApiKeysPage() {
         teams={team?.scope === 'all' ? teams.filter((t) => creatable.includes(t.id)).map((t) => ({ id: t.id, name: t.name })) : undefined}
         defaultTeamId={team?.id}
         isPending={create.isPending}
-        onSubmit={(input) => create.mutateAsync(input)}
+        onSubmit={(input) => create.mutateAsync(input).then((r) => (created.show(r.apiKey), r))}
       />
       <DeleteDialog
         open={!!revoking}
