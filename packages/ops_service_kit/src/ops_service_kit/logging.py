@@ -17,13 +17,16 @@ from __future__ import annotations
 
 import json
 import logging as _logging
+import re
 import sys
 from collections.abc import Callable, Mapping
-from typing import TextIO
+from typing import Any, TextIO
 
 import structlog
 from structlog.stdlib import BoundLogger, ProcessorFormatter
 from structlog.typing import EventDict, Processor, WrappedLogger
+
+from ops_pii import mask
 
 # The fields every line starts with, in this order; the ids are null when nothing has set them.
 SERVICE = "service.name"
@@ -31,6 +34,14 @@ IDS = ("request_id", "tenant_id", "team_id")
 _FIRST = ("ts", "level", "event", "logger", SERVICE, *IDS, "trace_id", "span_id")
 # The handler configure_logging owns on the root logger; a second call replaces it instead of adding another.
 _HANDLER = "ops-json"
+# Keys whose value is never printed. Numbers stay (input_tokens is a count, not a token).
+_SECRET_KEY = re.compile(r"token|secret|passw|authorization|api_?key|cookie", re.IGNORECASE)
+REDACTED = "[redacted]"
+# A query string (it can carry an API key): from `?` to the next space or quote, when it holds a `name=value`.
+_QUERY = re.compile(r"\?[^\s\"'<>#]*=[^\s\"'<>#]*")
+# Fields this module writes: ids and names, never personal data, so they are not masked.
+_UNMASKED = frozenset({"ts", "level", "logger", SERVICE, *IDS, "trace_id", "span_id"})
+
 
 _service: dict[str, str | None] = {SERVICE: None}
 _sources: list[Callable[[], Mapping[str, str | None]]] = []
@@ -86,6 +97,30 @@ def _add_trace(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
     return event
 
 
+def _scrub(value: Any) -> Any:
+    if isinstance(value, str):
+        return mask(_QUERY.sub("", value))
+    if isinstance(value, Mapping):
+        return {str(k): REDACTED if _secret(str(k), v) else _scrub(v) for k, v in value.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+    if isinstance(value, list | tuple | set | frozenset):
+        return [_scrub(v) for v in value]  # pyright: ignore[reportUnknownVariableType]
+    return value
+
+
+def _secret(key: str, value: Any) -> bool:
+    return bool(_SECRET_KEY.search(key)) and not isinstance(value, bool | int | float) and value is not None
+
+
+def redact(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
+    """Drops the value of any secret-named key, strips query strings and masks personal data (`ops_pii.mask`) in every
+    other string, nested values included. It runs last before rendering, so nothing a later step adds escapes it."""
+    for key, value in list(event.items()):
+        if key.startswith("_") or key in _UNMASKED:
+            continue
+        event[key] = REDACTED if _secret(key, value) else _scrub(value)
+    return event
+
+
 def _render(_: WrappedLogger, __: str, event: EventDict) -> str:
     ordered = {k: event.pop(k) for k in _FIRST if k in event}
     return json.dumps({**ordered, **event}, default=str, separators=(",", ":"))
@@ -101,6 +136,7 @@ _CHAIN: list[Processor] = [
     _add_ids,
     _add_trace,
     structlog.processors.format_exc_info,
+    redact,
 ]
 
 structlog.configure(
@@ -126,8 +162,9 @@ def get_logger(name: str) -> BoundLogger:
 
 
 def quiet_request_logs() -> None:
-    """httpx and httpcore log every request's full URL at INFO, and a URL can carry a resolved secret (a query-string
-    API key), so their request lines stay out of the logs; warnings and errors still show."""
+    """httpx and httpcore log every request's URL at INFO. Redaction strips query strings from what reaches stdout; this
+    keeps the volume down and keeps the raw URL out of handlers that do not render through `json_formatter` (a
+    test's captured records)."""
     for name in ("httpx", "httpcore"):
         _logging.getLogger(name).setLevel(_logging.WARNING)
 

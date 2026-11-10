@@ -15,7 +15,7 @@ import pytest
 from fastapi import FastAPI
 
 from ops_service_kit.http import install_error_handlers
-from ops_service_kit.logging import add_context, configure_logging, get_logger
+from ops_service_kit.logging import REDACTED, add_context, configure_logging, get_logger
 from ops_service_kit.request_timing import RequestTiming, _current, note_caller  # pyright: ignore[reportPrivateUsage]
 
 SECRET = "eyJ-kit-test-token"
@@ -38,7 +38,7 @@ def lines(stream: io.StringIO) -> list[dict[str, Any]]:
     return [json.loads(line) for line in stream.getvalue().splitlines()]
 
 
-def test_structlog_stdlib_and_uvicorn_records_are_each_one_json_line(out: io.StringIO) -> None:
+def test_structlog_stdlib_and_uvicorn_records_are_each_one_json_line_with_secrets_removed(out: io.StringIO) -> None:
     get_logger("ops_kit.test").info("kit.saved", authorization=BEARER, owner="a.person@bank.example")
     logging.getLogger("some.library").warning("library said", extra={"authorization": BEARER})
     # uvicorn's access record, as uvicorn.protocols.http makes it: the encoded path with its query string.
@@ -53,9 +53,10 @@ def test_structlog_stdlib_and_uvicorn_records_are_each_one_json_line(out: io.Str
     ours, library, uvicorn = lines(out)
     for line in (ours, library, uvicorn):
         assert line["service.name"] == "kit-test" and line["level"] in {"info", "warning"} and line["ts"].endswith("Z")
-    assert ours["event"] == "kit.saved" and ours["logger"] == "ops_kit.test"
-    assert library["event"] == "library said" and library["logger"] == "some.library"
-    assert uvicorn["logger"] == "uvicorn.access" and uvicorn["event"].startswith('127.0.0.1:5000 - "GET /v1/x')
+    assert ours["event"] == "kit.saved" and ours["authorization"] == REDACTED and ours["owner"] == "[email]"
+    assert library["event"] == "library said" and library["authorization"] == REDACTED
+    assert uvicorn["logger"] == "uvicorn.access" and uvicorn["event"] == '127.0.0.1:5000 - "GET /v1/x HTTP/1.1" 200'
+    assert SECRET not in out.getvalue() and "sk1" not in out.getvalue()
 
 
 def test_a_line_carries_the_request_id_and_the_ids_a_registered_reader_finds(out: io.StringIO) -> None:
@@ -104,3 +105,11 @@ def test_each_request_writes_one_http_request_line_with_its_id_and_route_templat
     assert (line["request_id"], line["tenant_id"], line["team_id"]) == ("req_kit_route_1", "tenant_kit", "t1")
     assert line["http.route"] == "/v1/items/{item_id}" and line["http.response.status_code"] == 200
     assert "sk-in-query" not in out.getvalue() and "itm_1" not in out.getvalue()
+
+
+def test_nested_secrets_and_personal_data_are_removed_and_counts_kept(out: io.StringIO) -> None:
+    get_logger("ops_kit.test").warning(
+        "kit.nested", call={"headers": {"Cookie": "sid=abc"}, "to": ["a.person@bank.example"]}, input_tokens=12
+    )
+    (line,) = lines(out)
+    assert line["call"] == {"headers": {"Cookie": REDACTED}, "to": ["[email]"]} and line["input_tokens"] == 12
