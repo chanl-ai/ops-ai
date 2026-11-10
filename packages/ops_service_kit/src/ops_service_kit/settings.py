@@ -273,6 +273,9 @@ class Settings(BaseSettings):
     # What kb-service's key may spend on likely questions, FAQ drafts and embeddings in one UTC day, across every
     # tenant (models-service refuses past it); each source's own ceiling per run is a source setting ($5 by default).
     kb_ai_daily_cap: float = 50.0
+    # The chat-model alias kb-service reranks and rewrites questions on, for a knowledge base that names none of its
+    # own (its retrieval's queryModel). Both steps are off on a base until its owner turns them on.
+    kb_query_alias: str = "bank-standard"
     embedding_width: int = 1536
     # Dev only: provider credentials by the name a provider connection's `keyRef` gives, as JSON in
     # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key

@@ -44,6 +44,7 @@ from .agents import AgentDirectory, AgentsUsage
 from .ai import AiClients, models_clients
 from .embedding import Backlog, Embedder, ModelsEmbedder, keep_embedding
 from .files import FileIntake, file_intake
+from .query_steps import ModelsQuery, QueryModel
 from .readings import DocumentsReadings, Readings
 from .schedule import keep_syncing
 from .schemas import (
@@ -73,6 +74,8 @@ from .schemas import (
     PluginSource,
     PreviewIn,
     QueryIn,
+    ScopesIn,
+    ScopesPage,
     SearchIn,
     SearchOut,
     Source,
@@ -87,6 +90,8 @@ from .schemas import (
     Tombstone,
     TombstonesIn,
     VerifyIn,
+    WrittenItem,
+    WrittenItemIn,
 )
 from .search import HybridRetriever
 from .service import KnowledgeService, Who
@@ -181,6 +186,15 @@ def _embedder(settings: Settings) -> Embedder | None:
     return ModelsEmbedder(calls, settings.embedding_alias, settings.embedding_width)
 
 
+def _query_model(settings: Settings) -> QueryModel | None:
+    """Rerank and rewrite through models-service with kb-service's own key; None without either, and a base asking
+    for them is searched without them, saying why."""
+    if not settings.models_url or settings.models_key is None:
+        return None
+    http = httpx.AsyncClient(base_url=settings.models_url, timeout=30)
+    return ModelsQuery(ModelCalls(http, settings.models_key.get_secret_value()))
+
+
 def _ai_clients(settings: Settings) -> AiClients | None:
     """The sources' AI steps through models-service with kb-service's own key; None without either."""
     if not settings.models_url or settings.models_key is None:
@@ -239,6 +253,7 @@ def create_kb_app(
     events_to: ServiceClient | None = None,
     embedder: Embedder | None = None,
     ai_clients: AiClients | None = None,
+    query_model: QueryModel | None = None,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
@@ -252,6 +267,7 @@ def create_kb_app(
     events = events_to or _events_service(Settings())
     embedder = embedder or _embedder(Settings())
     ai_clients = ai_clients or _ai_clients(Settings())
+    query_model = query_model or _query_model(Settings())
     vectors = PgVectorStore(engine)
     backlog = Backlog()
 
@@ -303,6 +319,8 @@ def create_kb_app(
         embedder=embedder,
         vectors=vectors,
         ai_clients=ai_clients,
+        query_model=query_model,
+        query_alias=Settings().kb_query_alias,
     )
     errors = error_responses()
 
@@ -462,6 +480,12 @@ def create_kb_app(
         the plugin's preview tool. Nothing is stored."""
         return ok(await service.preview_source(who, body.model_dump(by_alias=True)))
 
+    @sources.post("/scopes", response_model=Envelope[ScopesPage])
+    async def source_scopes(body: ScopesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What a plugin source can be pointed at, for Add source's pickers: its plugin's scopes tool searched by name
+        (sites, spaces), or what one picked site holds (`parent`). Nothing is stored."""
+        return ok(await service.source_scopes(who, body.model_dump()))
+
     @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
     async def list_tombstones(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Addresses removed after answering gone twice at their source; a sync leaves them out until lifted."""
@@ -511,6 +535,12 @@ def create_kb_app(
     @sources.post("/{source_id}/resume", response_model=Envelope[Source])
     async def resume_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.set_paused(who, source_id, paused=False))
+
+    @sources.post("/{source_id}/items", response_model=Envelope[WrittenItem])
+    async def put_item(source_id: str, body: WrittenItemIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Writes one item into a typed text or push source by its name, kept as a file and indexed at once. Sending
+        the same name and content again changes nothing and starts no sync; new content is the item's next version."""
+        return ok(await service.put_item(who, source_id, body.model_dump(exclude_none=True)))
 
     @sources.get("/{source_id}/items", response_model=Envelope[ListResult[Item]])
     async def list_items(  # pyright: ignore[reportUnusedFunction]

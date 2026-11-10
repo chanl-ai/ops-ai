@@ -44,6 +44,18 @@ const COLUMNS: ColumnDef<SearchPassage>[] = [
   { id: 'meaning', header: 'Meaning', cell: ({ row }) => <span className="tabular-nums">{score(row.original.lanes?.meaning)}</span> },
   { id: 'fused', header: 'Fused', cell: ({ row }) => <span className="font-medium tabular-nums">{score(row.original.score)}</span> },
 ];
+const RERANKED: ColumnDef<SearchPassage> = { id: 'reranked', header: 'Reranked', cell: ({ row }) => <span className="font-medium tabular-nums">{row.original.reranked === undefined ? '—' : `${row.original.reranked} of 10`}</span> };
+
+// The table shows its first five data columns; a rerank's score is the sixth and the one the order follows.
+const RERANK_SHOWN = { reranked: true };
+
+/** Why a model step around the search did not run, in words. */
+function stepReason(reason: string) {
+  if (reason === 'no_query_model') return 'this installation has no models-service for kb-service';
+  if (reason === 'unreadable_answer') return 'the model’s answer could not be read';
+  if (reason.startsWith('model_unavailable')) return `the model did not answer (${reason.split(':').slice(1).join(':').trim() || 'unavailable'})`;
+  return reason;
+}
 
 /**
  * What one search of a base did, as kb-service reports it: the lanes asked, run and skipped with the reason, each
@@ -54,6 +66,8 @@ export function SearchTrace({ result, settings }: { result: PlaygroundAnswer; se
   const lanes = result.lanes ?? { asked: [], ran: [], skipped: [] };
   const passages = result.passages ?? [];
   const onlyLane = lanes.skipped.length > 0 && lanes.ran.length === 1 ? lanes.ran[0] : null;
+  const { rewrite, rerank } = result;
+  const columns = rerank?.ran ? [...COLUMNS, RERANKED] : COLUMNS;
   return (
     <div className="flex flex-col gap-3" data-testid="search-trace">
       <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3">
@@ -78,7 +92,31 @@ export function SearchTrace({ result, settings }: { result: PlaygroundAnswer; se
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>{count(result.cost?.embeddingTokens ?? 0)} embedding tokens for the question</span>
           <span>Searched in {ms(result.retrievalMs)}</span>
+          {rewrite && <span>Rewrite {ms(rewrite.ms)}</span>}
+          {rerank && <span>Rerank {ms(rerank.ms)}</span>}
         </div>
+        {rewrite && (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm" data-testid="search-rewrite">
+            <dt className="text-muted-foreground">Asked</dt>
+            <dd>{rewrite.asked}</dd>
+            <dt className="text-muted-foreground">Searched</dt>
+            <dd>{rewrite.rewritten ?? <span className="text-warning-text">As asked: the rewrite was skipped, {stepReason(rewrite.skipped ?? '')}</span>}</dd>
+          </dl>
+        )}
+        {rerank && (
+          <div className="flex flex-wrap items-center gap-1.5 text-sm" data-testid="search-rerank">
+            {rerank.ran ? (
+              <Badge variant="secondary" className="font-normal">
+                Reranked {count(rerank.scored)} on {rerank.model}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="border-warning/40 bg-warning/10 font-normal text-warning-text">
+                Rerank skipped
+              </Badge>
+            )}
+            {!rerank.ran && rerank.skipped && <span className="text-xs text-muted-foreground">The fused order was kept: {stepReason(rerank.skipped)}.</span>}
+          </div>
+        )}
       </div>
 
       {onlyLane && (
@@ -98,7 +136,7 @@ export function SearchTrace({ result, settings }: { result: PlaygroundAnswer; se
           <AlertDescription>Nothing in this knowledge base scored {settings.threshold} or more in a lane. An agent says its no-answer message.</AlertDescription>
         </Alert>
       ) : (
-        <DataTableWithViews columns={COLUMNS} data={passages} getRowId={(p) => `${p.itemId}-${p.section}-${p.score}`} hideViewSwitcher hidePaginationOnOnePage rowNoun="passage" />
+        <DataTableWithViews columns={columns} initialColumnVisibility={RERANK_SHOWN} data={passages} getRowId={(p) => `${p.itemId}-${p.section}-${p.score}`} hideViewSwitcher hidePaginationOnOnePage rowNoun="passage" />
       )}
     </div>
   );

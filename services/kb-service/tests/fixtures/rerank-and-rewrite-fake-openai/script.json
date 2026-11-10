@@ -1,0 +1,14 @@
+{
+  "rules": [
+    {
+      "when": "Instruction:[\\s\\S]*Question: how late can money leave",
+      "tool": "final_result",
+      "arguments": {"question": "domestic wire cutoff"}
+    },
+    {
+      "when": "Passages:[\\s\\S]*\\[(?P<hit>\\d+)\\][^\\[]*25 dollars",
+      "tool": "final_result",
+      "arguments": {"scores": [{"n": "{hit}", "score": 9}]}
+    }
+  ]
+}

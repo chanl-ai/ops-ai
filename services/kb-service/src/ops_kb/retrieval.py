@@ -47,6 +47,8 @@ class Passage:
     chunk_id: str = ""
     # A person marked the item checked (its Verify action).
     verified: bool = False
+    # The reranker's score from 0 to 10 when a rerank ran (query_steps.py).
+    reranked: float | None = None
 
 
 @dataclass(frozen=True)
@@ -57,10 +59,10 @@ class Search:
     lanes: tuple[Lane, ...] = LANES
     # The keyword lane's floor: the share of the question's terms a unit holds.
     threshold: float = 0.5
-    # The meaning lane's floor: cosine similarity of the question's vector to the unit's. 0.30 sits below the answering
-    # passages and above unrelated ones for OpenAI's text-embedding-3 models (answering pairs score 0.35 to 0.7);
-    # a base or an environment on another model sets its own.
-    meaning_threshold: float = 0.3
+    # The meaning lane's floor: cosine similarity of the question's vector to the unit's. 0.38 kept 96% of answerable
+    # questions' answering pieces and withheld 92% of unanswerable ones on OpenAI's text-embedding-3 models at 1,536
+    # (docs/services/kb-service/experiments/meaning-threshold.md); a base on another model sets its own.
+    meaning_threshold: float = 0.38
     weight: float = 0.6
     limit: int = 8
 
@@ -75,6 +77,9 @@ class Found:
     skipped: dict[str, str]
     # Input tokens the question's embedding cost, charged to kb-service's key at models-service.
     embedding_tokens: int = 0
+    # The optional steps around the lanes (query_steps.py), as the answer shows them; None when not asked for.
+    rewrite: dict[str, Any] | None = None
+    rerank: dict[str, Any] | None = None
 
     def lanes_out(self) -> dict[str, Any]:
         return {

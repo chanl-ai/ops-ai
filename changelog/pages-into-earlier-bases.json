@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Add a page works on earlier knowledge bases",
+  "description": "A knowledge base that already had pages from before typed text sources takes new pages again, keeping the pages and versions it had.",
+  "tag": "fix"
+}

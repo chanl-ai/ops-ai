@@ -310,6 +310,25 @@ class PageIn(In):
     text: str = Field(max_length=100_000)
 
 
+class WrittenItemIn(In):
+    """One item written into a typed text or push source. `name` is its key: sent again with the same content it is
+    unchanged, with new content it is the item's next version."""
+
+    name: str = Field(min_length=1, max_length=200)
+    title: str | None = Field(default=None, max_length=200)
+    # Markdown by default; `mime` text/plain or text/html for other text.
+    text: str | None = Field(default=None, max_length=1_000_000)
+    # A file's bytes in base64 (a PDF, a Word document), with its `mime`.
+    content: str | None = Field(default=None, max_length=30_000_000)
+    mime: str | None = Field(default=None, max_length=120)
+
+
+class WrittenItem(Out):
+    # created: a new item; updated: its next version; unchanged: the same content, so no sync ran.
+    outcome: Literal["created", "updated", "unchanged"]
+    item: Item
+
+
 class SearchIn(In):
     kb_ids: list[str]
     question: str
@@ -335,6 +354,28 @@ class PassageOut(Out):
     # Each lane's own score: keyword, the share of the question's terms; meaning, cosine similarity.
     lanes: dict[str, float] = Field(default_factory=dict[str, float])
     verified: bool = False
+    # The reranker's score from 0 to 10, when a rerank ran; the order then follows it.
+    reranked: float | None = None
+
+
+class RewriteOut(Out):
+    """The question as asked and as searched, present when a base rewrites questions."""
+
+    asked: str
+    # None when the rewrite was skipped; the question was then searched as asked.
+    rewritten: str | None = None
+    skipped: str | None = None
+    ms: int = 0
+
+
+class RerankOut(Out):
+    """Present when a base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped."""
+
+    ran: bool
+    model: str
+    scored: int = 0
+    skipped: str | None = None
+    ms: int = 0
 
 
 class SkippedLane(Out):
@@ -357,6 +398,8 @@ class SearchOut(Out):
     passages: list[PassageOut]
     lanes: Lanes
     cost: SearchCost
+    rewrite: RewriteOut | None = None
+    rerank: RerankOut | None = None
 
 
 class PlaygroundAnswer(Out):
@@ -370,6 +413,8 @@ class PlaygroundAnswer(Out):
     passages: list[PassageOut]
     lanes: Lanes
     cost: SearchCost
+    rewrite: RewriteOut | None = None
+    rerank: RerankOut | None = None
     retrieval_ms: int
     synthesis_ms: int
     shape: str
@@ -496,6 +541,32 @@ class Tombstone(Out):
 
 class TombstonesIn(In):
     ids: list[str] = Field(min_length=1, max_length=200)
+
+
+class ScopesIn(In):
+    """What a person searches for while picking what a plugin source takes in: sites or spaces by name, or, with
+    `parent`, what one picked site holds (its libraries)."""
+
+    plugin: str = Field(min_length=1, max_length=200)
+    source: str = Field(min_length=1, max_length=200)
+    query: str = Field(default="", max_length=200)
+    parent: str | None = Field(default=None, max_length=500)
+    cursor: str | None = Field(default=None, max_length=4000)
+
+
+class Scope(Out):
+    id: str
+    title: str
+    # What it is in its system: site, library, space.
+    kind: str
+    parent: str | None = None
+    # A few words the picker shows under the title, such as its address or size.
+    detail: str | None = None
+
+
+class ScopesPage(Out):
+    scopes: list[Scope]
+    next_cursor: str | None = None
 
 
 class PreviewIn(In):
