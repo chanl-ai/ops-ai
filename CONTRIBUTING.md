@@ -94,6 +94,28 @@ Conventional commits: `type(scope): subject`.
 | Body | What was wrong before and why, then how the change was verified (the command run and its result). Six lines or fewer; no headings, tables or code blocks |
 | Changelog | A feat or fix that changes `apps/` or `services/` names its What's new entry in a `Changelog: <topic>` trailer, for `changelog/<topic>.json` staged in the same commit |
 
+## Everything here is public
+
+This repository is public, and so is everything in it and around it: code, comments, docs, commit messages, branch
+names, pull requests, issues, test fixtures, seed and sample data, mocks, screenshots, recorded logs and generated
+files. Write each as if a customer, a regulator or a journalist reads it next to your name. The rules apply to people
+and to coding agents alike.
+
+| Rule | Detail |
+|---|---|
+| Tone | Plain, neutral and factual. State what the code does and why. No blame, sarcasm, jokes at anyone's expense or frustration ("hack", "stupid", "garbage", "this is a mess"); describe the constraint instead |
+| Other parties | Say nothing unkind or unverified about customers, prospects, vendors, competitors or other projects. Name a third-party product only for a fact a reader needs, such as a supported version or a known bug with a link |
+| Customers and people | No names of real customers, prospects, partners or people, and nothing that identifies them: no account names, org addresses, email addresses, ticket numbers or quotes from their messages. Use roles ("an admin", "the account owner") |
+| Sample data | Fictional and generic, from several industries, never shaped after one real organisation. Domains use `example.com`, `example.org` or `.test`; phone numbers use reserved fictional ranges; no real-looking card, account or national id numbers. "Harbor & Pine Bank" is the console's fictional tenant |
+| Screenshots and recordings | Taken on sample data only. No real accounts, email addresses, org addresses, tokens or browser tabs in view |
+| Internal process | No internal tracker or story ids, internal tool names, session links, review chatter or "as discussed" references. A pull request links to public issues only |
+| Secrets | Never a secret, token or private key, even an expired or test one that looks real. Use obvious placeholders (`<api-key>`) |
+| Security | A weakness is described as fixed, with what changed. Exploit steps for an unfixed issue are reported privately through GitHub's private vulnerability reporting for this repository, never in a commit, issue or doc |
+| Claims | Only claims the repository can back: a test, a command or a linked source. Mark anything unconfirmed as **unverified**. No promises about dates or customers |
+
+`scripts/leak_scan.py` (run in CI by `.github/workflows/leak-scan.yml`) fails a change that adds home-directory paths,
+tracker ids or tracker trailers. The rest of this table is checked in review.
+
 ## Doc standards
 
 ### Every spec has this shape
@@ -125,7 +147,7 @@ there is one, lives in the title.
 | Filler | Do not use "simply", "just", "easy", "obviously" or "of course" |
 | Code references | `path:line` or `path`, relative to the repo root |
 | People | No personal names. Use roles ("the product owner", "the module owner") |
-| The bank | "The bank" in specs; "Harbor & Pine Bank" is the fictional tenant in the console |
+| Sample organisations | Specs say "the organisation" or "a team", not one industry; older specs that say "the bank" change when next edited. See "Everything here is public" |
 | Claims | Every "works" claim has evidence or a command the reader can run. Mark anything unconfirmed as **unverified** |
 | File names | kebab-case, named for the topic. No dates, numbers or sequence prefixes in file names; ids such as a spec number or ADR id go in the title, the status line says whether a doc is current or superseded, and git keeps the history |
 | Content | Only what a reader acts on: decisions, rules, facts, gotchas and the evidence for them. No narrative of how a result was reached |
