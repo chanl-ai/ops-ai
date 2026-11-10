@@ -74,9 +74,20 @@ function StateBadge({ r, app }: { r: AppResource; app: string }) {
  * flow with one item, made at once when it brings nothing else. An added copy opens, takes the app's update, or is
  * removed through its own delete.
  */
-export function ResourcesTab({ appName, pluginId, onConnect }: { appName: string; pluginId?: string | null; onConnect?: () => void }) {
+export function ResourcesTab({
+  appName,
+  pluginId,
+  installed = true,
+  onConnect,
+}: {
+  appName: string;
+  pluginId?: string | null;
+  /** False for an app the install does not hold: there is nothing to list, so nothing is asked for. */
+  installed?: boolean;
+  onConnect?: () => void;
+}) {
   const router = useRouter();
-  const source = pluginId ? `plugin:${pluginId}` : '';
+  const source = pluginId && installed ? `plugin:${pluginId}` : '';
   const list = useAppResources(source);
   const plan = useResourcePlan();
   const add = useAddResources(source);
@@ -94,6 +105,14 @@ export function ResourcesTab({ appName, pluginId, onConnect }: { appName: string
     return out;
   }, [rows, ticked]);
 
+  if (!installed)
+    return (
+      <Section>
+        <p className="text-sm text-muted-foreground" data-testid="app-resources-not-installed">
+          {appName} isn’t installed, so it brings no resources.
+        </p>
+      </Section>
+    );
   if (!pluginId)
     return (
       <Section>

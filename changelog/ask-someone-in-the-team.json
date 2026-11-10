@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Ask an admin names someone in the team",
+  "description": "Ask an admin now names a person granted the role in the team itself, never an admin of every team such as the install's first admin, and says to ask the team's admins when nobody in the team holds it.",
+  "tag": "fix"
+}

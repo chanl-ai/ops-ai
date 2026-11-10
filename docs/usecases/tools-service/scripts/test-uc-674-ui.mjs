@@ -220,6 +220,44 @@ await withUiStack(
           { badgeText, text, settingsTab });
       }, ravi);
 
+      // Words follow the reader's role and say whose state they are.
+      await step('10 Each role reads its own words: the picker, who to ask, whose state, and a missing app’s page', async () => {
+        const picker = async (page) => {
+          await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId('connectors-picker').click({ timeout: 60_000 });
+          const row = page.getByTestId(`connector-off-${GH}`);
+          await row.waitFor({ timeout: 30_000 });
+          const seen = { text: (await row.innerText()).replace(/\s+/g, ' '), action: await page.getByTestId(`connector-off-action-${GH}`).count() };
+          await page.keyboard.press('Escape');
+          return seen;
+        };
+        const adminPicker = await picker(priyaPage);
+        const viewerPicker = await picker(ravi);
+        // Who a viewer asks: someone granted in the team, never an admin of every team.
+        await ravi.goto(`${consoleUrl}/integrations/my-accounts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await ravi.getByTestId(`connector-ask-${GH}`).waitFor({ timeout: 60_000 });
+        const ask = (await ravi.getByTestId(`connector-ask-${GH}`).innerText()).trim();
+        // Whose state: on an app each person signs in to, the header is the reader's and the team's row says so.
+        const errs = await open(nadia, consoleUrl, GH);
+        const whose = (await nadia.getByTestId('app-status-whose').innerText()).replace(/\s+/g, ' ').trim();
+        const row = (await nadia.locator('[data-testid^="account-state-"]').first().locator('xpath=..').innerText()).replace(/\s+/g, ' ');
+        // A missing app's page: no resources asked for, one line; the admin reads who installs apps and how.
+        const gone = await open(priyaPage, consoleUrl, GONE);
+        await priyaPage.getByTestId('app-tab-resources').click();
+        const line = await priyaPage.getByTestId('app-resources-not-installed').innerText({ timeout: 30_000 });
+        const how = await priyaPage.getByTestId('app-removed-how').count();
+        await priyaPage.waitForTimeout(1000);
+        await open(ravi, consoleUrl, GONE);
+        const viewerHow = await ravi.getByTestId('app-removed-how').count();
+        await priyaPage.screenshot({ path: join(SHOTS, 'missing-app-resources.png') });
+        check('10 Each role reads its own words: the picker, who to ask, whose state, and a missing app’s page',
+          adminPicker.action === 1 && !/ask an admin/i.test(adminPicker.text) && viewerPicker.action === 0 && /ask an admin/i.test(viewerPicker.text) &&
+            /Ask an admin: (James Richardson|Priya Shah)/.test(ask) && !/Dev Admin/.test(ask) &&
+            /^You:/.test(whose) && /Team account:/.test(row) && errs().length === 0 &&
+            /isn’t installed/.test(line) && how === 1 && viewerHow === 0 && gone().length === 0,
+          { adminPicker, viewerPicker, ask, whose, row, line, how, viewerHow, errors: [...errs(), ...gone()] });
+      }, priyaPage);
+
       // Auth configs are a builder's and an admin's: a viewer's page has no Auth configs tab and no Auth config column.
       await step('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab', async () => {
         const configsOf = async (page) => {

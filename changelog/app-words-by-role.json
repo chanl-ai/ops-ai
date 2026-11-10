@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "App pages and the chat picker speak to each role",
+  "description": "The chat picker offers people who manage the team's apps their next step, and an app each person signs in to says which state is yours and which is the team account's. A missing app's page asks for no resources, counts the tools it lists, and tells admins how apps are installed.",
+  "tag": "improved"
+}

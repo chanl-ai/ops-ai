@@ -2041,6 +2041,11 @@
             "title": "Id",
             "type": "string"
           },
+          "inTeam": {
+            "default": false,
+            "title": "Inteam",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"

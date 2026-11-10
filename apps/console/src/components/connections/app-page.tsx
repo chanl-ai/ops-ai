@@ -30,7 +30,7 @@ import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
-import { headerActionFor } from '@/lib/app-state';
+import { headerActionFor, whoseState } from '@/lib/app-state';
 import { plural } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
 
@@ -157,17 +157,28 @@ export function AppPageView({ appId }: { appId: string }) {
     <PageLayout
       icon={<AppLogo name={card.name} logo={card.logo} className="size-9" />}
       title={card.name}
-      description={`${plural(card.toolsCount, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
+      // The tools the page lists, so the header and the Tools tab count the same ones.
+      description={`${plural(data.tools.length, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
       breadcrumbs={[{ label: 'Connectors', href: '/integrations' }, { label: 'Team setup', href: '/integrations' }, { label: card.name }]}
       backHref="/integrations"
-      badge={<AppStateBadge card={card} testId="app-status" />}
+      badge={<AppStateBadge card={card} whose={whoseState(card)} testId="app-status" />}
       actions={headerAction()}
       contentClassName="flex min-w-0 flex-col gap-4"
     >
       {gone && (
         <Alert data-testid="app-removed">
           <AlertTitle>{`${card.name} isn’t installed`}</AlertTitle>
-          <AlertDescription>{card.appStateReason}</AlertDescription>
+          <AlertDescription>
+            <p>{card.appStateReason}</p>
+            {card.mayManage && (
+              // Who installs apps, and how, for whoever manages the team's apps: the install is outside the console.
+              <p className="mt-1" data-testid="app-removed-how">
+                Apps are installed on the server that runs Ops AI, by whoever runs it at your company: they add the app's plugin
+                to its plugins folder and restart Ops AI. Its accounts and tools stay here until then, or until you delete the
+                app in Settings.
+              </p>
+            )}
+          </AlertDescription>
         </Alert>
       )}
       {/* Taking an update is managing the team's apps; the card says when one waits, so nothing asks before then. */}
@@ -189,7 +200,7 @@ export function AppPageView({ appId }: { appId: string }) {
           </TabsContent>
         )}
         <TabsContent value="resources">
-          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} />
+          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} installed={!gone} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} />
         </TabsContent>
         <TabsContent value="logs">
           {/* The same call log as Tool calls, fixed to this app's tools. */}

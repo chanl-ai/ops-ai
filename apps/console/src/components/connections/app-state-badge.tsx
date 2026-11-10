@@ -21,14 +21,31 @@ export const APP_STATE_LOOK = Object.fromEntries(
 
 /** An app's state as a badge, worded the same on its card, its page, Mine and the chat Connect card; `manages` false
  * gives the member's words. */
-export function AppStateBadge({ card, testId, manages = true }: { card: { appState: AppState }; testId?: string; manages?: boolean }) {
+export function AppStateBadge({
+  card,
+  testId,
+  manages = true,
+  whose,
+}: {
+  card: { appState: AppState };
+  testId?: string;
+  manages?: boolean;
+  /** Whose state this is ("You", "Team account"), said before the badge where it could be read as another's. */
+  whose?: string | null;
+}) {
   if (!card.appState) return null;
   const shown = { ...APP_STATE_LOOK[card.appState], label: labelFor(card.appState, manages) };
   const Icon = shown.icon;
-  return (
+  const badge = (
     <Badge variant="outline" className={shown.className} data-testid={testId} data-state={card.appState}>
       {Icon && <Icon />}
       {shown.label}
     </Badge>
+  );
+  if (!whose) return badge;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" data-testid={testId ? `${testId}-whose` : undefined}>
+      {whose}:{badge}
+    </span>
   );
 }
