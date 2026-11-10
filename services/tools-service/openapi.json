@@ -964,9 +964,26 @@
             "$ref": "#/components/schemas/AccountOwner"
           },
           "peopleSignedIn": {
-            "default": 0,
-            "title": "Peoplesignedin",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peoplesignedin"
+          },
+          "pointsAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pointsat"
           },
           "revision": {
             "title": "Revision",

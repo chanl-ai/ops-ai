@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "The assistant hears where an account points, not who",
+  "description": "The line that tells the assistant which account each app uses names the org or server it points at, and leaves out the person who signed in.",
+  "tag": "fix"
+}

@@ -21,6 +21,7 @@ from ops_agent_kernel.types import PromptFragment
 from ops_service_kit.logging import get_logger
 
 from ..activities.tool_directory import ToolsUnavailable
+from ..domain.accounts import chosen_accounts
 from ..store.team_defaults import TeamDefaults
 from .child_runs import TURN_PERSON
 from .deps import Runtime
@@ -147,7 +148,7 @@ class AppsLine:
         off = set(cast(list[str], overrides.get("toolsOff") or []))
         agent = self.rt.catalog.agent(agent_id)
         if agent is not None:
-            chosen = {**agent.accounts, **cast(dict[str, str], overrides.get("accounts") or {})}
+            chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], overrides.get("accounts") or {}))
             cards = await self._uses(cards, chosen, str((thread or {}).get("team_id") or ""))
         if not off or agent is None:
             return cards
@@ -174,8 +175,8 @@ class AppsLine:
                 )
             except ToolsUnavailable:
                 found = []
-            identity = cast(list[dict[str, Any]], found[0].get("identity") or []) if found else []
-            shown = str(identity[0]["shown"]) if identity else None
+            # Where it points, never who signed in: the prompt must not carry a person's email.
+            shown = str(found[0]["pointsAt"]) if found and found[0].get("pointsAt") else None
             out.append({**c, "usesAccount": name, **({"usesAccountShown": shown} if shown else {})})
         return out
 

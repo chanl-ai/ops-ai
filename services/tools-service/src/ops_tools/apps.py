@@ -485,8 +485,9 @@ class AppAccount(Out):
     # Whose login its calls use: the team's (`team`), each person's (`person`), or each person's with the team's for
     # runs nobody started (`person_or_team`). Optional so older readers keep parsing.
     sign_in: SignIn | None = None
-    # How many people hold their own sign-in on this account: the "3 of 12" under "Each person signs in".
-    people_signed_in: int = 0
+    # How many people hold their own sign-in on this account: the "3 of 12" under "Each person signs in". Optional so
+    # older readers keep parsing.
+    people_signed_in: int | None = None
     # The auth config it signs in with (`AuthConfig.id`) and its name; null for a kind with no OAuth client.
     config_id: str | None = None
     config_name: str | None = None
@@ -509,6 +510,9 @@ class AppAccount(Out):
     # An earlier account of the app that points at the same place, by name: a warning, never a refusal, since a team
     # may keep a read-only and a write login to one org.
     same_place_as: str | None = None
+    # Where it points, as shown: the first identity entry that is not who signed in; null when it names no place. Text
+    # sent to a model reads this, never `identity`, so a person's email stays out of it.
+    points_at: str | None = None
 
 
 class ConfigPermission(Out):
@@ -1932,6 +1936,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
         )
         place = same_place(row["identity"])
         row["samePlaceAs"] = places.get(place) if place else None
+        row["pointsAt"] = place[0] if place else None
         if place:
             places.setdefault(place, str(row["name"]))
     # Each person's own sign-in on a team account is a row of its own, under that account's auth config. A person who

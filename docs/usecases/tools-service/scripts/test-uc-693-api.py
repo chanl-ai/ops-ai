@@ -35,6 +35,13 @@ with git_rig("uc-693") as r:
         and (rows.get("Corp server") or [""])[0] == "ghe.corp.test",
         rows,
     )
+    # 4. Where each points, for text a model reads, is the server and never who signed in.
+    points = {str(a["name"]): a.get("pointsAt") for a in page.get("accounts") or [] if a.get("kind") == "team"}
+    check(
+        "4 each team account's pointsAt is its server, never who signed in",
+        points.get("Platform server") == "github.test" and points.get("Corp server") == "ghe.corp.test",
+        points,
+    )
     # 2. Connectors > Mine: Maya signs in on Platform server and adds Corp of her own; both rows say their server.
     _, mine_done = r.sign_in(r.maya, r.ids["public"], as_="self")
     started = r.gw.post(

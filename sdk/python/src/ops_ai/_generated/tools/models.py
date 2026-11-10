@@ -1917,7 +1917,8 @@ class AppAccount(TypedDict, closed=True):
     myDefault: NotRequired[bool | None]
     name: str
     owner: AccountOwner
-    peopleSignedIn: NotRequired[int]
+    peopleSignedIn: NotRequired[int | None]
+    pointsAt: NotRequired[str | None]
     revision: int
     rowId: str
     samePlaceAs: NotRequired[str | None]

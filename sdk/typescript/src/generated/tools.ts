@@ -1688,11 +1688,10 @@ export interface components {
             /** Name */
             name: string;
             owner: components["schemas"]["AccountOwner"];
-            /**
-             * Peoplesignedin
-             * @default 0
-             */
-            peopleSignedIn: number;
+            /** Peoplesignedin */
+            peopleSignedIn?: number | null;
+            /** Pointsat */
+            pointsAt?: string | null;
             /** Revision */
             revision: number;
             /** Rowid */
