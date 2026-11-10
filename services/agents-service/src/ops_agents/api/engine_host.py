@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
-from collections.abc import Mapping
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any, cast
@@ -29,7 +28,7 @@ from ops_agents.activities.gateway import (
     gateway_error,
 )
 from ops_checkpointer import LeaseSupersededError
-from ops_engine.ports import AS_TEAM_ACCOUNT, Access, LeaseBusyError, ToolResult
+from ops_engine.ports import AS_TEAM_ACCOUNT, STEP_ACCOUNTS, Access, LeaseBusyError, ToolResult
 from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import ServiceCallError
 from ops_policy import input_hash
@@ -115,8 +114,6 @@ class GatewayTools:
         key: str,
         generation: int | None,
         token: str | None,
-        *,
-        accounts: Mapping[str, str] | None = None,
     ) -> ToolResult:
         # The gateway fences writes on the run's lease generation and logs the call against the run's thread.
         # The run's mode, from the graph's config, picks the connection environment its calls use.
@@ -131,7 +128,7 @@ class GatewayTools:
                 run_id=run.run_id,
                 team_account=team_account,
                 # The run's accounts are the choice of the chat or agent that started it; the step's wins.
-                accounts=chosen_accounts(agent=run.accounts, step=accounts, team_account=team_account),
+                accounts=chosen_accounts(agent=run.accounts, step=STEP_ACCOUNTS.get(), team_account=team_account),
             )
         )
         try:

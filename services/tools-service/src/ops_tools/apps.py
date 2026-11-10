@@ -2226,7 +2226,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         only, which a workflow step or an agent names; with `mine`, also the caller's own, which their chats name;
         with `name`, the one so named (an empty list when none is), which the publish check reads."""
         rows = await account_choices(apps, who, app_id, usable=usable, name=name, mine=mine)
-        out = [AccountChoice(**r, pointsAt=points_at(r.get("identity") or [])) for r in rows]
+        out = [AccountChoice(**r).model_copy(update={"points_at": points_at(r.get("identity") or [])}) for r in rows]
         return ok([c.model_dump(by_alias=True) for c in out])
 
     @r.post("/v1/apps/{app_id}/accounts", response_model=Envelope[AccountDetail], status_code=201)

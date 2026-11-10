@@ -39,6 +39,7 @@ from .journal import Journal, StepRow, StepStatus
 from .node_types import CASE_PRIORITIES, DEFAULT_MAX_ITEMS, RETRY_BY_EFFECTS, NodeType, TypeRegistry
 from .ports import (
     AS_TEAM_ACCOUNT,
+    STEP_ACCOUNTS,
     AgentRequest,
     CaseNotFoundError,
     CaseTypeNotFoundError,
@@ -532,14 +533,13 @@ async def gateway_call(call: NodeCall) -> Outcome:
     accounts = step_accounts(call.params.get("accounts"))
 
     async def send() -> ToolResult:
-        return await call.ports.tools.call(
-            str(call.params["operation"]),
-            arguments,
-            call.key,
-            call.generation,
-            str(token) if token else None,
-            **({"accounts": accounts} if accounts else {}),
-        )
+        named = STEP_ACCOUNTS.set(accounts or None)
+        try:
+            return await call.ports.tools.call(
+                str(call.params["operation"]), arguments, call.key, call.generation, str(token) if token else None
+            )
+        finally:
+            STEP_ACCOUNTS.reset(named)
 
     result = await send()
     if (wait := connect_wait(result.output)) is not None:

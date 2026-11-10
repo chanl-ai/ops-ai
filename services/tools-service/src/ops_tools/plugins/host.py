@@ -201,8 +201,10 @@ def missing_objects(conn: Mapping[str, Any] | None, package_id: str) -> list[str
     """The objects of a package app that the account's last Test found missing (`health.packages`). Empty when the
     package is installed there, and when the account was never checked for it: an account signed in before the
     package was installed keeps working until its next Test says otherwise."""
-    packages = dict(dict((conn or {}).get("health") or {}).get("packages") or {})
-    return [str(n) for n in dict(packages.get(package_id) or {}).get("missing") or []]
+    health = cast(dict[str, Any], (conn or {}).get("health") or {})
+    packages = cast(dict[str, Any], health.get("packages") or {})
+    missing = cast(list[Any], cast(dict[str, Any], packages.get(package_id) or {}).get("missing") or [])
+    return [str(n) for n in missing]
 
 
 def own_and_registration(conn: Mapping[str, Any] | None) -> dict[str, Any]:

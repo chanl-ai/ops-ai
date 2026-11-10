@@ -187,7 +187,8 @@ async def test_an_account_that_points_nowhere_never_puts_who_signed_in_into_the_
         },
     }
     line = AppsLine(SimpleNamespace(app_states=Accounts(rows)))  # type: ignore[arg-type]
-    got = await line._uses([gh, sf], {gh["id"]: "Maya's login", sf["id"]: "EU org"}, "team_a")
+    chosen = {gh["id"]: "Maya's login", sf["id"]: "EU org"}
+    got = await line._uses([gh, sf], chosen, "team_a")  # pyright: ignore[reportPrivateUsage] - the prompt's seam
     text = render(got)
     assert text is not None
     assert "bank.example" not in text.replace("kestrel-eu.my.salesforce.test", ""), text

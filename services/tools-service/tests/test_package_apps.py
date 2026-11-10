@@ -31,7 +31,7 @@ from .test_plugin_manifest_fields import (  # noqa: F401  # pyright: ignore[repo
 LOANS = "test.packages-loans"
 EU = "Sites · second org"
 FOLDER = Path(__file__).parent / "plugin_packages"
-OP = {"name": "packages_loans_get_loan", "enabled": True, "input": []}
+OP: dict[str, Any] = {"name": "packages_loans_get_loan", "enabled": True, "input": []}
 
 
 async def _rig(rig: tuple[Any, TokenDesk], tenant: str) -> tuple[Any, Any, Any, str, str]:

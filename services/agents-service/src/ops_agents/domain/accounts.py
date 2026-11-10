@@ -33,6 +33,6 @@ def chosen_accounts(
     out: dict[str, str] = {}
     for layer in layers:
         for app, name in (layer or {}).items():
-            if isinstance(name, str) and name.strip():
+            if name and name.strip():
                 out[str(app)] = name.strip()
     return out
