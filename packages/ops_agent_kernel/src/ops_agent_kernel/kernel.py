@@ -90,12 +90,25 @@ UNGRANTED = "none"
 
 def refusal_code(body: object) -> str | None:
     """The `code` of a refusal body, whether the client kept the whole envelope or only its `error` member."""
+    return _refusal_field(body, "code")
+
+
+def refusal_text(status: int, body: object) -> str:
+    """What a person reads for a refused model call: the message models-service wrote for its code, which says what
+    happened and what to do. Its envelope always carries a code; a body without one (a proxy's page, or a gateway's
+    JSON with only a message) is never shown, only the status."""
+    code = refusal_code(body)
+    said = _refusal_field(body, "message") if code else None
+    return said or f"The model call was refused ({status} {code or 'error'})."
+
+
+def _refusal_field(body: object, name: str) -> str | None:
     if not isinstance(body, dict):
         return None
     fields = cast(dict[str, Any], body)
     inner = fields.get("error")
-    code = cast(dict[str, Any], inner).get("code") if isinstance(inner, dict) else fields.get("code")
-    return str(code) if code else None
+    value = cast(dict[str, Any], inner).get(name) if isinstance(inner, dict) else fields.get(name)
+    return str(value) if value else None
 
 
 def _args(part: ToolCallPart) -> dict[str, Any]:
@@ -1158,7 +1171,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield finish(
             "failed",
             "error",
-            error=f"The model call was refused ({e.status_code} {code or 'error'}).",
+            error=refusal_text(e.status_code, e.body),
             error_status=e.status_code,
             error_code=code,
         )

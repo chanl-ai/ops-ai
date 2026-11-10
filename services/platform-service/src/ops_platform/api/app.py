@@ -36,6 +36,7 @@ from ops_service_kit.http import (
     options_window,
 )
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.request_timing import note_caller
 from ops_service_kit.settings import Settings
 from ops_signin import PasswordHasher
 from ops_store.audit import AUDIT_SCOPE
@@ -460,6 +461,7 @@ def create_public_app(
             x_team_id = teams[0]
         elif x_team_id not in teams:
             raise Forbidden("You are not a member of that team.", code="team_forbidden")
+        note_caller(str(claims["tenant_id"]), x_team_id)
         return Actor(str(claims["tenant_id"]), x_team_id, str(claims["sub"]), new_id("req"))
 
     policy_store = PolicyStore(store.db)

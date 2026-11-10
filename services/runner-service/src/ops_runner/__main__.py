@@ -16,7 +16,7 @@ from .wasm import WasmPython
 
 def main() -> None:
     settings = Settings()
-    configure_logging()
+    configure_logging(service="runner-service")
     runtime = WasmPython(wasm_path(settings), sha256=settings.runner_wasm_sha256, compiled_dir=compiled_dir(settings))
     url = settings.tools_url or settings.gateway_url
     # Each call names the run's tenant and team itself; tools-service decides it as the caller its call token names.
@@ -28,7 +28,7 @@ def main() -> None:
         else None
     )
     app = create_runner_app(runtime, settings=settings, tools=tools)
-    uvicorn.run(app, host=settings.bind_host, port=settings.runner_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.runner_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

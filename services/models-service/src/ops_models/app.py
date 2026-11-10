@@ -165,6 +165,12 @@ def refused(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(error_body(status, code, message), status_code=status)
 
 
+def provider_refused(e: ProviderError) -> JSONResponse:
+    """A provider's failure in the platform envelope, with the provider's Retry-After when it named one."""
+    headers = {"Retry-After": e.retry_after} if e.retry_after else None
+    return JSONResponse(error_body(e.status, e.code, e.message), status_code=e.status, headers=headers)
+
+
 def _iso(v: datetime | None) -> str | None:
     return v.isoformat() if v is not None else None
 
@@ -615,9 +621,11 @@ def create_models_app(
                 await providers.observe(str(self.alias_row["provider_id"]), seen)
 
         async def failed(self, e: Exception) -> JSONResponse:
+            """The provider's failure as the caller gets it, its code also the call-log row's reason."""
+            failure = e if isinstance(e, ProviderError) else ProviderError(why="the provider answered an empty stream")
             await self.observed()
-            await self.log("error", "provider_error", **self.version)
-            return refused(502, "provider_error", str(e) or "The provider answered with an empty stream.")
+            await self.log("error", failure.code, **self.version)
+            return provider_refused(failure)
 
     async def open_gate(
         authorization: str | None,
@@ -718,7 +726,8 @@ def create_models_app(
         try:
             gate.provider = provider_for(alias_row, {str(ref): provider_key} if ref and provider_key else {}, http)
         except ProviderError as e:
-            return await gate.refuse(502, "provider_error", str(e))
+            await gate.log("error", e.code)
+            return provider_refused(e)
         return gate
 
     async def completions(
@@ -770,6 +779,7 @@ def create_models_app(
 
             async def events() -> AsyncIterator[str]:
                 settling: asyncio.Task[None] | None = None
+                reason = "provider_error"
                 try:
                     pending: dict[str, Any] | None = first
                     while pending is not None:
@@ -781,12 +791,12 @@ def create_models_app(
                     settling = asyncio.ensure_future(settle(usage.input_tokens, usage.output_tokens))
                     await asyncio.shield(settling)
                     yield "data: [DONE]\n\n"
-                except ProviderError:
-                    pass
+                except ProviderError as e:
+                    reason = e.code
                 finally:
                     if settling is None:
                         # A provider failure or a client gone mid-stream: one error row, shielded from the cancel.
-                        await asyncio.shield(log("error", "provider_error", **version))
+                        await asyncio.shield(log("error", reason, **version))
 
             return StreamingResponse(events(), media_type="text/event-stream")
         try:
@@ -815,8 +825,12 @@ def create_models_app(
 
     # OpenAI's path shape: clients built on the OpenAI SDK append `/chat/completions` to their base URL.
     provider_errors = {
-        502: "The provider refused or failed",
-        503: "The provider key the connection names is not saved",
+        429: "Over the model key's rate limit or a spend cap (`rate_limited`, ...), or the provider limits the "
+        "account's key (`provider_rate_limited`, with the provider's Retry-After)",
+        502: "The provider could not be reached (`provider_unreachable`), refused the account's key "
+        "(`provider_auth_failed`), refused the request as sent (`provider_bad_request`) or failed (`provider_error`)",
+        503: "The provider key the connection names is not saved (`provider_key_missing`)",
+        504: "The provider did not answer in time (`provider_timeout`)",
     }
     app.post(
         "/v1/models/chat/completions",

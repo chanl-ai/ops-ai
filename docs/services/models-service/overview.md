@@ -58,7 +58,29 @@ otherwise text naming the agent from the system prompt and the gist of the last 
 | Send agents-service through it | `OPS_MODELS_URL=http://127.0.0.1:8730` and `OPS_MODELS_KEY=mk_dev_agents` (dev seed) on agents-service; it then reads no `OPENAI_API_KEY` |
 
 The base URL includes `/v1`: the provider posts to `<baseUrl>/chat/completions`. A scripted connection cannot be
-rebound (409 `provider_not_rebindable`). An unreachable base URL answers 502 `provider_error` and logs an `error` row.
+rebound (409 `provider_not_rebindable`). An unreachable base URL answers 502 `provider_unreachable` and logs an `error`
+row.
+
+### Provider failures
+
+A provider that fails is answered with its own code, which is also the call-log row's reason, and a message that says
+what happened and what to do. The message never quotes the provider's body or the connection's address: a provider's
+401 can echo part of the key. The console words each code for its reader (`apps/console/src/lib/model-refusals.ts`):
+someone who manages settings is told to fix it on Settings > Model providers, anyone else to ask an admin. The mapping
+is `PROVIDER_FAILURES` and `answered()` in `src/ops_models/providers.py`, the one place a provider failure is classified.
+
+| The provider | Status | Code |
+|---|---|---|
+| Could not be reached (connection refused, DNS, TLS) | 502 | `provider_unreachable` |
+| Did not answer in time | 504 | `provider_timeout` |
+| Refused the account's key (401 or 403) | 502 | `provider_auth_failed` |
+| Limited calls on the key (429) | 429, with the provider's `Retry-After` | `provider_rate_limited` |
+| Refused the request as sent (any other 4xx: a wrong model or deployment name, an unknown setting), or the connection's type is not served | 502 | `provider_bad_request` |
+| Failed on its side (5xx), or answered an empty stream | 502 | `provider_error` |
+
+Two refusals come before any provider call: 503 `provider_key_missing` when the account has not saved the key the
+connection names, and 404 `alias_not_found`. A caller's own problem is never answered 401 or 403 for a provider's
+refusal: those statuses mean the caller's model key or clearance.
 Use case uc-060 drives this path, including the rebind to a closed port and back.
 
 ## Routes
@@ -96,7 +118,8 @@ Every route is typed; `openapi.json` is committed and `make openapi-check` (in `
 | The OpenAI client cannot parse a reply, streamed or not | `test_a_text_turn_runs_through_the_openai_client` | |
 | A tool turn loses its tool calls (scripted, streamed or not) | `test_a_tool_turn_carries_the_tool_call_and_its_result` | Yes |
 | An openai-compatible provider never sees the tools, or its calls are dropped | `test_an_openai_compatible_provider_gets_the_tools_and_returns_the_calls` | Yes |
-| An unreachable provider is a 500, or a rebind does not move the alias | uc-060 `rebinding openai-local to a closed port fails default with 502 provider_error; rebinding back restores it` | Yes |
+| An unreachable provider is a 500, or a rebind does not move the alias | uc-060 `rebinding openai-local to a closed port fails default with 502 provider_unreachable, saying where an admin checks the connection; rebinding back restores it` | Yes |
+| Every provider failure is one generic `provider_error`, the message does not say what to do, or a provider body that echoes the key reaches the answer or the log | `tests/test_provider_failures.py`, one test per row of "Provider failures"; uc-532 step 3 | Yes (all twelve red on the code-less error) |
 | An Azure key goes as a bearer token, the deployment URL or api-version is wrong, streamed usage or tool calls are lost, Azure's annotations reach the caller, or an answer from another region goes unrecorded | `tests/test_azure_provider.py`, one test each; uc-605 | Yes (header reverted to Bearer: five tests red) |
 | A bad OPENAI_API_* value starts models-service, a plain OPENAI_API_BASE stops it, another service fails on them, or a dev restart keeps an old openai-local | `tests/test_install_model_settings.py`, one test per rule; uc-605 cli | |
 | A refusal is retried or reaches the client as something else | `test_a_refusal_reaches_the_client_once`, `test_a_stream_is_refused_before_it_starts` | |

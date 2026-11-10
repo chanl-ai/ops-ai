@@ -27,7 +27,7 @@ def compiled_dir(settings: Settings) -> Path:
 
 
 def main() -> None:
-    configure_logging()
+    configure_logging(service="runner-service")
     settings = Settings()
     path = wasm_path(settings)
     if not path.is_file():
