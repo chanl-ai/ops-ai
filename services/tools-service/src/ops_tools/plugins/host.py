@@ -807,6 +807,10 @@ class PluginHost:
                 "connectionId": str(t["connection_id"]),
                 "name": str(live[str(t["connection_id"])]["name"]),
                 "account": t.get("account"),
+                # Where each points (its org, its server), so two accounts signed in as one person read apart.
+                "identity": account_identity(
+                    plugin.manifest, own_and_registration(live[str(t["connection_id"])]), t.get("account")
+                ),
             }
             for t in mine
             if t.get("refused_at") is None

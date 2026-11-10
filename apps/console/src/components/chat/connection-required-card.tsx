@@ -275,7 +275,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
 export interface AccountChoice {
   app: string;
   appId: string;
-  accounts: { connectionId: string; name: string; account?: string | null }[];
+  accounts: { connectionId: string; name: string; account?: string | null; identity?: { label: string; shown: string; value: string }[] }[];
 }
 
 /** The accounts a call asks the person to choose between, from the gateway's error, or null. */
@@ -340,7 +340,16 @@ export function AccountChoiceCard({ call, choice, onReply }: { call: ToolCall; c
                     )
                   }
                 >
-                  {label(a)}
+                  <span>{label(a)}</span>
+                  {/* Where it points, beside who signed in: two accounts of one person differ only here. */}
+                  {(a.identity ?? []).some((e) => e.shown !== label(a)) && (
+                    <span className="truncate text-xs text-muted-foreground">
+                      {(a.identity ?? [])
+                        .filter((e) => e.shown !== label(a))
+                        .map((e) => e.shown)
+                        .join(' · ')}
+                    </span>
+                  )}
                 </Button>
               ))}
             </div>

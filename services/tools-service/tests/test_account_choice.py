@@ -53,6 +53,8 @@ async def test_two_accounts_and_no_default_ask_which_and_a_saved_default_runs_as
         (first, "priya@live.example"),
         (second, "priya@second.example"),
     }, details
+    shown = [" · ".join(e["shown"] for e in a["identity"]) for a in details["accounts"]]
+    assert all(shown) and len(set(shown)) == 2, "each account says where it points, and the two read apart"
 
     saved = await c.put(f"/v1/apps/{SITES}/accounts/{second}/default", headers=admin(tenant))
     assert saved.status_code == 200, saved.text
