@@ -20,6 +20,7 @@ from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ..store.engine import EngineTransactions
 from ..store.mailboxes import MailboxStore
 from ..store.tenancy import current_team
+from .account_names import require_team_accounts, step_names
 from .agent_registry import registry, review_view
 from .auth import Principal, require_builder
 from .deps import Runtime
@@ -116,6 +117,7 @@ async def request_publish(
     await require_binding(MailboxStore(rt.db), me, row)
     current = await store.current(workflow_id, team=current_team())
     team = current_team() or str(row.get("team_id") or "")
+    await require_team_accounts(rt, team, step_names(row["definition"]))
     req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note)
     return review_view(req, name=row["name"], slug="", sla_hours=await sla_hours(rt))
 

@@ -24,8 +24,22 @@ ConnectionType = Literal["main", "model", "tool", "knowledge", "memory"]
 # The form a type's settings are edited in: a closed set of widgets the console renders, and a closed set of option
 # sources the platform serves (GET /v1/workflows/option-sources; `steps` is the definition being edited). A pack
 # ships data only, so it can neither add a widget nor run code to load options.
+# `account` picks, for the app the step's operation belongs to, one of the team's accounts (tools-service lists them).
 WIDGETS = frozenset(
-    {"text", "textarea", "number", "select", "switch", "mapping", "mappings", "list", "options", "source", "json"}
+    {
+        "text",
+        "textarea",
+        "number",
+        "select",
+        "switch",
+        "mapping",
+        "mappings",
+        "list",
+        "options",
+        "source",
+        "json",
+        "account",
+    }
 )
 OPTION_SOURCES = frozenset({"agents", "tools", "knowledge", "workflows", "steps", "mailboxes"})
 
@@ -982,10 +996,18 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "default": "error",
                     "description": "When the system does not answer in time: the error port, or a timeout port",
                 },
+                "accounts": {
+                    "type": "object",
+                    "maxProperties": 20,
+                    "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 200},
+                    "description": "The team account each app's call uses, by app id to account name; none set uses "
+                    "the app's default. A test run uses the app's test account",
+                },
             },
         },
         ui=_form(
             ("operation", _f("Operation", "source", "A registry operation the tool gateway calls", source="tools")),
+            ("accounts", _f("Account", "account", "Which of the app's team accounts this step uses")),
             ("input", _f("Input", "mappings", "The operation's arguments")),
             (
                 "approvedBy",

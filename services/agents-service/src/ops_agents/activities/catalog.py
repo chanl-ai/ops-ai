@@ -102,6 +102,9 @@ class AgentDefinition(_Model):
     # Its search_knowledge calls may search every knowledge base of its team, not only default_kb_ids (decision D19,
     # off by default; the Ops Assistant has it, as it answers from all of its team's knowledge).
     all_team_knowledge: bool = False
+    # The team account each app's calls use in this agent's turns, app id to account name, pinned with the version; an
+    # app with none uses the person's default, else the team's. A chat's own pick wins over it, a workflow step's too.
+    accounts: dict[str, str] = Field(default_factory=dict[str, str])
     suggestions: list[str]
     # Per turn. Tool calls may be uncapped (the model-call cap still bounds the turn); model calls are always a number.
     max_tool_calls: int | None = 6

@@ -376,10 +376,13 @@ class PluginAccounts:
             filled = set(c.from_token) | ({c.after_sign_in.setting} if c.after_sign_in else set[str]())
             held = dict(first.get("plugin_settings") or {})
             own = {**{k: v for k, v in held.items() if k in per_account(m) and k not in filled}, **own}
+        # Whose account its calls use is the first account's unless the add says otherwise, so a second org of a
+        # team that signs in as the team is not one each person must connect.
+        held_first = await self.connections.store.get(who.tenant_id, str(b["connection_id"])) or {}
         given = TeamPluginIn(
             enabled=True,
             credential_id=body.credential_id,
-            sign_in=body.sign_in,
+            sign_in=body.sign_in or held_first.get("sign_in"),
             kind=body.kind,
             credentials=dict(body.credentials),
         )

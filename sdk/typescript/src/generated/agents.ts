@@ -2689,6 +2689,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/account-uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Account Uses
+         * @description The team's workflow drafts and published versions, and agents, that name the account `name` of `app`.
+         */
+        get: operations["workflows_account_uses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/validate": {
         parameters: {
             query?: never;
@@ -3203,6 +3223,21 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccountUses
+         * @description How many definitions name one account of an app, for the warning before it is renamed: a rename never rewrites
+         *     them, so each keeps the old name and its next publish fails until its step names the new one.
+         */
+        AccountUses: {
+            /** Agents */
+            agents: string[];
+            /** Drafts */
+            drafts: number;
+            /** Published */
+            published: number;
+            /** Workflows */
+            workflows: string[];
+        };
+        /**
          * ActionField
          * @description One value a call would send, labelled from its operation's schema or reviewer card and formatted.
          */
@@ -3266,6 +3301,10 @@ export interface components {
         };
         /** Agent */
         Agent: {
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            };
             /**
              * Allteamknowledgebases
              * @default false
@@ -3409,6 +3448,10 @@ export interface components {
         };
         /** AgentPatch */
         AgentPatch: {
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            } | null;
             /** Allteamknowledgebases */
             allTeamKnowledgeBases?: boolean | null;
             /** Channels */
@@ -5081,6 +5124,15 @@ export interface components {
             port: string | null;
             /** Status */
             status: string;
+        };
+        /** Envelope[AccountUses] */
+        Envelope_AccountUses_: {
+            data: components["schemas"]["AccountUses"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
         };
         /** Envelope[AgentEvalRun] */
         Envelope_AgentEvalRun_: {
@@ -27053,6 +27105,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionPublished_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_account_uses: {
+        parameters: {
+            query: {
+                app: string;
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AccountUses_"];
                 };
             };
             /** @description Invalid request */

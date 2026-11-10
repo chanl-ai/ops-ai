@@ -10,10 +10,10 @@ the call's idempotency key, which a resumed call keeps across processes.
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol, cast
 
 import httpx
@@ -38,6 +38,9 @@ class RunContext:
     run_id: str | None = None
     # A call a person chose to run on the team's account in place of their own: it acts for nobody.
     team_account: bool = False
+    # The account each app's calls use, app id to account name, as a step, an agent or a chat chose; tools-service
+    # reads the entry for each call's own app and checks it (plugins/host.py for_call). Empty: each app's default.
+    accounts: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
 TEST, LIVE = "test", "live"
@@ -70,12 +73,29 @@ def current_run_context() -> RunContext:
 
 
 @contextmanager
-def acting_as(act: str, environment: str | None = None) -> Generator[None]:
+def acting_as(act: str, environment: str | None = None, accounts: Mapping[str, str] | None = None) -> Generator[None]:
     """Calls made inside name `act` (e.g. `agent:ag_dispute`) as their actor in the gateway's log, on the run's thread
-    and lease generation, in `environment` when given, else the run's."""
+    and lease generation, in `environment` when given, else the run's, on `accounts` (app id to account name) over the
+    run's own."""
     base = current_run_context()
     env = environment or base.environment
-    token = RUN_CONTEXT.set(replace(base, act=act, environment=env))
+    chosen = {**base.accounts, **(accounts or {})}
+    token = RUN_CONTEXT.set(replace(base, act=act, environment=env, accounts=chosen))
+    try:
+        yield
+    finally:
+        RUN_CONTEXT.reset(token)
+
+
+@contextmanager
+def using_accounts(accounts: Mapping[str, str] | None) -> Generator[None]:
+    """Calls made inside use `accounts` (app id to account name) over the run's own choice, as a step's setting asks;
+    nothing else about the run changes."""
+    if not accounts:
+        yield
+        return
+    base = current_run_context()
+    token = RUN_CONTEXT.set(replace(base, accounts={**base.accounts, **accounts}))
     try:
         yield
     finally:
@@ -217,6 +237,7 @@ class GatewayClient:
                 "step": key,
                 "act": ctx.act,
                 **({"environment": ctx.environment} if ctx.environment else {}),
+                **({"accounts": dict(ctx.accounts)} if ctx.accounts else {}),
             },
             "approvalToken": approval_token,
         }

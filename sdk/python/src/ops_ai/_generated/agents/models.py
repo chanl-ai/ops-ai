@@ -8,6 +8,13 @@ from typing import Any, Literal, NotRequired, TypeAlias
 from typing_extensions import TypedDict
 
 
+class AccountUses(TypedDict, closed=True):
+    agents: list[str]
+    drafts: int
+    published: int
+    workflows: list[str]
+
+
 class ActionField(TypedDict, closed=True):
     label: str
     value: str
@@ -607,6 +614,11 @@ class EngineRunInput(TypedDict, closed=True):
     runKey: NotRequired[str | None]
     version: NotRequired[int | None]
     workflowId: str
+
+
+class EnvelopeAccountUses(TypedDict, closed=True):
+    data: AccountUses
+    success: Literal[True]
 
 
 class EnvelopeAiStepOut(TypedDict, closed=True):
@@ -2336,6 +2348,7 @@ class AgentLimits(TypedDict, closed=True):
 
 
 class AgentPatch(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str] | None]
     allTeamKnowledgeBases: NotRequired[bool | None]
     channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
     collections: NotRequired[list[str] | None]
@@ -3372,6 +3385,7 @@ class ActivityRow(TypedDict, closed=True):
 
 
 class Agent(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str]]
     allTeamKnowledgeBases: NotRequired[bool]
     autoResolvedRate: float
     availability: Literal["published", "not_published", "paused"]

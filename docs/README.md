@@ -515,3 +515,5 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/a-deleted-account-name-is-refused.md` | uc-698: A call naming an account that no longer exists is refused, never sent to the default |
 | `usecases/tools-service/two-accounts-never-share-a-name.md` | uc-699: Two accounts of one app in one team never share a name |
 | `usecases/tools-service/a-test-run-never-uses-a-named-live-account.md` | uc-700: A test run that names a live account uses the test account or is refused |
+| `usecases/agents-service/a-step-runs-in-the-account-it-names.md` | uc-695: A workflow step that names an account runs in that account |
+| `usecases/agents-service/a-rename-changes-no-published-version.md` | uc-701: Renaming an account changes no published version, and the next publish names the dead name |

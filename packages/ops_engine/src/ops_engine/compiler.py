@@ -494,6 +494,14 @@ def _step(key: str) -> str:
     return key.rsplit(":", 1)[0]
 
 
+def step_accounts(value: object) -> dict[str, str]:
+    """A tool step's `accounts` setting, app id to account name, keeping only named entries."""
+    if not isinstance(value, Mapping):
+        return {}
+    given = cast(Mapping[object, object], value)
+    return {str(k): v.strip() for k, v in given.items() if isinstance(v, str) and v.strip()}
+
+
 async def gateway_call(call: NodeCall) -> Outcome:
     token = call.params.get("approvalToken")
     arguments = dict(call.params.get("input") or {})
@@ -513,9 +521,18 @@ async def gateway_call(call: NodeCall) -> Outcome:
         else:
             token = None
 
+    # The step's account per app (app id to name), as the builder set it; sent only when set, so a port that predates
+    # it keeps working.
+    accounts = step_accounts(call.params.get("accounts"))
+
     async def send() -> ToolResult:
         return await call.ports.tools.call(
-            str(call.params["operation"]), arguments, call.key, call.generation, str(token) if token else None
+            str(call.params["operation"]),
+            arguments,
+            call.key,
+            call.generation,
+            str(token) if token else None,
+            **({"accounts": accounts} if accounts else {}),
         )
 
     result = await send()

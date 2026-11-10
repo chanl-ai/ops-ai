@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+from collections.abc import Mapping
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any, cast
@@ -93,6 +94,15 @@ async def run_workflow(db: AsyncEngine, run_id: str) -> tuple[str, bool]:
     return workflow, bool(handler and stored is not None and stored.get("team_id") is None)
 
 
+def merged_accounts(
+    run: Mapping[str, str], step: Mapping[str, str] | None, *, team_account: bool = False
+) -> dict[str, str]:
+    """The account each app's call uses: the step's choice over the run's (an agent's, or a chat's over its agent's).
+    A call sent on the team's account in place of a person's (Run as the team account) keeps only the step's choice,
+    so a person's own pick from their chat never travels into a call that acts for nobody."""
+    return {**({} if team_account else dict(run)), **dict(step or {})}
+
+
 class GatewayTools:
     def __init__(self, gateway: GatewayClient | None, minter: ApprovalMinter | None = None) -> None:
         self.gateway = gateway
@@ -107,11 +117,19 @@ class GatewayTools:
         return self.gateway
 
     async def call(
-        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+        self,
+        operation: str,
+        input: dict[str, Any],
+        key: str,
+        generation: int | None,
+        token: str | None,
+        *,
+        accounts: Mapping[str, str] | None = None,
     ) -> ToolResult:
         # The gateway fences writes on the run's lease generation and logs the call against the run's thread.
         # The run's mode, from the graph's config, picks the connection environment its calls use.
         run = current_run_context()
+        team_account = AS_TEAM_ACCOUNT.get()
         ctx = RUN_CONTEXT.set(
             RunContext(
                 thread=thread_of(key),
@@ -119,7 +137,8 @@ class GatewayTools:
                 generation=generation,
                 environment=run.environment,
                 run_id=run.run_id,
-                team_account=AS_TEAM_ACCOUNT.get(),
+                team_account=team_account,
+                accounts=merged_accounts(run.accounts, accounts, team_account=team_account),
             )
         )
         try:

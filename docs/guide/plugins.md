@@ -667,8 +667,15 @@ moment make one account and the other is refused 409 `account_name_taken`.
 | Any member | `POST /v1/me/accounts/{id}/another` with `{name, settings}` | Adds a second account of their own, signing in where `settings` say. Only for apps that sign in with an account; with no body it is named "<person>'s other account" and signs in where `{id}` does |
 | Any caller | `GET /v1/apps/{app}/accounts?usable=1&name=…&mine=1` | The accounts a call may name, each with `identity`: `usable` keeps the team's live accounts (what a workflow step or an agent names), `mine` adds the caller's own, `name` keeps the one so named |
 | A run | `POST /v1/calls` with `runContext.accounts: {appId: name}` | Each app's call uses the account named for its app; `runContext.account` (one name) is still read |
+| A builder | an `ops.action.tool` step's `accounts` parameter, or an agent's `accounts` (`PATCH /v1/agents/{id}`) | The step's or agent's choice per app. Publishing checks each against tools-service (`?usable=1&name=`) and refuses 422 `account_name_unknown`; a draft may name one not made yet |
+| A person | `PUT /chat/threads/{id}/connectors` with `{off, accounts}` | The chat's choice per app, kept on the chat; `GET` lists each app's accounts when it has two or more, and `account` in use |
+| Before a rename | `GET /v1/workflows/definitions/account-uses?app=…&name=…` | How many drafts and published versions name the account. A rename rewrites none of them: a published version is refused at its next call until its next publish names the new name |
 
-How a call's account is chosen, in tools-service only (`plugins/host.py` `PluginHost.for_call` and `_named`):
+Agents-service sends what was chosen and never picks or compares names itself: a step's choice over the agent's,
+and a chat's over its agent's (`api/engine_host.py` merged_accounts, `graphs/agent_wrapper.py` turn_accounts); a call
+run as the team account keeps only the step's. The model is told the account in use on its apps line ("Salesforce:
+on · uses EU org (kestrel-eu.my.salesforce.test)", `api/apps_line.py`) and has no tool input to change it. How a call's
+account is chosen, in tools-service only (`plugins/host.py` `PluginHost.for_call` and `_named`):
 
 | Case | Account used |
 |---|---|

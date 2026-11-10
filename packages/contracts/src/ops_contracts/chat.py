@@ -338,6 +338,9 @@ class ChatOverrides(WireModel):
     widgets_off: list[str] | None = None
     compose_off: bool | None = None
     widgets_per_turn: int | None = None
+    # The account each app's calls use in this chat, app id to account name, as the person picked it in the
+    # composer's connectors; over the agent's own. Tools-service checks each (a person's own account only for them).
+    accounts: dict[str, str] | None = None
 
 
 class ReplyUsage(WireModel):

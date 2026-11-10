@@ -51,6 +51,7 @@ from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
+from ..account_names import uses_of
 from ..actors import ActorView, actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
@@ -414,6 +415,58 @@ class DefinitionRow(Out):
     runs: int
     updated_at: str
     updated_by: str
+
+
+class AccountUses(Out):
+    """How many definitions name one account of an app, for the warning before it is renamed: a rename never rewrites
+    them, so each keeps the old name and its next publish fails until its step names the new one."""
+
+    drafts: int
+    published: int
+    workflows: list[str]
+    agents: list[str]
+
+
+@router.get("/definitions/account-uses", response_model=Envelope[AccountUses])
+async def account_uses(
+    rt: Rt,
+    me: Me,
+    app: Annotated[str, Query(min_length=1, max_length=120)],
+    name: Annotated[str, Query(min_length=1, max_length=200)],
+) -> JSONResponse:
+    """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`."""
+    team = current_team() or me.team_id
+    store = definitions(rt)
+    drafts = published = 0
+    workflows: list[str] = []
+    for row in await store.summaries(team=team):
+        wid = str(row["workflow_id"])
+        latest = uses_of([(wid, cast(dict[str, Any], row.get("definition") or {}))], app, name)
+        live_version = row.get("current_version")
+        live = await store.get(wid, int(live_version), team=team) if live_version else None
+        named_live = bool(live and uses_of([(wid, cast(dict[str, Any], live["definition"]))], app, name))
+        drafts += int(bool(latest) and row.get("stage") == "draft")
+        published += int(named_live)
+        if latest or named_live:
+            workflows.append(wid)
+    agents: list[str] = []
+    reg = agent_registry(rt)
+    key = name.strip().casefold()
+    for a in await reg.rows():
+        if a.get("team_id") != team:
+            continue
+        for v in await reg.versions(str(a["id"])):
+            named = cast(dict[str, str], cast(dict[str, Any], v.get("spec") or {}).get("accounts") or {})
+            if str(named.get(app) or "").strip().casefold() != key:
+                continue
+            is_live = a.get("published_version") is not None and int(v["version"]) <= int(a["published_version"])
+            published += int(is_live)
+            drafts += int(not is_live)
+            if str(a["id"]) not in agents:
+                agents.append(str(a["id"]))
+    return ok(
+        AccountUses(drafts=drafts, published=published, workflows=workflows, agents=agents).model_dump(by_alias=True)
+    )
 
 
 @router.get("/definitions", response_model=Envelope[ListResult[DefinitionRow]])

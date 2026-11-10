@@ -293,6 +293,8 @@ export interface ChatOverrides {
   widgetsOff?: string[];
   composeOff?: boolean;
   widgetsPerTurn?: number;
+  /** The account each app's calls use in this chat, app id to account name; over the agent's own. */
+  accounts?: Record<string, string>;
 }
 
 /** A settings save: a field sent replaces it, null clears it, a field left out keeps what the thread has. */

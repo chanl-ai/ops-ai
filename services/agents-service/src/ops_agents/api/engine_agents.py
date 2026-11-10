@@ -19,7 +19,7 @@ from ops_agent_kernel.models import ModelsServiceModels, NoModelKeyError, build_
 from ops_agent_kernel.ports import KernelPorts
 from ops_agent_kernel.types import AgentSettings, PromptFragment, TurnRequest, TurnResult
 from ops_agents.activities.catalog import AgentDefinition, Catalog, load_catalog
-from ops_agents.activities.gateway import GatewayClient, GatewayToolExecutor
+from ops_agents.activities.gateway import GatewayClient, GatewayToolExecutor, current_run_context, using_accounts
 from ops_agents.activities.knowledge import KbService, Knowledge, NoKnowledgeService
 from ops_agents.activities.overrides import Overrides, limits_for
 from ops_agents.activities.overrides import resolve as resolve_settings
@@ -182,9 +182,11 @@ class KernelAgents:
             output_schema=request.output_schema,
         )
         result: TurnResult | None = None
-        async for event in run_turn(req, self.ports):
-            if isinstance(event, TurnFinished):
-                result = event.result
+        # The agent's own account per app, under any the run already chose.
+        with using_accounts({**agent.accounts, **current_run_context().accounts}):
+            async for event in run_turn(req, self.ports):
+                if isinstance(event, TurnFinished):
+                    result = event.result
         assert result is not None, "run_turn always ends with TurnFinished"
         if result.status == "completed":
             return AgentResult(True, result.output, result.text)

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
@@ -24,8 +25,10 @@ from fake_salesforce import salesforce
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
+    agents,
     bearer,
     data,
+    engine_worker,
     platform,
     service_headers,
     signed_in,
@@ -57,6 +60,8 @@ class Rig:
     maya: dict[str, str]
     tenant: str
     ids: dict[str, str] = field(default_factory=dict[str, str])
+    # agents-service with an engine worker, when the rig was asked for them.
+    api: httpx.Client | None = None
 
     def headers(self, team: str = "team_ops", acting_for: str | None = None) -> dict[str, str]:
         """A service call as agents-service makes it for a run in `team`, acting for `acting_for` (an email) or for
@@ -139,8 +144,9 @@ def code_of(r: httpx.Response) -> str:
 
 
 @contextmanager
-def rig(note: str) -> Generator[Rig]:
-    """The services and people; Salesforce is not yet turned on."""
+def rig(note: str, *, with_agents: bool = False) -> Generator[Rig]:
+    """The services and people; Salesforce is not yet turned on. `with_agents` adds agents-service and an engine
+    worker on the same gateway, for runs of workflows and agents."""
     with ExitStack() as stack:
         sf = stack.enter_context(salesforce())
         api, inner = stack.enter_context(platform())
@@ -156,6 +162,11 @@ def rig(note: str) -> Generator[Rig]:
         session = signed_in(api, PRIYA)
         tenant = str((session.get("principal") or {}).get("tenantId") or session.get("tenantId") or "")
         gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": note}, headers=sam)
+        runtime: httpx.Client | None = None
+        if with_agents:
+            gateway = str(gw.base_url).rstrip("/")
+            runtime = stack.enter_context(agents(gateway_url=gateway, env=AUTH))
+            stack.enter_context(engine_worker(note.replace("-", ""), {"OPS_GATEWAY_URL": gateway, **AUTH}))
         yield Rig(
             sf=sf,
             inner=inner,
@@ -164,6 +175,7 @@ def rig(note: str) -> Generator[Rig]:
             priya=bearer(session, "team_ops"),
             maya=bearer(signed_in(api, MAYA), "team_ops"),
             tenant=tenant,
+            api=runtime,
         )
 
 
@@ -286,3 +298,52 @@ def github_on(r: GitRig, sign_in: str = "team") -> httpx.Response:
     r.ids["public"] = str((data(on) or {}).get("connectionId") or "con_missing")
     r.sign_in(r.priya, r.ids["public"])
     return on
+
+
+def flow(flow_id: str, accounts: dict[str, str] | None) -> dict[str, Any]:
+    """A workflow of one salesforce_query step, naming `accounts` (app id to account name) when given."""
+    params: dict[str, Any] = {"operation": "salesforce_query", "input": {"q": QUERY}}
+    if accounts is not None:
+        params["accounts"] = accounts
+    return {
+        "schemaVersion": 2,
+        "id": flow_id,
+        "name": "Look up the case",
+        "nodes": [
+            {"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "parameters": {}},
+            {"id": "query", "type": "ops.action.tool", "typeVersion": 1, "parameters": params},
+            {"id": "done", "type": "ops.flow.end", "typeVersion": 1, "parameters": {"outcome": "done"}},
+            {"id": "held", "type": "ops.flow.end", "typeVersion": 1, "parameters": {"outcome": "held"}},
+            {"id": "failed", "type": "ops.flow.end", "typeVersion": 1, "parameters": {"outcome": "failed"}},
+        ],
+        "connections": [
+            {"from": {"node": "start", "port": "payload"}, "to": {"node": "query", "port": "in"}},
+            {"from": {"node": "query", "port": "ok"}, "to": {"node": "done", "port": "in"}},
+            {"from": {"node": "query", "port": "refused"}, "to": {"node": "held", "port": "in"}},
+            {"from": {"node": "query", "port": "error"}, "to": {"node": "failed", "port": "in"}},
+        ],
+    }
+
+
+def save_and_publish(r: Rig, definition: dict[str, Any]) -> tuple[httpx.Response, httpx.Response]:
+    """Saves `definition` as a draft and asks to publish it, as Priya; both answers."""
+    assert r.api is not None
+    saved = r.api.post("/v1/workflows/definitions", json={"definition": definition}, headers=r.priya)
+    published = r.api.post(f"/v1/workflows/definitions/{definition['id']}/publish-requests", json={}, headers=r.priya)
+    return saved, published
+
+
+def run_flow(r: Rig, flow_id: str, mode: str = "live") -> dict[str, Any]:
+    """Starts the workflow and waits for it to end; its outcome and the query step's output."""
+    assert r.api is not None
+    started = data(r.api.post("/v1/runs", json={"workflowId": flow_id, "mode": mode, "input": {}}, headers=r.priya))
+    deadline = time.monotonic() + 120
+    detail: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        detail = data(r.api.get(f"/v1/runs/{(started or {}).get('runId')}", headers=r.priya)) or {}
+        if detail.get("status") in ("succeeded", "failed", "cancelled"):
+            step = next((s for s in detail.get("steps") or [] if s.get("nodeId") == "query"), {})
+            return {"outcome": detail.get("outcome"), "output": step.get("output")}
+        time.sleep(0.5)
+    steps = [(s.get("nodeId"), s.get("status"), str(s.get("output"))[:300]) for s in detail.get("steps") or []]
+    return {"outcome": "timed out", "status": detail.get("status"), "steps": steps, "waiting": detail.get("waiting")}

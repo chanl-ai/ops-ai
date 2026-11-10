@@ -4,6 +4,7 @@ re-implementing the adapters, nothing else."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
@@ -39,9 +40,18 @@ AS_TEAM_ACCOUNT: ContextVar[bool] = ContextVar("ops_engine_as_team_account", def
 
 class ToolPort(Protocol):
     async def call(
-        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+        self,
+        operation: str,
+        input: dict[str, Any],
+        key: str,
+        generation: int | None,
+        token: str | None,
+        *,
+        accounts: Mapping[str, str] | None = None,
     ) -> ToolResult:
-        """One call through the tool gateway under `key` (run:node:iteration:attempt), fenced by `generation`."""
+        """One call through the tool gateway under `key` (run:node:iteration:attempt), fenced by `generation`.
+        `accounts` is the step's choice of account per app (app id to name), which the host merges over the run's
+        own and the tool gateway checks."""
         ...
 
     async def access(self, operation: str) -> Access:

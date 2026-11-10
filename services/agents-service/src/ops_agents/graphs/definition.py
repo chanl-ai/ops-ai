@@ -33,8 +33,10 @@ from pydantic import BaseModel, ConfigDict
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import Resume, TurnRequest
 from ops_agents.activities.catalog import AgentDefinition
+from ops_agents.activities.gateway import using_accounts
 from ops_agents.activities.tool_directory import CatalogTools
 from ops_agents.activities.tools import fill
+from ops_engine.compiler import step_accounts
 from ops_service_kit.ids import canonical_json, new_id
 
 from .common import (
@@ -572,7 +574,8 @@ def compile_definition(
                 key = str(chosen.get("step") or f"{state.get('review_id', nid)}:{nid}")
                 # Without a gateway no token is minted; the local port accepts the policy marker (as agent_resume).
                 token = str(decision.get("approval_token") or "approval:policy") if decision else None
-                outcome = await deps.ports.tools.execute(cfg["tool"], arguments, key=key, approval_token=token)
+                with using_accounts(step_accounts(cfg.get("accounts"))):
+                    outcome = await deps.ports.tools.execute(cfg["tool"], arguments, key=key, approval_token=token)
                 result = str(cfg.get("result") or cfg["tool"])
                 if not outcome.ok:
                     failure = _failure(outcome, cfg["tool"])
