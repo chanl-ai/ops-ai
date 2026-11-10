@@ -699,7 +699,12 @@ apart, built once in `plugins/host.py` `account_identity`. A plugin's `connectio
 with none declared it shows what the sign-in filled, then the account's own sign-in address, and for a custom app its
 address; who signed in comes last. A second account pointing at the same place carries `samePlaceAs` with the first's
 name, a warning only. A member's Accounts tab lists the team's accounts and counts their own sign-ins (`me.signIns`);
-their own accounts are on Connectors › Mine. A first turn-on through Ops AI's app keeps the sign-in address it asked as
+their own accounts are on Connectors › Mine. Each team row also carries `signIn` (whose login its calls use: `team`,
+`person` or `person_or_team`) and `peopleSignedIn` (how many people hold their own sign-in on that account). The row's
+Settings dialog (`components/connections/account-settings-dialog.tsx`, apart from Connect, which signs in) changes the
+name, who signs in, the auth config and the team default in one place; "Each person signs in" shows the count against
+the team's members, and a rename or a change of who signs in first shows how many drafts and published versions name
+the account. A first turn-on through Ops AI's app keeps the sign-in address it asked as
 a default on Ops AI's auth config, so a second account may type its own; a team whose first turn-on kept it fixed keeps
 it fixed, and adds an auth config holding the address as a default for a second org.
 

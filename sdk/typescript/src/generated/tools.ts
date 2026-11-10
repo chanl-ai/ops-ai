@@ -1688,6 +1688,11 @@ export interface components {
             /** Name */
             name: string;
             owner: components["schemas"]["AccountOwner"];
+            /**
+             * Peoplesignedin
+             * @default 0
+             */
+            peopleSignedIn: number;
             /** Revision */
             revision: number;
             /** Rowid */
@@ -1696,6 +1701,8 @@ export interface components {
             samePlaceAs?: string | null;
             /** Sandbox */
             sandbox: boolean;
+            /** Signin */
+            signIn?: ("team" | "person" | "person_or_team") | null;
             /** Signinvalues */
             signInValues?: components["schemas"]["SignInValue"][];
             /**

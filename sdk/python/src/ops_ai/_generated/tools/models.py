@@ -1917,10 +1917,12 @@ class AppAccount(TypedDict, closed=True):
     myDefault: NotRequired[bool | None]
     name: str
     owner: AccountOwner
+    peopleSignedIn: NotRequired[int]
     revision: int
     rowId: str
     samePlaceAs: NotRequired[str | None]
     sandbox: bool
+    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
     signInValues: NotRequired[list[SignInValue]]
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]

@@ -121,24 +121,103 @@ try {
               check('2 Add account opens the Connect window asking the account name first', await name.isVisible(), 'name field visible');
               await page.keyboard.press('Escape');
             }, page);
+            const settings = async (name) => {
+              await page.getByTestId(`account-menu-${name}`).click();
+              await page.getByTestId(`account-action-Settings-${name}`).click();
+              await page.getByTestId('account-settings').waitFor({ timeout: 30_000 });
+            };
+            await step('7 Settings opens apart from Connect with where the account points, who signs in and how many of the team signed in', async () => {
+              await settings('Retail org');
+              const points = (await page.getByTestId('account-settings-points').innerText()).trim();
+              const count = (await page.getByTestId('who-signed-in-count').innerText({ timeout: 10_000 })).trim();
+              const connect = await page.getByTestId('connect-window-name').count();
+              await shot(page, `account-settings-admin-${width}`);
+              check('7 Settings opens apart from Connect with where the account points, who signs in and how many of the team signed in', points.includes('kestrel.my.salesforce.test') && /^0 of \d+ people signed in$/.test(count) && connect === 0, { points, count, connect });
+            }, page);
+            await step('8 changing who signs in warns with the count of what names the account before saving', async () => {
+              await page.getByText('Shared team login').click();
+              const warn = page.getByTestId('account-who-uses');
+              await warn.waitFor({ timeout: 30_000 });
+              await page.waitForFunction(() => !document.querySelector('[data-testid="account-who-uses"]')?.textContent?.startsWith('Checking'), null, { timeout: 30_000 });
+              const text = (await warn.innerText()).trim();
+              await shot(page, `account-settings-who-warning-${width}`);
+              check('8 changing who signs in warns with the count of what names the account before saving', text === 'No workflow or agent names it.' || /published and \d+ draft versions name Retail org/.test(text), text);
+              await page.keyboard.press('Escape');
+            }, page);
+            await step('9 while the count loads and when it cannot be read the dialog says so instead of a number', async () => {
+              let release;
+              const held = new Promise((r) => (release = r));
+              await page.route('**/v1/workflows/definitions/account-uses**', async (route) => { await held; await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'unavailable', message: 'down' } }) }); });
+              await settings('EU org');
+              await page.getByTestId('account-settings-name').fill('Europe org');
+              const loading = (await page.getByTestId('account-rename-uses').innerText({ timeout: 10_000 })).trim();
+              await shot(page, `account-settings-slow-${width}`);
+              release();
+              await page.waitForFunction(() => document.querySelector('[data-testid="account-rename-uses"]')?.textContent?.startsWith('Couldn'), null, { timeout: 60_000 });
+              const failed = (await page.getByTestId('account-rename-uses').innerText()).trim();
+              await shot(page, `account-settings-error-${width}`);
+              await page.unroute('**/v1/workflows/definitions/account-uses**');
+              check('9 while the count loads and when it cannot be read the dialog says so instead of a number', loading.startsWith('Checking') && failed.startsWith('Couldn’t check'), { loading, failed });
+            }, page);
+            await step('10 saving a new name renames the row', async () => {
+              await page.getByTestId('account-settings-save').click();
+              await page.getByTestId('account-Europe org').waitFor({ timeout: 30_000 });
+              const back = await call('GET', `/v1/apps/${encodeURIComponent(APP)}`, priya);
+              const names = (back.data?.accounts ?? []).filter((a) => a.kind === 'team').map((a) => a.name).sort();
+              check('10 saving a new name renames the row', JSON.stringify(names) === JSON.stringify(['Europe org', 'Retail org']), names);
+              // Back to EU org, which the 390 pass reads.
+              const europe = (back.data?.accounts ?? []).find((a) => a.name === 'Europe org');
+              if (europe) await call('PATCH', `/v1/apps/${encodeURIComponent(APP)}/accounts/${europe.id}`, priya, { revision: europe.revision, name: 'EU org' });
+            }, page);
+            await step('11 an app page that cannot load says so, and an app with no accounts shows the empty state', async () => {
+              const route = `**/v1/apps/${encodeURIComponent(APP)}`;
+              await page.route(route, (r) => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'unavailable', message: 'The tools service is not answering.' } }) }));
+              await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+              await page.getByText('Couldn’t load this app').waitFor({ timeout: 90_000 });
+              await shot(page, `accounts-error-${width}`);
+              await page.unroute(route);
+              await page.route(route, async (r) => {
+                const real = await r.fetch();
+                const body = await real.json();
+                body.data.accounts = [];
+                await r.fulfill({ response: real, body: JSON.stringify(body) });
+              });
+              await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+              await page.getByTestId('app-tab-accounts').click({ timeout: 90_000 });
+              const empty = await page.getByTestId('app-accounts-empty').waitFor({ timeout: 60_000 }).then(() => true, () => false);
+              await shot(page, `accounts-empty-${width}`);
+              await page.unroute(route, { behavior: 'ignoreErrors' });
+              check('11 an app page that cannot load says so, and an app with no accounts shows the empty state', empty, { empty });
+            }, page);
+          } else {
+            await step(`7 at ${width} Settings fits the phone with every field reachable`, async () => {
+              await page.getByTestId('account-menu-Retail org').click();
+              await page.getByTestId('account-action-Settings-Retail org').click();
+              await page.getByTestId('account-settings').waitFor({ timeout: 30_000 });
+              await page.getByTestId('account-settings-save').scrollIntoViewIfNeeded();
+              const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+              await shot(page, `account-settings-admin-${width}`);
+              check(`7 at ${width} Settings fits the phone with every field reachable`, wide <= 0 && (await page.getByTestId('account-settings-save').isVisible()), { wide });
+              await page.keyboard.press('Escape');
+            }, page);
           }
           check(`3 at ${width} no page errors for the admin`, page.errors.length === 0, page.errors.slice(0, 3));
           await page.context().close();
         }
         for (const width of [1440, 390]) {
           const page = await signedIn(browser, consoleUrl, MAYA, width);
-          await step(`4 at ${width} a member sees the team's accounts with no Add account and no Delete or Rename`, async () => {
+          await step(`4 at ${width} a member sees the team's accounts with no Add account and no Delete or Settings`, async () => {
             await accountsTab(page, consoleUrl);
             const add = await page.getByTestId('app-add-account').count();
             const menus = page.locator('[data-testid^="account-menu-"]');
             let manage = 0;
             for (let i = 0; i < (await menus.count()); i++) {
               await menus.nth(i).click();
-              manage += await page.locator('[data-testid^="account-action-Delete-"], [data-testid^="account-action-Rename-"]').count();
+              manage += await page.locator('[data-testid^="account-action-Delete-"], [data-testid^="account-action-Settings-"]').count();
               await page.keyboard.press('Escape');
             }
             await shot(page, `accounts-member-${width}`);
-            check(`4 at ${width} a member sees the team's accounts with no Add account and no Delete or Rename`, add === 0 && manage === 0, { add, manage });
+            check(`4 at ${width} a member sees the team's accounts with no Add account and no Delete or Settings`, add === 0 && manage === 0, { add, manage });
           }, page);
           await step(`5 at ${width} a member's Connectors > Mine opens`, async () => {
             await page.goto(`${consoleUrl}/integrations/my-accounts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

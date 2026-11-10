@@ -223,3 +223,22 @@ async def test_an_account_a_step_or_agent_names_is_not_deleted_until_nothing_nam
     world.users.account_uses.clear()
     gone = await world.client.delete(f"/v1/apps/plugin:{ID}/accounts/{eu}", headers=admin(tenant))
     assert gone.status_code == 204, gone.text
+
+
+async def test_each_account_counts_the_people_signed_in_to_it_and_says_who_signs_in(world: World, tenant: str) -> None:
+    """The "Each person signs in" card shows how many people signed in to that account, so a count read off the
+    team's default, or off every account of the app, says the wrong number on the second account."""
+    first = await connected(world, tenant)
+    second = (await another(world, tenant, "EU org")).json()["data"]
+    each = await world.client.patch(
+        f"/v1/apps/{APP}/accounts/{second['id']}",
+        json={"revision": second["revision"], "signIn": "person_or_team"},
+        headers=admin(tenant),
+    )
+    assert each.status_code == 200, each.text
+    await signed(world, tenant, first, "https://us.my.desk.test", "usr_priya")
+    await signed(world, tenant, second["id"], "https://eu.my.desk.test", "usr_priya")
+    await signed(world, tenant, second["id"], "https://eu.my.desk.test", "usr_maya")
+    page = (await world.client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]
+    rows = {a["name"]: (a["signIn"], a["peopleSignedIn"]) for a in page["accounts"] if a["kind"] == "team"}
+    assert rows == {"Desk": ("team", 1), "EU org": ("person_or_team", 2)}, rows

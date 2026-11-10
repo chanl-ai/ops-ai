@@ -963,6 +963,11 @@
           "owner": {
             "$ref": "#/components/schemas/AccountOwner"
           },
+          "peopleSignedIn": {
+            "default": 0,
+            "title": "Peoplesignedin",
+            "type": "integer"
+          },
           "revision": {
             "title": "Revision",
             "type": "integer"
@@ -985,6 +990,22 @@
           "sandbox": {
             "title": "Sandbox",
             "type": "boolean"
+          },
+          "signIn": {
+            "anyOf": [
+              {
+                "enum": [
+                  "team",
+                  "person",
+                  "person_or_team"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signin"
           },
           "signInValues": {
             "items": {

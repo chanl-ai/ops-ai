@@ -38,7 +38,7 @@ from .connections.records import (
     state_reason,
     team_test,
 )
-from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn
+from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn, SignIn
 from .connections.service import OPS_AI_APP, ConnectionService, own_key
 from .connectors import MyConnector, my_connectors
 from .defaults import ensure_defaults
@@ -482,6 +482,11 @@ class AppAccount(Out):
     # Why it is refused or expired: the system's words, or the day the sign-in ended.
     state_reason: str | None = None
     owner: AccountOwner
+    # Whose login its calls use: the team's (`team`), each person's (`person`), or each person's with the team's for
+    # runs nobody started (`person_or_team`). Optional so older readers keep parsing.
+    sign_in: SignIn | None = None
+    # How many people hold their own sign-in on this account: the "3 of 12" under "Each person signs in".
+    people_signed_in: int = 0
     # The auth config it signs in with (`AuthConfig.id`) and its name; null for a kind with no OAuth client.
     config_id: str | None = None
     config_name: str | None = None
@@ -1825,6 +1830,10 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     mine = own_key(who)
     ids = [str(a["id"]) for a in stored]
     signed = {str(t["connection_id"]): t for t in await store.own_sign_ins(who.tenant_id, mine, ids)}
+    people_rows = await store.sign_ins(who.tenant_id, ids)
+    people_on: dict[str, set[str]] = {}
+    for t in people_rows:
+        people_on.setdefault(str(t["connection_id"]), set()).add(str(t["person_id"]))
     may = apps.connections.may_manage(who)
     now = apps.connections.clock()
     sandboxes = {str(a["id"]) for a in stored if a.get("sandbox")}
@@ -1895,6 +1904,8 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "stateReason": why,
                 # Each person signs in to it with their own account, so it is no one person's, whoever made it.
                 "owner": {"kind": "each", "name": who.name} if alone else {"kind": "team", "name": who.team.name},
+                "signIn": sign_in,
+                "peopleSignedIn": len(people_on.get(aid, set[str]())),
                 # Which auth config an account signs in through is shown only to whoever manages the team's apps.
                 "configId": config if may else None,
                 "configName": config_names.get(config) if config and may else None,
@@ -1926,10 +1937,10 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     # Each person's own sign-in on a team account is a row of its own, under that account's auth config. A person who
     # may not manage the team's apps sees only their own; the team's account row stays above for everyone.
     teams = {str(r["id"]): r for r in out}
-    for t in await store.sign_ins(
-        who.tenant_id, [aid for aid in ids if (teams[aid] or {}).get("owner", {}).get("kind") == "team"]
-    ):
+    for t in people_rows:
         aid, pid = str(t["connection_id"]), str(t["person_id"])
+        if aid not in teams or teams[aid].get("owner", {}).get("kind") != "team":
+            continue
         if not may:
             # A member's own sign-ins are on Connectors > Mine; the team's list shows the team's accounts (the page's
             # `me.signIns` counts theirs).

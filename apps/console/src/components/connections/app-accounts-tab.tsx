@@ -17,11 +17,10 @@ import { DefaultStar } from '@/components/shared/default-star';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StopRowClick } from '@/components/shared/form-field';
-import { RenameDialog } from '@/components/shared/rename-dialog';
-import { MoveDialog, STATE, type AuthConfig, type ConfigAccount } from '@/components/connections/app-auth-configs';
+import { AccountSettingsDialog } from '@/components/connections/account-settings-dialog';
+import { STATE, type AuthConfig, type ConfigAccount } from '@/components/connections/app-auth-configs';
 import {
   type AppPage,
-  useChangeAccount,
   useDeleteAccount,
   useMakeTeamDefault,
   usePinDefault,
@@ -29,7 +28,6 @@ import {
   useSignOutTeam,
   useTestAccount,
 } from '@/hooks/systems-queries';
-import { useAccountUses } from '@/hooks/plugin-update-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { initials } from '@/lib/format';
 import { accountOwnerWords } from '@/lib/app-state';
@@ -161,7 +159,7 @@ export function AccountsTab({
             <AccountActions
               app={latest.current.app}
               account={a}
-              moveTo={latest.current.configs.filter((c) => c.id !== a.configId && c.type !== 'account')}
+              configs={latest.current.configs}
               onSignIn={(as, id) => latest.current.onSignIn(as, id)}
             />
           </StopRowClick>
@@ -286,29 +284,6 @@ function StateCell({
   );
 }
 
-/**
- * What still names the account, before a rename: a rename rewrites no workflow or agent version, so each one counted
- * keeps the old name and its next publish is refused until it names the new one. Says so while the count loads or
- * cannot be read, so nobody renames on a guess.
- */
-function NamedBy({ app, name }: { app: string; name: string }) {
-  const uses = useAccountUses(app, name);
-  const n = uses.data ? uses.data.published + uses.data.drafts : 0;
-  const text = uses.isPending
-    ? 'Checking which workflows and agents name it…'
-    : uses.isError
-      ? 'Couldn’t check which workflows and agents name it. Each one that does keeps the old name until it is changed.'
-      : n === 0
-        ? 'No workflow or agent names it.'
-        : `${uses.data?.published ?? 0} published and ${uses.data?.drafts ?? 0} draft versions name ${name}. They keep the old name: each one’s next publish is refused until its step or agent names the new one.`;
-  return (
-    <p className={n > 0 || uses.isError ? 'flex gap-2 text-sm text-warning-text' : 'text-sm text-muted-foreground'} role={n > 0 ? 'alert' : undefined} data-testid="account-rename-uses">
-      {(n > 0 || uses.isError) && <TriangleAlert className="mt-0.5 size-4 shrink-0" />}
-      <span>{text}</span>
-    </p>
-  );
-}
-
 /** The team-default star on a team row: a button for whoever may change the default, else a mark on the default. */
 function TeamDefaultStar({ appId, account: a }: { appId: string; account: ConfigAccount }) {
   const teamDefault = useMakeTeamDefault();
@@ -333,27 +308,28 @@ function TeamDefaultStar({ appId, account: a }: { appId: string; account: Config
   );
 }
 
-/** A row's menu: Test now, Rename, defaults, Move, Disconnect and Delete, each only where the API offers it. */
+/**
+ * A row's menu: Test now, Settings (name, who signs in, auth config, team default), Reconnect, Make my default,
+ * Disconnect and Delete, each only where the API offers it.
+ */
 function AccountActions({
   app,
   account: a,
-  moveTo,
+  configs,
   onSignIn,
 }: {
   app: AppPage;
   account: ConfigAccount;
-  moveTo: AuthConfig[];
+  configs: AuthConfig[];
   onSignIn: (account: 'self' | 'team', accountId: string) => void;
 }) {
   const ref = { appId: app.card.id, accountId: a.id };
-  const change = useChangeAccount();
   const remove = useDeleteAccount();
   const signOutTeam = useSignOutTeam();
   const signOutMine = useSignOutMine();
   const pin = usePinDefault();
-  const teamDefault = useMakeTeamDefault();
   const test = useTestAccount();
-  const [dialog, setDialog] = React.useState<'rename' | 'move' | 'delete' | null>(null);
+  const [dialog, setDialog] = React.useState<'settings' | 'delete' | null>(null);
   const can = (x: NonNullable<ConfigAccount['actions']>[number]) => (a.actions ?? []).includes(x);
   const own = a.kind === 'person' || a.owner.kind === 'each';
   const disconnect = () =>
@@ -381,20 +357,12 @@ function AccountActions({
           ),
       },
     can('reconnect') && a.state === 'connected' && { label: 'Reconnect', onClick: () => onSignIn(own ? 'self' : 'team', a.id) },
-    can('rename') && a.kind === 'team' && { label: 'Rename', onClick: () => setDialog('rename') },
-    can('make_team_default') && {
-      label: 'Make the team’s default',
-      onClick: () =>
-        teamDefault.mutate(ref, {
-          onSuccess: () => toast.success(`${shownAs(a)} is the team’s default`, { description: 'Calls that name no account use it.' }),
-          onError: (e) => toast.error('Couldn’t make it the default', { description: e.message }),
-        }),
-    },
+    a.kind === 'team' &&
+      (can('rename') || can('move') || can('make_team_default')) && { label: 'Settings', onClick: () => setDialog('settings') },
     can('make_default') && {
       label: 'Make my default',
       onClick: () => pin.mutate(ref, { onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) }),
     },
-    can('move') && a.kind === 'team' && moveTo.length > 0 && { label: 'Move to another auth config', onClick: () => setDialog('move') },
     can('disconnect') && { label: 'Disconnect', onClick: () => void disconnect() },
     can('delete') && a.kind === 'team' && { label: 'Delete', onClick: () => setDialog('delete'), destructive: true },
   ].filter(Boolean) as { label: string; onClick: () => void; destructive?: boolean }[];
@@ -422,40 +390,7 @@ function AccountActions({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      {dialog === 'rename' && (
-        <RenameDialog
-          name={a.name}
-          description="Steps and tools pick an account by this name."
-          notice={<NamedBy app={app.card.id} name={a.name} />}
-          testId="account-rename"
-          busy={change.isPending}
-          onClose={() => setDialog(null)}
-          onSave={(next) =>
-            change.mutate(
-              { ...ref, body: { revision: a.revision, name: next } },
-              { onSuccess: () => (toast.success(`Renamed to ${next}`), setDialog(null)), onError: (e) => toast.error('Couldn’t rename it', { description: e.message }) },
-            )
-          }
-        />
-      )}
-      {dialog === 'move' && (
-        <MoveDialog
-          account={a.name}
-          to={moveTo}
-          busy={change.isPending}
-          onClose={() => setDialog(null)}
-          onMove={(c) =>
-            change.mutate(
-              // Ops AI's own app is no credential: null puts the account on it.
-              { ...ref, body: { revision: a.revision, credentialId: c.type === 'ops_ai' ? null : c.id } },
-              {
-                onSuccess: () => (toast.success(`${a.name} moved to ${c.name}`, { description: 'It signs in again with Reconnect.' }), setDialog(null)),
-                onError: (e) => toast.error('Couldn’t move it', { description: e.message }),
-              },
-            )
-          }
-        />
-      )}
+      {dialog === 'settings' && <AccountSettingsDialog app={app} account={a} configs={configs} onClose={() => setDialog(null)} />}
       <DeleteDialog
         open={dialog === 'delete'}
         onOpenChange={(o) => !o && setDialog(null)}
