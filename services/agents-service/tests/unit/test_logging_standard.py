@@ -6,18 +6,21 @@ from __future__ import annotations
 import ast
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import check_standards  # pyright: ignore[reportMissingImports]
 
-SERVICE_FILE = check_standards.ROOT / "services" / "x-service" / "src" / "ops_x" / "__main__.py"
+standards: Any = check_standards
+ROOT: Path = standards.ROOT
+SERVICE_FILE = ROOT / "services" / "x-service" / "src" / "ops_x" / "__main__.py"
 
 
 def findings(source: str, path: Path = SERVICE_FILE) -> list[str]:
     out: list[str] = []
-    check_standards.check_logging(path, ast.parse(source), out)
+    standards.check_logging(path, ast.parse(source), out)
     return out
 
 
@@ -47,5 +50,5 @@ def test_the_kits_forms_pass() -> None:
 
 
 def test_a_dev_fake_outside_services_may_set_its_own_uvicorn_level() -> None:
-    fake = check_standards.ROOT / "packages" / "ops_signin" / "src" / "ops_signin" / "fake_idp" / "__main__.py"
+    fake = ROOT / "packages" / "ops_signin" / "src" / "ops_signin" / "fake_idp" / "__main__.py"
     assert findings("import uvicorn\nuvicorn.run(app, port=1, log_level='warning')", fake) == []
