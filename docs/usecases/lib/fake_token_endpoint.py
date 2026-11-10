@@ -6,7 +6,12 @@ Each assertion is checked as Entra checks one: the algorithm pinned by the regis
 for P-256), `none` refused, the signature against the registered certificate's public key, `x5t#S256` equal to that
 certificate's thumbprint, `aud` the endpoint's own token address (DocuSign: its account host), `iss` and `sub` the
 client id, `nbf` not in the future, a lifetime of ten minutes or less, and a `jti` not seen before. A refusal answers
-401 `invalid_client` (`invalid_grant` for a JWT grant) naming the check that failed. The fake records each token
+401 `invalid_client` (`invalid_grant` for a JWT grant) naming the check that failed.
+
+The same endpoint signs a person in with a code (RFC 6749 4.1) for an app registered with a client secret
+(`secret_apps`): `authorize` is the sign-in page's answer, a one-time code bound to the client, the redirect address
+and the PKCE challenge (S256 only); the token request must send the client's secret (form or basic), the same redirect
+address and the verifier. The answer carries a refresh token, which a `refresh_token` grant spends once. The fake records each token
 request's form with the assertion's signature cut off, so a use case can print what it received without a credential.
 
 `login.certs.test` and `api.certs.test` answer on https on this machine's private address with one self-signed
@@ -19,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import secrets
 import tempfile
@@ -29,7 +35,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 
 import jwt
 from cryptography import x509
@@ -37,6 +43,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import NameOID
 from fake_bank_https import private_address
+from fake_multi_auth import _client_of as client_of  # pyright: ignore[reportPrivateUsage]
 from fake_salesforce import _serve as serve_https  # pyright: ignore[reportPrivateUsage]
 
 LOGIN_HOST = "login.certs.test"
@@ -86,6 +93,14 @@ def make_pair(name: str, kind: str = "rsa", days: int = 365) -> Pair:
 
 class Refused(Exception):
     """An assertion the endpoint refuses; the message names the check, never the assertion."""
+
+
+class ClientRefused(Refused):
+    """A code or refresh grant whose client did not prove itself with its secret: `invalid_client`, 401."""
+
+
+def s256(verifier: str) -> str:
+    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
 
 
 def _header(token: str) -> dict[str, Any]:
@@ -158,18 +173,40 @@ class TokenEndpoint:
         self.token_requests: list[dict[str, Any]] = []
         self.calls: list[dict[str, Any]] = []
         self._issued: dict[str, str] = {}
+        # Apps that sign a person in with a code, by client id: the secret each was registered with.
+        self.secret_apps: dict[str, str] = {}
+        self._codes: dict[str, dict[str, str]] = {}
+        self._refresh: dict[str, str] = {}
 
     def token_url(self, system: str) -> str:
         return f"{self.token_base}/{system}/token"
 
+    def authorize(self, query: dict[str, str], who: str) -> str:
+        """Where the sign-in page sends the browser once `who` signs in: the redirect address with a one-time code and
+        the state, or with `invalid_request` for a client it does not know or a request without an S256 challenge."""
+        back, state = query.get("redirect_uri", ""), query.get("state", "")
+        joined = "&" if "?" in back else "?"
+        ok = query.get("client_id") in self.secret_apps and query.get("response_type") == "code"
+        if not ok or query.get("code_challenge_method") != "S256" or not query.get("code_challenge"):
+            return f"{back}{joined}{urlencode({'error': 'invalid_request', 'state': state})}"
+        code = f"code-{secrets.token_hex(12)}"
+        self._codes[code] = {
+            "client_id": query["client_id"], "redirect_uri": back, "challenge": query["code_challenge"], "who": who,
+        }  # fmt: skip
+        return f"{back}{joined}{urlencode({'code': code, 'state': state})}"
+
+    def whose(self, authorization: str) -> str | None:
+        """Who the bearer token in an Authorization header was issued to; None for a token this endpoint never issued."""
+        return self._issued.get(authorization[7:]) if authorization.startswith("Bearer ") else None
+
     def app(self) -> Any:
-        from starlette.applications import Starlette  # noqa: PLC0415 - the agents-service environment has it
-        from starlette.routing import Route  # noqa: PLC0415
+        from starlette.applications import Starlette
+        from starlette.routing import Route
 
         return Starlette(routes=[Route("/{path:path}", self._handle, methods=["GET", "POST"])])
 
     async def _handle(self, request: Any) -> Any:
-        from starlette.responses import JSONResponse  # noqa: PLC0415
+        from starlette.responses import JSONResponse
 
         host = (request.headers.get("host") or "").split(":")[0]
         path = request.url.path
@@ -184,17 +221,22 @@ class TokenEndpoint:
         return JSONResponse({"as": who, "record": RECORD})
 
     def _token(self, system: str, form: dict[str, str]) -> Any:
-        from starlette.responses import JSONResponse  # noqa: PLC0415
+        from starlette.responses import JSONResponse
 
         status, body = self.token(system, form)
         return JSONResponse(body, status)
 
-    def token(self, system: str, form: dict[str, str]) -> tuple[int, dict[str, Any]]:
+    def token(self, system: str, form: dict[str, str], authorization: str = "") -> tuple[int, dict[str, Any]]:
         """One token request's answer, also for a use case that checks the fake's refusals without a client."""
         row: dict[str, Any] = {"system": system, "grant": form.get("grant_type"), "fields": sorted(form)}
         self.token_requests.append(row)
+        refresh: dict[str, str] = {}
         try:
-            if system == "entra":
+            if form.get("grant_type") in ("authorization_code", "refresh_token"):
+                who = self._code_grant(form, authorization)
+                refresh["refresh_token"] = f"rt-{secrets.token_hex(12)}"
+                self._refresh[refresh["refresh_token"]] = who
+            elif system == "entra":
                 who = self._entra(form)
             elif system in ("google", "docusign"):
                 who = self._jwt_grant(system, form)
@@ -202,12 +244,36 @@ class TokenEndpoint:
                 raise Refused(f"no token endpoint {system}")
         except Refused as e:
             row["refused"] = str(e)
-            code = "invalid_client" if system == "entra" else "invalid_grant"
-            return (401 if code == "invalid_client" else 400), {"error": code, "error_description": str(e)}
+            coded = form.get("grant_type") in ("authorization_code", "refresh_token")
+            client = isinstance(e, ClientRefused) or (system == "entra" and not coded)
+            code = "invalid_client" if client else "invalid_grant"
+            return (401 if client else 400), {"error": code, "error_description": str(e)}
         row["accepted"] = True
         token = f"at-{secrets.token_hex(8)}"
         self._issued[token] = who
-        return 200, {"access_token": token, "token_type": "Bearer", "expires_in": 3600}
+        return 200, {"access_token": token, "token_type": "Bearer", "expires_in": 3600, **refresh}
+
+    def _code_grant(self, form: dict[str, str], authorization: str) -> str:
+        """Whom a code or refresh grant signs in, else Refused naming the check that failed."""
+        client, secret = client_of({k: [v] for k, v in form.items()}, authorization)
+        held = self.secret_apps.get(client)
+        if held is None or not hmac.compare_digest(secret, held):
+            raise ClientRefused(f"client {client} did not prove itself with its secret")
+        if form["grant_type"] == "refresh_token":
+            who = self._refresh.pop(form.get("refresh_token", ""), None)
+            if who is None:
+                raise Refused("the refresh token is unknown or was already used")
+            return who
+        code = self._codes.pop(form.get("code", ""), None)
+        if code is None:
+            raise Refused("the code is unknown or was already used")
+        if code["client_id"] != client:
+            raise Refused("the code was issued to another client")
+        if code["redirect_uri"] != form.get("redirect_uri"):
+            raise Refused("the redirect address is not the one the code was issued for")
+        if s256(form.get("code_verifier", "")) != code["challenge"]:
+            raise Refused("the code verifier does not match the code challenge (PKCE)")
+        return code["who"]
 
     def _entra(self, form: dict[str, str]) -> str:
         if "client_secret" in form:

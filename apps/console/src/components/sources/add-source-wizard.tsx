@@ -9,6 +9,7 @@ import { ExternalLink } from 'lucide-react';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 
 import { SourceKindIcon } from '@/components/knowledge/knowledge-meta';
+import { PageFields } from '@/components/knowledge/page-fields';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FilePicker } from '@/components/shared/file-picker';
 import { FileUpload, type UploadItem, uploadsBlocker } from '@/components/shared/file-upload';
@@ -25,7 +26,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { useApproveAiSteps, useCreateSource, useSourceKinds, useSourcePreview } from '@/hooks/knowledge-queries';
+import { useApproveAiSteps, useCreateSource, usePutSourceItem, useSourceKinds, useSourcePreview } from '@/hooks/knowledge-queries';
 import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
 import { appPageHref } from '@/lib/app-links';
 import { count, plural } from '@/lib/format';
@@ -36,7 +37,10 @@ const STEPS = ['Source', 'What to include', 'Review'] as const;
 const PREVIEW_DEBOUNCE_MS = 600;
 const PREVIEW_ROWS = 50;
 
-const kindKey = (k: SourceKindOption) => (k.type === 'file' ? 'file' : `${k.plugin}/${k.source}`);
+const kindKey = (k: SourceKindOption) => (k.type === 'tool' ? `${k.plugin}/${k.source}` : k.type);
+/** What each built-in kind takes in, under its title in step 1. */
+const BUILT_IN_HINT: Record<string, string> = { file: 'Upload or pick from Files', text: 'Write or paste', push: 'Sent by your systems through the API' };
+const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'page';
 
 /** How a new source's AI steps were approved once it exists: by its creator as owner, refused, or not asked for. */
 export type AiApproval = { state: 'approved' } | { state: 'waiting'; reason: string } | { state: 'none' };
@@ -76,6 +80,7 @@ export function AddSourceWizard({
 }) {
   const kinds = useSourceKinds(open);
   const create = useCreateSource();
+  const putItem = usePutSourceItem();
   const approve = useApproveAiSteps();
   const [step, setStep] = React.useState(1);
   const [key, setKey] = React.useState<string | null>(null);
@@ -83,6 +88,7 @@ export function AddSourceWizard({
   const [name, setName] = React.useState('');
   const [uploads, setUploads] = React.useState<UploadItem[]>([]);
   const [picked, setPicked] = React.useState<string[]>([]);
+  const [page, setPage] = React.useState({ title: '', text: '' });
   const [schedule, setSchedule] = React.useState<Schedule>({ kind: 'manual' });
   const [ai, setAi] = React.useState<AiSwitches>({ questions: false, drafts: false });
   const [attempted, setAttempted] = React.useState(false);
@@ -98,6 +104,7 @@ export function AddSourceWizard({
     setName('');
     setUploads([]);
     setPicked([]);
+    setPage({ title: '', text: '' });
     setSchedule({ kind: 'manual' });
     setAi({ questions: false, drafts: false });
     setAttempted(false);
@@ -116,6 +123,7 @@ export function AddSourceWizard({
   const valid = Object.keys(errors).length === 0;
   const fileIds = [...new Set([...uploads.flatMap((u) => (u.phase === 'ready' && u.fileId ? [u.fileId] : [])), ...picked])];
   const nameError = name.trim().length < 2 || name.trim().length > 80 ? 'Name it in 2 to 80 characters.' : undefined;
+  const pageErrors = kind?.type === 'text' ? { title: page.title.trim() ? undefined : 'Give the page a title.', text: page.text.trim() ? undefined : 'Write the page’s text.' } : {};
   const filesError = kind?.type === 'file' ? (uploads.length ? uploadsBlocker(uploads) : undefined) ?? (fileIds.length ? undefined : 'Upload or pick at least one file.') : undefined;
 
   const previewValues = useDebounced(values, PREVIEW_DEBOUNCE_MS);
@@ -125,7 +133,7 @@ export function AddSourceWizard({
   const dirty = !!key;
   const close = (o: boolean) => {
     if (o) return onOpenChange(true);
-    if (create.isPending || approve.isPending) return;
+    if (create.isPending || putItem.isPending || approve.isPending) return;
     if (dirty) return setConfirmClose(true);
     onOpenChange(false);
   };
@@ -142,18 +150,21 @@ export function AddSourceWizard({
   };
   const next = () => {
     setAttempted(true);
-    if (!valid || nameError || filesError) return;
+    if (!valid || nameError || filesError || pageErrors.title || pageErrors.text) return;
     setStep(3);
   };
 
-  const units = kind?.type === 'file' ? fileIds.length : (preview.data?.willFetch ?? null);
+  const units = kind?.type === 'file' ? fileIds.length : kind?.type === 'text' ? 1 : kind?.type === 'push' ? null : (preview.data?.willFetch ?? null);
+  // Typed text and pushed items are indexed when written, so the source has nothing of its own to sync on a schedule.
+  const written = kind?.type === 'text' || kind?.type === 'push';
   const calls = units === null ? null : firstSyncCalls(units, ai);
 
   const submit = async () => {
     if (!kind) return;
     setError(undefined);
     try {
-      const s = await create.mutateAsync({ input: createInput({ kind, name, values, schedule, ai, fileIds }), sync: true, kbIds: [kb.id] });
+      const s = await create.mutateAsync({ input: createInput({ kind, name, values, schedule, ai, fileIds }), sync: !written, kbIds: [kb.id] });
+      if (kind.type === 'text') await putItem.mutateAsync({ id: s.id, input: { name: `${slug(page.title)}.md`, title: page.title.trim(), text: page.text } });
       let approval: AiApproval = { state: 'none' };
       if (ai.questions || ai.drafts) {
         try {
@@ -183,7 +194,7 @@ export function AddSourceWizard({
           Cancel
         </Button>
       ) : (
-        <Button variant="outline" onClick={() => setStep(step - 1)} disabled={create.isPending || approve.isPending}>
+        <Button variant="outline" onClick={() => setStep(step - 1)} disabled={create.isPending || putItem.isPending || approve.isPending}>
           Back
         </Button>
       )}
@@ -198,8 +209,8 @@ export function AddSourceWizard({
         </Button>
       )}
       {step === 3 && (
-        <LoadingButton isLoading={create.isPending || approve.isPending} loadingText="Creating…" onClick={submit} data-testid="add-source-create">
-          Create and sync
+        <LoadingButton isLoading={create.isPending || putItem.isPending || approve.isPending} loadingText="Creating…" onClick={submit} data-testid="add-source-create">
+          {kind?.type === 'push' ? 'Create' : 'Create and sync'}
         </LoadingButton>
       )}
     </div>
@@ -249,13 +260,13 @@ export function AddSourceWizard({
                               onSelect={() => setKey(kindKey(k))}
                               onDoubleClick={() => !notConnected && choose(k)}
                               className={cn('gap-3 py-2.5', key === kindKey(k) && 'bg-accent')}
-                              data-testid={`add-source-kind-${k.type === 'file' ? 'file' : k.source}`}
+                              data-testid={`add-source-kind-${k.type === 'tool' ? k.source : k.type}`}
                             >
                               <SourceKindIcon kind={k.kind} />
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-medium">{k.title}</span>
                                 <span className="block truncate text-xs text-muted-foreground">
-                                  {k.type === 'file' ? 'Upload or pick from Files' : k.site ? 'Pages of one website' : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
+                                  {k.type !== 'tool' ? BUILT_IN_HINT[k.type] : k.site ? 'Pages of one website' : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
                                 </span>
                               </span>
                               {key === kindKey(k) && <Badge variant="secondary">Chosen</Badge>}
@@ -298,9 +309,18 @@ export function AddSourceWizard({
                 </div>
                 {!!fileIds.length && <p className="text-xs text-muted-foreground">{plural(fileIds.length, 'file')} chosen.</p>}
               </div>
+            ) : kind.type === 'text' ? (
+              <PageFields idPrefix="add-source-page" title={page.title} text={page.text} onTitle={(title) => setPage({ ...page, title })} onText={(text) => setPage({ ...page, text })} titleError={attempted ? pageErrors.title : undefined} textError={attempted ? pageErrors.text : undefined} />
+            ) : kind.type === 'push' ? (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm" data-testid="add-source-push">
+                <p className="font-medium">Items arrive from your systems</p>
+                <p className="mt-1 text-muted-foreground">
+                  Each item is sent to <code className="font-mono text-xs">POST /v1/sources/&lt;id&gt;/items</code> with a name and its text or file, and is indexed at once. Sending the same name with the same content changes nothing; new content is the item’s next version. The source’s page shows its id once it is created.
+                </p>
+              </div>
             ) : (
               <>
-                <SourceValuesForm idPrefix="as" inputs={inputs} values={values} onChange={setValues} errors={shownErrors} />
+                <SourceValuesForm idPrefix="as" inputs={inputs} values={values} onChange={setValues} errors={shownErrors} scopeSource={kind.pickers && kind.plugin && kind.source ? { plugin: kind.plugin, source: kind.source } : undefined} />
                 {kind.previews && <PreviewPanel paused={!valid} query={preview} />}
               </>
             )}
@@ -317,16 +337,22 @@ export function AddSourceWizard({
                 rows={
                   kind.type === 'file'
                     ? [['Files', plural(fileIds.length, 'file')]]
-                    : [
+                    : kind.type === 'text'
+                      ? [['Page', page.title.trim()], ['Length', plural(page.text.trim().split(/\s+/).filter(Boolean).length, 'word')]]
+                      : kind.type === 'push'
+                        ? [['Items', 'Sent through the API']]
+                        : [
                         ...Object.keys(inputs).map((n): [string, React.ReactNode] => [n.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()), shown(values[n])]),
                         ...(kind.previews ? [['Pages', preview.data ? `${count(preview.data.willFetch)} of ${count(preview.data.found)} found will be fetched${preview.data.capped ? ' (the listing stopped at its limit)' : ''}` : 'Not previewed'] as [string, React.ReactNode]] : []),
                       ]
                 }
               />
             </Section>
-            <Section title="Schedule" description="The first sync starts as soon as you create the source.">
-              <SchedulePicker id="as-schedule" value={schedule} onChange={setSchedule} />
-            </Section>
+            {!written && (
+              <Section title="Schedule" description="The first sync starts as soon as you create the source.">
+                <SchedulePicker id="as-schedule" value={schedule} onChange={setSchedule} />
+              </Section>
+            )}
             <Section title="Questions and FAQs" description="Both call a model at each sync, for changed pieces only.">
               <div className="flex flex-col gap-4">
                 <AiSwitch id="as-faq" label="Likely questions" hint="A model writes questions each piece answers. They are searched; the piece is returned and cited. No review." checked={ai.questions} onChange={(v) => setAi({ ...ai, questions: v })} />

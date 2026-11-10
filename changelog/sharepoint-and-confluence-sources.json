@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "SharePoint and Confluence knowledge sources",
+  "description": "Add source can now take in SharePoint and OneDrive libraries or Confluence spaces, picked by searching for them by name. Each sync reads only what changed and keeps who can see each item.",
+  "tag": "new"
+}

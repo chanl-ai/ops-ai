@@ -1,6 +1,7 @@
 # kb-service
 
-Department knowledge bases, their file sources, and passages cited by page and section, on :8740. The designed
+Department knowledge bases, their sources (files, typed text, pushed items and plugin sources such as websites), and
+passages cited by page and section, on :8740. The designed
 surface and what is built are in `docs/services/kb-service/overview.md`.
 
 ```

@@ -7,7 +7,8 @@ pages, and sources read through a connection's tools), sync runs, documents and 
 section, change rows, and cited retrieval. An agent granted a knowledge base cites passages from it by document,
 version, page and section. A file source's files are read by documents-service (their reading, OCR on auto by
 `kb_ocr`), which kb-service splits with `packages/ops_ingest`; file bytes live in files-service and kb-service holds file
-ids, writing bytes itself only for pasted pages and the dev seed.
+ids, writing bytes itself only for items written into typed text and push sources (`POST /v1/sources/{id}/items`) and
+the dev seed.
 
 It does not own agents or their grants: "used by" asks agents-service (`agents.py`). Shared service rules:
 [services/CLAUDE.md](../CLAUDE.md). Cross-folder rules: [root guide](../../CLAUDE.md#folder-guides).
@@ -19,6 +20,7 @@ It does not own agents or their grants: "used by" asks agents-service (`agents.p
 | `src/ops_kb/app.py` | The FastAPI app and every route; models in `schemas.py`, mirroring `apps/console/src/lib/types/knowledge.ts` |
 | `src/ops_kb/service.py` | Bases and sources as the console reads them, joined and counted on the server |
 | `src/ops_kb/retrieval.py`, `store/fulltext.py` | The `Retriever` port and its one adapter, PostgreSQL full-text search with a score floor |
+| `src/ops_kb/query_steps.py` | Rerank and question rewrite around a search, through models-service on a chat-model alias |
 | `src/ops_kb/files.py` | Where a source's files are kept, through files-service |
 | `src/ops_kb/readings.py` | A file's reading from documents-service and its split; `POST /v1/events` takes `reading.finished` and `reading.failed`, and the knowledge schedule asks again for items still `reading` |
 | `src/ops_kb/tool_sources.py`, `schedule.py` | Knowledge read through a connection's tools, and the beat that syncs them on schedule |
@@ -68,5 +70,5 @@ To check a cited answer end to end, attach a base to a chat turn: `make chat AS=
 |---|---|
 | [docs/services/kb-service/overview.md](../../docs/services/kb-service/overview.md) | What is built: bases, sources, sync, retrieval, changes, team rules |
 | [docs/packages/ops_ingest/](../../docs/packages/ops_ingest/) | Parsing and splitting |
-| [docs/usecases/kb-service/](../../docs/usecases/README.md) | 3 use cases, including cited answers from uploaded PDFs |
+| [docs/usecases/kb-service/](../../docs/usecases/README.md) | Use cases, including cited answers from uploaded PDFs, a website source, and typed text and pushed items |
 | [openapi.json](openapi.json) | The API |

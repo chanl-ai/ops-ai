@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Fewer weak matches from knowledge search",
+  "description": "New knowledge bases search by meaning with a higher floor, set from real embeddings, so questions your documents do not answer return nothing instead of a loosely related passage. Existing bases keep their saved setting.",
+  "tag": "improved"
+}

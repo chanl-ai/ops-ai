@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Pushing an item reads only that item",
+  "description": "Writing or pushing one item into a typed text or push source now indexes just that item, so a large push source stays fast to update.",
+  "tag": "improved"
+}

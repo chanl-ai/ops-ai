@@ -17,6 +17,18 @@
       "ref": "a5bfc40c80bd735b46ab132ca77e02e30a7a64d1",
       "path": "plugins/web",
       "sha256": "d62dad9c634239b5cfdf8b360ce30e4560b64b42d0e15c052a9e2e817341e32a"
+    },
+    {
+      "source": "https://github.com/chanl-ai/ops-ai-plugins",
+      "ref": "96d79903889c8858c5e95c81f04f50474c4e716d",
+      "path": "plugins/sharepoint",
+      "sha256": "b4ac4e5e82f6f37e0803178133b8dc844042af1a25471c9c03740d5ba92b7214"
+    },
+    {
+      "source": "https://github.com/chanl-ai/ops-ai-plugins",
+      "ref": "96d79903889c8858c5e95c81f04f50474c4e716d",
+      "path": "plugins/confluence",
+      "sha256": "6456d3114422439c48f445137a3f32b36a37cb52e2a15726da9b815264c5c694"
     }
   ]
 }

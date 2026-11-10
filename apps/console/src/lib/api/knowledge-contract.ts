@@ -25,11 +25,15 @@ import type {
   SourceKindOption,
   SourceKindPreview,
   SourcePatch,
+  ScopeOption,
+  ScopesInput,
   SourceRow,
   SourceType,
   SyncOptions,
   SyncRun,
   Tombstone,
+  WrittenItem,
+  WrittenItemInput,
 } from '@/lib/types/knowledge';
 import type { SampleDocument, SplitPreview, SplitPreviewInput } from '@/lib/types/knowledge-ingest';
 import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/types/query';
@@ -72,6 +76,8 @@ export interface KnowledgeApi {
     sync(id: string, opts?: SyncOptions): Promise<SyncRun>;
     /** Adds files already in Files (the team's, scanned clean) to a file source by id; the next sync indexes them. */
     addFiles(id: string, fileIds: string[]): Promise<{ fileId: string; name: string }[]>;
+    /** Writes one item into a typed text or push source by its name, indexed at once; the same content is unchanged. */
+    putItem(id: string, input: WrittenItemInput): Promise<WrittenItem>;
     /** Stops a running sync or rebuild between two items. */
     cancelRun(runId: string): Promise<SyncRun>;
     setPaused(id: string, paused: boolean): Promise<Source>;
@@ -83,6 +89,8 @@ export interface KnowledgeApi {
     run(runId: string): Promise<SyncRun>;
     /** What a website or app source with this `config` ({plugin, source, values}) would take in, without creating it. */
     preview(config: Record<string, unknown>): Promise<SourceKindPreview>;
+    /** Add source's pickers: what a plugin source can be pointed at, searched by name or held by a picked parent. */
+    scopes(input: ScopesInput): Promise<{ scopes: ScopeOption[]; nextCursor?: string }>;
     /** Required metadata of the chosen knowledge bases, and how many previewed items each would hold for it. */
     previewHeld(input: HeldPreviewInput): Promise<HeldPreview>;
     /** Seeded documents a split preview can run on; a source's own documents first when `sourceId` is given. */

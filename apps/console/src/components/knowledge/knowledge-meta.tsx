@@ -19,8 +19,10 @@ import {
   Loader2,
   MinusCircle,
   PauseCircle,
+  PenLine,
   Presentation,
   Puzzle,
+  Send,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -153,7 +155,7 @@ export function KbDot({ color, className }: { color: string; className?: string 
   return <span className={cn('inline-block size-2.5 shrink-0 rounded-full', KB_COLORS[color] ?? 'bg-muted-foreground', className)} />;
 }
 
-const KIND_ICON: Record<SourceKind, LucideIcon> = { file: FileUp, web: Globe, tool: Puzzle };
+const KIND_ICON: Record<SourceKind, LucideIcon> = { file: FileUp, text: PenLine, push: Send, web: Globe, tool: Puzzle };
 
 /** The icon for what a source is: files, a website, or an app's knowledge source. The console keeps only icons by kind. */
 export function SourceKindIcon({ kind, className }: { kind: SourceKind; className?: string }) {
@@ -232,13 +234,6 @@ export const RULE_PLACEHOLDER: Record<(typeof RULE_FIELDS)[number]['value'], str
   modifiedAfter: 'e.g. 2026-01-01',
   sizeUnder: 'e.g. 50 MB',
 };
-
-// kb-service searches by keyword and does not rerank yet (service.py's defaults), so no preset claims either.
-export const RETRIEVAL_PRESETS = {
-  balanced: { searchMode: 'keyword', rerank: false, chunkLimit: 8, threshold: 0.5, answerShape: 'answer_with_citations', temperature: 0.1 },
-  precise: { searchMode: 'keyword', rerank: false, chunkLimit: 5, threshold: 0.65, answerShape: 'answer_with_citations', temperature: 0 },
-  raw: { searchMode: 'keyword', rerank: false, chunkLimit: 10, threshold: 0.4, answerShape: 'chunks' },
-} as const;
 
 /** Why an item is not searched as-is: the rule, the missing metadata, the copy it duplicates or the version that replaced it. */
 export function itemReason(i: Item): string | undefined {
