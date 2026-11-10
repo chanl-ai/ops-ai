@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "Scrollbars match the light or dark theme",
+  "description": "Scrollbars in the console are now thin and take their colour from the page, so they no longer look wide and dark on Windows.",
+  "tag": "fix"
+}

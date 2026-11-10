@@ -12,6 +12,7 @@
 /* Token structure adapted from the shared component library's preview theme; hues shifted from a
    warm palette to the demo brand green (oklch 0.55 0.15 150). */
 :root {
+  color-scheme: light;
   --background: oklch(0.985 0.003 150);
   --foreground: oklch(0.24 0.02 155);
   --card: oklch(1 0 0);
@@ -56,6 +57,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.17 0.008 155);
   --foreground: oklch(0.92 0.01 150);
   --card: oklch(0.2 0.01 155);
@@ -169,7 +171,6 @@
   max-width: 100%;
   justify-content: flex-start;
   overflow-x: auto;
-  scrollbar-width: thin;
 }
 [data-slot='tabs-trigger'] {
   flex-shrink: 0;
@@ -198,4 +199,17 @@
     linear-gradient(to left, var(--background), var(--background)) right center / 24px 100% local no-repeat,
     linear-gradient(to right, oklch(0 0 0 / 0.18), transparent) left center / 14px 100% scroll no-repeat,
     linear-gradient(to left, oklch(0 0 0 / 0.18), transparent) right center / 14px 100% scroll no-repeat;
+}
+
+/* Scrollbars follow the theme. `color-scheme` (set on :root and .dark above) tells the browser which palette to use for
+   native controls; without it Windows Chrome and Edge colour scrollbars from the OS theme, not the page's.
+   `scrollbar-color` inherits, so one rule on html reaches every scroller. `scrollbar-width` does not inherit, so it is
+   set on every element; a utility such as `[scrollbar-width:none]` still wins by specificity. Browsers ignore
+   ::-webkit-scrollbar once scrollbar-color is not `auto`, and Chrome/Edge 121+ and Firefox 64+ support the standard
+   properties, so no webkit fallback is kept. */
+html {
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent) transparent;
+}
+* {
+  scrollbar-width: thin;
 }
