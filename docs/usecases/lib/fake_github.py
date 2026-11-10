@@ -14,6 +14,7 @@ them as any outside system (OPS_EGRESS_CA_FILE, OPS_EGRESS_RESOLVE, the private 
 from __future__ import annotations
 
 import json
+import ssl
 import tempfile
 import uuid
 from collections.abc import Generator
@@ -143,8 +144,11 @@ def github() -> Generator[dict[str, Any]]:
             def sign_in(authorize_url: str) -> dict[str, str]:
                 url = urlsplit(authorize_url)
                 target = f"https://{address}:{port}{url.path}?{url.query}"
-                with httpx.Client(verify=False, headers={"Host": url.hostname or PUBLIC}, timeout=30) as browser:
-                    sent = browser.get(target, follow_redirects=False)
+                # Reached by address, checked against the fake's own certificate under the sign-in host's name.
+                name = url.hostname or PUBLIC
+                trusted = ssl.create_default_context(cafile=str(cert))
+                with httpx.Client(verify=trusted, headers={"Host": name}, timeout=30) as browser:
+                    sent = browser.get(target, follow_redirects=False, extensions={"sni_hostname": name})
                 back = parse_qs(urlsplit(sent.headers.get("location", "")).query)
                 return {k: v[0] for k, v in back.items()}
 
