@@ -40,7 +40,7 @@ function settings(profile) {
   const states = value('loading, error and empty states');
   return {
     origin: flag('origin') ?? process.env.OPS_CONSOLE_ORIGIN ?? value('console origin').split(/\s/)[0],
-    loginPath: (signIn.match(/^(\/\S*)/) ?? [, '/login'])[1],
+    loginPath: (signIn.match(/^(\/[\w/-]*)/) ?? [, '/login'])[1],
     emailLabel: (signIn.match(/labelled (\w+) and (\w+)/) ?? [, 'Email', 'Password'])[1],
     passwordLabel: (signIn.match(/labelled (\w+) and (\w+)/) ?? [, 'Email', 'Password'])[2],
     signInButton: (signIn.match(/starts with ([^;.]+)/) ?? [, 'Sign in'])[1].trim(),
