@@ -1,0 +1,29 @@
+# Installs one Trivy release by URL and checks it against the SHA-256 written here. The release tags of
+# aquasecurity/trivy-action and aquasecurity/setup-trivy were rewritten to malicious commits in March 2026
+# (GHSA-69fq-xp46-6x23), so the scanner is fetched as a binary whose digest this file fixes. Raise the version and the
+# digest together, from the release's trivy_<version>_checksums.txt.
+name: trivy
+description: Install a checksum-verified Trivy binary on a Linux x86-64 runner
+inputs:
+  version:
+    description: Trivy release, without the v
+    default: "0.76.2"
+  sha256:
+    description: SHA-256 of trivy_<version>_Linux-64bit.tar.gz
+    default: bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        SHA256: ${{ inputs.sha256 }}
+      run: |
+        set -euo pipefail
+        tarball="trivy_${VERSION}_Linux-64bit.tar.gz"
+        curl -sSfL -o "$RUNNER_TEMP/$tarball" "https://github.com/aquasecurity/trivy/releases/download/v${VERSION}/${tarball}"
+        echo "${SHA256}  $RUNNER_TEMP/$tarball" | sha256sum -c -
+        mkdir -p "$RUNNER_TEMP/trivy-bin"
+        tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP/trivy-bin" trivy
+        echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/trivy-bin/trivy" --version
