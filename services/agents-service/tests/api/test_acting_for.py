@@ -15,7 +15,7 @@ from ops_agents.activities.gateway import GatewayClient, GatewayRefused, RunCont
 from ops_agents.api import runs
 from ops_agents.api.acting_for import CallPeople
 from ops_agents.api.auth import Principal
-from ops_agents.api.child_runs import _started_by, acting_for
+from ops_agents.api.child_runs import _started_by, acting_for  # pyright: ignore[reportPrivateUsage]
 from ops_agents.api.run_person import running_for
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceClient, dev_service_signer
 from ops_policy import mint, verify
