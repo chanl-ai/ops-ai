@@ -23,8 +23,11 @@ permissions:
 jobs:
   python:
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      version: ${{ steps.version.outputs.version }}
     permissions:
-      contents: write # the draft release, on publish only
+      contents: read
       id-token: write # keyless signing and provenance
       attestations: write
     steps:
@@ -73,23 +76,24 @@ jobs:
             dist/
             sbom/
       - name: Publish when this version is new
+        id: publish
         env:
           PUBLISH: ${{ vars.SDK_PUBLISH == '1' && secrets.PYPI_TOKEN != '' }}
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           if curl -sf "https://pypi.org/pypi/ops-ai/$VERSION/json" >/dev/null; then echo "ops-ai $VERSION is on PyPI already"; exit 0; fi
           if [ "$PUBLISH" != true ]; then echo "dry run: would publish ops-ai $VERSION"; ls dist; exit 0; fi
           uv publish dist/*.whl dist/*.tar.gz
-          gh release create "sdk-python-v$VERSION" --draft --target "$GITHUB_SHA" --title "Python SDK $VERSION" \
-            --notes "ops-ai $VERSION on PyPI. Signed files (.sigstore.json bundles) and the CycloneDX SBOM are attached." \
-            dist/* sbom/*
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
   typescript:
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      version: ${{ steps.version.outputs.version }}
     permissions:
-      contents: write # the draft release, on publish only
+      contents: read
       id-token: write # keyless signing, provenance and npm provenance
       attestations: write
     steps:
@@ -139,17 +143,53 @@ jobs:
             dist/
             sbom/
       - name: Publish when this version is new
+        id: publish
         working-directory: sdk/typescript
         env:
           PUBLISH: ${{ vars.SDK_PUBLISH == '1' && secrets.NPM_TOKEN != '' }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           if npm view "@chanl-ai/ops-ai@$VERSION" version >/dev/null 2>&1; then echo "@chanl-ai/ops-ai $VERSION is on npm already"; exit 0; fi
           # pnpm publish, never npm publish: npm leaves workspace: ranges in a published package.
           if [ "$PUBLISH" != true ]; then pnpm publish --dry-run --no-git-checks; exit 0; fi
           NPM_CONFIG_PROVENANCE=true pnpm publish --access public --no-git-checks
-          gh release create "sdk-typescript-v$VERSION" --draft --target "$GITHUB_SHA" --title "TypeScript SDK $VERSION" \
-            --notes "@chanl-ai/ops-ai $VERSION on npm. The signed tarball (.sigstore.json bundle) and the CycloneDX SBOM are attached." \
-            ../../dist/* ../../sbom/*
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+  github-release:
+    # Its own job, so the only step holding a token that can write the repository is the release upload, and only
+    # after a version was published.
+    needs: [python, typescript]
+    if: needs.python.outputs.published == 'true' || needs.typescript.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        sdk: [python, typescript]
+    steps:
+      - id: pick
+        env:
+          SDK: ${{ matrix.sdk }}
+          PY_PUBLISHED: ${{ needs.python.outputs.published }}
+          PY_VERSION: ${{ needs.python.outputs.version }}
+          TS_PUBLISHED: ${{ needs.typescript.outputs.published }}
+          TS_VERSION: ${{ needs.typescript.outputs.version }}
+        run: |
+          if [ "$SDK" = python ]; then p=$PY_PUBLISHED; v=$PY_VERSION; else p=$TS_PUBLISHED; v=$TS_VERSION; fi
+          echo "published=$p" >> "$GITHUB_OUTPUT"; echo "version=$v" >> "$GITHUB_OUTPUT"
+      - if: steps.pick.outputs.published == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sdk-${{ matrix.sdk }}-${{ steps.pick.outputs.version }}
+      - if: steps.pick.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SDK: ${{ matrix.sdk }}
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          gh release create "sdk-$SDK-v$VERSION" --draft --target "$GITHUB_SHA" --title "$SDK SDK $VERSION" \
+            --notes "The $SDK SDK $VERSION. Signed files (.sigstore.json bundles) and the CycloneDX SBOM are attached." \
+            dist/* sbom/*

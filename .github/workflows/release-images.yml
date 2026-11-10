@@ -36,8 +36,10 @@ jobs:
   images:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     permissions:
-      contents: write # attach the SBOMs to the release
+      contents: read
       packages: write # push images and their signatures to ghcr.io
       id-token: write # keyless signing and provenance: the runner's OIDC identity
       attestations: write
@@ -150,10 +152,23 @@ jobs:
           path: |
             sbom/
             digests.txt
+
+  release:
+    # Its own job, so the only step holding a token that can write the repository is this upload.
+    needs: images
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sbom-images-${{ needs.images.outputs.version }}
       - name: Attach the SBOMs to the release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "$GITHUB_REF_NAME" \
