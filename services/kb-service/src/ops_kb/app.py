@@ -107,7 +107,11 @@ class Health(Out):
 FORWARDED = ("authorization", "x-api-key", "x-dev-user", "x-team-id")
 
 
-async def who(p: CurrentCaller, request: Request) -> Who:
+def person_headers(request: Request) -> dict[str, str]:
+    return {k: v for k in FORWARDED if (v := request.headers.get(k))}
+
+
+async def who(p: CurrentCaller, held: Annotated[dict[str, str] | None, Depends(person_headers)] = None) -> Who:
     """The caller; what it may change is `can()`'s, from its verified roles. The provisioning service may call
     with a token scoped to one team; like any service it needs `knowledge:view` even to read."""
     if p.kind == "service":
@@ -115,8 +119,8 @@ async def who(p: CurrentCaller, request: Request) -> Who:
     # A person, key or dev caller reads as the team it acts in; a service reads the tenant's, as
     # knowledge_reader says.
     set_acting_team(acting_team_of(p, services=False))
-    held = {} if p.kind == "service" else {k: v for k in FORWARDED if (v := request.headers.get(k))}
-    return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p, credentials=held)
+    credentials = {} if p.kind == "service" else (held or {})
+    return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p, credentials=credentials)
 
 
 Caller = Annotated[Who, Depends(who)]

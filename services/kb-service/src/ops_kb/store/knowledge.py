@@ -1141,7 +1141,7 @@ class KnowledgeStore:
         scope: list[sa.ColumnElement[bool]] = [c.c.tenant_id == tenant, team_visible(c)]
         if kb_id is not None:
             linked = sa.select(kb_base_sources.c.source_id).where(
-                kb_base_sources.c.tenant_id == tenant, kb_base_sources.c.kb_id == kb_id
+                kb_base_sources.c.tenant_id == tenant, kb_base_sources.c.kb_id == kb_id, team_visible(kb_base_sources)
             )
             scope.append(c.c.source_id.in_(linked))
         if search:
