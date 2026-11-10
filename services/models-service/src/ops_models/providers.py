@@ -49,8 +49,52 @@ class Embedded:
     input_tokens: int
 
 
+# How models-service answers each way a provider can fail: its status, the sentence that says what happened, and what to
+# do next. The one place a provider failure is classified; a caller reads the code, a person reads the message.
+ADMIN_FIX = "An account admin checks the connection and its key on Settings > Model providers."
+PROVIDER_FAILURES: dict[str, tuple[int, str]] = {
+    "provider_unreachable": (502, f"The model provider could not be reached. {ADMIN_FIX}"),
+    "provider_timeout": (504, "The model provider did not answer in time. Retry in a moment."),
+    "provider_auth_failed": (502, f"The model provider refused the account's key. {ADMIN_FIX}"),
+    "provider_rate_limited": (
+        429,
+        "The model provider is limiting calls on the account's key. Wait a minute and retry; if it keeps happening, an "
+        "account admin raises the limit with the provider.",
+    ),
+    "provider_bad_request": (
+        502,
+        "The model provider refused the request: the model or deployment name, or a setting, may be wrong. "
+        + ADMIN_FIX,
+    ),
+    "provider_error": (502, "The model provider failed to answer. Retry in a moment."),
+}
+
+
 class ProviderError(Exception):
-    pass
+    """A provider that failed, as models-service answers it: `code` from PROVIDER_FAILURES, its `status` and message,
+    and the provider's own Retry-After. The message never quotes the provider's body: a 401 can echo part of the key."""
+
+    def __init__(self, code: str = "provider_error", *, why: str = "", retry_after: str | None = None) -> None:
+        self.code = code
+        self.status, self.message = PROVIDER_FAILURES[code]
+        self.retry_after = retry_after
+        # `why` is for the service's own log line, never the answer.
+        super().__init__(why or self.message)
+
+
+def answered(status: int) -> str:
+    """The code for a provider's HTTP answer of `status` (400 or more)."""
+    if status in (401, 403):
+        return "provider_auth_failed"
+    if status == 429:
+        return "provider_rate_limited"
+    return "provider_error" if status >= 500 else "provider_bad_request"
+
+
+def unreached(e: httpx.HTTPError) -> ProviderError:
+    """A request that got no answer: a timeout, or a provider that could not be reached at all."""
+    code = "provider_timeout" if isinstance(e, httpx.TimeoutException) else "provider_unreachable"
+    return ProviderError(code, why=f"{code}: {type(e).__name__}")
 
 
 class Provider(Protocol):
@@ -176,7 +220,10 @@ class OpenAICompatibleProvider:
     def _answered(self, r: httpx.Response) -> None:
         """Raises when the answer is refused. Never quotes the body: a provider's 401 can echo part of the key."""
         if r.status_code >= 400:
-            raise ProviderError(f"provider answered {r.status_code}")
+            code = answered(r.status_code)
+            raise ProviderError(
+                code, why=f"provider answered {r.status_code}", retry_after=r.headers.get("retry-after")
+            )
 
     def _keep(self, chunk: dict[str, Any]) -> dict[str, Any] | None:
         """The chunk as callers get it, or None to drop it."""
@@ -189,7 +236,7 @@ class OpenAICompatibleProvider:
             )
         except httpx.HTTPError as e:
             # An unreachable endpoint is the provider's failure (502), not this service's (500).
-            raise ProviderError(f"provider unreachable at {self.base_url}: {type(e).__name__}") from e
+            raise unreached(e) from e
         self._answered(r)
         data: dict[str, Any] = r.json()
         usage: dict[str, Any] = data.get("usage") or {}
@@ -209,12 +256,12 @@ class OpenAICompatibleProvider:
         try:
             r = await self.client.post(self._embeddings_url(model_id), json=body, headers=self._headers)
         except httpx.HTTPError as e:
-            raise ProviderError(f"provider unreachable at {self.base_url}: {type(e).__name__}") from e
+            raise unreached(e) from e
         self._answered(r)
         data: dict[str, Any] = r.json()
         rows = sorted(cast(list[dict[str, Any]], data.get("data") or []), key=lambda d: int(d.get("index", 0)))
         if len(rows) != len(inputs):
-            raise ProviderError(f"provider returned {len(rows)} vectors for {len(inputs)} inputs")
+            raise ProviderError(why=f"provider returned {len(rows)} vectors for {len(inputs)} inputs")
         usage: dict[str, Any] = data.get("usage") or {}
         return Embedded([[float(x) for x in d["embedding"]] for d in rows], int(usage.get("prompt_tokens", 0)))
 
@@ -237,7 +284,7 @@ class OpenAICompatibleProvider:
                     if (kept := self._keep(chunk)) is not None:
                         yield kept
         except httpx.HTTPError as e:
-            raise ProviderError(f"provider unreachable at {self.base_url}: {type(e).__name__}") from e
+            raise unreached(e) from e
 
 
 # Azure's annotations, which no OpenAI client reads: dropped so callers see OpenAI's shape.
@@ -324,4 +371,4 @@ def provider_for(
     if kind == "azure-openai":
         version, region = str(connection["api_version"]), connection.get("region")
         return AzureOpenAIProvider(str(connection["base_url"]), version, region, api_key, client)
-    raise ProviderError(f"provider type {kind} is not served yet")
+    raise ProviderError("provider_bad_request", why=f"provider type {kind} is not served yet")

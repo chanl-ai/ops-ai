@@ -22,7 +22,7 @@ is called and no model key is read.
 | 2 | Complete on `default` with the dev runtime key, not streamed | 200, "Wire Fraud Sentinel on default heard: ...", usage filled |
 | 3 | The same, streamed | The same text from the deltas, then a usage chunk |
 | 4 | Offer `place_wire_hold` and ask to hold a wire, streamed and not | One tool call with the script's arguments, finish reason `tool_calls` |
-| 5 | `PUT` openai-local to a closed port, complete, `PUT` it back, complete | 502 `provider_error`, then the fake's answer again |
+| 5 | `PUT` openai-local to a closed port, complete, `PUT` it back, complete | 502 `provider_unreachable`, whose message says where an admin checks the connection and never names its address, then the fake's answer again |
 | 6 | `PUT` the scripted connection | 409 `provider_not_rebindable` |
 | 7 | Create and publish an agent, run its test turn | The turn reports `default` and the fake's reply |
 | 8 | Read the call log for `default` | Provider model `default` on every row; outcomes `ok` and one `error` |
@@ -37,6 +37,6 @@ In the console: none yet; the AI gateway's console is planned, so the use case s
 
 ## Non-vacuous check
 
-`rebinding openai-local to a closed port fails default with 502 provider_error; rebinding back restores it`: it proves
+`rebinding openai-local to a closed port fails default with 502 provider_unreachable, saying where an admin checks the connection; rebinding back restores it`: it proves
 the connection row, not code, decides where the alias goes. With the provider's transport-error mapping removed,
 models-service fails the call outright and the script stops at this step (seen: exit 1 after four passes).
