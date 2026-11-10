@@ -1366,9 +1366,11 @@ class ConnectionService:
             taken = {name_key(a.get("account_name")) for a in others}
             if name_key(name) in taken:
                 raise AccountNameTaken(name)
-            if given.get("settings") and self.own_place is not None:
-                settings, own_settings = await self.own_place(who, src, dict(given["settings"]))
-                settings = {k: v for k, v in settings.items() if k not in ("clientId", "clientSecret")}
+        if self.own_place is not None and plugin_of(src) is not None:
+            # A plugin's account signs in where `given` says, else where `src` does: its own sign-in address is kept,
+            # so a company's own address (a My Domain) is not lost, and the hosts it reaches are rendered from it.
+            settings, own_settings = await self.own_place(who, src, dict((given or {}).get("settings") or {}))
+            settings = {k: v for k, v in settings.items() if k not in ("clientId", "clientSecret")}
         row: dict[str, Any] = {
             "tenant_id": who.tenant_id,
             "id": new,

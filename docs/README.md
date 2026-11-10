@@ -517,3 +517,5 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/a-test-run-never-uses-a-named-live-account.md` | uc-700: A test run that names a live account uses the test account or is refused |
 | `usecases/agents-service/a-step-runs-in-the-account-it-names.md` | uc-695: A workflow step that names an account runs in that account |
 | `usecases/agents-service/a-rename-changes-no-published-version.md` | uc-701: Renaming an account changes no published version, and the next publish names the dead name |
+| `usecases/tools-service/a-person-adds-a-second-account-of-their-own.md` | uc-702: A person adds a second account of their own at their own address and makes it their default |
+| `usecases/tools-service/callers-from-before-several-accounts-keep-working.md` | uc-705: Callers from before several accounts keep working |

@@ -347,3 +347,24 @@ def run_flow(r: Rig, flow_id: str, mode: str = "live") -> dict[str, Any]:
         time.sleep(0.5)
     steps = [(s.get("nodeId"), s.get("status"), str(s.get("output"))[:300]) for s in detail.get("steps") or []]
     return {"outcome": "timed out", "status": detail.get("status"), "steps": steps, "waiting": detail.get("waiting")}
+
+
+def maya_second_github(r: GitRig) -> tuple[httpx.Response, str, httpx.Response]:
+    """GitHub on with each person's own account beside the team's; Maya signs in on Platform server, then adds Corp,
+    a second account of her own at ghe.corp.test, and signs in to it. The add's answer, where its sign-in opened, and
+    the sign-in's answer."""
+    github_on(r, sign_in="person_or_team")
+    r.sign_in(r.maya, r.ids["public"], as_="self")
+    started = r.gw.post(
+        f"/v1/me/accounts/{r.ids['public']}/another",
+        json={"name": "Corp", "settings": {"web_url": r.gh["corp_url"]}},
+        headers=r.maya,
+    )
+    opened = str((data(started) or {}).get("authorizeUrl") or "")
+    return started, opened, r.finish(r.maya, opened)
+
+
+def my_github(r: GitRig) -> dict[str, Any]:
+    """Maya's GitHub row on Connectors > Mine."""
+    rows = data(r.gw.get("/v1/me/connections", headers=r.maya)) or []
+    return next((c for c in rows if c.get("appId") == GH), {})

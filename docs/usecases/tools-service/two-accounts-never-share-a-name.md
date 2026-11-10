@@ -9,7 +9,7 @@ Design: the several accounts per app design, S4.
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
 | S1 | Two adds of one name at the same moment make one account; the other is refused 409 account_name_taken | api | 1 | 1 |
-| S2 | A name differing only in case, a person's own second account and a rename are refused the same way | api | 2-4 | 3, 4 |
+| S2 | A name differing only in case, a person's own second account and a rename are refused the same way | api | 2-4 | 3 |
 | S3 | A lookup by the name finds exactly one account | api | 5 | 5 |
 
 ## Preconditions

@@ -8,7 +8,7 @@ Design: the several accounts per app design, B1.
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | One person's own account signs only that person's calls: a run acting for nobody or for someone else that names it is refused, and nothing is sent | api | 1-3 | 2, 3 |
+| S1 | One person's own account signs only that person's calls: a run acting for nobody or for someone else that names it is refused, and nothing is sent | api | 1-3 | 2 |
 | S2 | The person's own call naming it runs in it | api | 4 | 4 |
 | S3 | Another team's account is never found by name | api | 5 | 5 |
 

@@ -307,18 +307,18 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | current |
 | uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing |
-| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | draft |
-| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | draft |
-| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | draft |
-| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | draft |
-| uc-695 | agents-service | A workflow step that names an account runs in that account | api | draft |
+| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current |
+| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current |
+| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |
+| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current |
+| uc-695 | agents-service | A workflow step that names an account runs in that account | api | current |
 | uc-696 | agents-service | An agent's account is used, and a step's account wins over the agent's | api | draft |
 | uc-697 | agents-service | A chat starts on the person's default account and runs in the one they pick | ui | draft |
-| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | draft |
-| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | draft |
-| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | draft |
-| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | draft |
-| uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | draft |
+| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current |
+| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current |
+| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current |
+| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current |
+| uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current |
 | uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | draft |
 | uc-704 | agents-service | The model is told which account each app uses and cannot switch it | api | draft |
-| uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | draft |
+| uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current |
