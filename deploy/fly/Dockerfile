@@ -16,8 +16,8 @@
 
 ARG IMAGE_REGISTRY=
 FROM ${IMAGE_REGISTRY}node:22-bookworm-slim AS node-image
-FROM ${IMAGE_REGISTRY}caddy:2.10.2 AS caddy-image
-FROM ${IMAGE_REGISTRY}openpolicyagent/opa:1.21.1-static AS opa-image
+FROM ${IMAGE_REGISTRY}caddy:2.11.9 AS caddy-image
+FROM ${IMAGE_REGISTRY}openpolicyagent/opa:1.21.4-static AS opa-image
 FROM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-image
 
 # The console's JavaScript is built on the build machine's own platform: `next build` under emulation (an arm64 laptop
@@ -230,7 +230,7 @@ COPY deploy deploy
 FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-build
 
 # PostgreSQL 17 with pgvector: the schema creates the vector extension (kb_0021), which the plain postgres image lacks.
-FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}pgvector/pgvector:pg17-bookworm AS db-scripts-build
+FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}pgvector/pgvector:pg17-bookworm@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8 AS db-scripts-build
 ARG UV_DEFAULT_INDEX=
 ARG UV_PYTHON_INSTALL_MIRROR=
 COPY --from=uv-build /uv /usr/local/bin/uv
