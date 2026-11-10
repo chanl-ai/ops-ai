@@ -4,12 +4,15 @@ chat; and choosing connectors wipes a tool the person switched off one by one in
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import replace
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 
-from ops_agents.activities.tool_directory import CatalogTools, OperationRef
+from ops_agents.activities.tool_directory import CatalogTools, OperationRef, ToolsUnavailable
 from ops_agents.api.deps import Runtime
 from tests.api.test_chat import new_thread, send
 from tests.api.test_chat_on_graph import stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
@@ -172,3 +175,54 @@ async def test_an_app_the_person_has_not_signed_in_to_is_in_the_sign_in_group_no
     assert (wires["appGroup"], wires["personal"], wires["on"]) == ("needs_you", True, True), wires
     refused = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CORE]})
     assert refused.status_code == 422, refused.text
+
+
+class Unreachable:
+    """tools-service not answering the app list."""
+
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        raise ToolsUnavailable("tools-service did not answer")
+
+
+class Unrelated:
+    """An app list with no app for any tool the agent holds."""
+
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        return [{"id": "plugin:test.other", "kind": "plugin", "name": "Other", "appState": "connected",
+                 "appGroup": "on", "moduleIds": ["mod_other"]}]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("states", "reason", "cards"),
+    [(Unreachable(), "tools_unavailable", 0), (None, "no_app_states", 0), (Unrelated(), "no_app_for_held_tools", 1)],
+)
+async def test_an_empty_picker_with_tools_held_logs_why(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    caplog: pytest.LogCaptureFixture,
+    states: Any,
+    reason: str,
+    cards: int,
+) -> None:
+    # The picker reads "This agent uses no connector." for each of these; only the log says which one happened.
+    client, rt = stack
+    rt.tool_directory, rt.app_states = Modules(rt), states
+    tid = (await new_thread(client))["id"]
+    with caplog.at_level(logging.WARNING, logger="ops_agents.chat_connectors"):
+        assert await connectors(client, tid) == {}
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("chat.connectors.empty")]
+    assert len(lines) == 1, caplog.text
+    assert f"reason={reason}" in lines[0] and f"cards={cards}" in lines[0], lines[0]
+    assert "agent=ag_" in lines[0] and "team=team_" in lines[0], lines[0]
+    assert re.search(r"held=[1-9]", lines[0]), lines[0]
+
+
+async def test_a_picker_with_apps_logs_nothing(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client, rt = stack
+    wire(rt)
+    tid = (await new_thread(client))["id"]
+    with caplog.at_level(logging.WARNING, logger="ops_agents.chat_connectors"):
+        assert await connectors(client, tid)
+    assert "chat.connectors.empty" not in caplog.text
