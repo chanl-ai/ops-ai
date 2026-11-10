@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Plug } from 'lucide-react';
+import { Check, Circle, CircleDot, Plug } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AppLogo } from '@/components/shared/app-logo';
@@ -32,6 +32,7 @@ function ConnectorsMenu({
   failed,
   saving,
   onToggle,
+  onPick,
   disabled,
 }: {
   open: boolean;
@@ -41,8 +42,12 @@ function ConnectorsMenu({
   failed: boolean;
   saving: boolean;
   onToggle: (c: ChatConnector) => void;
+  /** Picks the account this chat uses for an app; absent before the chat exists, where the default is used. */
+  onPick?: (c: ChatConnector, account: string) => void;
   disabled?: boolean;
 }) {
+  // The app whose accounts are open under it, after Change.
+  const [changing, setChanging] = React.useState<string | null>(null);
   const router = useRouter();
   const go = (href: string) => (setOpen(false), router.push(href));
   // Whoever manages the team's apps is offered the team's step; anyone else asks them (lib/app-state.ts).
@@ -91,13 +96,47 @@ function ConnectorsMenu({
                 <CommandEmpty>{rows.length ? 'No connector matches.' : 'This agent uses no connector.'}</CommandEmpty>
                 {usable.length > 0 && (
                   <CommandGroup heading="On in this chat">
-                    {usable.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} onSelect={() => onToggle(c)} disabled={saving} data-testid={`connector-toggle-${c.appId}`} data-on={c.on} data-state={APP_STATES[c.appState].label}>
-                        <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm" />
-                        <span className="flex-1 truncate">{c.name}</span>
-                        <Check className={cn('size-4', c.on ? 'opacity-100' : 'opacity-0')} />
-                      </CommandItem>
-                    ))}
+                    {usable.map((c) => {
+                      // The tick stays the app's on or off for this chat; the account in use is a line under it.
+                      const several = (c.accounts ?? []).length > 1;
+                      const inUse = c.account ?? (c.accounts ?? []).find((a) => a.default)?.name ?? null;
+                      return (
+                        <React.Fragment key={c.appId}>
+                          <CommandItem value={c.name} onSelect={() => onToggle(c)} disabled={saving} data-testid={`connector-toggle-${c.appId}`} data-on={c.on} data-state={APP_STATES[c.appState].label}>
+                            <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm" />
+                            <span className="flex-1 truncate">{c.name}</span>
+                            <Check className={cn('size-4', c.on ? 'opacity-100' : 'opacity-0')} />
+                          </CommandItem>
+                          {several && c.on && (
+                            <div className="flex items-center gap-1 pb-1.5 pl-8 pr-2 text-xs text-muted-foreground" data-testid={`connector-account-${c.appId}`}>
+                              <span className="min-w-0 flex-1 truncate">{inUse ? `Uses ${inUse}` : 'Uses your default'}</span>
+                              {onPick && (
+                                <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setChanging(changing === c.appId ? null : c.appId)} data-testid={`connector-change-${c.appId}`}>
+                                  Change
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                          {several && c.on && changing === c.appId &&
+                            (c.accounts ?? []).map((a) => (
+                              <CommandItem
+                                key={`${c.appId}:${a.name}`}
+                                value={`${c.name} ${a.name}`}
+                                className="pl-8"
+                                disabled={saving}
+                                onSelect={() => (onPick?.(c, a.name), setChanging(null))}
+                                data-testid={`connector-pick-${c.appId}-${a.name}`}
+                              >
+                                {a.name === inUse ? <CircleDot className="size-3.5" /> : <Circle className="size-3.5" />}
+                                <span className="flex min-w-0 flex-1 flex-col">
+                                  <span className="truncate">{a.name}</span>
+                                  <span className="truncate text-xs text-muted-foreground">{a.identity.map((e) => e.shown).join(' · ')}</span>
+                                </span>
+                              </CommandItem>
+                            ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </CommandGroup>
                 )}
                 {signIn.length > 0 && (
@@ -158,6 +197,11 @@ function nextOff(rows: ChatConnector[], c: ChatConnector): string[] {
   return c.on ? [...left, c.appId] : left.filter((id) => id !== c.appId);
 }
 
+/** The accounts this chat already chose, app id to name, which a new pick keeps beside its own. */
+function chosen(rows: ChatConnector[]): Record<string, string> {
+  return Object.fromEntries(rows.filter((r) => r.account).map((r) => [r.appId, r.account as string]));
+}
+
 /** The picker on a chat that exists: each change is saved on the chat at once. */
 export function ConnectorsPicker({ threadId, disabled }: { threadId: string; disabled?: boolean }) {
   const [open, setOpen] = React.useState(false);
@@ -174,6 +218,12 @@ export function ConnectorsPicker({ threadId, disabled }: { threadId: string; dis
       saving={save.isPending}
       disabled={disabled}
       onToggle={(c) => save.mutate(nextOff(rows, c), { onError: (e) => toast.error(`Couldn’t change ${c.name} for this chat`, { description: e.message }) })}
+      onPick={(c, account) =>
+        save.mutate(
+          { off: rows.filter((r) => r.appGroup !== 'needs_admin' && !r.on).map((r) => r.appId), accounts: { ...chosen(rows), [c.appId]: account } },
+          { onError: (e) => toast.error(`Couldn’t change ${c.name}’s account for this chat`, { description: e.message }) },
+        )
+      }
     />
   );
 }

@@ -34,7 +34,7 @@ class AccountIn(TypedDict, closed=True):
     credentialId: NotRequired[str | None]
     credentials: NotRequired[dict[str, str]]
     kind: NotRequired[str | None]
-    makeDefault: NotRequired[bool]
+    makeDefault: NotRequired[bool | None]
     name: str
     sandbox: NotRequired[bool]
     settings: NotRequired[dict[str, Any]]

@@ -2,13 +2,15 @@
 
 import * as React from 'react';
 import type { ColumnDef, ColumnFiltersState } from '@tanstack/react-table';
-import { ExternalLink, MoreVertical, Plug, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { ExternalLink, MoreVertical, Plug, Plus, RefreshCw, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -39,22 +41,28 @@ const whoCan = (a: ConfigAccount) => (a.owner.kind === 'team' ? 'Team' : a.owner
 const shownAs = (a: ConfigAccount) => a.account ?? a.name;
 
 /**
- * The app's Accounts tab: every account that signs in to the app and each person's own sign-in, in one table, with
- * the state and only the actions the API offers per row. Connect, in the page header, is the one way to add one.
+ * The app's Accounts tab: every account of the team that signs in to the app, in one table, with what each points at,
+ * its state and only the actions the API offers per row. Add account, on the table's toolbar, is the one way to add
+ * one, for whoever manages the team's apps; it is shown disabled with its reason while the app cannot sign one in. A
+ * member sees the team's accounts and a count of their own sign-ins, which live on Connectors › Mine.
  * `config` opens it filtered to one auth config (from that config's account count).
  */
-// What the account's sign-in found (Salesforce's org address), shown under its name.
-const orgOf = (a: ConfigAccount) => (a.signInValues ?? []).find((v) => v.kind === 'found');
+// What tells the account apart from the app's others (its org, its server, who signed in), as the API builds it.
+const pointsAt = (a: ConfigAccount) => (a.identity ?? []).map((e) => e.shown).join(' · ');
 
 export function AccountsTab({
   app,
   config,
   onConnect,
+  addBlocked,
   onSignIn,
 }: {
   app: AppPage;
   config?: string | null;
+  /** Add account; absent for someone who does not manage the team's apps. */
   onConnect?: () => void;
+  /** Why Add account cannot sign one in yet (lib/app-state.ts addAccountBlocked); null when it can. */
+  addBlocked?: string | null;
   onSignIn: (account: 'self' | 'team', accountId: string) => void;
 }) {
   const rows = app.accounts ?? [];
@@ -89,9 +97,15 @@ export function AccountsTab({
                 )}
               </span>
               {shownAs(a) !== a.name && <span className="truncate text-xs text-muted-foreground">{a.name}</span>}
-              {orgOf(a) && (
-                <span className="truncate text-xs text-muted-foreground" title={orgOf(a)?.value} data-testid={`account-org-${a.name}`}>
-                  {`${orgOf(a)?.label}: ${orgOf(a)?.shown}`}
+              {pointsAt(a) && (
+                <span className="truncate text-xs text-muted-foreground" title={(a.identity ?? []).map((e) => `${e.label}: ${e.value}`).join('\n')} data-testid={`account-org-${a.name}`}>
+                  {pointsAt(a)}
+                </span>
+              )}
+              {a.samePlaceAs && (
+                <span className="flex items-center gap-1 text-xs text-warning-text" data-testid={`account-same-place-${a.name}`}>
+                  <TriangleAlert className="size-3" />
+                  {`Points at the same place as ${a.samePlaceAs}`}
                 </span>
               )}
             </span>
@@ -159,7 +173,32 @@ export function AccountsTab({
     title,
     options: [...new Set(values)].map((v) => ({ label: v, value: v })),
   });
+  const signIns = app.me?.signIns ?? 0;
+  const add = onConnect && (
+    // Its own row below the search on a phone, beside it from sm up, so the search keeps its width.
+    <div className="w-full sm:w-auto">
+      {addBlocked ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} className="inline-flex w-full sm:w-auto" data-testid="app-add-account-blocked">
+              <Button size="sm" className="w-full sm:w-auto" disabled aria-describedby="app-add-account-why" data-testid="app-add-account">
+                <Plus />
+                Add account
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent id="app-add-account-why">{addBlocked}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <Button size="sm" className="w-full sm:w-auto" onClick={onConnect} data-testid="app-add-account">
+          <Plus />
+          Add account
+        </Button>
+      )}
+    </div>
+  );
   return (
+    <>
     <DataTableWithViews
       key={config ?? 'all'}
       columns={columns}
@@ -168,6 +207,7 @@ export function AccountsTab({
       searchColumn="signsInAs"
       searchPlaceholder="Search accounts…"
       hideViewSwitcher
+      toolbarExtra={add || undefined}
       initialColumnFilters={filtered}
       filters={[
         ...(seesConfigs ? [facet('config', 'Auth config', rows.map((a) => a.configName ?? '—'))] : []),
@@ -179,12 +219,21 @@ export function AccountsTab({
         <EmptyState
           icon={Plug}
           title={`No account signs in to ${name} yet`}
-          description={onConnect ? 'Connect one. Ops AI’s app works without any setup.' : 'An admin connects the first one.'}
-          action={onConnect ? { label: 'Connect', onClick: onConnect } : undefined}
+          description={onConnect ? 'Add one. Ops AI’s app signs in without an auth config where the app allows it.' : 'Someone who manages the team’s apps adds the first one.'}
+          action={onConnect && !addBlocked ? { label: 'Add account', onClick: onConnect } : undefined}
           testId="app-accounts-empty"
         />
       }
     />
+    {!seesConfigs && signIns > 0 && (
+      <p className="text-sm text-muted-foreground" data-testid="app-accounts-mine">
+        {`You are signed in on ${signIns} ${signIns === 1 ? 'account' : 'accounts'} of ${name}. `}
+        <Link href="/integrations/my-accounts" className="underline underline-offset-4">
+          Your own accounts are on Connectors › Mine
+        </Link>
+      </p>
+    )}
+    </>
   );
 }
 

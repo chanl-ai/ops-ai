@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useEngineOptions } from '@/hooks/engine-queries';
+import { useAppAccounts, useSystems } from '@/hooks/systems-queries';
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
 type Params = Record<string, unknown>;
@@ -122,7 +123,58 @@ function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id
       return <OptionsInput id={id} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} />;
     case 'json':
       return <JsonInput id={id} value={value} onChange={onChange} />;
+    case 'account':
+      return <AccountSelect id={id} value={asObject(value)} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />;
   }
+}
+
+/**
+ * Which of an app's team accounts a step uses (app id to account name): the app, then its account, with Default first.
+ * Only the team's live accounts are listed (a step's run may act for nobody); the publish check confirms the name.
+ */
+function AccountSelect({ id, value, onChange }: { id: string; value: Record<string, unknown>; onChange: (v: Record<string, string>) => void }) {
+  const apps = useSystems();
+  const plugins = (apps.data ?? []).filter((c) => c.kind === 'plugin' && c.appGroup !== 'gone');
+  const [app, setApp] = React.useState<string>(Object.keys(value)[0] ?? '');
+  const accounts = useAppAccounts(app || undefined);
+  const named = typeof value[app] === 'string' ? (value[app] as string) : '';
+  const fallback = (accounts.data ?? []).find((a) => a.default);
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row" data-field={id}>
+      <Select value={app || NONE} onValueChange={(v) => (setApp(v === NONE ? '' : v), onChange({}))}>
+        <SelectTrigger className="w-full sm:w-1/2" aria-label="App" data-testid={`${id}-app`}>
+          <SelectValue placeholder={apps.isPending ? 'Loading…' : 'Choose an app'} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>Each app’s default</SelectItem>
+          {plugins.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {app && (
+        <Select value={named || NONE} onValueChange={(v) => onChange(v === NONE ? {} : { [app]: v })}>
+          <SelectTrigger id={id} className="w-full sm:w-1/2" aria-busy={accounts.isFetching || undefined} data-testid={`${id}-account`}>
+            <SelectValue placeholder={accounts.isPending ? 'Loading…' : 'Choose'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>{fallback ? `Default (${fallback.name})` : 'Default'}</SelectItem>
+            {(accounts.data ?? [])
+              .filter((a) => !a.default)
+              .map((a) => (
+                <SelectItem key={a.id} value={a.name}>
+                  <span className="truncate">{a.name}</span>
+                  <span className="ml-2 truncate text-xs text-muted-foreground">{(a.identity ?? []).map((e) => e.shown).join(' · ')}</span>
+                </SelectItem>
+              ))}
+            {named && !(accounts.data ?? []).some((a) => a.name === named) && <SelectItem value={named}>{`${named} · not one of the team’s accounts`}</SelectItem>}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  );
 }
 
 function EnumSelect({ id, schema, value, onChange, testId }: { id: string; schema: Schema; value: unknown; onChange: (v: unknown) => void; testId?: string }) {

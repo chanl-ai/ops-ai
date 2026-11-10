@@ -1536,11 +1536,8 @@ export interface components {
             };
             /** Kind */
             kind?: string | null;
-            /**
-             * Makedefault
-             * @default false
-             */
-            makeDefault: boolean;
+            /** Makedefault */
+            makeDefault?: boolean | null;
             /** Name */
             name: string;
             /**

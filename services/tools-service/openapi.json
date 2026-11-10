@@ -497,9 +497,15 @@
             "title": "Kind"
           },
           "makeDefault": {
-            "default": false,
-            "title": "Makedefault",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makedefault"
           },
           "name": {
             "maxLength": 200,

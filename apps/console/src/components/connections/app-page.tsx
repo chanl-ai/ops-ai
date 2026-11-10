@@ -30,7 +30,7 @@ import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
-import { headerActionFor, whoseState } from '@/lib/app-state';
+import { addAccountBlocked, headerActionFor, whoseState } from '@/lib/app-state';
 import { plural } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
 
@@ -188,7 +188,7 @@ export function AppPageView({ appId }: { appId: string }) {
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
         {!builtIn && (
           <TabsContent value="accounts" className="flex flex-col gap-4">
-            <AccountsTab app={data} config={config} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} onSignIn={signIn} />
+            <AccountsTab app={data} config={config} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} addBlocked={addAccountBlocked(card)} onSignIn={signIn} />
           </TabsContent>
         )}
         <TabsContent value="tools">

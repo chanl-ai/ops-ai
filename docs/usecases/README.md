@@ -319,6 +319,6 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current |
 | uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current |
 | uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current |
-| uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | draft |
+| uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current |
 | uc-704 | agents-service | The model is told which account each app uses and cannot switch it | api | draft |
 | uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current |

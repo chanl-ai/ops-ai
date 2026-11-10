@@ -68,7 +68,7 @@ class AccountIn(_In):
     )
     # Make it the team's default (the one calls naming no account use); refused on a sandbox. The first account of an
     # app is its default whatever this says.
-    make_default: bool = False
+    make_default: bool | None = None
 
 
 class AnotherOwnIn(_In):
