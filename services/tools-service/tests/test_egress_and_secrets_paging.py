@@ -77,6 +77,7 @@ async def test_an_add_returns_the_entry_as_its_list_shows_it(
     again = await client.post("/v1/egress/hosts", json={"value": "zz-new.example.com"}, headers=sam)
     host = _data(added)["entry"]
     assert added.status_code == 201 and again.status_code == 200
+    assert set(host) == {"host", "note", "addedBy", "addedAt", "modules", "templateId", "protection"}
     assert {k: host[k] for k in ("host", "note", "addedBy", "modules")} == {
         "host": "zz-new.example.com",
         "note": "core",
@@ -87,4 +88,5 @@ async def test_an_add_returns_the_entry_as_its_list_shows_it(
     assert _data(again)["entry"] == host == listed[0]
 
     cidr = _data(await client.post("/v1/egress/ranges", json={"value": "10.42.0.0/16"}, headers=sam))["entry"]
-    assert (cidr["cidr"], cidr["addedBy"]) == ("10.42.0.0/16", "Sam Adeyemi") and "modules" not in cidr
+    assert (cidr["cidr"], cidr["addedBy"]) == ("10.42.0.0/16", "Sam Adeyemi")
+    assert set(cidr) == {"cidr", "note", "addedBy", "addedAt", "templateId", "protection"}

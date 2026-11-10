@@ -67,6 +67,11 @@ await withUiStack(
       check('a new host that sorts onto a later page shows right after it is added, marked New', late.status === 201 && late.shown && late.marked, late);
       await shoot(admin, 'admin-new-row-on-a-later-page');
 
+      await hosts.getByRole('button', { name: 'Host' }).click();
+      await admin.getByRole('menuitem', { name: 'Asc' }).click();
+      const resorted = await hosts.locator('tr[data-created]').waitFor({ state: 'detached', timeout: 15_000 }).then(() => true, () => false);
+      check('the new row follows the list again once the person sorts it', resorted, (await hosts.innerText()).slice(0, 500));
+
       const search = hosts.getByPlaceholder('Search hosts or notes…');
       await search.fill('a0');
       await hosts.getByText('a10.uc710.example.com', { exact: true }).waitFor({ state: 'detached', timeout: 30_000 });
@@ -83,6 +88,18 @@ await withUiStack(
       const again = await add(seeded[0]);
       const copies = await hosts.getByRole('row', { name: new RegExp(`^${seeded[0].replace(/\./g, '\\.')}`) }).count();
       check('a host added again shows once, marked New, where the page also lists it', again.status === 200 && again.marked && copies === 1, { ...again, copies });
+
+      // The ranges list is small and paged in the browser; the same table keeps its new row in view.
+      await admin.getByRole('button', { name: 'Add range' }).click();
+      const rd = admin.getByRole('dialog', { name: 'Add a private range' });
+      await rd.getByLabel('Range').fill('10.77.0.0/16');
+      await rd.getByLabel('Note').fill('Branch network');
+      const rangeRes = armed(admin.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/egress/ranges`, { timeout: 60_000 }));
+      await rd.getByTestId('egress-add-submit').click();
+      const rangeStatus = (await rangeRes)?.status();
+      const rangeRow = admin.getByTestId('egress-ranges').locator('tr[data-created]', { hasText: '10.77.0.0/16' });
+      const rangeShown = await rangeRow.waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      check('a new private range shows right after it is added, marked New', rangeStatus === 201 && rangeShown && (await rangeRow.innerText()).includes('New'), { rangeStatus, rangeShown });
       check('no page errors for the admin', admin.errors.length === 0, admin.errors);
 
       const member = await signIn(browser, consoleUrl, MEMBER);

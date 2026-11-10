@@ -21,10 +21,12 @@ and the console standards check (rule 22) fails a list that adds rows without it
 | # | Step | Expected |
 |---|---|---|
 | 1 | Twelve hosts that sort before it are listed; the Security admin adds `zz-late…` | the row shows on the first page, marked New |
-| 2 | The admin types a search the new host does not match, then adds `zz-search…` | the row shows, marked New |
-| 3 | The admin changes the search | the new row leaves, following the search |
-| 4 | The admin adds a host already listed on the page | 200, the row shows once, marked New |
-| 5 | A member opens the page | the list shows, with no Add host |
+| 2 | The admin sorts the list by host | the new row leaves, following the sort |
+| 3 | The admin types a search the new host does not match, then adds `zz-search…` | the row shows, marked New |
+| 4 | The admin changes the search | the new row leaves, following the search |
+| 5 | The admin adds a host already listed on the page | 200, the row shows once, marked New |
+| 6 | The admin adds a private range, a list paged in the browser | the row shows, marked New |
+| 7 | A member opens the page | the list shows, with no Add host |
 
 Screenshots of steps 1, 2 and 5 at 1440 and 390 are written to `.logs/usecases/uc-710/`.
 
