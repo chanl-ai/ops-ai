@@ -415,6 +415,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_source_scopes": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/scopes",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "sources_sync_source": {
         "body": "json",
         "headers": [],
@@ -635,6 +644,10 @@ class Operations:
     def sources_preview_source(self, body: PreviewIn) -> SourcePreview:
         "Preview Source"
         return self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def sources_source_scopes(self, body: ScopesIn) -> ScopesPage:
+        "Source Scopes"
+        return self._t.call(SERVICE, OPERATIONS["sources_source_scopes"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"
@@ -922,6 +935,10 @@ class AsyncOperations:
     async def sources_preview_source(self, body: PreviewIn) -> SourcePreview:
         "Preview Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def sources_source_scopes(self, body: ScopesIn) -> ScopesPage:
+        "Source Scopes"
+        return await self._t.call(SERVICE, OPERATIONS["sources_source_scopes"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"

@@ -701,6 +701,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           return list(rows, p, { text: (r) => r.id, value: (r, key) => String((r as unknown as Record<string, unknown>)[key]), facetKeys: ['status', 'trigger'] }, m);
         }),
       run: (rid) => run(() => runs.find((r) => r.id === rid) ?? notFound('Sync run')),
+      scopes: () => Promise.reject(new ApiError('Pickers ask the app through kb-service; the mock has no apps to ask.', 501)),
       preview: (config) =>
         run(() => {
           const rows = previewRows({ type: 'crawl', config });

@@ -543,6 +543,32 @@ class TombstonesIn(In):
     ids: list[str] = Field(min_length=1, max_length=200)
 
 
+class ScopesIn(In):
+    """What a person searches for while picking what a plugin source takes in: sites or spaces by name, or, with
+    `parent`, what one picked site holds (its libraries)."""
+
+    plugin: str = Field(min_length=1, max_length=200)
+    source: str = Field(min_length=1, max_length=200)
+    query: str = Field(default="", max_length=200)
+    parent: str | None = Field(default=None, max_length=500)
+    cursor: str | None = Field(default=None, max_length=4000)
+
+
+class Scope(Out):
+    id: str
+    title: str
+    # What it is in its system: site, library, space.
+    kind: str
+    parent: str | None = None
+    # A few words the picker shows under the title, such as its address or size.
+    detail: str | None = None
+
+
+class ScopesPage(Out):
+    scopes: list[Scope]
+    next_cursor: str | None = None
+
+
 class PreviewIn(In):
     # The plugin, its source and the source's own settings, as a create would send them.
     config: dict[str, Any]

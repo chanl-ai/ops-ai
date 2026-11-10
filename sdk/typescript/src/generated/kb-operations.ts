@@ -500,6 +500,15 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "sources_source_scopes": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sources/scopes",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "sources_sync_source": {
     "body": "json",
     "headers": [],

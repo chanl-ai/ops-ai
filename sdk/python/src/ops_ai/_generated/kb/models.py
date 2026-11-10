@@ -413,6 +413,27 @@ class RewriteOut(TypedDict, closed=True):
     skipped: NotRequired[str | None]
 
 
+class Scope(TypedDict, closed=True):
+    detail: NotRequired[str | None]
+    id: str
+    kind: str
+    parent: NotRequired[str | None]
+    title: str
+
+
+class ScopesIn(TypedDict):
+    cursor: NotRequired[str | None]
+    parent: NotRequired[str | None]
+    plugin: str
+    query: NotRequired[str]
+    source: str
+
+
+class ScopesPage(TypedDict, closed=True):
+    nextCursor: NotRequired[str | None]
+    scopes: list[Scope]
+
+
 class SearchCost(TypedDict, closed=True):
     embeddingTokens: int
 
@@ -606,6 +627,11 @@ class EnvelopeLookups(TypedDict, closed=True):
 
 class EnvelopeOptionsPage(TypedDict, closed=True):
     data: OptionsPage
+    success: Literal[True]
+
+
+class EnvelopeScopesPage(TypedDict, closed=True):
+    data: ScopesPage
     success: Literal[True]
 
 

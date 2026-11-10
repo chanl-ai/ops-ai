@@ -13,6 +13,7 @@ import type {
   QueryInput,
   RunFilters,
   SourceFilters,
+  ScopesInput,
   SourceInput,
   SourcePatch,
   SyncOptions,
@@ -68,6 +69,9 @@ export const useItem = (id: string | null) =>
   useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
 export const useSourceKinds = (enabled = true) => useTeamQuery({ queryKey: kk.sourceKinds, queryFn: api.knowledge.sourceKinds, enabled, staleTime: 60_000 });
 /** What a website or app source with `config` would take in, before it exists; asked only while the settings are valid. */
+/** What a plugin source's picker offers for `input` (a search, or what a picked parent holds). */
+export const useSourceScopes = (input: ScopesInput, enabled: boolean) =>
+  useTeamQuery({ queryKey: ['knowledge', 'source-scopes', input], queryFn: () => api.knowledge.sources.scopes(input), enabled, retry: false, staleTime: 60_000 });
 export const useSourcePreview = (config: Record<string, unknown>, enabled: boolean) =>
   useTeamQuery({ queryKey: ['knowledge', 'source-preview', config], queryFn: () => api.knowledge.sources.preview(config), enabled, retry: false, staleTime: 60_000 });
 /** The caller's team's agents citing knowledge base `kbId`, from agents-service's knowledge usage. */

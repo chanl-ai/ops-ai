@@ -320,7 +320,7 @@ export function AddSourceWizard({
               </div>
             ) : (
               <>
-                <SourceValuesForm idPrefix="as" inputs={inputs} values={values} onChange={setValues} errors={shownErrors} />
+                <SourceValuesForm idPrefix="as" inputs={inputs} values={values} onChange={setValues} errors={shownErrors} scopeSource={kind.pickers && kind.plugin && kind.source ? { plugin: kind.plugin, source: kind.source } : undefined} />
                 {kind.previews && <PreviewPanel paused={!valid} query={preview} />}
               </>
             )}

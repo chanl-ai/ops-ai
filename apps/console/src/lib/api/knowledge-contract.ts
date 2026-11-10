@@ -25,6 +25,8 @@ import type {
   SourceKindOption,
   SourceKindPreview,
   SourcePatch,
+  ScopeOption,
+  ScopesInput,
   SourceRow,
   SourceType,
   SyncOptions,
@@ -87,6 +89,8 @@ export interface KnowledgeApi {
     run(runId: string): Promise<SyncRun>;
     /** What a website or app source with this `config` ({plugin, source, values}) would take in, without creating it. */
     preview(config: Record<string, unknown>): Promise<SourceKindPreview>;
+    /** Add source's pickers: what a plugin source can be pointed at, searched by name or held by a picked parent. */
+    scopes(input: ScopesInput): Promise<{ scopes: ScopeOption[]; nextCursor?: string }>;
     /** Required metadata of the chosen knowledge bases, and how many previewed items each would hold for it. */
     previewHeld(input: HeldPreviewInput): Promise<HeldPreview>;
     /** Seeded documents a split preview can run on; a source's own documents first when `sourceId` is given. */

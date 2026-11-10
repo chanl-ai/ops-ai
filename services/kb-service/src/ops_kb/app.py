@@ -74,6 +74,8 @@ from .schemas import (
     PluginSource,
     PreviewIn,
     QueryIn,
+    ScopesIn,
+    ScopesPage,
     SearchIn,
     SearchOut,
     Source,
@@ -477,6 +479,12 @@ def create_kb_app(
         """What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
         the plugin's preview tool. Nothing is stored."""
         return ok(await service.preview_source(who, body.model_dump(by_alias=True)))
+
+    @sources.post("/scopes", response_model=Envelope[ScopesPage])
+    async def source_scopes(body: ScopesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What a plugin source can be pointed at, for Add source's pickers: its plugin's scopes tool searched by name
+        (sites, spaces), or what one picked site holds (`parent`). Nothing is stored."""
+        return ok(await service.source_scopes(who, body.model_dump()))
 
     @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
     async def list_tombstones(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

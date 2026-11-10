@@ -614,6 +614,26 @@ export interface SourceInputField {
   default?: unknown;
   enum?: (string | number | boolean)[];
   items?: SourceInputField;
+  /** The kind of scope (site, library, space) this input's values are picked from through the source's scopes tool. */
+  picker?: string;
+}
+
+/** One thing a plugin source can be pointed at, as its scopes tool answers: a site, a library, a space. */
+export interface ScopeOption {
+  id: string;
+  title: string;
+  kind: string;
+  parent?: string;
+  detail?: string;
+}
+
+export interface ScopesInput {
+  plugin: string;
+  source: string;
+  query?: string;
+  /** What one picked scope holds (a site's libraries). */
+  parent?: string;
+  cursor?: string;
 }
 
 /** What a new source's settings start as for its kind; Add source's Review shows them. */

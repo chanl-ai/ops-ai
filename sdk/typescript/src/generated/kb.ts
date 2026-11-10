@@ -475,6 +475,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Source Scopes
+         * @description What a plugin source can be pointed at, for Add source's pickers: its plugin's scopes tool searched by name
+         *     (sites, spaces), or what one picked site holds (`parent`). Nothing is stored.
+         */
+        post: operations["sources_source_scopes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/{source_id}": {
         parameters: {
             query?: never;
@@ -1080,6 +1101,15 @@ export interface components {
         /** Envelope[PlaygroundAnswer] */
         Envelope_PlaygroundAnswer_: {
             data: components["schemas"]["PlaygroundAnswer"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ScopesPage] */
+        Envelope_ScopesPage_: {
+            data: components["schemas"]["ScopesPage"];
             /**
              * Success
              * @constant
@@ -2111,6 +2141,46 @@ export interface components {
             rewritten?: string | null;
             /** Skipped */
             skipped?: string | null;
+        };
+        /** Scope */
+        Scope: {
+            /** Detail */
+            detail?: string | null;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Parent */
+            parent?: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ScopesIn
+         * @description What a person searches for while picking what a plugin source takes in: sites or spaces by name, or, with
+         *     `parent`, what one picked site holds (its libraries).
+         */
+        ScopesIn: {
+            /** Cursor */
+            cursor?: string | null;
+            /** Parent */
+            parent?: string | null;
+            /** Plugin */
+            plugin: string;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /** Source */
+            source: string;
+        };
+        /** ScopesPage */
+        ScopesPage: {
+            /** Nextcursor */
+            nextCursor?: string | null;
+            /** Scopes */
+            scopes: components["schemas"]["Scope"][];
         };
         /** SearchCost */
         SearchCost: {
@@ -5772,6 +5842,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SourcePreview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_source_scopes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScopesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ScopesPage_"];
                 };
             };
             /** @description Invalid request */

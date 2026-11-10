@@ -60,7 +60,7 @@ from .source_settings import (
 )
 from .store import DECIDABLE, KnowledgeStore
 from .store.vectors import PgVectorStore
-from .tool_sources import ToolReader, source_config, sync_tool_source
+from .tool_sources import ToolReader, declared_source, source_config, sync_tool_source
 
 # A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and the thresholds decide every search
 # of it (retrieval.py); rerank, rewrite and rewriteInstructions turn on the steps around it (query_steps.py), on the
@@ -852,6 +852,34 @@ class KnowledgeService:
             "pages": pages,
             "capped": bool(out.get("capped")),
         }
+
+    async def source_scopes(self, who: Who, i: dict[str, Any]) -> dict[str, Any]:
+        """A plugin source's pickers: its scopes tool asked, as the team's connection, for what matches `query` (or
+        what `parent` holds). Refused for a kind of source that has no pickers."""
+        who.require_builder(who.team_id, "pick what a source takes in", "create")
+        found = await declared_source(self.tools, who, str(i["plugin"]), str(i["source"]))
+        tool = found.get("scopesTool")
+        if not tool or self.tools is None:
+            raise ValidationFailed(f"{found['title']} has nothing to pick.", code="scopes_unavailable")
+        given = {k: i[k] for k in ("query", "parent", "cursor") if i.get(k) not in (None, "")}
+        answer = await self.tools.call(who.tenant_id, str(who.team_id), str(tool), given, act="kb-scopes")
+        if not answer.ok:
+            raise ServiceUnavailable(f"The picker could not ask {found['title']}: {answer.message or answer.code}",
+                                     code="scopes_failed")  # fmt: skip
+        out = cast(dict[str, Any], answer.output or {})
+        rows = [cast(dict[str, Any], r) for r in cast(list[Any], out.get("scopes") or []) if isinstance(r, dict)]
+        scopes = [
+            {
+                "id": str(r["id"]),
+                "title": str(r.get("title") or r["id"]),
+                "kind": str(r.get("kind") or ""),
+                **({"parent": str(r["parent"])} if r.get("parent") else {}),
+                **({"detail": str(r["detail"])} if r.get("detail") else {}),
+            }
+            for r in rows
+            if r.get("id")
+        ]
+        return {"scopes": scopes, **({"nextCursor": str(out["next_cursor"])} if out.get("next_cursor") else {})}
 
     async def remove_source(self, who: Who, source_id: str) -> None:
         await self._changeable_source(who, source_id, "delete")

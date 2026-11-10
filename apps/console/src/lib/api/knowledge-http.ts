@@ -47,6 +47,7 @@ export function createKnowledgeHttp(get: Get, send: Send, qs: (p: ListParams) =>
       runs: (id, p) => get(`/sources/${id}/runs?${qs(p)}`),
       run: (runId) => get(`/sync-runs/${runId}`),
       preview: (config) => send('POST', '/sources/preview', { config }),
+      scopes: (input) => send('POST', '/sources/scopes', input),
       previewHeld: (i) => send('POST', '/sources/preview-held', i),
       samples: (sourceId) => get(`/ingest/samples${sourceId ? `?sourceId=${sourceId}` : ''}`),
       previewSplit: (i) => send('POST', '/ingest/preview-split', i),
