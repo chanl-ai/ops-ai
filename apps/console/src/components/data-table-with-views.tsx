@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -126,7 +127,8 @@ interface DataTableWithViewsProps<TData, TValue> {
   getRowId?: (row: TData) => string;
   /**
    * Rows the person just created here (`useCreatedRows`): shown first and marked New, whatever page, sort or search
-   * the list is on, until the person pages, searches, filters or sorts. Needs `getRowId`.
+   * the list is on, until the person pages, searches, filters or sorts, or a later write removes or changes the row.
+   * Needs `getRowId`.
    */
   created?: CreatedRows<TData>;
   /** Custom empty state to render when data is empty and not loading */
@@ -326,6 +328,22 @@ export function DataTableWithViews<TData, TValue>({
     }
     clearCreated?.();
   }, [clientPagination.pageIndex, clientPagination.pageSize, columnFilters, sorting, clearCreated]);
+
+  // A created row leaves the top once a write sent after it was shown names it: a remove, revoke, archive or bulk
+  // delete, or an edit. A removed row on another page leaves the refetched page unchanged, so the writes are the only
+  // place that shows it is gone.
+  const queryClient = useQueryClient();
+  const createdWritten = created?.written;
+  const rowIdOf = React.useRef(getRowId);
+  rowIdOf.current = getRowId;
+  React.useEffect(() => {
+    if (!createdWritten) return;
+    return queryClient.getMutationCache().subscribe((e) => {
+      const idOf = rowIdOf.current;
+      if (idOf && e.type === 'updated' && e.action.type === 'success')
+        createdWritten({ variables: e.mutation.state.variables, submittedAt: e.mutation.state.submittedAt }, idOf);
+    });
+  }, [queryClient, createdWritten]);
 
   // Notify parent of column filter changes (for server-side search)
   React.useEffect(() => {

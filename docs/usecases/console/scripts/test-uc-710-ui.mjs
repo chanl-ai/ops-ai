@@ -91,6 +91,20 @@ await withUiStack(
       const copies = await hosts.getByRole('row', { name: new RegExp(`^${seeded[0].replace(/\./g, '\\.')}`) }).count();
       check('a host added again shows once, marked New, where the page also lists it', again.status === 200 && again.marked && copies === 1, { ...again, copies });
 
+      // A new host that sorts onto a later page, then removed: the refetched page is the same as before, so only the
+      // table letting the pinned row go takes it off screen.
+      const gone = await add('zz-remove.uc710.example.com');
+      const goneRow = hosts.locator('tr[data-created]', { hasText: 'zz-remove.uc710.example.com' });
+      await goneRow.getByRole('button', { name: 'Open menu' }).click();
+      await admin.getByRole('menuitem', { name: 'Remove' }).click();
+      const removeRes = armed(admin.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/egress/hosts/remove`, { timeout: 60_000 }));
+      await admin.getByTestId(/^delete-.*-dialog$/).getByRole('button', { name: 'Remove' }).click();
+      const removeStatus = (await removeRes)?.status();
+      const detached = await goneRow.waitFor({ state: 'detached', timeout: 15_000 }).then(() => true, () => false);
+      const listed = (await (await fetch(`${tools}/v1/egress/hosts?page=1&pageSize=50&search=zz-remove`, { headers: auth })).json()).data?.data?.filter((h) => h.host === 'zz-remove.uc710.example.com') ?? null;
+      check('a new host removed right after it is added leaves the list at once, not left marked New', gone.marked && removeStatus === 200 && detached && listed?.length === 0, { removeStatus, detached, listed: listed?.length, hosts: (await hosts.innerText()).slice(0, 500) });
+      await shoot(admin, 'admin-new-row-removed');
+
       // The ranges list is small and paged in the browser; the same table keeps its new row in view.
       await admin.getByRole('button', { name: 'Add range' }).click();
       const rd = admin.getByRole('dialog', { name: 'Add a private range' });
