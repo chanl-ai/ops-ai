@@ -1,8 +1,9 @@
 # An agent runs in the account it names, and a step it starts runs in the step's
 
-Status: draft. Step 1 passes; step 2 fails before any account is chosen, because a workflow an agent starts from a
-chat is refused at its first tool call with `acting_for_refused` ("A member of this team with that email was not
-found"), on PostgreSQL with platform sign-in. That refusal is a separate defect, not part of several accounts. Id:
+Status: step 1 current; step 2 blocked by a separate bug: a workflow an agent starts from a chat is refused at its
+first tool call with `acting_for_refused` on a platform-auth stack, before any account is chosen. Until that is
+fixed, the step-over-agent order is proved by `services/agents-service/tests/unit/test_merged_accounts.py` (red with
+`merged_accounts` reversed); a workflow run started directly carries no agent's accounts, so it cannot prove it. Id:
 `uc-696`. Service: `agents-service` with tools-service, platform-service and an engine worker. Layers: api. Guide:
 `docs/guide/plugins.md`, Several accounts of one app. Design: the several accounts per app design, AC3 and AC11.
 

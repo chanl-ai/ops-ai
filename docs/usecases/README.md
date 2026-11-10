@@ -315,7 +315,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |
 | uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current |
 | uc-695 | agents-service | A workflow step that names an account runs in that account | api | current |
-| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api | draft |
+| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's (step 2 blocked) | api | current |
 | uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current |
 | uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current |
 | uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current |
