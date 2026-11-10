@@ -44,14 +44,18 @@ class FakeModelsService:
         self.requests: list[httpx2.Request] = []
         # (status, code) to refuse every call with, as models-service does for a key over its limit.
         self.refusal: tuple[int, str] | None = None
-        # The refusal's message, as models-service words it; and a body that is not its envelope at all.
+        # The refusal's message, as models-service words it; and a body that is not its envelope at all: a proxy's
+        # page, or a proxy's JSON with a message and no code.
         self.said: str | None = None
         self.raw: str | None = None
+        self.proxy: dict[str, object] | None = None
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
         if self.raw is not None:
             return httpx2.Response(502, text=self.raw, headers={"content-type": "text/html"})
+        if self.proxy is not None:
+            return httpx2.Response(502, json=self.proxy)
         if self.refusal is not None:
             status, code = self.refusal
             said = self.said or f"refused: {code}"
@@ -202,14 +206,26 @@ async def test_the_message_models_service_wrote_reaches_the_test_turn_and_the_ch
     assert reloaded["messages"][-1]["error"] == SAID, "a reload reads the same sentence as the stream"
 
 
+@pytest.mark.parametrize(
+    ("raw", "proxy", "leak"),
+    [
+        ("<html><body>502 Bad Gateway from proxy edge-7</body></html>", None, "edge-7"),
+        # A gateway's JSON has a message but no code: it is not models-service's envelope, so its text is not shown.
+        (None, {"error": {"message": "upstream connect error to 10.0.0.5:443"}}, "10.0.0.5"),
+        (None, {"message": "Service Unavailable at edge-9"}, "edge-9"),
+    ],
+)
 async def test_a_body_that_is_not_models_services_envelope_is_never_shown(
     stack: tuple[AsyncClient, Runtime, FakeModelsService],
+    raw: str | None,
+    proxy: dict[str, object] | None,
+    leak: str,
 ) -> None:
     client, _, models = stack
-    models.raw = "<html><body>502 Bad Gateway from proxy edge-7</body></html>"
+    models.raw, models.proxy = raw, proxy
     tested = await client.post("/v1/agents/ag_fraud/test", json={"message": "hello"})
     message = tested.json()["error"]["message"]
-    assert "edge-7" not in message and "html" not in message
+    assert leak not in message and "html" not in message, message
     assert message.startswith("The model call was refused"), message
 
 

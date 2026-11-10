@@ -95,8 +95,11 @@ def refusal_code(body: object) -> str | None:
 
 def refusal_text(status: int, body: object) -> str:
     """What a person reads for a refused model call: the message models-service wrote for its code, which says what
-    happened and what to do; a body that is not its envelope (a proxy's page) is never shown, only its status."""
-    return _refusal_field(body, "message") or f"The model call was refused ({status} {refusal_code(body) or 'error'})."
+    happened and what to do. Its envelope always carries a code; a body without one (a proxy's page, or a gateway's
+    JSON with only a message) is never shown, only the status."""
+    code = refusal_code(body)
+    said = _refusal_field(body, "message") if code else None
+    return said or f"The model call was refused ({status} {code or 'error'})."
 
 
 def _refusal_field(body: object, name: str) -> str | None:
