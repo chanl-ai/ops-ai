@@ -120,7 +120,7 @@ function ConnectorsMenu({
                 {off.length > 0 && (
                   <CommandGroup heading="Off for this team">
                     {off.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-off-${c.appId}`} data-state={labelFor(c.appState, manages)}>
+                      <CommandItem key={c.appId} value={c.name} className="flex-wrap" data-testid={`connector-off-${c.appId}`} data-state={labelFor(c.appState, manages)}>
                         <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm opacity-60" />
                         <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
                         <OffAction c={c} manages={manages} go={go} />
@@ -148,7 +148,8 @@ function OffAction({ c, manages, go }: { c: ChatConnector; manages: boolean; go:
         {label}
       </Button>
     );
-  return <span className="text-xs text-muted-foreground">{labelFor(c.appState, manages)} · ask an admin</span>;
+  // Below the name on a narrow screen: sharing the row left the name only an initial.
+  return <span className="text-xs text-muted-foreground max-sm:basis-full max-sm:pl-6">{labelFor(c.appState, manages)} · ask an admin</span>;
 }
 
 /** The whole set an unchecked or checked connector makes: the apps left out, as the chat's PUT takes them. */
