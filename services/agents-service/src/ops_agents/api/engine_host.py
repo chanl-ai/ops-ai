@@ -28,13 +28,14 @@ from ops_agents.activities.gateway import (
     gateway_error,
 )
 from ops_checkpointer import LeaseSupersededError
-from ops_engine.ports import AS_TEAM_ACCOUNT, Access, LeaseBusyError, ToolResult
+from ops_engine.ports import AS_TEAM_ACCOUNT, STEP_ACCOUNTS, Access, LeaseBusyError, ToolResult
 from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import ServiceCallError
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.logging import get_logger
 
+from ..domain.accounts import chosen_accounts
 from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.events import EventLog
 from ..store.leases import LeaseHeldError, Leases
@@ -107,11 +108,17 @@ class GatewayTools:
         return self.gateway
 
     async def call(
-        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+        self,
+        operation: str,
+        input: dict[str, Any],
+        key: str,
+        generation: int | None,
+        token: str | None,
     ) -> ToolResult:
         # The gateway fences writes on the run's lease generation and logs the call against the run's thread.
         # The run's mode, from the graph's config, picks the connection environment its calls use.
         run = current_run_context()
+        team_account = AS_TEAM_ACCOUNT.get()
         ctx = RUN_CONTEXT.set(
             RunContext(
                 thread=thread_of(key),
@@ -119,7 +126,9 @@ class GatewayTools:
                 generation=generation,
                 environment=run.environment,
                 run_id=run.run_id,
-                team_account=AS_TEAM_ACCOUNT.get(),
+                team_account=team_account,
+                # The run's accounts are the choice of the chat or agent that started it; the step's wins.
+                accounts=chosen_accounts(agent=run.accounts, step=STEP_ACCOUNTS.get(), team_account=team_account),
             )
         )
         try:

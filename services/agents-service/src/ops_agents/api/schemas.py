@@ -194,6 +194,8 @@ class Agent(Out):
     stale_tool_ids: list[str]
     collections: list[str]
     all_team_knowledge_bases: bool = False
+    # The team account each app's calls use, app id to account name; empty for each app's default.
+    accounts: dict[str, str] = Field(default_factory=dict[str, str])
     # The owning team, from the creator's token; null for an agent no team owns.
     team_id: str | None
     paused: bool

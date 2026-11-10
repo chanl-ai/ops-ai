@@ -23,6 +23,7 @@ from ops_service_kit.http import Envelope, ListResult
 from ops_service_kit.ids import new_id, now_iso
 
 from ...store.template_copies import TemplateCopies
+from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
     agent_review_body,
@@ -124,6 +125,12 @@ class AgentPatch(WireModel):
     collections: list[str] | None = None
     # search_knowledge may search every knowledge base of the agent's team; off, only `collections` (decision D19).
     all_team_knowledge_bases: bool | None = None
+    # The team account each app's calls use, app id to account name, as the whole map; checked when the agent is
+    # published (each must be a team account of the app), never when saved, so a draft may name one not made yet.
+    accounts: (
+        dict[Annotated[str, Field(min_length=1, max_length=120)], Annotated[str, Field(min_length=1, max_length=200)]]
+        | None
+    ) = Field(default=None, max_length=20)
     guardrails: Guardrails | None = None
     # Guardrails attached by version: [{guardrailId, version}]; each saved with its version's rule.
     guardrail_pins: list[GuardrailPinInput] | None = None
@@ -661,6 +668,8 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     spec = v["spec"]
     for alias in limits_of(spec).allowed_models:
         await require_known_alias(rt, alias)
+    named = cast(dict[str, str], spec.get("accounts") or {})
+    await require_team_accounts(rt, str(row["team_id"] or ""), [("The agent", a, n) for a, n in named.items()])
     decision = await _publish_decision(rt, agent_id, row, body.version)
     approved = not decision.review_required
     review_body = {

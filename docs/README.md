@@ -513,6 +513,25 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/scanned-chat-attachment.md` | uc-673: A scanned file attached in chat is read with OCR and reaches the agent whole |
 | `usecases/tools-service/app-page-one-state.md` | uc-674: An app's page shows one state and its next action |
 | `usecases/kb-service/a-website-source-keeps-a-knowledge.md` | uc-675: A website source keeps a knowledge base current, and answers cite it |
+| `usecases/tools-service/a-second-org-signs-in-at-its-own-address.md` | uc-691: A second live org signs in at its own address and a call naming it reaches it |
+| `usecases/tools-service/a-package-app-runs-on-the-chosen-org.md` | uc-706: A package app runs on the chosen org and never on one without the package |
+| `usecases/agents-service/an-account-in-use-is-not-deleted.md` | uc-707: An account a workflow or agent names is not deleted until nothing names it |
+| `usecases/agents-service/an-expired-named-account-waits-for-sign-in.md` | uc-708: An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account |
+| `usecases/tools-service/a-second-server-signs-in-at-its-own-address.md` | uc-692: A second account of an app that is not Salesforce signs in at its own server |
+| `usecases/tools-service/every-account-says-what-it-points-at.md` | uc-693: Every account row says what it points at, also for an app that declares nothing and a custom app |
+| `usecases/tools-service/a-call-never-uses-someone-elses-account.md` | uc-694: A call naming another person's own account or another team's account is refused |
+| `usecases/tools-service/a-deleted-account-name-is-refused.md` | uc-698: A call naming an account that no longer exists is refused, never sent to the default |
+| `usecases/tools-service/changing-who-signs-in-to-each-person.md` | uc-709: Changing who signs in to each person makes calls act as the person, and schedules keep the shared login |
+| `usecases/tools-service/two-accounts-never-share-a-name.md` | uc-699: Two accounts of one app in one team never share a name |
+| `usecases/tools-service/a-test-run-never-uses-a-named-live-account.md` | uc-700: A test run that names a live account uses the test account or is refused |
+| `usecases/agents-service/a-step-runs-in-the-account-it-names.md` | uc-695: A workflow step that names an account runs in that account |
+| `usecases/agents-service/a-rename-changes-no-published-version.md` | uc-701: Renaming an account changes no published version, and the next publish names the dead name |
+| `usecases/agents-service/an-agent-runs-in-the-account-it-names.md` | uc-696: An agent runs in the account it names, and a step it starts runs in the step's |
+| `usecases/agents-service/a-chat-uses-the-account-picked-for-it.md` | uc-697: A chat uses the account picked for it, and a new chat starts on the default |
+| `usecases/agents-service/the-model-is-told-the-account-in-use.md` | uc-704: The model is told the account each app uses and cannot switch it in words |
+| `usecases/tools-service/a-person-adds-a-second-account-of-their-own.md` | uc-702: A person adds a second account of their own at their own address and makes it their default |
+| `usecases/tools-service/callers-from-before-several-accounts-keep-working.md` | uc-705: Callers from before several accounts keep working |
+| `usecases/tools-service/add-account-lives-on-the-accounts-tab.md` | uc-703: Add account is on the Accounts tab for whoever manages apps, and never for a member |
 | `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
 | `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
 | `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |

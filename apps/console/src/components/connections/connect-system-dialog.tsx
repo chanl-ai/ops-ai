@@ -81,7 +81,7 @@ export function ConnectSystemDialog({
 
   // Who signs in is on the app page's Settings, so nothing here repeats it.
   const title = existing
-    ? `${mode === 'reconnect' ? 'Reconnect' : 'Connect'} ${detail.data?.name ?? 'the app'}`
+    ? `${mode === 'reconnect' ? 'Sign in to' : 'Connect'} ${detail.data?.name ?? 'the app'}`
     : target.kind === 'module'
       ? `Connect ${target.name}`
       : target.kind === 'plugin'

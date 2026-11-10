@@ -16,7 +16,14 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from ops_agent_kernel.types import Access, ToolGrant
-from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import (
+    ACTING_FOR_HEADER,
+    ActingForTokens,
+    ServiceCallError,
+    ServiceClient,
+    ServiceUnreachable,
+    segment,
+)
 from ops_service_kit.errors import ApiError
 
 from ..store.tenancy import current_team, current_tenant
@@ -150,6 +157,14 @@ class AppStates(Protocol):
         """`team`'s apps as tools-service lists them, each card's state read for `person` (an email) when given."""
         ...
 
+    async def accounts(
+        self, person: str | None, team: str | None, app_id: str, *, usable: bool = False, name: str | None = None
+    ) -> list[dict[str, Any]]:
+        """The accounts of `app_id` a call may name (`GET /v1/apps/{app}/accounts`): with `usable`, the team's live
+        accounts a step or an agent names; with `person`, also that person's own; with `name`, the one so named. The
+        names are compared there, never here."""
+        ...
+
 
 class ToolsApps:
     """The team's apps from tools-service's `GET /v1/apps`, built-in ones included, for the Tools page: which app a
@@ -171,4 +186,28 @@ class ToolsApps:
             rows = await self.tools.get("/v1/apps", params={"include": "builtin"}, headers=headers, team=team)
         except (ServiceCallError, ServiceUnreachable) as e:
             raise ToolsUnavailable("The tools service cannot be reached, so the tools' apps are unknown.") from e
+        return cast(list[dict[str, Any]], rows)
+
+    async def accounts(
+        self, person: str | None, team: str | None, app_id: str, *, usable: bool = False, name: str | None = None
+    ) -> list[dict[str, Any]]:
+        team = team or current_team()
+        if not team:
+            return []
+        headers: dict[str, str] = {}
+        if person and self.people is not None:
+            headers[ACTING_FOR_HEADER] = await self.people.token(tenant_id=current_tenant(), email=person, team_id=team)
+        params: dict[str, str] = {**({"usable": "true"} if usable else {}), **({"mine": "true"} if person else {})}
+        if name:
+            params["name"] = name
+        try:
+            rows = await self.tools.get(
+                f"/v1/apps/{segment(app_id)}/accounts", params=params, headers=headers, team=team
+            )
+        except ServiceCallError as e:
+            if e.status == 404:
+                return []
+            raise ToolsUnavailable("The tools service cannot be reached, so the app's accounts are unknown.") from e
+        except ServiceUnreachable as e:
+            raise ToolsUnavailable("The tools service cannot be reached, so the app's accounts are unknown.") from e
         return cast(list[dict[str, Any]], rows)

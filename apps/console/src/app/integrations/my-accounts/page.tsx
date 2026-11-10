@@ -20,6 +20,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
+import { AnotherAccountDialog, type AnotherAccount } from '@/components/connections/another-account-dialog';
 import { ConnectorSheet, NO_ACCOUNT, inChatWords, signInEnded } from '@/components/connections/connector-sheet';
 import { AddAuthConfigButton } from '@/components/connections/app-actions';
 import { AppStateBadge } from '@/components/connections/app-state-badge';
@@ -49,18 +50,20 @@ function useConnect(onKey: (c: MyConnector, accountId: string) => void) {
   });
   return {
     pending: start.isPending || another.isPending,
-    go: (c: MyConnector, more = false) => {
-      if (more) {
-        // Another account of the person's own, through the same auth config as the one they use.
-        if (!c.primaryAccountId) return;
-        const w = signIn.open(c.name);
-        if (!w) return;
-        another.mutate(c.primaryAccountId, {
+    /** Another account of the person's own, named and placed in its dialog, through the same auth config. */
+    another: (c: MyConnector, a: AnotherAccount, onError: (why: string) => void) => {
+      if (!c.primaryAccountId) return;
+      const w = signIn.open(c.name);
+      if (!w) return;
+      another.mutate(
+        { accountId: c.primaryAccountId, ...a },
+        {
           onSuccess: (s) => w.go(s, { appId: c.appId, accountId: s.connectionId ?? c.primaryAccountId ?? '' }),
-          onError: (e) => w.fail(e.message),
-        });
-        return;
-      }
+          onError: (e) => (w.fail(e.message), onError(e.message)),
+        },
+      );
+    },
+    go: (c: MyConnector) => {
       const target = c.accounts.find((a) => a.connectionId === c.primaryAccountId);
       if (!target) return;
       if ((c.personFields ?? []).length > 0) return onKey(c, target.connectionId);
@@ -202,6 +205,7 @@ function ConnectorsPage() {
   const [ending, setEnding] = React.useState<MyConnector | null>(null);
   const [giving, setGiving] = React.useState<{ c: MyConnector; accountId: string } | null>(null);
   const [open, setOpen] = React.useState<string | null>(null);
+  const [adding, setAdding] = React.useState<{ c: MyConnector; error: string | null } | null>(null);
   const connect = useConnect((c, accountId) => setGiving({ c, accountId }));
   const shown = (mine.data ?? []).find((c) => c.appId === open) ?? null;
   const rows = React.useMemo(() => (mine.data ?? []).map((c) => ({ ...c, onRowClick: () => setOpen(c.appId) })), [mine.data]);
@@ -225,7 +229,7 @@ function ConnectorsPage() {
         defaultView="grid"
         gridClassName={APP_CARD_GRID}
         renderGridItem={(c) => (
-          <ConnectorCard c={c} connect={connect} onOpen={() => setOpen(c.appId)} onEnd={() => setEnding(c)} onAnother={() => connect.go(c, true)} />
+          <ConnectorCard c={c} connect={connect} onOpen={() => setOpen(c.appId)} onEnd={() => setEnding(c)} onAnother={() => setAdding({ c, error: null })} />
         )}
         searchColumn="name"
         searchPlaceholder="Search connectors…"
@@ -258,7 +262,16 @@ function ConnectorsPage() {
       description={`Apps that act as you in chat and in agents working for you, in ${team?.name ?? 'this team'}. Sign in once per team; disconnect here any time.`}
     >
       {body}
-      <ConnectorSheet connector={shown} open={shown !== null} onOpenChange={(o) => !o && setOpen(null)} onConnect={(c, another) => connect.go(c, another)} onDisconnect={(c) => setEnding(c)} />
+      <ConnectorSheet connector={shown} open={shown !== null} onOpenChange={(o) => !o && setOpen(null)} onConnect={(c, another) => (another ? setAdding({ c, error: null }) : connect.go(c))} onDisconnect={(c) => setEnding(c)} />
+      {adding && (
+        <AnotherAccountDialog
+          connector={adding.c}
+          busy={connect.pending}
+          error={adding.error}
+          onClose={() => setAdding(null)}
+          onAdd={(a) => connect.another(adding.c, a, (why) => setAdding({ c: adding.c, error: why }))}
+        />
+      )}
       <DialogShell
         open={giving !== null}
         onOpenChange={(o) => !o && setGiving(null)}

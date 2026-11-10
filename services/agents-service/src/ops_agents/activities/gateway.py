@@ -10,10 +10,10 @@ the call's idempotency key, which a resumed call keeps across processes.
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol, cast
 
 import httpx
@@ -38,6 +38,9 @@ class RunContext:
     run_id: str | None = None
     # A call a person chose to run on the team's account in place of their own: it acts for nobody.
     team_account: bool = False
+    # The account each app's calls use, app id to account name, as a step, an agent or a chat chose; tools-service
+    # reads the entry for each call's own app and checks it (plugins/host.py for_call). Empty: each app's default.
+    accounts: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
 TEST, LIVE = "test", "live"
@@ -70,12 +73,26 @@ def current_run_context() -> RunContext:
 
 
 @contextmanager
-def acting_as(act: str, environment: str | None = None) -> Generator[None]:
+def acting_as(act: str, environment: str | None = None, accounts: Mapping[str, str] | None = None) -> Generator[None]:
     """Calls made inside name `act` (e.g. `agent:ag_dispute`) as their actor in the gateway's log, on the run's thread
-    and lease generation, in `environment` when given, else the run's."""
+    and lease generation, in `environment` when given, else the run's, on `accounts` (app id to account name, as
+    domain/accounts.py chose them) when given, else the run's."""
     base = current_run_context()
     env = environment or base.environment
-    token = RUN_CONTEXT.set(replace(base, act=act, environment=env))
+    chosen = base.accounts if accounts is None else accounts
+    token = RUN_CONTEXT.set(replace(base, act=act, environment=env, accounts=chosen))
+    try:
+        yield
+    finally:
+        RUN_CONTEXT.reset(token)
+
+
+@contextmanager
+def using_accounts(accounts: Mapping[str, str] | None) -> Generator[None]:
+    """Calls made inside use `accounts` (app id to account name, as domain/accounts.py chose them, the run's own
+    choice included); nothing else about the run changes."""
+    base = current_run_context()
+    token = RUN_CONTEXT.set(replace(base, accounts=dict(accounts or {})))
     try:
         yield
     finally:
@@ -217,6 +234,7 @@ class GatewayClient:
                 "step": key,
                 "act": ctx.act,
                 **({"environment": ctx.environment} if ctx.environment else {}),
+                **({"accounts": dict(ctx.accounts)} if ctx.accounts else {}),
             },
             "approvalToken": approval_token,
         }
@@ -262,8 +280,15 @@ TEAM_SIGN_IN_LINE = (
     "Not run: {app} is on for this team, but its team account is not signed in yet. Reply with one sentence saying a "
     "team admin connects it from the card above, then you carry on with this ask; offer no other steps or help."
 )
+# A team account whose sign-in ended (tools-service auth._team_account_stopped, which names the event its next sign-in
+# reports): the card above sends an admin to sign that account in again. Any other AUTH_FAILED is read as it is.
+SIGN_IN_ENDED = "AUTH_FAILED"
+SIGN_IN_ENDED_LINE = (
+    "Not run: {app}'s team sign-in has ended. Reply with one sentence saying a team admin signs it in again from the "
+    "card above, then you carry on with this ask; do not use another account and offer no other steps or help."
+)
 # The refusals the chat draws as a card (carded).
-CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN)
+CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN, SIGN_IN_ENDED)
 
 
 def _object(value: Any) -> dict[str, Any] | None:
@@ -279,6 +304,10 @@ def carded(output: Any) -> str | None:
     if error is None or error.get("code") not in CARD_CODES:
         return None
     details = _object(error.get("details")) or {}
+    if error.get("code") == SIGN_IN_ENDED:
+        if details.get("account") != "team" or not _object(details.get("connectedEvent")):
+            return None
+        return SIGN_IN_ENDED_LINE.format(app=str(details.get("connection") or details.get("app") or "this app"))
     if error.get("code") == CHOICE:
         accounts = details.get("accounts")
         n = len(cast(list[Any], accounts)) if isinstance(accounts, list) else 2

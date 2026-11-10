@@ -47,15 +47,17 @@ from ..modules.service import Caller
 from ..secrets import SecretResolver
 from ..store.connections import (
     SHARED,
+    AccountNameTaken,
     ConnectionInUse,
     ConnectionStore,
     StaleConnection,
+    name_key,
     plugin_app,
     plugin_of,
     verifier_context,
 )
 from .account_events import connected_event
-from .records import status_of
+from .records import PERSON_ORIGIN, status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.
@@ -72,6 +74,7 @@ OWN = "own"
 # tenant, account, the token answer, and whether it is a person's own sign-in, which may not change what the
 # team's sign-in set -> account settings to add, or None. A ValueError with a `code` names why for the event.
 OnToken = Callable[[str, str, dict[str, Any], bool], Awaitable[dict[str, Any] | None]]
+OwnPlace = Callable[[Caller, dict[str, Any], dict[str, Any]], Awaitable[tuple[dict[str, Any], dict[str, Any]]]]
 # tenant, account, who signed in -> after a finished sign-in: the account's app is turned on for its team.
 OnSignedIn = Callable[[str, str, str], Awaitable[None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
@@ -153,9 +156,6 @@ def mcp_error(res: httpx.Response) -> str | None:
     return None if "result" in answer else "its answer had no result"
 
 
-# An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
-# team, and removed when its sign-in turns out to be an identity they already linked.
-PERSON_ORIGIN = "person"
 # Set on a finished sign-in's account when the system named an identity already linked on that account of the app.
 ALREADY = "_alreadyConnectedAs"
 
@@ -237,9 +237,19 @@ class ConnectionService:
         # A plugin app's title and logo by its app id (PluginHost.display_of), for My accounts; set once the plugin
         # host is up.
         self.app_display: Callable[[str], tuple[str, str | None] | None] | None = None
+        # Where a person's second account of a plugin's app signs in, from the place they gave
+        # (PluginAccounts.own_place): its sign-in settings and own plugin settings. None without plugins, where a
+        # second account signs in where the first does.
+        self.own_place: OwnPlace | None = None
         # The permissions a plugin account's sign-in asks for, from the tools its team added
         # (PluginHost.sign_in_scopes); set once the plugin host is up.
         self.sign_in_scopes: Callable[[str, str], Awaitable[list[str] | None]] | None = None
+        # The package apps that run on an account's app and the path that checks each of their objects
+        # (PluginHost.package_checks); a passing Test reads them. Set once the plugin host is up.
+        self.package_checks: Callable[[str, str], Awaitable[list[dict[str, Any]]]] | None = None
+        # The team's workflows and agents that name an account of an app (ToolUsers.accounts, agents-service); a
+        # delete is refused while any do. Set with the app routes (Apps).
+        self.account_users: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
         self._after_sign_in: set[asyncio.Task[None]] = set()
 
@@ -465,6 +475,10 @@ class ConnectionService:
             if not i["name"].strip():
                 raise ValidationFailed("Name the connection.")
             values["name"] = i["name"].strip()
+            if conn.get("account_name") is not None:
+                # The name steps, agents and chats pick the account by is the one renamed, so no second name drifts
+                # from it; another account of the app holding it refuses the rename (AccountNameTaken).
+                values["account_name"] = values["name"]
         if i.get("sign_in") is not None:
             self._sign_in_fits(kind_of(str(conn["auth_kind"])), str(i["sign_in"]))
             values["sign_in"] = i["sign_in"]
@@ -662,6 +676,24 @@ class ConnectionService:
     async def delete(self, who: Caller, connection_id: str) -> None:
         self._can(who, "manage")
         conn = await self._get(who, connection_id)
+        named = str(conn.get("account_name") or "")
+        if named and self.account_users is not None:
+            # A step or agent naming a deleted account is refused at its next call (ACCOUNT_NOT_FOUND), so the delete
+            # waits until nothing names it.
+            uses = await self.account_users(who.tenant_id, str(conn["team_id"]), str(conn["app_id"]), named)
+            published, drafts = int(uses.get("published") or 0), int(uses.get("drafts") or 0)
+            if published or drafts:
+                raise Conflict(
+                    f"{named} is named by {published} published and {drafts} draft workflow or agent "
+                    f"version{'s' if published + drafts != 1 else ''}. Change those to another account first.",
+                    code="account_in_use",
+                    details={
+                        "published": published,
+                        "drafts": drafts,
+                        "workflows": list(uses.get("workflows") or []),
+                        "agents": list(uses.get("agents") or []),
+                    },
+                )
         try:
             deleted = await self.store.delete(who.tenant_id, connection_id, actor=who.name, at=self.clock())
         except ConnectionInUse as e:
@@ -951,7 +983,8 @@ class ConnectionService:
                 detail={"settings": sorted(extra)},
             )
         detail = {"account": token.account, **({"own": True} if token_for != SHARED else {})}
-        own = connected_event(conn, token_for) if token_for != SHARED else None
+        # A person's own sign-in, or the team's signed in again: either wakes a run waiting on it.
+        own = connected_event(conn, token_for)
         event = self._event(who, "signed_in", detail)
         await self.store.note(who.tenant_id, connection_id, event, report=own)
         now_set = {**settings, **extra}
@@ -1316,12 +1349,17 @@ class ConnectionService:
         first = await self.store.get(who.tenant_id, app_id)
         return str((first or row)["name"]), None
 
-    async def add_own_account(self, who: Caller, connection_id: str) -> dict[str, Any]:
+    async def add_own_account(
+        self, who: Caller, connection_id: str, given: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Another account of the caller's own on the app of `connection_id`, signed in through the same auth config
-        (the same app credential or Ops AI's app): a personal and an office login side by side. The account is made
-        now and the sign-in starts on it; a sign-in that names an identity the caller already linked lands on that
-        account instead and this one is removed (`complete_sign_in`), so no duplicate is kept. An earlier one the
-        caller started and never signed in to is removed first."""
+        (the same app credential or Ops AI's app): a personal and an office login side by side. `given` names it
+        (`name`, which no other account of the app in the team holds) and says where it signs in (`settings`, the
+        app's per-account settings); with none it is named "<person>'s other account" and signs in where
+        `connection_id` does, as older callers expect. The account is made now and the sign-in starts on it; a
+        sign-in that names an identity the caller already linked lands on that account instead and this one is
+        removed (`complete_sign_in`), so no duplicate is kept. An earlier one the caller started and never signed in
+        to is removed first."""
         self._can(who, OWN)
         src = await self._get(who, connection_id)
         if (src.get("sign_in") or "team") == "team":
@@ -1346,14 +1384,26 @@ class ConnectionService:
         now = self.clock()
         new = new_id("ca")
         settings = {k: v for k, v in dict(src.get("settings") or {}).items() if k not in ("clientId", "clientSecret")}
+        name = str((given or {}).get("name") or "").strip() or f"{who.name}'s other account"
+        own_settings: dict[str, Any] | None = None
+        if given is not None:
+            others = await self.store.accounts(who.tenant_id, who.team.id, str(src["app_id"]))
+            taken = {name_key(a.get("account_name")) for a in others}
+            if name_key(name) in taken:
+                raise AccountNameTaken(name)
+        if self.own_place is not None and plugin_of(src) is not None:
+            # A plugin's account signs in where `given` says, else where `src` does: its own sign-in address is kept,
+            # so a company's own address (a My Domain) is not lost, and the hosts it reaches are rendered from it.
+            settings, own_settings = await self.own_place(who, src, dict((given or {}).get("settings") or {}))
+            settings = {k: v for k, v in settings.items() if k not in ("clientId", "clientSecret")}
         row: dict[str, Any] = {
             "tenant_id": who.tenant_id,
             "id": new,
             "team_id": who.team.id,
-            "name": f"{src.get('account_name') or src['name']} · {who.name}",
+            "name": name if given is not None else f"{src.get('account_name') or src['name']} · {who.name}",
             "app_id": src["app_id"],
             "sandbox": False,
-            "account_name": f"{who.name}'s other account",
+            "account_name": name,
             "auth_kind": src["auth_kind"],
             "sign_in": "person",
             "team_backup": False,
@@ -1364,6 +1414,7 @@ class ConnectionService:
             "secrets": {},
             "credential_id": src.get("credential_id"),
             "platform_app": src.get("platform_app"),
+            **({"plugin_settings": own_settings} if own_settings is not None else {}),
             "origin": PERSON_ORIGIN,
             "status": src.get("status") or "draft",
             "status_detail": None,
@@ -1547,6 +1598,9 @@ class ConnectionService:
                     named = None
                 if named:
                     await self.store.name_token(who.tenant_id, connection_id, own_key(who) if own else SHARED, named)
+                packages = await self._packages(who.tenant_id, connection_id, str(settings["baseUrl"]), prepared, hosts)
+                if packages:
+                    health["packages"] = packages
             else:
                 message = f"{urlsplit(url).hostname} answered {res.status_code} to the test address."
                 health |= {"status": "failed", "code": "UPSTREAM_STATUS", "message": message}
@@ -1569,6 +1623,34 @@ class ConnectionService:
         )
         await self.store.note(who.tenant_id, connection_id, self._event(who, "tested", detail))
         return await self.detail(who, connection_id)
+
+    async def _packages(
+        self, tenant_id: str, connection_id: str, base: str, prepared: Prepared | None, hosts: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Which package apps running on the account are installed there: each required object read through the
+        account's sign-in, as the test read was. A 404 or 400 marks the object missing; a package whose check could
+        not run is left out, so it is neither refused nor shown as installed on a guess."""
+        if self.package_checks is None or self.egress is None:
+            return {}
+        out: dict[str, dict[str, Any]] = {}
+        for package in await self.package_checks(tenant_id, connection_id):
+            missing: list[str] = []
+            try:
+                for name, path in dict(package["paths"]).items():
+                    url = base.rstrip("/") + str(path)
+                    await self.egress.check_url(tenant_id, url, hosts)
+                    res = await self._probe(url, prepared, tenant_id, hosts)
+                    if res.status_code in (400, 404):
+                        missing.append(str(name))
+                    elif res.status_code >= 300:
+                        raise httpx.HTTPStatusError("unchecked", request=res.request, response=res)
+            except (EgressDenied, httpx.HTTPError) as e:
+                log.warning(
+                    "package_check_failed", connection=connection_id, package=package["id"], error=type(e).__name__
+                )
+                continue
+            out[str(package["id"])] = {"title": package["title"], "missing": missing}
+        return out
 
     async def _probe(
         self, url: str, prepared: Prepared | None, tenant_id: str, hosts: list[str] | None = None, *, mcp: bool = False

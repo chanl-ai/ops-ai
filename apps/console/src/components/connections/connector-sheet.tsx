@@ -10,7 +10,8 @@ import { DetailSheet } from '@/components/shared/detail-sheet';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { AppStateBadge } from '@/components/connections/app-state-badge';
 import type { MyConnector } from '@/hooks/connections-queries';
-import { useTestAccount } from '@/hooks/systems-queries';
+import { DefaultStar } from '@/components/shared/default-star';
+import { usePinDefault, useTestAccount } from '@/hooks/systems-queries';
 import { plural, shortDate } from '@/lib/format';
 import { appPageHref } from '@/lib/app-links';
 import { appStateFor } from '@/lib/app-state';
@@ -61,6 +62,7 @@ export function ConnectorSheet({
   onDisconnect: (c: MyConnector) => void;
 }) {
   const test = useTestAccount();
+  const pin = usePinDefault();
   if (!c) return null;
   const connected = c.appGroup === 'on';
   const since = c.since ? ` · since ${shortDate(c.since)}` : '';
@@ -172,17 +174,46 @@ export function ConnectorSheet({
               {c.accounts
                 .filter((a) => a.state === 'connected')
                 .map((a) => (
-                  <p key={a.connectionId} className="flex flex-wrap items-center gap-2 text-sm" data-testid={`connector-account-${a.connectionId}`}>
-                    {a.account ?? a.name}
-                    {a.primary && c.accountCount > 1 && <Badge variant="secondary">Default</Badge>}
-                  </p>
+                  <div key={a.connectionId} className="flex flex-wrap items-center justify-between gap-2" data-testid={`connector-account-${a.connectionId}`}>
+                    <span className="flex min-w-0 items-start gap-2">
+                      {c.accountCount > 1 && (
+                        <DefaultStar
+                          on={a.primary}
+                          label="your default"
+                          busy={pin.isPending}
+                          testId={`connector-make-default-${a.connectionId}`}
+                          onSet={() =>
+                            pin.mutate(
+                              { appId: c.appId, accountId: a.connectionId },
+                              {
+                                onSuccess: () => toast.success(`${a.name} is your default`, { description: 'Your calls that name no account use it.' }),
+                                onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }),
+                              },
+                            )
+                          }
+                        />
+                      )}
+                      <span className="flex min-w-0 flex-col">
+                        <span className="text-sm">{a.name}</span>
+                        {(a.identity ?? []).length > 0 && (
+                          <span className="truncate text-xs text-muted-foreground" data-testid={`connector-account-points-${a.connectionId}`}>
+                            {(a.identity ?? []).map((e) => e.shown).join(' · ')}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </div>
                 ))}
               {connected ? (
                 <>
                   <Button size="sm" variant="outline" className="self-start" onClick={() => onConnect(c, true)} data-testid="connector-add-account">
                     Add another account
                   </Button>
-                  <p className="text-xs text-muted-foreground">Add another login of yours, such as a personal and an office one; it signs in the same way.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(c.personFields ?? []).length > 0
+                      ? `${c.name} signs in with a key, so another account is added by someone who manages the team’s apps.`
+                      : 'Another login of yours, such as a personal and an office one, with its own name and where it signs in.'}
+                  </p>
                 </>
               ) : (
                 <Button size="sm" className="self-start" onClick={() => onConnect(c, false)} data-testid="connector-sheet-connect">

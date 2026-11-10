@@ -104,6 +104,77 @@
         "title": "AbandonedCall",
         "type": "object"
       },
+      "AccountChoice": {
+        "additionalProperties": false,
+        "description": "One account a step, an agent or a chat may name for an app's calls, with what tells it apart.",
+        "properties": {
+          "appId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appid"
+          },
+          "default": {
+            "default": false,
+            "title": "Default",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "identity": {
+            "items": {
+              "$ref": "#/components/schemas/IdentityEntry"
+            },
+            "title": "Identity",
+            "type": "array"
+          },
+          "missingObjects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missingobjects",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "own": {
+            "default": false,
+            "title": "Own",
+            "type": "boolean"
+          },
+          "pointsAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pointsat"
+          },
+          "sandbox": {
+            "default": false,
+            "title": "Sandbox",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "AccountChoice",
+        "type": "object"
+      },
       "AccountDetail": {
         "additionalProperties": false,
         "properties": {
@@ -454,6 +525,17 @@
             ],
             "title": "Kind"
           },
+          "makeDefault": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makedefault"
+          },
           "name": {
             "maxLength": 200,
             "minLength": 1,
@@ -758,6 +840,28 @@
         "title": "AllowList",
         "type": "object"
       },
+      "AnotherOwnIn": {
+        "additionalProperties": false,
+        "description": "A person's second account of their own on an app: its name, which steps and chats pick it by and which no other\naccount of the app in the team holds, and where it signs in (the app's per-account settings, such as a company\nserver's address), kept as given rather than copied from the account it starts from.",
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AnotherOwnIn",
+        "type": "object"
+      },
       "AppAccount": {
         "additionalProperties": false,
         "description": "One row of the app's Accounts list: one of the team's accounts (the default is the one live calls use unless\nthey name another, and a sandbox one is what test runs use), or one person's own sign-in on it (`kind` person).",
@@ -831,6 +935,13 @@
             "title": "Id",
             "type": "string"
           },
+          "identity": {
+            "items": {
+              "$ref": "#/components/schemas/IdentityEntry"
+            },
+            "title": "Identity",
+            "type": "array"
+          },
           "kind": {
             "default": "team",
             "enum": [
@@ -863,6 +974,28 @@
           "owner": {
             "$ref": "#/components/schemas/AccountOwner"
           },
+          "peopleSignedIn": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peoplesignedin"
+          },
+          "pointsAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pointsat"
+          },
           "revision": {
             "title": "Revision",
             "type": "integer"
@@ -871,9 +1004,36 @@
             "title": "Rowid",
             "type": "string"
           },
+          "samePlaceAs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sameplaceas"
+          },
           "sandbox": {
             "title": "Sandbox",
             "type": "boolean"
+          },
+          "signIn": {
+            "anyOf": [
+              {
+                "enum": [
+                  "team",
+                  "person",
+                  "person_or_team"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signin"
           },
           "signInValues": {
             "items": {
@@ -1671,6 +1831,11 @@
           "connected": {
             "title": "Connected",
             "type": "boolean"
+          },
+          "signIns": {
+            "default": 0,
+            "title": "Signins",
+            "type": "integer"
           }
         },
         "required": [
@@ -3269,6 +3434,13 @@
             ],
             "title": "Message"
           },
+          "packages": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PackageCheck"
+            },
+            "title": "Packages",
+            "type": "object"
+          },
           "status": {
             "enum": [
               "ok",
@@ -3429,9 +3601,21 @@
             "title": "Connectionid",
             "type": "string"
           },
+          "identity": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorIdentity"
+            },
+            "title": "Identity",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "own": {
+            "default": false,
+            "title": "Own",
+            "type": "boolean"
           },
           "primary": {
             "default": false,
@@ -3465,6 +3649,30 @@
           "state"
         ],
         "title": "ConnectorAccount",
+        "type": "object"
+      },
+      "ConnectorIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "shown"
+        ],
+        "title": "ConnectorIdentity",
         "type": "object"
       },
       "ConnectorTool": {
@@ -4810,6 +5018,29 @@
         "title": "Envelope[WaitOut]",
         "type": "object"
       },
+      "Envelope_list_AccountChoice__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AccountChoice"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[AccountChoice]]",
+        "type": "object"
+      },
       "Envelope_list_AppCredential__": {
         "additionalProperties": false,
         "properties": {
@@ -5504,6 +5735,31 @@
           "url"
         ],
         "title": "HttpOperationIn",
+        "type": "object"
+      },
+      "IdentityEntry": {
+        "additionalProperties": false,
+        "description": "One thing that tells an account apart from the app's others (an org's address, a server, who signed in), as\nplugins.host.account_identity builds it.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "shown"
+        ],
+        "title": "IdentityEntry",
         "type": "object"
       },
       "IdsIn": {
@@ -8419,6 +8675,28 @@
         "title": "OperationPatchIn",
         "type": "object"
       },
+      "PackageCheck": {
+        "additionalProperties": false,
+        "description": "One package app's check on an account: the objects it requires that the account's system does not have.",
+        "properties": {
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "PackageCheck",
+        "type": "object"
+      },
       "PageOut": {
         "properties": {
           "deltaLink": {
@@ -9193,6 +9471,23 @@
               }
             ],
             "title": "Account"
+          },
+          "accounts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxProperties": 50,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounts"
           },
           "act": {
             "anyOf": [
@@ -15150,8 +15445,252 @@
       }
     },
     "/v1/apps/{app_id}/accounts": {
+      "get": {
+        "description": "The app's accounts a call may name, each with what tells it apart: with `usable`, the team's live accounts\nonly, which a workflow step or an agent names; with `mine`, also the caller's own, which their chats name;\nwith `name`, the one so named (an empty list when none is), which the publish check reads.",
+        "operationId": "apps_list_account_choices",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "usable",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Usable",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Mine",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_AccountChoice__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List Account Choices",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      },
       "post": {
-        "description": "Another account of one of the team's apps: a sandbox, which test runs use, or another named account\n(a second org of the same system). The first stays the default.",
+        "description": "Another account of one of the team's apps: a sandbox, which test runs use, or another named account\n(a second org of the same system). The first stays the default unless `makeDefault` is set. 409\naccount_name_taken for a name another account of the app in the team holds.",
         "operationId": "apps_add_account",
         "parameters": [
           {
@@ -22682,7 +23221,7 @@
     },
     "/v1/me/accounts/{account_id}/another": {
       "post": {
-        "description": "Add another account of the caller's own on this account's app, through the same auth config: where to\nsend the browser. Signing in as an identity the caller already linked updates that account instead.",
+        "description": "Add another account of the caller's own on this account's app, through the same auth config: where to\nsend the browser. The body names it and says where it signs in (409 account_name_taken for a name another\naccount of the app holds); with no body it is \"<name>'s other account\" and signs in where this account does.\nSigning in as an identity the caller already linked updates that account instead.",
         "operationId": "apps_add_own_account",
         "parameters": [
           {
@@ -22759,6 +23298,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AnotherOwnIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

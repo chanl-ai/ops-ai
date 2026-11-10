@@ -1315,6 +1315,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_account_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/account-uses",
+        "pathParams": [],
+        "query": ["app", "name"],
+        "stream": False,
+    },
     "workflows_archive_definition": {
         "body": None,
         "headers": [],
@@ -1430,6 +1439,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/workflows/{workflow_id}/validations/latest",
         "pathParams": ["workflow_id"],
         "query": [],
+        "stream": False,
+    },
+    "workflows_list_account_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/account-uses",
+        "pathParams": [],
+        "query": ["app", "name"],
         "stream": False,
     },
     "workflows_list_definitions": {
@@ -1825,6 +1843,12 @@ class Operations:
     def cases_get_run(self, thread_id: str) -> CaseRun:
         "Get Run"
         return self._t.call(SERVICE, OPERATIONS["cases_get_run"], {"thread_id": thread_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def workflows_list_account_uses(self, *, app: str | None = None, name: str | None = None) -> AccountUsers:
+        "List Account Uses"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_list_account_uses"], {}, {"app": app, "name": name}, {}, None
+        )  # type: ignore[no-any-return]
 
     def activity_list_activity(
         self,
@@ -2757,6 +2781,10 @@ class Operations:
         "Create Definition"
         return self._t.call(SERVICE, OPERATIONS["workflows_create_definition"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def workflows_account_uses(self, *, app: str | None = None, name: str | None = None) -> AccountUses:
+        "Account Uses"
+        return self._t.call(SERVICE, OPERATIONS["workflows_account_uses"], {}, {"app": app, "name": name}, {}, None)  # type: ignore[no-any-return]
+
     def workflows_validate_definition(self, body: DefinitionInput) -> DefinitionValidation:
         "Validate Definition"
         return self._t.call(SERVICE, OPERATIONS["workflows_validate_definition"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -3054,6 +3082,12 @@ class AsyncOperations:
     async def cases_get_run(self, thread_id: str) -> CaseRun:
         "Get Run"
         return await self._t.call(SERVICE, OPERATIONS["cases_get_run"], {"thread_id": thread_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def workflows_list_account_uses(self, *, app: str | None = None, name: str | None = None) -> AccountUsers:
+        "List Account Uses"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_list_account_uses"], {}, {"app": app, "name": name}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def activity_list_activity(
         self,
@@ -4011,6 +4045,12 @@ class AsyncOperations:
     async def workflows_create_definition(self, body: DefinitionInput) -> DefinitionPublished:
         "Create Definition"
         return await self._t.call(SERVICE, OPERATIONS["workflows_create_definition"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def workflows_account_uses(self, *, app: str | None = None, name: str | None = None) -> AccountUses:
+        "Account Uses"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_account_uses"], {}, {"app": app, "name": name}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def workflows_validate_definition(self, body: DefinitionInput) -> DefinitionValidation:
         "Validate Definition"

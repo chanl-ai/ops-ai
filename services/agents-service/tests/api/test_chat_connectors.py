@@ -60,6 +60,17 @@ class Cards:
             },
         ]  # fmt: skip
 
+    async def accounts(
+        self, person: str | None, team: str | None, app_id: str, *, usable: bool = False, name: str | None = None
+    ) -> list[dict[str, Any]]:
+        """The CRM has two accounts, the team's Retail desk (its default) and the person's own EU desk; every other
+        app has one, which the picker does not list."""
+        retail = {"name": "Retail desk", "identity": [{"label": "Org", "value": "x", "shown": "retail.crm.test"}]}
+        eu = {"name": "EU desk", "identity": [{"label": "Org", "value": "y", "shown": "eu.crm.test"}], "own": True}
+        rows: list[dict[str, Any]] = [{**retail, "default": True}, eu] if app_id == CRM else [{"name": "Only"}]
+        rows = [r for r in rows if not (usable and r.get("own"))]
+        return [r for r in rows if name is None or r["name"].casefold() == name.strip().casefold()]
+
 
 def wire(rt: Runtime) -> None:
     rt.tool_directory, rt.app_states = Modules(rt), Cards()
@@ -174,6 +185,25 @@ async def test_an_app_the_person_has_not_signed_in_to_is_in_the_sign_in_group_no
     assert (wires["appGroup"], wires["personal"], wires["on"]) == ("needs_you", True, True), wires
     refused = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CORE]})
     assert refused.status_code == 422, refused.text
+
+
+async def test_a_chat_lists_an_apps_accounts_and_keeps_the_one_picked(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    """Failure modes: the picker shows no account for an app with two, so nobody can tell which org a chat uses; a
+    pick is not kept on the chat; a name the app does not have is saved and sent."""
+    client, rt = stack
+    wire(rt)
+    tid = (await new_thread(client))["id"]
+    start = await connectors(client, tid)
+    assert [a["name"] for a in start[CRM]["accounts"]] == ["Retail desk", "EU desk"], start[CRM]
+    assert start[CRM]["account"] is None and start[WIRES]["accounts"] == [], start
+    picked = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [], "accounts": {CRM: "eu desk"}})
+    assert picked.status_code == 200, picked.text
+    assert (await connectors(client, tid))[CRM]["account"] == "EU desk"
+    assert (await settings(client, tid))["overrides"]["accounts"] == {CRM: "EU desk"}
+    refused = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [], "accounts": {CRM: "Ghost desk"}})
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "account_unknown", refused.text
 
 
 def _fields(record: logging.LogRecord) -> dict[str, Any]:

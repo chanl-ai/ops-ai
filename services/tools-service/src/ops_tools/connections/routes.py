@@ -19,6 +19,7 @@ from .schemas import (
     AccountDetail,
     AccountPatchIn,
     AccountTestIn,
+    AnotherOwnIn,
     ConnectionKinds,
     ConnectLinkIn,
     MyAccount,
@@ -123,10 +124,15 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
         return ok(await service.give_own(who, account_id, body.credentials))
 
     @r.post("/v1/me/accounts/{account_id}/another", response_model=Envelope[SignInStart])
-    async def add_own_account(account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def add_own_account(  # pyright: ignore[reportUnusedFunction]
+        account_id: str, who: Annotated[Caller, Depends(caller)], body: AnotherOwnIn | None = None
+    ) -> JSONResponse:
         """Add another account of the caller's own on this account's app, through the same auth config: where to
-        send the browser. Signing in as an identity the caller already linked updates that account instead."""
-        return ok(await service.add_own_account(who, account_id))
+        send the browser. The body names it and says where it signs in (409 account_name_taken for a name another
+        account of the app holds); with no body it is "<name>'s other account" and signs in where this account does.
+        Signing in as an identity the caller already linked updates that account instead."""
+        given = body.model_dump() if body is not None else None
+        return ok(await service.add_own_account(who, account_id, given))
 
     @r.delete("/v1/me/accounts/{account_id}", status_code=204, response_class=Response)
     async def disconnect(account_id: str, who: Annotated[Caller, Depends(caller)]) -> Response:  # pyright: ignore[reportUnusedFunction]

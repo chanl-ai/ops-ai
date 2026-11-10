@@ -63,10 +63,21 @@ ISSUER = f"https://{LOGIN_HOST}/{ISSUER_ID}"
 SANDBOX_ID = "sandbox"
 SANDBOX_ISSUER = f"https://{LOGIN_HOST}/{SANDBOX_ID}"
 SANDBOX_HOST = "kestrel--uat.sandbox.my.salesforce.test"
-INSTANCES = {ISSUER: API_HOST, SANDBOX_ISSUER: SANDBOX_HOST}
+# A second production org, as a company with a European org beside its main one has: its own My Domain and tokens.
+EU_ID = "eu"
+EU_ISSUER = f"https://{LOGIN_HOST}/{EU_ID}"
+EU_HOST = "kestrel-eu.my.salesforce.test"
+# A lending package's loan object, installed in the EU org only, so a package app's call on the production org finds
+# no such object, as Salesforce answers for a package an org never installed.
+LOAN_OBJECT = "LNDK__Loan__c"
+LOAN_ID = "a0LEU0000000001"
+PACKAGES = {EU_HOST: {LOAN_OBJECT}}
+INSTANCES = {ISSUER: API_HOST, SANDBOX_ISSUER: SANDBOX_HOST, EU_ISSUER: EU_HOST}
 # Each org also signs in at its own My Domain, `https://<my domain>/services/oauth2/...`, as Salesforce's do: the path
 # the server serves the org's sign-in under, by host.
-MY_DOMAIN_LOGIN = {API_HOST: ISSUER_ID, SANDBOX_HOST: SANDBOX_ID}
+MY_DOMAIN_LOGIN = {API_HOST: ISSUER_ID, SANDBOX_HOST: SANDBOX_ID, EU_HOST: EU_ID}
+# The OAuth server's path prefix of each org other than production's, to its issuer.
+ISSUER_BY_PATH = {f"/{SANDBOX_ID}/": SANDBOX_ISSUER, f"/{EU_ID}/": EU_ISSUER}
 OAUTH = "/services/oauth2/"
 AUDIENCE = "salesforce-api"
 IMAGE = "ghcr.io/navikt/mock-oauth2-server:2.1.10"
@@ -122,7 +133,7 @@ def _certificate(folder: Path) -> tuple[Path, Path]:
         .not_valid_before(now - timedelta(minutes=5))
         .not_valid_after(now + timedelta(days=1))
         .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(h) for h in (LOGIN_HOST, API_HOST, SANDBOX_HOST)]), critical=False
+            x509.SubjectAlternativeName([x509.DNSName(h) for h in (LOGIN_HOST, *INSTANCES.values())]), critical=False
         )
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         .sign(key, hashes.SHA256())
@@ -148,7 +159,7 @@ def oauth_server(token_expiry_s: int = 300) -> Generator[str]:
                 "tokenExpiry": token_expiry_s,
                 "requestMappings": [{"requestParam": "grant_type", "match": "*", "claims": {"aud": [AUDIENCE]}}],
             }
-            for issuer in (ISSUER_ID, SANDBOX_ID)
+            for issuer in (ISSUER_ID, SANDBOX_ID, EU_ID)
         ],
     }
     name = f"uc-salesforce-idp-{uuid.uuid4().hex[:8]}"
@@ -264,6 +275,9 @@ class Salesforce:
         self.records = self.org.records
         self.unparsed = self.org.unparsed
         self.revoked: list[str] = []
+        # Tokens an org stopped taking (revoke_sessions): its API answers them 401, as Salesforce does once a session is
+        # revoked or has expired.
+        self.dead: set[str] = set()
         # The OAuth app each token exchange came from, (client id, client secret): which app a team's sign-in used.
         self.clients: list[tuple[str, str]] = []
         # The scopes asked for at sign-in, by the code the server returned, then by the access token issued for it.
@@ -274,7 +288,10 @@ class Salesforce:
         self._jwks = {
             ISSUER: jwt.PyJWKClient(f"{upstream}/{ISSUER_ID}/jwks"),
             SANDBOX_ISSUER: jwt.PyJWKClient(f"{upstream}/{SANDBOX_ID}/jwks"),
+            EU_ISSUER: jwt.PyJWKClient(f"{upstream}/{EU_ID}/jwks"),
         }
+        # Every API call an org answered, by its host, so a use case can tell which org a call reached.
+        self.calls: list[dict[str, str]] = []
 
     def app(self) -> Any:
         from starlette.applications import Starlette
@@ -304,6 +321,7 @@ class Salesforce:
             return signer
         who, scopes = signer
         path = request.url.path
+        self.calls.append({"host": host, "path": path, "who": who})
         if path == "/services/oauth2/userinfo":
             # On a My Domain this is also the sign-in host's UserInfo, which names the org's address.
             return self._userinfo(request)
@@ -311,6 +329,9 @@ class Salesforce:
             status, self.fail_next = self.fail_next, None
             code = "REQUEST_LIMIT_EXCEEDED" if status == 429 else "INVALID_SESSION_ID"
             return JSONResponse([{"errorCode": code}], status)
+        found = self._package_api(host, path)
+        if found is not None:
+            return found
         found = self._org_api(request, path, body, who, scopes)
         if found is not None:
             return found
@@ -369,12 +390,33 @@ class Salesforce:
             return Response(status_code=204)
         return JSONResponse([{"errorCode": "NOT_FOUND", "message": path}], 404)
 
+    def _package_api(self, host: str, path: str) -> Response | None:
+        """The loan package's object at an org that installed it (describe and one record), Salesforce's NOT_FOUND at
+        one that did not; None for any other path."""
+        from starlette.responses import JSONResponse
+
+        prefix = f"{API}/sobjects/{LOAN_OBJECT}"
+        if not path.startswith(prefix):
+            return None
+        if LOAN_OBJECT not in PACKAGES.get(host, set()):
+            return JSONResponse([{"errorCode": "NOT_FOUND", "message": "The requested resource does not exist"}], 404)
+        if path == f"{prefix}/describe":
+            fields = [{"name": f} for f in ("Id", "Name", "LNDK__Stage__c", "LNDK__Amount__c")]
+            return JSONResponse({"name": LOAN_OBJECT, "custom": True, "fields": fields})
+        if path == f"{prefix}/{LOAN_ID}":
+            loan = {"Id": LOAN_ID, "Name": "Harbor bakery expansion", "LNDK__Stage__c": "Underwriting"}
+            return JSONResponse({"attributes": {"type": LOAN_OBJECT}, **loan, "LNDK__Amount__c": 250000})
+        return JSONResponse([{"errorCode": "NOT_FOUND", "message": path}], 404)
+
     def _signer(self, request: Any, host: str) -> tuple[str, set[str]] | Response:
         """The bearer token's subject and the scopes granted at its sign-in, or the 401 Salesforce answers."""
         from starlette.responses import JSONResponse
 
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
+        if token in self.dead:
+            self.refused.append("revoked")
+            return JSONResponse([{"errorCode": "INVALID_SESSION_ID", "message": "Session expired or invalid"}], 401)
         try:
             said = str(jwt.decode(token, options={"verify_signature": False}).get("iss") or "")
             if said not in self._jwks:
@@ -388,6 +430,17 @@ class Salesforce:
             self.refused.append(type(e).__name__)
             return JSONResponse([{"errorCode": "INVALID_SESSION_ID", "message": str(e)}], 401)
         return str(claims["sub"]), set(self._scope_by_token.get(token, "").split())
+
+    def revoke_sessions(self, host: str) -> None:
+        """Every token issued so far for the org at `host` stops working, as when an admin revokes its sessions; a
+        later sign-in gets a working one. Refreshes are refused only while `refuse_refresh` is set."""
+        for token in list(self._scope_by_token):
+            try:
+                said = str(jwt.decode(token, options={"verify_signature": False}).get("iss") or "")
+            except jwt.PyJWTError:
+                continue  # a refresh token, which is not a JWT
+            if INSTANCES.get(said) == host:
+                self.dead.add(token)
 
     def _org_api(self, request: Any, path: str, body: bytes, who: str, scopes: set[str]) -> Response | None:
         """The advisor org's calls, or None for a path the case handlers answer. A Case call comes here only when it
@@ -623,7 +676,7 @@ class Salesforce:
                 scope = self._scope_by_token.get(form.get("refresh_token", [""])[0], "")
             answer["scope"] = scope
             # Salesforce names the org's own address in every token answer; a plugin reads its instance from here.
-            issuer = SANDBOX_ISSUER if path.startswith(f"/{SANDBOX_ID}/") else ISSUER
+            issuer = next((i for p, i in ISSUER_BY_PATH.items() if path.startswith(p)), ISSUER)
             answer["instance_url"] = "https://evil.example" if self.bad_instance else f"https://{INSTANCES[issuer]}"
             self._scope_by_token[answer["access_token"]] = scope
             if answer.get("refresh_token"):
@@ -683,6 +736,7 @@ class Salesforce:
             "clients": list(self.clients),
             "records": copy.deepcopy(self.records),
             "unparsed": list(self.unparsed),
+            "calls": list(self.calls),
         }
 
 
@@ -1912,16 +1966,18 @@ def salesforce(token_expiry_s: int = 300) -> Generator[dict[str, Any]]:
                 "settings": {
                     "OPS_EGRESS_CA_FILE": str(cert),
                     "OPS_EGRESS_RESOLVE": json.dumps(
-                        dict.fromkeys((LOGIN_HOST, API_HOST, SANDBOX_HOST), f"{address}:{port}")
+                        dict.fromkeys((LOGIN_HOST, *INSTANCES.values()), f"{address}:{port}")
                     ),
                 },
-                "hosts": [LOGIN_HOST, API_HOST, SANDBOX_HOST],
+                "hosts": [LOGIN_HOST, *INSTANCES.values()],
                 "sandbox_login": SANDBOX_ISSUER,
                 # Where the Salesforce plugin signs in to each org: its company address (My Domain), one of the
                 # places the plugin takes.
                 "login_url": f"https://{API_HOST}/services/oauth2",
                 "sandbox_login_url": f"https://{SANDBOX_HOST}/services/oauth2",
                 "sandbox_base": f"https://{SANDBOX_HOST}",
+                "eu_login_url": f"https://{EU_HOST}/services/oauth2",
+                "eu_base": f"https://{EU_HOST}",
                 "range": f"{address}/32",
                 "authorize_url": f"{ISSUER}/authorize",
                 "token_url": f"{ISSUER}/token",

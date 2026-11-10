@@ -66,6 +66,18 @@ class AccountIn(_In):
     credentials: dict[str, Annotated[str, Field(max_length=CREDENTIAL_MAX)]] = Field(
         default_factory=dict[str, str], max_length=20
     )
+    # Make it the team's default (the one calls naming no account use); refused on a sandbox. The first account of an
+    # app is its default whatever this says.
+    make_default: bool | None = None
+
+
+class AnotherOwnIn(_In):
+    """A person's second account of their own on an app: its name, which steps and chats pick it by and which no other
+    account of the app in the team holds, and where it signs in (the app's per-account settings, such as a company
+    server's address), kept as given rather than copied from the account it starts from."""
+
+    name: str = Field(min_length=1, max_length=200)
+    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
 class AccountPatchIn(_In):
@@ -200,6 +212,13 @@ class SignedIn(Out):
     scopes: list[str]
 
 
+class PackageCheck(Out):
+    """One package app's check on an account: the objects it requires that the account's system does not have."""
+
+    title: str
+    missing: list[str] = Field(default_factory=list[str])
+
+
 class ConnectionHealth(Out):
     """The last Test connection: a read of the system's test address, signed in with `account`'s sign-in."""
 
@@ -211,6 +230,8 @@ class ConnectionHealth(Out):
     http_status: int | None = None
     code: str | None = None
     message: str | None = None
+    # Each package app that runs on the account's app, by plugin id, as the test found it; absent when none runs on it.
+    packages: dict[str, PackageCheck] = Field(default_factory=dict[str, PackageCheck])
 
 
 class SigningCertificate(Out):

@@ -7,6 +7,7 @@ import { ArrowUpRight, BookOpen, LayoutTemplate, Plus, Wrench } from 'lucide-rea
 import { CHANNEL_ICON } from '@/components/agents/agent-card';
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
 import { CopyField } from '@/components/shared/setting/copy-field';
+import { AccountSelect } from '@/components/connections/account-select';
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
 import { SettingsSection } from '@/components/shared/settings-section';
@@ -44,6 +45,8 @@ export interface AgentDraft {
   channels: Channel[];
   instructions: string;
   toolIds: string[];
+  /** The account each app's calls use (app id to account name); an app it does not name uses its default. */
+  accounts: Record<string, string>;
   collections: string[];
   guardrails: AgentGuardrails;
   guardrailPins: { guardrailId: string; version: number; enabled: boolean }[];
@@ -61,6 +64,7 @@ export const draftOf = (a: Agent): AgentDraft => ({
   channels: a.channels,
   instructions: a.instructions,
   toolIds: a.toolIds,
+  accounts: a.accounts ?? {},
   collections: a.collections,
   guardrails: a.guardrails,
   guardrailPins: (a.guardrailPins ?? []).map((p) => ({ guardrailId: p.guardrailId, version: p.version, enabled: p.enabled ?? true })),
@@ -94,6 +98,7 @@ const SECTION: Record<keyof AgentDraft, string> = {
   channels: 'Identity',
   instructions: 'Instructions',
   toolIds: 'Tools',
+  accounts: 'Tools',
   collections: 'Knowledge',
   guardrails: 'Guardrails',
   guardrailPins: 'Guardrails',
@@ -205,6 +210,9 @@ export function ToolsSection({ draft, set, stale = [] }: { draft: AgentDraft; se
     <SettingsSection title={`Tools · ${draft.toolIds.length}`} description="The only systems this agent may call. Tools marked review pause every call for a person.">
       <div className="flex flex-col gap-3">
         {draft.toolIds.length === 0 && <p className="text-sm text-muted-foreground">No tools. The agent can only answer from knowledge.</p>}
+        <FormField id="agent-accounts" label="Account" hint="Which account of an app this agent’s calls use. A workflow step that names its own account wins.">
+          <AccountSelect id="agent-accounts" value={draft.accounts} onChange={(v) => set('accounts', v)} />
+        </FormField>
         <EntityPicker source={toolOptions} value={offered} onChange={(ids) => set('toolIds', [...ids, ...gone])} addLabel="Grant tools" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." icon={Wrench} testId="agent-tools-picker" note={(first) => <ToolsNotAddedNote apps={first.notAdded ?? []} />} />
         {gone.length > 0 && (
           <div className="flex flex-col gap-1" data-testid="stale-grants">

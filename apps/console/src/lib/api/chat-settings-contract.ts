@@ -13,5 +13,6 @@ export interface ChatSettingsApi {
   /** The connectors this chat may use, for the composer's picker. */
   connectors(threadId: string): Promise<ChatConnectors>;
   /** Leaves these apps out of this chat (the whole set); it only narrows what the agent holds. */
-  setConnectors(threadId: string, off: string[]): Promise<ChatConnectors>;
+  /** The apps this chat leaves out and, when given, the account each app uses in it (app id to account name). */
+  setConnectors(threadId: string, off: string[], accounts?: Record<string, string>): Promise<ChatConnectors>;
 }

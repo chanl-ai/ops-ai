@@ -51,6 +51,7 @@ from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
+from ..account_names import account_uses_in
 from ..actors import ActorView, actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
@@ -414,6 +415,28 @@ class DefinitionRow(Out):
     runs: int
     updated_at: str
     updated_by: str
+
+
+class AccountUses(Out):
+    """How many definitions name one account of an app, for the warning before it is renamed: a rename never rewrites
+    them, so each keeps the old name and its next publish fails until its step names the new one."""
+
+    drafts: int
+    published: int
+    workflows: list[str]
+    agents: list[str]
+
+
+@router.get("/definitions/account-uses", response_model=Envelope[AccountUses])
+async def account_uses(
+    rt: Rt,
+    me: Me,
+    app: Annotated[str, Query(min_length=1, max_length=120)],
+    name: Annotated[str, Query(min_length=1, max_length=200)],
+) -> JSONResponse:
+    """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`."""
+    found = await account_uses_in(rt, current_team() or me.team_id, app, name)
+    return ok(AccountUses(**found).model_dump(by_alias=True))
 
 
 @router.get("/definitions", response_model=Envelope[ListResult[DefinitionRow]])

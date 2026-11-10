@@ -30,13 +30,15 @@ from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
 from .connections.records import (
     CONNECTED,
+    PERSON_ORIGIN,
     account_state,
+    connection_base,
     person_state,
     shown_status,
     state_reason,
     team_test,
 )
-from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn
+from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn, SignIn
 from .connections.service import OPS_AI_APP, ConnectionService, own_key
 from .connectors import MyConnector, my_connectors
 from .defaults import ensure_defaults
@@ -49,19 +51,23 @@ from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
 from .plugins.host import (
     PluginHost,
+    account_identity,
     fixed_fields,
+    missing_objects,
     module_id_of,
     offered,
     own_and_registration,
     per_account,
     plugin_id_of,
+    points_at,
+    same_place,
     shown_value,
     sign_in_values,
     tools_added,
 )
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
-from .store.connections import DEFAULT_VALUE, FIXED_VALUE, plugin_app, plugin_of, split_config
+from .store.connections import DEFAULT_VALUE, FIXED_VALUE, name_key, plugin_app, plugin_of, split_config
 from .store.modules import ModuleStore
 from .store.team_defaults import TeamDefaults
 
@@ -388,6 +394,8 @@ class AppMe(Out):
 
     connected: bool
     account: str | None = None
+    # How many of the app's accounts the caller signed in to themselves; a member's Accounts tab links them to Mine.
+    sign_ins: int = 0
 
 
 class AccountOwner(Out):
@@ -425,6 +433,37 @@ class SignInValue(Out):
     shown: str
 
 
+class IdentityEntry(Out):
+    """One thing that tells an account apart from the app's others (an org's address, a server, who signed in), as
+    plugins.host.account_identity builds it."""
+
+    label: str
+    value: str
+    # As a person reads it: a choice's label, or the host of an address.
+    shown: str
+
+
+class AccountChoice(Out):
+    """One account a step, an agent or a chat may name for an app's calls, with what tells it apart."""
+
+    id: str
+    name: str
+    identity: list[IdentityEntry] = Field(default_factory=list[IdentityEntry])
+    # The team's default: calls naming no account use it.
+    default: bool = False
+    sandbox: bool = False
+    # One of the caller's own accounts (only with `mine`), which only their own chats use.
+    own: bool = False
+    # The app whose accounts these are, the key a step's or agent's `accounts` names it under: the app itself, or for
+    # a package app the app it runs on. Optional so older readers keep parsing.
+    app_id: str | None = None
+    # For a package app, the objects of the package this account's last Test found missing; a picker shows the
+    # account unavailable while any are, and the call is refused (PACKAGE_MISSING).
+    missing_objects: list[str] = Field(default_factory=list[str])
+    # Where it points, who signed in left out (plugins/host.py points_at); null when it names no place.
+    points_at: str | None = None
+
+
 class AppAccount(Out):
     """One row of the app's Accounts list: one of the team's accounts (the default is the one live calls use unless
     they name another, and a sandbox one is what test runs use), or one person's own sign-in on it (`kind` person)."""
@@ -446,6 +485,12 @@ class AppAccount(Out):
     # Why it is refused or expired: the system's words, or the day the sign-in ended.
     state_reason: str | None = None
     owner: AccountOwner
+    # Whose login its calls use: the team's (`team`), each person's (`person`), or each person's with the team's for
+    # runs nobody started (`person_or_team`). Optional so older readers keep parsing.
+    sign_in: SignIn | None = None
+    # How many people hold their own sign-in on this account: the "3 of 12" under "Each person signs in". Optional so
+    # older readers keep parsing.
+    people_signed_in: int | None = None
     # The auth config it signs in with (`AuthConfig.id`) and its name; null for a kind with no OAuth client.
     config_id: str | None = None
     config_name: str | None = None
@@ -463,6 +508,14 @@ class AppAccount(Out):
     health: ConnectionHealth | None = None
     # Where it signs in and the org its sign-in landed in; empty for an app whose plugin names neither.
     sign_in_values: list[SignInValue] = Field(default_factory=list[SignInValue])
+    # What tells it apart from the app's other accounts, shown under its name; optional so older readers keep parsing.
+    identity: list[IdentityEntry] = Field(default_factory=list[IdentityEntry])
+    # An earlier account of the app that points at the same place, by name: a warning, never a refusal, since a team
+    # may keep a read-only and a write login to one org.
+    same_place_as: str | None = None
+    # Where it points, as shown: the first identity entry that is not who signed in; null when it names no place. Text
+    # sent to a model reads this, never `identity`, so a person's email stays out of it.
+    points_at: str | None = None
 
 
 class ConfigPermission(Out):
@@ -555,10 +608,13 @@ class Apps:
         self.connections = connections
         # Who uses each of an app's tools (agents-service), for the app page's Tools tab.
         self.users = users
+        connections.account_users = users.accounts if users is not None else None
         self.modules = modules
         self.plugins = plugins
         # A plugin's turn-on and accounts, when the install has plugins.
         self.plugin_accounts = PluginAccounts(plugins, connections) if plugins is not None else None
+        if self.plugin_accounts is not None:
+            connections.own_place = self.plugin_accounts.own_place
         # The call log, for an app's Usage tab; without it the page lists no runs.
         self.calls = calls
         # The team's write approval policies, for whether a connector's write is reviewed first; without them each
@@ -1699,7 +1755,11 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
     return {
         "card": card,
         "connection": detail,
-        "me": {"connected": bool(signed), "account": signed[0].get("account") if signed else None},
+        "me": {
+            "connected": bool(signed),
+            "account": signed[0].get("account") if signed else None,
+            "signIns": len(signed),
+        },
         "peopleCount": len(people),
         "accounts": accounts,
         # Auth configs are for whoever manages the team's apps (builders and admins): anyone else gets none.
@@ -1708,6 +1768,59 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
         "skills": skills,
         "usage": usage,
     }
+
+
+async def account_choices(
+    apps: Apps, who: Caller, app_id: str, *, usable: bool, name: str | None, mine: bool
+) -> list[dict[str, Any]]:
+    """The accounts of an app a call may name, read by the step and agent pickers, a chat's picker and the publish
+    check (agents-service asks here rather than matching names itself). `usable`: the team's live accounts only, the
+    ones a workflow step or an agent may name (a step's run may act for nobody, and a test run takes the test account
+    by itself). `mine` adds the caller's own accounts, which their own chats may name. `name` keeps the one so named,
+    compared as calls compare it (trimmed, case-folded)."""
+    store = apps.connections.store
+    pid = plugin_of({"app_id": app_id})
+    plugin = apps.plugins.plugins.get(pid) if apps.plugins and pid else None
+    package: str | None = None
+    if plugin is not None and plugin.manifest.connection.runs_on:
+        # A package app has no accounts: it lists those of the app it runs on, each marked where it is missing.
+        package, pid = plugin.manifest.id, plugin.manifest.connection.runs_on
+        plugin = apps.plugins.plugins.get(pid) if apps.plugins else None
+        app_id = plugin_app(pid)
+    found = await store.accounts(who.tenant_id, who.team.id, app_id)
+    if not found or (pid is not None and plugin is None):
+        raise NotFound(f"App {app_id}")
+    b = await apps.plugins.bindings.get(who.tenant_id, who.team.id, pid) if apps.plugins and pid else None
+    default = str((b or {}).get("connection_id") or "") if pid else app_id
+    own_ids = {
+        str(t["connection_id"])
+        for t in await store.own_sign_ins(who.tenant_id, own_key(who), [str(a["id"]) for a in found])
+    }
+    tokens = await store.team_tokens(who.tenant_id, [str(a["id"]) for a in found])
+    wanted = name_key(name) if name else None
+    out: list[dict[str, Any]] = []
+    for a in found:
+        aid, own = str(a["id"]), a.get("origin") == PERSON_ORIGIN
+        if (own and not (mine and aid in own_ids)) or (usable and a.get("sandbox")):
+            continue
+        if wanted is not None and name_key(a.get("account_name")) != wanted:
+            continue
+        signed = (tokens.get(aid) or {}).get("account")
+        manifest = plugin.manifest if plugin else None
+        identity = account_identity(manifest, own_and_registration(a), signed, "" if plugin else connection_base(a))
+        out.append(
+            {
+                "id": aid,
+                "name": str(a.get("account_name") or a["name"]),
+                "identity": identity,
+                "default": aid == default,
+                "sandbox": bool(a.get("sandbox")),
+                "own": own,
+                "app_id": app_id,
+                "missing_objects": missing_objects(a, package) if package else [],
+            }
+        )
+    return out
 
 
 async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1724,6 +1837,10 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     mine = own_key(who)
     ids = [str(a["id"]) for a in stored]
     signed = {str(t["connection_id"]): t for t in await store.own_sign_ins(who.tenant_id, mine, ids)}
+    people_rows = await store.sign_ins(who.tenant_id, ids)
+    people_on: dict[str, set[str]] = {}
+    for t in people_rows:
+        people_on.setdefault(str(t["connection_id"]), set()).add(str(t["person_id"]))
     may = apps.connections.may_manage(who)
     now = apps.connections.clock()
     sandboxes = {str(a["id"]) for a in stored if a.get("sandbox")}
@@ -1743,8 +1860,12 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     # An app the install no longer loads keeps its accounts for the record only: nothing signs in or changes them.
     removed = card["kind"] == "plugin" and card.get("plugin") is None
     out: list[dict[str, Any]] = []
+    places: dict[tuple[str, ...], str] = {}
     for a in stored:
         aid = str(a["id"])
+        if not may and a.get("origin") == PERSON_ORIGIN:
+            # One person's own second account is theirs to see on Connectors > Mine, never a row of the team's list.
+            continue
         state, status, why = states[aid]
         sign_in = a.get("sign_in") or "team"
         own = signed.get(aid)
@@ -1790,6 +1911,8 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "stateReason": why,
                 # Each person signs in to it with their own account, so it is no one person's, whoever made it.
                 "owner": {"kind": "each", "name": who.name} if alone else {"kind": "team", "name": who.team.name},
+                "signIn": sign_in,
+                "peopleSignedIn": len(people_on.get(aid, set[str]())),
                 # Which auth config an account signs in through is shown only to whoever manages the team's apps.
                 "configId": config if may else None,
                 "configName": config_names.get(config) if config and may else None,
@@ -1807,14 +1930,28 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "signInValues": sign_in_values(plugin.manifest, own_and_registration(a)) if plugin else [],
             }
         )
+        row = out[-1]
+        row["identity"] = account_identity(
+            plugin.manifest if plugin else None,
+            own_and_registration(a),
+            str(row["account"]) if row.get("account") else None,
+            "" if plugin else connection_base(a),
+        )
+        place = same_place(row["identity"])
+        row["samePlaceAs"] = places.get(place) if place else None
+        row["pointsAt"] = points_at(row["identity"])
+        if place:
+            places.setdefault(place, str(row["name"]))
     # Each person's own sign-in on a team account is a row of its own, under that account's auth config. A person who
     # may not manage the team's apps sees only their own; the team's account row stays above for everyone.
     teams = {str(r["id"]): r for r in out}
-    for t in await store.sign_ins(
-        who.tenant_id, [aid for aid in ids if (teams[aid] or {}).get("owner", {}).get("kind") == "team"]
-    ):
+    for t in people_rows:
         aid, pid = str(t["connection_id"]), str(t["person_id"])
-        if not may and pid != mine:
+        if aid not in teams or teams[aid].get("owner", {}).get("kind") != "team":
+            continue
+        if not may:
+            # A member's own sign-ins are on Connectors > Mine; the team's list shows the team's accounts (the page's
+            # `me.signIns` counts theirs).
             continue
         row = teams[aid]
         state = person_state(t, now)
@@ -2077,12 +2214,28 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         refused, as only test runs use it."""
         return ok(await apps.make_team_default(who, app_id, account_id))
 
+    @r.get("/v1/apps/{app_id}/accounts", response_model=Envelope[list[AccountChoice]])
+    async def list_account_choices(  # pyright: ignore[reportUnusedFunction]
+        app_id: str,
+        who: Annotated[Caller, Depends(caller)],
+        usable: bool = False,
+        name: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
+        mine: bool = False,
+    ) -> JSONResponse:
+        """The app's accounts a call may name, each with what tells it apart: with `usable`, the team's live accounts
+        only, which a workflow step or an agent names; with `mine`, also the caller's own, which their chats name;
+        with `name`, the one so named (an empty list when none is), which the publish check reads."""
+        rows = await account_choices(apps, who, app_id, usable=usable, name=name, mine=mine)
+        out = [AccountChoice(**r).model_copy(update={"points_at": points_at(r.get("identity") or [])}) for r in rows]
+        return ok([c.model_dump(by_alias=True) for c in out])
+
     @r.post("/v1/apps/{app_id}/accounts", response_model=Envelope[AccountDetail], status_code=201)
     async def add_account(  # pyright: ignore[reportUnusedFunction]
         app_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Another account of one of the team's apps: a sandbox, which test runs use, or another named account
-        (a second org of the same system). The first stays the default."""
+        (a second org of the same system). The first stays the default unless `makeDefault` is set. 409
+        account_name_taken for a name another account of the app in the team holds."""
         return ok(await apps.add_account(who, app_id, body), 201)
 
     return r

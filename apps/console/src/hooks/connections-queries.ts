@@ -62,4 +62,8 @@ export const useStartCredentialCheck = () => useMutation({ mutationFn: (ref: Acc
 
 /** Starts the person's sign-in for another account of their own on a connector's app, through the same auth config
  * (POST /v1/me/accounts/{id}/another); a login already linked updates that account instead. */
-export const useAddOwnAccount = () => useMutation({ mutationFn: (accountId: string) => sdk((ops) => ops.raw.tools.apps_add_own_account({ path: { account_id: accountId } })) });
+export const useAddOwnAccount = () =>
+  useMutation({
+    mutationFn: (i: { accountId: string; name: string; settings: Record<string, string> }) =>
+      sdk((ops) => ops.raw.tools.apps_add_own_account({ path: { account_id: i.accountId }, body: { name: i.name, settings: i.settings } })),
+  });

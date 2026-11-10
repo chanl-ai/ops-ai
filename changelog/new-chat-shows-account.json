@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "A new chat says which account it uses",
+  "description": "When an app has several accounts, a new chat's Connectors list shows the account it starts on, the agent's or the team's default, before the first message.",
+  "tag": "fix"
+}

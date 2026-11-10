@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "Package apps run on the org you pick",
+  "description": "An app that runs inside another one, such as a lending package in a Salesforce org, uses the Salesforce account you pick. Orgs without the package are marked and refused, with the org named, before anything is sent.",
+  "tag": "new"
+}

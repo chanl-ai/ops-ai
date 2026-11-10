@@ -21,6 +21,7 @@ from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.gateway import LIVE, TEST, acting_as, current_run_context
 from ops_agents.activities.overrides import limits_for
 from ops_agents.activities.tools import fill
+from ops_agents.domain.accounts import chosen_accounts
 from ops_contracts.chat import EffectiveSettings
 from ops_service_kit.ids import new_id
 
@@ -147,8 +148,9 @@ def build(
             # gets the agent's passages when they match, and finding none is not a no-answer.
             knowledge_asked=bool(state.get("kb_ids")) or bool(attached),
         )
-        # The agent is the actor of every call its turn makes, in the gateway's log.
-        with acting_as(f"agent:{a.id}", turn_environment(state)):
+        # The agent is the actor of every call its turn makes, in the gateway's log, on the accounts it and the chat
+        # chose.
+        with acting_as(f"agent:{a.id}", turn_environment(state), turn_accounts(a, state)):
             result = await kernel_turn("agent", req, ports, deps.meter, deps.model_alias)
         return {
             "messages": [{"role": "user", "content": state["message"]}, {"role": "assistant", "content": result.text}],
@@ -208,7 +210,7 @@ def build(
                 else None,
             ),
         )
-        with acting_as(f"agent:{a.id}", turn_environment(state)):
+        with acting_as(f"agent:{a.id}", turn_environment(state), turn_accounts(a, state)):
             result = await kernel_turn("resume", req, ports, deps.meter, deps.model_alias)
         return {
             "messages": [{"role": "assistant", "content": result.text}],
@@ -230,6 +232,12 @@ def build(
     g.add_edge("approval", "resume")
     g.add_conditional_edges("resume", after_turn, ["approval", END])
     return g.compile(checkpointer=checkpointer, name=f"agent:{agent_id}" if agent_id else "agent_wrapper")
+
+
+def turn_accounts(agent: AgentDefinition, state: Mapping[str, Any]) -> dict[str, str]:
+    """The account each app's calls use in a turn: the chat's pick (its thread's `accounts`) over the agent's own."""
+    chosen = cast(dict[str, Any], (state.get("thread_overrides") or {}).get("accounts") or {})
+    return chosen_accounts(agent=agent.accounts, chat=chosen)
 
 
 def _effective(state: AgentState) -> EffectiveSettings | None:

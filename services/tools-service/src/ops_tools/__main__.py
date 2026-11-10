@@ -203,6 +203,7 @@ def main() -> None:
     )
     connection_service.app_display = plugins.display_of if plugins else None
     connection_service.sign_in_scopes = plugins.sign_in_scopes if plugins else None
+    connection_service.package_checks = plugins.package_checks if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
     modules.users = tool_users
     # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.

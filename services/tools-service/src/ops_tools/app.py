@@ -64,7 +64,11 @@ class RunContext(_Wire):
     # The kind of run the call is made in: live runs send production, everything else test. Absent is test,
     # so a caller that does not say never reaches a live account's write unseen.
     environment: RunKind | None = None
-    # One of the team's accounts of the tool's app, by name; none uses the default.
+    # The account each app's calls use, app id to account name, as a step, an agent or a chat chose; an app with no
+    # entry uses the person's default, else the team's. The call reads its own app's entry.
+    accounts: dict[str, Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=50)
+    # Deprecated: one account name for the call's app, as older callers send it; read for one release, `accounts`
+    # wins.
     account: str | None = Field(default=None, min_length=1, max_length=200)
 
 

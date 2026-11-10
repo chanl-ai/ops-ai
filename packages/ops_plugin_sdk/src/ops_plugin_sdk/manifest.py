@@ -137,6 +137,18 @@ class Connection(Strict):
     # The settings that belong to the OAuth app's registration (a Microsoft tenant, an Okta domain), not to one account:
     # a team's app credential holds them, and every account signing in with that credential reads them from it.
     credential_settings: list[str] = Field(default_factory=list[str])
+    # The settings whose values tell one account of the app from another (Salesforce's instance_url, an org's address),
+    # shown under each account's name, in this order. None declared: the host shows what the sign-in filled, the
+    # account's own sign-in address and who signed in (tools-service host.account_identity).
+    identity: list[str] = Field(default_factory=list[str])
+    # A package app: the plugin id of the app it runs inside (a loan package in a Salesforce org). It has no accounts
+    # of its own, so it declares `kinds: [none]`; each call signs in with the chosen account of that app, and its
+    # endpoint and egress render with that account's settings.
+    runs_on: str | None = None
+    # The objects the package installs in the app (custom object names). An account where one is missing cannot run
+    # the package's tools: tools-service reads `requires_check`, with `{name}` for each object, at sign-in and on Test.
+    requires: list[str] = Field(default_factory=list[str])
+    requires_check: str | None = None
 
     def sign_in_error(self, error: str, description: str | None) -> SignInError | None:
         """The first `sign_in_errors` entry for this error code and description; None when none matches."""

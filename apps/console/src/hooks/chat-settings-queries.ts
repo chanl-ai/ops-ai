@@ -31,7 +31,8 @@ export const useChatConnectors = (threadId: string | undefined, enabled = true) 
 export function useSetChatConnectors(threadId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (off: string[]) => api.chat.settings.setConnectors(threadId, off),
+    mutationFn: (i: string[] | { off: string[]; accounts: Record<string, string> }) =>
+      Array.isArray(i) ? api.chat.settings.setConnectors(threadId, i) : api.chat.settings.setConnectors(threadId, i.off, i.accounts),
     onSuccess: (answer) => {
       qc.setQueryData(teamKey(connectorsKey(threadId)), answer);
       void qc.invalidateQueries({ queryKey: teamKey(key(threadId)) });
