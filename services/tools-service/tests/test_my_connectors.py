@@ -81,7 +81,7 @@ async def test_two_accounts_of_one_app_are_one_row_named_as_the_sign_in_said(
     rows = [r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES]
     assert len(rows) == 1, rows
     row = rows[0]
-    assert (row["state"], row["accountCount"], row["primaryAccountId"]) == ("connected", 2, first), row
+    assert (row["appState"], row["accountCount"], row["primaryAccountId"]) == ("connected", 2, first), row
     assert row["account"] == "priya@live.example" and row["inChat"] is True, row
     assert {a["account"] for a in row["accounts"]} == {"priya@live.example", "priya@second.example"}, row
     # Two connected and none saved: no account is her default yet, so a call asks which.
@@ -192,12 +192,13 @@ async def test_an_app_off_for_the_team_is_listed_off_and_one_the_install_lacks_i
     sam = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
     rows = {r["appId"]: r for r in await _mine(c, sam)}
     off = rows.get(SITES)
-    assert off is not None and off["state"] == "app_off" and off["accounts"] == [], rows
-    assert off["mayTurnOn"] is True and off["inChat"] is False and off["canDo"] == "Reads: Read a record", off
+    # Security has no auth config for the app and this install has no app of its own for it, so it reads that.
+    assert off is not None and off["appState"] == "needs_auth_config" and off["accounts"] == [], rows
+    assert off["mayManage"] is True and off["inChat"] is False and off["canDo"] == "Reads: Read a record", off
     # The team-only desk acts as the team, never as a person, so it is no connector of Sam's.
     assert "plugin:test.fields" not in rows, rows
     viewer = person(tenant, "Ravi Menon", {"team_security": "viewer"})
-    assert next(r for r in await _mine(c, viewer) if r["appId"] == SITES)["mayTurnOn"] is False
+    assert next(r for r in await _mine(c, viewer) if r["appId"] == SITES)["mayManage"] is False
 
 
 async def test_an_apps_card_says_the_callers_own_sign_in_beside_the_teams(

@@ -15,8 +15,10 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
 import { Row, Rows } from '@/components/shared/surface';
 import { SettingsSection } from '@/components/shared/settings-section';
+import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 import { type AppPage, useAppUsers, useChangeAccount, useChangeAppKind, useDeleteApp, useSetTeamApp } from '@/hooks/systems-queries';
 import type { Kind, Kinds } from '@/lib/connect-plan';
+import { addAuthConfigFirst, appStateFor } from '@/lib/app-state';
 import { plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -25,17 +27,36 @@ import { cn } from '@/lib/utils';
  * team, and deleting it. Turning it off keeps its accounts and tools, so it is a setting, not in the danger zone. Auth
  * configs and their callback URL live on the Auth configs tab.
  */
-export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; kinds?: Kinds; onSetUp: () => void; onDeleted: () => void }) {
+export function SettingsTab({
+  app,
+  kinds,
+  onSetUp,
+  onTurnOn,
+  onDeleted,
+}: {
+  app: AppPage;
+  kinds?: Kinds;
+  onSetUp: () => void;
+  /** The first turn-on's window; an app turned off before goes back on from here directly. */
+  onTurnOn: () => void;
+  onDeleted: () => void;
+}) {
   const conn = app.connection;
   const change = useChangeAccount();
   const kind = kinds?.kinds.find((k) => k.id === conn?.authKind);
   const [off, setOff] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [changing, setChanging] = React.useState(false);
-  if (!conn) return null;
+  // An app with no account yet (never turned on) still shows whether it is on, and its one next action.
+  if (!conn)
+    return app.card.pluginId && app.card.mayManage && app.card.plugin ? (
+      <div className="flex flex-col gap-4" data-testid="app-settings">
+        <OnForTeam app={app} onTurnOn={onTurnOn} onTurnOff={() => setOff(true)} />
+      </div>
+    ) : null;
   // An app the system no longer has installed changes nothing here; an admin may still delete what it left.
   const mayDelete = Boolean(conn.mayManage);
-  const may = mayDelete && app.card.appState !== 'removed';
+  const may = mayDelete && app.card.appGroup !== 'gone';
   const personal = conn.signIn !== 'team';
   // On: tools a person runs use their own account, and the team's sign-in serves only runs nobody started.
   const flip = (on: boolean) =>
@@ -80,19 +101,7 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
         </div>
         {app.card.pluginId && <p className="text-xs text-muted-foreground">{`${app.card.name}’s plugin sets how it signs in.`}</p>}
       </SettingsSection>
-      {may && app.card.pluginId && (
-        <SettingsSection title="On for this team">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="min-w-0 flex-1 basis-60 text-sm">
-              <span className="block font-medium">{`${app.card.name} is on`}</span>
-              <span className="block text-xs text-muted-foreground">Turned off, its tools stop for this team; its accounts and the tools you added stay.</span>
-            </span>
-            <Button size="sm" variant="outline" onClick={() => setOff(true)} data-testid="app-off">
-              Turn off
-            </Button>
-          </div>
-        </SettingsSection>
-      )}
+      {may && app.card.pluginId && <OnForTeam app={app} onTurnOn={onTurnOn} onTurnOff={() => setOff(true)} />}
       {mayDelete && (
         <DangerZone
           items={[
@@ -210,6 +219,51 @@ function DeleteAppDialog({ app, onClose, onDeleted }: { app: AppPage; onClose: (
         )
       }
     />
+  );
+}
+
+/** On for this team: the card's state, as the header's badge reads it (lib/app-state.ts), with its one next action. */
+function OnForTeam({ app, onTurnOn, onTurnOff }: { app: AppPage; onTurnOn: () => void; onTurnOff: () => void }) {
+  const shown = appStateFor(app.card.appState, app.card.appGroup, Boolean(app.card.mayManage));
+  return (
+    <SettingsSection title="For this team">
+      {/* What is true for the team, in one line, and its one action (lib/app-state.ts). */}
+      <div className="flex flex-wrap items-center gap-3" data-testid="app-on-for-team" data-state={app.card.appState}>
+        <span className="min-w-0 flex-1 basis-60 text-sm">
+          <span className="block font-medium">
+            {shown.action === 'fix_auth_config'
+              ? `${app.card.name} is on, and its auth config needs fixing`
+              : shown.on
+                ? `${app.card.name} is on`
+                : shown.action === 'add_auth_config'
+                  ? `${app.card.name} is off, with no auth config yet`
+                  : `${app.card.name} is off`}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {shown.action === 'fix_auth_config'
+              ? `${app.card.appStateReason ?? ''} Add a working auth config and sign in again, or turn it off.`
+              : shown.on
+                ? 'Turned off, its tools stop for this team; its accounts and the tools you added stay.'
+                : shown.action === 'add_auth_config'
+                  ? `${app.card.name} signs in through an auth config. Add one, then turn it on.`
+                  : 'Turning it on keeps its accounts and the tools you added, and signs nobody in.'}
+          </span>
+        </span>
+        {shown.on ? (
+          // Turn off stays whenever the team has it on, a broken auth config included.
+          <span className="flex flex-wrap gap-2">
+            {shown.action === 'fix_auth_config' && <AddAuthConfigButton appId={app.card.id} testId="app-settings-fix-auth-config" />}
+            <Button size="sm" variant="outline" onClick={onTurnOff} data-testid="app-off">
+              Turn off
+            </Button>
+          </span>
+        ) : shown.action === 'add_auth_config' ? (
+          <AddAuthConfigButton appId={app.card.id} testId="app-settings-add-auth-config" />
+        ) : shown.action === 'turn_on' ? (
+          <TurnOnButton card={app.card} variant="outline" onFirstTurnOn={onTurnOn} testId="app-settings-turn-on" />
+        ) : null}
+      </div>
+    </SettingsSection>
   );
 }
 

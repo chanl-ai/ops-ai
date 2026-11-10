@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PreviewBadge } from '@/components/shared/preview-badge';
 import { TitleSwitcher } from '@/components/shared/title-switcher';
-import { SampleOnPage } from '@/components/shared/sample-data';
+import { SampleNoteOnPage, SampleOnPage } from '@/components/shared/sample-data';
 import { WholeTokens } from '@/components/shared/whole-tokens';
 import { usePreview } from '@/hooks/use-preview';
 import {
@@ -90,6 +90,9 @@ export function PageLayout({
   // A sample section anywhere on the page counts too: its area may be live while that section is not.
   const [samples, setSamples] = useState(0);
   const reportSample = useCallback((change: 1 | -1) => setSamples((n) => n + change), []);
+  // A sample note on the page says why already; the header then keeps only its badge, so the words appear once.
+  const [notes, setNotes] = useState(0);
+  const reportNote = useCallback((change: 1 | -1) => setNotes((n) => n + change), []);
   const preview = previewProp ?? (previewOfArea || samples > 0);
 
   const renderIcon = () => {
@@ -172,6 +175,7 @@ export function PageLayout({
 
   return (
     <SampleOnPage.Provider value={reportSample}>
+    <SampleNoteOnPage.Provider value={reportNote}>
     <BulkSelectionContext.Provider value={ctxValue}>
       <div className={cn('flex flex-col h-full space-y-4 px-6 lg:px-8 py-6', className)}>
         {/* Breadcrumbs */}
@@ -272,9 +276,11 @@ export function PageLayout({
                     // The reason in words, not only on hover: a touch screen never shows the badge's title.
                     <>
                       <PreviewBadge />
-                      <span className="text-xs text-muted-foreground" data-testid="preview-reason">
-                        Parts of this page show sample data that isn’t stored yet, so they are read only.
-                      </span>
+                      {notes === 0 && (
+                        <span className="text-xs text-muted-foreground" data-testid="preview-reason">
+                          Parts of this page show sample data that isn’t stored yet, so they are read only.
+                        </span>
+                      )}
                     </>
                   )}
                   {badge}
@@ -298,6 +304,7 @@ export function PageLayout({
         <div className={cn('flex-1 px-1 -mx-1', contentClassName)}>{children}</div>
       </div>
     </BulkSelectionContext.Provider>
+    </SampleNoteOnPage.Provider>
     </SampleOnPage.Provider>
   );
 }

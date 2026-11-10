@@ -1,5 +1,5 @@
 """uc-588, cli layer: docs/usecases/tools-service/plugin-sign-in-methods.md, story S6 (steps 14-15). A developer runs
-`ops plugin validate` on each test plugin in services/tools-service/tests/plugin_kinds, one per sign-in method, and on
+`opsai plugin validate` on each test plugin in services/tools-service/tests/plugin_kinds, one per sign-in method, and on
 two broken copies written to a temporary folder: one offering person sign-in with only an API key, which holds no
 person's token, and one listing `api_key` without saying how the key is sent. No service and no model call."""
 
@@ -19,7 +19,7 @@ KINDS = ROOT / "services/tools-service/tests/plugin_kinds"
 
 def validate(folder: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["uv", "run", "--quiet", "ops", "plugin", "validate", str(folder)],
+        ["uv", "run", "--quiet", "opsai", "plugin", "validate", str(folder)],
         cwd=ROOT,
         capture_output=True,
         text=True,

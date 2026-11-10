@@ -17,7 +17,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | S8 | The app's page lists its tools, and a builder runs one Mock (nothing reaches Salesforce) and Real (the team's account, through the gateway) | api | 40-42, 50 | 42 |
 | S9 | An agent granted a new tool offers it in chat right after it is published (task S7) | api | 45 | 45 |
 | S10 | A builder lists an app's tools and runs one Mock and Real through the Python SDK | sdk | 43 | 43 |
-| S11 | A builder lists an app's tools and runs one Mock and Real with `ops tools` | cli | 44 | 44 |
+| S11 | A builder lists an app's tools and runs one Mock and Real with `opsai tools` | cli | 44 | 44 |
 | S12 | On an app where each person signs in with their own account, a person's own sign-in runs a tool before any team account exists | api | 47-49 | 49 |
 
 ## Preconditions
@@ -54,9 +54,9 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 17 | Sync again | Nothing fetched again |
 | 18 | An article changes at the source; sync | Only it is fetched; it becomes version 2 |
 | 19 | James asks the agent about resetting a card PIN | The answer cites the Salesforce article |
-| 20 | `ops plugin validate ../ops-ai-plugins/plugins/salesforce` | OK, with its tools, 1 knowledge source and 1 template |
-| 21 | `ops plugin validate` on copies with an unknown sign-in kind, a write used as a knowledge tool, and a template that needs a missing tool | Each refused, naming the problem |
-| 22 | `ops plugin test ../ops-ai-plugins/plugins/salesforce` | Every tool and the knowledge listing pass against the plugin's fake |
+| 20 | `opsai plugin validate ../ops-ai-plugins/plugins/salesforce` | OK, with its tools, 1 knowledge source and 1 template |
+| 21 | `opsai plugin validate` on copies with an unknown sign-in kind, a write used as a knowledge tool, and a template that needs a missing tool | Each refused, naming the problem |
+| 22 | `opsai plugin test ../ops-ai-plugins/plugins/salesforce` | Every tool and the knowledge listing pass against the plugin's fake |
 | 23 | tools-service starts with a broken plugin beside Salesforce, and a Python tool calls a host the plugin does not list | `/v1/plugins` lists the broken one as failed and Salesforce as loaded; the call fails `EGRESS_DENIED` |
 | 24 | The install config holds Ops AI's OAuth app for Salesforce; Sam tries to set its secret through the API | No route sets it (404 or 405); the plugin view shows its client id and that the secret is set, never the secret |
 | 25 | Wanjiru turns Salesforce on for team_platform with no app of its own; a team_platform call runs before it signs in | The call is refused; Salesforce receives nothing, though team_ops is signed in |
@@ -69,7 +69,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 41 | James runs `POST /v1/tool-modules/{module}/operations/salesforce_query/run` with mode `mock` | 200, `mocked` true; Salesforce received no query |
 | 42 | James runs it with mode `real`, naming no environment; the team signed in for production only | 200 with case 00044818 and a call id; Salesforce received the query |
 | 43 | Through the SDK on the Apps stack, James lists the header-key desk's tools and runs `header_key_get_record` Mock and Real (`ops.tools.list`, `ops.tools.run`) | The tool listed; Mock reaches nothing; Real reads rec-1042 |
-| 44 | James runs `ops tools list --app plugin:test.header-key`, then `ops tools run … --mock --input input.json` and `--real` | Each exits 0; Mock reaches nothing; Real reads rec-1042 |
+| 44 | James runs `opsai tools list --app plugin:test.header-key`, then `opsai tools run … --mock --input input.json` and `--real` | Each exits 0; Mock reaches nothing; Real reads rec-1042 |
 | 45 | With team_ops's publish policy at always, James makes an agent and asks to publish it (the request waits); he grants salesforce_query, saves and asks again; Maya approves; he chats "call salesforce_query …" | The request for the newest draft (201) replaces the one waiting; after Maya approves, the first chat turn calls salesforce_query and reads the case |
 | 51 | Priya reads the app's page right after the team's sign-in in step 5 | The team account reads connected at once; its `test` reads ok once the test that follows the sign-in has run |
 | 50 | James runs `salesforce_list_view` Real from its page | 200; the records shaped once by the tool's transform, no transform error, and the request sent shown |

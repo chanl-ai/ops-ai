@@ -40,8 +40,8 @@ Then one folder-local command:
 
 ```bash
 uv run python examples/workflows/01-normalize-a-request/setup.py
-ops workflows validate examples/workflows/01-normalize-a-request
-ops workflows test examples/workflows/01-normalize-a-request
+opsai workflows validate examples/workflows/01-normalize-a-request
+opsai workflows test examples/workflows/01-normalize-a-request
 ```
 
 ## Artifact words
@@ -59,4 +59,4 @@ Example helpers and comments name the folder or the published id. They do not ci
 
 ## Surfaces
 
-Python, TypeScript and `ops` expose the same lifecycle: validate, apply, publish, run in test mode, inspect, evaluate an agent. Replay, workflow evaluation and the Agent Run API stay **Planned** on [developer-surface-coverage.md](developer-surface-coverage.md).
+Python, TypeScript and `opsai` expose the same lifecycle: validate, apply, publish, run in test mode, inspect, evaluate an agent. Replay, workflow evaluation and the Agent Run API stay **Planned** on [developer-surface-coverage.md](developer-surface-coverage.md).

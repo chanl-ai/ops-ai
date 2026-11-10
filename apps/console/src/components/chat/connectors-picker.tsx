@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useChatConnectors, useNewChatConnectors, useSetChatConnectors } from '@/hooks/chat-settings-queries';
 import type { ChatConnector } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
+import { APP_STATES } from '@/lib/app-state';
 
 /** Where a connector's one action is taken: the person's own sign-in on Connectors (Mine), an admin's on Team setup. */
 const MINE = '/integrations/my-accounts';
@@ -42,9 +43,10 @@ function ConnectorsMenu({
 }) {
   const router = useRouter();
   const go = (href: string) => (setOpen(false), router.push(href));
-  const usable = rows.filter((c) => c.state === 'on');
-  const signIn = rows.filter((c) => c.state === 'needs_sign_in');
-  const off = rows.filter((c) => c.state === 'off_for_team');
+  // Grouped by who acts next, as tools-service answers it (appGroup); the words come from lib/app-state.ts.
+  const usable = rows.filter((c) => c.appGroup === 'on');
+  const signIn = rows.filter((c) => c.appGroup === 'needs_you');
+  const off = rows.filter((c) => c.appGroup === 'needs_admin');
   const inUse = usable.filter((c) => c.on);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -86,7 +88,7 @@ function ConnectorsMenu({
                 {usable.length > 0 && (
                   <CommandGroup heading="On in this chat">
                     {usable.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} onSelect={() => onToggle(c)} disabled={saving} data-testid={`connector-toggle-${c.appId}`} data-on={c.on}>
+                      <CommandItem key={c.appId} value={c.name} onSelect={() => onToggle(c)} disabled={saving} data-testid={`connector-toggle-${c.appId}`} data-on={c.on} data-state={APP_STATES[c.appState].label}>
                         <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm" />
                         <span className="flex-1 truncate">{c.name}</span>
                         <Check className={cn('size-4', c.on ? 'opacity-100' : 'opacity-0')} />
@@ -97,7 +99,7 @@ function ConnectorsMenu({
                 {signIn.length > 0 && (
                   <CommandGroup heading="Needs your sign-in">
                     {signIn.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-sign-in-${c.appId}`}>
+                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-sign-in-${c.appId}`} data-state={APP_STATES[c.appState].label}>
                         <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm opacity-60" />
                         <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
                         {c.personal ? (
@@ -114,10 +116,10 @@ function ConnectorsMenu({
                 {off.length > 0 && (
                   <CommandGroup heading="Off for this team">
                     {off.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-off-${c.appId}`}>
+                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-off-${c.appId}`} data-state={APP_STATES[c.appState].label}>
                         <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm opacity-60" />
                         <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
-                        <span className="text-xs text-muted-foreground">ask an admin</span>
+                        <span className="text-xs text-muted-foreground">{APP_STATES[c.appState].label} · ask an admin</span>
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -134,7 +136,7 @@ function ConnectorsMenu({
 
 /** The whole set an unchecked or checked connector makes: the apps left out, as the chat's PUT takes them. */
 function nextOff(rows: ChatConnector[], c: ChatConnector): string[] {
-  const left = rows.filter((r) => r.state !== 'off_for_team' && !r.on).map((r) => r.appId);
+  const left = rows.filter((r) => r.appGroup !== 'needs_admin' && !r.on).map((r) => r.appId);
   return c.on ? [...left, c.appId] : left.filter((id) => id !== c.appId);
 }
 
@@ -165,6 +167,6 @@ export function ConnectorsPicker({ threadId, disabled }: { threadId: string; dis
 export function NewChatConnectorsPicker({ agentId, off, onChange, disabled }: { agentId?: string; off: string[]; onChange: (off: string[]) => void; disabled?: boolean }) {
   const [open, setOpen] = React.useState(false);
   const found = useNewChatConnectors(agentId);
-  const rows = (found.data?.connectors ?? []).map((c) => (c.state === 'off_for_team' ? c : { ...c, on: !off.includes(c.appId) }));
+  const rows = (found.data?.connectors ?? []).map((c) => (c.appGroup === 'needs_admin' ? c : { ...c, on: !off.includes(c.appId) }));
   return <ConnectorsMenu open={open} setOpen={setOpen} rows={rows} pending={found.isPending} failed={found.isError} saving={false} disabled={disabled} onToggle={(c) => onChange(nextOff(rows, c))} />;
 }

@@ -120,7 +120,7 @@ services:
       OPS_SERVICE_SIGNING_KID: svc-tools-1
       OPS_REVIEW_KEY: ${OPS_REVIEW_KEY:?}
       OPS_SECRETS_KEY: ${OPS_SECRETS_KEY:?}
-    # The host folder `ops plugin install --into` writes; the checkout's plugins/ unless OPS_PLUGINS_HOST_DIR names one.
+    # The host folder `opsai plugin install --into` writes; the checkout's plugins/ unless OPS_PLUGINS_HOST_DIR names one.
     volumes:
       - ${OPS_PLUGINS_HOST_DIR:-../../plugins}:/plugins:ro
 

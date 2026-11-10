@@ -8,6 +8,6 @@ uv run python examples/agents/01-answer-from-instructions/setup.py
 uv run pytest examples/agents/01-answer-from-instructions/test_example.py
 ```
 
-Python uses `ops.agents.chat` and `fixtures/question.json`. CLI `ops agents chat` is built. `ops chat send` is **Planned**.
+Python uses `ops.agents.chat` and `fixtures/question.json`. CLI `opsai agents chat` is built. `opsai chat send` is **Planned**.
 
 The full lesson is in [../../../docs/guide/agents.md](../../../docs/guide/agents.md).

@@ -1,4 +1,4 @@
-"""Runs a plugin's tools against its fake system, for the plugin's own tests and `ops plugin test`.
+"""Runs a plugin's tools against its fake system, for the plugin's own tests and `opsai plugin test`.
 
 It sends what tools-service sends for the same tool: the endpoint and path rendered with the settings and the
 arguments, each input left out as its default, a body template's `{{arg}}` as JSON, the remaining arguments as the

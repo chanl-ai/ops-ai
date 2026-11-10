@@ -1,6 +1,6 @@
 # A website source keeps a knowledge base current, and answers cite it
 
-Status: current. Id: `uc-674`. Service: `kb-service`. Layers: api, sdk.
+Status: current. Id: `uc-675`. Service: `kb-service`. Layers: api, sdk.
 
 ## Stories
 
@@ -23,7 +23,7 @@ Status: current. Id: `uc-674`. Service: `kb-service`. Layers: api, sdk.
 | A help centre to crawl | `docs/usecases/lib/fake_help_site.py`: https as `help.northbank.test` on this machine's private address, with robots.txt refusing `/admin/`, a sitemap index, lastmod dates, ETags, menus and footers around each article |
 | Models | models-service's scripted aliases (embeddings on `bank-embed`) and a fake OpenAI with two rules: the questions step and the FAQ drafts step, each answering from the section its prompt names. No provider is called |
 
-Run: `OPS_PLUGINS_REPO=<path> make usecase-test UC=uc-674 LAYER=api`.
+Run: `OPS_PLUGINS_REPO=<path> make usecase-test UC=uc-675 LAYER=api`.
 
 ## Steps and expected results
 
@@ -56,8 +56,8 @@ Run: `OPS_PLUGINS_REPO=<path> make usecase-test UC=uc-674 LAYER=api`.
 
 | Layer | Script | State |
 |---|---|---|
-| api | `kb-service/scripts/test-uc-674-api.py` | passing |
-| sdk | `kb-service/scripts/test-uc-674-sdk.py` | passing |
+| api | `kb-service/scripts/test-uc-675-api.py` | passing |
+| sdk | `kb-service/scripts/test-uc-675-sdk.py` | passing |
 
 ## Non-vacuous check
 

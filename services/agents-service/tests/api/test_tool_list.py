@@ -49,9 +49,9 @@ class Apps:
         self.asked_for.append(person)
         return [
             {"id": "plugin:crm", "name": "CRM", "kind": "plugin", "moduleIds": ["mod_plugin_crm"],
-             "appState": "connected", "signIn": "team"},
+             "appState": "connected", "appGroup": "on", "signIn": "team"},
             {"id": "plugin:pay", "name": "Payments", "kind": "plugin", "moduleIds": ["mod_plugin_pay"],
-             "appState": "needs_sign_in", "signIn": "person"},
+             "appState": "needs_sign_in", "appGroup": "needs_you", "signIn": "person"},
         ]  # fmt: skip
 
 

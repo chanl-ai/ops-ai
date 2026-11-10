@@ -1,8 +1,8 @@
 """uc-590, cli layer: docs/usecases/agents-service/plugin-templates.md, story S7 (step 23).
 The sdk layer's stack: platform-service, tools-service with the test plugin, documents-service (beside kb-service) whose
 document type copies the resource list joins, agents-service reading tools-service.
-A team admin lists the app's resources and adds the agent with `ops resources`, signed in as their dev role the way
-`make api` signs in (`ops --as`). No model call."""
+A team admin lists the app's resources and adds the agent with `opsai resources`, signed in as their dev role the way
+`make api` signs in (`opsai --as`). No model call."""
 
 from __future__ import annotations
 
@@ -32,11 +32,11 @@ def main() -> None:
         on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=admin)
         check("set-up: the plugin is on for team_ops", on.status_code == 200, on.text[:200])
 
-        # 23. ops resources list and add, as the team admin.
+        # 23. opsai resources list and add, as the team admin.
         listed_code, listed = ops_cli("admin", "resources", "list", f"plugin:{PLUGIN}")
         added_code, added = ops_cli("admin", "resources", "add", f"plugin:{PLUGIN}", "case-helper")
         check(
-            "23 `ops resources list` names the plugin's four resources and `ops resources add` copies the agent",
+            "23 `opsai resources list` names the plugin's four resources and `opsai resources add` copies the agent",
             listed_code == 0
             and isinstance(listed, list)
             and len(listed) == 4

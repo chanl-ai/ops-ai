@@ -1,5 +1,5 @@
 """uc-584, cli layer: docs/usecases/tools-service/plugin-manifest-fields.md, story S5 (steps 13-18). A developer runs
-`ops plugin validate` on copies of the test plugins in services/tools-service/tests/plugin_fields, each changed one way
+`opsai plugin validate` on copies of the test plugins in services/tools-service/tests/plugin_fields, each changed one way
 that would send a secret, replace the sign-in, reach a host the plugin does not list or leave a limit unread, and is
 told the field each time. Nothing starts; no model call."""
 
@@ -17,7 +17,7 @@ FIELDS = ROOT / "services/tools-service/tests/plugin_fields"
 
 
 def validate(folder: Path) -> subprocess.CompletedProcess[str]:
-    argv = ["uv", "run", "--quiet", "ops", "plugin", "validate", str(folder)]
+    argv = ["uv", "run", "--quiet", "opsai", "plugin", "validate", str(folder)]
     return subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, check=False)
 
 

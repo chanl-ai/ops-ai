@@ -5,7 +5,7 @@ Status: current. Generated from `services/agents-service/seed/engine_workflows.j
 
 This page is generated seed topology: workflows a local stack starts with. Those seeds are the product
 demo, not the developer Examples. Copy a folder from `examples/workflows/` and pass it to
-`ops workflows validate|apply|run`. Name a seed as `example` in a goal file and
+`opsai workflows validate|apply|run`. Name a seed as `example` in a goal file and
 `scripts/wf_builder.py create`
 adapts it until that skill uses the generic folder commands.
 

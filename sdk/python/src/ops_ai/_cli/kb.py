@@ -1,4 +1,4 @@
-"""`ops kb`: knowledge bases as the Knowledge pages show them. Bases and their documents, sources and their items,
+"""`opsai kb`: knowledge bases as the Knowledge pages show them. Bases and their documents, sources and their items,
 adding a file or a written page, syncing, the playground's question, and the changes waiting on review."""
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ PURPOSE = "knowledge_source"
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops kb", "Knowledge bases, sources, items, search and changes.")
+    ap = parser("opsai kb", "Knowledge bases, sources, items, search and changes.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     sub.add_parser("bases", parents=common, help="the knowledge bases").add_argument("--search")

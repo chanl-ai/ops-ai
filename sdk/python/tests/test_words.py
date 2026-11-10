@@ -38,8 +38,9 @@ def body(r: httpx.Request) -> Any:
 
 def test_connected_keeps_signed_in_and_built_in_apps_only() -> None:
     cards = [
-        {"id": "plugin:desk", "kind": "plugin", "state": "connected", "status": "healthy"},
-        {"id": "plugin:crm", "kind": "plugin", "state": "not_signed_in", "status": "healthy"},
+        {"id": "plugin:desk", "kind": "plugin", "state": "connected", "appGroup": "on", "status": "healthy"},
+        # Its team account reads connected, but the caller has not signed in: their card says so.
+        {"id": "plugin:crm", "kind": "plugin", "state": "connected", "appGroup": "needs_you", "status": "healthy"},
         {"id": "builtin:files", "kind": "builtin", "status": "available"},
     ]
     ops = client({("GET", "apps"): cards}, [])

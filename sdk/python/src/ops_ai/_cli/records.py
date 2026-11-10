@@ -1,5 +1,5 @@
-"""`ops cases`, `ops files` and `ops documents`: cases as the Cases page lists them, with a note added to one; files
-as the Files page holds them, and an upload through the same ticket, bytes and complete steps; document types and
+"""`opsai cases`, `opsai files` and `opsai documents`: cases as the Cases page lists them, with a note added to one;
+files as the Files page holds them, and an upload through the same ticket, bytes and complete steps; document types and
 what was read from a file."""
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ def _area(prog: str, text: str) -> tuple[argparse.ArgumentParser, Any, list[argp
 
 
 def cases_main(argv: list[str]) -> int:
-    ap, sub, common = _area("ops cases", "Cases: list, show, add a note.")
+    ap, sub, common = _area("opsai cases", "Cases: list, show, add a note.")
     listing = sub.add_parser("list", parents=common, help="cases")
     listing.add_argument("--status", action="append")
     listing.add_argument("--search")
@@ -44,7 +44,7 @@ def cases_main(argv: list[str]) -> int:
 
 
 def files_main(argv: list[str]) -> int:
-    ap, sub, common = _area("ops files", "Files: list, show, upload.")
+    ap, sub, common = _area("opsai files", "Files: list, show, upload.")
     listing = sub.add_parser("list", parents=common, help="files")
     listing.add_argument("--search")
     listing.add_argument("--purpose", action="append")
@@ -75,7 +75,7 @@ def upload_file(ops: OpsAI, path: Path, purpose: str, name: str | None = None) -
 
 
 def documents_main(argv: list[str]) -> int:
-    ap, sub, common = _area("ops documents", "Document types and what was read from files.")
+    ap, sub, common = _area("opsai documents", "Document types and what was read from files.")
     sub.add_parser("types", parents=common, help="the document types")
     sub.add_parser("type", parents=common, help="one document type").add_argument("type")
     reads = sub.add_parser("extractions", parents=common, help="what was read from files, newest first")

@@ -24,7 +24,7 @@ it asserts.
 | S5 | A developer lists and installs a template through the Python SDK and gets the same copy as the API gives | sdk | 21 | 21 |
 | S6 | The app's Resources list what it brings, and Add to team copies the agent on agents-service and the document type on documents-service, once | api | 30-31 | 31 |
 | S7 | A developer adds a resource to the team through the SDK's `resources_copy_resource` | sdk | 22 | 22 |
-| S8 | A team admin lists the app's resources and adds one with `ops resources` | cli | 23 | 23 |
+| S8 | A team admin lists the app's resources and adds one with `opsai resources` | cli | 23 | 23 |
 | S9 | On the app's Resources tab a person adds a resource to the team, and Added opens the team's copy | ui | 32 | 32 |
 | S10 | Everyone in the team sees each resource and its state; a viewer cannot add one and is told so in plain words, a builder can | api | 40-42 | 41 |
 | S11 | A builder previews several resources and adds them with what they depend on: a workflow before the agent it runs is refused naming it, bindings are the team's own, and the workflow runs the team's copy | api | 43-47 | 44 |
@@ -62,7 +62,7 @@ it asserts.
 | 11 | (api) Install the agent with model alias `nobody-serves-this` after its copy is deleted | 422 `unknown_model_alias`; no agent made |
 | 21 | (sdk) `templates_list_templates(kind="agent")` and `resources_copy_resource` as team_ops on a fresh install | The same list as the API; 201 then 200 with the same copy |
 | 22 | (sdk) `resources_copy_resource("plugin:test.templates:close-politely", {})` | The skill's copy with its record id |
-| 23 | (cli) `ops resources list plugin:test.templates`, then `ops resources add plugin:test.templates case-helper` | Each exits 0; four resources; the agent's copy |
+| 23 | (cli) `opsai resources list plugin:test.templates`, then `opsai resources add plugin:test.templates case-helper` | Each exits 0; four resources; the agent's copy |
 | 30 | `GET /v1/plugin-templates` on tools-service, the app's resources | The four resources; each is named `<source>:<template id>` for Add to team |
 | 31 | `POST /v1/resources/plugin:test.templates:case-helper/copies` on agents-service twice (the agent was deleted in step 11), and `POST /v1/resources/plugin:test.templates:case-letter/copies` on documents-service | 201 then 200 with the same copy; the document type answers the copy step 7 made |
 | 32 | (ui) Priya opens the templates desk's page › Resources, presses Add to team on the agent, comes back and presses Open, then adds the document type | Four rows each offer Add to team; the agent's copy opens at `/agents/{id}`, the row then reads Added and Open lands on the same copy; the document type's copy opens at `/document-types/{id}` |

@@ -1,4 +1,4 @@
-"""uc-674 a website source keeps a knowledge base current, and answers cite it, api layer:
+"""uc-675 a website source keeps a knowledge base current, and answers cite it, api layer:
 docs/usecases/kb-service/a-website-source-keeps-a-knowledge.md. The website plugin (opsai.web, from the ops-ai-plugins
 checkout beside this one, or OPS_PLUGINS_REPO) crawls a fake help centre served on https as help.northbank.test;
 models-service runs its scripted aliases and a fake OpenAI with rules for the questions and FAQ steps, so no provider
@@ -68,7 +68,7 @@ def agent(api: Any, name: str, collections: list[str]) -> str:
     made = data(api.post("/v1/agents", json={"name": f"{name} {RUN}", "role": "Answers help questions"}, headers=OPS))
     saved = data(api.patch(f"/v1/agents/{made['id']}", json={"collections": collections}, headers=OPS))
     api.post(
-        f"/v1/agents/{made['id']}/publish-requests", json={"version": saved["version"], "note": "uc-674"}, headers=OPS
+        f"/v1/agents/{made['id']}/publish-requests", json={"version": saved["version"], "note": "uc-675"}, headers=OPS
     )
     return str(made["id"])
 
@@ -77,7 +77,7 @@ def main() -> None:
     if not WEB_PLUGIN.is_dir():
         raise SystemExit(f"FAIL the website plugin is not at {WEB_PLUGIN}; set OPS_PLUGINS_REPO")
     with (
-        tempfile.TemporaryDirectory(prefix="uc-674-") as tmp,
+        tempfile.TemporaryDirectory(prefix="uc-675-") as tmp,
         help_site() as site,
         _docs_site() as docs,
         fake_openai(_rules(Path(tmp))) as fake,
@@ -93,9 +93,9 @@ def main() -> None:
             },
         ) as k,
     ):
-        data(gw.post("/v1/egress/ranges", json={"value": site.range, "note": "uc-674 help site"}, headers=SECURITY))
+        data(gw.post("/v1/egress/ranges", json={"value": site.range, "note": "uc-675 help site"}, headers=SECURITY))
         if docs is not None and docs.range != site.range:
-            data(gw.post("/v1/egress/ranges", json={"value": docs.range, "note": "uc-674 docs"}, headers=SECURITY))
+            data(gw.post("/v1/egress/ranges", json={"value": docs.range, "note": "uc-675 docs"}, headers=SECURITY))
         data(gw.put("/v1/apps/plugin:opsai.web/team", json={"enabled": True}, headers=OPS))
         start = {"start": [f"{site.base}/"], "include": ["/lending/**", "/cards/**"], "exclude": ["/archive/**"]}
         config = {"plugin": "opsai.web", "source": "site", "values": {**start, "rate": 20}}
@@ -123,7 +123,7 @@ def main() -> None:
                 "hits": site.hits[:5],
             },
         )
-        data(gw.post("/v1/egress/hosts", json={"value": "help.northbank.test", "note": "uc-674"}, headers=SECURITY))
+        data(gw.post("/v1/egress/hosts", json={"value": "help.northbank.test", "note": "uc-675"}, headers=SECURITY))
         approved = data(k.post(f"/v1/sources/{waiting['id']}/sync"))
         check(
             "0b once an admin approves the host, the source syncs and no longer waits",
@@ -306,7 +306,7 @@ def main() -> None:
         # Story 6, when the repo's docs site runs (OPS_DOCS_SITE_URL): a real site with no sitemap, crawled by links.
         if docs is not None:
             data(
-                gw.post("/v1/egress/hosts", json={"value": "docs.opsai.test", "note": "uc-674 docs"}, headers=SECURITY)
+                gw.post("/v1/egress/hosts", json={"value": "docs.opsai.test", "note": "uc-675 docs"}, headers=SECURITY)
             )
             values = {"start": [f"{docs.base}/docs"], "follow_links": True, "depth": 2, "max_pages": 25, "rate": 20}
             body = {

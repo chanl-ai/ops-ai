@@ -1,4 +1,4 @@
-"""Offline checks of a plugin: what `ops plugin validate` prints and what each service's loader refuses a plugin for.
+"""Offline checks of a plugin: what `opsai plugin validate` prints and what each service's loader refuses a plugin for.
 
 One list of problems, each naming where it is, so a plugin is refused for every reason at once rather than one per
 run. A plugin with any problem is not loaded."""

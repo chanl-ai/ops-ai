@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Every App says what state it is in and what to do next",
+  "description": "An App's card, page header and Settings now read one state with one next action, including Needs an auth config, Available for an App off for the team, and Not installed for a plugin the system does not hold. In the API and SDK, appState gains needs_auth_config and not_installed, and an App installed but off for the team now reads off instead of not_installed.",
+  "tag": "improved"
+}

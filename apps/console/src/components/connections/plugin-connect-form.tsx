@@ -314,7 +314,7 @@ export function PluginConnectForm({
         {picks && (
           <div className="flex flex-col gap-3">
             <AppCredentialPicker
-              app={card.id}
+              card={card}
               value={client}
               onChange={(c) => ((typedSince.current = true), setClient(c))}
               platform={Boolean(plugin.platformApp)}

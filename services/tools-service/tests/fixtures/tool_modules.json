@@ -2290,7 +2290,7 @@
   },
   {
    "id": "int_aws_storage",
-   "name": "Amazon S3 · ops files",
+   "name": "Amazon S3 · opsai files",
    "kind": "aws_s3",
    "base": "healthy",
    "expiresIn": 330,

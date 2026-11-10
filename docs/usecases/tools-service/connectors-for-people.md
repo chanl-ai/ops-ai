@@ -35,10 +35,10 @@ unchanged in content), read only for a member.
 | 1 | Priya turns Person desk on (each person signs in), adds a second account and signs in to both | `GET /v1/me/connections` has one Person desk row: `accountCount` 2, the team's default account primary, `account` the name the sign-in gave |
 | 2 | She reads the row | `canDo` "Reads: Read a record", each tool with its access and `reviewed` |
 | 3 | A call acts for her with both accounts connected and no default; she saves the second as her default; the call again, and a run acting for nobody | 403 `ACCOUNT_CHOICE_NEEDED` naming both accounts; then it runs as the second and `used.callsThisWeek` is 1 |
-| 4 | Sam reads his connectors in Security, where Person desk is off | The row is `app_off`, with no accounts and `mayTurnOn` true |
+| 4 | Sam reads his connectors in Security, where Person desk is off | The row's `appState` is `needs_auth_config` (Security has no auth config for it), with no accounts and `mayManage` true |
 | 5 | A call acting for Sam in Security on Person desk | 403 `APP_OFF_FOR_TEAM` with details `app`, `appId`, `teamId` |
 | 6 | `ops.me.connectors.list()` as Priya | The same rows |
-| 7 | `ops connectors list`, then `ops connectors disconnect "Person desk"` | The row is listed; after the disconnect of her default the other account is primary and the count is 1 |
+| 7 | `opsai connectors list`, then `opsai connectors disconnect "Person desk"` | The row is listed; after the disconnect of her default the other account is primary and the count is 1 |
 | 8 | Priya opens Connectors in the sidebar at 1280 and searches | The title reads Connectors with Mine and Team setup; one GitHub row with "+1 account"; each row one action by state; "git" finds GitHub alone, "jira" none; an app the install lacks is not listed |
 | 9 | She opens a row | The details sheet: what it can do with Read, Write and Reviewed; Used by as counts and links; the accounts; Test now and Disconnect |
 | 10 | At 390, light and dark | The state and action sit inside the connector cell and inside the viewport; no screen says Apps or My accounts |

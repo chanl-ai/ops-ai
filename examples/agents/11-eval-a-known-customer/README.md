@@ -10,6 +10,6 @@ uv run python examples/agents/11-eval-a-known-customer/setup.py
 uv run pytest examples/agents/11-eval-a-known-customer/test_example.py
 ```
 
-Python uses `ops.agents.eval`. CLI `ops agents eval <id> --cases fixtures/cases.json` is built. The console eval-cases surface stays **Planned**.
+Python uses `ops.agents.eval`. CLI `opsai agents eval <id> --cases fixtures/cases.json` is built. The console eval-cases surface stays **Planned**.
 
 The full lesson is in [../../../docs/guide/agents.md](../../../docs/guide/agents.md).

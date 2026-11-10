@@ -1,4 +1,5 @@
-"""`ops plugin test` runs a paged data tool the way tools-service does, by failure mode: the runner sends a query value
+"""`opsai plugin test` runs a paged data tool the way tools-service does, by failure mode:
+the runner sends a query value
 unchecked, so a plugin's tests pass where tools-service refuses the call; it follows every page, or loses the query
 on the next one; or it follows a page address to a host the plugin does not list."""
 

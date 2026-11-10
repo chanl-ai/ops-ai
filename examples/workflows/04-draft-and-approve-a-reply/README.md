@@ -14,8 +14,8 @@ After setup:
 
 ```bash
 cd examples/workflows/04-draft-and-approve-a-reply
-OPS_CONFIG=.ops-profile.json ops workflows send-test-email draft_and_approve_reply --event fixtures/complaint.json
-OPS_CONFIG=.ops-profile.json ops workflows decide <task-id> approve
+OPS_CONFIG=.ops-profile.json opsai workflows send-test-email draft_and_approve_reply --event fixtures/complaint.json
+OPS_CONFIG=.ops-profile.json opsai workflows decide <task-id> approve
 ```
 
 The full lesson is in [../../../docs/guide/workflows.md](../../../docs/guide/workflows.md).

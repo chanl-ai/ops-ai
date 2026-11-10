@@ -43,6 +43,6 @@ Tool that calls the App and is changed in one place.
 
 - Code tools: a function that shapes what a REST Tool returns.
 - API keys that build Tools from a script.
-- `ops login`: the SDK reads its address and key from arguments, `OPS_*` variables or a profile file you write.
+- `opsai login`: the SDK reads its address and key from arguments, `OPS_*` variables or a profile file you write.
 
 Proof: uc-611 runs these steps against a payments stand-in, in a browser and through the API.

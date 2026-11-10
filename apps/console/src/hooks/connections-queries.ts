@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { AccountRef, SignInAccount, SignInReturn } from '@/lib/types/connections';
+import { refreshAppState } from './app-state-refresh';
 import { useTeamQuery } from './team-query';
 
 const KEY = ['connections'] as const;
@@ -30,12 +31,12 @@ export const useMyConnectors = () =>
 /** Reads the person's connections again, after a sign-in window says they connected. */
 export function useRefreshMine() {
   const qc = useQueryClient();
-  return () => void qc.invalidateQueries({ queryKey: MINE });
+  return () => void refreshAppState(qc);
 }
 
 function useConnectionMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: KEY }) });
+  return useMutation({ mutationFn: fn, onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: KEY }), refreshAppState(qc)]) });
 }
 
 /** Nothing changes until the sign-in completes, so nothing is invalidated here. */
@@ -48,7 +49,7 @@ export function useFinishSignIn() {
   return useMutation({
     mutationFn: (i: SignInReturn) => api.connections.finishSignIn(i),
     // A refusal is recorded on the account too, so either way the account's answer changed.
-    onSettled: () => (void qc.invalidateQueries({ queryKey: KEY }), void qc.invalidateQueries({ queryKey: ['systems'] })),
+    onSettled: () => (void qc.invalidateQueries({ queryKey: KEY }), void refreshAppState(qc)),
   });
 }
 /** The person's own key, password or token on an account each person signs in to. */

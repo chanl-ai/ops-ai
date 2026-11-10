@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Connectors and the chat picker show an app's one state",
+  "description": "The connectors page for each person, the chat picker and the chat Connect card now show the same state as the app's own page, and a person's state on an app that signs in as each person is their own sign-in. In the API and SDK, a connector row and a chat connector carry appState in place of their own state field.",
+  "tag": "improved"
+}

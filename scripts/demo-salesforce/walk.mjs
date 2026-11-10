@@ -165,8 +165,8 @@ try {
   // Story 1 — the operator installed the plugin (CLI and config); installed, it is there for every team.
   const lp = await signIn(LEAD);
   if (FROM <= 1) await step('1 Operator: the Salesforce plugin validates, is loaded, and shows on Connections', lp, async () => {
-    const validated = execFileSync('uv', ['run', '--quiet', 'ops', 'plugin', 'validate', PLUGIN_DIR], { cwd: ROOT, encoding: 'utf8' }).trim();
-    writeFileSync(join(SHOTS, 'story1-validate.txt'), `$ ops plugin validate plugins/salesforce\n${validated}\n`);
+    const validated = execFileSync('uv', ['run', '--quiet', 'opsai', 'plugin', 'validate', PLUGIN_DIR], { cwd: ROOT, encoding: 'utf8' }).trim();
+    writeFileSync(join(SHOTS, 'story1-validate.txt'), `$ opsai plugin validate plugins/salesforce\n${validated}\n`);
     await lp.goto(`${CONSOLE}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     const button = lp.getByTestId(`connect-plugin:${PLUGIN}`);
     await button.waitFor({ timeout: 90_000 });

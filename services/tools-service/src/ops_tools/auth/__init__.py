@@ -452,6 +452,15 @@ class Authenticator:
         settings = cast(dict[str, Any], conn.get("settings") or {})
         return await self._not_linked(conn, acting_for, settings, scopes=[], reason="refused")
 
+    async def sign_in_request(self, tenant_id: str, connection_id: str, person: ActingForPerson) -> dict[str, Any]:
+        """What a CONNECTION_NOT_LINKED refused before the sign-in step carries, as one refused here does: the account,
+        its app and a link only `person` can use to connect their own; nothing when the account is gone."""
+        conn = await self.connections.get(tenant_id, connection_id)
+        if conn is None:
+            return {}
+        settings = cast(dict[str, Any], conn.get("settings") or {})
+        return (await self._not_linked(conn, person, settings, scopes=[])).details
+
     async def _not_linked(
         self,
         conn: dict[str, Any],

@@ -58,6 +58,7 @@ export function AccountsTab({
 }) {
   const rows = app.accounts ?? [];
   const configs = app.authConfigs ?? [];
+  const seesConfigs = Boolean(app.card.mayManage);
   const name = app.card.name;
   // Read through a ref so the columns keep one identity: new column functions remount every cell, which closes an open
   // row menu whenever the page above re-renders.
@@ -96,14 +97,19 @@ export function AccountsTab({
           </span>
         ),
       },
-      {
-        id: 'config',
-        accessorFn: (a) => a.configName ?? '—',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Auth config" />,
-        meta: { kind: 'status' },
-        cell: ({ row }) => <span className="whitespace-nowrap text-sm">{row.original.configName ?? '—'}</span>,
-        filterFn: facetFilterFn,
-      },
+      // Auth configs are shown only to whoever manages the team's apps; the API names none to anyone else.
+      ...(seesConfigs
+        ? ([
+            {
+              id: 'config',
+              accessorFn: (a) => a.configName ?? '—',
+              header: ({ column }) => <DataTableColumnHeader column={column} title="Auth config" />,
+              meta: { kind: 'status' },
+              cell: ({ row }) => <span className="whitespace-nowrap text-sm">{row.original.configName ?? '—'}</span>,
+              filterFn: facetFilterFn,
+            },
+          ] as ColumnDef<ConfigAccount>[])
+        : []),
       {
         id: 'who',
         accessorFn: (a) => (a.owner.kind === 'team' ? 'Team' : 'Personal'),
@@ -143,7 +149,7 @@ export function AccountsTab({
         ),
       },
     ],
-    [],
+    [seesConfigs],
   );
   const facet = (id: 'config' | 'who' | 'run' | 'state', title: string, values: string[]) => ({
     column: id,
@@ -161,7 +167,7 @@ export function AccountsTab({
       hideViewSwitcher
       initialColumnFilters={filtered}
       filters={[
-        facet('config', 'Auth config', rows.map((a) => a.configName ?? '—')),
+        ...(seesConfigs ? [facet('config', 'Auth config', rows.map((a) => a.configName ?? '—'))] : []),
         facet('who', 'Who can use it', rows.map((a) => (a.owner.kind === 'team' ? 'Team' : 'Personal'))),
         facet('run', 'Test or live', rows.map((a) => (a.sandbox ? 'Test' : 'Live'))),
         facet('state', 'State', rows.map((a) => STATE[a.state].label)),

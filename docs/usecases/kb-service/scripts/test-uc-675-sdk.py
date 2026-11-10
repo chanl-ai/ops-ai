@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-674 a website source keeps a knowledge base current, sdk layer: docs/usecases/kb-service/a-website-source-keeps-
+"""uc-675 a website source keeps a knowledge base current, sdk layer: docs/usecases/kb-service/a-website-source-keeps-
 a-knowledge.md, story S7. A developer drives the knowledge routes this release added through the Python SDK in
 sdk/python and the TypeScript SDK in sdk/typescript: the kinds a source can be, a source's schedule, the AI steps'
 estimate and approval, FAQ drafts decided in the Changes queue, and a search that says which lanes ran. Own kb-service,
@@ -67,7 +67,7 @@ HELP = pdf(
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="uc-674-sdk-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="uc-675-sdk-") as tmp:
         rules = Path(tmp) / "fake-openai"
         rules.mkdir()
         (rules / "script.json").write_text(json.dumps(RULES))

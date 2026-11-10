@@ -1,4 +1,4 @@
-"""`ops test-data clean`: finds what test runs made, by the `[test] ` prefix they put in a title or file name
+"""`opsai test-data clean`: finds what test runs made, by the `[test] ` prefix they put in a title or file name
 (common.MARK), and removes it through the console's own delete routes, signed in as each item's owner. It lists and
 removes nothing else: an item without the prefix, or one another person owns, is never touched. Without `--confirm`
 it only lists. Dev seed people on a local stack only, since the sign-in is `--as`.
@@ -22,7 +22,7 @@ PAGE = 100
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops test-data", "Find and remove what test runs made.")
+    ap = parser("opsai test-data", "Find and remove what test runs made.")
     sub = ap.add_subparsers(dest="verb", required=True)
     clean = sub.add_parser("clean", parents=[verb_options()], help="list marked test data; --confirm removes it")
     clean.add_argument(

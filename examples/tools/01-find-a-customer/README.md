@@ -8,6 +8,6 @@ uv run python examples/tools/01-find-a-customer/setup.py
 uv run pytest examples/tools/01-find-a-customer/test_example.py
 ```
 
-Python uses the public SDK and `fixtures/input.json`. The CLI `ops tools call` is **Planned**.
+Python uses the public SDK and `fixtures/input.json`. The CLI `opsai tools call` is **Planned**.
 
 The full lesson is in [../../../docs/guide/build-with-ops-ai.md](../../../docs/guide/build-with-ops-ai.md).

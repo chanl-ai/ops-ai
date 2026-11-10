@@ -215,7 +215,7 @@ def ops_cli(role: str, *args: str, stdin: str | None = None) -> tuple[int, Any]:
         "OPS_API_TOKENS": str(_TOKENS),
     }
     p = subprocess.run(
-        ["uv", "run", "--quiet", "ops", *args, "--as", role, "--json"],
+        ["uv", "run", "--quiet", "opsai", *args, "--as", role, "--json"],
         cwd=ROOT, env=env, input=stdin, capture_output=True, text=True, timeout=180, check=False,
     )  # fmt: skip
     try:

@@ -28,7 +28,7 @@ ops = OpsAI(api_key="ok_...", base_url="https://ops.example.com", team="team_cla
 | API key | `api_key` | `OPS_API_KEY` |
 | Team the calls act in | `team` | `OPS_TEAM` |
 
-Arguments win over the environment, which wins over the profile the `ops` CLI saves. On a local stack with no proxy,
+Arguments win over the environment, which wins over the profile the `opsai` CLI saves. On a local stack with no proxy,
 pass `services={"agents": "http://127.0.0.1:8700", ...}` to reach each service on its own port.
 
 ## Run a workflow and decide its task

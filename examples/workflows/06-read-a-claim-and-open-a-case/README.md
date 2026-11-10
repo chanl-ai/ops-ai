@@ -14,7 +14,7 @@ After setup:
 
 ```bash
 cd examples/workflows/06-read-a-claim-and-open-a-case
-OPS_CONFIG=.ops-profile.json ops workflows send-test-email read_claim_and_open_case --event fixtures/claim.json
+OPS_CONFIG=.ops-profile.json opsai workflows send-test-email read_claim_and_open_case --event fixtures/claim.json
 ```
 
 | Case | Fixture | Outcome |

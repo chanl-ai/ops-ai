@@ -12,9 +12,9 @@ After setup:
 
 ```bash
 cd examples/workflows/09-wait-for-verification
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows run wait_for_verification --input fixtures/clear.json --test --wait
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows run wait_for_verification --input fixtures/clear.json --test --wait
 ```
 
 | Case | Fixture | Outcome |

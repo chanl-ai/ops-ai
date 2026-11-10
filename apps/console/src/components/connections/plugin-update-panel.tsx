@@ -56,9 +56,7 @@ function counts(tools: ToolChange[]): string {
 export function PluginUpdatePanel({ appId, name }: { appId: string; name: string }) {
   const update = usePluginUpdate(appId);
   const [open, setOpen] = React.useState(false);
-  const status = (update.error as { status?: number } | null)?.status;
-  // 404: the install has plugin_updates off, or the team has not turned the app on; nothing to show either way.
-  if (update.isPending || status === 404) return null;
+  if (update.isPending) return null;
   if (update.isError)
     return <QueryError what="this app's update" error={update.error} onRetry={() => update.refetch()} retrying={update.isFetching} />;
   const u = update.data;

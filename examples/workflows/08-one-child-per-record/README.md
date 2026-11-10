@@ -14,9 +14,9 @@ After setup:
 
 ```bash
 cd examples/workflows/08-one-child-per-record
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows run one_child_per_record --input fixtures/records.json --test --wait
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows run one_child_per_record --input fixtures/records.json --test --wait
 ```
 
 | Case | Fixture | Outcome |

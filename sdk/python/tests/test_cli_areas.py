@@ -1,4 +1,4 @@
-"""The `ops` areas that drive the console's routes, by failure mode: a person named by first name signs in as someone
+"""The `opsai` areas that drive the console's routes, by failure mode: a person named by first name signs in as someone
 else or not at all; a kept session from another stack is sent and refused; a chat reply's stream, tool calls or
 Connect card are lost on the way to the terminal; a widget action reaches the wrong widget or with the wrong body;
 a file meant for a knowledge base is uploaded under another purpose or never added; an invite goes out without
@@ -635,12 +635,27 @@ CONNECTORS = [
     {
         "appId": "plugin:opsai.salesforce",
         "name": "Salesforce",
-        "state": "on",
+        "appState": "connected",
+        "appGroup": "on",
         "on": True,
         "tools": ["salesforce_query"],
     },
-    {"appId": "plugin:opsai.github", "name": "GitHub", "state": "on", "on": True, "tools": ["github_list_issues"]},
-    {"appId": "plugin:core", "name": "Core banking", "state": "off_for_team", "on": False, "tools": []},
+    {
+        "appId": "plugin:opsai.github",
+        "name": "GitHub",
+        "appState": "connected",
+        "appGroup": "on",
+        "on": True,
+        "tools": ["github_list_issues"],
+    },
+    {
+        "appId": "plugin:core",
+        "name": "Core banking",
+        "appState": "off",
+        "appGroup": "needs_admin",
+        "on": False,
+        "tools": [],
+    },
 ]
 
 
@@ -675,7 +690,13 @@ def test_connectors_list_is_one_row_per_app(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     rows = [
-        {"name": "GitHub", "state": "connected", "account": "harbor-ops", "accountCount": 2, "canDo": "Reads: issues"}
+        {
+            "name": "GitHub",
+            "appState": "connected",
+            "account": "harbor-ops",
+            "accountCount": 2,
+            "canDo": "Reads: issues",
+        }
     ]
     seen: list[httpx.Request] = []
     _use(monkeypatch, "connectors", _client(seen, lambda r: _ok(rows)))

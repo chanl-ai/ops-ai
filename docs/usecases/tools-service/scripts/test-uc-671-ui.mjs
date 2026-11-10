@@ -131,9 +131,11 @@ try {
     await toggle.waitFor({ timeout: 30_000 });
     const before = await toggle.getAttribute('data-on');
     const listed = await (await fetch(`${AGENTS}/chat/threads/${tid}/connectors`, { headers: auth })).json();
-    const want = { needs_sign_in: 'Needs your sign-in', off_for_team: 'Off for this team' };
+    // Each connector's group comes from its app's state (lib/app-state.ts): off and needs_auth_config are an admin's.
+    const want = { sign_in: 'Needs your sign-in', off_for_team: 'Off for this team' };
+    const groupOf = (state) => (state === 'needs_sign_in' ? 'sign_in' : ['off', 'needs_auth_config'].includes(state) ? 'off_for_team' : 'on');
     const groups = await priya.getByTestId('connectors-picker-list').innerText();
-    const states = new Set(listed.data.connectors.map((c) => c.state));
+    const states = new Set(listed.data.connectors.map((c) => groupOf(c.appState)));
     const groupsOk = Object.entries(want).every(([state, heading]) => states.has(state) === groups.includes(heading));
     check('11b the picker draws a sign-in group and an off-for-team group exactly when the chat has such connectors', groupsOk, { states: [...states], groups: groups.slice(0, 300) });
     await priya.screenshot({ path: join(SHOTS, 'picker-1280-light.png') });

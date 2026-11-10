@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
+import { addAuthConfigFirst } from '@/lib/app-state';
 import { credentialHref } from '@/components/connections/credential-display';
 import { appHref } from '@/components/connections/systems-grid';
 import { useSignInWindow } from '@/components/connections/sign-in';
@@ -280,7 +281,7 @@ export function ConnectWindow({
     const errors = fieldErrors(schema.safeParse(values));
     form.clearErrors();
     if (!managed && client === null) {
-      setError(`Pick the auth config ${card.name} signs in with.`);
+      setError(card.appState === 'needs_auth_config' ? addAuthConfigFirst(card.name) : `Pick the auth config ${card.name} signs in with.`);
       return;
     }
     if (Object.keys(errors).length) {
@@ -436,7 +437,7 @@ export function ConnectWindow({
         </div>
       ) : (
       <div className="flex min-w-0 flex-col gap-4">
-        <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
+        <AppCredentialPicker card={card} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
         {onConfig.length > 0 && picked.data && <ConfigPlace href={credentialHref(picked.data)} places={onConfig.map((x) => onConfigValue(x.name) ?? '')} />}
 
         {asked.filter(isSignInPlace).map((x) => (

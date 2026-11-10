@@ -1,4 +1,4 @@
-"""What `ops plugin validate` checks of a plugin's sign-in, one test per way it can be wrong and still look
+"""What `opsai plugin validate` checks of a plugin's sign-in, one test per way it can be wrong and still look
 installable: a plugin that lets each person sign in with a method that holds no person's credential (a service
 account's client credentials), which a team learns only when it turns the plugin on; and an API key the plugin does
 not say how to send, which a team admin would have to guess."""

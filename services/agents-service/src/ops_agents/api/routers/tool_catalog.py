@@ -109,8 +109,6 @@ async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any
 
 # The row fields the page filters and counts by; each filter is repeatable.
 FACETS = ("app", "kind", "status")
-# An app's state that leaves its tools runnable: connected, or connected with a failed test (a warning).
-RUNNABLE = ("connected", "test_failed")
 
 
 def _kind_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
@@ -122,9 +120,9 @@ def _kind_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
 
 
 def _status_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
-    if card is not None and card.get("appState") not in RUNNABLE:
-        each_person = card.get("appState") == "needs_sign_in" and card.get("signIn") == "person"
-        return "needs_your_sign_in" if each_person else "app_not_connected"
+    if card is not None and card.get("appGroup") != "on":
+        # tools-service says who acts next: the person's own sign-in, or the team's (an admin).
+        return "needs_your_sign_in" if card.get("appGroup") == "needs_you" else "app_not_connected"
     return "needs_approval" if tool.get("requiresApproval") else "ready"
 
 

@@ -7,11 +7,11 @@ A workflow is a reviewed typed graph. A developer authors YAML, validates it, st
 ## Lifecycle
 
 ```bash
-ops workflows validate workflow.yaml
-ops workflows apply workflow.yaml
-ops workflows publish <id> --note "Ready"
-ops workflows run <id> --input input.json --wait
-ops workflows inspect <run-id>
+opsai workflows validate workflow.yaml
+opsai workflows apply workflow.yaml
+opsai workflows publish <id> --note "Ready"
+opsai workflows run <id> --input input.json --wait
+opsai workflows inspect <run-id>
 ```
 
 Python:
@@ -35,7 +35,7 @@ New runs default to `mode="test"`. Live effects need `mode="live"` or `--live`.
 
 Schema v2 JSON or YAML: `id`, `name`, `nodes[]`, `connections[]`. Each node has `type`, `typeVersion`, `parameters`, and a stable `id`. Connections name those ids and ports.
 
-`GET /v1/workflows/node-types` lists types, ports and parameter schemas. `ops workflows types` prints the same catalog.
+`GET /v1/workflows/node-types` lists types, ports and parameter schemas. `opsai workflows types` prints the same catalog.
 
 ## Debugging
 
@@ -44,10 +44,10 @@ Schema v2 JSON or YAML: `id`, `name`, `nodes[]`, `connections[]`. Each node has 
 | Invalid graph | `validate` checks, each with `path`, `code`, `message`, `suggestion` | Fix the named node or field |
 | Draft not live | 409 `not_live` on a live run | Publish first |
 | Step refused | `run.error` and `run.failure.nodeId` | Fix the tool, mapping or input |
-| Waiting on a person | `status=waiting` and `taskId` | `ops workflows decide <task-id> approve` |
+| Waiting on a person | `status=waiting` and `taskId` | `opsai workflows decide <task-id> approve` |
 | Start schema | 422 on `POST /v1/runs` | Send the request trigger's required fields |
 
-`ops workflows replay` and `fork` are **Planned**. `ops workflows retry` retries a stuck run from its last recorded step.
+`opsai workflows replay` and `fork` are **Planned**. `opsai workflows retry` retries a stuck run from its last recorded step.
 
 ## Examples
 
@@ -82,9 +82,9 @@ Node coverage: [workflow-example-coverage.md](workflow-example-coverage.md).
 An app posts `customerEmail`, `subject` and `message`. Set fields emits `customer.email`, `title`, `body` and `source`. A missing email fails start validation.
 
 ```bash
-ops workflows validate examples/workflows/01-normalize-a-request
-ops workflows apply examples/workflows/01-normalize-a-request
-ops workflows run normalize_support_request --input examples/workflows/01-normalize-a-request/fixtures/valid.json --wait
+opsai workflows validate examples/workflows/01-normalize-a-request
+opsai workflows apply examples/workflows/01-normalize-a-request
+opsai workflows run normalize_support_request --input examples/workflows/01-normalize-a-request/fixtures/valid.json --wait
 ```
 
 ```python
@@ -102,9 +102,9 @@ Nodes: `ops.trigger.request` → `ops.data.set` → `ops.flow.end`. No model, to
 Classify text onto a queue with one `ops.ai.classify` call. Categories are billing, technical and cancellation. Below the 0.6 floor the run leaves by `otherwise` and ends as `other`. A model answer outside the schema ends as `classify_failed`.
 
 ```bash
-ops workflows validate examples/workflows/02-route-a-support-message
-ops workflows apply examples/workflows/02-route-a-support-message
-ops workflows run route_support_message --input examples/workflows/02-route-a-support-message/fixtures/billing.json --test --wait
+opsai workflows validate examples/workflows/02-route-a-support-message
+opsai workflows apply examples/workflows/02-route-a-support-message
+opsai workflows run route_support_message --input examples/workflows/02-route-a-support-message/fixtures/billing.json --test --wait
 ```
 
 ```python

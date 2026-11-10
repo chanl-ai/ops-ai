@@ -7,7 +7,7 @@
                                       Connect dialog and the template install start again from nothing
 
 What it does, each step a no-op when already done: the plugins repo cloned at PLUGIN_REF (.run/plugins/ops-ai-plugins)
-and the Salesforce plugin installed from it into the stack's plugins folder with `ops plugin install`; the fake
+and the Salesforce plugin installed from it into the stack's plugins folder with `opsai plugin install`; the fake
 Salesforce kept running in the background, which the stack trusts and resolves while it runs (scripts/stack.sh);
 tools, agents, the worker, kb and documents restarted when the plugin or the fake changed; the demo's model alias
 `salesforce-demo` on its own connection to the fake model, so the case helper's chat turns never reach a real provider;
@@ -131,7 +131,7 @@ def plugin_folder() -> bool:
             "uv",
             "run",
             "--quiet",
-            "ops",
+            "opsai",
             "plugin",
             "validate",
             str(PLUGIN_DIR.parents[1]),
@@ -143,20 +143,20 @@ def plugin_folder() -> bool:
     )
     line = (checked.stdout.strip() or checked.stderr.strip()).splitlines()[-1:] or ["(no output)"]
     if checked.returncode != 0:
-        raise SystemExit(f"FAIL  ops plugin validate: {line[0]}")
-    say("OK", f"plugin {head.stdout.strip()}; ops plugin validate: {line[0]}")
+        raise SystemExit(f"FAIL  opsai plugin validate: {line[0]}")
+    say("OK", f"plugin {head.stdout.strip()}; opsai plugin validate: {line[0]}")
     if same_tree(PLUGIN_DIR, PLUGINS / PLUGIN_DIR.name):
         say("FOUND", f"plugin installed in {PLUGINS}")
         return False
     done = subprocess.run(
-        ["uv", "run", "--quiet", "ops", "plugin", "install", str(PLUGIN_DIR.parents[1]), "--into", str(PLUGINS)],
+        ["uv", "run", "--quiet", "opsai", "plugin", "install", str(PLUGIN_DIR.parents[1]), "--into", str(PLUGINS)],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
     if done.returncode != 0:
-        raise SystemExit(f"FAIL  ops plugin install: {(done.stdout + done.stderr).strip()[-300:]}")
+        raise SystemExit(f"FAIL  opsai plugin install: {(done.stdout + done.stderr).strip()[-300:]}")
     say("MADE", f"plugin installed in {PLUGINS}")
     return True
 

@@ -290,7 +290,7 @@ class AsyncKnowledge(AsyncResource):
 
 
 class OpsAI:
-    """The synchronous client. Arguments win over OPS_* environment variables, which win over the ops CLI's profile."""
+    """The synchronous client. Arguments win over OPS_* environment variables, which win over the CLI's profile."""
 
     def __init__(self, *, http: httpx.Client | None = None, **config: Any) -> None:
         self.config = Config.resolve(**config)

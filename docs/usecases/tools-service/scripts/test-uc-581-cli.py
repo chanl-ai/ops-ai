@@ -1,5 +1,5 @@
 """uc-581, cli layer: docs/usecases/tools-service/agents-query-salesforce-many-ways.md, story S5 (steps 18-21). A
-developer runs `ops plugin validate` on copies of the Salesforce plugin from the ops-ai-plugins repository beside
+developer runs `opsai plugin validate` on copies of the Salesforce plugin from the ops-ai-plugins repository beside
 ops-ai, each changed one way that would let a model's value change a query or leave a listing unable to page, and is
 told the field each time. Nothing starts; no model call."""
 
@@ -22,7 +22,7 @@ UNCHECKED = '      status: { type: string, description: "The cases\' status" }'
 
 
 def validate(folder: Path) -> subprocess.CompletedProcess[str]:
-    argv = ["uv", "run", "--quiet", "ops", "plugin", "validate", str(folder)]
+    argv = ["uv", "run", "--quiet", "opsai", "plugin", "validate", str(folder)]
     return subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, check=False)
 
 

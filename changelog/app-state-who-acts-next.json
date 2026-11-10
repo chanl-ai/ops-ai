@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Apps say who acts next; a broken auth config shows",
+  "description": "Every App now carries who acts next (the person, an admin, or nobody because it works), and an App that is on with a missing or secretless auth config reads Auth config needs fixing, with Turn off still offered. Viewers no longer see auth config names or ids on app cards, their connectors page or their own accounts.",
+  "tag": "improved"
+}

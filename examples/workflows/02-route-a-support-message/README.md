@@ -12,9 +12,9 @@ After setup:
 
 ```bash
 cd examples/workflows/02-route-a-support-message
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows run route_support_message --input fixtures/billing.json --test --wait
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows run route_support_message --input fixtures/billing.json --test --wait
 ```
 
 | Case | Fixture | Outcome |

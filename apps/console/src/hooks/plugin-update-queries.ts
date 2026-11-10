@@ -3,14 +3,12 @@
 /**
  * A plugin update's review and take, on the generated SDK through `sdk()`: what taking the installed version
  * would change for the team, which of the team's agents and workflows use each changed or removed tool, and taking it.
- * The routes answer 404 while the install's plugin_updates flag is off, so the screen shows nothing then.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { sdk } from '@/lib/api/ops-sdk';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 
-import { useFlag } from './flag-queries';
 import { useTeamQuery } from './team-query';
 
 type Tools = OpsAI['raw']['tools'];
@@ -22,16 +20,14 @@ export type ToolUses = Awaited<ReturnType<Agents['agents_list_tool_uses']>>;
 
 const update = (appId: string) => ['apps', appId, 'update'] as const;
 
-/** The review for one plugin's app (`plugin:<id>`): the team's version, the installed one, and each changed tool. */
-export const usePluginUpdate = (appId: string) => {
-  // The route answers 404 while the install's plugin_updates flag is off; asking then only logs a 404 on every app page.
-  const on = useFlag('plugin_updates');
-  return useTeamQuery({
+/** The review for one plugin's app (`plugin:<id>`): the team's version, the installed one, and each changed tool. Asked
+ * only once the app's card says an update waits (`plugin.updateAvailable`), which is false while the install's
+ * plugin_updates flag is off or the team has not turned the app on. */
+export const usePluginUpdate = (appId: string) =>
+  useTeamQuery({
     queryKey: update(appId),
     queryFn: () => sdk((ops) => ops.raw.tools.apps_plugin_update({ path: { app_id: appId } })),
-    enabled: on,
   });
-};
 
 /** For each changed or removed tool, the team's agents and workflows that use it; nothing to ask when none changed. */
 export const useToolUses = (tools: string[]) =>

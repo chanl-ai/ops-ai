@@ -36,9 +36,23 @@ def state(c: dict[str, Any]) -> tuple[str, str | None]:
     return c["appState"], c["appStateReason"]
 
 
-async def test_an_app_the_team_has_not_turned_on_is_not_installed(world: World, tenant: str) -> None:  # noqa: F811
+async def test_an_app_the_team_has_not_turned_on_is_off(world: World, tenant: str) -> None:  # noqa: F811
     c = await card(world, tenant)
-    assert state(c) == ("not_installed", None) and c["credential"] is None, c
+    assert state(c) == ("off", None) and c["credential"] is None, c
+
+
+async def test_turned_off_the_app_and_its_page_read_off_and_turn_on_again_alone(world: World, tenant: str) -> None:  # noqa: F811
+    conn = await connected(world, tenant)
+    await signed(world, tenant, conn, "https://acme.my.desk.test")
+    off = await world.client.put(f"/v1/apps/{APP}/team", json={"enabled": False}, headers=admin(tenant))
+    assert off.status_code == 200 and off.json()["data"]["appState"] == "off", off.text
+    page = await world.client.get(f"/v1/apps/{APP}", headers=admin(tenant))
+    shown = page.json()["data"]["card"]
+    assert (shown["appState"], shown["plugin"]["teamOn"]) == ("off", False), shown
+    # Turning it on again keeps its account and sign-in: no settings, no credential and no sign-in asked.
+    on = await world.client.put(f"/v1/apps/{APP}/team", json={"enabled": True}, headers=admin(tenant))
+    assert on.status_code == 200, on.text
+    assert state(await card(world, tenant)) == ("connected", None)
 
 
 async def test_a_team_account_needs_its_sign_in_then_is_connected(world: World, tenant: str) -> None:  # noqa: F811
@@ -46,6 +60,8 @@ async def test_a_team_account_needs_its_sign_in_then_is_connected(world: World, 
     before = await card(world, tenant)
     shown = before["credential"]
     assert before["appState"] == "needs_sign_in" and shown["type"] == "own" and shown["id"], before
+    # The team account's sign-in is an admin's to do, so the card says who acts next.
+    assert before["appGroup"] == "needs_admin", before
     await signed(world, tenant, conn, "https://acme.my.desk.test")
     assert state(await card(world, tenant)) == ("connected", None)
 
@@ -103,5 +119,29 @@ async def test_a_service_asking_for_a_person_reads_that_persons_own_sign_in(worl
     await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
     james = await card(world, tenant, acting_for(tenant, "usr_james"))
     maya = await card(world, tenant, acting_for(tenant, "usr_maya"))
-    assert (james["appState"], james["signIn"]) == ("connected", "person"), james
-    assert maya["appState"] == "needs_sign_in", maya
+    assert (james["appState"], james["signIn"], james["appGroup"]) == ("connected", "person", "on"), james
+    assert (maya["appState"], maya["appGroup"]) == ("needs_sign_in", "needs_you"), maya
+
+
+async def test_with_the_team_account_as_backup_a_persons_card_is_their_own_and_a_services_the_teams(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    # Each person's own account with the team's for runs nobody started: a person's calls never use the team's, so
+    # their card (and Mine and the chat picker, which read it) needs their own sign-in; a service asking for nobody
+    # reads the team account's.
+    conn = await connected(world, tenant)
+    row = await world.store.get(tenant, conn)
+    assert row is not None
+    await world.store.change(
+        tenant, conn, int(row["revision"]), {"sign_in": "person_or_team"}, actor="t", at=datetime.now(UTC)
+    )
+    await signed(world, tenant, conn, "https://acme.my.desk.test")
+    assert state(await card(world, tenant)) == ("needs_sign_in", "Connect your own account.")
+    await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
+    assert (await card(world, tenant, acting_for(tenant, "usr_james")))["appState"] == "connected"
+    service = mint_service_token(
+        dev_service_signer(), service="agents", audience="tools", tenant_id=tenant,
+        scopes=["tools:view", "connections:view"], team_id="team_platform",
+    )  # fmt: skip
+    assert (await card(world, tenant, {"Authorization": f"Bearer {service}"}))["appState"] == "connected"

@@ -1,16 +1,17 @@
-# Ops AI from the terminal, through the `ops` command (sdk/python): every target calls the routes the console calls,
+# Ops AI from the terminal, through the `opsai` command (sdk/python): every target calls the routes the console calls,
 # signed in through the password sign-in as AS= (a dev role, a seeded person's name such as james, or an email), with
 # X-Team-Id for TEAM= or the person's own team. JSON=1 prints JSON. The session is kept in .run/api-tokens, the file
 # `make api` keeps, so the two share one sign-in per person. What a target makes carries the `[test] ` prefix (a dev
 # seed sign-in is a test run), so `make test-data-clean` finds it.
 
-OPS_CLI = uv run --quiet --project $(ROOT)/sdk/python ops
+# The `ops` on PATH (make install-cli) or the workspace's own; never a workspace sync (scripts/ops_cli.sh).
+OPS_CLI = $(ROOT)/scripts/ops_cli.sh
 # The options go before the verb, where every area reads them.
 OPS_AS = --as '$(AS)' $(if $(TEAM),--team $(TEAM)) $(if $(JSON),--json)
 # $(call need,VAR,example): stops the target with what to give when VAR is empty.
 need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 
-.PHONY: sf-signin-save sf-signin-remove sf-signin-restore sf-signin-env demo-org-seed demo-org-remove chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
+.PHONY: install-cli wheelhouse nexus-proof sf-signin-save sf-signin-remove sf-signin-restore sf-signin-env demo-org-seed demo-org-remove chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
 	chat-approve chat-reject chat-submit chat-transcript chat-transcripts \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
@@ -22,7 +23,17 @@ need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 	models-aliases models-providers models-keys models-test memories-list memories-forget memories-forget-agent \
 	memories-export test-data-clean
 
-##@ Chat (ops chat)
+##@ Install the opsai command
+
+install-cli: ## make install-cli [WHEELS=dist/wheelhouse] [FROM_INDEX=1]: only the opsai command, in its own tool environment; honours the mirror settings; WHEELS installs offline; FROM_INDEX=1 installs ops-ai by name from the configured index
+	@WHEELS='$(WHEELS)' FROM_INDEX='$(FROM_INDEX)' $(ROOT)/scripts/install_cli.sh
+wheelhouse: ## make wheelhouse [PLATFORMS='…'] [PYTHONS='3.11 3.12'] [OUT=dir]: every wheel the opsai command needs, into dist/wheelhouse (needs internet)
+	@PLATFORMS='$(PLATFORMS)' PYTHONS='$(PYTHONS)' $(ROOT)/scripts/wheelhouse.sh $(if $(OUT),'$(OUT)')
+
+nexus-proof: ## make nexus-proof [NEXUS_IMAGE=sonatype/nexus3]: accepts Sonatype's Community Edition EULA; install-cli through a real Sonatype Nexus (proxy, group, hosted), then the wheelhouse via twine; removes its containers
+	@$(ROOT)/scripts/nexus_proof.sh
+
+##@ Chat (opsai chat)
 
 chat: ## make chat AS=james AGENT='Case helper' SAY='…' [THREAD=th_…] [TEST=1] [KB=kb_…] [CONNECTOR=GitHub] [CONNECTED=Salesforce]: chat turns streamed, tool calls and the call log printed
 	@$(if $(SAY)$(CONNECTED),,echo "make chat: give SAY='…' or CONNECTED=<app>" >&2; exit 2)
@@ -93,7 +104,7 @@ chat-submit: ## make chat-submit THREAD=th_… VALUES='a=1 b=2' [WIDGET=] AS=jam
 	$(call need,THREAD,THREAD=th_…)
 	@$(OPS_CLI) chat $(OPS_AS) submit $(THREAD) $(WIDGET) $(foreach v,$(VALUES),--value '$(v)')
 
-##@ Knowledge (ops kb)
+##@ Knowledge (opsai kb)
 
 kb-bases: ## make kb-bases AS=james [SEARCH=]: the knowledge bases
 	@$(OPS_CLI) kb $(OPS_AS) bases $(if $(SEARCH),--search '$(SEARCH)')
@@ -132,7 +143,7 @@ kb-change: ## make kb-change ID=… AS=james: one knowledge change
 	$(call need,ID,ID=chg_…)
 	@$(OPS_CLI) kb $(OPS_AS) change $(ID)
 
-##@ Apps and connections (ops apps)
+##@ Apps and connections (opsai apps)
 
 apps-list: ## make apps-list AS=admin [CONNECTED=1]: the Apps page's cards
 	@$(OPS_CLI) apps $(OPS_AS) list $(if $(CONNECTED),--connected)
@@ -165,7 +176,7 @@ apps-test: ## make apps-test APP=… [ACCOUNT=] [TEAM_ACCOUNT=1] AS=admin: test 
 apps-auth-configs: ## make apps-auth-configs [APP=] AS=admin: the team's app credentials (auth configs)
 	@$(OPS_CLI) apps $(OPS_AS) auth-configs $(if $(APP),--app '$(APP)')
 
-##@ Tools (ops tools)
+##@ Tools (opsai tools)
 
 tools-list: ## make tools-list AS=builder [APP=] [SEARCH=]: tool modules, or an app's tools
 	@$(OPS_CLI) tools $(OPS_AS) list $(if $(APP),--app '$(APP)') $(if $(SEARCH),--search '$(SEARCH)')
@@ -216,7 +227,7 @@ demo-org-remove: ## make demo-org-remove AS=james: deletes the [Demo] account's 
 	done; \
 	again=$$($(DEMO_ORG_FIND)); [ -z "$$again" ] && echo "REMOVED the demo account $$found, its cases and its records" || { echo "FAIL   $$again is still there"; exit 1; }
 
-##@ Runs and Human Tasks (ops runs, ops tasks)
+##@ Runs and Human Tasks (opsai runs, opsai tasks)
 
 runs-list: ## make runs-list AS=builder [WORKFLOW=]: workflow runs, newest first
 	@$(OPS_CLI) runs $(OPS_AS) list $(if $(WORKFLOW),--workflow $(WORKFLOW))
@@ -245,7 +256,7 @@ tasks-decide: ## make tasks-decide TASK=… DECISION=approve [REASON=] [FIELDS='
 	$(call need,DECISION,DECISION=approve)
 	@$(OPS_CLI) tasks $(OPS_AS) decide '$(TASK)' $(DECISION) $(if $(REASON),--reason '$(REASON)') $(if $(FIELDS),--fields '$(FIELDS)')
 
-##@ Cases, files and documents (ops cases, ops files, ops documents)
+##@ Cases, files and documents (opsai cases, opsai files, opsai documents)
 
 cases-list: ## make cases-list AS=james [SEARCH=]: cases
 	@$(OPS_CLI) cases $(OPS_AS) list $(if $(SEARCH),--search '$(SEARCH)')
@@ -274,7 +285,7 @@ documents-extractions: ## make documents-extractions ID=fil_… AS=builder: what
 	$(call need,ID,ID=fil_…)
 	@$(OPS_CLI) documents $(OPS_AS) extractions --file $(ID)
 
-##@ People, roles and models (ops people, ops models)
+##@ People, roles and models (opsai people, opsai models)
 
 people-list: ## make people-list AS=admin: the team's members
 	@$(OPS_CLI) people $(OPS_AS) list
@@ -296,7 +307,7 @@ models-test: ## make models-test AGENT='Ops Assistant' CONFIRM=1 AS=builder: one
 	$(call need,AGENT,AGENT='Ops Assistant')
 	@$(OPS_CLI) models $(OPS_AS) test '$(AGENT)' $(if $(SAY),-m '$(SAY)') $(if $(CONFIRM),--confirm)
 
-##@ Memories and test data (ops memories, ops test-data)
+##@ Memories and test data (opsai memories, opsai test-data)
 
 memories-list: ## make memories-list AS=james [AGENT=]: what the agents remember about this person
 	@$(OPS_CLI) memories $(OPS_AS) list $(if $(AGENT),--agent '$(AGENT)')

@@ -1,4 +1,4 @@
-"""`ops plugin test` sends a data tool's request as tools-service sends it, by failure mode: an input the call leaves
+"""`opsai plugin test` sends a data tool's request as tools-service sends it, by failure mode: an input the call leaves
 out is sent empty instead of its default, so a test cannot show the request tools-service makes; the plugin's and the
 tool's headers are left off, so a missing API-version header passes its tests; a header naming an unset setting is
 sent with the placeholder in it; and a header outranks the connection's sign-in."""
