@@ -155,6 +155,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/demo-mailbox.md` | A demo mailbox on Fly: the Stalwart mail server, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
+| `deploy/security-scanning.md` | Every security scan (CodeQL, Scorecard, the dependency check, the release image scan), the SBOM, signatures and build provenance on each release, the settings the owner switches on, and how to verify a release |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
 | `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
 | `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |
