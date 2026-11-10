@@ -23,7 +23,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .ids import new_id
-from .logging import request_logger
+from .logging import add_context, request_logger
 
 HEADER = "x-request-id"
 # A caller's own id is kept only in this form: anything else (a line break, a 10 kB value) would land in the logs.
@@ -54,6 +54,13 @@ def current() -> RequestTiming | None:
 def current_request_id() -> str | None:
     timing = _current.get()
     return timing.request_id if timing else None
+
+
+def _log_ids() -> dict[str, str | None]:
+    return {"request_id": current_request_id()}
+
+
+add_context(_log_ids)
 
 
 def request_id_from(header: str | None) -> str:

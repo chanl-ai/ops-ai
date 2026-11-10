@@ -50,7 +50,7 @@ def main() -> None:
     # Provider keys are sealed with it: the public dev default would let anyone with the database read them.
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
-    configure_logging()
+    configure_logging(service="models-service")
     engine = open_database(settings.database_url)
     if settings.environment == "dev":
         asyncio.run(_seed(engine, settings, connection))

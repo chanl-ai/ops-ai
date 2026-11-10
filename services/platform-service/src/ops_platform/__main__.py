@@ -91,7 +91,7 @@ async def serve(settings: Settings) -> None:
 
 
 def main() -> None:
-    configure_logging()
+    configure_logging(service="platform-service")
     settings = Settings()
     # The workspaces' sign-in secrets are sealed under it (store/signin_secrets.py).
     require_keys(settings, "secrets_key")

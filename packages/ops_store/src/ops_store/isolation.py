@@ -33,10 +33,10 @@ from typing import Literal, Protocol
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_service_kit.logging import get_logger
+from ops_service_kit.logging import add_context, get_logger
 
 from . import dialect
-from .team_scope import acting_as, set_acting_team
+from .team_scope import acting_as, acting_team, set_acting_team
 
 log = get_logger(__name__)
 
@@ -91,6 +91,19 @@ def current() -> Isolation:
     if found is None or not found.tenant_id:
         raise NoTenantError("no tenant is set for this statement; a request sets it in ops_identity")
     return found
+
+
+def log_ids() -> dict[str, str | None]:
+    """The tenant and team every log line carries (`ops_service_kit.logging`): the isolation context's, and the acting
+    team when no context names one."""
+    found = _ctx.get()
+    return {
+        "tenant_id": found.tenant_id if found else None,
+        "team_id": (found.team_id if found else None) or acting_team(),
+    }
+
+
+add_context(log_ids)
 
 
 def tenant() -> str:
