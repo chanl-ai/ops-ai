@@ -61,9 +61,19 @@ async def serve(settings: Settings) -> None:
     )
     internal = create_internal_app(store, services=services, signer=signer_from(settings))
     servers = [
-        uvicorn.Server(uvicorn.Config(public, host=settings.bind_host, port=settings.platform_port, log_level="info")),
         uvicorn.Server(
-            uvicorn.Config(internal, host=settings.bind_host, port=settings.platform_internal_port, log_level="info")
+            uvicorn.Config(
+                public, host=settings.bind_host, port=settings.platform_port, log_config=None, access_log=False
+            )
+        ),
+        uvicorn.Server(
+            uvicorn.Config(
+                internal,
+                host=settings.bind_host,
+                port=settings.platform_internal_port,
+                log_config=None,
+                access_log=False,
+            )
         ),
     ]
     # Workspaces closed longer than the restore window are purged here, one copy for the account.

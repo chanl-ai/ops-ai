@@ -85,7 +85,7 @@ def main() -> None:
     # every alias with its scripted provider; still no provider call.
     through_models = settings.models_url is not None and settings.models_key is not None
     app = create_app(settings, model=None if through_models else scripted_model(), graph_models=FakeGraphModels())
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

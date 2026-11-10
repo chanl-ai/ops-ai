@@ -21,7 +21,7 @@ def main() -> None:
     settings = Settings()
     require_keys(settings, "review_key")
     require_current_schema(settings.database_url, MIGRATIONS)
-    uvicorn.run(create_app(settings), host=settings.bind_host, port=settings.port, log_level="info")
+    uvicorn.run(create_app(settings), host=settings.bind_host, port=settings.port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

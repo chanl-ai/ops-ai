@@ -60,7 +60,7 @@ def main() -> None:
         provider_secrets=dev_provider_keys(settings),
         overlap_seconds=settings.model_key_overlap_seconds,
     )
-    uvicorn.run(app, host=settings.bind_host, port=settings.models_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.models_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

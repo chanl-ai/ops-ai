@@ -34,6 +34,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.logging import add_context, get_logger
+from ops_service_kit.request_timing import note_caller
 
 from . import dialect
 from .team_scope import acting_as, acting_team, set_acting_team
@@ -135,6 +136,7 @@ def enter(tenant_id: str, team_id: str | None, *, kind: str) -> Isolation:
     found = Isolation(tenant_id, team_id or None, "team", kind)
     _ctx.set(found)
     set_acting_team(found.team_id)
+    note_caller(found.tenant_id, found.team_id)
     return found
 
 
@@ -256,6 +258,7 @@ def _log_widen(caller: str, **fields: str) -> None:
 def _widen_request(tenant_id: str, kind: str, reason: str) -> Isolation:
     found = _widened(tenant_id, kind, reason, None)
     _ctx.set(found)
+    note_caller(found.tenant_id, found.team_id)
     set_acting_team(None)
     return found
 

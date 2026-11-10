@@ -224,7 +224,7 @@ def install_error_handlers(app: FastAPI) -> None:
     # Just outside the envelope, so the request's id is still set when the 500 envelope is built.
     if not any(m.cls is RequestTimingMiddleware for m in app.user_middleware):
         at = next(i for i, m in enumerate(app.user_middleware) if m.cls is _UnhandledAsEnvelope)
-        timing = Middleware(RequestTimingMiddleware, enabled=Settings().request_timing, service=app.title)
+        timing = Middleware(RequestTimingMiddleware, enabled=Settings().request_timing)
         app.user_middleware.insert(at, timing)
 
     @app.exception_handler(ApiError)

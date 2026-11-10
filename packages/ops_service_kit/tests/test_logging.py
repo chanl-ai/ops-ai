@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -9,10 +10,13 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
+from ops_service_kit.http import install_error_handlers
 from ops_service_kit.logging import add_context, configure_logging, get_logger
-from ops_service_kit.request_timing import RequestTiming, _current  # pyright: ignore[reportPrivateUsage]
+from ops_service_kit.request_timing import RequestTiming, _current, note_caller  # pyright: ignore[reportPrivateUsage]
 
 SECRET = "eyJ-kit-test-token"
 BEARER = f"Bearer {SECRET}"
@@ -78,3 +82,25 @@ def test_configuring_twice_writes_each_line_once(out: io.StringIO) -> None:
     configure_logging(service="kit-test", stream=out)
     get_logger("ops_kit.test").info("kit.once")
     assert len(lines(out)) == 1
+
+
+def test_each_request_writes_one_http_request_line_with_its_id_and_route_template(out: io.StringIO) -> None:
+    app = FastAPI()
+    install_error_handlers(app)
+
+    @app.get("/v1/items/{item_id}")
+    async def item(item_id: str) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        note_caller("tenant_kit", "t1")  # as an auth dependency does once the caller is verified
+        return {"id": item_id}
+
+    async def call() -> None:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://kit") as c:
+            await c.get(
+                "/v1/items/itm_1?api_key=sk-in-query", headers={"X-Request-Id": "req_kit_route_1", "X-Team-Id": "t1"}
+            )
+
+    asyncio.run(call())
+    (line,) = [row for row in lines(out) if row["event"] == "http.request"]
+    assert (line["request_id"], line["tenant_id"], line["team_id"]) == ("req_kit_route_1", "tenant_kit", "t1")
+    assert line["http.route"] == "/v1/items/{item_id}" and line["http.response.status_code"] == 200
+    assert "sk-in-query" not in out.getvalue() and "itm_1" not in out.getvalue()

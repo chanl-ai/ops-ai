@@ -95,7 +95,7 @@ def main() -> None:
     if settings.environment == "dev":
         asyncio.run(_seed(settings))
     app = create_kb_app(engine_for(settings.database_url), auth=Auth.from_settings(settings, audience="kb"))
-    uvicorn.run(app, host=settings.bind_host, port=settings.kb_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.kb_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

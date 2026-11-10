@@ -56,6 +56,8 @@ def _add_service(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
 
 def _flatten_extra(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
     """`log.warning("x", extra={...})`, the standard library's form, gives the same top-level fields as keywords."""
+    # uvicorn's ANSI-coloured copy of its message, for its own console formatter.
+    event.pop("color_message", None)
     extra = event.get("extra")
     if isinstance(extra, Mapping):
         del event["extra"]
@@ -132,7 +134,8 @@ def quiet_request_logs() -> None:
 
 def configure_logging(service: str, *, level: int = _logging.INFO, stream: TextIO | None = None) -> None:
     """Once at start: every record in the process, as JSON lines on stdout (`stream` for a test). Run uvicorn with
-    `log_config=None` so its loggers reach this handler instead of their own."""
+    `log_config=None` so its loggers reach this handler instead of their own, and `access_log=False`: each request's
+    line is `http.request` (`request_timing`), which names the route template, never the raw path and query."""
     _service[SERVICE] = service
     handler = _logging.StreamHandler(stream or sys.stdout)
     handler.set_name(_HANDLER)
@@ -144,16 +147,3 @@ def configure_logging(service: str, *, level: int = _logging.INFO, stream: TextI
     root.setLevel(level)
     _logging.captureWarnings(True)
     quiet_request_logs()
-
-
-def request_logger() -> _logging.Logger:
-    """The `ops.request` logger: its own handler printing the bare message, and no propagation, so each line is
-    exactly one JSON object whatever format the service's root logger prints."""
-    logger = _logging.getLogger("ops.request")
-    if not logger.handlers:
-        handler = _logging.StreamHandler(sys.stderr)
-        handler.setFormatter(_logging.Formatter("%(message)s"))
-        logger.addHandler(handler)
-        logger.setLevel(_logging.INFO)
-        logger.propagate = False
-    return logger

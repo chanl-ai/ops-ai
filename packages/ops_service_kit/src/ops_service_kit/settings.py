@@ -147,8 +147,8 @@ class Settings(BaseSettings):
     engine_concurrency: int = 4
     # How often the worker's run reconciler looks for runs nothing is working on and marks them Stuck.
     engine_reconcile_seconds: float = Field(default=60.0, gt=0)
-    # One JSON line per request on the ops.request logger and a Server-Timing header; off by default because
-    # Server-Timing tells a caller how long internal work took.
+    # A Server-Timing header on every response; off by default because it tells a caller how long internal work took.
+    # The request's log line (http.request) is written either way.
     request_timing: bool = False
     # Feature flags turned on for this install, from the install config: OPS_FLAGS=mcp_gateway,tool_search (a
     # JSON list also reads). Every flag is off unless named; a name not in ops_service_kit.flags.FLAGS stops the service

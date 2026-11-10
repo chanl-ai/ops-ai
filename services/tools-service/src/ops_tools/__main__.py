@@ -324,7 +324,7 @@ def main() -> None:
             ),
         ),
     )
-    uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":
