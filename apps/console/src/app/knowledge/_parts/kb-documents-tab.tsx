@@ -26,7 +26,7 @@ import { serverPagination } from '@/components/shared/server-pagination';
 type Row = DocumentRow & { onRowClick: (d: DocumentRow) => void };
 
 /** Every document the knowledge base indexes. `?status=` and `?freshness=` preset the filters; `?doc=` opens one. */
-export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
+export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBuild: boolean }) {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -141,9 +141,11 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
         searchPlaceholder="Search by title or path…"
         hideViewSwitcher
         toolbarExtra={
-          <Button size="sm" variant="outline" onClick={() => setPageOpen(true)}>
-            <FilePlus2 className="size-4" /> Add page
-          </Button>
+          canBuild && (
+            <Button size="sm" variant="outline" onClick={() => setPageOpen(true)}>
+              <FilePlus2 className="size-4" /> Add page
+            </Button>
+          )
         }
         initialColumnFilters={initialFilters}
         initialColumnVisibility={{ sensitivity: false }}

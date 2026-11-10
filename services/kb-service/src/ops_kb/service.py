@@ -2500,7 +2500,8 @@ def kind_defaults(kind: str, ocr: str, *, plugin_schedule: Any = None) -> dict[s
 def scope_summary(s: dict[str, Any]) -> str:
     """What a source takes in, in a few words: a site's start address, or a plugin source's name, or its files."""
     if s["type"] != "tool":
-        return f"{len(s['file_ids'])} uploaded files"
+        n = len(s["file_ids"])
+        return f"{n} uploaded file" if n == 1 else f"{n} uploaded files"
     cfg = dict(s.get("config") or {})
     values = cast(dict[str, Any], cfg.get("values") or {})
     start = cast(list[Any], values.get("start") or [])
