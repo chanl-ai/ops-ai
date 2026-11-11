@@ -104,7 +104,7 @@ with ExitStack() as stack:
     clean(ops, "uc410")
     allow_bank(security, bank)
     key = {"settings": {"name": "X-Api-Key"}, "secretValues": {"key": "dev-bank-key"}}
-    conn = connection(ops, "uc410 core banking", "api_key", {"test": key}, base_url=f"https://{bank['host']}")
+    conn = connection(ops, "uc410 core banking", "api_key", {"sandbox": key}, base_url=f"https://{bank['host']}")
     approver = bearer(nadia, "team_security")
     base = f"https://{bank['host']}/accounts/{{account_id}}"
     module(ops, "uc410-get-account", base, conn["id"], security=approver)
@@ -127,7 +127,7 @@ with ExitStack() as stack:
     OPS_KEY, OTHER_KEY = ops_key["secret"], other_key["secret"]
 
     # 1. A team_ops key lists the team's reads, with schemas and readOnlyHint, and no writes.
-    tools_seen = asyncio.run(listed(OPS_KEY, "/test/team_ops"))
+    tools_seen = asyncio.run(listed(OPS_KEY, "/team_ops"))
     read = tools_seen.get("uc410_get_account")
     check(
         "1 the key lists the team's read with its input schema and readOnlyHint",
@@ -139,7 +139,7 @@ with ExitStack() as stack:
     check("1 the write is not listed", "uc410_place_hold" not in tools_seen, sorted(tools_seen))
 
     # 2. A read runs through the gateway against the bank, and the log names mcp, the key and the client.
-    result = asyncio.run(called(OPS_KEY, "/test/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
+    result = asyncio.run(called(OPS_KEY, "/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
     out = result.structured_content or {}
     check(
         "2 the read answers with the bank's own account",
@@ -158,7 +158,7 @@ with ExitStack() as stack:
     )
 
     # 3. A write called by name is refused by the gateway, logged, and the bank keeps no hold.
-    held = asyncio.run(called(OPS_KEY, "/test/team_ops", "uc410_place_hold", {"account_id": "CHQ-2219"}))
+    held = asyncio.run(called(OPS_KEY, "/team_ops", "uc410_place_hold", {"account_id": "CHQ-2219"}))
     why = held.structured_content or {}
     check(
         "3 a write declared to run at once is refused over MCP until a person approves",
@@ -171,15 +171,15 @@ with ExitStack() as stack:
         bool(rows) and rows[0].get("channel") == "mcp" and rows[0]["decision"] == "deny",
         rows[:1],
     )
-    again = asyncio.run(called(OPS_KEY, "/test/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
+    again = asyncio.run(called(OPS_KEY, "/team_ops", "uc410_get_account", {"account_id": "CHQ-2219"}))
     check("3 the bank holds nothing on the account", (again.structured_content or {}).get("holds") == [], again)
 
     # 4. Another team: its own URL lists none of team_ops' module and cannot run it; team_ops' URL refuses its key.
-    other_seen = asyncio.run(listed(OTHER_KEY, "/test/team_platform"))
+    other_seen = asyncio.run(listed(OTHER_KEY, "/team_platform"))
     check(
         "4 a team_platform key does not see team_ops' module", "uc410_get_account" not in other_seen, sorted(other_seen)
     )
-    stolen = asyncio.run(called(OTHER_KEY, "/test/team_platform", "uc410_get_account", {"account_id": "CHQ-2219"}))
+    stolen = asyncio.run(called(OTHER_KEY, "/team_platform", "uc410_get_account", {"account_id": "CHQ-2219"}))
     check(
         # The team's registry does not resolve another team's operation, so the gateway refuses it as not registered;
         # team_forbidden is the answer when it resolves but belongs elsewhere. Either way nothing runs.
@@ -190,14 +190,17 @@ with ExitStack() as stack:
     )
     check(
         "4 a team_platform key at team_ops' URL is 403",
-        refused(OTHER_KEY, "/test/team_ops") == (403, "team_forbidden"),
+        refused(OTHER_KEY, "/team_ops") == (403, "team_forbidden"),
     )
 
-    # 5. Production is refused until a team allows it; no key is 401; a viewer, who cannot run tools, is 403.
-    check("5 the production URL is 403", refused(OPS_KEY, "/production/team_ops") == (403, "production_off"))
-    check("5 no credential is 401", refused(None, "/test/team_ops") == (401, "unauthorized"))
+    # 5. There is no production address (calls over MCP are always test runs); no key is 401; a viewer, who cannot run tools, is 403.
+    check(
+        "5 an environment segment in the address (/mcp/production/team_ops) is no address: 404 not_found",
+        refused(OPS_KEY, "/production/team_ops") == (404, "not_found"),
+    )
+    check("5 no credential is 401", refused(None, "/team_ops") == (401, "unauthorized"))
     check(
         "5 a viewer's token is refused (no tools.run)",
-        refused(ravi.get("token", ""), "/test/team_ops") == (403, "role_required"),
+        refused(ravi.get("token", ""), "/team_ops") == (403, "role_required"),
     )
 finish()

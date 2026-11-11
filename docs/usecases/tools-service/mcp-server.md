@@ -1,11 +1,11 @@
 # An assistant lists and runs a team's read tools over MCP with an API key
 
-Status: passing. Id: `uc-410`. Service: `tools-service`. Layers: api.
+Status: blocked by a product bug (steps 2 to 4 fail: the call has no tenant); steps 1 and 5 pass. Id: `uc-410`. Service: `tools-service`. Layers: api.
 
-An outside assistant (Claude Code, Cursor) connects to `/mcp/test/{team}` with an API key of that team and uses the
+An outside assistant (Claude Code, Cursor) connects to `/mcp/{team}` with an API key of that team and uses the
 official MCP Python SDK client to list and call the team's tools. Listing shows the team's published read operations
 only. A call runs through the same gateway function as `POST /v1/calls`, so the registry, schema, OPA, rate window,
-executor and call log all apply. Writes, other teams' tools, other teams' URLs, production and callers without
+executor and call log all apply. Writes, other teams' tools, other teams' URLs, callers without
 `tools.run` are refused.
 
 ## Preconditions
@@ -22,11 +22,11 @@ executor and call log all apply. Writes, other teams' tools, other teams' URLs, 
 | # | Step | Expected |
 |---|---|---|
 | setup | Priya connects the bank and publishes `uc410_get_account` (read) and `uc410_place_hold` (a write declared to run at once); Nadia approves both reviews | Both published |
-| 1 | The team_ops key lists tools at `/mcp/test/team_ops` | The read is listed with its input schema and `readOnlyHint`; the write is not |
+| 1 | The team_ops key lists tools at `/mcp/team_ops` | The read is listed with its input schema and `readOnlyHint`; the write is not |
 | 2 | It calls `uc410_get_account` for `CHQ-2219` | The bank's own account; the call log row says `channel` mcp, the client's name and test |
 | 3 | It calls `uc410_place_hold` by name | Refused (`write needs an approval token`) and logged as an mcp call; the account still has no hold |
-| 4 | The team_platform key lists and calls at `/mcp/test/team_platform`, then tries `/mcp/test/team_ops` | Not listed; the call is 403 `team_forbidden`; the other team's URL is 403 `team_forbidden` |
-| 5 | The production URL; no credential; a viewer's token | 403 `production_off`; 401 `unauthorized` with `WWW-Authenticate`; 403 `role_required` |
+| 4 | The team_platform key lists and calls at `/mcp/team_platform`, then tries `/mcp/team_ops` | Not listed; the call is 403 `team_forbidden`; the other team's URL is 403 `team_forbidden` |
+| 5 | `/mcp/production/team_ops` (there is no environment segment); no credential; a viewer's token | 404 `not_found`; 401 `unauthorized` with `WWW-Authenticate`; 403 `role_required` |
 
 ## Acceptance layers
 

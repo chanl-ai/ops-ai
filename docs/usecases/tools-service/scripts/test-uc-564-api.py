@@ -148,7 +148,7 @@ with ExitStack() as stack:
     login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
     credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
-    team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
+    team_on = {"enabled": True, "signIn": "team", "settings": {"login_url": login}, "credentialId": credential}
     # A viewer: builders manage apps since D59.
     viewer = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
     refused = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=viewer)

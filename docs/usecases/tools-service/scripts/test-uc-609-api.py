@@ -97,6 +97,11 @@ with ExitStack() as stack:
             )
             for who in (priya, wanjiru)
         ]
+        # A new app hands agents its read tools only; each team's admin adds the two writes, as from the Tools tab.
+        for who in (priya, wanjiru):
+            gw.post(
+                f"/v1/apps/plugin:{ID}/tools", json={"tools": ["fields_post_message", "fields_transfer"]}, headers=who
+            )
         first = [review(gw, priya), review(gw, wanjiru)]
         check(
             "1 both teams turn the fields desk on and each runs 0.1.0 with no update waiting",
@@ -198,6 +203,8 @@ with ExitStack() as stack:
         )  # fmt: skip
 
         # 8. Team ops now runs 0.2.0; team platform is still on 0.1.0.
+        # The update's new tool is in the catalog now; the team's admin adds it from the Tools tab.
+        gw.post(f"/v1/apps/plugin:{ID}/tools", json={"tools": ["fields_close_case"]}, headers=priya)
         new_post = call(gw, "post_message", {"channel": "C1", "text": "Card 1043"})
         new_at = reached(fake)
         closed = call(gw, "close_case", {"id": "case-1"})

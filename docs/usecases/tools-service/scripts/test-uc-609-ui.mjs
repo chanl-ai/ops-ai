@@ -83,6 +83,8 @@ try {
       const old = declared();
       const sql = `UPDATE plugin_bindings SET version = '0.1.0', digest = '${old.digest}', declarations = '${JSON.stringify(old.declarations).replaceAll("'", "''")}' WHERE team_id = 'team_ops' AND plugin_id = '${ID}'`;
       execFileSync('psql', [`postgresql://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`, '-c', sql], { encoding: 'utf8' });
+      // A new app hands agents its read tools only; the team's admin adds the writes, as from the app's Tools tab.
+      await call(tools, 'POST', `/v1/apps/plugin:${ID}/tools`, priya, { tools: ['fields_post_message'] });
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Message desk', role: 'Posts updates to the desk' })).data ?? {};
       let granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'] });
       for (let i = 0; i < 40 && granted.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'] }));

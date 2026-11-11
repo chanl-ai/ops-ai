@@ -138,6 +138,10 @@ with ExitStack() as stack:
 
     # 2. S1: a data tool carries the plugin's header and its own, beside the team's token, unchanged.
     on = turn_on(gw, priya, "test.fields", credentials={"token": SECRETS["token"]})
+    # A new app hands agents its read tools only; the team admin adds the two writes, as from the app's Tools tab.
+    gw.post(
+        "/v1/apps/plugin:test.fields/tools", json={"tools": ["fields_post_message", "fields_transfer"]}, headers=priya
+    )
     searched = call(gw, "fields_search", {"q": "card"})
     seen = (calls_of(fake, "fields") or [{}])[-1]
     check(
@@ -294,6 +298,7 @@ with ExitStack() as stack:
     # The org's company address, one of the places the Salesforce plugin signs in.
     login = sf["login_url"]
     team_on = {
+        "signIn": "team",
         "settings": {"login_url": login},
         "credentialId": credential(gw, priya, "opsai.salesforce", "ops-ai-acme", "s3"),
     }

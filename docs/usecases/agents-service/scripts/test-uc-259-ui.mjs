@@ -11,11 +11,12 @@ const STEP = { id: 'sum', type: 'ops.ai.summarise', typeVersion: 1, parameters: 
 const DEFINITION = aiDefinition(ID, [STEP], [['start', 'payload', 'sum'], ['sum', 'ok', 'end_done'], ['sum', 'error', 'end_failed']]);
 
 await withUiStack(async (consoleUrl, stack) => {
-  const J = await as(JAMES);
   const browser = await chromium.launch();
   const errors = [];
   try {
     const turned = await turnOnPolicy(await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors), consoleUrl, 'aiSteps');
+    // Turning a policy on raises the permission version, so James signs in after it: an older token is refused.
+    const J = await as(JAMES);
     const made = await saveAndPublish(J, DEFINITION);
     check('0 Priya turns AI steps on in Policies and the workflow publishes', turned === 200 && made.live, { policy: turned, live: made.live });
     await stack.startWorker();
