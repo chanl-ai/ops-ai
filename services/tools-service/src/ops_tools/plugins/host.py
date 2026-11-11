@@ -18,6 +18,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
+from ops_access import write_waits
 from ops_plugin_sdk import Manifest, Plugin
 from ops_plugin_sdk.loader import Loaded, discover
 from ops_plugin_sdk.manifest import AfterSignIn, InputField, Other, Setting, SignInError, Tool
@@ -382,7 +383,7 @@ def operation_of(m: Manifest, t: Tool, op_id: str) -> dict[str, Any]:
         "masked_output": [],
         "binding": None,
         "rate_limit_per_min": t.rate_limit_per_min,
-        "requires_approval": t.waits,
+        "requires_approval": write_waits(t.access, t.requires_approval),
         "approvers": 1,
         "amount_max": t.amount_max,
         "needs_person": t.needs_person,

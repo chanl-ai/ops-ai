@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from ops_access import write_waits
 from ops_agents.activities.catalog import Catalog
 from ops_store.team_scope import acting_team
 
@@ -147,8 +148,7 @@ class ToolRegistry:
                     "description": t.description,
                     "access": t.access,
                     "input_schema": t.input_schema,
-                    # Off unless the tool declares it (approvals are off by default).
-                    "requires_approval": t.access in WRITES and t.requires_approval is True,
+                    "requires_approval": write_waits(t.access, t.requires_approval),
                     "approvers": t.approvers,
                     "step_up": t.approvers > 1,
                     "output_shape": None,
@@ -246,15 +246,15 @@ class ToolRegistry:
 
     async def requires_approval(self, tool: str, tenant_id: str, team_id: str | None = None) -> bool:
         """Whether a write to `tool` waits for a person's approval, from its registry entry alone: the operation's own
-        flag, else the workflow tool's or the agents catalogue's declaration. A write that declares nothing runs:
-        approvals are off by default and a team turns them on in its policies."""
+        flag, else the workflow tool's or the agents catalogue's declaration. A write that declares nothing waits
+        (`write_waits`); a team's policies may hold more."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
             return bool(resolved.operation["requires_approval"])
         if tool in WORKFLOW_TOOLS:
             return WORKFLOW_TOOLS[tool][1]
         definition = self.catalog.tool(tool)
-        return definition is not None and definition.requires_approval is True
+        return definition is not None and write_waits(definition.access, definition.requires_approval)
 
     async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's

@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import httpx
 import yaml
 
-from ops_access import Access, require_provisioner
+from ops_access import Access, require_provisioner, write_waits
 from ops_identity import Principal
 from ops_service_kit.errors import (
     ApiError,
@@ -1121,9 +1121,8 @@ class ModuleService:
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # Approvals are off by default: a new write runs until its tool's switch or a team
-            # policy turns approval on.
-            "requires_approval": False,
+            # A new write waits for a person until its switch says it runs at once; a read never waits.
+            "requires_approval": write_waits(o["access"], o.get("requires_approval")),
             "amount_max": None,
             # The source's example response when it gives one, so a stubbed call answers like the system.
             "stub": o.get("stub") if o.get("stub") is not None else {"ok": True},
@@ -1549,9 +1548,9 @@ class ModuleService:
             detail = f"Access {o['access']} → {access}"
             changes.append({"operation": name, "kind": "access_widened", "detail": detail, "major": True})
             o["access"] = access
-            # A read never waits; a write keeps its own switch, off unless someone turned it on.
-            if access == "read":
-                o["requires_approval"] = False
+            # A read never waits; a read made a write has no approval setting of its own yet, so it waits. A
+            # requiresApproval in the same patch applies after this.
+            o["requires_approval"] = write_waits(access, None)
             if access == "read":
                 o["amount_max"] = None
         if patch.get("enabled") is not None and patch["enabled"] != o["enabled"]:
@@ -1594,8 +1593,8 @@ class ModuleService:
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
             o["approvers"] = approvers
             if approvers > 1 and not o["requires_approval"]:
-                # Asking for two approvers turns the tool's approval on: approvals are off by default,
-                # and a write two people approve always waits for them.
+                # Asking for two approvers turns the tool's approval on: a write two people approve always waits for
+                # them, even one switched to run at once.
                 changes.append(
                     {
                         "operation": name,

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "Approvals are safe by default",
+  "description": "The person who asks for a decision no longer approves it, and a tool write with no approval setting waits for a person. A team can loosen either with Requester may decide in Policies or by switching a tool to run at once; values already set are kept.",
+  "tag": "improved"
+}

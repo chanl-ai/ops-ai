@@ -51,6 +51,7 @@ from .policies import (
     team_off,
     team_on,
     team_writes_need_approval,
+    write_waits,
 )
 
 __all__ = [
@@ -97,4 +98,5 @@ __all__ = [
     "team_on",
     "team_writes_need_approval",
     "who_can",
+    "write_waits",
 ]

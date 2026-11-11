@@ -403,8 +403,8 @@ class GatewayCalls:
             return Refused(call_id, status, code, [reason], details)
         policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
         # From the registry and the team's policies, never the caller: whether this write needs an approval token.
-        # Approvals are off by default: a write waits only when its tool's switch is on, the team
-        # has every write wait, or the team listed its app.
+        # A write waits when its tool's setting says so (a write with none waits, `write_waits`), the team has every
+        # write wait, or the team listed its app.
         module = resolved.module if resolved else None
         # A test run on an app with no sandbox account signs in with its live one (connections.records account_for);
         # its write then waits for a person's approval, so testing never changes live data unseen. The person running

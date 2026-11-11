@@ -102,14 +102,14 @@ async def test_a_secret_in_the_path_is_never_an_input_and_a_missing_argument_is_
     assert unknown.status_code == 422 and unknown.json()["error"]["details"]["field"] == "input.day", unknown.text
 
 
-async def test_an_access_change_is_major_and_leaves_approval_off(api: Api) -> None:
+async def test_an_access_change_is_major_and_a_read_made_a_write_waits(api: Api) -> None:
     op = await _op(api, "get_payoff_statement")
     staged = await _ok(await _patch(api, op, {"access": "write"}))
     change = next(c for c in staged["pendingChanges"] if c["operation"] == "get_payoff_statement")
     assert change == {**change, "kind": "access_widened", "major": True}
     after = next(o for o in staged["operations"] if o["name"] == "get_payoff_statement")
-    # Approvals are off by default: a read made a write does not start waiting by itself.
-    assert (after["access"], after["requiresApproval"]) == ("write", False)
+    # A read made a write has no approval setting of its own yet, so it waits until someone says it runs at once.
+    assert (after["access"], after["requiresApproval"]) == ("write", True)
 
 
 async def test_a_default_reaches_the_agents_schema_once_published(api: Api) -> None:

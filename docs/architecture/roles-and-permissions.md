@@ -30,6 +30,7 @@ The rules for both (CLAUDE.md "No hard coding"):
 | Definitions are database records | Built-in workflows, roles and task types are seeded and editable through `can()`, never locked in code |
 | Security sits in the step that acts | Separation of duties is a step setting (`notDecidedBy`) and a team policy (`requesterMayDecide`), never a lock on a definition |
 | AI features are off by default | The documented exception to open defaults (rows E03, E36) |
+| Approvals are safe by default | The asker does not decide and a write with no approval setting waits; a team loosens either (row E49) |
 
 ### The always-on baseline
 
@@ -274,11 +275,11 @@ fails the commit until it is classified.
 
 | Key | Default | Open? | What on means | Changed by | Per team |
 |---|---|---|---|---|---|
-| `requesterMayDecide` | on | yes | The person who asked for, saved or started a decision may take it; off: 403 `own_request` | `settings.manage` (Security team) | no (row E29) |
+| `requesterMayDecide` | off | no (row E49) | The person who asked for, saved or started a decision may take it; off: 403 `own_request` | `settings.manage` (Security team) | no (row E29) |
 | `stepUp` | off | yes | Every approver steps up, besides operations that ask for it | `settings.manage` | no |
 | `chatThreadsOwnerOnly` | on | no (row E02) | A chat thread is read only by whoever started it, admins included | `settings.manage` | no |
 | `publishReview` | `{}`: every area `major` | no (row E01) | Per team and area: `always`, `major` or `never` | `reviews.manage` | yes |
-| `toolWritesNeedApproval` | `{}`: off | yes | Every tool write of the team waits for a person, including those an operation lets run at once | `reviews.manage` | yes |
+| `toolWritesNeedApproval` | `{}`: each write follows its tool (one with no setting waits, row E49) | yes | Every tool write of the team waits for a person, including those an operation lets run at once | `reviews.manage` | yes |
 | `appWritesNeedApproval` | `{}`: no app listed | yes | Writes of the apps the team lists wait for a person; a reviews.decide holder is not asked | `reviews.manage` | yes |
 | `aiSteps` | `{}`: off | no (row E03) | The team's workflows may use Classify, Summarise, Extract from text and Draft steps | `workflows.manage` | yes |
 | `taskAssist` | `{}`: off | no (row E03) | A typed task opens with AI help | `workflows.manage` | yes |
@@ -348,7 +349,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E20 | The Access table styles the admin badge by role name | `apps/console/src/components/access/members-panel.tsx:53` | Presentation only; decides nothing | | consistent |
 | E21 | `GET /v1/api-key-summaries` refused every person, workspace admins included | `services/platform-service/src/ops_platform/api/app.py` | Resolved 2026-10-19: a person with `can('access', 'manage')` in every team reads it; a service still needs `settings:view` (test_workspace_admin) | | **resolved** |
 | E22 | The console maps team roles to a session role `admin`, `member` or `viewer` | `apps/console/src/lib/auth/providers/platform.ts:70` | None. Sign-in Q6 is open (O06) | | **no decision** |
-| E23 | A tool write runs without approval unless the team turns approval on: every write (`toolWritesNeedApproval`), the apps it lists (`appWritesNeedApproval`) or one tool (its operation's switch); when on, a person holding reviews.decide in the team is not asked | `services/tools-service/src/ops_tools/gateway_calls.py` (`self_approved`); `modules/policy.py` `approves_own_writes` | Owner, 2026-11-01: approvals are off by default and role-based when on; superseded the 2026-10-17 default where every write waited | 2026-11-01 | decided |
+| E23 | A tool write runs without approval unless the team turns approval on: every write (`toolWritesNeedApproval`), the apps it lists (`appWritesNeedApproval`) or one tool (its operation's switch); when on, a person holding reviews.decide in the team is not asked | `services/tools-service/src/ops_tools/gateway_calls.py` (`self_approved`); `modules/policy.py` `approves_own_writes` | Owner, 2026-11-01: approvals are off by default and role-based when on; superseded the 2026-10-17 default where every write waited. Superseded 2026-11-10 by E49 | 2026-11-01 | superseded |
 | E24 | Models-service admin routes take a service token only; no person reaches them | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | to fix |
 | E25 | Writes before a first publish: a draft test uses the draft, a live run needs the live version | `services/agents-service/src/ops_agents/api/auth.py:256-262` | A test run is a draft activity (`workflows.edit`); a live run is `workflows.run` | 2026-10-17 | decided |
 | E26 | A team admin outside the Security team does not change egress, another team's secrets, storage settings or security reviews | `SECURITY_TEAM_ACTIONS` `catalogue.py:55` | These decide what every team may reach, so they are held in the Security team | 2026-10-17 | decided |
@@ -374,6 +375,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E46 | The `plugins` policy (the install switch) | — | Superseded 2026-11-03: the policy is gone; an installed plugin is available to every team, which turns it on for itself, and settings fixed for every team come from the install config (`OPS_PLUGIN_LOCKED`) | 2026-11-03 | superseded |
 | E47 | A members-only hosted form refuses anyone signed in outside the team that shares it, and answers the same for a form that does not exist (403 `form_members_only`) | `services/agents-service/src/ops_agents/api/routers/forms.py` (`_member_form`) | The form is the team's own start form shared with its members; reading it in another team would cross the team boundary, so a person outside it learns nothing about it | 2026-10-30 | prototype |
 | E48 | `egressNewHosts` defaults to `ask_security`: a host the account has not listed waits for the Security team, unless the policy says builders, any public host or block; an unreadable policy counts as `ask_security` | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/egress.py` (`NewHosts`) | Reaching a new outside address is a security decision, so the default asks Security; private, loopback, link-local and metadata addresses are refused under every value | 2026-11-03 | prototype |
+| E49 | Approvals are safe by default: `requesterMayDecide` is off, so the person who asked for, saved or started a decision does not take it (403 `own_request`), and a tool write with no approval setting waits for a person (`write_waits`); a team loosens either, by turning `requesterMayDecide` on or switching a tool to run at once | `packages/ops_access/src/ops_access/policies.py` (`requesterMayDecide`, `write_waits`) | Owner, 2026-11-10: a person approving their own request, or a write running because nobody set its switch, was a security bug; a workspace or tool that set a value keeps it | 2026-11-10 | decided |
 
 ## Decided questions
 
@@ -401,7 +403,7 @@ when a question comes up again.
 | D17 | Is a refusal outside the grid and policies allowed? | No. It is a defect unless this page records a decision for it | 2026-10-18 |
 | D18 | Are definitions code or records? | Database records seeded from files; built-in workflows, roles and task types are editable through `can()`, never locked | 2026-10-18 |
 | D19 | Where does security for a definition live? | In the step that acts (`notDecidedBy`, `requesterMayDecide`), never in a lock on the definition | 2026-10-18 |
-| D20 | Is `requesterMayDecide` a rule or a setting? | A team policy, on by default | 2026-10-18 |
+| D20 | Is `requesterMayDecide` a rule or a setting? | A team policy, off by default since 2026-11-10 (row E49) | 2026-11-10 |
 | D21 | Is separation of duties part of `can()`? | Yes, as `not_by` and `requested_by`; two-approver counting stays where approvals are counted | 2026-10-17 |
 | D22 | How are roles shown to admins? | As a roles × permissions checkbox matrix; admins edit built-in roles' cells there | 2026-10-18 |
 | D23 | Is there a chat-only role? | Yes, Chat user: chats with the team's published agents, sees only its own threads | 2026-10-17 |

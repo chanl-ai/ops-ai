@@ -60,7 +60,7 @@ this table is generated from. A per-team policy holds a value per team; a team w
 
 | Key | Name | Scope | Default | What it does |
 |---|---|---|---|---|
-| `requesterMayDecide` | Requester may decide | workspace | True | The person who asked for a decision may also make it. Off: someone else has to decide. |
+| `requesterMayDecide` | Requester may decide | workspace | False | The person who asked for a decision may also make it. Off (the default): someone else has to decide. |
 | `extractionFloor` | Extraction confidence floor | workspace | 0.8 | The lowest confidence an Extract from file step may accept; no step can ask for less. |
 | `stepUp` | Step-up on every approval | workspace | False | Every approver confirms their sign-in again before deciding. Off: only operations that ask for it. |
 | `publishReview` | Publish reviews | per team | off in every team | Which of a team's publishes wait for review: always, major changes only (the default), or never. |
