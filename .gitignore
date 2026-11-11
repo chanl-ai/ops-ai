@@ -45,3 +45,6 @@ examples/**/.ops-profile.json
 # Local caches, never source
 .pnpm-store/
 .playwright-mcp/
+
+# Agent settings for one machine (see .claude/workspace.example.md)
+.claude/workspace.local.md

@@ -22,6 +22,7 @@ include make/experiments.mk
 include make/git.mk
 include make/plugins.mk
 include make/box.mk
+include make/agents.mk
 
 ##@ General
 
