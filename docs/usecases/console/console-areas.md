@@ -22,22 +22,22 @@ when two or more areas are offered. Design: the console areas design page, accep
 | Needs | How |
 |---|---|
 | The demo stack with platform sign-in | `withUiStack(..., { platform: true, demo: true })` |
-| Priya, James, Maya, Ravi, and the fixtures Lena (chat only) and Tomas (builder in Operations, chat user in Platform) | `services/platform-service/seed/people.json`, password `northfield-demo` |
+| Priya, James, Maya, Ravi, Wanjiru (admin of every team), and the fixtures Lena (chat only) and Tomas (builder in Operations, chat user in Platform) | `services/platform-service/seed/people.json`, password `northfield-demo` |
 
 ## Steps and expected results
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Each of the four signs in and opens every row of every area | Four areas each; Govern holds what their cells open and nothing more; no page answers 403 |
+| 1 | Priya, Wanjiru, James, Maya and Ravi each sign in and open every row of every area | Four areas each; Govern holds what their cells open and nothing more (Background only for Wanjiru, who administers every team); no page answers 403 |
 | 2 | Lena signs in, at 1440 and 390 | Lands on /chat; no area control; sidebar is New chat and All chats; `/` goes to /chat; /agents shows the page's own refusal with the sidebar unchanged and no area lit; the chord does nothing |
 | 3 | Tomas picks Build, switches to Platform and back | In Platform no control and only chat rows; back in Operations the areas return |
 | 4 | Priya on /cases presses the Build chord, then the Work chord | Build's first row opens with Build lit; Work returns to /cases, the last page she visited; search still opens |
 | 5 | The chord with the chat composer focused, and with search open | Nothing changes |
 | 6 | Search for "knowledge"; Ravi searches "activity" | Each page once, grouped by area; the pick lights Data; Ravi is offered no Activity |
 | 7 | James picks Build, signs out; Priya signs in, picks Govern, signs out; James, then Priya sign in again | Priya starts on Work, James returns to Build, Priya to Govern |
-| 8 | Priya opens /deployments, /prompt-blocks, /sources, /wiki, /connect, /reviews/all | Each lights its area and draws a trail |
-| 9 | At 390 | One 44 px button replaces the control; a pick opens that area and the menu closes; the sheet lists only that area; picking a row closes it |
-| 10 | At 1024 on Tool calls; at 1440 with the sidebar folded | No sideways scroll, no cut label; the four areas stay |
+| 8 | Priya opens /deployments, /prompt-blocks, /sources, /wiki, /connect, /reviews/all | Each lights its area and draws a trail; /connect redirects to /channels/mcp, so it lights Build |
+| 9 | At 390 (the sheet is closed, so the page is ready when the area button has drawn) | One 44 px button replaces the control; a pick opens that area and the menu closes; the sheet lists only that area; picking a row closes it |
+| 10 | At 1024 on Tool calls; at 1440 with the sidebar folded | No sideways scroll, no cut label; the four areas stay; on /chat the area is the one she was last in (Govern), as New chat has no area of its own |
 | 11 | Keyboard and screen reader | One group named Area, one pressed item, arrows and Enter pick, a click on the lit item keeps it lit |
 | 12 | Cells held back, then refused | Skeleton rows and no control; then "Pages unavailable" with Try again, which loads the rows |
 | 13 | Priya opens Settings, then Back | The settings sidebar with Govern lit; Back returns to the area |

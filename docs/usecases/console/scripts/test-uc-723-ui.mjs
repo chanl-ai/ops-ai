@@ -17,6 +17,7 @@ const MAYA = 'm.okafor@harborpine.example';
 const RAVI = 'r.menon@harborpine.example';
 const LENA = 'l.brandt@harborpine.example';
 const TOMAS = 't.reyes@harborpine.example';
+const WANJIRU = 'w.kamau@harborpine.example';
 const AREAS = ['Work', 'Build', 'Data', 'Govern'];
 const SHOTS = evidenceDir('723', 'uc');
 const ONLY = process.env.UC723_STEPS?.split(',').map((x) => x.trim());
@@ -46,7 +47,8 @@ await withUiStack(
       const rowsOf = async (page) => (await page.locator('[data-sidebar=header] a, [data-sidebar=content] a').allInnerTexts()).map((t) => t.split('\n')[0].trim()).filter(Boolean);
       // Settled: the sidebar has drawn a row and the cells have answered (no skeleton left).
       const settle = async (page) => {
-        await page.locator('[data-sidebar=header] a, [data-sidebar=content] a').first().waitFor({ timeout: 45_000 });
+        // At phone width the sidebar is a closed sheet with no links; the area button is what has drawn.
+        await page.locator('[data-sidebar=header] a, [data-sidebar=content] a, button[aria-label^="Area: "]').first().waitFor({ timeout: 45_000 });
         await page.locator('[data-sidebar=content] [data-slot=skeleton]').first().waitFor({ state: 'detached', timeout: 30_000 }).catch(() => undefined);
         await page.waitForTimeout(700);
       };
@@ -81,9 +83,11 @@ await withUiStack(
 
       await step('1 each person is offered the areas and pages their cells open, and no listed page refuses them', async () => {
         const seen = {};
-        // Priya: admin in three teams and in every team. James: a builder. Maya: a reviewer. Ravi: a viewer.
+        // Priya: admin of Operations. Wanjiru: admin of every team. James: a builder. Maya: a reviewer. Ravi: a viewer.
         const want = {
-          [PRIYA]: { has: ['Policies', 'Reviews', 'Activity', 'Tool calls', 'Audit log', 'Background', 'Evals', 'Model inventory', 'Access', 'Roles', 'Tool access', 'Settings'], lacks: [] },
+          [PRIYA]: { has: ['Policies', 'Reviews', 'Activity', 'Tool calls', 'Audit log', 'Evals', 'Model inventory', 'Access', 'Roles', 'Tool access', 'Settings'], lacks: [] },
+          // Background needs an admin of every team: Priya is admin of Operations only, Wanjiru of all.
+          [WANJIRU]: { has: ['Policies', 'Reviews', 'Activity', 'Tool calls', 'Audit log', 'Background', 'Evals', 'Model inventory', 'Access', 'Roles', 'Tool access', 'Settings'], lacks: [] },
           [JAMES]: { has: ['Reviews', 'Activity', 'Tool calls', 'Audit log', 'Evals', 'Access'], lacks: ['Policies', 'Settings', 'Background'] },
           [MAYA]: { has: ['Reviews', 'Activity', 'Tool calls', 'Evals', 'Access'], lacks: ['Audit log', 'Policies', 'Settings', 'Background'] },
           [RAVI]: { has: ['Access'], lacks: ['Activity', 'Tool calls', 'Audit log', 'Evals', 'Policies', 'Settings', 'Background'] },
@@ -266,7 +270,7 @@ await withUiStack(
 
       await step('8 a page reached by link lights its own area, and the trail names it', async () => {
         const seen = {};
-        const routes = [['/deployments', 'Build'], ['/prompt-blocks', 'Build'], ['/sources', 'Data'], ['/wiki', 'Data'], ['/connect', 'Data'], ['/reviews/all', 'Govern']];
+        const routes = [['/deployments', 'Build'], ['/prompt-blocks', 'Build'], ['/sources', 'Data'], ['/wiki', 'Data'], ['/connect', 'Build'], ['/reviews/all', 'Govern']];
         for (const [route, area] of routes) {
           await priya.goto(`${consoleUrl}${route}`, { waitUntil: 'domcontentloaded' });
           await settle(priya);
@@ -311,6 +315,7 @@ await withUiStack(
           cut: [...document.querySelectorAll('[role=group][aria-label=Area] :is(button,[role=radio])')].filter((b) => b.scrollWidth > b.clientWidth).length,
         }));
         const shown = await items(priya).count();
+        const before = await lit(priya);
         await priya.setViewportSize({ width: 1440, height: 1000 });
         await open(priya, '/chat');
         const sidebar = priya.locator('[data-slot=sidebar]').first();
@@ -319,7 +324,7 @@ await withUiStack(
         const folded = { state: await sidebar.getAttribute('data-state'), lit: await lit(priya), shown: await items(priya).count() };
         await priya.screenshot({ path: join(SHOTS, 'folded-1440.png') });
         await priya.locator('[data-slot=sidebar-trigger]').first().click();
-        check('10 the longest trail fits at 1024 and the control stays where the sidebar folds', !fit.sideways && fit.cut === 0 && shown === 4 && folded.state === 'collapsed' && folded.lit[0] === 'Work' && folded.shown === 4, { fit, shown, folded });
+        check('10 the longest trail fits at 1024 and the control stays where the sidebar folds', !fit.sideways && fit.cut === 0 && shown === 4 && folded.state === 'collapsed' && before[0] === 'Govern' && folded.lit[0] === before[0] && folded.shown === 4, { fit, shown, before, folded });
       });
 
       await step('11 the control is named, exposes what is lit, and works from the keyboard', async () => {
