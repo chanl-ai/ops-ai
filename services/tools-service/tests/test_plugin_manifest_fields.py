@@ -166,6 +166,14 @@ async def test_a_data_tool_whose_200_answer_holds_an_error_fails_with_the_system
 
 
 async def test_a_python_tools_request_whose_200_answer_holds_an_error_fails_the_call(rig: Rig) -> None:
+    rig.answer = httpx.Response(200, json=SLACK_REFUSAL)
+    refused = await rig.call("echo")
+    assert not refused.ok, refused
+    assert refused.output["error"] == {
+        "code": "UPSTREAM_ERROR",
+        "message": "Fields desk refused the call: channel_not_found.",
+        "side": "upstream",
+    }, refused
     rig.answer = httpx.Response(200, json={"ok": False, "error": "invalid_auth"})
     out = await rig.call("echo")
     assert not out.ok, out
