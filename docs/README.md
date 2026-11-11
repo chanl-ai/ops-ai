@@ -114,6 +114,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/platform-choices.md` | The product or library each part is built on today, with code paths; the current outcome of every record in `architecture/decisions/` |
 | `architecture/templates.md` | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not |
 | `architecture/knowledge-base.md` | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not |
+| `architecture/app-accounts.md` | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built |
 | `architecture/console-areas.md` | The console's four areas (Work, Build, Data, Govern), the cells that offer each page, the area switcher and chat's links back (switcher designed, not built) |
 | `architecture/logging-and-data-writes.md` | One JSON log line per event with ids and redaction (built), and the store helper for a person's edit with revision check, audit and outbox (designed) |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |

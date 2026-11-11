@@ -38,6 +38,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Logging and data writes | [logging-and-data-writes.md](logging-and-data-writes.md) | Log lines, ids and redaction; the store helper for a person's edit | Builder, operator |
 | Templates | [templates.md](templates.md) | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not | Builder |
 | Knowledge base | [knowledge-base.md](knowledge-base.md) | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not | Builder |
+| Several accounts per app | [app-accounts.md](app-accounts.md) | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built | Builder |
 | Decision records | [decisions/](decisions/) | The options and scoring behind the platform choices | Approver |
 
 ## What is proven
