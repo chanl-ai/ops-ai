@@ -31,7 +31,7 @@ from ops_store import Guarantee, isolation
 from ops_store.outbox import add as add_event
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
-from ops_store.team_scope import team_visible
+from ops_store.team_scope import any_team, team_visible
 
 from .modules import metadata, module_operations, service_outbox, tool_modules
 
@@ -627,7 +627,12 @@ class ConnectionStore:
                     await c.execute(connections.insert().values(**{**row, "settings": {}, "secrets": {}}))
             except IntegrityError as e:
                 k = connections.c
-                taken = sa.select(k.id).where(k.tenant_id == row["tenant_id"], k.id == row["id"])
+                # The key is (tenant_id, id): a clash may be another team's row, so the refusal check names no team.
+                taken = sa.select(k.id).where(
+                    k.tenant_id == row["tenant_id"],
+                    k.id == row["id"],
+                    any_team(connections, "an id clash is decided across teams; the row is never returned"),
+                )
                 if (await c.execute(taken)).first() is None:
                     raise AccountNameTaken(str(row.get("account_name"))) from e
                 return False
