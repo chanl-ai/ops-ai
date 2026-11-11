@@ -31,10 +31,11 @@ const BY_REVIEWER = 'reviewer';
 const SWITCH = 'Ask before an agent changes anything in an app';
 const OWN_REQUESTS = 'People can approve their own requests';
 const TEST_ACCOUNTS = 'Test accounts never ask';
+const TEST_RUNS = 'Test runs on live accounts ask first';
 const NOT_THESE_ROLES = new Set(['viewer', 'chat_user', 'owner', 'builder']);
 
 const teamSchema = z
-  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), requesterMayDecide: z.boolean(), testAccountsNeverAsk: z.boolean() })
+  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), requesterMayDecide: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean() })
   .refine((v) => !v.ask || v.answer !== BY_REVIEWER || !!v.reviewerRole, { message: 'Choose the role that reviews.', path: ['reviewerRole'] });
 type TeamForm = z.infer<typeof teamSchema>;
 
@@ -77,6 +78,7 @@ export default function ApprovalsPage() {
       reviewerRole: (saved.reviewerRole as string | null) ?? null,
       requesterMayDecide: mayDecide?.value === true,
       testAccountsNeverAsk: saved.testAccountsNeverAsk !== false,
+      testRunsAsk: saved.testRunsAsk !== false,
     },
   });
   const ask = form.watch('ask');
@@ -106,6 +108,15 @@ export default function ApprovalsPage() {
       toast.success(`Saved: ${TEST_ACCOUNTS}`);
     } catch (e) {
       toast.error('Couldn’t save the test account setting', { description: (e as Error).message });
+    }
+  };
+  const saveTestRuns = async () => {
+    try {
+      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: form.getValues('testRunsAsk') };
+      await set.mutateAsync({ key: 'appChanges', teamId, value });
+      toast.success(`Saved: ${TEST_RUNS}`);
+    } catch (e) {
+      toast.error('Couldn’t save the test run setting', { description: (e as Error).message });
     }
   };
   const saveApps = async () => {
@@ -138,7 +149,7 @@ export default function ApprovalsPage() {
             requiredRole="admin"
             onSave={saveTeam}
             saving={set.isPending}
-            dirty={Object.keys(form.formState.dirtyFields).some((k) => k !== 'testAccountsNeverAsk')}
+            dirty={Object.keys(form.formState.dirtyFields).some((k) => k !== 'testAccountsNeverAsk' && k !== 'testRunsAsk')}
           >
             <div className="flex flex-col gap-4">
               <Controller
@@ -232,6 +243,28 @@ export default function ApprovalsPage() {
                     <label className="flex items-center gap-2 text-sm">
                       <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} disabled={locked} aria-label={TEST_ACCOUNTS} />
                       {TEST_ACCOUNTS}
+                    </label>
+                  )}
+                />
+              </SettingCard>
+              <SettingCard
+                id="approvals-test-runs"
+                title={TEST_RUNS}
+                description="A test run that writes with an app’s live account pauses for a yes from the person running it, even while the switch above is off."
+                help="Default: on · Changed by a team admin"
+                locked={locked}
+                requiredRole="admin"
+                onSave={saveTestRuns}
+                saving={set.isPending}
+                dirty={form.formState.dirtyFields.testRunsAsk === true}
+              >
+                <Controller
+                  control={form.control}
+                  name="testRunsAsk"
+                  render={({ field }) => (
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} disabled={locked} aria-label={TEST_RUNS} />
+                      {TEST_RUNS}
                     </label>
                   )}
                 />

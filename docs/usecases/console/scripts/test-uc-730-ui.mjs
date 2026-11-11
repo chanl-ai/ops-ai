@@ -8,6 +8,7 @@ import { check, chromium, finish, consoleSignIn, withUiStack } from '@ops-ai/use
 const SWITCH = /Ask before an agent changes anything in an app/i;
 const OWN = /People can approve their own requests/i;
 const TEST_ACCOUNTS = /Test accounts never ask/i;
+const TEST_RUNS = /Test runs on live accounts ask first/i;
 
 async function step(name, body) {
   try {
@@ -64,6 +65,25 @@ await withUiStack(async (consoleUrl) => {
       await again.click();
       await page.getByTestId('setting-approvals-test-accounts').getByRole('button', { name: 'Save' }).click();
       await page.getByText(/Saved/).first().waitFor();
+    });
+
+    await step('3b Advanced holds Test runs on live accounts ask first, on until a team saves it off', async () => {
+      await page.goto(`${consoleUrl}/settings/approvals`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('approvals-advanced').click();
+      const box = page.getByRole('checkbox', { name: TEST_RUNS });
+      await box.waitFor();
+      check('3b it is on by default', (await box.getAttribute('aria-checked')) === 'true');
+      await box.click();
+      await page.getByTestId('setting-approvals-test-runs').getByRole('button', { name: 'Save' }).click();
+      await page.getByText(/Saved: Test runs/).first().waitFor();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.getByTestId('approvals-advanced').click();
+      const again = page.getByRole('checkbox', { name: TEST_RUNS });
+      await again.waitFor();
+      check('3b it stays off after a reload', (await again.getAttribute('aria-checked')) === 'false');
+      await again.click();
+      await page.getByTestId('setting-approvals-test-runs').getByRole('button', { name: 'Save' }).click();
+      await page.getByText(/Saved: Test runs/).first().waitFor();
     });
 
     await step('4 Policies no longer holds the old approval rows or Requester may decide', async () => {
