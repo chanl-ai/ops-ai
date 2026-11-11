@@ -174,6 +174,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-160 | platform-service | A person resets their password by a mailed link and signs in with it; the demo password stops working for them | api, ui | passing |
 | uc-161 | platform-service | A first OIDC sign-in creates a chat-only member once, and the console offers SSO for that email | api, ui | passing |
 | uc-162 | platform-service | A person signs in through SAML and steps up at the same provider, which must ask again | api | passing |
+| uc-711 | platform-service | Leaving a group at the identity provider ends only the membership that group gave | api | passing |
 | uc-163 | platform-service | A password in an SSO-only workspace, another provider's answer and a reused code are refused | api | passing |
 | uc-164 | platform-service | Workspace admins create a team with its first admin, rename, archive and restore it; others cannot | api, ui | passing |
 | uc-212 | platform-service | A workspace sets its security and default teams, and SSO groups put new people in mapped teams | api | passing |

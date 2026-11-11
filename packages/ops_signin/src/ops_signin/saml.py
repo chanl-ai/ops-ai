@@ -45,6 +45,8 @@ EMAIL_FORMAT = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
 METADATA = "urn:oasis:names:tc:SAML:2.0:metadata"
 DSIG = "http://www.w3.org/2000/09/xmldsig#"
 RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+# Entra ID's overage claim: sent in place of the groups list when a person is in more than 150 groups.
+GROUPS_OVERAGE = "http://schemas.microsoft.com/claims/groups.link"
 DECRYPT_REFUSED = "the encrypted assertion could not be read"
 # A posted response larger than this is refused before it is parsed.
 MAX_RESPONSE_BYTES = 256 * 1024
@@ -283,13 +285,21 @@ class SamlServiceProvider:
         if fresh_since is not None and (auth_time is None or auth_time < fresh_since - self.skew_s):
             raise SignInRefused("the provider did not ask for credentials again")
         name = attrs.get(c.name_attribute, "") if c.name_attribute else ""
-        groups = tuple(
-            _text(v)
-            for x in a.findall("saml:AttributeStatement/saml:Attribute", NS)
-            if c.groups_attribute and x.get("Name") == c.groups_attribute
-            for v in x.findall("saml:AttributeValue", NS)
-        )
+        groups = self._groups(a)
         return VerifiedIdentity(subject=subject, email=email, name=name or email, auth_time=auth_time, groups=groups)
+
+    def _groups(self, a: Element) -> tuple[str, ...] | None:
+        """The values of the named groups attribute; () when it is there with none; None when it is missing, or when
+        Entra's overage claim stands in for it, since neither says which groups the person is in."""
+        if not self.config.groups_attribute:
+            return None
+        named = list(a.findall("saml:AttributeStatement/saml:Attribute", NS))
+        if any(x.get("Name") == GROUPS_OVERAGE for x in named):
+            return None
+        found = [x for x in named if x.get("Name") == self.config.groups_attribute]
+        if not found:
+            return None
+        return tuple(_text(v) for x in found for v in x.findall("saml:AttributeValue", NS))
 
     def _window(self, not_before: str | None, not_on_or_after: str | None, now: datetime) -> None:
         start, end = _parse_instant(not_before), _parse_instant(not_on_or_after)

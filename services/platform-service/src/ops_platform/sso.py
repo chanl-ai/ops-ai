@@ -40,7 +40,7 @@ from ops_signin.saml import sp_metadata
 
 from .auth import SSO_METHODS, Auth, Issued, StepUpIssued
 from .store.identity import IdentityStore
-from .store.signin import Flow, Provider, SignInStore
+from .store.signin import Flow, Provider, SignInStore, group_settings
 from .store.signin_secrets import SignInSecretStore
 
 log = get_logger(__name__)
@@ -64,10 +64,9 @@ def _unix(iso: str) -> int:
     return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
 
 
-def _groups_source(config: dict[str, Any]) -> str | None:
-    """The claim or attribute a provider's group mapping reads; None when it maps no groups."""
-    groups: dict[str, Any] = config.get("groups") or {}
-    return str(groups.get("source") or "groups") if groups.get("map") else None
+def _groups_source(p: Provider) -> str | None:
+    """The claim or attribute a provider's group rules read; None when it has none."""
+    return str(group_settings(p.config).get("source") or "groups") if p.group_rules else None
 
 
 async def guarded_get(http: httpx.AsyncClient, fetch: PublicFetch | None, url: str) -> bytes:
@@ -160,7 +159,7 @@ class Sso:
             client_id=str(c["clientId"]),
             client_secret=secret,
             scopes=tuple(c.get("scopes") or ("openid", "email", "profile")),
-            groups_claim=_groups_source(c),
+            groups_claim=_groups_source(p),
         )
         return OidcClient(config, self.http, self._metadata, fetch=self.guarded_get if self.fetch else None)
 
@@ -200,7 +199,7 @@ class Sso:
                 acs_url=at["acsUrl"],
                 email_attribute=c.get("emailAttribute"),
                 name_attribute=c.get("nameAttribute"),
-                groups_attribute=_groups_source(c),
+                groups_attribute=_groups_source(p),
                 sp_key=self.sp_key.get_secret_value() if self.sp_key else None,
                 sign_requests=bool(c.get("signRequests")),
                 require_encryption=bool(c.get("requireEncryption")),

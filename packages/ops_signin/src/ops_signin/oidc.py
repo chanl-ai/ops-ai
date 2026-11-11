@@ -144,13 +144,14 @@ class OidcClient:
         if not email or claims.get("email_verified") is False:
             raise SignInRefused("no verified email")
         raw = claims.get(self.config.groups_claim) if self.config.groups_claim else None
-        groups = cast(list[Any], raw) if isinstance(raw, list) else [raw] if isinstance(raw, str) else []
+        # A missing claim, or Entra's overage marker (_claim_names.groups) in its place, says nothing about groups.
+        listed = cast(list[Any], raw) if isinstance(raw, list) else [raw] if isinstance(raw, str) else None
         return VerifiedIdentity(
             subject=str(claims["sub"]),
             email=email,
             name=str(claims.get("name") or email),
             auth_time=auth_time if isinstance(auth_time, int) else None,
-            groups=tuple(str(g) for g in groups),
+            groups=tuple(str(g) for g in listed) if listed is not None else None,
         )
 
     async def _verify(self, doc: dict[str, Any], id_token: str) -> dict[str, Any]:

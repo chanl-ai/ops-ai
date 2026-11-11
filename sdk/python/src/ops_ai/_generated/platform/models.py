@@ -163,11 +163,13 @@ class GroupRuleOut(TypedDict, closed=True):
 
 class GroupSettings(TypedDict, closed=True):
     map: list[GroupRule]
+    onMissing: NotRequired[Literal["keep", "remove"] | None]
     source: NotRequired[str | None]
 
 
 class GroupSettingsOut(TypedDict, closed=True):
     map: list[GroupRuleOut]
+    onMissing: Literal["keep", "remove"]
     source: str | None
 
 

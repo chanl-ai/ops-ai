@@ -43,6 +43,8 @@ PROTOCOL = "urn:oasis:names:tc:SAML:2.0:protocol"
 RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
 ASSERTION = "urn:oasis:names:tc:SAML:2.0:assertion"
 _NS = {"samlp": PROTOCOL, "saml": ASSERTION}
+# What Entra ID sends in place of the groups list for a person in more than 150 groups.
+GROUPS_OVERAGE = "http://schemas.microsoft.com/claims/groups.link"
 
 
 @dataclass
@@ -312,7 +314,9 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
             in_response_to=str(req.get("ID")),
             email=email,
             auth_time=auth_time,
-            groups=[g for g in q.get("groups", "").split(",") if g],
+            # No `groups` parameter sends no attribute; `groups=` sends an empty one.
+            groups=[g for g in q["groups"].split(",") if g] if "groups" in q else None,
+            overage=q.get("overage") == "1",
             encrypt_to=str(known["certificate"]) if known.get("encrypt") else None,
             cipher=str(known.get("cipher", "aes256-gcm")),
             key_transport=str(known.get("keyTransport", "rsa-oaep-mgf1p")),
@@ -361,6 +365,7 @@ def saml_response(
     email: str,
     auth_time: int,
     groups: list[str] | None = None,
+    overage: bool = False,
     encrypt_to: str | None = None,
     cipher: str = "aes256-gcm",
     key_transport: str = "rsa-oaep-mgf1p",
@@ -368,7 +373,9 @@ def saml_response(
     sign_response: bool = False,
 ) -> str:
     """A Response holding one assertion signed with the provider's key, base64 as the POST binding sends it. With
-    `encrypt_to` (a certificate) the assertion is encrypted to it; `sign_response` signs the Response around it."""
+    `encrypt_to` (a certificate) the assertion is encrypted to it; `sign_response` signs the Response around it.
+    `groups` None sends no groups attribute and [] an empty one; `overage` sends Entra's groups.link claim in its
+    place, as Entra does for a person in more than 150 groups."""
     now = datetime.now(UTC)
     later = now + timedelta(minutes=5)
     response = etree.Element(
@@ -411,7 +418,10 @@ def saml_response(
     for key, value in (("email", email), ("displayName", email.split("@", maxsplit=1)[0].replace(".", " ").title())):
         attr = etree.SubElement(attrs, f"{{{ASSERTION}}}Attribute", Name=key)
         etree.SubElement(attr, f"{{{ASSERTION}}}AttributeValue").text = value
-    if groups:
+    if overage:
+        attr = etree.SubElement(attrs, f"{{{ASSERTION}}}Attribute", Name=GROUPS_OVERAGE)
+        etree.SubElement(attr, f"{{{ASSERTION}}}AttributeValue").text = "https://graph.microsoft.com/v1.0/me/memberOf"
+    elif groups is not None:
         attr = etree.SubElement(attrs, f"{{{ASSERTION}}}Attribute", Name="groups")
         for g in groups:
             etree.SubElement(attr, f"{{{ASSERTION}}}AttributeValue").text = g

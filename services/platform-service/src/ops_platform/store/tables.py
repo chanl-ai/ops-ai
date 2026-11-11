@@ -318,6 +318,54 @@ signin_certificates = sa.Table(
     sa.Index("ix_signin_certificates_not_after", "not_after"),
     info=TENANT_SCOPED,
 )
+signin_group_rules = sa.Table(
+    "signin_group_rules",
+    metadata,
+    # A provider's group mapping (migration 0033): the person in `group_value` (the exact value the provider sends)
+    # gets `role` in `team_id`. Never admin: the service refuses it on save (decision D5).
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, index=True),
+    sa.Column("provider_id", sa.String(64), nullable=False),
+    sa.Column("group_value", sa.String(255), nullable=False),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("role", sa.String(16), nullable=False),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    sa.Column("created_by", sa.String(64), nullable=False),
+    sa.UniqueConstraint("provider_id", "group_value", "team_id", name="uq_signin_group_rules"),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "provider_id"],
+        ["signin_providers.tenant_id", "signin_providers.id"],
+        name="fk_signin_group_rules_provider",
+        ondelete="CASCADE",
+    ),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_signin_group_rules_team"
+    ),
+    info=TENANT_SCOPED,
+)
+signin_grants = sa.Table(
+    "signin_grants",
+    metadata,
+    # Where a membership came from: a provider's first sign-in (`jit`) or one of its group rules (`group`, one row
+    # per rule that gives it). Group removal ends only a membership with a `group` row and no matching rule left, so a
+    # membership given by hand, which has no row here, is never removed by a sign-in.
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, index=True),
+    sa.Column("member_id", sa.String(64), sa.ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True),
+    sa.Column("provider_id", sa.String(64), nullable=False),
+    # Null for a first-sign-in grant, for a group grant whose rule was deleted, and for one read back from the audit log
+    # that no single rule explains; a group grant with no rule still counts as given by groups.
+    sa.Column("rule_id", sa.String(64), sa.ForeignKey("signin_group_rules.id", ondelete="SET NULL")),
+    sa.Column("why", sa.String(8), nullable=False),  # jit | group
+    sa.Column("granted_at", sa.String(40), nullable=False),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "provider_id"],
+        ["signin_providers.tenant_id", "signin_providers.id"],
+        name="fk_signin_grants_provider",
+        ondelete="CASCADE",
+    ),
+    info=TENANT_SCOPED,
+)
 # One verified owner per domain, so a domain's people go to one workspace's provider; a pending claim blocks nobody.
 sa.Index(
     "ux_signin_domains_verified",

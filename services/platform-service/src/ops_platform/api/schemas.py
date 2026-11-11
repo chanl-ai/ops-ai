@@ -715,6 +715,9 @@ class GroupSettings(In):
 
     source: str | None = Field(default=None, max_length=255)
     map: list[GroupRule] = Field(min_length=1, max_length=100)
+    # When a person signs in without a group that gave them a membership: `remove` ends it (the default for a new
+    # provider), `keep` leaves it. A missing, empty or overage groups claim removes nothing either way.
+    on_missing: Literal["keep", "remove"] | None = None
 
 
 class ProviderIn(In):
@@ -807,6 +810,7 @@ class GroupRuleOut(Out):
 class GroupSettingsOut(Out):
     source: str | None
     map: list[GroupRuleOut]
+    on_missing: Literal["keep", "remove"]
 
 
 class TxtRecordOut(Out):

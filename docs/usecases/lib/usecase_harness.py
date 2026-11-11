@@ -720,6 +720,7 @@ def sso_round_trip(
     user: str | None = None,
     stale: bool = False,
     groups: tuple[str, ...] = (),
+    idp_params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """A browser's SSO sign-in, without the browser: start for `email`, log `user` (default `email`) in at the identity
     provider, hand its answer to platform-service, and complete with the flow key when it sent back a code. Returns
@@ -733,6 +734,8 @@ def sso_round_trip(
     if groups:
         # The groups the fake identity provider says the person is in.
         params["groups"] = ",".join(groups)
+    # Anything else the fake identity provider takes, e.g. {"overage": "1"} for Entra's groups.link claim.
+    params |= idp_params or {}
     at_idp = idp.get(url.path, params=params)
     if at_idp.status_code == 302:
         back = httpx.URL(at_idp.headers["location"])

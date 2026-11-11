@@ -2158,6 +2158,21 @@
             "title": "Map",
             "type": "array"
           },
+          "onMissing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "remove"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onmissing"
+          },
           "source": {
             "anyOf": [
               {
@@ -2187,6 +2202,14 @@
             "title": "Map",
             "type": "array"
           },
+          "onMissing": {
+            "enum": [
+              "keep",
+              "remove"
+            ],
+            "title": "Onmissing",
+            "type": "string"
+          },
           "source": {
             "anyOf": [
               {
@@ -2201,7 +2224,8 @@
         },
         "required": [
           "source",
-          "map"
+          "map",
+          "onMissing"
         ],
         "title": "GroupSettingsOut",
         "type": "object"

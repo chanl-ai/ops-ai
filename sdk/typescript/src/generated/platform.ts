@@ -2253,6 +2253,8 @@ export interface components {
         GroupSettings: {
             /** Map */
             map: components["schemas"]["GroupRule"][];
+            /** Onmissing */
+            onMissing?: ("keep" | "remove") | null;
             /** Source */
             source?: string | null;
         };
@@ -2260,6 +2262,11 @@ export interface components {
         GroupSettingsOut: {
             /** Map */
             map: components["schemas"]["GroupRuleOut"][];
+            /**
+             * Onmissing
+             * @enum {string}
+             */
+            onMissing: "keep" | "remove";
             /** Source */
             source: string | null;
         };

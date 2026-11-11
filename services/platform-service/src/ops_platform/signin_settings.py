@@ -27,17 +27,20 @@ from .sso import saml_addresses
 from .store.members import Actor
 from .store.signin import (
     PASSWORD,
+    SIGNIN_ROLES,
     DomainListedError,
     DomainTakenError,
+    GroupRule,
     Provider,
     SignInStore,
     TrustedCertificate,
+    group_settings,
 )
 from .store.signin_secrets import SignInSecretStore
 from .teams import Members
 
 # The membership roles a first SSO sign-in may give; admin is never one.
-JIT_ROLES = ("chat_user", "viewer", "builder", "approver")
+JIT_ROLES = SIGNIN_ROLES
 
 
 def _iso(t: datetime) -> str:
@@ -146,7 +149,13 @@ def provider_out(p: Provider, public_url: str | None = None, console_url: str | 
         else None,
         "saml": _saml_out(p, public_url, console_url) if p.kind == "saml" else None,
         "jit": {"team": p.jit_team_id, "role": p.jit_role} if p.jit_role else None,
-        "groups": c.get("groups"),
+        "groups": {
+            **group_settings(c),
+            "onMissing": group_settings(c).get("onMissing", "keep"),
+            "map": [{"group": r.group, "team": r.team, "role": r.role} for r in p.group_rules],
+        }
+        if p.group_rules or c.get("groups")
+        else None,
     }
 
 
@@ -343,11 +352,16 @@ class SignInSettings:
             await self.members.require_admin(
                 Actor(actor.tenant_id, linked, actor.user_id, actor.request_id), "access", "create"
             )
-        if groups:
-            config["groups"] = {"source": groups.get("source"), "map": [dict(r) for r in rules]}
         if await self.store.verified_elsewhere(actor.tenant_id, domains):
             raise Conflict("Another workspace has verified one of these domains.", code="domain_taken")
         before = await self.store.provider(actor.tenant_id, provider_id)
+        if groups:
+            # Removal is the default for a new provider (decision D4); one saved before it keeps adding only, until an
+            # admin chooses.
+            kept = (group_settings(before.config).get("onMissing") if before else None) or (
+                "keep" if before else "remove"
+            )
+            config["groups"] = {"source": groups.get("source"), "onMissing": groups.get("onMissing") or kept}
         # A provider keeps the addresses it was created with; a new company provider gets its own.
         sp_id = before.sp_id if before else (new_id("ssp") if kind != PASSWORD else None)
         p = Provider(
@@ -369,6 +383,7 @@ class SignInSettings:
                 at=_iso(datetime.now(UTC)),
                 request_id=actor.request_id,
                 certificates=certificates,
+                rules=[GroupRule(str(r["group"]), str(r["team"]), str(r["role"])) for r in rules],
             )
         except DomainTakenError as e:
             raise Conflict("Another workspace has verified one of these domains.", code="domain_taken") from e
