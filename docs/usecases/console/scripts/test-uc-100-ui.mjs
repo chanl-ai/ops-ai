@@ -14,20 +14,20 @@ await withUiStack(async (consoleUrl) => {
     try {
       // Overview: the Reviews count and the Cases "Needs a person" view; no performance tiles, chart or health table.
       await page.goto(`${consoleUrl}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('overview-reviews').waitFor({ timeout: 120_000 });
+      await page.getByText('Human Tasks waiting for you').waitFor({ timeout: 120_000 });
       const overview = {
-        reviews: await page.getByTestId('overview-reviews').getByText('Waiting on review').count(),
-        cases: await page.getByTestId('overview-cases').getByText('Needs a person').count(),
+        reviews: await page.getByText(/^Human Tasks waiting for you/).count(),
+        cases: await page.getByText(/^Cases due/).count(),
         tasks: await page.getByText('Agent tasks').count(),
         chart: await page.locator('.recharts-wrapper').count(),
         health: await page.getByText('Workflow health').count(),
       };
-      check('the Overview shows the Reviews count and Needs a person, and no performance tiles, chart or health table', overview.reviews === 1 && overview.cases === 1 && overview.tasks === 0 && overview.chart === 0 && overview.health === 0, overview);
-      await page.getByTestId('overview-cases').click();
+      check('the Overview shows the Human Tasks waiting and Cases due, and no performance tiles, chart or health table', overview.reviews === 1 && overview.cases === 1 && overview.tasks === 0 && overview.chart === 0 && overview.health === 0, overview);
+      await page.locator('a[href="/cases"]', { hasText: 'Open all' }).click();
       await page.waitForURL((u) => u.pathname === '/cases', { timeout: 30_000 });
-      check('Needs a person opens Cases', new URL(page.url()).pathname === '/cases', page.url());
+      check('Open all on Cases due opens Cases', new URL(page.url()).pathname === '/cases', page.url());
     } catch (e) {
-      check('the Overview shows the Reviews count and Needs a person, and no performance tiles, chart or health table', false, String(e).slice(0, 300));
+      check('the Overview shows the Human Tasks waiting and Cases due, and no performance tiles, chart or health table', false, String(e).slice(0, 300));
     }
 
     try {
@@ -41,6 +41,9 @@ await withUiStack(async (consoleUrl) => {
     }
 
     // Chat reaches All chats from the sidebar, which lists the Work area only (no Agents row beside it).
+    // New chat has no area of its own and shows the one last used (Build, from Agents), so Work is picked before the sidebar is read.
+    await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    await page.getByRole('group', { name: 'Area' }).getByText('Work', { exact: true }).click({ timeout: 30_000 }).catch(() => undefined);
     const sidebar = page.locator('[data-sidebar="sidebar"]').first();
     const link = sidebar.getByRole('link', { name: 'All chats' });
     const listed = await link.waitFor({ timeout: 30_000 }).then(() => true, () => false);
