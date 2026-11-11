@@ -65,6 +65,7 @@ packages/ops_access/src/ops_access/policies.py policy-default stepUp=false 1 ope
 packages/ops_access/src/ops_access/policies.py policy-default taskAssist={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedApproval={} 1 open
 packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedApproval={} 1 E23
+packages/ops_access/src/ops_access/policies.py policy-default appsChangeWithoutAsking={} 1 E49
 # 409 codes, each classified once (`* conflict <code> 0 state`): the record is in the wrong state, so the refusal is not
 # an access decision. A 409 that decides by who made a record gets a path line and a register row instead. A new code
 # fails until it is classified here; a code no 409 carries any more is stale. An access-deciding 409 carries its own code.

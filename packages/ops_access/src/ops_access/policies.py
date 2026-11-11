@@ -1,7 +1,8 @@
 """The stricter rules an admin may switch on for a workspace. Each policy's default is open, the AI uses
-aside (aiSteps, taskAssist, checkBeforeSend): a new workspace meets no control until an admin sets one, and every value
-is changed through `can(settings, manage)` in the security team. platform-service stores the values per tenant and puts
-them on every token; services read them there with `policy(p, key)`."""
+(aiSteps, taskAssist, checkBeforeSend) and each app's "Ask before changes" (appsChangeWithoutAsking) aside: a new
+workspace meets no control until an admin sets one, and every value is changed through `can(settings, manage)` in the
+security team. platform-service stores the values per tenant and puts them on every token; services read them there
+with `policy(p, key)`."""
 
 from __future__ import annotations
 
@@ -130,6 +131,19 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Approve writes of these apps",
+    ),
+    Policy(
+        "appsChangeWithoutAsking",
+        # On for every app by default: {} lists no app, so the person in chat is asked before each write of every
+        # app. A team admin lists the apps whose writes run without asking, by the id the Apps page shows.
+        {},
+        "Writes from the listed apps run in chat without asking the person first. Every other app asks before changes.",
+        kind="names",
+        # A team admin's: settings.manage in the team, which builders and members do not hold.
+        changed_by=("settings", "manage"),
+        per_team=True,
+        live=True,
+        title="Apps that change without asking",
     ),
     Policy(
         "aiSteps",
