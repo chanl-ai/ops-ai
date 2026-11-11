@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.dialect import locked
 from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
@@ -147,7 +148,7 @@ class GuardrailRegistry:
             registry_guardrails.c.id == guardrail_id, team_visible(registry_guardrails)
         )
         if lock:
-            q = q.with_for_update()
+            q = locked(q, registry_guardrails)
         if c is None:
             async with self.engine.connect() as conn:
                 r = (await conn.execute(q)).mappings().first()
