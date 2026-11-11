@@ -15,6 +15,9 @@ connect → import or create → edit → security review → publish
 
 Every step happens in the console as a named person. No step needs a direct API call, a fixture or a seed edit.
 
+Several named accounts of one app, and how a call picks one: [several accounts per app](app-accounts.md). The layers
+around a connection (plugins, sign-in providers, triggers, MCP): [integrations in layers](integrations.md).
+
 | Step | Who | Today | Target |
 |---|---|---|---|
 | Connect: egress host and range | Admin | Built (Egress page) | Unchanged |

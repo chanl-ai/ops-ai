@@ -40,6 +40,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Knowledge base | [knowledge-base.md](knowledge-base.md) | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not | Builder |
 | Several accounts per app | [app-accounts.md](app-accounts.md) | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built | Builder |
 | SAML sign-in | [saml-sign-in.md](saml-sign-in.md) | Company sign-in over SAML: the checks, domain proof, first sign-in and group rules (built); certificates, test sign-in and break-glass (not built) | Builder |
+| Integrations in layers | [integrations.md](integrations.md) | Integrations in layers: plugins, auth configs, accounts, the gateway, triggers, events and MCP, with what is built per layer | Builder |
 | Decision records | [decisions/](decisions/) | The options and scoring behind the platform choices | Approver |
 
 ## What is proven
