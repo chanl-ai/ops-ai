@@ -1,7 +1,7 @@
 # Roles and permissions
 
 Status: current, 2026-11-11. This is the one page for who may do what in Ops AI, approvals included ([Approvals](#approvals)). Before asking an access
-question, look it up in [Decided questions](#decided-questions); before writing a refusal, a role check, a lock or a
+question, look it up in [Access rules](#access-rules); before writing a refusal, a role check, a lock or a
 closed default, look it up in the [Exceptions register](#exceptions-register). Code is cited at commit `c96319da`.
 The grid below is generated from `packages/ops_access` and checked by `make python-verify`; the register is checked by
 `scripts/check_access_exceptions.py` on every commit: every 403 (typed errors included) and every 409 code against a
@@ -25,13 +25,13 @@ The rules for both (CLAUDE.md "No hard coding"):
 | Rule | Consequence |
 |---|---|
 | Every permission and approval is a grid cell or a setting | Each one is a cell an admin ticks in the roles grid or a policy an admin changes. A rule that is neither is a defect, or a register row that says why |
-| Defaults are open, except the safe defaults the owner chose | A new workspace meets no control until an admin sets one, except the rows listed below. Each is still a setting a team can loosen |
+| Defaults are open, except the safe approval defaults | A new workspace meets no control until an admin sets one, except the rows listed below. Each is still a setting a team can loosen |
 | Admins can do everything | The built-in Admin role holds every cell in its team (migration `0016_admin_every_cell`). The exceptions are rows E02, E26 and E27 |
 | A refusal behind neither the grid nor a policy is a defect | Unless the [Exceptions register](#exceptions-register) records a decision for it |
 | Definitions are database records | Built-in workflows, roles and task types are seeded and editable through `can()`, never locked in code |
 | Security sits in the step that acts | Separation of duties is a step setting (`notDecidedBy`) and a team policy (`requesterMayDecide`), never a lock on a definition |
 
-The safe defaults the owner chose for approvals:
+The safe defaults for approvals:
 
 | Row | Safe default | Setting that loosens it |
 |---|---|---|
@@ -324,16 +324,6 @@ write waits for a person; every setting in the table feeds it. Policies are chan
 Two rules in `needs` are not settings yet: every write over MCP waits for a person (`gateway_calls.py:453`), and a
 test account never waits (the last row).
 
-### Migration of existing tools
-
-Open question: when the safe default reached existing workspaces, which writes that were set to run at once switch to
-waiting? Either every one of them, whenever it was saved, or only those saved since 1 November, when the old open
-default began. The migration built so far (`services/tools-service/migrations/versions/0072_write_approvals_on.py`) takes the second
-reading and picks writes by their module's `updated_at`. A reviewer found
-that a plugin upgrade rewrites a tool's operations without stamping `updated_at`
-(`services/tools-service/src/ops_tools/plugins/host.py:613`), so a plugin tool upgraded since 1 November can look older
-than it is and keep running at once. Until the owner answers, the date cut-off cannot be trusted for plugin tools.
-
 ## Team and workspace scope
 
 | Fact | Detail | Source |
@@ -390,7 +380,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E19 | The console decides by role name on the mock only (`useCanCheck` without `GET /v1/me/permissions`); nav pages name the grid cell they need (`lib/nav.ts` `needs`) | `apps/console/src/hooks/me-queries.ts:47` | The behaviour is decided; the mechanism goes to `GET /v1/me/permissions` | 2026-10-18 | to fix |
 | E20 | The Access table styles the admin badge by role name | `apps/console/src/components/access/members-panel.tsx:53` | Presentation only; decides nothing | | consistent |
 | E21 | `GET /v1/api-key-summaries` refused every person, workspace admins included | `services/platform-service/src/ops_platform/api/app.py` | Resolved 2026-10-19: a person with `can('access', 'manage')` in every team reads it; a service still needs `settings:view` (test_workspace_admin) | | **resolved** |
-| E22 | The console maps team roles to a session role `admin`, `member` or `viewer` | `apps/console/src/lib/auth/providers/platform.ts:70` | None. Sign-in Q6 is open (O06) | | **no decision** |
+| E22 | The console maps team roles to a session role `admin`, `member` or `viewer` | `apps/console/src/lib/auth/providers/platform.ts:70` | No rule yet | | **no decision** |
 | E23 | A tool write runs without approval unless the team turns approval on: every write (`toolWritesNeedApproval`), the apps it lists (`appWritesNeedApproval`) or one tool (its operation's switch); when on, a person holding reviews.decide in the team is not asked | `services/tools-service/src/ops_tools/gateway_calls.py` (`self_approved`); `modules/policy.py` `approves_own_writes` | Owner, 2026-11-01: approvals are off by default and role-based when on; superseded the 2026-10-17 default where every write waited. Superseded 2026-11-10 by E49 | 2026-11-01 | superseded |
 | E24 | Models-service admin routes take a service token only; no person reaches them | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | to fix |
 | E25 | Writes before a first publish: a draft test uses the draft, a live run needs the live version | `services/agents-service/src/ops_agents/api/auth.py:256-262` | A test run is a draft activity (`workflows.edit`); a live run is `workflows.run` | 2026-10-17 | decided |
@@ -399,7 +389,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E28 | API keys hold three fixed cells in code rather than a role | `KEY_GRANTS` `check.py:56` | A key is a bank system acting for one team: live runs, cancelling its own, and running the team's tools over MCP (reads only; a write waits for a person, `gateway_calls.py`) | 2026-10-19 | decided |
 | E29 | `requesterMayDecide` is one value per workspace | `policies.py:48` (no `per_team`) | It is a team policy | 2026-10-18 | to fix |
 | E30 | A first SSO sign-in or an IdP group can give `chat_user`, `viewer`, `builder` or `approver`, never `admin` | `JIT_ROLES`, `services/platform-service/src/ops_platform/signin_settings.py:30` | None recorded; the default (Chat user) is named only | | **no decision** |
-| E31 | No invite or role change sets the `chat_user` membership; only a first SSO sign-in does | `catalogue.py:165-167`; invite roles in `apps/console/src/components/access/roles.ts` | An admin should be able to give someone Chat user; how is not decided (O10) | 2026-10-18 | **no decision** on the mechanism |
+| E31 | No invite or role change sets the `chat_user` membership; only a first SSO sign-in does | `catalogue.py:165-167`; invite roles in `apps/console/src/components/access/roles.ts` | An admin should be able to give someone Chat user; the mechanism has no rule yet | 2026-10-18 | **no decision** on the mechanism |
 | E32 | Test threads need `agents.test`, which the code maps to `agents.edit`; no separate cell | `auth.py:239,256`; `services/agents-service/src/ops_agents/api/routers/chat.py:328` | Test threads are gated by `agents.test`, badged everywhere and kept out of counts and memory | 2026-10-18 | decided; separate cell not built |
 | E33 | Anyone holding `connections.manage` may create shared connections | `connections` in `AREAS` (`packages/ops_access/src/ops_access/catalogue.py`); `connection_rights`, `services/tools-service/src/ops_tools/connections/service.py`; grid migration `0025_connections_cells` | Decided: admins hold it by default; every member reads (`connections.view`) | 2026-10-19 | built (1f1866c7) |
 | E34 | `redactPii` masks what people see and defaults on; the model sees real values. AI steps follow the same decision through `aiStepsMaskPersonalData`, on unless a team sets false | `services/agents-service/src/ops_agents/api/agent_registry.py:39`; `packages/ops_access/src/ops_access/policies.py` (`aiStepsMaskPersonalData`, `team_off`) | Decided. An earlier wording, "masked in what the model sees", is superseded | 2026-10-19 | in review |
@@ -421,101 +411,80 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E50 | A write whose app asks before changes is answered (Allow, Deny, Allow for this chat) only by the person who asked in the chat, whatever their role; an admin or reviewer cannot answer it for them, and a write any reviewer approval holds is decided as before | `services/agents-service/src/ops_agents/api/auth.py` (`require_asker`); `api/hitl_facade.py` (`_check_thread_decider`); `api/routers/reviews.py` (`record_approval`) | The answer is the person's consent to their own change, not an approval, so no grid cell grants it to anyone else | 2026-11-10 | decided |
 | E51 | Approvals are safe by default: `requesterMayDecide` is off, so the person who asked for, saved or started a decision does not take it (403 `own_request`), and a tool write with no approval setting waits for a person (`write_waits`); a team loosens either, by turning `requesterMayDecide` on or switching a tool to run at once | `packages/ops_access/src/ops_access/policies.py` (`requesterMayDecide`, `write_waits`); `services/tools-service/src/ops_tools/gateway_calls.py` (`asker_refusal` in `modules/policy.py`, through `can()`: an approval the asker gave themselves is checked against today's policy when the write is sent) | Owner, 2026-11-10: a person approving their own request, or a write running because nobody set its switch, was a security bug; a workspace or tool that set a value keeps it | 2026-11-10 | decided |
 
-## Decided questions
+## Access rules
 
-Questions already decided. Cite the row id
-when a question comes up again.
+The rules every access question is answered from. Code comments cite them by id (`D40`, `D59`); ids are kept, and a
+retired id is not reused.
 
-| # | Question | Answer | Date |
-|---|---|---|---|
-| D01 | What do people call the stored `approver` role? | Reviewer. The stored and wire value stays `approver` until a migration renames it | 2026-10-17 |
-| D02 | One role model per team, or capabilities per IdP group? | One role per team, built-in roles as data; the capability-role tabs were dropped | 2026-10-17 |
-| D03 | Where does a role come from? | The verified token only (`access` claim for the `X-Team-Id` team), never a body, query or header the caller sets | 2026-10-17 |
-| D04 | Who writes definitions? | A builder or admin of the owning team; a reviewer decides; a viewer reads; refusals are 403 `role_required` | 2026-10-17 |
-| D05 | How is another team's record refused? | 403 `team_forbidden` naming the owning team; another tenant's record is 404 | 2026-10-17 |
-| D06 | Superseded 2026-10-22: every record belongs to one team ([identity and tenancy](identity-and-tenancy.md#the-team-is-the-workspace)). Was: who changes a record no team owns? | Whoever the grid lets change it in the acting team (replaces "an admin or whoever saved it") | 2026-10-18 |
-| D07 | Who pauses an agent? | A builder or admin, as for workflows | 2026-10-17 |
-| D08 | Who starts a run? | A builder or admin, test and live; an API key of the team, live runs only | 2026-10-17 |
-| D09 | Who cancels a run? | Whoever started it, or a reviewer or admin of the run's team | 2026-10-17 |
-| D10 | Who decides a review? | A reviewer or admin of the reviewing team, with separation of duties and step-up | 2026-10-17 |
-| D11 | May viewers chat? | Yes: every role in the agent's team ("an agent no team owns is open to everyone" is superseded 2026-10-22: every agent belongs to one team) | 2026-10-17 |
-| D12 | How does the console know whether to show Decide or Cancel? | From the server: `canDecide` and `canCancel` on each record, filled by `can()` | 2026-10-17 |
-| D13 | Who may check another person's access, and does the check apply policies? | Whoever holds `access.view` in that team, a workspace admin for every team; the check runs the same `can()`, so policies show as reasons | 2026-10-17 |
-| D14 | Is the checked person told? | No. Each check is audited with who checked whom | 2026-10-17 |
-| D15 | Are defaults open? | Yes. Every policy starts open; stricter rules are settings an admin switches on | 2026-10-17 |
-| D16 | Can admins do everything? | Yes, in their team; a workspace admin in every team | 2026-10-17 |
-| D17 | Is a refusal outside the grid and policies allowed? | No. It is a defect unless this page records a decision for it | 2026-10-18 |
-| D18 | Are definitions code or records? | Database records seeded from files; built-in workflows, roles and task types are editable through `can()`, never locked | 2026-10-18 |
-| D19 | Where does security for a definition live? | In the step that acts (`notDecidedBy`, `requesterMayDecide`), never in a lock on the definition | 2026-10-18 |
-| D20 | Is `requesterMayDecide` a rule or a setting? | A team policy, off by default since 2026-11-10 (row E51) | 2026-11-10 |
-| D21 | Is separation of duties part of `can()`? | Yes, as `not_by` and `requested_by`; two-approver counting stays where approvals are counted | 2026-10-17 |
-| D22 | How are roles shown to admins? | As a roles × permissions checkbox matrix; admins edit built-in roles' cells there | 2026-10-18 |
-| D23 | Is there a chat-only role? | Yes, Chat user: chats with the team's published agents, sees only its own threads | 2026-10-17 |
-| D24 | What does a person see on a control they cannot use? | A ⓘ "why can't I" that names the missing cell or policy | 2026-10-18 |
-| D25 | Who is the test user? | Admin, builder and first seeded user are the same person for testing; role tests go through invites and role changes, with `OPS_SEED_EVERYONE_ADMIN` off | 2026-10-18 |
-| D26 | What role does an invite start on? | Viewer | 2026-10-18 |
-| D27 | Invite rules? | Seven days, single use, only a team admin invites, link shown once, no email | 2026-10-17 |
-| D28 | How are test threads gated? | `agents.test`, badged everywhere, kept out of counts, budgets and memory | 2026-10-18 |
-| D29 | Who creates shared connections? | Anyone holding `connections.manage` | 2026-10-19 |
-| D30 | Are AI features on by default? | No. Each is a team setting, off until turned on through `can()`: AI steps, task assist, check before sending, builder help, page images to the model | 2026-10-18 |
-| D31 | What does `redactPii` mask? | What people see; it defaults on and the model sees real values | 2026-10-19 |
-| D32 | Who enters credentials? | Only a person, in the console. Root signing keys stay in the deployment's environment | 2026-10-18 |
-| D33 | Who adds every-team secrets that services read? | Superseded (2026-10-27): every tool secret belongs to a team and no service reads one; model provider keys move to an account-level store in models-service that account admins edit | 2026-10-18 |
-| D34 | Who owns a team's secrets? | The team: its builders add, change and remove them, unless `securityTeamAddsSecrets` is on | 2026-10-17 |
-| D35 | Is knowledge per person or per team? | Shared by the team: any builder changes or deletes its bases and sources | 2026-10-17 |
-| D36 | Are chats private? | Yes by default (`chatThreadsOwnerOnly`); off lets the team's admins read them | 2026-10-17 |
-| D37 | Who edits what agents remember about a person? | That person only | 2026-10-17 |
-| D38 | Where is a Security-team rule held? | In the Security team, a per-workspace setting; Admin elsewhere holds none of `SECURITY_TEAM_ACTIONS` | 2026-10-17 |
-| D39 | What does an assignment look like, and when does a change apply? | Person or team subject, a role, a team or `*`, an optional expiry; the permission version rises on every change, which applies on the next request (D62) | 2026-10-17 |
-| D40 | Custom roles: when, how narrow, which cells? | Later; may be narrower than any built-in; may not hold secrets, egress or Security-team cells. The first answer is narrowed by D22 | 2026-10-17 |
-| D41 | How does a service pass `can()`? | Its token lists `area:action` scopes; 403 `scope_required` otherwise | 2026-10-17 |
-| D42 | Do people call service routes? | Yes: each with the cell it needs, answering their team's records only | 2026-10-18 |
-| D43 | Who decides a module security review? | An approver or admin of the Security team for a security change, of the module's team otherwise; never the requester or saver | 2026-10-17 |
-| D44 | Who decides a tool access request, and who revokes a grant? | The module's team in Human Tasks, with the same requester policy and step-up; revoking stays with the module's builders and admins | 2026-10-17 |
-| D45 | Which team owns a tools review run? | The deciding team; `created_by` is who asked, so the requester rule applies | 2026-10-18 |
-| D46 | Which publishes wait for review? | Per team and area: always, major (default) or never; a security change is always reviewed by Security; an unreadable policy waits | 2026-10-17 |
-| D47 | Who makes a widget deployment, and how does a person reach it? | A builder or admin of the agent's team; a 15-minute session from the bank's SSO token or a team key, bound to deployment, origin and person | 2026-10-17 |
-| D48 | May a widget session approve? | No; the decision is made in Reviews | 2026-10-17 |
-| D49 | Who creates API keys, and how long do tokens live? | A team admin; tokens 15 minutes, sessions 8 hours; revocation reaches other services within 15 minutes | 2026-10-11 |
-| D50 | Who continues or raises a spent chat budget? | The thread's owner continues; a team admin raises | 2026-10-17 |
-| D51 | Who changes document types? | Whoever holds `files.create` in the team; others see the pages read only | 2026-10-18 |
-| D52 | Who changes storage settings? | An admin of the Security team; every save audited | 2026-10-17 |
-| D53 | Is a secret's team scope enforced in the console? | In the gateway: a call reads only its own team's secret, so another team's never reaches it (one team per secret, no scopes); a secret in use cannot be deleted | 2026-10-17 |
-| D54 | Who provisions a workspace, and what can a team change? | A platform admin or the command line; `system` records need `manage`, `managed` records are changed freely and template fields come back | 2026-10-17 |
-| D55 | How are teams made? | Flat, created by a workspace admin; Security team and default team are settings | 2026-10-17 |
-| D56 | Is the extraction floor an access rule? | No, a quality threshold with the engine's default | 2026-10-17 |
-| D57 | How does a password or SSO account step up? | Password plus TOTP when enrolled; SSO and Google at their IdP | 2026-10-16 |
-| D58 | Do money approvals need two people and a step-up? | Two distinct approvers when the operation says so, each with a step-up under five minutes old | 2026-10-11 |
-| D59 | What does Builder hold by default? | Every cell in the team except people and access (members, roles, assignments) and the workspace's settings: connections, secrets, auth configs and testing a connection included. Admin keeps every cell | 2026-11-05 |
-| D60 | Where do role permissions live, and who changes them? | In the database, managed centrally and defined from the UI: a workspace admin edits any role's cells on Access › Roles, built-in or custom, each change audited; the code grid is seed data only, with Reset to default per built-in role | 2026-11-05 |
-| D61 | Where is an auth config's client secret changed? | On its auth config only. The Secrets page lists it read only with a link to the config, and the secrets API refuses a rotate or delete of it (409 `credential_secret`) naming the config | 2026-11-05 |
-| D62 | When does a change to roles, cells, assignments or policies reach the services? | On the person's next request: each service compares the token's `perm_version` with platform-service's current one and refuses an older token (401 `permissions_changed`), so the client renews it. The database stays the one source; the token is a copy checked by version | 2026-11-05 |
-| D63 | Where does each workspace's Security team come from? | Its own record, edited by a workspace admin through `can()` on Settings > Workspace and read by every service from the token, or from platform-service for a review a service opened. The install setting names only a new workspace's team; migration 0029 wrote its old default into each workspace that relied on it | 2026-11-05 |
-| D64 | Where do the install's own mail settings stop? | The install sends its own mail (password resets, a send_reply that names no mailbox) with its own provider and password from the environment; a team reads and sends mail only through its mailbox records, each with its own secret. No setting names a mailbox or a team's secret | 2026-11-05 |
-| D65 | Whose provider key does a model call use? | The account the call names (`X-Tenant-Id`, which every calling service sends); a call that uses an account's key without naming one is refused, 400 `tenant_required` | 2026-11-05 |
-| D66 | Where are a workspace's sign-in secrets kept? | In the workspace, sealed under the install's secrets key: a Security team admin saves or deletes one through `can()` (`settings.manage`), each change audited, and a provider names it as `clientSecretRef`; no value is read back, and one a provider names is not deleted (409 `secret_in_use`) | 2026-11-05 |
-| D67 | Can a workspace make its own roles, and how does a person get one? | Yes: a workspace admin creates a custom role from scratch or as a copy (less the cells D40 keeps from custom roles), renames, edits and deletes it on Access › Roles; a delete names the holders and moves them to another role. An admin of a team gives a person a custom role in that team on Access › People; a built-in role still comes with the team role. Every change through `can()` and audited (`role.create`, `role.rename`, `role.delete`, `role.grant`, `role.ungrant`) | 2026-11-05 |
-
-## Open questions
-
-Still open. A recommendation is not an answer; nothing here may be quoted as decided.
-
-| # | Question | Raised | Where it bites |
-|---|---|---|---|
-| O01 | Which platform roles exist (model risk, Security, platform, auditor), and are they teams with roles or tenant-wide roles? | this page, Q4 | Models admin (E24), auditors outside a team |
-| O02 | May a 403 name the owning team when the data gateway hides that the record exists? | this page, Q5 | Data gateway |
-| O03 | Must API keys expire, and with what maximum? | this page, Q7 | Key creation |
-| O04 | Should a step-up bind to what it approves (review ids, amounts)? | sign-in Q3 | Bulk money approvals |
-| O05 | Does turning MFA off, self-signup on, or removing the last verified domain need a second admin? | sign-in Q5 | Sign-in settings |
-| O06 | Does the session keep a workspace role (`admin`, `member`, `viewer`), or only teams? | sign-in Q6 | E22 |
-| O07 | Built-in cells are editable since 2026-11-05 and an admin may tick any cell, secrets, egress and Security-team cells included; should those be refused, as D40 says for custom roles? | D22 | Built-in role editing (`PUT /v1/roles/{id}/permissions`) |
-| O08 | Do admin and Security roles expire and need a second admin to grant, in v1? | — | Access requests |
-| O09 | May a first SSO sign-in or an IdP group give Admin? | E30 | `signin_settings.py:30` |
-| O10 | How does an admin give someone Chat user: an invite role, a role change, or a grant? | E31 | — |
-| O11 | May an agent open a case without approval, and do test runs open real cases? | Unanswered; built that way | E23 |
-| O12 | Should a person with a cell read every team's API key summaries? | E21 | `app.py:699` |
-| O13 | Should tools-service's bulk delete skip system modules for admins? | E05 | `modules/service.py:1109` |
-| O14 | Resolved 2026-11-05: the five install settings that held one team's or workspace's value moved to records or went away, D63 (Security team), D64 (mailbox, SMTP secret), D65 (model keys tenant), D66 (sign-in secrets) | 2026-11-05 env audit | `packages/ops_service_kit/src/ops_service_kit/settings.py` |
+| # | Rule |
+|---|---|
+| D01 | People read the stored `approver` role as Reviewer. The stored and wire value is `approver` |
+| D02 | Each team has one role model; built-in roles are data |
+| D03 | A role comes from the verified token only (the `access` claim for the `X-Team-Id` team), never from a body, query or header the caller sets |
+| D04 | A builder or admin of the owning team writes definitions; a reviewer decides; a viewer reads. Other callers get 403 `role_required` |
+| D05 | Another team's record is refused with 403 `team_forbidden` naming the owning team; another tenant's record is 404 |
+| D06 | Every record belongs to one team ([identity and tenancy](identity-and-tenancy.md#the-team-is-the-workspace)); whoever the grid lets change it in that team changes it |
+| D07 | A builder or admin pauses an agent, as for workflows |
+| D08 | A builder or admin starts a run, test or live; an API key of the team starts live runs only |
+| D09 | Whoever started a run cancels it, or a reviewer or admin of the run's team |
+| D10 | A reviewer or admin of the reviewing team decides a review, with separation of duties and step-up |
+| D11 | Every role in an agent's team may chat with it; every agent belongs to one team |
+| D12 | The console shows Decide or Cancel from the server: `canDecide` and `canCancel` on each record, filled by `can()` |
+| D13 | Whoever holds `access.view` in a team checks another person's access there; a workspace admin does so in every team. The check runs the same `can()`, so policies show as reasons |
+| D14 | The checked person is not told; each check is audited with who checked whom |
+| D15 | Policies start at the defaults in [Policies](#policies) and [Approvals](#approvals): access policies are open and an admin switches stricter rules on; approvals are safe by default (row E51) |
+| D16 | Admins do everything in their team; a workspace admin does so in every team |
+| D17 | A refusal outside the grid and policies is a defect unless the [Exceptions register](#exceptions-register) records it |
+| D18 | Definitions are database records seeded from files; built-in workflows, roles and task types are edited through `can()` and are never locked |
+| D19 | Security for a definition lives in the step that acts (`notDecidedBy`, `requesterMayDecide`), never in a lock on the definition |
+| D20 | `requesterMayDecide` is a team policy, off by default (row E51) |
+| D21 | Separation of duties is part of `can()`, as `not_by` and `requested_by`; two-approver counting stays where approvals are counted |
+| D22 | Admins see roles as a roles × permissions checkbox matrix and edit built-in roles' cells there |
+| D23 | Chat user is a role that chats with the team's published agents and sees only its own threads |
+| D24 | A control a person cannot use carries a ⓘ "why can't I" that names the missing cell or policy |
+| D25 | Role tests go through invites and role changes, with `OPS_SEED_EVERYONE_ADMIN` off; the first seeded user is admin and builder for testing |
+| D26 | An invite starts on Viewer |
+| D27 | An invite lasts seven days, is single use, is made only by a team admin, shows its link once and sends no email |
+| D28 | Test threads need `agents.test`, are badged everywhere and are kept out of counts, budgets and memory |
+| D29 | Anyone holding `connections.manage` creates shared connections |
+| D30 | AI features are off by default. Each is a team setting turned on through `can()`: AI steps, task assist, check before sending, builder help, page images to the model |
+| D31 | `redactPii` masks what people see; it defaults on and the model sees real values |
+| D32 | Only a person enters credentials, in the console. Root signing keys stay in the deployment's environment |
+| D33 | Every tool secret belongs to a team and no service reads one; model provider keys are in an account-level store in models-service that account admins edit |
+| D34 | A team owns its secrets: its builders add, change and remove them, unless `securityTeamAddsSecrets` is on |
+| D35 | Knowledge is shared by the team: any builder changes or deletes its bases and sources |
+| D36 | Chats are private by default (`chatThreadsOwnerOnly`); turned off, the team's admins read them |
+| D37 | Only the person edits what agents remember about them |
+| D38 | A Security-team rule is held by the Security team, a per-workspace setting; Admin in another team holds none of `SECURITY_TEAM_ACTIONS` |
+| D39 | An assignment has a person or team subject, a role, a team or `*`, and an optional expiry; the permission version rises on every change, which applies on the next request (D62) |
+| D40 | A custom role may be narrower than any built-in role and may not hold secrets, egress or Security-team cells |
+| D41 | A service passes `can()` with `area:action` scopes in its token; otherwise 403 `scope_required` |
+| D42 | People may call service routes, each with the cell it needs, answering their team's records only |
+| D43 | An approver or admin of the Security team decides a module security review for a security change, of the module's team otherwise; never the requester or saver |
+| D44 | The module's team decides a tool access request in Human Tasks, with the same requester policy and step-up; the module's builders and admins revoke grants |
+| D45 | A tools review run is owned by the deciding team; `created_by` is who asked, so the requester rule applies |
+| D46 | Publishes wait for review per team and area: always, major (default) or never; a security change is always reviewed by Security; an unreadable policy waits |
+| D47 | A builder or admin of the agent's team makes a widget deployment; a person reaches it with a 15-minute session from the customer's SSO token or a team key, bound to deployment, origin and person |
+| D48 | A widget session does not approve; the decision is made in Reviews |
+| D49 | A team admin creates API keys; tokens live 15 minutes, sessions 8 hours; revocation reaches other services within 15 minutes |
+| D50 | The thread's owner continues a spent chat budget; a team admin raises it |
+| D51 | Whoever holds `files.create` in the team changes document types; others see those pages read only |
+| D52 | An admin of the Security team changes storage settings; every save is audited |
+| D53 | A secret's team scope is enforced in the gateway: a call reads only its own team's secret (one team per secret, no scopes); a secret in use cannot be deleted |
+| D54 | A platform admin or the command line provisions a workspace; `system` records need `manage`, `managed` records change freely and template fields come back on the next provisioning run |
+| D55 | Teams are flat and created by a workspace admin; the Security team and the default team are settings |
+| D56 | The extraction floor is a quality threshold with the engine's default, outside access |
+| D57 | A password account steps up with password plus TOTP when enrolled; SSO and Google accounts step up at their IdP |
+| D58 | A money approval needs two distinct approvers when the operation says so, each with a step-up under five minutes old |
+| D59 | Builder holds every cell in the team except people and access (members, roles, assignments) and the workspace's settings: connections, secrets, auth configs and testing a connection included. Admin holds every cell |
+| D60 | Role permissions live in the database. A workspace admin edits any role's cells on Access › Roles, built-in or custom, each change audited; the code grid is seed data, with Reset to default per built-in role |
+| D61 | An auth config's client secret is changed on its auth config only. The Secrets page lists it read only with a link to the config, and the secrets API refuses a rotate or delete of it (409 `credential_secret`) naming the config |
+| D62 | A change to roles, cells, assignments or policies reaches the services on the person's next request: each service compares the token's `perm_version` with platform-service's current one and refuses an older token (401 `permissions_changed`), so the client renews it. The database is the one source; the token is a copy checked by version |
+| D63 | Each workspace's Security team is held on its own record, edited by a workspace admin through `can()` on Settings › Workspace and read by every service from the token, or from platform-service for a review a service opened. The install setting names only a new workspace's team |
+| D64 | The install sends its own mail (password resets, a `send_reply` that names no mailbox) with its own provider and password from the environment; a team reads and sends mail only through its mailbox records, each with its own secret. No setting names a mailbox or a team's secret |
+| D65 | A model call uses the provider key of the account it names (`X-Tenant-Id`, which every calling service sends); a call that uses an account's key without naming one is refused, 400 `tenant_required` |
+| D66 | A workspace's sign-in secrets are kept in the workspace, sealed under the install's secrets key: a Security team admin saves or deletes one through `can()` (`settings.manage`), each change audited, and a provider names it as `clientSecretRef`; no value is read back, and one a provider names is not deleted (409 `secret_in_use`) |
+| D67 | A workspace admin creates a custom role from scratch or as a copy (less the cells D40 keeps from custom roles), renames, edits and deletes it on Access › Roles; a delete names the holders and moves them to another role. An admin of a team gives a person a custom role in that team on Access › People; a built-in role comes with the team role. Every change goes through `can()` and is audited (`role.create`, `role.rename`, `role.delete`, `role.grant`, `role.ungrant`) |
 
 ## Errors
 
@@ -557,7 +526,7 @@ for reuse.
 | `scripts/roles_matrix.py --check` | `make python-verify` | The grid above differs from `ops_access` |
 | `scripts/check_access_exceptions.py` | Every commit (`scripts/verify-staged.sh`) and `make python-verify` | A 403, a role-name comparison, a system lock or a policy default appears that `access-exceptions-allowlist.txt` does not list against a register row, or a listed one is gone and its line was not lowered |
 | `scripts/tests/test_builtin_roles_match_checks.py` | `make python-verify` | A service's check answers a cell differently from the grid |
-| Access check | Each architecture review, and each question about access | A change, question or diff conflicts with this page, or asks something [Decided questions](#decided-questions) answers |
+| Access check | Each architecture review, and each question about access | A change, question or diff conflicts with this page, or asks something [Access rules](#access-rules) answers |
 
-A new decision adds a row to Decided questions in the same change that acts on it; a new exception adds a register
+A new rule adds a row to Access rules in the same change that acts on it; a new exception adds a register
 row and an allowlist line with a `Standards-exception:` trailer.
