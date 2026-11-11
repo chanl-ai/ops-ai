@@ -324,7 +324,7 @@ export function ReviewDetailBody({
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Paused by the <Link href="/settings/policies" className="underline underline-offset-2" data-testid="review-gate-link">{policy.name}</Link> gate in{' '}
+          Paused by the <Link href="/policies" className="underline underline-offset-2" data-testid="review-gate-link">{policy.name}</Link> gate in{' '}
           <Link href={`/workflows/${review.workflowId}`} className="underline underline-offset-2">
             {review.workflowName}
           </Link>

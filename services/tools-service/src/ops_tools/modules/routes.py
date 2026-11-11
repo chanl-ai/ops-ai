@@ -70,6 +70,7 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
         thread: str | None = None,
         decision: Annotated[str | None, Query(pattern="^(allow|deny)$")] = None,
         key: Annotated[str | None, Query(max_length=200)] = None,
+        call: Annotated[str | None, Query(max_length=200)] = None,
     ) -> JSONResponse:
         data = await service.executions(
             who,
@@ -80,6 +81,7 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
             thread_id=thread,
             decision=decision,
             key=key,
+            call_id=call,
         )
         return ok(data)
 

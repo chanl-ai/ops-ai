@@ -12,6 +12,8 @@ import type { SearchGroup, SearchHit, SearchResults } from '@/lib/types/search';
 export interface PalettePage {
   title: string;
   href: string;
+  /** The area the page belongs to (Work, Build, Data, Govern): pages are grouped under it, in the order pages are given. */
+  area?: string;
   section?: string;
   icon: TablerIcon | LucideIcon;
   /** Extra words the page should match on, e.g. its full heading when the sidebar name is shorter. */
@@ -192,15 +194,20 @@ export function CommandPalette({
               ))}
             </CommandGroup>
             <CommandSeparator />
-            <CommandGroup heading="Pages">
-              {pages.map((p) => (
-                <CommandItem key={p.href} value={`${p.title} ${p.section ?? ''} ${p.href} ${p.keywords ?? ''}`} onSelect={() => onNavigate(p.href)}>
-                  <p.icon />
-                  <span className="flex-1">{p.title}</span>
-                  {p.section && <span className="text-xs text-muted-foreground">{p.section}</span>}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {/* One group per area, so the palette reads like the header's area buttons. */}
+            {[...new Set(pages.map((p) => p.area ?? 'Pages'))].map((area) => (
+              <CommandGroup key={area} heading={area}>
+                {pages
+                  .filter((p) => (p.area ?? 'Pages') === area)
+                  .map((p) => (
+                    <CommandItem key={p.href} value={`${p.title} ${area} ${p.section ?? ''} ${p.href} ${p.keywords ?? ''}`} onSelect={() => onNavigate(p.href)}>
+                      <p.icon />
+                      <span className="flex-1">{p.title}</span>
+                      {p.section && <span className="text-xs text-muted-foreground">{p.section}</span>}
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            ))}
           </>
         )}
       </CommandList>

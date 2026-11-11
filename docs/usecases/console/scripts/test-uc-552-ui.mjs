@@ -100,16 +100,20 @@ await withUiStack(
         check('1 Maya lands on Chat with hints from her own work', url === '/chat' && task.length > 0 && cases === 1 && starts === 0, { url, task, cases, starts });
       });
 
-      await step('2 the sidebar holds New chat, Overview, Cases and Human Tasks with her count at the top, then the groups', async () => {
+      await step('2 the sidebar holds New chat, Overview, Cases and Human Tasks with her count at the top, then the Chats group, with the other areas in the header', async () => {
         // One count: on Human Tasks, the tasks waiting for her; Overview carries none.
         const count = Number(await page.getByTestId('sidebar-count-reviews').innerText());
         const overviewCount = await page.getByTestId('sidebar-overview-count').count();
         const mine = (await json(await fetch(`${agents}/reviews?view=mine&pageSize=1`, { headers: maya })))?.viewCounts?.mine;
-        const top = (await page.locator('[data-sidebar=header] [data-sidebar=menu-button]').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim()).filter(Boolean);
+        // New chat sits in the sidebar header and the area's pages in its content.
+        const top = (await page.locator('[data-sidebar=header] [data-sidebar=menu-button], [data-sidebar=content] [data-sidebar=menu-button]').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim()).filter(Boolean);
         const search = await page.getByTestId('sidebar-search').count();
-        const groups = { chats: await groupOpen('Chats'), agents: await groupOpen('Agents'), dataHub: await groupOpen('Data Hub'), govern: await groupOpen('Govern'), work: await page.locator('[data-nav-group="Work"]').count() };
+        // One area at a time: the Agents, Data Hub and Govern headings are gone, and the pages of the other areas sit
+        // behind the header's area control, which is named "Area".
+        const groups = { chats: await groupOpen('Chats'), agents: await page.locator('[data-nav-group="Agents"]').count(), dataHub: await page.locator('[data-nav-group="Data Hub"]').count(), govern: await page.locator('[data-nav-group="Govern"]').count(), work: await page.locator('[data-nav-group="Work"]').count() };
+        const areas = (await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').allInnerTexts()).map((t) => t.trim());
         const want = ['New chat', 'Overview', 'Cases', 'Human Tasks'];
-        check('2 the sidebar holds New chat, Overview, Cases and Human Tasks with her count at the top, then the groups', count === mine && count >= 1 && overviewCount === 0 && want.every((w) => top.includes(w)) && search === 0 && groups.chats && !groups.agents && !groups.dataHub && !groups.govern && groups.work === 0, { count, overviewCount, mine, top, search, groups });
+        check('2 the sidebar holds New chat, Overview, Cases and Human Tasks with her count at the top, then the Chats group, with the other areas in the header', count === mine && count >= 1 && overviewCount === 0 && want.every((w) => top.includes(w)) && search === 0 && groups.chats && groups.agents === 0 && groups.dataHub === 0 && groups.govern === 0 && groups.work === 0 && areas.length >= 2 && areas[0] === 'Work', { count, overviewCount, mine, top, search, groups, areas });
       });
 
       await step('2c the trail names no Work group, and the agent picker shows its name whole', async () => {
@@ -215,20 +219,21 @@ await withUiStack(
         check('4 Overview shows the four widgets from one request, and a row opens its page', counts.tasks >= 1 && counts.runs >= 1 && counts.cases >= 1 && news === 1 && calls.some((c) => c.endsWith('/v1/overview') || c.includes('/v1/overview?')) && calls.every((c) => c.includes('/v1/overview')) && filtered.cases === 1 && filtered.tasks === 0 && !!opened, { counts, calls, filtered, opened });
       });
 
-      await step('5 the folded sidebar and an opened group stay as she left them', async () => {
+      await step('5 the folded sidebar and the area she picked stay as she left them', async () => {
         await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded' });
         await page.getByTestId('sidebar-new-chat').waitFor();
-        await page.locator('[data-nav-group="Agents"] [data-sidebar=group-label]').first().click();
+        await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').filter({ hasText: 'Build' }).first().click();
+        await page.waitForTimeout(600);
         await page.locator('[data-slot=sidebar-trigger]').first().click();
         await page.waitForTimeout(500);
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.getByTestId('sidebar-new-chat').waitFor();
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(1500);
         const folded = await sidebar.getAttribute('data-state');
+        const lit = (await page.getByRole('group', { name: 'Area' }).locator('[data-state=on]').allInnerTexts()).map((t) => t.trim());
         await page.locator('[data-slot=sidebar-trigger]').first().click();
         await page.waitForTimeout(500);
-        const agentsOpen = await groupOpen('Agents');
-        check('5 the folded sidebar and an opened group stay as she left them', folded === 'collapsed' && agentsOpen, { folded, agentsOpen });
+        const agentsRow = await page.locator('[data-sidebar=content]').getByRole('link', { name: 'Agents', exact: true }).count();
+        check('5 the folded sidebar and the area she picked stay as she left them', folded === 'collapsed' && lit[0] === 'Build' && agentsRow === 1, { folded, lit, agentsRow });
       });
 
       await step('5b every sidebar row takes its own click at 1280 and 1440 px, open and folded', async () => {
@@ -244,7 +249,9 @@ await withUiStack(
             // A normal click: Playwright refuses when another element (an invisible group label) would take it.
             await page.getByTestId('sidebar-new-chat').click({ timeout: 5000 });
             await page.waitForURL((u) => u.pathname === '/chat', { timeout: 15_000 });
-            await page.locator('[data-sidebar=header] a[href="/reviews"]').first().click({ timeout: 5000 });
+            // New chat keeps Work (she starts it from a Work page); the Work click is a no-op and Human Tasks is on Work.
+            await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').filter({ hasText: 'Work' }).first().click({ timeout: 5000 });
+            await page.locator('[data-sidebar=content] a[href="/reviews"]').first().click({ timeout: 5000 });
             await page.waitForURL((u) => u.pathname === '/reviews', { timeout: 15_000 });
             hits[`${w}-${folded ? 'folded' : 'open'}`] = 'ok';
           }

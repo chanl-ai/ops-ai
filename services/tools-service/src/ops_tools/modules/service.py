@@ -920,10 +920,12 @@ class ModuleService:
         thread_id: str | None,
         decision: str | None,
         key: str | None = None,
+        call_id: str | None = None,
     ) -> dict[str, Any]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
-        sent under one idempotency key: how a workflow run reconciles a write after a crash. The log names who called
-        what, so it is read under activity.view."""
+        sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
+        call, so a chat's Open call link shows the call it was made from. The log names who called what, so it is read
+        under activity.view."""
         _can(who, "activity", "view", what="the tool-call log")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
@@ -940,6 +942,7 @@ class ModuleService:
             thread_id=thread_id,
             decision=decision,
             key=key,
+            call_id=call_id,
             offset=(page - 1) * page_size,
             limit=page_size,
         )

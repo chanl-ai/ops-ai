@@ -504,7 +504,8 @@ export const toolsOperations = {
       "moduleId",
       "thread",
       "decision",
-      "key"
+      "key",
+      "call"
     ],
     "stream": false
   },
