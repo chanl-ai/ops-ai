@@ -49,7 +49,7 @@ profile's "Commands an agent runs" table names the make targets.
 | Read the brief, the rules, the profile and the workspace file before any other file; then the documents the profile maps to the files the task names, and nothing else until a finding needs it | here |
 | Keep each tool call under 2 minutes; run tests, builds and walks in the background and poll | here |
 | One slice per run, about 45 minutes; then commit, write the handoff (done, next slice, file state) to the tracker or, if the tracker refuses, to `HANDOFF.md` on the branch, and stop | here |
-| While building, run only the test files for the code you changed; the full suite runs once at the QA stage | here |
+| Run only the tests a change touches: your task's test files while building, `make test-affected BASE=origin/main` and the affected use cases at QA. Never run a whole suite (`make test PKG=...` with no file); CI and the nightly run do that | here |
 | Permissions and settings have one page: any role cell, approval or setting a change adds or alters is written in `docs/architecture/roles-and-permissions.md` in the same change, with default, who changes it and where | that page, "Keeping this page true" |
 | Owner instructions become rules: when the person who briefed you gives a standing instruction, add it to the agent, skill or doc it belongs in during the same task, and say which file changed | here |
 | Fewer, stronger tests: one per failure mode, within the card's budget (5 small, 10 medium, 15 large); a suite should shrink or hold when a change lands, never grow by habit | here |
