@@ -112,8 +112,8 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "toolWritesNeedApproval",
-        # No team set: each write follows its tool's own setting (write_waits), so a write with none waits and one
-        # switched to run at once runs. On, every write of the team waits, whatever its tool says.
+        # No team set: each write follows its tool's own setting (write_waits), so a write with none runs and one
+        # switched to ask first waits. On, every write of the team waits, whatever its tool says.
         {},
         "Every tool write by the team waits for a person's approval, including the ones a tool lets run at once.",
         changed_by=("reviews", "manage"),
@@ -298,15 +298,16 @@ def team_off(values: Any, team: str | None) -> bool:
 
 
 def write_waits(access: str, requires_approval: bool | None) -> bool:
-    """Whether a call of a tool waits for a person's approval by the tool's own setting: a write waits unless its
-    setting is an explicit false (it runs at once); a read never does. Every place that turns a tool's setting into
+    """Whether a call of a tool waits for a person's approval by the tool's own setting: a write waits only when its
+    setting is an explicit true; a write with none runs, unless the team's switches (toolWritesNeedApproval,
+    appWritesNeedApproval) hold it; a read never waits. Every place that turns a tool's setting into
     a decision (the registry, plugin and seeded tools, the agents' catalogue) asks here, so the default is set once.
 
     Args:
         access: the tool's access class, "read" or "write" ("workflow" and others never wait here).
         requires_approval: the tool's setting; None when it has none.
     """
-    return access == "write" and requires_approval is not False
+    return access == "write" and requires_approval is True
 
 
 def team_writes_need_approval(values: dict[str, Any], team: str | None) -> bool:
@@ -328,3 +329,59 @@ def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:
     (read live on each decision); `major` where the team set none."""
     of_team: dict[str, Any] = dict(modes.get(team) or {})
     return str(of_team.get(area, DEFAULT_PUBLISH_MODE))
+
+
+ANSWERS = ("none", "person", "reviewer")
+
+
+def _level(value: Any) -> tuple[str | None, str | None]:
+    """The (answer, reviewerRole) one level of the chain holds; answer None when the level says nothing."""
+    if not isinstance(value, dict):
+        return None, None
+    held = cast(dict[str, Any], value)
+    answer = held.get("answer")
+    if held.get("ask") is False:
+        answer = "none"
+    return (answer if answer in ANSWERS else None), held.get("reviewerRole")
+
+
+def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str, test_account: bool) -> dict[str, Any]:
+    """Whether a call waits, and who answers, for one tool: the single rule every service reads.
+
+    The most specific level wins: the tool's `approvalMode`, then the app's entry of `appChangesByApp`, then the team's
+    `appChanges`. A read never waits; a write over MCP always does (nobody is in the chat); a tool with two approvers
+    always asks a reviewer. A team's checkbox `testAccountsNeverAsk` (on unless saved off) lets a test account through.
+    "Ask the person" with nobody in the chat (a workflow) goes to the reviewer role. An unreadable team policy (None)
+    fails closed: the write waits for a reviewer.
+
+    Returns:
+        {waits, answer ("none" | "person" | "reviewer"), reviewerRole, source ("tool" | "app" | "team" | "mcp" |
+        "test-account")}.
+    """
+    if tool.get("access") != "write":
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": "tool"}
+    team_role = None
+    if team is None:
+        return {"waits": True, "answer": "reviewer", "reviewerRole": None, "source": "team"}
+    if channel == "mcp":
+        return {"waits": True, "answer": "reviewer", "reviewerRole": tool.get("reviewerRole"), "source": "mcp"}
+    if tool.get("approvers") == 2:
+        role = tool.get("reviewerRole") or _level(team)[1]
+        return {"waits": True, "answer": "reviewer", "reviewerRole": role, "source": "tool"}
+    team_answer, team_role = _level(team)
+    answer, role, source = team_answer or "none", team_role, "team"
+    app_answer, app_role = _level(app)
+    if app_answer is not None:
+        answer, role, source = app_answer, app_role or team_role, "app"
+    mode = tool.get("approvalMode")
+    if mode in ANSWERS:
+        answer, role, source = mode, tool.get("reviewerRole") or role, "tool"
+    if answer == "person" and channel == "workflow":
+        answer = "reviewer"
+    if answer == "none":
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": source}
+    if test_account and (
+        cast(dict[str, Any], team).get("testAccountsNeverAsk", True) if isinstance(team, dict) else True
+    ):
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": "test-account"}
+    return {"waits": True, "answer": answer, "reviewerRole": None if answer == "person" else role, "source": source}

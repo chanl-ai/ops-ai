@@ -1705,6 +1705,7 @@ async def app_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                     "added": added,
                     "askedAtSignIn": asked,
                     "waits": write_waits(str(op["access"]), op.get("requires_approval")),
+                    "setting": op.get("requires_approval"),
                     "moduleId": module_id,
                 }
             )
@@ -1723,7 +1724,10 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
         else set[str]()
     )
     # The page's Tools tab shows neither a tool's own approval flag nor its module.
-    tools = [{k: v for k, v in t.items() if k not in ("waits", "moduleId")} for t in await app_tools(apps, who, card)]
+    tools = [
+        {k: v for k, v in t.items() if k not in ("waits", "setting", "moduleId")}
+        for t in await app_tools(apps, who, card)
+    ]
     usage: list[dict[str, Any]] = []
     if apps.users is not None and tools:
         try:

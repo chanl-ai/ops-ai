@@ -25,7 +25,7 @@ from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
-from .modules.policy import asker_refusal
+from .modules.policy import WriteApprovals, asker_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
 from .registry import Resolved, ToolRegistry
@@ -231,10 +231,8 @@ class GatewayCalls:
         executor: Executor,
         counters: RateWindows,
         send_check: SendCheck | None,
-        all_writes_wait: Callable[[str, str | None], Awaitable[bool]],
         clock: Callable[[], float] = time.time,
-        app_writes_wait: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
-        app_changes_quietly: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
+        approvals: WriteApprovals | None = None,
         approver: Callable[[Principal], bool] | None = None,
         requester_may_decide: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
@@ -246,12 +244,8 @@ class GatewayCalls:
         self.executor = executor
         self.counters = counters
         self.send_check = send_check
-        self.all_writes_wait = all_writes_wait
-        # Whether the team listed the module's app in appWritesNeedApproval; none listed without it.
-        self.app_writes_wait = app_writes_wait
-        # Whether the team's admin listed the module's app in appsChangeWithoutAsking: the only input that loosens a
-        # write's own wait. Team-wide and per-app holds and MCP still win. None without it: nothing loosens.
-        self.app_changes_quietly = app_changes_quietly
+        # The team's and apps' approval settings; without them only the tool's own setting and MCP decide.
+        self.approvals = approvals or WriteApprovals()
         # Whether the caller holds the approver role in the team (can() over the roles grid); nobody without it.
         self.approver = approver
         self.clock = clock
@@ -437,34 +431,25 @@ class GatewayCalls:
             )
             return Refused(call_id, status, code, [reason], details)
         policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
-        # From the registry and the team's policies, never the caller: whether this write needs an approval token.
-        # A write waits when its tool's setting says so (a write with none waits, `write_waits`), the team has every
-        # write wait, or the team listed its app.
+        # From the registry and the team's settings, never the caller: whether this write needs an approval token.
+        # `effective_answer` is the one rule: the tool's own setting, then its app's, then the team's; MCP always waits.
         module = resolved.module if resolved else None
-        # A write signed in with the app's test account changes nothing real, so it never waits, whatever the tool or
-        # the team holds. A test run on an app with no test account signs in with its live one
-        # (connections.records account_for) and meets the rules a live write meets.
+        # A write signed in with the app's test account changes nothing real; the team's checkbox decides if it asks.
         on_test_account = bool((module or {}).get("sandbox"))
-        needs = (
-            access in WRITES
-            and not on_test_account
-            and (
-                # Over MCP every write waits for a person, whatever the operation declares.
-                channel == MCP
-                or (
-                    await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
-                    and not (
-                        self.app_changes_quietly is not None
-                        and await self.app_changes_quietly(caller.tenant_id, caller.team_id, module)
-                    )
-                )
-                or await self.all_writes_wait(caller.tenant_id, caller.team_id)
-                or (
-                    self.app_writes_wait is not None
-                    and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
-                )
+        needs = False
+        if access in WRITES:
+            setting = await self.registry.approval_setting(req.tool, caller.tenant_id, caller.team_id)
+            answer = await self.approvals.answer(
+                caller.tenant_id,
+                caller.team_id,
+                module,
+                access=access,
+                setting=setting,
+                approvers=(policy or {}).get("approvers") or 1,
+                channel="mcp" if channel == MCP else "chat",
+                test_account=on_test_account,
             )
-        )
+            needs = bool(answer["waits"])
         # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.
         # requesterMayDecide is read now: the token's copy dates from when it was minted and may since be off.

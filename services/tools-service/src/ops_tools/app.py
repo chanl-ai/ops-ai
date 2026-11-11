@@ -37,7 +37,7 @@ from .held_hosts import install_held_hosts
 from .mcp_server import McpAdapter
 from .mocks import MockAnswers
 from .modules.directory import Directory
-from .modules.policy import RequesterMayDecide, WriteApprovals, app_ids, approves_own_writes
+from .modules.policy import RequesterMayDecide, WriteApprovals, approves_own_writes
 from .modules.service import ModuleService
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash, registered_identities
 from .plugins.executor import PluginExecutor
@@ -125,6 +125,11 @@ class GrantableOperation(Out):
     access: str
     input_schema: dict[str, Any]
     requires_approval: bool
+    # Who answers a call that waits, from the one resolver (`effective_answer`): "none", "person" (the asker confirms)
+    # or "reviewer" (someone else with `reviewer_role`), and the level it came from.
+    answer: str = "none"
+    reviewer_role: str | None = None
+    source: str = "team"
     approvers: int
     # Approving asks for a step-up: set on the operation, or two approvers.
     step_up: bool = False
@@ -214,7 +219,8 @@ def create_gateway_app(
     is refused. `cors_origins` are the browser origins (the console) allowed to call these routes. `auth` resolves
     callers (ops_identity's shared dependency); by default it is built from Settings for audience "tools". `background`
     runs beside the server from start-up and is cancelled at shutdown (the copy of reviews into Reviews).
-    `write_approvals` reads each team's toolWritesNeedApproval live; without it each write follows its registry flag.
+    `write_approvals` reads each team's appChanges and appChangesByApp live; without it only a tool's own setting
+    decides.
     `requester_policy` reads the tenant's requesterMayDecide live, so an approval the asker gave themselves is checked
     again at the call; without it the dev policies decide.
     `authenticator` signs a module's calls in through its connection; without it a connection adds nothing.
@@ -234,24 +240,6 @@ def create_gateway_app(
     )
     expected = policy_hash(rules)
     counters = rates or RateWindows(log.engine)
-
-    async def all_writes_wait(tenant_id: str, team_id: str | None) -> bool:
-        return write_approvals is not None and await write_approvals.all_writes(tenant_id, team_id)
-
-    async def app_writes_wait(tenant_id: str, team_id: str | None, module: Aggregate | None) -> bool:
-        """Whether the team listed this module's app in appWritesNeedApproval; an unreadable list counts as listed."""
-        if write_approvals is None or module is None:
-            return False
-        listed = await write_approvals.apps(tenant_id, team_id)
-        return listed is None or bool(app_ids(module) & set(listed))
-
-    async def app_changes_quietly(tenant_id: str, team_id: str | None, module: Aggregate | None) -> bool:
-        """Whether the team's admin listed this module's app in appsChangeWithoutAsking, which loosens a write's own
-        wait (never a team-wide or per-app hold). An unreadable list counts as not listed, so the write waits."""
-        if write_approvals is None or module is None:
-            return False
-        listed = await write_approvals.change_without_asking(tenant_id, team_id)
-        return listed is not None and bool(app_ids(module) & set(listed))
 
     async def with_test_account(
         tenant_id: str, team_id: str | None, mods: dict[str, Any], rows: list[dict[str, Any]]
@@ -285,10 +273,8 @@ def create_gateway_app(
         executor=executor,
         counters=counters,
         send_check=send_check,
-        all_writes_wait=all_writes_wait,
         clock=clock,
-        app_writes_wait=app_writes_wait,
-        app_changes_quietly=app_changes_quietly,
+        approvals=write_approvals,
         approver=approver,
         # An approval the asker gave themselves counts only while today's policy lets an asker decide.
         requester_may_decide=(requester_policy or RequesterMayDecide(None, dev=Settings().dev_policies)).allowed,
@@ -382,30 +368,35 @@ def create_gateway_app(
             else {}
         )
 
-        def of_listed(r: dict[str, Any], listed: list[str] | None, unreadable: bool) -> bool:
-            """Whether the row's app is in a per-team app list; an unreadable list answers `unreadable`."""
-            if listed is None:
-                return unreadable
-            m = mods.get(str(r.get("module_id") or ""))
-            return m is not None and bool(app_ids(m) & set(listed))
-
-        if write_approvals is not None and mods:
-            # Apps the team's admin listed in appsChangeWithoutAsking: their writes run at once, as in the gateway.
-            quiet = await write_approvals.change_without_asking(caller.tenant_id, caller.team_id) or []
-            rows = [
-                r | {"requires_approval": False} if r["access"] in WRITES and of_listed(r, quiet, False) else r
-                for r in rows
-            ]
-        if await all_writes_wait(caller.tenant_id, caller.team_id):
-            # The caller's team has every write wait, so the agents that list these pause before each one.
-            rows = [r | {"requires_approval": True} if r["access"] in WRITES else r for r in rows]
-        elif mods:
-            # The apps the team listed in appWritesNeedApproval: their writes pause too.
-            listed = await write_approvals.apps(caller.tenant_id, caller.team_id) if write_approvals else []
-            rows = [
-                r | {"requires_approval": True} if r["access"] in WRITES and of_listed(r, listed, True) else r
-                for r in rows
-            ]
+        if write_approvals is not None:
+            # The one rule behind the gateway's wait: each write's answer from its own setting, its app and the team.
+            tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
+            levels = await write_approvals.levels(caller.tenant_id, caller.team_id)
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                if r["access"] not in WRITES:
+                    out.append(r)
+                    continue
+                m = mods.get(str(r.get("module_id") or ""))
+                ans = await write_approvals.answer(
+                    caller.tenant_id,
+                    caller.team_id,
+                    m,
+                    access=r["access"],
+                    setting=r.get("setting"),
+                    approvers=r["approvers"],
+                    levels=levels,
+                )
+                out.append(
+                    r
+                    | {
+                        "requires_approval": ans["waits"],
+                        "answer": ans["answer"],
+                        "reviewer_role": ans["reviewerRole"],
+                        "source": ans["source"],
+                    }
+                )
+            rows = out
         if write_approvals is not None:
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
             rows = [r | {"test_account": str(r.get("module_id") or "") in tested} for r in rows]

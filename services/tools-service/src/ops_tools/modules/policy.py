@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ops_access import BY_KEY, Access, publish_mode, team_names, team_on, team_writes_need_approval
+from ops_access import BY_KEY, Access, effective_answer, publish_mode, team_on
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Forbidden
 
@@ -43,39 +43,46 @@ class PublishPolicy:
 
 
 class WriteApprovals:
-    def __init__(self, platform: ServiceClient) -> None:
-        """The team's `toolWritesNeedApproval`, read live from platform-service on each call with this
-        service's `settings:view` token for the tenant, as PublishPolicy reads publishReview."""
+    def __init__(self, platform: ServiceClient | None = None) -> None:
+        """The team's approval settings for agent changes (`appChanges`, `appChangesByApp`), read live from
+        platform-service on each call with this service's `settings:view` token for the tenant, as PublishPolicy
+        reads publishReview. Without `platform` no team has set anything."""
         self.platform = platform
 
-    async def all_writes(self, tenant_id: str, team_id: str | None) -> bool:
-        """Whether every tool write by `team_id` waits for approval. A policy that cannot be read counts as on, so a
-        failed read never lets a write through unapproved."""
+    async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
+        """(team level, per-app levels) for `team_id`. The team level is None when the policy cannot be read, which
+        `effective_answer` counts as waiting, so a failed read never lets a write through unapproved."""
+        if self.platform is None:
+            return {}, {}
         try:
-            data = await self.platform.get("/v1/policies/toolWritesNeedApproval", tenant=tenant_id)
-            return team_writes_need_approval(dict(data.get("value") or {}), team_id)
+            team = await self.platform.get("/v1/policies/appChanges", tenant=tenant_id)
+            by_app = await self.platform.get("/v1/policies/appChangesByApp", tenant=tenant_id)
+            of_team = dict(team.get("value") or {}).get(team_id) if team_id else None
+            apps = dict(by_app.get("value") or {}).get(team_id) if team_id else None
+            return (of_team or {}), dict(apps or {})
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
-            return True
+            return None, {}
 
-    async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
-        """The apps whose writes `team_id` has wait (appWritesNeedApproval), by the ids the Apps page shows. None
-        when the policy cannot be read, which the gateway counts as every app, so a failed read never lets a write
-        through unapproved."""
-        try:
-            data = await self.platform.get("/v1/policies/appWritesNeedApproval", tenant=tenant_id)
-            return team_names(data.get("value"), team_id)
-        except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
-            return None
-
-    async def change_without_asking(self, tenant_id: str, team_id: str | None) -> list[str] | None:
-        """The apps whose "Ask before changes" `team_id`'s admin switched off (appsChangeWithoutAsking), by the ids
-        the Apps page shows; every other app's writes ask the person in chat first. None when the policy cannot be
-        read, which counts as no app listed, so a failed read never stops the asking."""
-        try:
-            data = await self.platform.get("/v1/policies/appsChangeWithoutAsking", tenant=tenant_id)
-            return team_names(data.get("value"), team_id)
-        except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
-            return None
+    async def answer(
+        self,
+        tenant_id: str,
+        team_id: str | None,
+        module: dict[str, Any] | None,
+        *,
+        access: str,
+        setting: bool | None,
+        approvers: int = 1,
+        channel: str = "chat",
+        test_account: bool = False,
+        levels: tuple[Any, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """The one answer to "does this call wait, and who answers": the tool's own setting, its app's entry and the
+        team's, through `effective_answer`. Everything that shows or enforces a wait calls here."""
+        team, by_app = levels or await self.levels(tenant_id, team_id)
+        app = next((by_app[i] for i in sorted(app_ids(module) if module else ()) if i in by_app), None)
+        mode = {True: "reviewer", False: "none"}.get(setting) if setting is not None else None  # type: ignore[arg-type]
+        tool = {"access": access, "approvalMode": mode, "reviewerRole": None, "approvers": approvers}
+        return effective_answer(tool=tool, app=app, team=team, channel=channel, test_account=test_account)
 
 
 def approves_own_writes(access: Access, p: Principal) -> bool:
