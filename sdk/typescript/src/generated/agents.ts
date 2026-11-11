@@ -1756,7 +1756,8 @@ export interface paths {
          *     only the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`
          *     makes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What
          *     runs keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy
-         *     moved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own.
+         *     moved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422
+         *     `tool_not_available`, naming the tools, when the template needs one the team cannot call.
          */
         post: operations["resources_take_update"];
         delete?: never;

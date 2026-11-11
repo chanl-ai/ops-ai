@@ -248,7 +248,9 @@ async def test_an_update_naming_a_tool_the_team_cannot_call_is_refused_and_saves
     more = AGENT | {"version": 3, "requires": {**AGENT["requires"], "tools": [*TOOLS, "billing_refund"]}}
     wire(client, [more])
     r = await client.post(f"/v1/resources/{SOURCE}:case-helper/copies/{aid}/update", json={}, headers=OPS)
-    assert r.status_code == 400 and r.json()["error"]["code"] == "unknown_tool", r.text
+    # 422, not the add path's 400: the request is well formed, and the template asks for what the team lacks.
+    assert r.status_code == 422 and r.json()["error"]["code"] == "tool_not_available", r.text
+    assert r.json()["error"]["details"]["tools"] == ["billing_refund"]
     assert "billing_refund" in r.json()["error"]["message"]
     from ops_agents.api.agent_registry import registry  # noqa: PLC0415
 

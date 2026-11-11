@@ -42589,7 +42589,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Take update. `merge` (the default) saves one draft that keeps every field the team edited, takes every field\nonly the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`\nmakes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What\nruns keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy\nmoved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own.",
+        "description": "Take update. `merge` (the default) saves one draft that keeps every field the team edited, takes every field\nonly the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`\nmakes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What\nruns keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy\nmoved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422\n`tool_not_available`, naming the tools, when the template needs one the team cannot call.",
         "operationId": "resources_take_update",
         "parameters": [
           {

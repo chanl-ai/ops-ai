@@ -57,6 +57,7 @@ from . import agents as agent_routes
 from .agents import require_known_alias
 from .engine import DefinitionInput, create_definition, definitions
 from .skills import SkillCreateInput
+from .tool_catalog import known_tools
 
 router = APIRouter(prefix="/v1/templates", tags=["templates"])
 # Add to team in the screen's words: a resource is an agent, skill or workflow an app brings, copied into the
@@ -835,7 +836,20 @@ async def _newest(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any
 async def _template_body(rt: Runtime, team: str, kind: str, t: dict[str, Any], yours: dict[str, Any]) -> dict[str, Any]:
     """The template's body now, made through the kind's create checks, with the copy's bindings in place."""
     if kind == "agent":
-        tools = await agent_routes._checked_tools(rt, list(t["requires"]["tools"]), [])  # pyright: ignore[reportPrivateUsage]
+        wanted = list(t["requires"]["tools"])
+        try:
+            tools = await agent_routes._checked_tools(rt, wanted, [])  # pyright: ignore[reportPrivateUsage]
+        except ValidationFailed as e:
+            # The add check's refusal, as the update's 422: the request is well formed, and the template asks for a
+            # tool the team cannot call (a plugin off for it, or one no longer offered). Nothing is saved.
+            known = {x["id"] for x in await known_tools(rt, fresh=True)}
+            missing = [x for x in wanted if x not in known] or wanted
+            raise Unprocessable(
+                f"{t['title']} version {t['version']} needs tools your team cannot call: {', '.join(missing)}. Turn on "
+                "the app that brings them, then take the update.",
+                code="tool_not_available",
+                details={"tools": missing},
+            ) from e
         model, bases = str(yours.get("model") or ""), list(yours.get("collections") or [])
         return _spec_of(t, str(yours["name"]), model, tools, bases)
     bases = list(yours.get("knowledgeBases") or [])
@@ -931,7 +945,8 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
     only the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`
     makes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What
     runs keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy
-    moved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own."""
+    moved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422
+    `tool_not_available`, naming the tools, when the template needs one the team cannot call."""
     team = _team(me)
     row, t, review, outcomes, template_body = await _review(rt, me, team, resource, copy)
     mode = body.mode or ("reset" if body.confirm else "merge")
