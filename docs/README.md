@@ -70,7 +70,7 @@ names it or a folder it takes whole, and a page it does not place fails the site
 | Reader | Read in this order |
 |---|---|
 | Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0016; every ADR is an option, not decided, until it is confirmed) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
+| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
 ## Requirements
@@ -111,6 +111,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
 | `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, approvals, the access rules and the exceptions register |
+| `architecture/platform-choices.md` | The product or library each part is built on today, with code paths; the current outcome of every record in `architecture/decisions/` |
 | `architecture/console-areas.md` | The console's four areas (Work, Build, Data, Govern), the cells that offer each page, the area switcher and chat's links back (switcher designed, not built) |
 | `architecture/logging-and-data-writes.md` | One JSON log line per event with ids and redaction (built), and the store helper for a person's edit with revision check, audit and outbox (designed) |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
