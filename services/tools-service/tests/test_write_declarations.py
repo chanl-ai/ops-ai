@@ -88,3 +88,10 @@ async def test_the_policy_is_read_for_the_calling_team_and_a_failed_read_has_eve
     assert fraud == ({}, {}), "a team that set nothing follows each write's own flag"
     unread = await policy.levels("t_b", "team_fraud")
     assert unread[0] is None, "a policy that cannot be read is None, which the resolver counts as every write waits"
+
+
+async def test_a_policy_the_real_read_cannot_get_makes_a_write_wait_for_a_reviewer() -> None:
+    # Tenant t_b gets a 404 from the fake platform-service, through the real read in WriteApprovals.levels.
+    policy = _platform({}, {})
+    answer = await policy.answer("t_b", "team_fraud", None, access="write", setting=None)
+    assert (answer["waits"], answer["answer"]) == (True, "reviewer"), answer
