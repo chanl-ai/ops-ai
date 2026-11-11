@@ -104,6 +104,7 @@ A `feat` or `fix` that changes this folder needs a What's new entry ([Commits](.
 | Bulk change | `BulkConfirmDialog` / `BulkFieldDialog` + `toastBulk` (skipped items named by reason) + `useSticky` | silent partial success |
 | Record page | `RecordLayout` / `AttributeCard` / `FieldRow`, or a settings form with a right rail | bespoke grids |
 | Field | `FormField` (label, "(optional)", hint, inline error, `aria-invalid`) | placeholder-as-label |
+| Any form | One zod schema (shared with the API types where one exists) + `react-hook-form` with `zodResolver`, rendered through the shadcn `Form` parts and `FormField`; validate on blur and submit, show server errors on the field they belong to, disable submit while saving, keep unsaved changes guarded | `useState` per field, hand-written validation, `<form onSubmit>` reading inputs directly |
 | Upload a file | `FileUpload` (`components/shared/file-upload.tsx`): presigned upload through the Files API, progress, scan state, limits from Settings → Storage; pass the `fileId` on | `<input type="file">` with your own request, `FormData`, `fetch` PUT of a `File` (`check-standards` rule 13) |
 
 `components/ui/*` are shadcn primitives adapted from the shared component library: do not edit them; wrap them in

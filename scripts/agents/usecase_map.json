@@ -1,0 +1,1733 @@
+{
+ "about": "Source path globs to the use cases that cover them, built from the use case coverage plan; edit the plan and this file together. Read by scripts/agents/affected_usecases.py.",
+ "ignore": [
+  "docs/**",
+  "changelog/**",
+  "*.md",
+  "**/*.md",
+  "**/tests/**",
+  "**/*.test.ts",
+  "**/*.test.tsx",
+  "**/test_*.py",
+  ".github/**",
+  "roadmap.json",
+  "pnpm-lock.yaml",
+  "uv.lock",
+  "**/package.json"
+ ],
+ "rules": [
+  {
+   "row": "page: Overview",
+   "globs": [
+    "apps/console/src/app/page.tsx",
+    "apps/console/src/lib/overview.ts"
+   ],
+   "usecases": [
+    "uc-100",
+    "uc-469"
+   ]
+  },
+  {
+   "row": "page: Sidebar, header and page switcher",
+   "globs": [
+    "apps/console/src/lib/nav.ts",
+    "apps/console/src/lib/settings-tree.ts",
+    "apps/console/src/components/shell/**",
+    "apps/console/src/components/header/**",
+    "apps/console/src/app/layout.tsx"
+   ],
+   "usecases": [
+    "uc-047",
+    "uc-100",
+    "uc-264",
+    "uc-232",
+    "uc-505",
+    "uc-552",
+    "uc-562",
+    "uc-510",
+    "uc-517"
+   ]
+  },
+  {
+   "row": "page: Shared tables, lists and dialogs",
+   "globs": [
+    "apps/console/src/components/shared/**",
+    "apps/console/src/components/*.tsx"
+   ],
+   "usecases": [
+    "uc-097",
+    "uc-098",
+    "uc-106",
+    "uc-127",
+    "uc-257",
+    "uc-562",
+    "uc-710",
+    "uc-404"
+   ]
+  },
+  {
+   "row": "page: Sign in",
+   "globs": [
+    "apps/console/src/app/(auth)/login/**",
+    "apps/console/src/app/(auth)/sso/**",
+    "apps/console/src/components/auth/**",
+    "apps/console/src/lib/auth/**"
+   ],
+   "usecases": [
+    "uc-021",
+    "uc-161",
+    "uc-162",
+    "uc-163",
+    "uc-213",
+    "uc-214",
+    "uc-215",
+    "uc-111"
+   ]
+  },
+  {
+   "row": "page: Sign up",
+   "globs": [
+    "apps/console/src/app/(auth)/signup/**",
+    "apps/console/src/app/(auth)/invite/**"
+   ],
+   "usecases": [
+    "uc-216",
+    "uc-217",
+    "uc-218",
+    "uc-219",
+    "uc-220"
+   ]
+  },
+  {
+   "row": "page: Password reset",
+   "globs": [
+    "apps/console/src/app/(auth)/forgot-password/**",
+    "apps/console/src/app/(auth)/reset-password/**"
+   ],
+   "usecases": [
+    "uc-160",
+    "uc-214"
+   ]
+  },
+  {
+   "row": "page: Two-step sign-in",
+   "globs": [
+    "apps/console/src/app/(auth)/mfa/**"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "page: Cases",
+   "globs": [
+    "apps/console/src/app/cases/**",
+    "apps/console/src/components/cases/**"
+   ],
+   "usecases": [
+    "uc-139",
+    "uc-251",
+    "uc-256",
+    "uc-500",
+    "uc-450",
+    "uc-404"
+   ]
+  },
+  {
+   "row": "page: Human Tasks",
+   "globs": [
+    "apps/console/src/app/reviews/**",
+    "apps/console/src/components/reviews/**",
+    "apps/console/src/components/tasks/**"
+   ],
+   "usecases": [
+    "uc-057",
+    "uc-224",
+    "uc-225",
+    "uc-234",
+    "uc-460",
+    "uc-254",
+    "uc-008",
+    "uc-009"
+   ]
+  },
+  {
+   "row": "page: Review policies",
+   "globs": [
+    "apps/console/src/app/reviews/policies/**"
+   ],
+   "usecases": [
+    "uc-049"
+   ]
+  },
+  {
+   "row": "page: My connectors",
+   "globs": [
+    "apps/console/src/app/integrations/my-accounts/**"
+   ],
+   "usecases": [
+    "uc-628",
+    "uc-671",
+    "uc-674",
+    "uc-703",
+    "uc-702"
+   ]
+  },
+  {
+   "row": "page: Chat",
+   "globs": [
+    "apps/console/src/app/chat/**",
+    "apps/console/src/components/chat/**",
+    "apps/console/src/components/ai-elements/**",
+    "apps/console/src/lib/widgets/**"
+   ],
+   "usecases": [
+    "uc-018",
+    "uc-061",
+    "uc-072",
+    "uc-074",
+    "uc-087",
+    "uc-089",
+    "uc-091",
+    "uc-095",
+    "uc-108",
+    "uc-128",
+    "uc-132",
+    "uc-229",
+    "uc-469",
+    "uc-552",
+    "uc-673",
+    "uc-697",
+    "uc-720"
+   ]
+  },
+  {
+   "row": "page: Conversations",
+   "globs": [
+    "apps/console/src/app/chat/conversations/**"
+   ],
+   "usecases": [
+    "uc-087",
+    "uc-247",
+    "uc-058"
+   ]
+  },
+  {
+   "row": "page: Agents list",
+   "globs": [
+    "apps/console/src/app/agents/page.tsx"
+   ],
+   "usecases": [
+    "uc-018",
+    "uc-560",
+    "uc-099"
+   ]
+  },
+  {
+   "row": "page: Agent page",
+   "globs": [
+    "apps/console/src/app/agents/[id]/**",
+    "apps/console/src/components/agents/**"
+   ],
+   "usecases": [
+    "uc-018",
+    "uc-088",
+    "uc-104",
+    "uc-113",
+    "uc-130",
+    "uc-133",
+    "uc-253",
+    "uc-267"
+   ]
+  },
+  {
+   "row": "page: Workflows list",
+   "globs": [
+    "apps/console/src/app/workflows/page.tsx",
+    "apps/console/src/app/workflows/[id]/**"
+   ],
+   "usecases": [
+    "uc-252",
+    "uc-257",
+    "uc-445",
+    "uc-228",
+    "uc-466"
+   ]
+  },
+  {
+   "row": "page: Workflow editor",
+   "globs": [
+    "apps/console/src/app/workflows/definitions/**",
+    "apps/console/src/components/workflows/**"
+   ],
+   "usecases": [
+    "uc-092",
+    "uc-121",
+    "uc-122",
+    "uc-151",
+    "uc-486",
+    "uc-123",
+    "uc-233"
+   ]
+  },
+  {
+   "row": "page: Runs",
+   "globs": [
+    "apps/console/src/app/workflows/runs/**"
+   ],
+   "usecases": [
+    "uc-115",
+    "uc-209",
+    "uc-228",
+    "uc-477",
+    "uc-508",
+    "uc-525",
+    "uc-567"
+   ]
+  },
+  {
+   "row": "page: Batches",
+   "globs": [
+    "apps/console/src/app/workflows/batches/**"
+   ],
+   "usecases": [
+    "uc-568"
+   ]
+  },
+  {
+   "row": "page: Forms",
+   "globs": [
+    "apps/console/src/app/forms/**"
+   ],
+   "usecases": [
+    "uc-568"
+   ]
+  },
+  {
+   "row": "page: Channels",
+   "globs": [
+    "apps/console/src/app/channels/page.tsx",
+    "apps/console/src/components/channels/**",
+    "apps/console/src/app/deployments/**",
+    "apps/console/src/components/deployments/**"
+   ],
+   "usecases": [
+    "uc-142",
+    "uc-130"
+   ]
+  },
+  {
+   "row": "page: Chat embeds",
+   "globs": [
+    "apps/console/src/app/channels/chat/**"
+   ],
+   "usecases": [
+    "uc-136",
+    "uc-109",
+    "uc-116",
+    "uc-119"
+   ]
+  },
+  {
+   "row": "page: Email",
+   "globs": [
+    "apps/console/src/app/channels/email/**"
+   ],
+   "usecases": [
+    "uc-199",
+    "uc-245",
+    "uc-226"
+   ]
+  },
+  {
+   "row": "page: MCP",
+   "globs": [
+    "apps/console/src/app/channels/mcp/**",
+    "apps/console/src/app/connect/**"
+   ],
+   "usecases": [
+    "uc-410",
+    "uc-612"
+   ]
+  },
+  {
+   "row": "page: API, Slack and Teams",
+   "globs": [
+    "apps/console/src/app/channels/api/**",
+    "apps/console/src/app/channels/slack/**",
+    "apps/console/src/app/channels/teams/**"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "page: Skills",
+   "globs": [
+    "apps/console/src/app/skills/**",
+    "apps/console/src/components/skills/**",
+    "apps/console/src/app/prompt-blocks/**",
+    "apps/console/src/components/prompts/**"
+   ],
+   "usecases": [
+    "uc-106",
+    "uc-590"
+   ]
+  },
+  {
+   "row": "page: Guardrails",
+   "globs": [
+    "apps/console/src/app/guardrails/**"
+   ],
+   "usecases": [
+    "uc-085",
+    "uc-104",
+    "uc-097",
+    "uc-098"
+   ]
+  },
+  {
+   "row": "page: Widgets",
+   "globs": [
+    "apps/console/src/app/widgets/**",
+    "apps/console/src/components/widgets/**",
+    "apps/console/src/app/dev/widgets/**"
+   ],
+   "usecases": [
+    "uc-103",
+    "uc-127",
+    "uc-073"
+   ]
+  },
+  {
+   "row": "page: Knowledge bases",
+   "globs": [
+    "apps/console/src/app/knowledge/**",
+    "apps/console/src/components/knowledge/**"
+   ],
+   "usecases": [
+    "uc-096",
+    "uc-129",
+    "uc-138",
+    "uc-113",
+    "uc-676",
+    "uc-677",
+    "uc-678"
+   ]
+  },
+  {
+   "row": "page: Knowledge changes",
+   "globs": [
+    "apps/console/src/app/knowledge/changes/**"
+   ],
+   "usecases": [
+    "uc-075",
+    "uc-079"
+   ]
+  },
+  {
+   "row": "page: Sources",
+   "globs": [
+    "apps/console/src/app/integrations/sources/**",
+    "apps/console/src/app/sources/**",
+    "apps/console/src/components/sources/**"
+   ],
+   "usecases": [
+    "uc-138",
+    "uc-564",
+    "uc-562"
+   ]
+  },
+  {
+   "row": "page: Connectors, team setup",
+   "globs": [
+    "apps/console/src/app/integrations/page.tsx",
+    "apps/console/src/components/connections/**",
+    "apps/console/src/app/connections/**"
+   ],
+   "usecases": [
+    "uc-607",
+    "uc-626",
+    "uc-628",
+    "uc-671",
+    "uc-625"
+   ]
+  },
+  {
+   "row": "page: App page",
+   "globs": [
+    "apps/console/src/app/integrations/apps/**"
+   ],
+   "usecases": [
+    "uc-394",
+    "uc-396",
+    "uc-588",
+    "uc-590",
+    "uc-609",
+    "uc-615",
+    "uc-617",
+    "uc-618",
+    "uc-703",
+    "uc-707"
+   ]
+  },
+  {
+   "row": "page: Secrets",
+   "globs": [
+    "apps/console/src/app/integrations/credentials/**",
+    "apps/console/src/app/settings/security/secrets/**",
+    "apps/console/src/components/secrets/**"
+   ],
+   "usecases": [
+    "uc-013",
+    "uc-107",
+    "uc-110",
+    "uc-626"
+   ]
+  },
+  {
+   "row": "page: Tools",
+   "globs": [
+    "apps/console/src/app/tools/page.tsx",
+    "apps/console/src/app/tools/[id]/page.tsx",
+    "apps/console/src/components/tools/**"
+   ],
+   "usecases": [
+    "uc-010",
+    "uc-012",
+    "uc-015",
+    "uc-052",
+    "uc-053",
+    "uc-054",
+    "uc-059",
+    "uc-611"
+   ]
+  },
+  {
+   "row": "page: Tool operation",
+   "globs": [
+    "apps/console/src/app/tools/[id]/operations/**"
+   ],
+   "usecases": [
+    "uc-090",
+    "uc-101",
+    "uc-015",
+    "uc-627"
+   ]
+  },
+  {
+   "row": "page: Custom tools",
+   "globs": [
+    "apps/console/src/app/tools/custom/**"
+   ],
+   "usecases": [
+    "uc-090",
+    "uc-531",
+    "uc-612"
+   ]
+  },
+  {
+   "row": "page: Tool connections",
+   "globs": [
+    "apps/console/src/app/tools/connections/**"
+   ],
+   "usecases": [
+    "uc-558"
+   ]
+  },
+  {
+   "row": "page: Files",
+   "globs": [
+    "apps/console/src/app/files/**",
+    "apps/console/src/components/files/**"
+   ],
+   "usecases": [
+    "uc-112",
+    "uc-227",
+    "uc-244",
+    "uc-331",
+    "uc-398",
+    "uc-629",
+    "uc-094"
+   ]
+  },
+  {
+   "row": "page: Document types",
+   "globs": [
+    "apps/console/src/app/document-types/**",
+    "apps/console/src/components/document-types/**"
+   ],
+   "usecases": [
+    "uc-243"
+   ]
+  },
+  {
+   "row": "page: Activity",
+   "globs": [
+    "apps/console/src/app/activity/**",
+    "apps/console/src/components/logs/**"
+   ],
+   "usecases": [
+    "uc-141",
+    "uc-508",
+    "uc-403"
+   ]
+  },
+  {
+   "row": "page: Tool calls",
+   "globs": [
+    "apps/console/src/app/tools/calls/**",
+    "apps/console/src/app/logs/tool-calls/**"
+   ],
+   "usecases": [
+    "uc-607",
+    "uc-616"
+   ]
+  },
+  {
+   "row": "page: Audit log",
+   "globs": [
+    "apps/console/src/app/logs/audit/**"
+   ],
+   "usecases": [
+    "uc-025"
+   ]
+  },
+  {
+   "row": "page: Background",
+   "globs": [
+    "apps/console/src/app/logs/background/**"
+   ],
+   "usecases": [
+    "uc-516"
+   ]
+  },
+  {
+   "row": "page: Access members",
+   "globs": [
+    "apps/console/src/app/access/page.tsx",
+    "apps/console/src/app/access/people/**",
+    "apps/console/src/components/access/**"
+   ],
+   "usecases": [
+    "uc-023",
+    "uc-219",
+    "uc-267",
+    "uc-216"
+   ]
+  },
+  {
+   "row": "page: Roles",
+   "globs": [
+    "apps/console/src/app/access/roles/**"
+   ],
+   "usecases": [
+    "uc-118",
+    "uc-267"
+   ]
+  },
+  {
+   "row": "page: Teams",
+   "globs": [
+    "apps/console/src/app/access/teams/**"
+   ],
+   "usecases": [
+    "uc-164"
+   ]
+  },
+  {
+   "row": "page: Tool access",
+   "globs": [
+    "apps/console/src/app/access/tool-access/**"
+   ],
+   "usecases": [
+    "uc-143"
+   ]
+  },
+  {
+   "row": "page: Evals",
+   "globs": [
+    "apps/console/src/app/assurance/**",
+    "apps/console/src/components/assurance/**",
+    "apps/console/src/components/evals/**"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "page: Model inventory",
+   "globs": [
+    "apps/console/src/app/model-risk/**",
+    "apps/console/src/components/model-risk/**"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "page: Wiki",
+   "globs": [
+    "apps/console/src/app/wiki/**",
+    "apps/console/src/components/wiki/**"
+   ],
+   "usecases": [
+    "uc-047"
+   ]
+  },
+  {
+   "row": "page: Settings, workspace general",
+   "globs": [
+    "apps/console/src/app/settings/workspace/page.tsx",
+    "apps/console/src/components/settings/**",
+    "apps/console/src/app/settings/page.tsx"
+   ],
+   "usecases": [
+    "uc-232"
+   ]
+  },
+  {
+   "row": "page: Storage",
+   "globs": [
+    "apps/console/src/app/settings/workspace/storage/**",
+    "apps/console/src/app/settings/storage/**"
+   ],
+   "usecases": [
+    "uc-105",
+    "uc-125"
+   ]
+  },
+  {
+   "row": "page: Model providers",
+   "globs": [
+    "apps/console/src/app/settings/workspace/model-providers/**",
+    "apps/console/src/components/models/**"
+   ],
+   "usecases": [
+    "uc-532",
+    "uc-605"
+   ]
+  },
+  {
+   "row": "page: Usage and cost",
+   "globs": [
+    "apps/console/src/app/settings/workspace/usage/**",
+    "apps/console/src/app/settings/usage/**"
+   ],
+   "usecases": [
+    "uc-152"
+   ]
+  },
+  {
+   "row": "page: Team general",
+   "globs": [
+    "apps/console/src/app/settings/team/page.tsx",
+    "apps/console/src/app/settings/general/**"
+   ],
+   "usecases": [
+    "uc-128",
+    "uc-258"
+   ]
+  },
+  {
+   "row": "page: Team notifications",
+   "globs": [
+    "apps/console/src/app/settings/team/notifications/**",
+    "apps/console/src/app/settings/notifications/**"
+   ],
+   "usecases": [
+    "uc-125"
+   ]
+  },
+  {
+   "row": "page: Team webhooks",
+   "globs": [
+    "apps/console/src/app/settings/team/webhooks/**",
+    "apps/console/src/app/settings/webhooks/**"
+   ],
+   "usecases": [
+    "uc-125",
+    "uc-152"
+   ]
+  },
+  {
+   "row": "page: Team API keys",
+   "globs": [
+    "apps/console/src/app/settings/team/api-keys/**",
+    "apps/console/src/app/settings/api-keys/**"
+   ],
+   "usecases": [
+    "uc-023",
+    "uc-152"
+   ]
+  },
+  {
+   "row": "page: Workspace policies",
+   "globs": [
+    "apps/console/src/app/settings/policies/page.tsx"
+   ],
+   "usecases": [
+    "uc-170"
+   ]
+  },
+  {
+   "row": "page: Publish reviews",
+   "globs": [
+    "apps/console/src/app/settings/policies/publish-reviews/**",
+    "apps/console/src/app/settings/publish-reviews/**"
+   ],
+   "usecases": [
+    "uc-114",
+    "uc-137"
+   ]
+  },
+  {
+   "row": "page: Gate policies",
+   "globs": [
+    "apps/console/src/app/settings/policies/gates/**"
+   ],
+   "usecases": [
+    "uc-125"
+   ]
+  },
+  {
+   "row": "page: Sign-in settings",
+   "globs": [
+    "apps/console/src/app/settings/security/sign-in/**",
+    "apps/console/src/app/settings/sign-in/**",
+    "apps/console/src/app/settings/security/page.tsx"
+   ],
+   "usecases": [
+    "uc-213",
+    "uc-220"
+   ]
+  },
+  {
+   "row": "page: Egress",
+   "globs": [
+    "apps/console/src/app/settings/security/egress/**",
+    "apps/console/src/app/settings/egress/**"
+   ],
+   "usecases": [
+    "uc-110",
+    "uc-012",
+    "uc-710"
+   ]
+  },
+  {
+   "row": "page: My account",
+   "globs": [
+    "apps/console/src/app/settings/account/page.tsx",
+    "apps/console/src/app/account/**"
+   ],
+   "usecases": [
+    "uc-097"
+   ]
+  },
+  {
+   "row": "page: My security",
+   "globs": [
+    "apps/console/src/app/settings/account/security/**"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "page: My memory",
+   "globs": [
+    "apps/console/src/app/settings/account/memory/**",
+    "apps/console/src/components/memory/**"
+   ],
+   "usecases": [
+    "uc-135",
+    "uc-152"
+   ]
+  },
+  {
+   "row": "page: My connections",
+   "globs": [
+    "apps/console/src/app/settings/account/connections/**"
+   ],
+   "usecases": [
+    "uc-558",
+    "uc-607"
+   ]
+  },
+  {
+   "row": "page: Dev pages",
+   "globs": [
+    "apps/console/src/app/dev/**"
+   ],
+   "usecases": [
+    "uc-073"
+   ]
+  },
+  {
+   "row": "agent: Create an agent",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/routers/agents.py",
+    "services/agents-service/src/ops_agents/api/agent_registry.py",
+    "services/agents-service/src/ops_agents/store/agent_registry.py"
+   ],
+   "usecases": [
+    "uc-018",
+    "uc-028",
+    "uc-217"
+   ]
+  },
+  {
+   "row": "agent: Edit and version",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/agent_registry.py",
+    "services/agents-service/src/ops_agents/store/agent_registry.py"
+   ],
+   "usecases": [
+    "uc-018",
+    "uc-701"
+   ]
+  },
+  {
+   "row": "agent: Publish and review",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/publish_reviews.py",
+    "services/agents-service/src/ops_agents/api/publish_policy.py",
+    "services/agents-service/src/ops_agents/api/routers/publish_requests.py",
+    "services/agents-service/src/ops_agents/api/deployment_reviews.py"
+   ],
+   "usecases": [
+    "uc-018",
+    "uc-114",
+    "uc-218",
+    "uc-137"
+   ]
+  },
+  {
+   "row": "agent: Limits callers override within",
+   "globs": [
+    "services/agents-service/src/ops_agents/activities/agent_limits.py",
+    "services/agents-service/src/ops_agents/activities/overrides.py"
+   ],
+   "usecases": [
+    "uc-088",
+    "uc-091"
+   ]
+  },
+  {
+   "row": "agent: Tools and grants",
+   "globs": [
+    "services/agents-service/src/ops_agents/activities/tools.py",
+    "services/agents-service/src/ops_agents/activities/tool_directory.py",
+    "services/agents-service/src/ops_agents/activities/catalog.py",
+    "services/agents-service/src/ops_agents/api/tool_access.py",
+    "services/agents-service/src/ops_agents/api/tool_access_reviews.py",
+    "services/agents-service/src/ops_agents/api/routers/tool_catalog.py",
+    "services/agents-service/src/ops_agents/api/routers/tool_uses.py",
+    "services/agents-service/src/ops_agents/api/ops_tools.py"
+   ],
+   "usecases": [
+    "uc-048",
+    "uc-056",
+    "uc-084",
+    "uc-610",
+    "uc-055",
+    "uc-086"
+   ]
+  },
+  {
+   "row": "agent: Knowledge",
+   "globs": [
+    "services/agents-service/src/ops_agents/activities/knowledge.py",
+    "services/agents-service/src/ops_agents/api/routers/knowledge_usage.py"
+   ],
+   "usecases": [
+    "uc-001",
+    "uc-075",
+    "uc-078",
+    "uc-079",
+    "uc-080",
+    "uc-619",
+    "uc-613"
+   ]
+  },
+  {
+   "row": "agent: Guardrails",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/guardrails.py",
+    "services/agents-service/src/ops_agents/api/routers/guardrails.py",
+    "services/agents-service/src/ops_agents/store/guardrails.py"
+   ],
+   "usecases": [
+    "uc-085",
+    "uc-229"
+   ]
+  },
+  {
+   "row": "agent: Masking personal data",
+   "globs": [
+    "packages/ops_pii/**"
+   ],
+   "usecases": [
+    "uc-265"
+   ]
+  },
+  {
+   "row": "agent: Memory",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/memory*.py",
+    "services/agents-service/src/ops_agents/api/routers/memories.py",
+    "services/agents-service/src/ops_agents/store/memories.py"
+   ],
+   "usecases": [
+    "uc-134",
+    "uc-135",
+    "uc-561"
+   ]
+  },
+  {
+   "row": "agent: Chat",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/chat_*.py",
+    "services/agents-service/src/ops_agents/api/routers/chat*.py",
+    "services/agents-service/src/ops_agents/api/routers/team_assistant.py",
+    "services/agents-service/src/ops_agents/api/routing.py",
+    "services/agents-service/src/ops_agents/api/routers/routing.py",
+    "services/agents-service/src/ops_agents/store/chat_search.py",
+    "services/agents-service/src/ops_agents/graphs/agent_wrapper.py",
+    "packages/ops_agent_kernel/**",
+    "packages/ops_checkpointer/**"
+   ],
+   "usecases": [
+    "uc-001",
+    "uc-018",
+    "uc-087",
+    "uc-128",
+    "uc-108",
+    "uc-566"
+   ]
+  },
+  {
+   "row": "agent: Chat attachments",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/chat_attachments.py",
+    "services/agents-service/src/ops_agents/activities/attachments.py"
+   ],
+   "usecases": [
+    "uc-091",
+    "uc-620",
+    "uc-673"
+   ]
+  },
+  {
+   "row": "agent: Chat privacy",
+   "globs": [
+    "services/agents-service/src/ops_agents/store/tenancy.py"
+   ],
+   "usecases": [
+    "uc-058",
+    "uc-526"
+   ]
+  },
+  {
+   "row": "agent: Test panel",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/agent_test.py"
+   ],
+   "usecases": [
+    "uc-133",
+    "uc-247",
+    "uc-253"
+   ]
+  },
+  {
+   "row": "agent: Channels and embeds",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/routers/channel*.py",
+    "services/agents-service/src/ops_agents/api/channels/**",
+    "services/agents-service/src/ops_agents/api/widget*.py",
+    "services/agents-service/src/ops_agents/api/routers/widget*.py",
+    "services/agents-service/src/ops_agents/store/widget*.py",
+    "services/agents-service/src/ops_agents/store/channel*.py",
+    "apps/embed/**"
+   ],
+   "usecases": [
+    "uc-109",
+    "uc-116",
+    "uc-117",
+    "uc-119",
+    "uc-130",
+    "uc-136"
+   ]
+  },
+  {
+   "row": "agent: Run history",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/usage.py",
+    "services/agents-service/src/ops_agents/api/metering.py",
+    "services/agents-service/src/ops_agents/store/usage.py",
+    "services/agents-service/src/ops_agents/store/model_calls.py",
+    "services/agents-service/src/ops_agents/api/model_ledger.py"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "agent: Approvals in chat",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/approval_renewal.py",
+    "services/agents-service/src/ops_agents/api/routers/step_up.py",
+    "services/agents-service/src/ops_agents/api/hitl_facade.py"
+   ],
+   "usecases": [
+    "uc-002",
+    "uc-027",
+    "uc-049",
+    "uc-057",
+    "uc-072"
+   ]
+  },
+  {
+   "row": "agent: Acting for a person",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/acting_for.py",
+    "services/agents-service/src/ops_agents/api/run_person.py",
+    "services/agents-service/src/ops_agents/api/account_names.py",
+    "services/platform-service/src/ops_platform/acting_for.py"
+   ],
+   "usecases": [
+    "uc-558",
+    "uc-695",
+    "uc-696",
+    "uc-697",
+    "uc-704",
+    "uc-708",
+    "uc-709"
+   ]
+  },
+  {
+   "row": "agent: Models",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/model_aliases.py",
+    "services/agents-service/src/ops_agents/api/routers/model_alias_catalog.py",
+    "services/models-service/**"
+   ],
+   "usecases": [
+    "uc-028",
+    "uc-060",
+    "uc-532",
+    "uc-605",
+    "uc-720"
+   ]
+  },
+  {
+   "row": "agent: Installed plugin agents",
+   "globs": [
+    "services/agents-service/src/ops_agents/store/template_copies.py",
+    "services/agents-service/src/ops_agents/api/routers/templates.py"
+   ],
+   "usecases": [
+    "uc-590",
+    "uc-621",
+    "uc-622"
+   ]
+  },
+  {
+   "row": "workflow: Create on the canvas",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/workflow_registry.py",
+    "services/agents-service/src/ops_agents/store/workflow_registry.py",
+    "services/agents-service/src/ops_agents/api/routers/workflows.py"
+   ],
+   "usecases": [
+    "uc-121",
+    "uc-122",
+    "uc-486",
+    "uc-092"
+   ]
+  },
+  {
+   "row": "workflow: Create from JSON or a description",
+   "globs": [
+    "packages/ops_engine/src/ops_engine/definition.py",
+    "packages/ops_engine/src/ops_engine/compiler.py"
+   ],
+   "usecases": [
+    "uc-019",
+    "uc-568",
+    "uc-623"
+   ]
+  },
+  {
+   "row": "workflow: Step kinds: tool, agent and send",
+   "globs": [
+    "packages/ops_engine/src/ops_engine/node_types.py",
+    "packages/ops_engine/src/ops_engine/ports.py",
+    "packages/ops_engine/src/ops_engine/shapes.py",
+    "services/agents-service/src/ops_agents/api/step_shapes.py"
+   ],
+   "usecases": [
+    "uc-081",
+    "uc-084",
+    "uc-200",
+    "uc-230",
+    "uc-397"
+   ]
+  },
+  {
+   "row": "workflow: Step kinds: AI steps",
+   "globs": [
+    "packages/ops_engine/src/ops_engine/ai_steps.py",
+    "services/agents-service/src/ops_agents/api/ai_steps_gate.py",
+    "services/agents-service/src/ops_agents/api/routers/ai_steps.py"
+   ],
+   "usecases": [
+    "uc-258",
+    "uc-259",
+    "uc-260",
+    "uc-261",
+    "uc-262"
+   ]
+  },
+  {
+   "row": "workflow: Step kinds: Calculate, Join, Wait, Start workflow",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/child_runs.py",
+    "services/agents-service/src/ops_agents/api/timers.py",
+    "services/agents-service/src/ops_agents/api/timer_port.py",
+    "services/agents-service/src/ops_agents/store/timers.py"
+   ],
+   "usecases": [
+    "uc-004",
+    "uc-231",
+    "uc-400",
+    "uc-402",
+    "uc-403",
+    "uc-209",
+    "uc-525"
+   ]
+  },
+  {
+   "row": "workflow: Step kinds: document read",
+   "globs": [
+    "packages/ops_engine/src/ops_engine/document_types.py",
+    "services/agents-service/src/ops_agents/api/engine_documents.py",
+    "services/documents-service/**",
+    "packages/ops_extract/**"
+   ],
+   "usecases": [
+    "uc-124",
+    "uc-244",
+    "uc-525",
+    "uc-672",
+    "uc-249"
+   ]
+  },
+  {
+   "row": "workflow: Step output mapping",
+   "globs": [
+    "packages/ops_engine/src/ops_engine/shapes.py"
+   ],
+   "usecases": [
+    "uc-401"
+   ]
+  },
+  {
+   "row": "workflow: Triggers: email received",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/email_trigger.py",
+    "services/agents-service/src/ops_agents/api/mailbox_gateway.py",
+    "services/agents-service/src/ops_agents/api/routers/mailboxes.py",
+    "services/agents-service/src/ops_agents/store/mailboxes.py",
+    "services/agents-service/src/ops_agents/store/trigger_events.py",
+    "services/agents-service/src/ops_agents/store/poll_cursors.py",
+    "packages/ops_email/**",
+    "services/tools-service/src/ops_tools/mailboxes.py",
+    "services/tools-service/src/ops_tools/graph_mailbox.py"
+   ],
+   "usecases": [
+    "uc-150",
+    "uc-151",
+    "uc-192",
+    "uc-199",
+    "uc-226",
+    "uc-210",
+    "uc-223",
+    "uc-246"
+   ]
+  },
+  {
+   "row": "workflow: Triggers: start by hand",
+   "globs": [
+    "packages/ops_engine/src/ops_engine/starts.py",
+    "services/agents-service/src/ops_agents/api/run_starts.py"
+   ],
+   "usecases": [
+    "uc-233",
+    "uc-445",
+    "uc-466",
+    "uc-228"
+   ]
+  },
+  {
+   "row": "workflow: Triggers: events and API",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/event_workflows.py",
+    "services/agents-service/src/ops_agents/api/routers/events.py",
+    "services/agents-service/src/ops_agents/store/events.py",
+    "services/agents-service/src/ops_agents/api/service_events.py"
+   ],
+   "usecases": [
+    "uc-003",
+    "uc-020"
+   ]
+  },
+  {
+   "row": "workflow: Triggers: schedules",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/routers/timers.py"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "workflow: Forms",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/routers/forms.py",
+    "services/agents-service/src/ops_agents/store/form_links.py"
+   ],
+   "usecases": [
+    "uc-568"
+   ]
+  },
+  {
+   "row": "workflow: Batches",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/batches.py",
+    "services/agents-service/src/ops_agents/api/routers/batches.py",
+    "services/agents-service/src/ops_agents/store/batches.py"
+   ],
+   "usecases": [
+    "uc-568"
+   ]
+  },
+  {
+   "row": "workflow: Human tasks",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/routers/tasks.py",
+    "services/agents-service/src/ops_agents/api/routers/task_types.py",
+    "services/agents-service/src/ops_agents/api/task_*.py",
+    "services/agents-service/src/ops_agents/api/tenant_tasks.py",
+    "services/agents-service/src/ops_agents/api/legacy_tasks.py",
+    "services/agents-service/src/ops_agents/store/task_*.py",
+    "services/agents-service/src/ops_agents/store/review_assignments.py",
+    "services/agents-service/src/ops_agents/task_types.py",
+    "services/hitl-service/**"
+   ],
+   "usecases": [
+    "uc-224",
+    "uc-225",
+    "uc-234",
+    "uc-254",
+    "uc-263",
+    "uc-460"
+   ]
+  },
+  {
+   "row": "workflow: Approvals",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/engine_reviews.py",
+    "services/agents-service/src/ops_agents/api/routers/reviews.py",
+    "services/agents-service/src/ops_agents/store/reviews.py",
+    "services/agents-service/src/ops_agents/api/review_*.py",
+    "services/agents-service/src/ops_agents/graphs/sla.py"
+   ],
+   "usecases": [
+    "uc-008",
+    "uc-009",
+    "uc-006",
+    "uc-041",
+    "uc-049",
+    "uc-053",
+    "uc-248"
+   ]
+  },
+  {
+   "row": "workflow: Retries and failure",
+   "globs": [
+    "packages/ops_engine/src/ops_engine/worker.py",
+    "packages/ops_engine/src/ops_engine/store/**",
+    "packages/ops_engine/src/ops_engine/journal.py",
+    "services/agents-service/src/ops_agents/api/worker.py",
+    "services/agents-service/src/ops_agents/api/sweeper.py",
+    "services/agents-service/src/ops_agents/api/engine_resume.py",
+    "services/agents-service/src/ops_agents/api/routers/run_resume.py",
+    "services/agents-service/src/ops_agents/api/fencing.py",
+    "services/agents-service/src/ops_agents/store/leases.py"
+   ],
+   "usecases": [
+    "uc-005",
+    "uc-081",
+    "uc-567",
+    "uc-397"
+   ]
+  },
+  {
+   "row": "workflow: Versions and publish",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/engine_lifecycle.py",
+    "services/agents-service/src/ops_agents/api/routers/engine.py",
+    "services/agents-service/src/ops_agents/api/engine_host.py"
+   ],
+   "usecases": [
+    "uc-019",
+    "uc-092",
+    "uc-252"
+   ]
+  },
+  {
+   "row": "workflow: Run page",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/run_story.py",
+    "services/agents-service/src/ops_agents/api/runs.py",
+    "services/agents-service/src/ops_agents/api/engine_runs.py"
+   ],
+   "usecases": [
+    "uc-115",
+    "uc-477",
+    "uc-508"
+   ]
+  },
+  {
+   "row": "workflow: Cases",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/case_*.py",
+    "services/agents-service/src/ops_agents/api/engine_cases.py",
+    "services/agents-service/src/ops_agents/api/routers/case*.py",
+    "services/agents-service/src/ops_agents/store/case*.py",
+    "services/agents-service/src/ops_agents/case_wording.py",
+    "services/agents-service/src/ops_agents/case_fields.py"
+   ],
+   "usecases": [
+    "uc-139",
+    "uc-210",
+    "uc-251",
+    "uc-500"
+   ]
+  },
+  {
+   "row": "workflow: Sharing",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/routers/graph_list.py",
+    "services/agents-service/src/ops_agents/api/routers/graphs.py",
+    "services/agents-service/src/ops_agents/store/graphs.py"
+   ],
+   "usecases": [
+    "uc-084"
+   ]
+  },
+  {
+   "row": "service: Tool registry and executor (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/executor.py",
+    "services/tools-service/src/ops_tools/registry.py",
+    "services/tools-service/src/ops_tools/tools.py",
+    "services/tools-service/src/ops_tools/callers.py",
+    "services/tools-service/src/ops_tools/gateway_calls.py",
+    "services/tools-service/src/ops_tools/store/calls.py",
+    "services/tools-service/src/ops_tools/limits.py",
+    "services/tools-service/src/ops_tools/store/rate_windows.py"
+   ],
+   "usecases": [
+    "uc-007",
+    "uc-011",
+    "uc-038",
+    "uc-042",
+    "uc-616",
+    "uc-617"
+   ]
+  },
+  {
+   "row": "service: Connection sign-in kinds (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/connections/**",
+    "services/tools-service/src/ops_tools/auth/**",
+    "services/tools-service/src/ops_tools/store/connections.py",
+    "services/tools-service/src/ops_tools/tokens.py",
+    "services/tools-service/src/ops_tools/header_keys.py"
+   ],
+   "usecases": [
+    "uc-390",
+    "uc-391",
+    "uc-392",
+    "uc-393",
+    "uc-395",
+    "uc-583"
+   ]
+  },
+  {
+   "row": "service: Several accounts per app (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/apps.py",
+    "services/tools-service/src/ops_tools/app_states.py",
+    "services/tools-service/src/ops_tools/environments.py"
+   ],
+   "usecases": [
+    "uc-618",
+    "uc-691",
+    "uc-692",
+    "uc-693",
+    "uc-694",
+    "uc-698",
+    "uc-699",
+    "uc-700",
+    "uc-705"
+   ]
+  },
+  {
+   "row": "service: Plugins (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/plugins/**",
+    "services/tools-service/src/ops_tools/store/plugin_bindings.py",
+    "packages/ops_plugin_sdk/**",
+    "plugins/**"
+   ],
+   "usecases": [
+    "uc-564",
+    "uc-581",
+    "uc-584",
+    "uc-588",
+    "uc-609",
+    "uc-612",
+    "uc-668",
+    "uc-706"
+   ]
+  },
+  {
+   "row": "service: Tool modules and reviews (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/modules/**",
+    "services/tools-service/src/ops_tools/store/modules.py",
+    "services/tools-service/src/ops_tools/store/review_handoffs.py",
+    "services/tools-service/src/ops_tools/mcp.py"
+   ],
+   "usecases": [
+    "uc-010",
+    "uc-012",
+    "uc-040",
+    "uc-059"
+   ]
+  },
+  {
+   "row": "service: MCP server (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/mcp_server.py"
+   ],
+   "usecases": [
+    "uc-410"
+   ]
+  },
+  {
+   "row": "service: Sending policy and egress (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/send_*.py",
+    "services/tools-service/src/ops_tools/store/send_policies.py",
+    "services/tools-service/src/ops_tools/egress*.py",
+    "services/tools-service/src/ops_tools/store/egress.py",
+    "services/tools-service/src/ops_tools/held_hosts.py"
+   ],
+   "usecases": [
+    "uc-266",
+    "uc-012"
+   ]
+  },
+  {
+   "row": "service: Secrets (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/secrets/**",
+    "services/tools-service/src/ops_tools/store/secrets.py"
+   ],
+   "usecases": [
+    "uc-013",
+    "uc-107"
+   ]
+  },
+  {
+   "row": "service: Mocks and expressions (tools-service)",
+   "globs": [
+    "services/tools-service/src/ops_tools/mock*.py",
+    "services/tools-service/src/ops_tools/store/mocks.py",
+    "services/tools-service/src/ops_tools/expression*.py",
+    "services/tools-service/src/ops_tools/transform.py"
+   ],
+   "usecases": [
+    "uc-101",
+    "uc-397"
+   ]
+  },
+  {
+   "row": "service: Code runner (runner-service)",
+   "globs": [
+    "services/runner-service/**"
+   ],
+   "usecases": [
+    "uc-531"
+   ]
+  },
+  {
+   "row": "service: Sign-in and identity (platform-service)",
+   "globs": [
+    "services/platform-service/src/ops_platform/auth.py",
+    "services/platform-service/src/ops_platform/sso.py",
+    "services/platform-service/src/ops_platform/passwords.py",
+    "services/platform-service/src/ops_platform/signin_*.py",
+    "services/platform-service/src/ops_platform/keys.py",
+    "packages/ops_identity/**",
+    "packages/ops_signin/**"
+   ],
+   "usecases": [
+    "uc-021",
+    "uc-026",
+    "uc-160",
+    "uc-161",
+    "uc-162",
+    "uc-163",
+    "uc-214",
+    "uc-215",
+    "uc-614"
+   ]
+  },
+  {
+   "row": "service: Teams, roles and policies (platform-service)",
+   "globs": [
+    "services/platform-service/src/ops_platform/teams.py",
+    "services/platform-service/src/ops_platform/team_admin.py",
+    "services/platform-service/src/ops_platform/roles.py",
+    "services/platform-service/src/ops_platform/policies.py",
+    "services/platform-service/src/ops_platform/access_check.py",
+    "services/platform-service/src/ops_platform/tenants.py",
+    "services/platform-service/src/ops_platform/workspace_lifecycle.py",
+    "packages/ops_access/**",
+    "packages/ops_policy/**"
+   ],
+   "usecases": [
+    "uc-118",
+    "uc-164",
+    "uc-212",
+    "uc-216",
+    "uc-219",
+    "uc-220"
+   ]
+  },
+  {
+   "row": "service: API keys (platform-service)",
+   "globs": [
+    "services/platform-service/src/ops_platform/api_keys.py"
+   ],
+   "usecases": [
+    "uc-410"
+   ]
+  },
+  {
+   "row": "service: Audit log (platform-service)",
+   "globs": [
+    "services/platform-service/src/ops_platform/audit_log.py"
+   ],
+   "usecases": [
+    "uc-025"
+   ]
+  },
+  {
+   "row": "service: Team usage (platform-service, agents-service)",
+   "globs": [
+    "services/platform-service/src/ops_platform/team_usage.py",
+    "services/agents-service/src/ops_agents/api/routers/team_usage.py",
+    "packages/ops_metering/**"
+   ],
+   "usecases": [],
+   "gap": "no use case yet"
+  },
+  {
+   "row": "service: Files (files-service)",
+   "globs": [
+    "services/files-service/**",
+    "packages/ops_files_client/**",
+    "packages/ops_storage/**"
+   ],
+   "usecases": [
+    "uc-093",
+    "uc-094",
+    "uc-331",
+    "uc-613"
+   ]
+  },
+  {
+   "row": "service: Documents (documents-service)",
+   "globs": [
+    "packages/ops_documents_client/**"
+   ],
+   "usecases": [
+    "uc-243",
+    "uc-672"
+   ]
+  },
+  {
+   "row": "service: Knowledge (kb-service)",
+   "globs": [
+    "services/kb-service/**",
+    "packages/ops_ingest/**"
+   ],
+   "usecases": [
+    "uc-080",
+    "uc-399",
+    "uc-675",
+    "uc-676",
+    "uc-677",
+    "uc-678"
+   ]
+  },
+  {
+   "row": "service: Background processes (agents-service)",
+   "globs": [
+    "services/agents-service/src/ops_agents/api/routers/background.py",
+    "services/agents-service/src/ops_agents/store/background.py"
+   ],
+   "usecases": [
+    "uc-516"
+   ]
+  },
+  {
+   "row": "service: Team isolation (all services)",
+   "globs": [
+    "packages/ops_store/**",
+    "packages/ops_service_kit/**"
+   ],
+   "usecases": [
+    "uc-094",
+    "uc-526",
+    "uc-505"
+   ]
+  },
+  {
+   "row": "service: Install and migrations",
+   "globs": [
+    "services/*/migrations/**",
+    "scripts/sample_team.py",
+    "install.sh"
+   ],
+   "usecases": [
+    "uc-563",
+    "uc-565",
+    "uc-111"
+   ]
+  },
+  {
+   "row": "service: SDKs",
+   "globs": [
+    "sdk/**"
+   ],
+   "usecases": [
+    "uc-092",
+    "uc-621",
+    "uc-622",
+    "uc-623",
+    "uc-624",
+    "uc-705"
+   ]
+  }
+ ]
+}

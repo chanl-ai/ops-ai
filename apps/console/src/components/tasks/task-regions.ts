@@ -1,4 +1,4 @@
-import { plural } from '@/lib/format';
+import { plural } from '../../lib/format.ts';
 import type { ActionField, DocumentRead, Review, TaskAction, TypedTask } from '@/lib/types/domain';
 import type { KindNode } from '@/lib/types/widgets';
 
@@ -247,10 +247,44 @@ function readQuestion(read: DocumentRead): string {
   return keys ? `Check ${plural(keys, 'key field')} read from ${file}` : doubtful ? `Check ${plural(doubtful, 'field')} read from ${file}` : `Confirm the ${plural(read.schema.length * per, 'field')} read from ${file}`;
 }
 
+const words = (key: string) => {
+  const s = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim().toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+const shown = (v: unknown): string =>
+  v === null || v === undefined ? '' : Array.isArray(v) ? v.map(shown).filter(Boolean).join(', ') : typeof v === 'object' ? Object.entries(v as Data).map(([k, x]) => `${words(k)}: ${shown(x)}`).join(' · ') : String(v);
+
+/**
+ * A workflow step's proposal may carry a list of disagreements; it is drawn here, once, for every kind of task. A list of disagreements ({field, values: [{source, value}]}) is one row per field with
+ * every source's value, so a reviewer sees both sides. A proposal that is a sentence is the task's own words and is not repeated.
+ */
+export function proposalNodes(proposal: string | null | undefined): KindNode[] {
+  if (!proposal || !/^\s*[[{]/.test(proposal)) return [];
+  let data: unknown;
+  try {
+    data = JSON.parse(proposal);
+  } catch {
+    return [];
+  }
+  if (!data || typeof data !== 'object') return [];
+  const nodes: KindNode[] = [];
+  for (const [key, value] of Object.entries(Array.isArray(data) ? { items: data } : (data as Data))) {
+    // Only the disagreement shape is drawn; any other JSON is a step summary the task already explains in its own regions.
+    const rows = Array.isArray(value) && value.length && value.every((x) => x && typeof x === 'object' && !Array.isArray(x) && Array.isArray((x as Data).values))
+      ? value.map((x) => ({ label: words(text((x as Data).field) || 'value'), value: ((x as Data).values as Data[]).map((v) => `${text(v.source) ? `${words(text(v.source))}: ` : ''}${shown(v.value)}`).join(' · ') }))
+      : [];
+    const fields = rows.filter((f) => f.value);
+    if (fields.length) nodes.push({ type: 'entity', title: words(key), fields });
+  }
+  return nodes;
+}
+
 /** Today's review as the page's regions. */
 export function taskView(r: Review): TaskView {
   const { details, technical } = detailsOf(r);
-  return { ...regionsOf(r, details), technical };
+  const view = regionsOf(r, details);
+  // A task with no regions of its own (legacy) draws the review's body, which already shows the proposal.
+  return { ...view, decide: view.legacy ? view.decide : [...proposalNodes(r.proposal), ...view.decide], technical };
 }
 
 function regionsOf(r: Review, details: KindNode[]): TaskView {

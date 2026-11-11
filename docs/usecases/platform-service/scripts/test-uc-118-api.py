@@ -60,11 +60,11 @@ with platform() as (api, _internal):
         names(mine.get("access.manage")) == ["Admin"],
         mine.get("access.manage"),
     )
-    # A team admin holds every cell (platform migration 0016); egress is a Security-team-only cell, so Priya's
-    # holds only in the Security team, where she is not.
+    # A team admin holds every cell (platform migration 0016); egress is a Security-team action, decided in the
+    # Security team whatever team a request acts in, so Priya's Operations list does not carry it.
     check(
-        "Priya changes egress only in the Security team, where she is not",
-        (mine.get("secrets_egress.manage") or {}).get("securityTeamOnly") is True,
+        "Priya's Operations list has no egress cell, as she is not in the Security team",
+        mine.get("secrets_egress.manage") is None,
         mine.get("secrets_egress.manage"),
     )
 
@@ -81,10 +81,8 @@ with platform() as (api, _internal):
     james = held(data(r), "team_ops") if r.status_code == 200 else {}
     check(
         # A builder changes any of the team's knowledge (platform migration 0009), not only their own.
-        "James, a builder, creates agents, changes the team's knowledge and decides nothing",
-        "agents.create" in james
-        and james.get("knowledge.edit", {}).get("scope") == "all"
-        and "agents.decide" not in james,
+        "James, a builder, creates agents, changes the team's knowledge and decides on agents",
+        "agents.create" in james and james.get("knowledge.edit", {}).get("scope") == "all" and "agents.decide" in james,
         r.text[:200],
     )
     r = api.get("/v1/people/usr_security_admin/permissions", headers=priya)

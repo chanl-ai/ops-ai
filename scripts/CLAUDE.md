@@ -23,6 +23,7 @@ scripts are reached through a make target; run them that way so ports and env ma
 | Workflow builder skill | `wf_builder.py`, `wf_builder_examples.py` | the `/wf-builder` skill (`docs/guide/skills/`) |
 | Setup and dependencies | `setup/` (`make setup`), `deps_doctor.py`, `deps_relock.sh`, `deps_audit.py`, `deps_smoke.sh`, `install_via_mirror.sh` | `make setup`, `make deps-*`, `make qa-mirror`, `make install-mirror` |
 | Docs builds | `docs/build_guide.mjs`, `docs/mermaid_svg.mjs`, `docs/screens.mjs` | run by hand with `node` |
+| Agent scripts | `agents/review_context.py` (the reviewer's bundle), `agents/test_audit.py` (mutation on changed lines, tests that cannot fail, failure modes with no test), `agents/ui_walk.mjs` (routes as each role at each width), `agents/seed_canaries.py` (planted bugs and the finder score), `agents/project_profile.py` and `.mjs` (the profile reader) | `make agent-*` (`make/agents.mk`), `CONTRIBUTING.md` "Agents and their scripts" |
 | Proofs and probes | `disk_proof.sh`, `skills_proof.sh` (`make skills-proof`), `team_isolation_probe.py`, `perf/time_routes.py`, `proof-*.sh`, `release-tag.sh` (`make release-tag`), `qa.sh` (asks a QA runner for a verdict on a commit; needs one set up through `QA_DIR`) | by hand or their make target |
 
 ## Tests
@@ -35,6 +36,7 @@ scripts are reached through a make target; run them that way so ports and env ma
 | One script's tests | `uv run pytest -q scripts/tests/test_commit_paths.py` |
 | All of them | `uv run pytest -q scripts/tests` |
 | The pre-commit hook end to end, in a throwaway clone | `bash scripts/tests/test-verify-staged.sh` |
+| The agent scripts' own cases | `make agent-scripts-test` (each script's `--self-test`; the audit's plants faults and watches them survive once their test is removed) |
 | The JS gates' own cases | `node scripts/commit-message-check.mjs --self-test`, `node scripts/changelog-check.mjs --self-test`, `node scripts/check-public-paths.mjs --self-test`, `python3 scripts/git-rules.py --self-test` |
 | Lint and format | `uv run ruff check scripts` and `uv run ruff format --check scripts` |
 

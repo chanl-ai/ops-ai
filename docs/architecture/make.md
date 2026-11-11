@@ -26,6 +26,10 @@ beside it.
 |---|---|
 | `make up` | Runs the stack from this checkout: migrates, then restarts each service whose process runs another checkout's code or another commit's (`.run/<svc>.rev` records both at start), and starts what is down |
 | `make review BRANCH=<name>` | Fetches the branch, checks it out detached in the review worktree beside the main checkout (`<main checkout>-review`, made on first use, its `.env` copied from the main checkout), installs, then runs `make up` there. Your own checkout and branch stay as they are; it refuses when the review worktree has uncommitted changes. `make up` in your checkout moves the stack back |
+| `make wt BRANCH=<name>` | A preview: a worktree under `../ops-ai-worktrees/<name>` and its own stack on port offset 51000, 52000 or 53000 (console :54016, :55016, :56016), installed from the user-wide pnpm and uv caches. At most three run; a fourth is refused naming them. `make down` in another checkout never touches it |
+| `make wt-list` | Each preview's branch, console URL and age; rewrites a page listing them, `.run/previews.html` by default (`PREVIEW_PAGE=` another path) |
+| `make wt-stop BRANCH=<name>` | Stops that preview by its pids and compose project; its data and worktree stay |
+| `make review-main` | Checks the review worktree out at the latest `origin/main` and restarts the :3016 stack from it (`AUTH=platform OPS_CONSOLE_PORT=3016 make restart`). Restart only: no reset, the database stays. Refuses when the review worktree has uncommitted changes |
 | `make test PKG=<folder>` | One member's tests (`T=` some files), on a throwaway database of its own on the stack's PostgreSQL; with no `PKG`, the suites of what changed since `origin/main` (`scripts/verify-changed.sh`) |
 
 A branch made before this change has the old make files, which refuse to run a stack from a worktree: merge `main`
@@ -48,6 +52,7 @@ into it before reviewing it.
 | `make/usecase.mk` | `usecase-test`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-runner-test` | Calls `scripts/usecase.mjs` (`packages/usecase-runner`); use-case ports and database `OPS_USECASE_*`. Registry and rules: `docs/usecases/README.md` |
 | `make/git.mk` | `commit`, `commit-hunks`, `review` | Committing named files through the hooks, and the review worktree |
 | `make/plugins.mk` | `plugins-sync`, `plugins-bump` | Putting the plugins `deploy/plugins.json` pins into `OPS_PLUGINS_DIR`, and moving the pins |
+| `make/agents.mk` | `agent-review-context`, `agent-test-audit`, `agent-ui-walk`, `agent-canary`, `agent-canary-score`, `agent-scripts-test` | The agent scripts in `scripts/agents/` (`CONTRIBUTING.md` "Agents and their scripts"); every path they use comes from `.claude/project-profile.md` |
 | `make/experiments.mk` | `experiment` | Runs `services/agents-service/experiments/e<n>_*.py` on the scripted model |
 | `make/service-common.mk` | `help`, `stop`, `logs`, `health` | Included by running services' Makefiles: the verbs that act on the `make up` process |
 | `make/service-stub.mk` | the whole verb set | Included by planned services' Makefiles: every verb answers "not started" unless the Makefile defines it (`OWN_VERBS`) |
