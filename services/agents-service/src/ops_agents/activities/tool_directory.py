@@ -56,6 +56,8 @@ class OperationRef:
     asks_first: bool = False
     # The team has a test account of the app, so a test turn's write changes nothing real and never asks.
     test_account: bool = False
+    # False for a tool the team turned off in its app's catalog (ToolsOperations.off_operations).
+    added: bool = True
 
     def grant(self) -> ToolGrant:
         return ToolGrant(
@@ -81,12 +83,21 @@ async def grants_for(directory: ToolDirectory, names: list[str]) -> list[ToolGra
     if not wanted:
         return []
     by_name = {o.name: o for o in await directory.operations()}
+    # A tool the team turned off in its app's catalog still reaches the run, so a call to it is refused with the fix
+    # (gateway TOOL_NOT_ADDED, drawn as a card) instead of the agent not knowing the tool exists.
+    off = {o.name: o for o in await off_operations(directory)}
     # A name the kept list lacks may be a tool published since it was read (the agent was granted it and published
     # moments ago): ask tools-service once more before leaving it out of the turn.
     if any(n not in by_name for n in wanted) and (forget := getattr(directory, "forget", None)) is not None:
         forget()
         by_name = {o.name: o for o in await directory.operations()}
-    return [by_name[n].grant() for n in wanted if n in by_name]
+    return [(by_name.get(n) or off[n]).grant() for n in wanted if n in by_name or n in off]
+
+
+async def off_operations(directory: ToolDirectory) -> list[OperationRef]:
+    """The operations the team turned off in its app's catalog, for a directory that keeps them; none otherwise."""
+    listed = getattr(directory, "off_operations", None)
+    return list(await listed()) if listed is not None else []
 
 
 class ToolsOperations:
@@ -99,6 +110,15 @@ class ToolsOperations:
         self._cache: dict[tuple[str, str | None], tuple[float, list[OperationRef]]] = {}
 
     async def operations(self) -> list[OperationRef]:
+        """The operations agents may be granted and offered: those the team has added."""
+        return [o for o in await self._listed() if o.added]
+
+    async def off_operations(self) -> list[OperationRef]:
+        """The operations the team turned off in its app's catalog: never offered, only handed to a run that holds
+        one, so its call is refused with the fix."""
+        return [o for o in await self._listed() if not o.added]
+
+    async def _listed(self) -> list[OperationRef]:
         key = (current_tenant(), current_team())
         hit = self._cache.get(key)
         if hit is not None and self.clock() - hit[0] < self.ttl_s:
@@ -124,6 +144,7 @@ class ToolsOperations:
                 title=o.get("title"),
                 asks_first=bool(o.get("asksFirst")),
                 test_account=bool(o.get("testAccount")),
+                added=o.get("added") is not False,
             )
             for o in rows
         ]

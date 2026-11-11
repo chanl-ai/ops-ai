@@ -72,6 +72,14 @@ async def test_a_tool_not_added_is_refused_at_the_gateway_in_one_plain_sentence(
     assert not out.ok and out.output["error"]["code"] == "TOOL_NOT_ADDED", out
     said = out.output["error"]["message"]
     assert "Post a message" in said and "Tools tab" in said and "fields_" not in said, said
+    # The chat draws the fix in place from these: Turn on <tool> for someone who manages apps, Ask an admin otherwise.
+    details = out.output["error"]["details"]
+    assert details == {
+        "app": details["app"],
+        "appId": APP,
+        "tool": "fields_post_message",
+        "toolTitle": "Post a message",
+    }
     assert rig.seen and all(not r.url.path.endswith("/messages") for r in rig.seen)
 
 

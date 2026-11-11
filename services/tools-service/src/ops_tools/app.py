@@ -138,6 +138,9 @@ class GrantableOperation(Out):
     # The caller's team has a test account of the app: a test run's write signs in there and changes nothing real, so
     # it never asks (gateway_calls holds no write on a test account either).
     test_account: bool = False
+    # False for a tool the team turned off in its app's catalog: listed so a run can call it and be refused with the
+    # fix (Turn on <tool>, or Ask an admin), never offered to agents to pick.
+    added: bool = True
 
 
 class CallResult(Out):
@@ -358,9 +361,10 @@ def create_gateway_app(
         can(caller, "tools", "view", what="the grantable operations")
         rows = await registry.grantable(caller.tenant_id, team_view(caller))
         if plugins is not None and caller.team_id:
-            # A tool the team has not added from its app's catalog is not offered to its agents.
+            # A tool the team has not added from its app's catalog is listed as not added: agents are not offered it,
+            # and a run that calls it is refused with the fix.
             off = await plugins.tools_off(caller.tenant_id, caller.team_id)
-            rows = [r for r in rows if str(r["name"]) not in off]
+            rows = [r | {"added": False} if str(r["name"]) in off else r for r in rows]
         mods = (
             {str(m["id"]): m for m in await registry.modules.all_teams(caller.tenant_id)}
             if registry.modules and write_approvals is not None and any(r["access"] in WRITES for r in rows)
@@ -387,7 +391,10 @@ def create_gateway_app(
         if write_approvals is not None:
             # Every app asks before changes unless the team's admin switched it off; an unreadable list keeps asking.
             quiet = await write_approvals.change_without_asking(caller.tenant_id, caller.team_id)
-            rows = [r | {"asks_first": r["access"] in WRITES and not of_listed(r, quiet, False)} for r in rows]
+            rows = [
+                r | {"asks_first": r["access"] in WRITES and r.get("added", True) and not of_listed(r, quiet, False)}
+                for r in rows
+            ]
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
             rows = [r | {"test_account": str(r.get("module_id") or "") in tested} for r in rows]
         data = [GrantableOperation.model_validate(r).model_dump(by_alias=True) for r in rows]

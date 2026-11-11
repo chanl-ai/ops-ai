@@ -93,7 +93,8 @@ class Rig:
         given = args or {}
         refused = _before_policy(r, given)
         if refused is not None:
-            return ToolOutcome(False, {"error": {"code": refused[1], "status": refused[0], "message": refused[2]}})
+            error = {"code": refused[1], "status": refused[0], "message": refused[2], "details": refused[3]}
+            return ToolOutcome(False, {"error": error})
         assert r.module is not None and r.operation is not None
         if r.executor == "plugin":
             return await self.plugins.run(r.module, r.operation, given, actor="t", environment="live", acting_for=None)

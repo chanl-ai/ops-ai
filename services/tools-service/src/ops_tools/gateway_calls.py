@@ -143,7 +143,10 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         title = str(cast(dict[str, Any], module.get("tool_titles") or {}).get(op["name"]) or op["name"])
         who = "someone who manages the team's apps"
         said = f"{app}'s {title} is not added to this team; {who} adds it from {app}'s Tools tab."
-        return 403, "TOOL_NOT_ADDED", said, {}
+        # What the chat's card offers in place: Turn on <tool> on the app's Tools tab, or Ask an admin.
+        template = str(module.get("template_id") or "")
+        app_id = template if template.startswith("plugin:") else f"module:{module['id']}"
+        return 403, "TOOL_NOT_ADDED", said, {"app": app, "appId": app_id, "tool": op["name"], "toolTitle": title}
     if module.get("sign_in_needed"):
         # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.

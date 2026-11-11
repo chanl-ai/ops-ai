@@ -399,6 +399,7 @@ class FenceIn(TypedDict, closed=True):
 
 class GrantableOperation(TypedDict, closed=True):
     access: str
+    added: NotRequired[bool]
     approvers: int
     asksFirst: NotRequired[bool]
     description: str
