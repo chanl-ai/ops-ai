@@ -61,6 +61,7 @@ profile's "Commands an agent runs" table names the make targets.
 | One stack per machine: tests and use cases make their own database and services, so they need no stack; never start a second stack; restart or switch the stack only if the workspace allows it | the project's run rules (profile "Console", "Tests") |
 | Open a pull request only when the person who briefed you says so; push the branch | here |
 | Stop processes by pid only; use a headless browser, never a person's own browser | here |
+| Fewer prompts: run git as `git -C <path> ...` and tools with absolute paths, one command per call; never `cd <dir> && ...` chains. New worktrees go under `../ops-ai-worktrees/<branch>` | here |
 | Never print secrets or `.env` files; read single keys by name; never type a live secret into a field | here |
 | Model calls in tests are scripted; real calls are capped by the project's rule | profile "Tests" |
 | An agent that reviews, audits or tests does not change product code; it reports, with file:line | here |
