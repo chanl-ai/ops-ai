@@ -411,6 +411,9 @@ class Manifest(Strict):
     # Sent on every request the plugin makes, a Python tool's too: fixed text or {setting}.
     headers: dict[str, str] = Field(default_factory=dict[str, str])
     tools: list[Tool] = Field(min_length=1)
+    # The answer path where the system reports a failure inside a 200 (Slack's `error`, GraphQL's `errors`): a value
+    # there fails the call in the system's words (answers.py).
+    error_when: str | None = Field(default=None, min_length=1, max_length=200)
     knowledge_sources: list[KnowledgeSource] = Field(default_factory=list[KnowledgeSource])
     templates: list[Template] = Field(default_factory=list[Template])
     display: Display = Field(default_factory=Display)

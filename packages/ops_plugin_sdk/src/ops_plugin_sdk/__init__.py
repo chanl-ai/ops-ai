@@ -10,6 +10,7 @@ from .errors import (
     NotFound,
     PluginError,
     RateLimited,
+    Refused,
     TooLarge,
 )
 from .manifest import Manifest, ManifestError, read
@@ -28,6 +29,7 @@ __all__ = [
     "Plugin",
     "PluginError",
     "RateLimited",
+    "Refused",
     "Response",
     "Settings",
     "TooLarge",
