@@ -51,7 +51,7 @@ MIGRATOR = "ops_migrator"
 # as SQL. Every later revision must render (test_offline.py); an upgrade across one of these is refused by name.
 ONLINE_ONLY = {
     "agents": {"0031_engine_definitions_stage", "0036_widget_name", "0042_skill_published_loading"},
-    "tools": {"tools_0001_gateway", "tools_0020_drop_security_reviews"},
+    "tools": {"tools_0001_gateway", "tools_0020_drop_security_reviews", "tools_0071_account_key"},
     "platform": {"0006_roles", "0013_team_lifecycle", "0017_signin_domain_verification"},
 }
 OFFLINE_URL = "postgresql+asyncpg://offline:offline@localhost:1/offline"
