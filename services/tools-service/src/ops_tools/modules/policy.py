@@ -80,7 +80,9 @@ class WriteApprovals:
         team's, through `effective_answer`. Everything that shows or enforces a wait calls here."""
         team, by_app = levels or await self.levels(tenant_id, team_id)
         app = next((by_app[i] for i in sorted(app_ids(module) if module else ()) if i in by_app), None)
-        mode = {True: "reviewer", False: "none"}.get(setting) if setting is not None else None  # type: ignore[arg-type]
+        # Only a tool that waits is an answer of its own. A stored "runs" cannot be told from the old open default,
+        # so it is no override: the app and the team decide, and a tool-level loosening needs approvalMode.
+        mode = "reviewer" if setting is True else None
         tool = {"access": access, "approvalMode": mode, "reviewerRole": None, "approvers": approvers}
         return effective_answer(tool=tool, app=app, team=team, channel=channel, test_account=test_account)
 

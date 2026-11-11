@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-10",
-  "title": "Tool writes saved since 1 November wait for approval",
-  "description": "Writes that were saved on or after 1 November without needing approval now wait for approval before they run. Each change is recorded, and an admin can still switch a write back.",
-  "tag": "fix"
-}
