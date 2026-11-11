@@ -10,6 +10,8 @@ const SHOTS = process.env.SHOTS_DIR ?? 'docs/plans/ops-ai/test-results/approvals
 mkdirSync(SHOTS, { recursive: true });
 const SAM = 's.adeyemi@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';
+// Wanjiru Kamau: admin of every team. Priya's seeded role is Operations-only, so she cannot change a team's policy.
+const WANJIRU = 'w.kamau@harborpine.example';
 const RUN = Math.random().toString(36).slice(2, 7);
 const WRITE = `close_ticket_${RUN}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -38,7 +40,7 @@ await withUiStack(
     await call('POST', `${tools}/v1/egress/hosts`, S, { value: stack.bank.host, note: 'uc-721' });
     await call('POST', `${tools}/v1/egress/ranges`, S, { value: stack.bank.range, note: 'uc-721' });
     const J = await signedIn(JAMES);
-    const P = await signedIn(PRIYA);
+    const P = await signedIn(WANJIRU, 'team_ops');
     const made = await call('POST', `${tools}/v1/tool-modules/blank`, J, { displayName: `Tickets ${RUN}`, name: `tickets-${RUN}`, type: 'http' });
     const moduleId = made.data?.id;
     await call('POST', `${tools}/v1/tool-modules/${moduleId}/operations`, J, { name: WRITE, description: 'Close a ticket', access: 'write', method: 'POST', url: `https://${stack.bank.host}/v1/accounts/{accountId}/holds` });
