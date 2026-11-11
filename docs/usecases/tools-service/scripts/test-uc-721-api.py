@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from apps_walk import app_path, apps_stack
-from usecase_harness import check, data, finish, service_headers
+from usecase_harness import as_role, check, data, finish, service_headers
 
 APP = "plugin:test.header-key"
 POLICY = "/v1/policies/toolWritesNeedApproval"
@@ -48,7 +48,9 @@ with apps_stack() as w:
     # 4-5. Only a person who manages reviews turns Ask before changes on; then the same write waits for a person.
     viewer = w.kept(w.api.put(POLICY, json={"value": True}, headers=w.who["viewer"]))
     check("4 a viewer cannot turn Ask before changes on (403)", viewer.status_code == 403, viewer.text[:200])
-    admin = w.kept(w.api.put(POLICY, json={"value": True}, headers=w.who["admin"]))
+    # Wanjiru Kamau is the admin of every team (dev-roles.json "platform"); the seed's "admin" is an Operations-only role.
+    team_admin = as_role(w.api, "platform", "team_ops")
+    admin = w.kept(w.api.put(POLICY, json={"value": True}, headers=team_admin))
     held = w.call("header_key_close_record", args={"id": "rec-1042"})
     check(
         "5 the team admin turns it on and the same write no longer runs without approval",
@@ -56,10 +58,11 @@ with apps_stack() as w:
         (admin.text[:200], held.status_code, held.text[:300]),
     )
     # Back off, so the next step meets only the removal.
-    w.kept(w.api.put(POLICY, json={"value": False}, headers=w.who["admin"]))
+    w.kept(w.api.put(POLICY, json={"value": False}, headers=team_admin))
 
-    # 6. A tool turned off says why and where to turn it on.
-    removed = w.kept(w.gw.delete(f"{app_path(APP)}/tools/header_key_close_record", headers=w.who["admin"]))
+    # 6. A tool turned off says why and where to turn it on. A policy change re-issues permissions, so sign in again.
+    team_admin = as_role(w.api, "platform", "team_ops")
+    removed = w.kept(w.gw.delete(f"{app_path(APP)}/tools/header_key_close_record", headers=team_admin))
     off = w.call("header_key_close_record", args={"id": "rec-1042"})
     # Refused before any request leaves, as the run's outcome or the route's error, naming what is off and where.
     body = off.json() or {}
@@ -70,7 +73,7 @@ with apps_stack() as w:
         error.get("code") == "TOOL_NOT_ADDED"
         and details.get("appId") == APP
         and details.get("toolTitle") == "Close a record",
-        (removed.status_code, off.status_code, off.text[:400]),
+        (removed.status_code, removed.text[:300], off.status_code, off.text[:400]),
     )
 
 finish()
