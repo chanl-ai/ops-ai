@@ -85,7 +85,7 @@ await withUiStack(
         const seen = {};
         // Priya: admin of Operations. Wanjiru: admin of every team. James: a builder. Maya: a reviewer. Ravi: a viewer.
         const want = {
-          [PRIYA]: { has: ['Policies', 'Reviews', 'Activity', 'Tool calls', 'Audit log', 'Evals', 'Model inventory', 'Access', 'Roles', 'Tool access', 'Settings'], lacks: [] },
+          [PRIYA]: { has: ['Policies', 'Reviews', 'Activity', 'Tool calls', 'Audit log', 'Evals', 'Model inventory', 'Access', 'Roles', 'Tool access', 'Settings'], lacks: ['Background'] },
           // Background needs an admin of every team: Priya is admin of Operations only, Wanjiru of all.
           [WANJIRU]: { has: ['Policies', 'Reviews', 'Activity', 'Tool calls', 'Audit log', 'Background', 'Evals', 'Model inventory', 'Access', 'Roles', 'Tool access', 'Settings'], lacks: [] },
           [JAMES]: { has: ['Reviews', 'Activity', 'Tool calls', 'Audit log', 'Evals', 'Access'], lacks: ['Policies', 'Settings', 'Background'] },

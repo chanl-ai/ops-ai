@@ -116,7 +116,7 @@ export const NAV: NavGroup[] = [
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase, needs: cell('knowledge', 'view'), also: ['/sources', '/wiki'] },
       // Connectors, Team setup (the catalog); an app's auth configs are on its own page.
-      { title: CONNECTORS, url: '/integrations', icon: IconPlugConnected, needs: cell('connections', 'view'), views: CONNECTOR_VIEWS, also: ['/connect', '/tools/connections'] },
+      { title: CONNECTORS, url: '/integrations', icon: IconPlugConnected, needs: cell('connections', 'view'), views: CONNECTOR_VIEWS, also: ['/tools/connections'] },
       { title: 'Secrets', url: '/integrations/credentials', icon: IconKey, needs: cell('secrets_egress', 'view') },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports).
       { title: 'Files', url: '/files', icon: IconFolder, needs: cell('files', 'view') },

@@ -249,7 +249,7 @@ await withUiStack(
             // A normal click: Playwright refuses when another element (an invisible group label) would take it.
             await page.getByTestId('sidebar-new-chat').click({ timeout: 5000 });
             await page.waitForURL((u) => u.pathname === '/chat', { timeout: 15_000 });
-            // New chat shows the area she was last in (Build, from step 5); Human Tasks is on Work.
+            // New chat keeps Work (she starts it from a Work page); the Work click is a no-op and Human Tasks is on Work.
             await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').filter({ hasText: 'Work' }).first().click({ timeout: 5000 });
             await page.locator('[data-sidebar=content] a[href="/reviews"]').first().click({ timeout: 5000 });
             await page.waitForURL((u) => u.pathname === '/reviews', { timeout: 15_000 });
