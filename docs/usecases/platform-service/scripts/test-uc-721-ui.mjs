@@ -31,12 +31,13 @@ await withUiStack(
       await page.goto(`${consoleUrl}/settings/team/api-keys`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
 
       // 7. The dialog: tools are picked, and an expiry is not optional.
-      await page.getByRole('button', { name: 'Create key' }).first().click({ timeout: 90_000 });
+      // dispatchEvent: the button stays animating for Playwright's stability check on this page, so a plain click times out.
+      await page.getByRole('button', { name: 'Create key' }).first().dispatchEvent('click', undefined, { timeout: 90_000 });
       const dialog = page.getByRole('dialog');
       check('7 Create key offers a tool picker', await shown(dialog.getByText(/Tools/).first()));
       await dialog.getByLabel('Expires').click();
       check('7 and no "Never" expiry', (await page.getByRole('option', { name: 'Never' }).count()) === 0);
-      await page.keyboard.press('Escape');
+      await page.getByRole('option', { name: '90 days' }).click();
       await dialog.getByLabel('Name').fill('Claims triage script');
       await dialog.getByRole('button', { name: /^Create/ }).click();
       check('7 the secret shows once, to copy', await shown(page.getByText('Copy your API key')));
