@@ -80,12 +80,18 @@ def reasons(r: httpx.Response) -> list[str]:
     return list(r.json()["error"]["details"]["reasons"])
 
 
-async def test_a_write_with_no_approval_setting_runs_and_one_that_declares_approval_waits(gateway: Call) -> None:
+async def test_a_write_with_no_approval_setting_runs_and_so_does_one_whose_stored_flag_is_true(gateway: Call) -> None:
     opened = await gateway("open_case", CASE, "s1")
     # Allowed by the policy; with no agents-service behind this runner the case itself is not opened.
     assert opened.json()["data"]["decision"] == "allow", opened.text
-    waits = await gateway("update_address", ADDRESS, "s2")
-    assert (waits.status_code, reasons(waits)) == (403, ["write needs an approval token"]), waits.text
+    # A stored requires_approval=true cannot be told from the old default, so it means "use the app's setting".
+    flagged = await gateway("update_address", ADDRESS, "s2")
+    assert flagged.json()["data"]["decision"] == "allow", flagged.text
+
+
+async def test_a_team_that_asks_a_reviewer_holds_a_write_whose_stored_flag_is_true(strict: Call) -> None:
+    r = await strict("update_address", ADDRESS, "s2b")
+    assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
 
 
 async def test_a_caller_cannot_say_its_write_needs_no_approval(gateway: Call) -> None:

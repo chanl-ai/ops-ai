@@ -20,7 +20,7 @@ from .conftest import build_app, opa_client
 from .fake_upstream import ENDPOINT, HOST, SlowAware, fake_bank
 from .test_calls import Gateway, bank_module, on_its_connection
 from .test_test_run_writes import _on_accounts, _real  # pyright: ignore[reportPrivateUsage]
-from .test_write_approval_gateway import EveryWriteWaits
+from .test_write_approval_gateway import TeamAsksReviewer
 
 
 class PolicyNowOff:
@@ -57,7 +57,7 @@ async def stale_token_gateway(
             opa=opa,
             upstream=upstream,
             requester_policy=PolicyNowOff(),
-            write_approvals=EveryWriteWaits(),
+            write_approvals=TeamAsksReviewer(),
         )
         async with (
             app.router.lifespan_context(app),

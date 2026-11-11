@@ -1,9 +1,10 @@
 """Each app's "Ask before changes" switch as the grantable operations carry it to agents-service, by failure mode:
 
-- a write that declares approval is handed to agents as one that waits (requiresApproval);
+- a write that declares approval is handed to agents as one that waits when its team asks (requiresApproval), because
+  a stored requires_approval=true means "use the app's setting";
 - a read never waits;
 - an app a team admin set to don't ask (appChangesByApp) does not hold a write with no setting of its own, and a tool
-  that declares approval still waits: the tool's answer is more specific than its app's;
+  that declares approval follows its app too (only a tool's approvalMode is its own answer);
 - a team policy that cannot be read keeps writes waiting.
 
 Whether the person in chat is then asked is agents-service's (test_ask_first_chat there); the gateway's own approvals
@@ -74,10 +75,10 @@ async def test_a_write_that_declares_approval_waits_and_no_read_does(grantable: 
     assert all(o["requiresApproval"] is False for o in rows.values() if o["access"] == "read"), rows
 
 
-async def test_a_tool_that_declares_approval_still_waits_where_its_app_is_set_to_dont_ask(grantable: Rows) -> None:
+async def test_a_tool_that_declares_approval_follows_its_app_when_set_to_dont_ask(grantable: Rows) -> None:
     rows = await grantable(Quiet(lambda mods: [_module_of(mods, "update_address")]))
-    assert rows["update_address"]["requiresApproval"] is True, rows["update_address"]
-    assert rows["update_address"]["source"] == "tool", rows["update_address"]
+    assert rows["update_address"]["requiresApproval"] is False, rows["update_address"]
+    assert rows["update_address"]["source"] == "app", rows["update_address"]
 
 
 async def test_a_switch_that_cannot_be_read_keeps_the_write_waiting(grantable: Rows) -> None:

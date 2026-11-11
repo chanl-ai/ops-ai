@@ -25,7 +25,7 @@ from ops_tools.store.modules import ModuleStore
 from .conftest import build_app, opa_client, service_headers
 from .fake_upstream import ENDPOINT, HOST, SlowAware, fake_bank
 from .test_calls import bank_module
-from .test_write_approval_gateway import EveryWriteWaits
+from .test_write_approval_gateway import TeamAsksReviewer
 
 ACCOUNT = {"accountId": "CHQ-2219"}
 HOLD = {"accountId": "CHQ-2219", "hours": 24}
@@ -115,7 +115,7 @@ async def test_a_test_runs_write_on_the_live_account_follows_the_rules_a_live_on
 
 async def test_a_write_on_the_test_account_never_waits_whatever_the_team_holds(gateway_on: Any) -> None:
     # A test account changes nothing real: a team that has every write wait still lets it run, and a live one waits.
-    async for call in gateway_on(("live", "sandbox"), EveryWriteWaits()):
+    async for call in gateway_on(("live", "sandbox"), TeamAsksReviewer()):
         r = await call("place_hold", HOLD, "test", "w4")
         assert r.status_code == 200 and r.json()["data"]["ok"] is True, r.text
         live = await call("place_hold", HOLD, "live", "w5")
@@ -151,7 +151,7 @@ async def test_agents_are_told_which_apps_write_to_a_test_account_so_chat_never_
     await EgressStore(engine).add(tenant, "host", HOST, actor="test", note="", at=datetime.now(UTC))
     await _module_on(engine, tenant, suffix, accounts)
     async with opa_client() as opa:
-        app = build_app(engine, seed, tenant, opa=opa, write_approvals=EveryWriteWaits())
+        app = build_app(engine, seed, tenant, opa=opa, write_approvals=TeamAsksReviewer())
         async with (
             app.router.lifespan_context(app),
             httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as c,

@@ -27,6 +27,7 @@ from ops_tools.tokens import Binding, mint
 
 from .conftest import REVIEW_KEY, build_app, opa_client, service_headers
 from .fake_upstream import ENDPOINT, HOST, SlowAware, fake_bank
+from .test_write_approval_gateway import TeamAsksReviewer
 
 MODULE = "mod_bank_api"
 
@@ -151,7 +152,8 @@ async def gateway(
         opa_client() as opa,
         httpx.AsyncClient(transport=SlowAware(httpx.ASGITransport(app=bank))) as upstream,
     ):
-        app = build_app(engine, seed, tenant, opa=opa, upstream=upstream)
+        # The team asks a reviewer, so a write waits for a token: a stored requires_approval alone no longer holds it.
+        app = build_app(engine, seed, tenant, opa=opa, upstream=upstream, write_approvals=TeamAsksReviewer())
         hooks = {"response": [response_checker(app)]}
         async with (
             app.router.lifespan_context(app),
