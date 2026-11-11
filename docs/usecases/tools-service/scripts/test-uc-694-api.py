@@ -5,8 +5,9 @@ refused as unknown. Neither reaches Salesforce (lib/several_accounts.py)."""
 
 from __future__ import annotations
 
+import httpx
 from several_accounts import MAYA, PRIYA, SF, code_of, retail_on, rig
-from usecase_harness import check, data, finish
+from usecase_harness import PLATFORM_PORT, bearer, check, data, finish, signed_in
 
 MINE = "Mobile org · Maya"
 
@@ -48,8 +49,10 @@ with rig("uc-694") as r:
         for_maya.status_code == 200 and r.hosts(before) == [sf["eu_base"].removeprefix("https://")],
         {"call": for_maya.text[:300], "hosts": r.hosts(before)},
     )
-    # 5. Another team's account is never found from this team, by name.
-    platform_team = {**r.priya, "X-Team-Id": "team_platform"}
+    # 5. Another team's account is never found from this team, by name. Wanjiru Kamau is the seeded admin of the
+    # Platform team (Priya Shah is admin of Operations only).
+    with httpx.Client(base_url=f"http://127.0.0.1:{PLATFORM_PORT}", timeout=30) as public:
+        platform_team = bearer(signed_in(public, "w.kamau@harborpine.example"), "team_platform")
     other = r.gw.put(
         f"/v1/apps/{SF}/team",
         json={"enabled": True, "accountName": "Brand org", "settings": {"login_url": sf["login_url"]}},

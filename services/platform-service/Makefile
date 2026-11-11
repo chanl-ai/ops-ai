@@ -26,8 +26,8 @@ lint: ## ruff format check and lint
 typecheck: ## Strict pyright
 	uv run pyright $(PY_DIRS)
 
-test: ## pytest on the test database (make db-up)
-	$(TEST_DB) uv run pytest
+test: ## pytest on the test database (make db-up); T= runs only those files
+	$(TEST_DB) uv run pytest $(T)
 
 openapi-check: ## openapi.json matches the apps and every operation is typed
 	uv run python scripts/check_openapi.py

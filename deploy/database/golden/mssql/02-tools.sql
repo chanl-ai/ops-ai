@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0070_config_setting_modes
+-- tools-service, stamped at tools_0071_account_key
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -147,6 +147,7 @@ CREATE TABLE connections (
 	app_id VARCHAR(120) NOT NULL, 
 	sandbox BIT NOT NULL DEFAULT 0, 
 	account_name VARCHAR(200) NULL, 
+	account_key VARCHAR(200) NULL, 
 	settings NVARCHAR(max) NOT NULL, 
 	secrets NVARCHAR(max) NOT NULL, 
 	platform_app VARCHAR(120) NULL, 
@@ -164,6 +165,8 @@ GO
 CREATE INDEX ix_connections_app ON connections (tenant_id, team_id, app_id);
 GO
 CREATE INDEX ix_connections_team ON connections (tenant_id, team_id);
+GO
+CREATE UNIQUE INDEX uq_connections_account_key ON connections (tenant_id, team_id, app_id, account_key) WHERE account_key IS NOT NULL AND account_key IS NOT NULL;
 GO
 CREATE TABLE app_credentials (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -548,5 +551,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0070_config_setting_modes');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0071_account_key');
 GO
