@@ -4741,7 +4741,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow";
+            kind: "agent" | "skill" | "workflow" | "case_type" | "task_type";
             /** Recordid */
             recordId: string;
             /** Source */
@@ -7700,7 +7700,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
+            kind: "agent" | "skill" | "workflow" | "case_type" | "task_type" | "document_type" | "knowledge_source";
             refusal?: components["schemas"]["PlanRefusal"] | null;
             /** Resource */
             resource: string;
@@ -9414,7 +9414,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow";
+            kind: "agent" | "skill" | "workflow" | "case_type" | "task_type";
             plugin: components["schemas"]["TemplatePlugin"];
             removeCell?: components["schemas"]["RemoveCell"] | null;
             requires: components["schemas"]["TemplateRequires"];
@@ -24340,7 +24340,7 @@ export interface operations {
     templates_list_templates: {
         parameters: {
             query?: {
-                kind?: ("agent" | "skill" | "workflow") | null;
+                kind?: ("agent" | "skill" | "workflow" | "case_type" | "task_type") | null;
                 source?: string | null;
             };
             header?: never;

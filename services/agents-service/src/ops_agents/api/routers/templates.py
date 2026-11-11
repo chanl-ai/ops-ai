@@ -54,6 +54,7 @@ from ..skills import check_content, skills
 
 # The agent create route's own checks, called rather than copied, so a copy is refused exactly as a create is.
 from . import agents as agent_routes
+from . import template_types as tt
 from .agents import require_known_alias
 from .engine import DefinitionInput, create_definition, definitions
 from .skills import SkillCreateInput
@@ -66,19 +67,27 @@ resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
 
-Kind = Literal["agent", "skill", "workflow"]
-KINDS: tuple[Kind, ...] = ("agent", "skill", "workflow")
+Kind = Literal["agent", "skill", "workflow", "case_type", "task_type"]
+KINDS: tuple[Kind, ...] = ("agent", "skill", "workflow", "case_type", "task_type")
 # Every kind this service keeps copy links for, which a detach looks a record up under.
 COPY_KINDS: tuple[Kind, ...] = KINDS
 # Every kind an app brings, for a preview that spans services.
-AnyKind = Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+AnyKind = Literal["agent", "skill", "workflow", "case_type", "task_type", "document_type", "knowledge_source"]
 # The area a kind's create is checked in, as its create route checks it.
-AREAS: dict[str, str] = {"agent": "agents", "skill": "skills", "workflow": "workflows"}
+AREAS: dict[str, str] = {
+    "agent": "agents",
+    "skill": "skills",
+    "workflow": "workflows",
+    "case_type": "workflows",
+    "task_type": "workflows",
+}
 # What a kind is called in a sentence a person reads.
 NOUNS: dict[str, tuple[str, str]] = {
     "agent": ("an agent", "agents"),
     "skill": ("a skill", "skills"),
     "workflow": ("a workflow", "workflows"),
+    "case_type": ("a case type", "case types"),
+    "task_type": ("a task type", "task types"),
     "document_type": ("a document type", "document types"),
     "knowledge_source": ("a knowledge source", "knowledge sources"),
 }
@@ -87,11 +96,21 @@ SERVICES: dict[str, str] = {
     "agent": "agents",
     "skill": "agents",
     "workflow": "agents",
+    "case_type": "agents",
+    "task_type": "agents",
     "document_type": "documents",
     "knowledge_source": "kb",
 }
 # A preview's add order: what nothing depends on first, so every copy finds the copies it needs.
-ORDER: dict[str, int] = {"document_type": 0, "skill": 0, "knowledge_source": 0, "agent": 1, "workflow": 2}
+ORDER: dict[str, int] = {
+    "document_type": 0,
+    "skill": 0,
+    "knowledge_source": 0,
+    "case_type": 0,
+    "task_type": 0,
+    "agent": 1,
+    "workflow": 2,
+}
 State = Literal["available", "added", "update_available", "removed_upstream"]
 MAX_PLAN = 50
 
@@ -286,6 +305,8 @@ async def _record_name(rt: Runtime, kind: str, record_id: str) -> str | None:
             return str(content.get("name") or "")
     except NotFound:
         return None
+    if kind in tt.TYPE_KINDS:
+        return await tt.name(rt, kind, record_id)
     found = await definitions(rt).get(record_id, team=current_team())
     return str(found["name"]) if found else None
 
@@ -302,6 +323,8 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
             return str(found["digest"]) if found else None
     except NotFound:
         return None
+    if kind in tt.TYPE_KINDS:
+        return await tt.digest(rt, kind, record_id)
     found = await definitions(rt).get(record_id, team=current_team())
     return str(found["digest"]) if found else None
 
@@ -418,6 +441,8 @@ async def _names_in_use(rt: Runtime, kind: str) -> set[str]:
         return {name.casefold() for name, _ in named.values()}
     if kind == "workflow":
         return {str(d["name"]).casefold() for d in await team_workflows(rt) if not d.get("archived_at")}
+    if kind in tt.TYPE_KINDS:
+        return await tt.names_in_use(rt, kind, current_team() or "")
     # A skill's name is unique by its slug, which the skill store refuses as name_taken itself.
     return set()
 
@@ -651,6 +676,8 @@ async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JS
             if e.code != "name_taken":
                 raise
             raise _name_taken(kind, name, str(t["plugin"]["title"])) from None
+    elif kind in tt.TYPE_KINDS:
+        record_id = await tt.make(rt, me, kind, t, name)
     else:
         record_id = await _make_workflow(rt, me, t, body, records)
     row, made = await copies.add(
@@ -663,7 +690,7 @@ async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JS
         by=me.email,
         digest=cast(str | None, t.get("digest")),
         record_digest=await _record_digest(rt, kind, record_id),
-        base=copy_base(kind, (await _newest(rt, kind, record_id))[0]) if kind in FIELDS else None,
+        base=_base_of(kind, t, record_id_body=(await _newest(rt, kind, record_id))[0] if kind in FIELDS else None),
     )
     if not made:
         # Another install of this version won the race: its copy stands, and the agent made here goes (a skill or
@@ -767,6 +794,16 @@ FIELDS: dict[str, tuple[str, ...]] = {"agent": SPEC_FIELDS, "skill": tuple(SKILL
 FIELD_LABELS: dict[str, str] = {**SKILL_LABELS, "toolIds": "tools", "collections": "knowledge bases"}
 
 
+def _base_of(kind: str, t: dict[str, Any], *, record_id_body: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The base a new copy link stores: the agent or skill body as made, a type's template record without its name,
+    and none for a workflow (compared whole, by digest)."""
+    if record_id_body is not None:
+        return copy_base(kind, record_id_body)
+    if kind in tt.TYPE_KINDS:
+        return {k: v for k, v in tt.body_of(kind, t).items() if k != "name"}
+    return None
+
+
 def copy_base(kind: str, body: dict[str, Any]) -> dict[str, Any]:
     """The base a copy link stores: the kind's body made from the template, with the binding fields left out and no
     choices applied."""
@@ -833,6 +870,10 @@ async def _newest(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any
     return cast(dict[str, Any], v["content"]), v.get("published_at") is None
 
 
+async def _newest_type(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any], bool]:
+    return await tt.newest(rt, kind, record_id)
+
+
 async def _template_body(rt: Runtime, team: str, kind: str, t: dict[str, Any], yours: dict[str, Any]) -> dict[str, Any]:
     """The template's body now, made through the kind's create checks, with the copy's bindings in place."""
     if kind == "agent":
@@ -867,8 +908,8 @@ async def _legacy_base(rt: Runtime, kind: str, record_id: str, row: dict[str, An
 
 def _labelled(outcomes: list[FieldOutcome]) -> list[dict[str, Any]]:
     return [
-        {"field": o.field, "label": FIELD_LABELS.get(o.field, o.field), "outcome": o.outcome, "yours": o.yours,
-         "template": o.template}
+        {"field": o.field, "label": FIELD_LABELS.get(o.field) or tt.label(o.field, o.yours, o.template),
+         "outcome": o.outcome, "yours": o.yours, "template": o.template}
         for o in outcomes
     ]  # fmt: skip
 
@@ -903,6 +944,12 @@ async def _review(
             base = await _legacy_base(rt, kind, record_id, row)
         fields = [f for f in FIELDS[kind] if f in template_body or (base is not None and f in base)]
         outcomes = merge(base, yours, template_body, fields, bindings=BINDINGS[kind])
+    elif kind in tt.TYPE_KINDS:
+        yours, draft_open = await _newest_type(rt, kind, record_id)
+        template_body = tt.body_of(kind, t)
+        base = row.get("base")
+        keys = tt.order(kind, yours, template_body, base)
+        outcomes = merge(tt.flat(kind, base), tt.flat(kind, yours) or {}, tt.flat(kind, template_body) or {}, keys)
     else:
         # A workflow's body is pointed at the team's copies, so it compares by digest as a whole definition.
         edited = row.get("record_digest") != record_digest
@@ -987,6 +1034,19 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
         if merged != yours:
             version = await _save(rt, me, kind, copy, merged, note=note)
         base = copy_base(kind, template_body)
+    elif kind in tt.TYPE_KINDS:
+        assert template_body is not None
+        yours, _ = await tt.newest(rt, kind, copy)
+        keys = tt.order(kind, yours, template_body, row.get("base"))
+        mine = tt.flat(kind, yours) or {}
+        merged = (
+            tt.flat(kind, template_body) or {}
+            if mode == "reset"
+            else apply(mine, outcomes, cast(dict[str, Any], choices))
+        )
+        if merged != mine:
+            version = await tt.save(rt, me, kind, copy, tt.unflat(kind, merged, keys, str(yours["name"])))
+        base = {k: v for k, v in template_body.items() if k != "name"}
     elif taken or chosen:
         held = await definitions(rt).get(copy, team=current_team())
         assert held is not None
@@ -998,7 +1058,7 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
         version = cast(int | None, json.loads(bytes(answer.body))["data"].get("version"))
     # A workflow conflict kept as the team's moves the link to the new version and leaves its record digest, so the
     # team's edit still reads as edited and the same update is not offered again.
-    saved = version is not None or kind in FIELDS
+    saved = version is not None or kind in FIELDS or kind in tt.TYPE_KINDS
     await TemplateCopies(rt.db).updated(
         str(row["id"]),
         version=int(t["version"]),

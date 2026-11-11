@@ -5053,7 +5053,9 @@
             "enum": [
               "agent",
               "skill",
-              "workflow"
+              "workflow",
+              "case_type",
+              "task_type"
             ],
             "title": "Kind",
             "type": "string"
@@ -12961,6 +12963,8 @@
               "agent",
               "skill",
               "workflow",
+              "case_type",
+              "task_type",
               "document_type",
               "knowledge_source"
             ],
@@ -18270,7 +18274,9 @@
             "enum": [
               "agent",
               "skill",
-              "workflow"
+              "workflow",
+              "case_type",
+              "task_type"
             ],
             "title": "Kind",
             "type": "string"
@@ -47847,7 +47853,9 @@
                   "enum": [
                     "agent",
                     "skill",
-                    "workflow"
+                    "workflow",
+                    "case_type",
+                    "task_type"
                   ],
                   "type": "string"
                 },
