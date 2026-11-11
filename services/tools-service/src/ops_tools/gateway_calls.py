@@ -292,6 +292,13 @@ class GatewayCalls:
             return {"callId": out.call_id, "status": out.status, "code": out.code, "reasons": out.reasons}
         return {"callId": out.call_id, "ok": out.ok, "output": out.output}
 
+    async def _with_live_policy(self, caller: Principal) -> Principal:
+        """`caller` carrying the tenant's requesterMayDecide as read at this call, in place of the token's copy."""
+        if self.requester_may_decide is None:
+            return caller
+        may_decide = await self.requester_may_decide(caller.tenant_id)
+        return caller.model_copy(update={"policies": {**caller.policies, "requesterMayDecide": may_decide}})
+
     async def _asker_refusal(self, tenant_id: str, req: CallRequest) -> Forbidden | None:
         """`can`'s own_request refusal when the call's approval names the person it acts for and the tenant's
         requesterMayDecide, read now, does not let an asker decide; the token alone cannot say, since the policy may
@@ -451,8 +458,13 @@ class GatewayCalls:
         )
         # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.
+        # requesterMayDecide is read now: the token's copy dates from when it was minted and may since be off.
         self_approved = bool(
-            needs and not live_test_write and req.approval_token is None and self.approver and self.approver(caller)
+            needs
+            and not live_test_write
+            and req.approval_token is None
+            and self.approver
+            and self.approver(await self._with_live_policy(caller))
         )
         if self_approved:
             row["approvers"] = [caller.email]
