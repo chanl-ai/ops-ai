@@ -77,7 +77,8 @@ export function useAreas() {
     current,
     lit,
     ready,
-    failed: !ready && permissions.isError,
+    // A read that keeps failing is retried for a while before it reports an error; the person is told as soon as it first fails.
+    failed: !ready && (permissions.isError || permissions.failureCount > 0),
     retry: () => void permissions.refetch(),
     select,
     // The effects below run in one place (AreaSwitcher); they read these.
@@ -108,16 +109,18 @@ export function AreaSwitcher() {
   const router_ = React.useRef(router);
   router_.current = router;
 
-  // Remember the page and its area. New chat has no area to go by and is not recorded.
+  // Remember the page and its area, once per page: a pick writes the area it is opening before the page changes, and
+  // recording the page still on screen would write the old area back over it. New chat has no area to go by.
   const here = areaOf(pathname);
+  const recorded = React.useRef('');
   React.useEffect(() => {
-    if (!person || !ready || !here || pathname === '/chat' || !areas.includes(here)) return;
+    if (!person || !ready || !here || pathname === '/chat' || !areas.includes(here) || recorded.current === pathname) return;
     // The home page is about to send the person back to the area they left; recording Work here would erase it.
     if (pathname === '/' && memory.area && memory.area !== 'Work') return;
-    if (memory.area === here && memory.pages[here] === pathname) return;
+    recorded.current = pathname;
     writeMemory(person, { area: here, pages: { ...memory.pages, [here]: pathname } });
     bump();
-  }, [person, ready, here, pathname, areas.join(), memory.area, memory.pages, bump]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [person, ready, here, pathname, areas.join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The home page opens where the person left off; a person with no Overview (chat only) goes to their first page.
   React.useEffect(() => {
@@ -142,7 +145,16 @@ export function AreaSwitcher() {
   if (areas.length < 2) return null;
   return (
     <>
-      <ToggleGroup type="single" variant="outline" size="sm" value={lit ?? ''} onValueChange={(v) => v && v !== lit && select(v as AreaName)} role="group" aria-label="Area" className="shrink-0 max-md:hidden" data-testid="area-switcher">
+      <ToggleGroup type="single" variant="outline" size="sm" value={lit ?? ''} onValueChange={(v) => v && v !== lit && select(v as AreaName)} role="group"
+        aria-label="Area"
+        // The group's own arrow-key move lands on the next tick; this moves focus in the same one, so a screen reader and a fast key press agree.
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+          const buttons = [...e.currentTarget.querySelectorAll<HTMLElement>('[role=radio]')];
+          const at = buttons.indexOf(document.activeElement as HTMLElement);
+          if (at >= 0) buttons[(at + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length].focus();
+        }}
+        className="shrink-0 max-md:hidden" data-testid="area-switcher">
         {areas.map((a) => {
           const Icon = ICONS[a];
           return (
