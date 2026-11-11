@@ -108,6 +108,34 @@ async def test_an_unreadable_team_policy_makes_a_write_with_no_setting_wait(unre
     assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
 
 
+class TeamAsksPerson(WriteApprovals):
+    """A team whose switch is on and answered by the person in the chat, recording what the gateway asked for."""
+
+    def __init__(self) -> None:
+        super().__init__(cast(Any, None))
+        self.asked: list[tuple[str, str]] = []
+
+    async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
+        return {"ask": True, "answer": "person", "reviewerRole": None}, {}
+
+    async def answer(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        got = await super().answer(*args, **kwargs)
+        self.asked.append((kwargs["channel"], got["answer"]))
+        return got
+
+
+async def test_a_workflows_write_is_asked_as_a_workflow_and_goes_to_a_reviewer_where_the_team_asks_the_person(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> None:
+    """A call acting for nobody (a workflow step) has no chat to confirm in: it must reach the resolver as a workflow,
+    or "ask the person" holds it for an answer nobody can give."""
+    team = TeamAsksPerson()
+    async for call in _gateway(engine, seed, tenant, catalog_tools, team):
+        r = await call("open_case", CASE, "wf-1")
+        assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
+    assert team.asked == [("workflow", "reviewer")], team.asked
+
+
 def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:
     return Principal(
         kind="person",
