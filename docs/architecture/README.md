@@ -37,6 +37,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Console areas | [console-areas.md](console-areas.md) | The four areas of the console and the cells that offer each page | Builder |
 | Logging and data writes | [logging-and-data-writes.md](logging-and-data-writes.md) | Log lines, ids and redaction; the store helper for a person's edit | Builder, operator |
 | Templates | [templates.md](templates.md) | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not | Builder |
+| Knowledge base | [knowledge-base.md](knowledge-base.md) | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not | Builder |
 | Decision records | [decisions/](decisions/) | The options and scoring behind the platform choices | Approver |
 
 ## What is proven
