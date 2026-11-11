@@ -1,9 +1,9 @@
-# Every merge to main is tagged `vYYYY-MM-DD.N` (What's new shows it) and then deployed to staging, so staging
-# runs main unless someone overrides it. Each step is a make target that runs the same way locally: `make release-tag`
-# (DRY=1 prints the next name) and `make stg-deploy REF=<sha>`.
+# Every merge to main is tagged `vYYYY-MM-DD.N` (What's new shows it). Staging runs develop (ci.yml deploys each merge
+# there), so a merge to main does not touch staging. Each step is a make target that runs the same way locally:
+# `make release-tag` (DRY=1 prints the next name) and `make stg-deploy REF=<sha>`.
 #
-# Override: run this workflow by hand with a ref to put that ref on staging; set the repository variable STAGING_HOLD
-# (any value, the reason) to stop merges from replacing it, and clear it to go back to main.
+# Override: run this workflow by hand with a ref to put that ref on staging (a hotfix check); set the repository
+# variable STAGING_HOLD (any value, the reason) to stop develop merges from replacing it.
 #
 # The staging deploy is .github/actions/stg-deploy, which lists the secrets and variables it needs. They live in the
 # GitHub environment "staging"; without them the deploy is skipped with a notice and the tag still lands. ci.yml uses
@@ -44,12 +44,8 @@ jobs:
 
   staging:
     needs: tag
-    # After the tag on a merge (unless staging is held), or on a hand-started run whatever the hold says.
-    if: >-
-      !cancelled() && (
-        (github.event_name == 'push' && needs.tag.result == 'success' && vars.STAGING_HOLD == '') ||
-        github.event_name == 'workflow_dispatch'
-      )
+    # Only on a hand-started run: staging otherwise follows develop.
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: staging
