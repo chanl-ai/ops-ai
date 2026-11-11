@@ -3342,11 +3342,6 @@ export interface components {
             added: boolean;
             /** Approvers */
             approvers: number;
-            /**
-             * Asksfirst
-             * @default false
-             */
-            asksFirst: boolean;
             /** Description */
             description: string;
             /** Inputschema */

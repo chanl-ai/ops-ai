@@ -401,7 +401,6 @@ class GrantableOperation(TypedDict, closed=True):
     access: str
     added: NotRequired[bool]
     approvers: int
-    asksFirst: NotRequired[bool]
     description: str
     inputSchema: dict[str, Any]
     moduleId: str | None

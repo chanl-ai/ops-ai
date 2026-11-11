@@ -132,9 +132,6 @@ class GrantableOperation(Out):
     output_shape: str | None = None
     module_id: str | None
     module_name: str
-    # The app's "Ask before changes" is on for the caller's team: in a chat with a person, this write asks that person
-    # first (agents-service). Reads never ask; a workflow or an agent run with nobody in it does not use this.
-    asks_first: bool = False
     # The caller's team has a test account of the app: a test run's write signs in there and changes nothing real, so
     # it never asks (gateway_calls holds no write on a test account either).
     test_account: bool = False
@@ -248,6 +245,14 @@ def create_gateway_app(
         listed = await write_approvals.apps(tenant_id, team_id)
         return listed is None or bool(app_ids(module) & set(listed))
 
+    async def app_changes_quietly(tenant_id: str, team_id: str | None, module: Aggregate | None) -> bool:
+        """Whether the team's admin listed this module's app in appsChangeWithoutAsking, which loosens a write's own
+        wait (never a team-wide or per-app hold). An unreadable list counts as not listed, so the write waits."""
+        if write_approvals is None or module is None:
+            return False
+        listed = await write_approvals.change_without_asking(tenant_id, team_id)
+        return listed is not None and bool(app_ids(module) & set(listed))
+
     async def with_test_account(
         tenant_id: str, team_id: str | None, mods: dict[str, Any], rows: list[dict[str, Any]]
     ) -> set[str]:
@@ -283,6 +288,7 @@ def create_gateway_app(
         all_writes_wait=all_writes_wait,
         clock=clock,
         app_writes_wait=app_writes_wait,
+        app_changes_quietly=app_changes_quietly,
         approver=approver,
         # An approval the asker gave themselves counts only while today's policy lets an asker decide.
         requester_may_decide=(requester_policy or RequesterMayDecide(None, dev=Settings().dev_policies)).allowed,
@@ -383,6 +389,13 @@ def create_gateway_app(
             m = mods.get(str(r.get("module_id") or ""))
             return m is not None and bool(app_ids(m) & set(listed))
 
+        if write_approvals is not None and mods:
+            # Apps the team's admin listed in appsChangeWithoutAsking: their writes run at once, as in the gateway.
+            quiet = await write_approvals.change_without_asking(caller.tenant_id, caller.team_id) or []
+            rows = [
+                r | {"requires_approval": False} if r["access"] in WRITES and of_listed(r, quiet, False) else r
+                for r in rows
+            ]
         if await all_writes_wait(caller.tenant_id, caller.team_id):
             # The caller's team has every write wait, so the agents that list these pause before each one.
             rows = [r | {"requires_approval": True} if r["access"] in WRITES else r for r in rows]
@@ -394,12 +407,6 @@ def create_gateway_app(
                 for r in rows
             ]
         if write_approvals is not None:
-            # Every app asks before changes unless the team's admin switched it off; an unreadable list keeps asking.
-            quiet = await write_approvals.change_without_asking(caller.tenant_id, caller.team_id)
-            rows = [
-                r | {"asks_first": r["access"] in WRITES and r.get("added", True) and not of_listed(r, quiet, False)}
-                for r in rows
-            ]
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
             rows = [r | {"test_account": str(r.get("module_id") or "") in tested} for r in rows]
         data = [GrantableOperation.model_validate(r).model_dump(by_alias=True) for r in rows]

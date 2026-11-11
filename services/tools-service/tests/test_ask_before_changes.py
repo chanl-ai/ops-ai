@@ -1,9 +1,9 @@
 """Each app's "Ask before changes" switch as the grantable operations carry it to agents-service, by failure mode:
 
-- a write of an app nobody switched off is handed to agents as one that runs without asking;
-- a read is marked as asking, so chat would stop on every lookup;
-- an app a team admin switched off (appsChangeWithoutAsking) still asks, or one switched off asks no more for every app;
-- a switch that cannot be read lets writes run without asking, where a failed read must keep asking.
+- a write of an app nobody switched off is handed to agents as one that waits (requiresApproval);
+- a read never waits;
+- an app a team admin switched off (appsChangeWithoutAsking) runs at once and no other app does;
+- a switch that cannot be read lets writes run, where a failed read must keep them waiting.
 
 Whether the person in chat is then asked is agents-service's (test_ask_first_chat there); the gateway's own approvals
 (test_approvals_off_by_default) are unchanged by the switch.
@@ -69,20 +69,18 @@ def _module_of(modules: list[dict[str, Any]], tool: str) -> str:
     return next(f"module:{m['id']}" for m in modules if any(o["name"] == tool for o in m["operations"]))
 
 
-async def test_every_write_asks_first_and_no_read_does(grantable: Rows) -> None:
+async def test_a_write_that_declares_approval_waits_and_no_read_does(grantable: Rows) -> None:
     rows = await grantable(Quiet(lambda _: []))
-    writes = [o for o in rows.values() if o["access"] != "read"]
-    assert writes and all(o["asksFirst"] is True for o in writes), writes
-    assert all(o["asksFirst"] is False for o in rows.values() if o["access"] == "read"), rows
+    assert rows["update_address"]["requiresApproval"] is True and rows["place_wire_hold"]["requiresApproval"] is True
+    assert all(o["requiresApproval"] is False for o in rows.values() if o["access"] == "read"), rows
 
 
-async def test_an_app_switched_off_runs_its_writes_without_asking_and_others_still_ask(grantable: Rows) -> None:
-    rows = await grantable(Quiet(lambda mods: [_module_of(mods, "open_case")]))
-    assert rows["open_case"]["asksFirst"] is False, rows["open_case"]
-    others = [o for o in rows.values() if o["access"] != "read" and o.get("moduleId") != rows["open_case"]["moduleId"]]
-    assert others and all(o["asksFirst"] is True for o in others), others
+async def test_an_app_listed_runs_its_writes_at_once_and_other_apps_still_wait(grantable: Rows) -> None:
+    rows = await grantable(Quiet(lambda mods: [_module_of(mods, "update_address")]))
+    assert rows["update_address"]["requiresApproval"] is False, rows["update_address"]
+    assert rows["place_wire_hold"]["requiresApproval"] is True, rows["place_wire_hold"]
 
 
-async def test_a_switch_that_cannot_be_read_keeps_every_write_asking(grantable: Rows) -> None:
+async def test_a_switch_that_cannot_be_read_keeps_the_write_waiting(grantable: Rows) -> None:
     rows = await grantable(Quiet(lambda _: None))
-    assert rows["open_case"]["asksFirst"] is True, rows["open_case"]
+    assert rows["update_address"]["requiresApproval"] is True, rows["update_address"]

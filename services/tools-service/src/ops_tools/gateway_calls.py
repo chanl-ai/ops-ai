@@ -234,6 +234,7 @@ class GatewayCalls:
         all_writes_wait: Callable[[str, str | None], Awaitable[bool]],
         clock: Callable[[], float] = time.time,
         app_writes_wait: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
+        app_changes_quietly: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
         approver: Callable[[Principal], bool] | None = None,
         requester_may_decide: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
@@ -248,6 +249,9 @@ class GatewayCalls:
         self.all_writes_wait = all_writes_wait
         # Whether the team listed the module's app in appWritesNeedApproval; none listed without it.
         self.app_writes_wait = app_writes_wait
+        # Whether the team's admin listed the module's app in appsChangeWithoutAsking: the only input that loosens a
+        # write's own wait. Team-wide and per-app holds and MCP still win. None without it: nothing loosens.
+        self.app_changes_quietly = app_changes_quietly
         # Whether the caller holds the approver role in the team (can() over the roles grid); nobody without it.
         self.approver = approver
         self.clock = clock
@@ -440,7 +444,13 @@ class GatewayCalls:
             and (
                 # Over MCP every write waits for a person, whatever the operation declares.
                 channel == MCP
-                or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
+                or (
+                    await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
+                    and not (
+                        self.app_changes_quietly is not None
+                        and await self.app_changes_quietly(caller.tenant_id, caller.team_id, module)
+                    )
+                )
                 or await self.all_writes_wait(caller.tenant_id, caller.team_id)
                 or (
                     self.app_writes_wait is not None

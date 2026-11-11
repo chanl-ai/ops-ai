@@ -5430,11 +5430,6 @@
             "title": "Approvers",
             "type": "integer"
           },
-          "asksFirst": {
-            "default": false,
-            "title": "Asksfirst",
-            "type": "boolean"
-          },
           "description": {
             "title": "Description",
             "type": "string"

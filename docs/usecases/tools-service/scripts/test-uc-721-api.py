@@ -32,8 +32,8 @@ with apps_stack() as w:
     ops = grantable()
     close, read = ops.get("header_key_close_record") or {}, ops.get("header_key_get_record") or {}
     check(
-        "2 Close a record asks first and Read a record does not",
-        close.get("asksFirst") is True and read.get("asksFirst") is False,
+        "2 Close a record waits and Read a record does not",
+        close.get("requiresApproval") is True and read.get("requiresApproval") is False,
         (close, read),
     )
 
@@ -43,8 +43,8 @@ with apps_stack() as w:
     admin = w.kept(w.api.put(POLICY, json={"value": [APP]}, headers=w.who["admin"]))
     after = grantable().get("header_key_close_record") or {}
     check(
-        "4 the team admin turns it off and the write asks no more",
-        admin.status_code == 200 and after.get("asksFirst") is False,
+        "4 the team admin turns it off and the write waits no more",
+        admin.status_code == 200 and after.get("requiresApproval") is False,
         (admin.text[:200], after),
     )
 
