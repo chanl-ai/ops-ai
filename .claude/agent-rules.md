@@ -48,6 +48,8 @@ profile's "Commands an agent runs" table names the make targets.
 |---|---|
 | Read the brief, the rules, the profile and the workspace file before any other file; then the documents the profile maps to the files the task names, and nothing else until a finding needs it | here |
 | Keep each tool call under 2 minutes; run tests, builds and walks in the background and poll | here |
+| One slice per run, about 45 minutes; then commit, write the handoff (done, next slice, file state) to the tracker or, if the tracker refuses, to `HANDOFF.md` on the branch, and stop | here |
+| While building, run only the test files for the code you changed; the full suite runs once at the QA stage | here |
 | Before adding any shared part, list what already does that job (file:line) and reuse it; a second owner needs a stated reason | the project's architecture rules (profile) |
 | Work on your own branch from the trunk; commit after each slice that passes its own tests; one concern per branch and per commit | the project's contributing guide (profile "Conventions") |
 | No `git stash`, hard resets, `git clean`, `--no-verify`, force pushes or pushes to the trunk | the project's hooks (profile "Conventions") |
