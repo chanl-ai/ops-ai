@@ -1,10 +1,9 @@
-"""Approvals are off by default and roles decide when they are on, by failure mode:
+"""Write approvals: what makes a write wait and who approves their own, by failure mode:
 
 - a write nobody turned approval on for still waits for a token;
 - a team that lists an app in appWritesNeedApproval has that app's writes run without one;
-- a person who decides the team's reviews is asked to approve their own write, or one who does not is let through
-  (the dev caller's Real write runs, test_test_console_reads; an imported write starts with its switch off,
-  test_import).
+- a person who decides the team's reviews approves their own write only while requesterMayDecide is on (off by
+  default), and one who does not is never let through (an imported write starts waiting, test_import).
 
 Decided by the real Rego in OPA, on a seeded tenant's registry.
 """
@@ -87,8 +86,10 @@ def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:
 
 def test_only_a_person_who_decides_the_teams_reviews_approves_their_own_write() -> None:
     access = Access(security_team="team_security")
-    assert approves_own_writes(access, _person("admin")) and approves_own_writes(access, _person("approver"))
-    assert not approves_own_writes(access, _person("viewer")), "a viewer is asked like anyone else"
-    assert not approves_own_writes(access, _person("viewer"))
-    # The four-eyes rule: with requesterMayDecide off, someone else decides even an admin's write.
-    assert not approves_own_writes(access, _person("admin", {"requesterMayDecide": False}))
+    loose = {"requesterMayDecide": True}
+    assert approves_own_writes(access, _person("admin", loose)) and approves_own_writes(
+        access, _person("approver", loose)
+    )
+    assert not approves_own_writes(access, _person("viewer", loose)), "a viewer is asked like anyone else"
+    # The four-eyes rule, the default: someone else decides even an admin's write.
+    assert not approves_own_writes(access, _person("admin"))

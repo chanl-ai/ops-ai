@@ -109,7 +109,8 @@ async def test_the_line_names_only_switched_on_tools(
     )
     assert added.status_code == 200, added.text
     row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
-    assert row["canDo"] == "Reads: Read a record · Writes: Change a record", row["canDo"]
+    # The write says nothing about approval, so it waits for a person.
+    assert row["canDo"] == "Reads: Read a record · Writes, reviewed first: Change a record", row["canDo"]
 
 
 async def test_a_write_the_teams_policy_holds_is_marked_reviewed() -> None:
