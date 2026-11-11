@@ -9,6 +9,7 @@ import httpx
 from usecase_harness import INVITED_PASSWORD, bearer, check, data, finish, invited, people_stack, signed_in
 
 PRIYA = "p.shah@harborpine.example"
+WANJIRU = "w.kamau@harborpine.example"
 
 
 def member(api: httpx.Client, h: dict[str, str], email: str) -> str:
@@ -19,6 +20,7 @@ with people_stack() as (api, _):
     priya = bearer(signed_in(api, PRIYA), "team_ops")
     admin_email = f"admin.{secrets.token_hex(3)}@harborpine.example"
     admin = bearer(invited(api, priya, admin_email, "admin"), "team_ops")
+    wanjiru = bearer(signed_in(api, WANJIRU), "team_platform")
 
     person_email = f"person.{secrets.token_hex(3)}@harborpine.example"
     person = invited(api, admin, person_email, "viewer")
@@ -51,18 +53,22 @@ with people_stack() as (api, _):
     )
     check("the admin cannot invite into a team they are not in (403)", r.status_code == 403, r.text[:200])
 
-    # Priya owns the workspace, so a team admin never removes her: she transfers it first (E42).
-    r = api.post("/v1/settings/members/delete", json={"ids": [member(api, admin, PRIYA)]}, headers=admin)
+    # Wanjiru Kamau (Admin in every team) owns the workspace, so a team admin never removes her: she transfers it first (E42).
+    # The owner sits in the Platform team, so the admin who tries is one of that team's own.
+    platform_admin = bearer(
+        invited(api, wanjiru, f"admin.{secrets.token_hex(3)}@harborpine.example", "admin"), "team_platform"
+    )
+    r = api.post("/v1/settings/members/delete", json={"ids": [member(api, wanjiru, WANJIRU)]}, headers=platform_admin)
     check(
-        "the admin cannot remove Priya, the workspace's owner (409)",
+        "the admin cannot remove Wanjiru, the workspace's owner (409)",
         r.status_code == 409 and r.json()["error"]["code"] == "owner_must_transfer",
         r.text[:200],
     )
-    # A team Priya makes with the new admin as its only admin: there they cannot step down.
+    # A team Wanjiru makes with the new admin as its only admin: there they cannot step down.
     desk = api.post(
-        "/v1/settings/teams", json={"name": f"Desk {secrets.token_hex(2)}", "admin": admin_email}, headers=priya
+        "/v1/settings/teams", json={"name": f"Desk {secrets.token_hex(2)}", "admin": admin_email}, headers=wanjiru
     )
-    check("Priya makes a team with the new admin as its admin (201)", desk.status_code == 201, desk.text[:200])
+    check("Wanjiru makes a team with the new admin as its admin (201)", desk.status_code == 201, desk.text[:200])
     desk_id = str((data(desk) or {}).get("id", "team_x"))
     admin = bearer(signed_in(api, admin_email, INVITED_PASSWORD), desk_id)
     me = member(api, admin, admin_email)

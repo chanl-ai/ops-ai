@@ -227,8 +227,9 @@ async def list_threads(
 ) -> JSONResponse:
     """Search runs in SQL over titles, agents, last replies and every question asked; filters, facets and order read
     each thread's meta; only the rows returned are rebuilt from their events. `cursor` pages by position in the order,
-    so a thread added or answered meanwhile neither repeats nor skips a row; `page` serves the conversations table.
-    Either read returns `nextCursor` while more rows follow."""
+    so a thread added meanwhile does not shift the rows; a thread that changes while someone pages can move across
+    the cursor and be skipped. `page` serves the conversations table. Either read returns `nextCursor` while more
+    rows follow."""
     rows = await chat_rows(rt, me)
     await with_summaries(rt, rows)
     # A builder's tests are their own list: the conversations, their facets and counts leave them out.
@@ -265,11 +266,15 @@ async def list_threads(
                 return str(r["created_at"])
             case "messageCount":
                 return int(m.get("messageCount") or 0)
-            case _:
+            case "lastMessageAt":
                 return str(m.get("lastMessageAt") or r["created_at"])
+            case _:
+                # Pinned chats lead the default order only, so a short first page (the sidebar's) still holds them;
+                # an explicit sort is the plain sort.
+                return f"{int(bool(m.get('pinned')))}|{m.get('lastMessageAt') or r['created_at']}"
 
     descending = (sort_order or ("asc" if sort_by == "title" else "desc")) == "desc"
-    order = f"{sort_by or 'lastMessageAt'}:{'desc' if descending else 'asc'}"
+    order = f"{sort_by or 'default'}:{'desc' if descending else 'asc'}"
     ordered = sorted(((key_of(r, m), str(r["id"]), r) for r, m in selected), key=lambda x: x[:2], reverse=descending)
     total = len(ordered)
     if cursor is not None:

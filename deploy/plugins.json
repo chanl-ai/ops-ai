@@ -29,6 +29,12 @@
       "ref": "96d79903889c8858c5e95c81f04f50474c4e716d",
       "path": "plugins/confluence",
       "sha256": "6456d3114422439c48f445137a3f32b36a37cb52e2a15726da9b815264c5c694"
+    },
+    {
+      "source": "https://github.com/chanl-ai/ops-ai-plugins",
+      "ref": "f0f017f68b69d8377d2244b612ae7c4546058f13",
+      "path": "plugins/core",
+      "sha256": "6deaec97bf057b6e19ed5ed4403b3b918516d407a2e5f072cc05627b78fed4a1"
     }
   ]
 }

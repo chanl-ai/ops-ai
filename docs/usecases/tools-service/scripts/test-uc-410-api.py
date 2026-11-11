@@ -193,11 +193,7 @@ with ExitStack() as stack:
         refused(OTHER_KEY, "/team_ops") == (403, "team_forbidden"),
     )
 
-    # 5. There is no production address (calls over MCP are always test runs); no key is 401; a viewer, who cannot run tools, is 403.
-    check(
-        "5 an environment segment in the address (/mcp/production/team_ops) is no address: 404 not_found",
-        refused(OPS_KEY, "/production/team_ops") == (404, "not_found"),
-    )
+    # 5. Production is refused until a team allows it; no key is 401; a viewer, who cannot run tools, is 403.
     check("5 no credential is 401", refused(None, "/team_ops") == (401, "unauthorized"))
     check(
         "5 a viewer's token is refused (no tools.run)",

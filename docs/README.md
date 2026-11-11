@@ -142,6 +142,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/decisions/execution-engine-seam.md` | Engine seam: Temporal preferred where allowed, LangGraph on PostgreSQL built first, one conformance suite |
 | `architecture/decisions/fencing-and-timers.md` | Fencing the thread by lease generation; timers as a port with a fire endpoint; Temporal tests before a Temporal adapter |
 | `architecture/decisions/database-support.md` | ADR-0017, decided: PostgreSQL and SQL Server 2025 (Azure SQL first in intent), MySQL dropped, and the rule every change follows |
+| `architecture/decisions/template-copy-updates.md` | ADR-0018, proposed: a team's copy of a template takes updates field by field against a stored base, never rewriting a published version |
 | `plan/implementation-plan.md` | Phases, teams, workstreams, stop condition |
 | `console/chat.md` | Chat: the AI Elements blocks behind chat-blocks.tsx, untrusted replies, widget shapes and the registry, x-ops-shape, adding data not components |
 | `console/agents-and-workflows.md` | User guide: what an agent is made of, chatting, agents as workflow steps, workflows as tools, when to use which |
@@ -264,7 +265,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/files-page-on-files-service.md` | uc-112: James searches Files, sees what uses a file, downloads it and deletes an unused one; Priya places a legal hold |
 | `usecases/console/pickers-search-the-server.md` | uc-113: James searches the agent page's knowledge picker for the 118th base and grants a tool; the version stores their ids |
 | `usecases/console/viewer-sees-read-only-pages.md` | uc-099: Ravi, a viewer, sees no create button and opens an agent read-only; James, a builder, sees and edits them |
-| `usecases/console/console-matches-page-plan.md` | uc-100: the Overview shows only what waits on a person, Agents has no Templates, Chat reaches Conversations, and roles say reviewer |
+| `usecases/console/console-matches-page-plan.md` | uc-100: the Overview shows only what waits on a person, Agents has no Templates, Chat reaches All chats, and roles say reviewer |
 | `usecases/console/lists-preview-and-versioned-saves.md` | uc-106: a 25-row list is one Tab stop per row; Settings shows Preview beside real services and Egress does not; Enter in Storage saves no version and the Save button does |
 | `usecases/console/widget-edited-with-forms.md` | uc-103: James adds a widget field, its sample and a caption bound to it with forms; the saved template keeps the JSON limits |
 | `usecases/console/guardrail-record-page.md` | uc-104: James saves and publishes v2 on a guardrail's page, sees both versions, and pins v1 on an agent |
@@ -324,6 +325,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
 | `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
 | `usecases/console/sub-pages-in-the-sidebar.md` | uc-047: every sidebar parent lists its sub-pages as rows, the active one lit, closed parents remembered |
+| `usecases/console/console-areas.md` | uc-723: the sidebar shows one area at a time, chosen from the top bar and offered only by what the person may open |
+| `usecases/console/console-areas-server-facts.md` | uc-722: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id |
 | `usecases/console/tool-workbench.md` | uc-101: an operation on its full-width workbench; draft mock and transform, a secret typed for one run, the request sent masked, the mock staged for review |
 | `usecases/console/secrets-in-one-place.md` | uc-107: Settings > Secrets lists the operations each secret serves, a rotation reaches them all, a delete in use is refused, and a team scope is enforced by the gateway |
 | `usecases/console/sample-data-pages-say-so.md` | uc-125: a page the mock stores shows "Sample data, changes aren't saved" and cannot be saved, while a live setting keeps its value after a reload |
@@ -535,3 +538,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
 | `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
 | `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
+| `usecases/agents-service/guardrail-names-per-team.md` | uc-731: Two teams keep a guardrail of the same name and one team cannot hold two |

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "A team admin sees only their own team's settings",
+  "description": "The demo workspace's team admin is now Admin of Operations only, so the settings screens show that team's people, apps and access, and nothing from other teams.",
+  "tag": "fix"
+}

@@ -234,11 +234,12 @@ async def test_deleting_a_copy_marks_it_removed_and_a_changed_template_shows_as_
     assert after["copies"] == 0, after
 
 
-async def test_an_update_takes_an_unedited_copy_at_once_and_asks_first_for_one_with_no_baseline(
+async def test_an_update_takes_an_unedited_copy_and_a_link_with_no_base_keeps_every_difference_as_yours(
     client: AsyncClient,
 ) -> None:
-    """A copy made before copies kept their record's digest has none: it reads as edited, so the update asks the person
-    before it leaves anything of theirs out, and the review still answers."""
+    """A copy link made before links kept a base (and a record digest) has nothing to tell the team's edits from the
+    template's changes: every difference is a choice kept as the team's, so a take with no choices drops nothing. An
+    older console's body, {confirm: true} with no mode, is a reset, as it was before the merge."""
     import sqlalchemy as sa  # noqa: PLC0415 - only this test writes the table directly
 
     from ops_agents.store.template_copies import template_copies  # noqa: PLC0415
@@ -246,19 +247,26 @@ async def test_an_update_takes_an_unedited_copy_at_once_and_asks_first_for_one_w
     wire(client, [AGENT])
     made = ok(await install(client, {"knowledgeBases": ["kb_support"]}), 201)["copy"]
     path = f"/v1/resources/{SOURCE}:case-helper/copies/{made['recordId']}/update"
+    agent = f"/v1/agents/{made['recordId']}"
     body = cast(dict[str, Any], AGENT["body"])
-    edited = {**body, "instructions": "Read it twice."}
-    changed: dict[str, Any] = AGENT | {"version": 3, "digest": "b" * 64, "body": edited}
+    twice = {**body, "instructions": "Read twice."}
+    changed: dict[str, Any] = AGENT | {"version": 3, "digest": "b" * 64, "body": twice}
     wire(client, [changed])
     review = ok(await client.get(path, headers=OPS))
     assert (review["fromVersion"], review["toVersion"], review["edits"]) == (2, 3, [])
-    assert "instructions" in review["changes"]
+    assert [(f["field"], f["outcome"]) for f in review["fields"]] == [("instructions", "taken")]
     assert ok(await client.post(path, json={}, headers=OPS))["taken"] is True
+    assert ok(await client.get(agent, headers=OPS))["instructions"] == "Read twice."
     db = cast(AsyncEngine, client._transport.app.state.runtime.db)  # type: ignore[attr-defined]
     async with db.begin() as c:
-        await c.execute(sa.update(template_copies).values(record_digest=None))
-    wire(client, [changed | {"version": 4, "digest": "c" * 64}])
-    assert ok(await client.get(path, headers=OPS))["edits"]
-    refused = await client.post(path, json={}, headers=OPS)
-    assert refused.status_code == 409 and refused.json()["error"]["code"] == "copy_edited", refused.text
-    assert ok(await client.post(path, json={"confirm": True}, headers=OPS))["copy"]["version"] == 4
+        await c.execute(sa.update(template_copies).values(record_digest=None, base=None))
+    latest: dict[str, Any] = changed | {"version": 4, "digest": "c" * 64, "body": {**body, "role": "Reads cases"}}
+    wire(client, [latest])
+    review = ok(await client.get(path, headers=OPS))
+    # With no base, both the role and the instructions differ from the template: both are the team's unless chosen.
+    assert {f["field"]: f["outcome"] for f in review["fields"]} == {"role": "conflict", "instructions": "conflict"}
+    kept = ok(await client.post(path, json={"mode": "merge"}, headers=OPS))
+    assert kept["version"] is None and ok(await client.get(agent, headers=OPS))["instructions"] == "Read twice."
+    reset = ok(await client.post(path, json={"confirm": True}, headers=OPS))
+    assert reset["copy"]["version"] == 4
+    assert ok(await client.get(agent, headers=OPS))["instructions"] == "Read the case with get_case."

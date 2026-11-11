@@ -5034,6 +5034,17 @@
       "CopyRef": {
         "additionalProperties": false,
         "properties": {
+          "detachedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detachedat"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -5042,7 +5053,10 @@
             "enum": [
               "agent",
               "skill",
-              "workflow"
+              "workflow",
+              "guardrail",
+              "case_type",
+              "task_type"
             ],
             "title": "Kind",
             "type": "string"
@@ -6720,6 +6734,25 @@
           "data"
         ],
         "title": "Envelope[ChannelRow]",
+        "type": "object"
+      },
+      "Envelope_CopyRef_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CopyRef"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[CopyRef]",
         "type": "object"
       },
       "Envelope_DefinitionPublished_": {
@@ -9067,6 +9100,41 @@
           "citation"
         ],
         "title": "FieldRead",
+        "type": "object"
+      },
+      "FieldReview": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "kept",
+              "taken",
+              "conflict"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template"
+          },
+          "yours": {
+            "title": "Yours"
+          }
+        },
+        "required": [
+          "field",
+          "label",
+          "outcome"
+        ],
+        "title": "FieldReview",
         "type": "object"
       },
       "FileLink": {
@@ -12896,6 +12964,9 @@
               "agent",
               "skill",
               "workflow",
+              "guardrail",
+              "case_type",
+              "task_type",
               "document_type",
               "knowledge_source"
             ],
@@ -18205,7 +18276,10 @@
             "enum": [
               "agent",
               "skill",
-              "workflow"
+              "workflow",
+              "guardrail",
+              "case_type",
+              "task_type"
             ],
             "title": "Kind",
             "type": "string"
@@ -19887,13 +19961,78 @@
         "title": "TypedTask",
         "type": "object"
       },
+      "UpdateExpect": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "recordDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorddigest"
+          }
+        },
+        "title": "UpdateExpect",
+        "type": "object"
+      },
       "UpdateInput": {
         "additionalProperties": false,
         "properties": {
+          "choices": {
+            "additionalProperties": {
+              "enum": [
+                "yours",
+                "template"
+              ],
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "object"
+          },
           "confirm": {
             "default": false,
             "title": "Confirm",
             "type": "boolean"
+          },
+          "expect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateExpect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "merge",
+                  "reset"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
           }
         },
         "title": "UpdateInput",
@@ -19912,11 +20051,26 @@
           "copy": {
             "$ref": "#/components/schemas/CopyRef"
           },
+          "draftOpen": {
+            "default": false,
+            "title": "Draftopen",
+            "type": "boolean"
+          },
           "edits": {
             "items": {
               "type": "string"
             },
             "title": "Edits",
+            "type": "array"
+          },
+          "expect": {
+            "$ref": "#/components/schemas/UpdateExpect"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldReview"
+            },
+            "title": "Fields",
             "type": "array"
           },
           "fromVersion": {
@@ -19931,6 +20085,17 @@
           "toVersion": {
             "title": "Toversion",
             "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
@@ -37867,7 +38032,7 @@
         "x-ops-public": "sdk"
       },
       "patch": {
-        "description": "Saves the next version as a draft; agents keep the version they pin until a publish and a re-pin.",
+        "description": "Saves into the open draft, or opens the next version when the newest is published or under review; agents keep\nthe version they pin until a publish and a re-pin.",
         "operationId": "agents_update_guardrail",
         "parameters": [
           {
@@ -42037,9 +42202,207 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/resources/{resource}/copies/{copy}/detach": {
+      "post": {
+        "description": "Detach: the team's copy becomes its own record, offered no update or reset again, and the template is offered\nfor a fresh copy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the\nteam's copy of `resource`.",
+        "operationId": "resources_detach_copy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "title": "Resource",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "copy",
+            "required": true,
+            "schema": {
+              "title": "Copy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CopyRef_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Detach Copy",
+        "tags": [
+          "Resources",
+          "resources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/resources/{resource}/copies/{copy}/update": {
       "get": {
-        "description": "Review update: what taking the app's current template would change in the team's copy (`copy` is the copy's\nrecord id), and the edits the team made to its copy since, which the new draft does not carry.",
+        "description": "Review update: field by field, what taking the app's current template does to the team's copy (`copy` is the\ncopy's record id): the team's edits kept, the template's changes taken, and the fields both changed, which keep the\nteam's value unless the person chooses. 409 `detached` for a copy the team made its own.",
         "operationId": "resources_review_update",
         "parameters": [
           {
@@ -42235,7 +42598,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Take update: a new draft version of the copy made from the app's current template; the published version keeps\nrunning until the draft goes through its publish review, and earlier versions stay in the copy's history. A copy the\nteam edited since it was added is refused with 409 `copy_edited`, listing the edits, until `confirm` says the\nperson saw that the new draft does not carry them; nothing is merged.",
+        "description": "Take update. `merge` (the default) saves one draft that keeps every field the team edited, takes every field\nonly the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`\nmakes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What\nruns keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy\nmoved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422\n`tool_not_available`, naming the tools, when the template needs one the team cannot call.",
         "operationId": "resources_take_update",
         "parameters": [
           {
@@ -47493,7 +47856,10 @@
                   "enum": [
                     "agent",
                     "skill",
-                    "workflow"
+                    "workflow",
+                    "guardrail",
+                    "case_type",
+                    "task_type"
                   ],
                   "type": "string"
                 },

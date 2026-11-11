@@ -169,6 +169,10 @@ class DocumentTypes:
             verb = "add" if adding else "change"
             raise CreateNotAllowedError(f"Your role in this team cannot {verb} document types.")
 
+    def may_change(self, who: Who) -> None:
+        """Refuses a role that cannot change the team's document types, before a route changes anything."""
+        self._may_write(who)
+
     async def create(self, who: Who, body: dict[str, Any]) -> dict[str, Any]:
         self._may_write(who, adding=True)
         type_id = body.get("id") or f"dt_{uuid.uuid4().hex[:12]}"

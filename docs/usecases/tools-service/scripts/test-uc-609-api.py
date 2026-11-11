@@ -97,11 +97,12 @@ with ExitStack() as stack:
             )
             for who in (priya, wanjiru)
         ]
-        # A new app hands agents its read tools only; each team's admin adds the two writes, as from the Tools tab.
+        # A new app starts with its reads added; each team adds the two writes it calls, as an admin does from the Tools tab.
         for who in (priya, wanjiru):
-            gw.post(
+            added = gw.post(
                 f"/v1/apps/plugin:{ID}/tools", json={"tools": ["fields_post_message", "fields_transfer"]}, headers=who
             )
+            check("1 the team adds the two write tools (200)", added.status_code == 200, added.text[:200])
         first = [review(gw, priya), review(gw, wanjiru)]
         check(
             "1 both teams turn the fields desk on and each runs 0.1.0 with no update waiting",
@@ -202,9 +203,10 @@ with ExitStack() as stack:
             {"stale": stale.text[:200], "taken": taken.text[:300]},
         )  # fmt: skip
 
-        # 8. Team ops now runs 0.2.0; team platform is still on 0.1.0.
-        # The update's new tool is in the catalog now; the team's admin adds it from the Tools tab.
+        # The update brings close_case into the catalog; team ops adds it as it adds any tool.
         gw.post(f"/v1/apps/plugin:{ID}/tools", json={"tools": ["fields_close_case"]}, headers=priya)
+
+        # 8. Team ops now runs 0.2.0; team platform is still on 0.1.0.
         new_post = call(gw, "post_message", {"channel": "C1", "text": "Card 1043"})
         new_at = reached(fake)
         closed = call(gw, "close_case", {"id": "case-1"})

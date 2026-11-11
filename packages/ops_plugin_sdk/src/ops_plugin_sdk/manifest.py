@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -381,7 +381,7 @@ class Requires(Strict):
 
 
 class Template(Strict):
-    kind: Literal["agent", "skill", "workflow", "document_type"]
+    kind: Literal["agent", "skill", "workflow", "document_type", "case_type", "task_type", "guardrail"]
     id: str
     version: int = Field(ge=1)
     path: str
@@ -406,16 +406,37 @@ class Manifest(Strict):
     sdk: str
     connection: Connection
     settings: dict[str, Setting] = Field(default_factory=dict[str, Setting])
-    egress: list[str] = Field(min_length=1)
+    egress: list[str] = Field(default_factory=list[str])
     endpoint: str
     # Sent on every request the plugin makes, a Python tool's too: fixed text or {setting}.
     headers: dict[str, str] = Field(default_factory=dict[str, str])
-    tools: list[Tool] = Field(min_length=1)
+    tools: list[Tool] = Field(default_factory=list[Tool])
     knowledge_sources: list[KnowledgeSource] = Field(default_factory=list[KnowledgeSource])
     templates: list[Template] = Field(default_factory=list[Template])
     display: Display = Field(default_factory=Display)
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _pack(cls, raw: Any) -> Any:
+        """A pack (a plugin that lists templates) may bring no connection, endpoint, egress or tools: it signs in as no
+        one (`kinds: [none]`), so nothing asks for an account, and reaches no host."""
+        if not isinstance(raw, dict):
+            return raw
+        given = cast(dict[str, Any], raw)
+        if not given.get("templates"):
+            return given
+        return {"connection": {"kinds": ["none"], "sign_in": ["team"]}, "endpoint": "", **given}
+
+    @model_validator(mode="after")
+    def _reaches_something(self) -> Manifest:
+        # A plugin with no templates is a connection and its tools; one that reaches no host does nothing.
+        if not self.templates and not self.egress:
+            raise ValueError("egress: a plugin with no templates names at least one host")
+        if not self.templates and not self.tools:
+            raise ValueError("tools: a plugin with no templates has at least one tool")
+        return self
 
     @field_validator("id")
     @classmethod

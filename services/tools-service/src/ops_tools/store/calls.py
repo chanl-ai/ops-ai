@@ -310,6 +310,7 @@ class CallLog:
         decision: str | None = None,
         since: str | None = None,
         key: str | None = None,
+        call_id: str | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[dict[str, Any]], int]:
@@ -330,6 +331,8 @@ class CallLog:
             where.append(gateway_calls.c.decision == decision)
         if key:
             where.append(gateway_calls.c.idempotency_key == key)
+        if call_id:
+            where.append(gateway_calls.c.id == call_id)
         if since:
             where.append(gateway_calls.c.created_at >= since)
         q = gateway_calls.select().where(*where).order_by(gateway_calls.c.created_at.desc()).offset(offset).limit(limit)

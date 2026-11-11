@@ -1992,7 +1992,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
             plugin: components["schemas"]["PluginRef"];
             /** Reason */
             reason?: string | null;
@@ -4503,7 +4503,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
             plugin: components["schemas"]["PluginRef"];
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
@@ -10065,6 +10065,7 @@ export interface operations {
                 thread?: string | null;
                 decision?: string | null;
                 key?: string | null;
+                call?: string | null;
             };
             header?: never;
             path?: never;
@@ -11190,7 +11191,7 @@ export interface operations {
     plugins_list_plugin_templates: {
         parameters: {
             query?: {
-                kind?: ("agent" | "skill" | "workflow" | "document_type" | "knowledge_source") | null;
+                kind?: ("agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source") | null;
             };
             header?: never;
             path?: never;

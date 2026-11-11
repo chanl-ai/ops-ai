@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_identity import Auth, Identity, dev_service_signer, mint_service_token
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.loader import discover
+from ops_plugin_sdk.validate import validate
 from ops_service_kit.settings import Settings
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.templates import TemplateOutside, body_of, plugin_templates_router
@@ -73,6 +74,32 @@ def linked_desk(parent: Path) -> Path:
     (root / "plugin.yaml").write_text(LINKED_MANIFEST)
     (root / "helper.yaml").write_text("name: Helper\ninstructions: Help.\n")
     (root / "triage.yaml").write_text("schemaVersion: 2\nid: triage\nname: Triage\nnodes: []\nconnections: []\n")
+    return root
+
+
+# A pack: templates only, with no connection, endpoint, egress or tools, as the core pack ships its case and task types.
+PACK = "test.pack"
+PACK_MANIFEST = """\
+schema: ops-ai/plugin@2
+id: test.pack
+title: Core types
+version: 0.1.0
+sdk: "1"
+templates:
+  - { kind: case_type, id: complaint, version: 1, path: complaint.yaml }
+  - { kind: task_type, id: callback, version: 1, path: callback.yaml }
+  - { kind: guardrail, id: no-advice, version: 1, path: no-advice.yaml }
+"""
+
+
+def type_pack(parent: Path) -> Path:
+    root = parent / "type_pack"
+    root.mkdir()
+    (root / "__init__.py").write_text("from ops_plugin_sdk import Plugin\n\nplugin = Plugin.beside(__file__)\n")
+    (root / "plugin.yaml").write_text(PACK_MANIFEST)
+    (root / "complaint.yaml").write_text("name: Complaint\nfields: []\n")
+    (root / "callback.yaml").write_text("name: Call back\nfields: []\n")
+    (root / "no-advice.yaml").write_text("name: No advice\ntopics: [investment advice]\n")
     return root
 
 
@@ -130,13 +157,14 @@ class FakeCopies:
 async def client(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str, tmp_path: Path
 ) -> AsyncIterator[httpx.AsyncClient]:
-    loaded = discover(found=[], folders=[str(FOLDER), str(linked_desk(tmp_path))])
+    loaded = discover(found=[], folders=[str(FOLDER), str(linked_desk(tmp_path)), str(type_pack(tmp_path))])
     assert all(item.ok for item in loaded), [item.error for item in loaded if not item.ok]
     host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded)
     bindings = PluginBindings(engine)
     await bindings.put(tenant, ON, PLUGIN, enabled=True, connection_id=None, settings={}, by="test")
     await bindings.put(tenant, OFF, PLUGIN, enabled=False, connection_id=None, settings={}, by="test")
     await bindings.put(tenant, ON, LINKED, enabled=True, connection_id=None, settings={}, by="test")
+    await bindings.put(tenant, ON, PACK, enabled=True, connection_id=None, settings={}, by="test")
     # People sign in with the platform's tokens; services with the dev service key, as the tools tests sign them.
     dev = Auth.for_dev(Settings(), audience="tools", name="dev", email="dev", tenant_id=tenant)
     auth = Auth(
@@ -263,3 +291,17 @@ def test_a_body_outside_the_plugin_folder_is_never_read(tmp_path: Path) -> None:
     escaped = agent.model_copy(update={"path": "../../../conftest.py"})
     with pytest.raises(TemplateOutside):
         body_of(plugin, escaped)
+
+
+async def test_a_pack_with_no_connection_loads_lists_its_templates_and_needs_no_sign_in(
+    client: httpx.AsyncClient, tenant: str, tmp_path: Path
+) -> None:
+    _, problems = validate(tmp_path / "type_pack")
+    assert problems == [], [str(p) for p in problems]
+    on = [t for t in await listed(client, service(tenant, ON)) if t["plugin"]["id"] == PACK]
+    assert sorted((t["kind"], t["id"]) for t in on) == [
+        ("case_type", "complaint"),
+        ("guardrail", "no-advice"),
+        ("task_type", "callback"),
+    ]
+    assert next(t for t in on if t["id"] == "no-advice")["body"]["topics"] == ["investment advice"]

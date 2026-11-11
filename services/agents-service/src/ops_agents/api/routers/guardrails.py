@@ -133,13 +133,14 @@ async def create_guardrail(rt: Rt, me: Me, body: GuardrailInput) -> JSONResponse
 
 @router.patch("/{guardrail_id}", response_model=Envelope[Guardrail])
 async def update_guardrail(rt: Rt, me: Me, guardrail_id: str, body: GuardrailPatch) -> JSONResponse:
-    """Saves the next version as a draft; agents keep the version they pin until a publish and a re-pin."""
+    """Saves into the open draft, or opens the next version when the newest is published or under review; agents keep
+    the version they pin until a publish and a re-pin."""
     reg = guardrails(rt)
     row = await changeable(rt, me, guardrail_id, "edit")
     newest = await reg.version(guardrail_id, int(row["version"]))
     assert newest is not None
     merged: dict[str, Any] = {**newest["config"], **body.model_dump(by_alias=True, exclude_none=True, exclude={"note"})}
-    await reg.save(guardrail_id, check_config(row["kind"], merged), by=me.email, note=body.note)
+    await reg.save_draft(guardrail_id, check_config(row["kind"], merged), by=me.email, note=body.note)
     return ok(await view(rt, guardrail_id))
 
 
