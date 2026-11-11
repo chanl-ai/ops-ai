@@ -1,10 +1,10 @@
-// uc-721 the console shows one area of pages at a time, chosen from the top bar, ui layer:
+// uc-723 the console shows one area of pages at a time, chosen from the top bar, ui layer:
 // docs/usecases/console/console-areas.md. Headless Chromium on the demo stack, signed in through platform-service as the
 // seeded people (services/platform-service/seed/people.json) and the fixtures added for this card: Lena (chat only) and
 // Tomas (a builder in Operations, a chat user in Platform). Nothing names a role: what a person is offered is what
-// their cells open. Screenshots go to evidenceDir('721', 'uc').
+// their cells open. Screenshots go to evidenceDir('723', 'uc').
 //
-// UC721_STEPS=1,4 runs only those steps.
+// UC723_STEPS=1,4 runs only those steps.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -18,8 +18,8 @@ const RAVI = 'r.menon@harborpine.example';
 const LENA = 'l.brandt@harborpine.example';
 const TOMAS = 't.reyes@harborpine.example';
 const AREAS = ['Work', 'Build', 'Data', 'Govern'];
-const SHOTS = evidenceDir('721', 'uc');
-const ONLY = process.env.UC721_STEPS?.split(',').map((x) => x.trim());
+const SHOTS = evidenceDir('723', 'uc');
+const ONLY = process.env.UC723_STEPS?.split(',').map((x) => x.trim());
 
 async function step(name, body) {
   if (ONLY && !ONLY.includes(name.split(' ')[0])) return;

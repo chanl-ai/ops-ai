@@ -331,5 +331,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
-| uc-721 | console | The console shows one area of pages at a time, chosen from the top bar and offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams, on a desktop and a phone | ui | failing |
+| uc-723 | console | The console shows one area of pages at a time, chosen from the top bar and offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams, on a desktop and a phone | ui | failing |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |

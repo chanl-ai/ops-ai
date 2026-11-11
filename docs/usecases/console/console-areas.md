@@ -1,6 +1,6 @@
 # The console shows one area of pages at a time, chosen from the top bar
 
-Status: draft. Id: `uc-721`. Service: `console`. Layers: ui.
+Status: draft. Id: `uc-723`. Service: `console`. Layers: ui.
 
 The sidebar lists the pages of one area (Work, Build, Data or Govern) and the top bar switches areas, with one dropdown
 on a phone. A person is offered a page exactly when they hold the cell its service checks, so the area control shows only
@@ -47,7 +47,7 @@ when two or more areas are offered. Design: the console areas design page, accep
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-721-ui.mjs` | failing |
+| ui | `console/scripts/test-uc-723-ui.mjs` | failing |
 
 ## Non-vacuous check
 

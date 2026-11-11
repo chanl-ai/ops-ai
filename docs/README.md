@@ -324,7 +324,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
 | `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
 | `usecases/console/sub-pages-in-the-sidebar.md` | uc-047: every sidebar parent lists its sub-pages as rows, the active one lit, closed parents remembered |
-| `usecases/console/console-areas.md` | uc-721: the sidebar shows one area at a time, chosen from the top bar and offered only by what the person may open |
+| `usecases/console/console-areas.md` | uc-723: the sidebar shows one area at a time, chosen from the top bar and offered only by what the person may open |
 | `usecases/console/console-areas-server-facts.md` | uc-722: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id |
 | `usecases/console/tool-workbench.md` | uc-101: an operation on its full-width workbench; draft mock and transform, a secret typed for one run, the request sent masked, the mock staged for review |
 | `usecases/console/secrets-in-one-place.md` | uc-107: Settings > Secrets lists the operations each secret serves, a rotation reaches them all, a delete in use is refused, and a team scope is enforced by the gateway |
