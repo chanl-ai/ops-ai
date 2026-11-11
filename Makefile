@@ -9,6 +9,7 @@ include make/cli.mk
 include make/db.mk
 include make/db-scripts.mk
 include make/release.mk
+include make/update.mk
 include make/staging.mk
 include make/services.mk
 include make/console.mk
