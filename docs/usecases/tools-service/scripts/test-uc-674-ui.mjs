@@ -288,17 +288,26 @@ await withUiStack(
       }, ravi);
 
       // Auth configs are a builder's and an admin's: a viewer's page has no Auth configs tab and no Auth config column.
-      await step('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab', async () => {
+      // An admin's Accounts tab shows the column only when opened from a config's account count (the drilldown), so
+      // the plain list keeps its room for the state and the row's actions.
+      await step('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab, and the column from a config’s count', async () => {
+        const columnCount = (page) => page.getByRole('columnheader', { name: 'Auth config' }).count();
         const configsOf = async (page) => {
           await open(page, consoleUrl, SF);
           await page.getByTestId('app-tab-accounts').click();
           await page.waitForTimeout(800);
-          const column = await page.getByRole('columnheader', { name: 'Auth config' }).count();
-          return { tab: await page.getByTestId('app-tab-auth').count(), column, named: (await page.locator('main').innerText()).includes('Ops AI’s app') };
+          return { tab: await page.getByTestId('app-tab-auth').count(), column: await columnCount(page), named: (await page.locator('main').innerText()).includes('Ops AI’s app') };
         };
         const viewer = await configsOf(ravi);
         const admin = await configsOf(priyaPage);
-        check('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab', viewer.tab === 0 && viewer.column === 0 && !viewer.named && admin.tab === 1 && admin.column === 1, { viewer, admin });
+        // The drilldown: Auth configs › a config's account count opens Accounts filtered to it, with the column.
+        await priyaPage.getByTestId('app-tab-auth').click();
+        await priyaPage.locator('[data-testid^="auth-config-accounts-"]:enabled').first().click({ timeout: 30_000 });
+        await priyaPage.waitForTimeout(800);
+        admin.drilldownColumn = await columnCount(priyaPage);
+        check('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab, and the column from a config’s count',
+          viewer.tab === 0 && viewer.column === 0 && !viewer.named && admin.tab === 1 && admin.column === 0 && admin.drilldownColumn === 1,
+          { viewer, admin });
       }, ravi);
     } finally {
       await browser.close();
