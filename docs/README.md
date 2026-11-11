@@ -535,4 +535,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
 | `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
 | `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
-| `usecases/platform-service/a-team-admin-gives-a-system.md` | uc-721: A team admin gives a system its own expiring, rotatable key limited to picked tools, and the call log names that system |
+| `usecases/platform-service/system-keys.md` | uc-732: A team admin gives a system its own expiring, rotatable key limited to picked tools, and the call log names that system |

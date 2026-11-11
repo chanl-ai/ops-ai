@@ -1,4 +1,4 @@
-"""uc-721 a team admin gives a system its own expiring, rotatable key limited to picked tools, and the call log names
+"""uc-732 a team admin gives a system its own expiring, rotatable key limited to picked tools, and the call log names
 that system, api layer: docs/usecases/platform-service/a-team-admin-gives-a-system.md. platform-service issues the
 keys and tools-service verifies them through its introspection. No model call."""
 

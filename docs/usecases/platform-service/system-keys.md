@@ -1,6 +1,6 @@
 # A team admin gives a system its own expiring, rotatable key limited to picked tools, and the call log names that system
 
-Status: draft. Id: `uc-721`. Service: `platform-service`, tools-service, console. Layers: api, ui.
+Status: draft. Id: `uc-732`. Service: `platform-service`, tools-service, console. Layers: api, ui.
 
 Labels from the MCP sign-in design: step 1 is uc-mcp-10, step 2
 uc-mcp-9, step 3 uc-mcp-12, step 4 uc-mcp-11, step 5 uc-mcp-13, step 6 uc-mcp-18; the ui steps are uc-mcp-13 and uc-mcp-20.
@@ -57,8 +57,8 @@ platform-service runs with the dev seed's own roles; tools-service verifies its 
 
 | Layer | Script | State |
 |---|---|---|
-| api | `platform-service/scripts/test-uc-721-api.py` | failing (red) |
-| ui | `platform-service/scripts/test-uc-721-ui.mjs` | failing (red) |
+| api | `platform-service/scripts/test-uc-732-api.py` | failing (red) |
+| ui | `platform-service/scripts/test-uc-732-ui.mjs` | failing (red) |
 
 ## Non-vacuous check
 

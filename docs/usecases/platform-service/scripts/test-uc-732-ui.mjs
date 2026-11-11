@@ -1,4 +1,4 @@
-// uc-721 a team admin gives a system its own expiring, rotatable key limited to picked tools, ui layer. Headless
+// uc-732 a team admin gives a system its own expiring, rotatable key limited to picked tools, ui layer. Headless
 // Chromium against a console signed in through platform-service (dev seed, tools-service beside it for the tool
 // picker): Priya (team_ops admin) opens Create key, sees a tool picker and no "Never" expiry, makes a key, finds a key
 // 10 days from its end marked "Expires soon" at 1440 and 390, rotates it, and sees a key whose maker left marked gone;
