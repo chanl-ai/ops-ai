@@ -271,6 +271,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "resources_detach_copy": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/resources/{resource}/copies/{copy}/detach",
+        "pathParams": ["resource", "copy"],
+        "query": [],
+        "stream": False,
+    },
     "resources_review_update": {
         "body": None,
         "headers": [],
@@ -478,6 +487,12 @@ class Operations:
         "Copy Resource"
         return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def resources_detach_copy(self, resource: str, copy: str) -> CopyRef:
+        "Detach Copy"
+        return self._t.call(
+            SERVICE, OPERATIONS["resources_detach_copy"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
         "Review Update"
         return self._t.call(
@@ -677,6 +692,12 @@ class AsyncOperations:
     async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
         "Copy Resource"
         return await self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def resources_detach_copy(self, resource: str, copy: str) -> CopyRef:
+        "Detach Copy"
+        return await self._t.call(
+            SERVICE, OPERATIONS["resources_detach_copy"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
         "Review Update"

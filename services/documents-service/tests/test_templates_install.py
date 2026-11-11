@@ -237,7 +237,7 @@ async def test_a_type_a_workflow_reads_is_not_deleted_and_the_refusal_names_the_
     assert (await svc.client.get(f"/v1/document-types/{made}", headers=OPS)).status_code == 200
 
 
-async def test_an_update_makes_a_new_version_and_asks_first_when_the_team_saved_its_own(make: Make) -> None:
+async def test_an_update_makes_a_new_version_and_a_reset_asks_first_when_the_team_saved_its_own(make: Make) -> None:
     svc = make()
     wire(svc, [LETTER])
     made = data(await install(svc), 201)["copy"]["recordId"]
@@ -251,9 +251,12 @@ async def test_an_update_makes_a_new_version_and_asks_first_when_the_team_saved_
     versions = data(await svc.client.get(f"/v1/document-types/{made}", headers=OPS))["versions"]
     keys = [f["key"] for f in max(versions, key=lambda v: v["version"])["fields"]]
     assert keys == ["case_number", "letter_date", "sender"]
-    # The team saves a version of its own; the next update asks before leaving it out.
+    # The team saves a version of its own; a reset asks before dropping it.
     own = await svc.client.post(f"/v1/document-types/{made}/versions", json={"fields": fields[:1]}, headers=OPS)
     assert own.status_code == 201, own.text
     wire(svc, [LETTER | {"version": 3, "digest": "d" * 64, "body": {**LETTER["body"], "fields": fields}}])
-    assert code(await svc.client.post(path, json={}, headers=OPS), 409) == "copy_edited"
+    assert code(await svc.client.post(path, json={"mode": "reset"}, headers=OPS), 409) == "copy_edited"
+    # An older console's {confirm: true} with no mode is the reset it always was: the template as it is.
     assert data(await svc.client.post(path, json={"confirm": True}, headers=OPS))["copy"]["version"] == 3
+    versions = data(await svc.client.get(f"/v1/document-types/{made}", headers=OPS))["versions"]
+    assert [f["key"] for f in max(versions, key=lambda v: v["version"])["fields"]] == keys

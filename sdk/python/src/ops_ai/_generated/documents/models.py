@@ -55,6 +55,7 @@ class ClassifyIn(TypedDict, closed=True):
 
 
 class CopyRef(TypedDict, closed=True):
+    detachedAt: NotRequired[str | None]
     id: str
     kind: Literal["document_type"]
     recordId: str
@@ -140,6 +141,11 @@ class EnvelopeClassification(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeCopyRef(TypedDict, closed=True):
+    data: CopyRef
+    success: Literal[True]
+
+
 class EnvelopeDocumentTypeVersion(TypedDict, closed=True):
     data: DocumentTypeVersion
     success: Literal[True]
@@ -183,6 +189,14 @@ class ExtractionRequest(TypedDict, closed=True):
     read: NotRequired[Literal["fields", "propose"]]
     reviewBelow: NotRequired[float | None]
     version: NotRequired[int | None]
+
+
+class FieldReview(TypedDict, closed=True):
+    field: str
+    label: str
+    outcome: Literal["kept", "taken", "conflict"]
+    template: NotRequired[Any]
+    yours: NotRequired[Any]
 
 
 class FileFacts(TypedDict, closed=True):
@@ -391,17 +405,30 @@ class TestRun(TypedDict, closed=True):
     version: int
 
 
+class UpdateExpect(TypedDict, closed=True):
+    digest: NotRequired[str | None]
+    recordDigest: NotRequired[str | None]
+
+
 class UpdateInput(TypedDict, closed=True):
+    choices: NotRequired[dict[str, Literal["yours", "template"]]]
     confirm: NotRequired[bool]
+    expect: NotRequired[UpdateExpect | None]
+    mode: NotRequired[Literal["merge", "reset"] | None]
 
 
 class UpdateReview(TypedDict, closed=True):
+    appliesNow: NotRequired[bool]
     changes: list[str]
     copy: CopyRef
+    draftOpen: NotRequired[bool]
     edits: list[str]
+    expect: NotRequired[UpdateExpect]
+    fields: NotRequired[list[FieldReview]]
     fromVersion: int
     taken: NotRequired[bool]
     toVersion: int
+    version: NotRequired[int | None]
 
 
 class Word(TypedDict, closed=True):

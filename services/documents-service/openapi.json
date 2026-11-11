@@ -418,6 +418,17 @@
       "CopyRef": {
         "additionalProperties": false,
         "properties": {
+          "detachedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detachedat"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1084,6 +1095,25 @@
           "data"
         ],
         "title": "Envelope[Classification]",
+        "type": "object"
+      },
+      "Envelope_CopyRef_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CopyRef"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[CopyRef]",
         "type": "object"
       },
       "Envelope_DocumentTypeList_": {
@@ -1993,6 +2023,41 @@
           "fileId"
         ],
         "title": "ExtractionRequest",
+        "type": "object"
+      },
+      "FieldReview": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "kept",
+              "taken",
+              "conflict"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template"
+          },
+          "yours": {
+            "title": "Yours"
+          }
+        },
+        "required": [
+          "field",
+          "label",
+          "outcome"
+        ],
+        "title": "FieldReview",
         "type": "object"
       },
       "FileFacts": {
@@ -3422,13 +3487,78 @@
         "title": "TestRun",
         "type": "object"
       },
+      "UpdateExpect": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "recordDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorddigest"
+          }
+        },
+        "title": "UpdateExpect",
+        "type": "object"
+      },
       "UpdateInput": {
         "additionalProperties": false,
         "properties": {
+          "choices": {
+            "additionalProperties": {
+              "enum": [
+                "yours",
+                "template"
+              ],
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "object"
+          },
           "confirm": {
             "default": false,
             "title": "Confirm",
             "type": "boolean"
+          },
+          "expect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateExpect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "merge",
+                  "reset"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
           }
         },
         "title": "UpdateInput",
@@ -3437,6 +3567,11 @@
       "UpdateReview": {
         "additionalProperties": false,
         "properties": {
+          "appliesNow": {
+            "default": true,
+            "title": "Appliesnow",
+            "type": "boolean"
+          },
           "changes": {
             "items": {
               "type": "string"
@@ -3447,11 +3582,26 @@
           "copy": {
             "$ref": "#/components/schemas/CopyRef"
           },
+          "draftOpen": {
+            "default": false,
+            "title": "Draftopen",
+            "type": "boolean"
+          },
           "edits": {
             "items": {
               "type": "string"
             },
             "title": "Edits",
+            "type": "array"
+          },
+          "expect": {
+            "$ref": "#/components/schemas/UpdateExpect"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldReview"
+            },
+            "title": "Fields",
             "type": "array"
           },
           "fromVersion": {
@@ -3466,6 +3616,17 @@
           "toVersion": {
             "title": "Toversion",
             "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
@@ -8891,9 +9052,206 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/resources/{resource}/copies/{copy}/detach": {
+      "post": {
+        "description": "Detach: the team's type becomes its own, offered no update again, and the template is offered for a fresh\ncopy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the team's copy\nof `resource`.",
+        "operationId": "resources_detach_copy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "title": "Resource",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "copy",
+            "required": true,
+            "schema": {
+              "title": "Copy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CopyRef_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not ready or already in another state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Detach Copy",
+        "tags": [
+          "resources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/resources/{resource}/copies/{copy}/update": {
       "get": {
-        "description": "Review update: what a new version from the app's current template changes in the team's type (`copy` is the\ntype's id), and the versions the team saved since adding it, which the new version does not carry.",
+        "description": "Review update: field by field, what taking the app's current template does to the team's type (`copy` is the\ntype's id): the team's edits kept, the template's changes taken, and the fields both changed, which keep the\nteam's value unless the person chooses. Each extracted field is compared by its key. 409 `detached` for a copy\nthe team made its own.",
         "operationId": "resources_review_update",
         "parameters": [
           {
@@ -9088,7 +9446,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Take update: the type's next version made from the app's current template, as a person's new version is\nmade; earlier versions stay. A type the team gave a version of its own since adding it is refused with 409\n`copy_edited` until `confirm` says the person saw the new version does not carry it; nothing is merged.",
+        "description": "Take update. `merge` (the default) makes the type's next version keeping every field the team edited,\ntaking every field only the template changed, and writing the template's value on a conflict only where\n`choices` says so; `reset` makes it from the template as it is, after `confirm` (409 `copy_edited` listing the\nedits it drops). A document type has no draft, so the version applies at once; earlier versions, and every pin\non them, stay. 409 `update_stale` when the template or the type moved since the review `expect` names, and\nnothing is saved; 409 `detached` for a copy the team made its own.",
         "operationId": "resources_take_update",
         "parameters": [
           {

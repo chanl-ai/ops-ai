@@ -42,6 +42,7 @@ A team's agent, skill or workflow made from a plugin's template is an ordinary r
 | Field by field | Kept where only the team edited, taken where only the template changed, a choice where both did, kept as the team's by default (`ops_service_kit.template_merge`) |
 | The base never moves on a save | Only an install or an update writes it, and it is the template's body, never the merged result, so a conflict kept as the team's is asked about again only when the template changes that field again |
 | Detach | The copy becomes the team's own and is offered no update |
+| Document types | documents-service keeps the same link (`documents_template_copies`) and compares each extracted field by its key; a type has no draft, so a taken update is the type's next version at once (`appliesNow`), and versions a workflow pinned keep reading as they were |
 
 ## What happens without the pin
 
