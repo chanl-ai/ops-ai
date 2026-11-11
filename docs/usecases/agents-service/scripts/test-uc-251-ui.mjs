@@ -1,7 +1,7 @@
 // uc-251 a case reads assembled, ui layer: docs/usecases/agents-service/a-case-reads-assembled.md. A fee dispute workflow
 // (configuration, nothing in code knows it) opens a complaint case and waits on a person to approve waiving the fee.
 // James opens the case: its fields in the complaint type's order, what it waits on with a link to the task, and the
-// drafted action. Maya follows that link, approves on the task page, and the case then reads nothing left and the
+// drafted action. James, who started it, cannot approve it himself; Maya follows that link, approves on the task page, and the case then reads nothing left and the
 // action approved. Platform sign-in; no model call is made.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { JAMES, MAYA, PASSWORD, agents, as, decideOpenTask, saveAndPublish, start, until } from '../../lib/workflow_ui.mjs';
@@ -101,6 +101,20 @@ await withUiStack(
         '2 it says what it waits on, links the task, and lists the drafted action as pending',
         /waiting on/i.test(before.left) && /Waive fee: .*fee id FEE-3901, amount 35\?/.test(before.left) && /^\/reviews/.test(before.task ?? '') && JSON.stringify(before.actions) === JSON.stringify(['pending']),
         before,
+      );
+
+      // James started the run, so he may not approve its write himself (requesterMayDecide is off by default): the
+      // task page says someone else decides, and no approval of his is recorded.
+      await james.goto(`${consoleUrl}${before.task}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await james.locator('main').getByText(/someone else/i).first().waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const ownPage = (await james.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ');
+      const ownDecide = james.getByTestId('decide');
+      const canClick = (await ownDecide.count()) > 0 && (await ownDecide.isEnabled().catch(() => false));
+      const stillWaiting = await readCase(james, consoleUrl, caseId);
+      check(
+        '3 the person who started it cannot approve their own request: the task says someone else decides',
+        /someone else/i.test(ownPage) && !canClick && JSON.stringify(stillWaiting.actions) === JSON.stringify(['pending']),
+        { text: ownPage.slice(0, 400), canClick, actions: stillWaiting.actions },
       );
 
       // Maya, a reviewer of the team, follows the case's link to the task and approves it there.

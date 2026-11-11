@@ -292,7 +292,7 @@ export function OperationSheet({
         <Section title="Limits and approval">
           <div className="grid gap-3 sm:grid-cols-2">
             <FormField id="op-access" label="Access" hint="Whether a call changes data. Any change is a major version.">
-              {/* Approvals are off by default: a write waits only when its approval switch is turned on. */}
+              {/* A write waits for approval until its switch says it runs at once; a read made a write starts waiting. */}
               <Select value={d.access} onValueChange={(v) => set({ access: v as ToolAccess })}>
                 <SelectTrigger id="op-access" className="w-full">
                   <SelectValue />

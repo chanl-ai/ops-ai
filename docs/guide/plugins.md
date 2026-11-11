@@ -161,8 +161,8 @@ paging, knowledge sources and templates.
 | `templates` | Each template's `kind` (`agent`, `skill`, `workflow` or `document_type`), `id`, `version`, `path` (its file, relative to the manifest), and `requires`: `tools` (names without the prefix; validate refuses one the plugin lacks) and `bind` (what a team fills in on its copy, such as `{model_alias: chat}` or `{knowledge_base: "Salesforce articles"}`) |
 | `display` | What the console's App card shows: `logo` (a URL or a `data:` URI), `category`, `description` (one line) and `docs_url` (where an admin reads how to register the system's app or get its key) |
 
-A write waits for a person's approval only when the team's approval policies say so (apps.md, Approvals) or its
-manifest entry sets `requires_approval: true`; approvals are off by default. A tool's `title` (at most 60
+A write waits for a person's approval unless its manifest entry sets `requires_approval: false` (it runs at once); a
+write that leaves it out waits, and the team's approval policies may hold more (apps.md, Approvals). A tool's `title` (at most 60
 characters, such as "Find cases") is what the tools picker, the agent page and the approval cards show in place of
 its operation name.
 
