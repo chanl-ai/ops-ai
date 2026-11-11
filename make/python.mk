@@ -1,5 +1,5 @@
 # The uv workspace: packages/ plus the services.
-.PHONY: python-install python-verify sbom test
+.PHONY: python-install python-verify sbom test test-impacted agent-guard
 
 ##@ Python
 
@@ -29,6 +29,16 @@ endif
 else
 	@scripts/verify-changed.sh "$$(git merge-base origin/main HEAD)"
 endif
+
+# What a builder runs while working: only the tests the change can affect, with the pick and the reason printed.
+# PLAN=1 prints the pick and stops. CI and nightly keep the whole suites (`make verify`).
+test-impacted: ## Run only the tests a change since BASE (default origin/main) can affect; PLAN=1 prints the pick only
+	@uv run python scripts/impacted_tests.py --base "$(or $(BASE),origin/main)" $(if $(PLAN),--list)
+
+# Registered like git-rules.py: one PreToolUse hook on Bash in the checkout's own Claude Code project settings (not tracked).
+agent-guard: ## Check the agent wait guard and print the hook entry that registers it
+	@python3 scripts/agent-guard.py --self-test
+	@echo 'register: {"matcher":"Bash","hooks":[{"type":"command","command":"python3 \"$$CLAUDE_PROJECT_DIR\"/scripts/agent-guard.py"}]} under hooks.PreToolUse'
 
 python-verify: ## Lint and type-check packages, then verify each service with model keys unset
 	@rm -f $(VERIFY_FAILED)

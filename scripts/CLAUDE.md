@@ -14,7 +14,7 @@ scripts are reached through a make target; run them that way so ports and env ma
 |---|---|---|
 | The stack | `stack.sh` (start, stop, probe, tail, stale detection), `schema_sync.py` (may `make up` migrate in place), `test_db.py` (the throwaway test database), `dev_admin.py`, `dev_egress.py`, `scratch_db_sweep.py`, `api_docs.py` (all services' API reference on :8799) | `make up`, `make health`, `make logs`, `make test`, `make db-sweep` |
 | Calling the API as a person | `api_as.py` (every other area runs the `opsai` command in `sdk/python`) | `make api`, `make sdk-call` ([make/CLAUDE.md](../make/CLAUDE.md)) |
-| Commit and push gates | `verify-staged.sh` (pre-commit, on the staged content), `commit-message-check.mjs`, `changelog-check.mjs` (commit-msg), `verify-changed.sh` (what changed since a base), `verify-head.sh` (`make verify` on an export of HEAD), `commit-paths.sh`, `commit-patch.sh`, `install-hooks.sh`, `git-rules.py` | `.githooks/`, `make commit`, `make commit-hunks`, `make test`, `make git-rules` ([Commits](../CLAUDE.md#commits)) |
+| Commit and push gates | `verify-staged.sh` (pre-commit, on the staged content), `commit-message-check.mjs`, `changelog-check.mjs` (commit-msg), `verify-changed.sh` (what changed since a base), `verify-head.sh` (`make verify` on an export of HEAD), `commit-paths.sh`, `commit-patch.sh`, `install-hooks.sh`, `git-rules.py`, `agent-guard.py` (refuses whole suites, bare pytest, pnpm verify and sleeps over 60 s when CL_AGENT or CL_AGENT_RUN is set), `impacted_tests.py` (the tests a change can affect) | `.githooks/`, `make commit`, `make commit-hunks`, `make test`, `make test-impacted`, `make git-rules`, `make agent-guard` ([Commits](../CLAUDE.md#commits)) |
 | Docs and generated-file checks | `check-docs.mjs`, `check-public-paths.mjs`, `scrub_board_paths.py`, `agent_skills.py`, `wf_builder_examples.py`, `check_examples.py` | `make docs-verify`, `pnpm verify` |
 | Code standards checks | `check_access_exceptions.py` (access decisions outside `can()`), `check_portable_store.py` (storage code that runs on PostgreSQL and not on SQL Server), `check_downgrades.py`, `leak_scan.py` | `make python-verify`, CI |
 | Docs written from code | `roles_matrix.py` (roles grid in `docs/architecture/roles-and-permissions.md`), `store_inventory.py` (`docs/architecture/data.md`), `sbom.py` (`docs/architecture/dependencies.md`) | `make python-verify` runs each with `--check`; run without it to rewrite |
@@ -37,7 +37,7 @@ scripts are reached through a make target; run them that way so ports and env ma
 | All of them | `uv run pytest -q scripts/tests` |
 | The pre-commit hook end to end, in a throwaway clone | `bash scripts/tests/test-verify-staged.sh` |
 | The agent scripts' own cases | `make agent-scripts-test` (each script's `--self-test`; the audit's plants faults and watches them survive once their test is removed) |
-| The JS gates' own cases | `node scripts/commit-message-check.mjs --self-test`, `node scripts/changelog-check.mjs --self-test`, `node scripts/check-public-paths.mjs --self-test`, `python3 scripts/git-rules.py --self-test` |
+| The JS gates' own cases | `node scripts/commit-message-check.mjs --self-test`, `node scripts/changelog-check.mjs --self-test`, `node scripts/check-public-paths.mjs --self-test`, `python3 scripts/git-rules.py --self-test`, `python3 scripts/agent-guard.py --self-test` |
 | Lint and format | `uv run ruff check scripts` and `uv run ruff format --check scripts` |
 
 ## Rules
