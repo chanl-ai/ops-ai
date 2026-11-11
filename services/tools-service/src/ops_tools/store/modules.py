@@ -144,6 +144,10 @@ module_operations = _child(
     sa.Column("binding", sa.JSON),
     sa.Column("rate_limit_per_min", sa.Integer, nullable=False),
     sa.Column("requires_approval", sa.Boolean, nullable=True),
+    # The tool's own answer to who approves a call (none, person or reviewer); null follows its app, then the team.
+    # `reviewer_role` is the role that decides when the answer is a reviewer. Loosening either is a reviewed change.
+    sa.Column("approval_mode", sa.String(8), nullable=True),
+    sa.Column("reviewer_role", sa.String(64), nullable=True),
     sa.Column("amount_max", sa.Numeric(14, 2)),
     # The write approval policy (docs/architecture/tool-lifecycle.md): how many distinct people approve a call, the
     # team they come from (None: the module's owning team), and whether the person who asked may be one of them.
@@ -299,6 +303,8 @@ REVIEWED = (
     "input",
     "access",
     "requires_approval",
+    "approval_mode",
+    "reviewer_role",
     "enabled",
     "binding",
     "amount_max",
@@ -309,6 +315,8 @@ OPERATION_DEFAULTS: dict[str, Any] = {
     "body_encoding": None,
     "response_transform": None,
     "timeout_ms": None,
+    "approval_mode": None,
+    "reviewer_role": None,
     "approvers": 1,
     "approver_team": None,
     "step_up": False,

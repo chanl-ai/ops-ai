@@ -44,7 +44,7 @@ from .connections.service import OPS_AI_APP, ConnectionService, own_key
 from .connectors import MyConnector, my_connectors
 from .defaults import ensure_defaults
 from .modules.directory import Directory
-from .modules.policy import WriteApprovals
+from .modules.policy import WriteApprovals, tool_mode
 from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, name_in_words, template_of, tool_title
@@ -1705,7 +1705,8 @@ async def app_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                     "added": added,
                     "askedAtSignIn": asked,
                     "waits": write_waits(str(op["access"]), op.get("requires_approval")),
-                    "setting": op.get("requires_approval"),
+                    "setting": tool_mode(op),
+                    "settingRole": op.get("reviewer_role"),
                     "moduleId": module_id,
                 }
             )
@@ -1725,7 +1726,7 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
     )
     # The page's Tools tab shows neither a tool's own approval flag nor its module.
     tools = [
-        {k: v for k, v in t.items() if k not in ("waits", "setting", "moduleId")}
+        {k: v for k, v in t.items() if k not in ("waits", "setting", "settingRole", "moduleId")}
         for t in await app_tools(apps, who, card)
     ]
     usage: list[dict[str, Any]] = []

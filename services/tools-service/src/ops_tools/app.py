@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 from fastapi import APIRouter, FastAPI, Header
@@ -384,6 +384,7 @@ def create_gateway_app(
                     m,
                     access=r["access"],
                     setting=r.get("setting"),
+                    reviewer_role=cast(str | None, r.get("setting_role")),
                     approvers=r["approvers"],
                     levels=levels,
                 )
@@ -401,7 +402,9 @@ def create_gateway_app(
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
             rows = [r | {"test_account": str(r.get("module_id") or "") in tested} for r in rows]
         data = [
-            GrantableOperation.model_validate({k: v for k, v in r.items() if k != "setting"}).model_dump(by_alias=True)
+            GrantableOperation.model_validate(
+                {k: v for k, v in r.items() if k not in ("setting", "setting_role")}
+            ).model_dump(by_alias=True)
             for r in rows
         ]
         return JSONResponse({"success": True, "data": data})

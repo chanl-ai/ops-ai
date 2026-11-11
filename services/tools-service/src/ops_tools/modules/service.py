@@ -262,6 +262,14 @@ def _reviewed(op: dict[str, Any], key: str) -> Any:
     )
 
 
+_MODE_WORDS: dict[str | None, str] = {
+    None: "follows the app",
+    "none": "runs without asking",
+    "person": "asks the person",
+    "reviewer": "asks a reviewer",
+}
+
+
 def _differs_from_published(m: Aggregate) -> bool:
     """Whether the operations about to go live differ from the published ones (the baseline) in anything Security
     reviews. Publish decides major from this, never from the edit history alone, so a change reaches calls without
@@ -576,6 +584,8 @@ class ModuleService:
             "binding": o["binding"],
             "rateLimitPerMin": o["rate_limit_per_min"],
             "requiresApproval": o["requires_approval"],
+            "approvalMode": o.get("approval_mode"),
+            "reviewerRole": o.get("reviewer_role"),
             "approvers": policy["approvers"],
             "approverTeam": policy["approver_team"],
             "stepUp": policy["step_up"],
@@ -1502,6 +1512,11 @@ class ModuleService:
         two = int(o.get("approvers") or 1) > 1 and patch.get("approvers") != 1
         if patch.get("requires_approval") is False and two:
             raise Unprocessable("An operation two people approve always needs a person's approval.")
+        mode = patch.get("approval_mode") if "approval_mode" in fields else o.get("approval_mode")
+        if mode is not None and (patch.get("access") or o["access"]) != "write":
+            raise Unprocessable("Only a write has an approval mode; a read never waits.")
+        if mode in ("none", "person") and int(patch.get("approvers") or o.get("approvers") or 1) > 1:
+            raise Unprocessable("An operation two people approve always asks a reviewer.")
         rate = patch.get("rate_limit_per_min")
         if rate is not None and not 1 <= rate <= 10_000:
             raise ValidationFailed("Set a rate limit between 1 and 10,000 calls a minute.")
@@ -1577,6 +1592,19 @@ class ModuleService:
             detail = "Every call waits for an approval" if on else "Calls no longer wait for a person"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": not on})
             o["requires_approval"] = on
+        if "approval_mode" in fields and mode != o.get("approval_mode"):
+            before_mode = o.get("approval_mode")
+            # Asking less than the app and team do, or handing the answer back to them, widens what runs unattended:
+            # Security reviews it. Asking a reviewer is stricter and publishes as a minor change.
+            detail = f"Approval {_MODE_WORDS[before_mode]} → {_MODE_WORDS[mode]}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": mode != "reviewer"})
+            o["approval_mode"] = mode
+        if "reviewer_role" in fields and patch.get("reviewer_role") != o.get("reviewer_role"):
+            role = patch.get("reviewer_role")
+            anyone = "anyone who can approve"
+            detail = f"Reviewer role {o.get('reviewer_role') or anyone} → {role or anyone}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": role is None})
+            o["reviewer_role"] = role
         if rate is not None and rate != o["rate_limit_per_min"]:
             detail = f"Rate limit {o['rate_limit_per_min']} → {rate} a minute"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})

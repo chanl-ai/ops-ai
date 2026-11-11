@@ -18,6 +18,7 @@ from ops_store.team_scope import acting_team
 from .connections.records import account_for
 from .defaults import ensure_defaults
 from .environments import LIVE
+from .modules.policy import tool_mode
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.connections import ConnectionStore
@@ -150,6 +151,7 @@ class ToolRegistry:
                     "input_schema": t.input_schema,
                     "requires_approval": write_waits(t.access, t.requires_approval),
                     "setting": t.requires_approval,
+                    "setting_role": None,
                     "approvers": t.approvers,
                     "step_up": t.approvers > 1,
                     "output_shape": None,
@@ -200,7 +202,8 @@ class ToolRegistry:
                         "input_schema": input_schema(op["input"]),
                         "requires_approval": write_waits(op["access"], op["requires_approval"]),
                         # The tool's own setting before the team's and app's answer is applied (app.py).
-                        "setting": op["requires_approval"],
+                        "setting": tool_mode(op),
+                        "setting_role": op.get("reviewer_role"),
                         "approvers": approval_policy(module, op)["approvers"],
                         "step_up": approval_policy(module, op)["step_up"],
                         "output_shape": op.get("output_shape"),
@@ -247,17 +250,19 @@ class ToolRegistry:
         limit_ms = op.get("timeout_ms") or module.get("timeout_ms")
         return float(limit_ms) / 1000 + 5.0 if limit_ms else None
 
-    async def approval_setting(self, tool: str, tenant_id: str, team_id: str | None = None) -> bool | None:
-        """The tool's own approval setting, from its registry entry alone: the operation's flag, else the workflow
-        tool's or the agents catalogue's declaration. True waits, False runs, None follows the app and team
-        (`effective_answer` decides what a write with none does)."""
+    async def approval_setting(
+        self, tool: str, tenant_id: str, team_id: str | None = None
+    ) -> tuple[str | bool | None, str | None]:
+        """The tool's own approval answer and reviewer role, from its registry entry alone: the operation's mode, else
+        the workflow tool's or the agents catalogue's declaration (True waits, False runs). None follows the app and
+        team (`effective_answer` decides what a write with none does)."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
-            return resolved.operation["requires_approval"]
+            return tool_mode(resolved.operation), resolved.operation.get("reviewer_role")
         if tool in WORKFLOW_TOOLS:
-            return WORKFLOW_TOOLS[tool][1]
+            return WORKFLOW_TOOLS[tool][1], None
         definition = self.catalog.tool(tool)
-        return definition.requires_approval if definition is not None else None
+        return (definition.requires_approval if definition is not None else None), None
 
     async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's

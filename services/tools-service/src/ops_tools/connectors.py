@@ -144,7 +144,13 @@ async def _reviewed(apps: Apps, who: Caller, tools: list[dict[str, Any]]) -> lis
         if t["access"] != "read":
             module = await apps.modules.get(who.tenant_id, str(t["moduleId"]))
             answer = await apps.write_approvals.answer(
-                who.tenant_id, who.team.id, module, access=str(t["access"]), setting=t.get("setting"), levels=levels
+                who.tenant_id,
+                who.team.id,
+                module,
+                access=str(t["access"]),
+                setting=t.get("setting"),
+                reviewer_role=t.get("settingRole"),
+                levels=levels,
             )
             waits = bool(answer["waits"])
         out.append({**t, "reviewed": waits})

@@ -182,6 +182,9 @@ class ModuleOperation(Out):
     rate_limit_per_min: int
     # None: the team default decides (a write waits unless the team lets its app change without asking).
     requires_approval: bool | None = None
+    # The tool's own answer (none, person or reviewer); None follows its app, then the team.
+    approval_mode: Literal["none", "person", "reviewer"] | None = None
+    reviewer_role: str | None = None
     amount_max: float | None = None
     # The write approval policy: distinct approvers (1 or 2) and the team they come from. Whether the person who asked
     # may approve is the tenant's requesterMayDecide policy, not a per-operation setting.
@@ -546,6 +549,9 @@ class OperationPatchIn(In):
     timeout_ms: int | None = None
     enabled: bool | None = None
     requires_approval: bool | None = None
+    # none, person or reviewer; null clears it, back to the app's and team's answer. A loosening is a major change.
+    approval_mode: Literal["none", "person", "reviewer"] | None = None
+    reviewer_role: Annotated[str, Field(max_length=64)] | None = None
     rate_limit_per_min: int | None = None
     binding: SubjectBindingIn | None = None
     amount_max: float | None = None

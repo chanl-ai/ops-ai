@@ -438,13 +438,14 @@ class GatewayCalls:
         on_test_account = bool((module or {}).get("sandbox"))
         needs = False
         if access in WRITES:
-            setting = await self.registry.approval_setting(req.tool, caller.tenant_id, caller.team_id)
+            setting, setting_role = await self.registry.approval_setting(req.tool, caller.tenant_id, caller.team_id)
             answer = await self.approvals.answer(
                 caller.tenant_id,
                 caller.team_id,
                 module,
                 access=access,
                 setting=setting,
+                reviewer_role=setting_role,
                 approvers=(policy or {}).get("approvers") or 1,
                 channel="mcp" if channel == MCP else "chat",
                 test_account=on_test_account,

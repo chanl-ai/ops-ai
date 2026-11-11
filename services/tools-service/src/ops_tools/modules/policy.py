@@ -70,7 +70,8 @@ class WriteApprovals:
         module: dict[str, Any] | None,
         *,
         access: str,
-        setting: bool | None,
+        setting: str | bool | None,
+        reviewer_role: str | None = None,
         approvers: int = 1,
         channel: str = "chat",
         test_account: bool = False,
@@ -80,11 +81,20 @@ class WriteApprovals:
         team's, through `effective_answer`. Everything that shows or enforces a wait calls here."""
         team, by_app = levels or await self.levels(tenant_id, team_id)
         app = next((by_app[i] for i in sorted(app_ids(module) if module else ()) if i in by_app), None)
-        # Only a tool that waits is an answer of its own. A stored "runs" cannot be told from the old open default,
-        # so it is no override: the app and the team decide, and a tool-level loosening needs approvalMode.
-        mode = "reviewer" if setting is True else None
-        tool = {"access": access, "approvalMode": mode, "reviewerRole": None, "approvers": approvers}
+        # `setting` is the tool's own mode (see `tool_mode`). A bare True is the older "waits" flag, a reviewer's
+        # answer; a bare False is no override, since it cannot be told from the old open default.
+        mode = "reviewer" if setting is True else setting if isinstance(setting, str) else None
+        tool = {"access": access, "approvalMode": mode, "reviewerRole": reviewer_role, "approvers": approvers}
         return effective_answer(tool=tool, app=app, team=team, channel=channel, test_account=test_account)
+
+
+def tool_mode(op: dict[str, Any]) -> str | None:
+    """The tool's own answer (none, person or reviewer) from its operation row: its approval_mode, else the older
+    requires_approval flag where it waits; None follows the tool's app, then the team."""
+    mode = op.get("approval_mode")
+    if mode in ("none", "person", "reviewer"):
+        return str(mode)
+    return "reviewer" if op.get("requires_approval") is True else None
 
 
 def approves_own_writes(access: Access, p: Principal) -> bool:
