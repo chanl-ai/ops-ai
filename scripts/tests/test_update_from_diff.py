@@ -145,7 +145,8 @@ def test_a_bad_file_or_target_is_refused_in_one_line(world: World, tmp_path: Pat
         "no-to": ["apply", str(good)],
         "moving-to": ["apply", str(good), "main"],
     }[case]
-    run_ = run(root, *args)
+    # No releases page to read, so a missing TO has nothing to default to.
+    run_ = run(root, *args, UPDATE_BASE_URL=f"file://{tmp_path}/no-site")
     assert run_.returncode != 0 and len(run_.stderr.strip().splitlines()) == 1, run_.stderr
     assert (root / "app.txt").read_text() == "one\ntwo\nthree\n"
 
@@ -167,6 +168,36 @@ def test_update_url_names_the_compare_page_from_the_installed_version(world: Wor
     out = run(root, "url", "v2026-11-12.1").stdout.strip()
     assert out.startswith(f"https://github.com/chanl-ai/ops-ai/compare/{world.c1}...v2026-11-12.1"), out
     assert out.splitlines()[0].endswith(".diff") or ".diff" in out
+
+
+def test_update_url_in_a_git_checkout_without_version_starts_at_head(world: World) -> None:
+    root = world.install("url-head", with_git=True)
+    out = run(root, "url", world.c3).stdout.splitlines()[0]
+    assert f"/compare/{world.c1}...{world.c3}" in out, out
+    bare = world.install("url-nothing", with_git=False)
+    refused = run(bare, "url", world.c3)
+    assert refused.returncode != 0 and "compare" not in refused.stdout, refused.stdout
+
+
+def test_a_missing_target_is_the_latest_release_and_says_which(world: World) -> None:
+    root = world.install("latest", with_git=False)
+    (root / "VERSION").write_text(world.c1 + "\n")
+    site = world.tmp / "site2"
+    (site / "compare").mkdir(parents=True)
+    (site / "releases.atom").write_text(
+        '<feed><entry><link href="https://x/releases/tag/v2026-11-12.2"/></entry>'
+        '<entry><link href="https://x/releases/tag/v2026-11-12.1"/></entry></feed>'
+    )
+    (site / "compare" / f"{world.c1}...v2026-11-12.2.diff").write_text(
+        git(world.upstream, "diff", world.c1, world.c3) + "\n"
+    )
+    env = {"UPDATE_BASE_URL": f"file://{site}"}
+    url = run(root, "url", **env)
+    assert "...v2026-11-12.2.diff" in url.stdout and "v2026-11-12.2" in url.stdout.splitlines()[0], url.stdout
+    assert "latest release v2026-11-12.2" in url.stderr
+    down = run(root, "download", **env)
+    assert down.returncode == 0 and "latest release v2026-11-12.2" in down.stderr, down.stderr
+    assert list((root / ".run" / "updates").glob("*v2026-11-12.2.diff"))
 
 
 def test_update_download_saves_a_checked_diff_and_refuses_an_empty_or_misplaced_one(world: World) -> None:

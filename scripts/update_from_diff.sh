@@ -3,7 +3,7 @@
 # that can download files but has no git access (docs/deploy/install-guide.md, "Update from a downloaded diff").
 #
 #   version [COMMIT]     print the installed version; record it in VERSION from git HEAD, or from COMMIT (SET=)
-#   url [TO]             the compare page from the installed version to TO (a release tag or commit; default main)
+#   url [TO]             the compare page from the installed version to TO (a release tag or commit; default the latest release)
 #   download TO          fetch that .diff over HTTPS into .run/updates/ (curl reads HTTPS_PROXY) and check it
 #   apply FILE TO        check FILE starts at the installed version, apply it, record TO in VERSION
 #
@@ -13,7 +13,7 @@
 # VERSION is the only file this writes outside the diff; it is git-ignored, so a diff never collides with it. The start
 # check compares each changed file with the blob hash the diff expects (git hash-object, needs no repository), so local
 # edits to a tracked file are refused too; without git on the machine the dry run of patch is the check. TO must name a
-# release or a commit: a branch moves, and the next update would start from the wrong place.
+# release or a commit (default: the latest release): a branch passed by hand is refused, it moves, and the next update would start from the wrong place.
 # A text diff cannot carry a binary file. Those entries are cut out, listed with where to download them, and the rest
 # is applied. .env and .data are never in a diff (git-ignored), so they stay as they are.
 set -eu
@@ -26,9 +26,21 @@ die() { echo "update: $*" >&2; exit 1; }
 has_git() { command -v git >/dev/null 2>&1; }
 is_git_folder() { [ -e .git ] && has_git; }
 
+# VERSION, else the commit a git checkout is at.
 installed() {
-  [ -s VERSION ] || die "no VERSION here; record the installed version once: make version SET=<commit or release>"
-  tr -d ' \r\n' <VERSION
+  if [ -s VERSION ]; then tr -d ' \r\n' <VERSION; return; fi
+  is_git_folder && git rev-parse --verify -q HEAD && return
+  die "no VERSION here; record the installed version once: make version SET=<commit or release>"
+}
+
+# TO when given, else the newest release on the releases feed (newest first); says which it picked.
+target_or_latest() {
+  if [ -n "${1:-}" ]; then printf '%s' "$1"; return; fi
+  command -v curl >/dev/null 2>&1 || die "TO is missing and curl is not here to look up the latest release; pass TO=<release tag or commit>"
+  tag=$(curl -fsSL "$BASE/releases.atom" 2>/dev/null | grep -Eo 'releases/tag/v[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]+' | head -1 | sed 's|releases/tag/||') || tag=
+  [ -n "$tag" ] || die "TO is missing and no release was found at $BASE/releases; pass TO=<release tag or commit>"
+  echo "Using the latest release $tag (pass TO= to choose another)" >&2
+  printf '%s' "$tag"
 }
 
 need_target() {
@@ -95,12 +107,13 @@ case $cmd in
     installed; echo
     ;;
   url)
-    to=${1:-main}
-    echo "$BASE/compare/$(installed)...$to.diff"
-    echo "Open it, save the page as a file, then: make update-from-diff FILE=<saved file> TO=<release or commit>"
+    ver=$(installed)
+    to=$(target_or_latest "${1:-}")
+    echo "$BASE/compare/$ver...$to.diff"
+    echo "Open it, save the page as a file, then: make update-from-diff FILE=<saved file> TO=$to"
     ;;
   download)
-    need_target "${1:-}"; to=$1; ver=$(installed)
+    ver=$(installed); to=$(target_or_latest "${1:-}"); need_target "$to"
     command -v curl >/dev/null 2>&1 || die "download needs curl; use make update-url and save the page in a browser"
     mkdir -p .run/updates
     out=.run/updates/$(printf '%s' "$ver" | cut -c1-12)...$to.diff
@@ -116,8 +129,8 @@ case $cmd in
     [ -n "$file" ] || die "FILE is missing: make update-from-diff FILE=<saved diff> TO=<release or commit>"
     [ -f "$file" ] || die "FILE $file does not exist"
     [ -s "$file" ] || die "FILE $file is empty"
-    need_target "$to"
     ver=$(installed)
+    to=$(target_or_latest "$to"); need_target "$to"
     check_start "$file"
     if is_git_folder; then
       git apply --check "$WORK/text.diff" || die "git could not apply the diff"
