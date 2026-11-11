@@ -2363,6 +2363,7 @@ class ModuleService:
                     secret_values=i.get("secret_values"),
                     trial=trial,
                     environment=str(i.get("environment") or TEST),
+                    confirmed=bool(i.get("confirmed")),
                 )
             )
         elif answer is not None:
@@ -2402,6 +2403,7 @@ class ModuleService:
         secret_values: dict[str, str] | None,
         trial: Trial,
         environment: str,
+        confirmed: bool = False,
     ) -> dict[str, Any]:
         """The Real run, as one gateway call: the gateway decides it as it decides an agent's call (approval,
         limits, egress, the team's account) in the environment the person chose, and logs it under them. `trial` comes
@@ -2418,6 +2420,7 @@ class ModuleService:
             act=f"console:{who.name}",
             trial=trial,
             secret_values=secret_values,
+            confirmed=confirmed,
         )
         result: dict[str, Any] = {
             "callId": ran["callId"],
@@ -2427,9 +2430,13 @@ class ModuleService:
         }
         if "code" in ran:
             message = "; ".join(ran["reasons"])
+            code = ran["code"]
+            if code == "gateway_refused" and any("needs an approval token" in r for r in ran["reasons"]):
+                # A live-account test run waiting for the person's yes reads as a missing approval, like a workflow's.
+                code = "approval_token_missing"
             return result | {
                 "decision": "deny",
-                "denyReason": ran["code"],
+                "denyReason": code,
                 "denyMessage": message,
                 "status": ran["status"],
                 "output": {"error": ran["code"], "message": message},

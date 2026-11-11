@@ -3340,6 +3340,11 @@ export interface components {
              * @default true
              */
             added: boolean;
+            /**
+             * Answer
+             * @default none
+             */
+            answer: string;
             /** Approvers */
             approvers: number;
             /** Description */
@@ -3358,6 +3363,13 @@ export interface components {
             outputShape?: string | null;
             /** Requiresapproval */
             requiresApproval: boolean;
+            /** Reviewerrole */
+            reviewerRole?: string | null;
+            /**
+             * Source
+             * @default team
+             */
+            source: string;
             /**
              * Stepup
              * @default false
@@ -3868,6 +3880,8 @@ export interface components {
             access: "read" | "write";
             /** Amountmax */
             amountMax?: number | null;
+            /** Approvalmode */
+            approvalMode?: ("none" | "person" | "reviewer") | null;
             /** Approvedworkflows */
             approvedWorkflows: number;
             /** Approverteam */
@@ -3922,6 +3936,8 @@ export interface components {
             requiresApproval?: boolean | null;
             /** Responsetransform */
             responseTransform?: string | null;
+            /** Reviewerrole */
+            reviewerRole?: string | null;
             /** Scopes */
             scopes?: string[];
             /** Secrets */
@@ -3982,6 +3998,11 @@ export interface components {
         };
         /** ModuleTestIn */
         ModuleTestIn: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
             /** Contextid */
             contextId: string;
             draft?: components["schemas"]["TestDraftIn"] | null;
@@ -4302,6 +4323,8 @@ export interface components {
             access?: ("read" | "write") | null;
             /** Amountmax */
             amountMax?: number | null;
+            /** Approvalmode */
+            approvalMode?: ("none" | "person" | "reviewer") | null;
             /** Approverteam */
             approverTeam?: string | null;
             /** Approvers */
@@ -4332,6 +4355,8 @@ export interface components {
             requiresApproval?: boolean | null;
             /** Responsetransform */
             responseTransform?: string | null;
+            /** Reviewerrole */
+            reviewerRole?: string | null;
             /** Scopes */
             scopes?: string[] | null;
             /** Stepup */
@@ -5622,6 +5647,11 @@ export interface components {
          *     call, with every check, in the environment picked.
          */
         ToolRunIn: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
             /** Environment */
             environment?: ("test" | "live") | null;
             /** Input */

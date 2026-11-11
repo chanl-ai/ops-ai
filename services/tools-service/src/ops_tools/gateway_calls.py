@@ -57,6 +57,9 @@ class CallRequest:
     approval_token: str | None = None
     # The person the call acts for, from a verified acting-for token; never from `run_context`.
     acting_for: ActingForPerson | None = None
+    # The person's own yes to a test run that asks them first, from the console's approval card. Honoured only on the
+    # console channel, only for the answer "ask the person", and only for the person the call acts for.
+    confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -270,6 +273,7 @@ class GatewayCalls:
         act: str,
         trial: Trial,
         secret_values: dict[str, str] | None,
+        confirmed: bool = False,
     ) -> dict[str, Any]:
         """A tool page's Real run as one gateway call, so it meets every rule an agent's call meets: approvals,
         limits, the egress policy, the team's account and the call log. The answer is plain data, so the module
@@ -287,6 +291,7 @@ class GatewayCalls:
             key=new_id("console"),
             run_context={"environment": environment, "act": act},
             acting_for=person,
+            confirmed=confirmed,
         )
         out = await self.call(caller, req, channel=CONSOLE, trial=trial, secret_values=secret_values)
         if isinstance(out, Refused):
@@ -473,6 +478,16 @@ class GatewayCalls:
             and self.approver
             and self.approver(await self._with_live_policy(caller))
         )
+        if (
+            needs
+            and confirmed_by_asker
+            and req.confirmed
+            and channel == CONSOLE
+            and req.acting_for is not None
+            and req.approval_token is None
+        ):
+            # A test run that asks the person: their yes on the console's card is the whole approval.
+            self_approved = True
         if self_approved:
             row["approvers"] = [caller.email]
         approval_required = access not in WRITES or (needs and not self_approved)

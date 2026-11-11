@@ -7459,6 +7459,11 @@
       "ModuleTestIn": {
         "additionalProperties": false,
         "properties": {
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
           "contextId": {
             "title": "Contextid",
             "type": "string"
@@ -12743,6 +12748,11 @@
         "additionalProperties": false,
         "description": "One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway\ncall, with every check, in the environment picked.",
         "properties": {
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
           "environment": {
             "anyOf": [
               {

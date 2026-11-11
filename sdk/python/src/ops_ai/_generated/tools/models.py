@@ -400,6 +400,7 @@ class FenceIn(TypedDict, closed=True):
 class GrantableOperation(TypedDict, closed=True):
     access: str
     added: NotRequired[bool]
+    answer: NotRequired[str]
     approvers: int
     description: str
     inputSchema: dict[str, Any]
@@ -408,6 +409,8 @@ class GrantableOperation(TypedDict, closed=True):
     name: str
     outputShape: NotRequired[str | None]
     requiresApproval: bool
+    reviewerRole: NotRequired[str | None]
+    source: NotRequired[str]
     stepUp: NotRequired[bool]
     testAccount: NotRequired[bool]
     title: NotRequired[str | None]
@@ -1151,6 +1154,7 @@ class ToolModule(TypedDict, closed=True):
 
 
 class ToolRunIn(TypedDict, closed=True):
+    confirmed: NotRequired[bool]
     environment: NotRequired[Literal["test", "live"] | None]
     input: NotRequired[dict[str, Any]]
     mode: Literal["mock", "real"]
@@ -1573,6 +1577,7 @@ class ModuleList(TypedDict, closed=True):
 class ModuleOperation(TypedDict, closed=True):
     access: Literal["read", "write"]
     amountMax: NotRequired[float | None]
+    approvalMode: NotRequired[Literal["none", "person", "reviewer"] | None]
     approvedWorkflows: int
     approverTeam: str | None
     approvers: int
@@ -1598,6 +1603,7 @@ class ModuleOperation(TypedDict, closed=True):
     rateLimitPerMin: int
     requiresApproval: NotRequired[bool | None]
     responseTransform: NotRequired[str | None]
+    reviewerRole: NotRequired[str | None]
     scopes: NotRequired[list[str]]
     secrets: NotRequired[list[SecretNeed]]
     signInHeader: NotRequired[str | None]
@@ -1608,6 +1614,7 @@ class ModuleOperation(TypedDict, closed=True):
 
 
 class ModuleTestIn(TypedDict, closed=True):
+    confirmed: NotRequired[bool]
     contextId: str
     draft: NotRequired[TestDraftIn | None]
     environment: NotRequired[Literal["test", "live"]]
@@ -1694,6 +1701,7 @@ class MyConnector(TypedDict, closed=True):
 class OperationPatchIn(TypedDict, closed=True):
     access: NotRequired[Literal["read", "write"] | None]
     amountMax: NotRequired[float | None]
+    approvalMode: NotRequired[Literal["none", "person", "reviewer"] | None]
     approverTeam: NotRequired[str | None]
     approvers: NotRequired[int | None]
     binding: NotRequired[SubjectBindingIn | None]
@@ -1710,6 +1718,7 @@ class OperationPatchIn(TypedDict, closed=True):
     rateLimitPerMin: NotRequired[int | None]
     requiresApproval: NotRequired[bool | None]
     responseTransform: NotRequired[str | None]
+    reviewerRole: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
     stepUp: NotRequired[bool | None]
     stub: NotRequired[Any]

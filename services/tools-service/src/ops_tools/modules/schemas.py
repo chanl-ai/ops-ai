@@ -607,6 +607,8 @@ class ModuleTestIn(In):
     target: Literal["stub", "sandbox"]
     input: dict[str, Any]
     simulate_approval: bool = False
+    # The person's yes to a Real test run that asks them first (the console's approval card).
+    confirmed: bool = False
     draft: TestDraftIn | None = None
     # Values for this one call, by secret name; never stored, logged or returned.
     secret_values: dict[str, str] | None = None
@@ -623,6 +625,8 @@ class ToolRunIn(In):
     # The kind of run a Real run is; left out, test: it uses the app's sandbox account when it has one, and a write on
     # a live account waits for a person.
     environment: RunKind | None = None
+    # The person's yes to a Real run that asks them first.
+    confirmed: bool = False
 
 
 class ToolRunResult(ModuleTestResult):

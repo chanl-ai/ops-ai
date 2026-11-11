@@ -272,7 +272,8 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         Real as the gateway's call, so the two never decide differently."""
         target = "stub" if body.mode == "mock" else "sandbox"
         given = {"operation": operation, "context_id": "owner", "target": target, "input": body.input}
-        out = await service.test(who, module_id, {**given, "environment": body.environment})
+        extra = {"environment": body.environment, "confirmed": body.confirmed}
+        out = await service.test(who, module_id, {**given, **extra})
         return ok({**out, "mocked": body.mode == "mock" or out.get("mockId") is not None})
 
     @r.get("/{module_id}/activity", response_model=Envelope[ModuleActivity])
