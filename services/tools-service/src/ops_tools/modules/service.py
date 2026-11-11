@@ -1121,8 +1121,8 @@ class ModuleService:
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # A new write waits for a person until its switch says it runs at once; a read never waits.
-            "requires_approval": write_waits(o["access"], o.get("requires_approval")),
+            # Not set unless someone sets it: the team default then decides, and a later change of it reaches the tool.
+            "requires_approval": o.get("requires_approval"),
             "amount_max": None,
             # The source's example response when it gives one, so a stubbed call answers like the system.
             "stub": o.get("stub") if o.get("stub") is not None else {"ok": True},
@@ -1548,9 +1548,9 @@ class ModuleService:
             detail = f"Access {o['access']} → {access}"
             changes.append({"operation": name, "kind": "access_widened", "detail": detail, "major": True})
             o["access"] = access
-            # A read never waits; a read made a write has no approval setting of its own yet, so it waits. A
-            # requiresApproval in the same patch applies after this.
-            o["requires_approval"] = write_waits(access, None)
+            # A read never waits; a read made a write has no approval setting of its own yet, so the team default
+            # decides. A requiresApproval in the same patch applies after this.
+            o["requires_approval"] = None if access == "write" else False
             if access == "read":
                 o["amount_max"] = None
         if patch.get("enabled") is not None and patch["enabled"] != o["enabled"]:
@@ -1592,7 +1592,7 @@ class ModuleService:
             detail = f"Approvers {o.get('approvers') or 1} → {approvers}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
             o["approvers"] = approvers
-            if approvers > 1 and not o["requires_approval"]:
+            if approvers > 1 and o["requires_approval"] is not True:
                 # Asking for two approvers turns the tool's approval on: a write two people approve always waits for
                 # them, even one switched to run at once.
                 changes.append(
@@ -2275,7 +2275,7 @@ class ModuleService:
             }
         if amount_refusal(o, args) is not None:  # the gateway's own check (ops_tools.limits)
             return deny("constraint")
-        would_pause = o["access"] in WRITES and o["requires_approval"]
+        would_pause = o["access"] in WRITES and write_waits(o["access"], o["requires_approval"])
         # A real write in a workflow's context needs a real approval; simulate_approval stands in for one on Mock only.
         if would_pause and sandbox and ctx is not None:
             return deny("approval_token_missing")

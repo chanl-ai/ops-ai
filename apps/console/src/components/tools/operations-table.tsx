@@ -22,6 +22,12 @@ export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | '
       </span>
     );
   if (op.access === 'read') return <span className="text-xs text-muted-foreground">None</span>;
+  if (op.requiresApproval === null)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground">
+        <UserCheck className="size-3.5" /> Team default (waits)
+      </span>
+    );
   return op.requiresApproval ? (
     <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-warning-text">
       <UserCheck className="size-3.5" /> Every call

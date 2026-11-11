@@ -23,7 +23,7 @@ import { BINDING_LABEL } from './module-meta';
 import { SupervisionText } from './operations-table';
 
 const SOURCES = Object.keys(BINDING_LABEL) as BindingSource[];
-type Draft = { description: string; bound: boolean; binding: SubjectBinding; rate: string; requiresApproval: boolean; amountMax: string; approvers: 1 | 2; stepUp: boolean; access: ToolAccess; input: FieldDraft[]; http: HttpOperationInput; transform: string; timeout: string };
+type Draft = { description: string; bound: boolean; binding: SubjectBinding; rate: string; requiresApproval: boolean | null; amountMax: string; approvers: 1 | 2; stepUp: boolean; access: ToolAccess; input: FieldDraft[]; http: HttpOperationInput; transform: string; timeout: string };
 
 const baseOf = (endpoint: string) => endpoint.replace(/\/+$/, '');
 
@@ -317,10 +317,10 @@ export function OperationSheet({
               <div>
                 <p className="text-sm font-medium">Every call waits for an approval</p>
                 <p className="text-xs text-muted-foreground">
-                  {twoApprovers ? 'Two different people approve every call, as the operation’s approval policy requires.' : 'Off: only a gate policy’s approval token lets the call run. Turning it off is a major version.'}
+                  {twoApprovers ? 'Two different people approve every call, as the operation’s approval policy requires.' : d.requiresApproval === null ? 'Team default (waits): follows the team’s approval settings until you switch it.' : 'Off: only a gate policy’s approval token lets the call run. Turning it off is a major version.'}
                 </p>
               </div>
-              <Switch checked={d.requiresApproval || twoApprovers} disabled={twoApprovers} onCheckedChange={(v) => set({ requiresApproval: v })} aria-label="Every call waits for an approval" />
+              <Switch checked={d.requiresApproval !== false || twoApprovers} disabled={twoApprovers} onCheckedChange={(v) => set({ requiresApproval: v })} aria-label="Every call waits for an approval" />
             </div>
           )}
           {write && (

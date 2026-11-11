@@ -7183,8 +7183,15 @@
             "type": "integer"
           },
           "requiresApproval": {
-            "title": "Requiresapproval",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requiresapproval"
           },
           "responseTransform": {
             "anyOf": [
@@ -7257,7 +7264,6 @@
           "maskedOutput",
           "binding",
           "rateLimitPerMin",
-          "requiresApproval",
           "approvers",
           "approverTeam",
           "stepUp",

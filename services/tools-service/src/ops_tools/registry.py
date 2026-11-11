@@ -197,7 +197,7 @@ class ToolRegistry:
                         "description": op["description"],
                         "access": op["access"],
                         "input_schema": input_schema(op["input"]),
-                        "requires_approval": bool(op["requires_approval"]),
+                        "requires_approval": write_waits(op["access"], op["requires_approval"]),
                         "approvers": approval_policy(module, op)["approvers"],
                         "step_up": approval_policy(module, op)["step_up"],
                         "output_shape": op.get("output_shape"),
@@ -250,7 +250,7 @@ class ToolRegistry:
         (`write_waits`); a team's policies may hold more."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
-            return bool(resolved.operation["requires_approval"])
+            return write_waits(resolved.operation["access"], resolved.operation["requires_approval"])
         if tool in WORKFLOW_TOOLS:
             return WORKFLOW_TOOLS[tool][1]
         definition = self.catalog.tool(tool)

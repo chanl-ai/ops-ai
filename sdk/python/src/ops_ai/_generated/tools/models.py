@@ -1596,7 +1596,7 @@ class ModuleOperation(TypedDict, closed=True):
     p95Ms: int
     path: NotRequired[str | None]
     rateLimitPerMin: int
-    requiresApproval: bool
+    requiresApproval: NotRequired[bool | None]
     responseTransform: NotRequired[str | None]
     scopes: NotRequired[list[str]]
     secrets: NotRequired[list[SecretNeed]]

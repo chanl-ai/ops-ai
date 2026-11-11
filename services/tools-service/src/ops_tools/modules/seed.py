@@ -15,7 +15,6 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
-from ops_access import write_waits
 from ops_identity.fastapi import DEV_TEAM
 from ops_store import isolation
 from ops_store.team_scope import acting_as
@@ -303,7 +302,7 @@ def runtime_module(
             "binding": None,
             "rate_limit_per_min": 60,
             # Declared on the tool; a write that declares nothing waits.
-            "requires_approval": write_waits(t["access"], t.get("requires_approval")),
+            "requires_approval": t.get("requires_approval"),
             "approvers": 1,
             "amount_max": None,
             "stub": {"ok": True},
@@ -580,7 +579,7 @@ def aggregates(
                     "binding": o.get("binding"),
                     "rate_limit_per_min": o.get("rate") or 60,
                     # A write the seed does not mark to run at once waits.
-                    "requires_approval": write_waits(access, o.get("requiresApproval")),
+                    "requires_approval": o.get("requiresApproval"),
                     "approvers": int(base.get("approvers") or 1),
                     # Who approves a write when not the module's own team (Fraud Operations decides a wire hold).
                     **({"approver_team": base["approverTeam"]} if base.get("approverTeam") else {}),

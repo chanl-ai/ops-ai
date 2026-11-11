@@ -137,7 +137,8 @@ export interface ModuleOperation {
   binding: SubjectBinding | null;
   rateLimitPerMin: number;
   /** Each call waits for an approval token bound to the exact input. */
-  requiresApproval: boolean;
+  /** null: not set, so the team default decides (a write waits unless the team lets its app change without asking). */
+  requiresApproval: boolean | null;
   /** A write's approval policy: how many distinct people of the run's team approve each call. */
   approvers: 1 | 2;
   /** Approving asks the approver to step up (implied by two approvers). */

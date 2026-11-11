@@ -180,7 +180,8 @@ class ModuleOperation(Out):
     masked_output: list[str]
     binding: SubjectBinding | None
     rate_limit_per_min: int
-    requires_approval: bool
+    # None: the team default decides (a write waits unless the team lets its app change without asking).
+    requires_approval: bool | None = None
     amount_max: float | None = None
     # The write approval policy: distinct approvers (1 or 2) and the team they come from. Whether the person who asked
     # may approve is the tenant's requesterMayDecide policy, not a per-operation setting.

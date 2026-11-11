@@ -143,7 +143,7 @@ module_operations = _child(
     sa.Column("masked_output", sa.JSON, nullable=False),
     sa.Column("binding", sa.JSON),
     sa.Column("rate_limit_per_min", sa.Integer, nullable=False),
-    sa.Column("requires_approval", sa.Boolean, nullable=False),
+    sa.Column("requires_approval", sa.Boolean, nullable=True),
     sa.Column("amount_max", sa.Numeric(14, 2)),
     # The write approval policy (docs/architecture/tool-lifecycle.md): how many distinct people approve a call, the
     # team they come from (None: the module's owning team), and whether the person who asked may be one of them.

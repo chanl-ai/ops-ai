@@ -3919,7 +3919,7 @@ export interface components {
             /** Ratelimitpermin */
             rateLimitPerMin: number;
             /** Requiresapproval */
-            requiresApproval: boolean;
+            requiresApproval?: boolean | null;
             /** Responsetransform */
             responseTransform?: string | null;
             /** Scopes */
