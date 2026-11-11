@@ -26,6 +26,10 @@ the tests. You write no product code.
 - Never a test for a dependency, a serializer's shape, a framework's matching rule or a constructor; never the same
   branch twice with different fixtures; never a fixed sleep.
 - A test has one reason to fail and its name says which.
+- Budget: a small card gets at most 5 tests, a medium 10, a large 15. Going over needs a written reason per extra test on the page.
+- Before adding a test, apply its revert and run the existing tests: if one already fails, extend or keep that test and add none.
+- Prefer one end-to-end use case step over several unit tests that prove the same behaviour.
+- Every plan ends with "Delete": the existing tests in the touched files that no longer catch anything, repeat a check, or test a library.
 
 ## Checks you run
 | Check | How |

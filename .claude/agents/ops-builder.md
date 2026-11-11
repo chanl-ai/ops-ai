@@ -48,3 +48,7 @@ spec.
 ## Report (at most 12 lines)
 Commits; results per layer (what ran and what it printed); each new test's first failure in one line; the audit's
 mutation score and survivors; anything not run or not done.
+
+## Tests
+
+Write no test the plan does not list. The test writer owns the tests; if a behaviour you add has no test, say so on the tracker instead of writing one.
