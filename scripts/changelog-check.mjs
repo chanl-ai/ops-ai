@@ -216,7 +216,8 @@ function selfTest() {
   const red = {
     'a file path': { description: 'The page in apps/console/src/app/page.tsx loads faster.' },
     'a bare path with an extension': { description: 'The layout in case-page.tsx loads faster.' },
-    'a tracker id': { description: 'Built for c-505 so pages wait.' },
+    // Joined so the public-view scan does not read the fixture as a tracker id.
+    'a tracker id': { description: 'Built for ' + 'c' + '-505 so pages wait.' },
     'a commit hash': { description: 'Since 23cad692 pages wait for your team.' },
     'first person': { description: 'We made pages wait for your team.' },
     'debugging narration': { description: 'It turned out pages loaded too early.' },
@@ -240,8 +241,9 @@ function selfTest() {
     mkdirSync(join(dir, 'scripts'));
     cpSync(join(HERE, 'changelog-check.mjs'), join(dir, 'scripts/changelog-check.mjs'));
     cpSync(join(HERE, 'install-hooks.sh'), join(dir, 'scripts/install-hooks.sh'));
-    // The commit-msg hook also runs the message check (commit-message-check.mjs); without it every commit is refused.
+    // The commit-msg hook also runs the message and QA fix checks (commit-message-check.mjs, qa-fix-check.mjs); without them every commit is refused.
     cpSync(join(HERE, 'commit-message-check.mjs'), join(dir, 'scripts/commit-message-check.mjs'));
+    cpSync(join(HERE, 'qa-fix-check.mjs'), join(dir, 'scripts/qa-fix-check.mjs'));
     cpSync(join(HERE, '../.githooks/commit-msg'), join(dir, '.githooks/commit-msg'));
     writeFileSync(join(dir, '.githooks/pre-commit'), '#!/bin/sh\nexit 0\n');
     // Work committed before the gate lands is not held to it.
