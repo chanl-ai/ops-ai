@@ -21,6 +21,8 @@ each `member.group` entry becomes a `group` grant naming the provider's one rule
 role, or naming no rule when no single rule explains it; it still counts as given by groups. A membership with no
 entry at all counts as given by hand and is never removed by a sign-in.
 
+Test sign-in. `signin_flows.test_result` holds what a test round trip got back, for the admin who started it.
+
 Break-glass. `signin_break_glass` names the Security admins who may sign in by password while the workspace's
 `companySignInRequired` policy is on, with when each last did.
 
@@ -232,6 +234,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
     )
+    op.add_column("signin_flows", sa.Column("test_result", sa.JSON(none_as_null=True)))
     _backfill()
     _backfill_groups()
     if op.get_bind().dialect.name != "postgresql":
@@ -258,6 +261,7 @@ def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         for signature in FUNCTIONS:
             op.execute(f"DROP FUNCTION {signature}")
+    op.drop_column("signin_flows", "test_result")
     op.drop_table("signin_break_glass")
     op.drop_table("signin_grants")
     op.drop_table("signin_group_rules")

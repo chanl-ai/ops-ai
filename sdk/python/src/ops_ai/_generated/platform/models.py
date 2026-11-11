@@ -535,6 +535,20 @@ class SignInSecretOut(TypedDict, closed=True):
     version: int
 
 
+class SignInTestOut(TypedDict, closed=True):
+    email: NotRequired[str | None]
+    groups: NotRequired[list[str] | None]
+    name: NotRequired[str | None]
+    reason: NotRequired[str | None]
+    state: Literal["waiting", "ok", "refused"]
+    subject: NotRequired[str | None]
+
+
+class SignInTestStartOut(TypedDict, closed=True):
+    flowId: str
+    redirectUrl: str
+
+
 class Skip(TypedDict, closed=True):
     id: str
     reason: str
@@ -814,6 +828,16 @@ class EnvelopeRoleGrantOut(TypedDict, closed=True):
 
 class EnvelopeSignInSecretOut(TypedDict, closed=True):
     data: SignInSecretOut
+    success: Literal[True]
+
+
+class EnvelopeSignInTestOut(TypedDict, closed=True):
+    data: SignInTestOut
+    success: Literal[True]
+
+
+class EnvelopeSignInTestStartOut(TypedDict, closed=True):
+    data: SignInTestStartOut
     success: Literal[True]
 
 

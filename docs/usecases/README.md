@@ -176,6 +176,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-162 | platform-service | A person signs in through SAML and steps up at the same provider, which must ask again | api | passing |
 | uc-711 | platform-service | Leaving a group at the identity provider ends only the membership that group gave | api | passing |
 | uc-712 | platform-service | Company sign-in required: passwords refused on company domains except for break-glass Security admins | api | passing |
+| uc-713 | platform-service | An admin tests a company provider, turned off, and sees what it sent; nobody is signed in or made | api | passing |
 | uc-163 | platform-service | A password in an SSO-only workspace, another provider's answer and a reused code are refused | api | passing |
 | uc-164 | platform-service | Workspace admins create a team with its first admin, rename, archive and restore it; others cannot | api, ui | passing |
 | uc-212 | platform-service | A workspace sets its security and default teams, and SSO groups put new people in mapped teams | api | passing |

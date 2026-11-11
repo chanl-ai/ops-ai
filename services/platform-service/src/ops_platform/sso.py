@@ -47,6 +47,8 @@ log = get_logger(__name__)
 
 SIGN_IN = "sign_in"
 STEP_UP = "step_up"
+# A test round trip an admin starts from the provider's settings: it records what came back and signs nobody in.
+TEST = "test"
 OIDC_CALLBACK = "/v1/auth/oidc/callback"
 SAML_ACS = "/v1/auth/saml/acs"
 SAML_SP = "/v1/auth/saml"
@@ -111,6 +113,7 @@ def _refused() -> Unauthorized:
 class Started:
     redirect_url: str
     flow_key: str
+    flow_id: str = ""
 
 
 @dataclass
@@ -223,8 +226,8 @@ class Sso:
 
         async def keep(
             state: str, *, verifier: str | None = None, nonce: str | None = None, request: str | None = None
-        ) -> None:
-            await self.store.open_flow(
+        ) -> str:
+            return await self.store.open_flow(
                 tenant_id=p.tenant_id,
                 provider_id=p.id,
                 purpose=purpose,
@@ -245,13 +248,13 @@ class Sso:
                 start = await (await self._oidc(p)).begin(
                     redirect_uri=f"{public}{OIDC_CALLBACK}", login_hint=login_hint, force=force
                 )
-                await keep(start.state, verifier=start.verifier, nonce=start.nonce)
-                return Started(start.url, flow_key)
+                flow_id = await keep(start.state, verifier=start.verifier, nonce=start.nonce)
+                return Started(start.url, flow_key, flow_id)
             if p.kind == "saml":
                 state = secrets.token_urlsafe(32)
                 saml = self._saml(p).begin(relay_state=state, force=force, now=now)
-                await keep(state, request=saml.request_id)
-                return Started(saml.url, flow_key)
+                flow_id = await keep(state, request=saml.request_id)
+                return Started(saml.url, flow_key, flow_id)
         except SignInRefused as e:
             log.warning("signin_provider_unavailable", provider=p.id, reason=e.reason)
             raise ServiceUnavailable("Your company's sign-in did not answer. Try again.", code="sso_unavailable") from e
@@ -273,6 +276,13 @@ class Sso:
             raise ValidationFailed("This sign-in link does not lead to a company provider.", code="sso_not_enabled")
         return await self._begin(p, purpose=SIGN_IN, login_hint=None, next_path=next_path)
 
+    async def start_test(self, tenant_id: str, provider_id: str, *, user_id: str) -> Started:
+        """A test round trip for the admin `user_id`, also while the provider is off. The caller checks the admin."""
+        p = await self.store.provider(tenant_id, provider_id)
+        if p is None or p.kind not in SSO_METHODS:
+            raise NotFound("sign-in provider")
+        return await self._begin(p, purpose=TEST, login_hint=None, next_path=None, user_id=user_id)
+
     async def oidc_answer(self, *, state: str, code: str) -> str:
         """The console URL the browser goes to after the provider's OIDC answer."""
         flow = await self.store.flow_by_state(_hash(state)) if state else None
@@ -291,6 +301,8 @@ class Sso:
             return await self._answer(flow, p, who)
         except SignInRefused as e:
             log.info("signin_refused", kind="oidc", flow=flow.id if flow else None, reason=e.reason)
+            if flow is not None and flow.purpose == TEST:
+                return await self._failed_test(flow, e)
             return self._failed(flow, e)
 
     async def saml_answer(self, *, relay_state: str, saml_response: str, sp_id: str | None = None) -> str:
@@ -321,6 +333,8 @@ class Sso:
             return await self._answer(flow, p, who)
         except SignInRefused as e:
             log.info("signin_refused", kind="saml", flow=flow.id if flow else None, reason=e.reason)
+            if flow is not None and flow.purpose == TEST:
+                return await self._failed_test(flow, e)
             return self._failed(flow, e)
 
     async def _unsolicited(self, tenant_id: str, provider_id: str, sp_id: str, saml_response: str, tiles: bool) -> str:
@@ -336,12 +350,23 @@ class Sso:
         if flow is None or flow.expires_at <= _iso(datetime.now(UTC)):
             raise SignInRefused("unknown or expired flow")
         p = await self.store.provider(flow.tenant_id, flow.provider_id)
-        if p is None or not p.enabled or p.kind != kind:
+        # A test runs while the provider is off, so an admin can check it before anyone signs in through it.
+        if p is None or (not p.enabled and flow.purpose != TEST) or p.kind != kind:
             raise SignInRefused(f"flow is not for a live {kind} provider")
         return p
 
     async def _answer(self, flow: Flow, p: Provider, who: VerifiedIdentity) -> str:
         now = _iso(datetime.now(UTC))
+        if flow.purpose == TEST:
+            result = {
+                "state": "ok",
+                "subject": who.subject,
+                "email": who.email,
+                "name": who.name,
+                "groups": list(who.groups) if who.groups is not None else None,
+            }
+            await self.store.record_test(flow, result, at=now)
+            return self._tested(flow)
         if flow.purpose == STEP_UP:
             user_id = await self.store.linked(p.tenant_id, p.id, who.subject)
             if user_id is None or user_id != flow.user_id:
@@ -365,6 +390,15 @@ class Sso:
         if flow is not None and flow.next_path:
             params = {**params, "next": flow.next_path}
         return f"{console}/sso/callback?{urlencode(params)}"
+
+    def _tested(self, flow: Flow) -> str:
+        _, console = self._urls()
+        return f"{console}/settings/security/sign-in?{urlencode({'test': flow.id})}"
+
+    async def _failed_test(self, flow: Flow, e: SignInRefused) -> str:
+        """A failed test keeps the check that failed, for the admin who ran it: they fix the provider from it."""
+        await self.store.record_test(flow, {"state": "refused", "reason": e.reason}, at=_iso(datetime.now(UTC)))
+        return self._tested(flow)
 
     def _failed(self, flow: Flow | None, e: SignInRefused) -> str:
         """The console's error page. Only the reasons a person can act on are named; every failed check is

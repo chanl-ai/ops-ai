@@ -421,7 +421,7 @@ signin_flows = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False, index=True),
     sa.Column("provider_id", sa.String(64), nullable=False),
-    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up
+    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up | test
     sa.Column("state_hash", sa.String(64), nullable=False, unique=True),
     # The hash of the key the starting browser holds; completing the flow needs it.
     sa.Column("browser_hash", sa.String(64), nullable=False),
@@ -436,6 +436,9 @@ signin_flows = sa.Table(
     sa.Column("expires_at", sa.String(40), nullable=False),
     sa.Column("answered_at", sa.String(40)),
     sa.Column("used_at", sa.String(40)),
+    # A test sign-in's result (0033): state, subject, email, name, groups, or the check that failed. Read only by the
+    # admin who started it (`user_id`); a test flow never gets a handoff, so it can never become a session.
+    sa.Column("test_result", sa.JSON(none_as_null=True)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "provider_id"],
         ["signin_providers.tenant_id", "signin_providers.id"],

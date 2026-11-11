@@ -664,6 +664,28 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "sign_in_providers_signin_test_result": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/settings/sign-in/test-results/{flow_id}",
+    "pathParams": [
+      "flow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_test_signin_provider": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/settings/sign-in/providers/{provider_id}/test",
+    "pathParams": [
+      "provider_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sign_in_providers_verify_signin_domain": {
     "body": null,
     "headers": [],

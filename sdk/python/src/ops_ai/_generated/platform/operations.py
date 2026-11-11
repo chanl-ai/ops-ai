@@ -595,6 +595,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sign_in_providers_signin_test_result": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/settings/sign-in/test-results/{flow_id}",
+        "pathParams": ["flow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_test_signin_provider": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/settings/sign-in/providers/{provider_id}/test",
+        "pathParams": ["provider_id"],
+        "query": [],
+        "stream": False,
+    },
     "sign_in_providers_verify_signin_domain": {
         "body": None,
         "headers": [],
@@ -1079,6 +1097,12 @@ class Operations:
             SERVICE, OPERATIONS["sign_in_providers_refresh_signin_provider"], {"provider_id": provider_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def sign_in_providers_test_signin_provider(self, provider_id: str) -> SignInTestStartOut:
+        "Test Signin Provider"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_test_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def sign_in_providers_list_signin_secret_names(self) -> list[str]:
         "List Signin Secret Names"
         return self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_secret_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1094,6 +1118,12 @@ class Operations:
     def sign_in_providers_delete_signin_secret(self, name: str) -> Any:
         "Delete Signin Secret"
         return self._t.call(SERVICE, OPERATIONS["sign_in_providers_delete_signin_secret"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sign_in_providers_signin_test_result(self, flow_id: str) -> SignInTestOut:
+        "Signin Test Result"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_signin_test_result"], {"flow_id": flow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     def teams_list_workspace_teams(
         self,
@@ -1505,6 +1535,12 @@ class AsyncOperations:
             SERVICE, OPERATIONS["sign_in_providers_refresh_signin_provider"], {"provider_id": provider_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def sign_in_providers_test_signin_provider(self, provider_id: str) -> SignInTestStartOut:
+        "Test Signin Provider"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_test_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def sign_in_providers_list_signin_secret_names(self) -> list[str]:
         "List Signin Secret Names"
         return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_secret_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1523,6 +1559,12 @@ class AsyncOperations:
         "Delete Signin Secret"
         return await self._t.call(
             SERVICE, OPERATIONS["sign_in_providers_delete_signin_secret"], {"name": name}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_signin_test_result(self, flow_id: str) -> SignInTestOut:
+        "Signin Test Result"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_signin_test_result"], {"flow_id": flow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def teams_list_workspace_teams(

@@ -807,6 +807,22 @@ class GroupRuleOut(Out):
     role: str
 
 
+class SignInTestStartOut(Out):
+    redirect_url: str
+    flow_id: str
+
+
+class SignInTestOut(Out):
+    # waiting until the provider answers; ok with what it sent; refused with the check that failed.
+    state: Literal["waiting", "ok", "refused"]
+    subject: str | None = None
+    email: str | None = None
+    name: str | None = None
+    # None: the provider sent no groups list (or Entra's overage claim), so group rules would change nothing.
+    groups: list[str] | None = None
+    reason: str | None = None
+
+
 class BreakGlassOut(Out):
     user_id: str
     email: str

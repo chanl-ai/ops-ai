@@ -130,6 +130,8 @@ from .schemas import (
     SignIn,
     SignInSecretIn,
     SignInSecretOut,
+    SignInTestOut,
+    SignInTestStartOut,
     SsoCompleteIn,
     SsoStarted,
     SsoStartIn,
@@ -912,6 +914,38 @@ def create_public_app(
     ) -> Response:
         await signin_settings.delete(actor, provider_id)
         return Response(status_code=204)
+
+    @app.post(
+        "/v1/settings/sign-in/providers/{provider_id}/test",
+        tags=["sign-in-providers"],
+        response_model=Envelope[SignInTestStartOut],
+        responses=ERRORS,
+    )
+    async def test_signin_provider(  # pyright: ignore[reportUnusedFunction]
+        provider_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Starts a test sign-in: the admin signs in at the provider as themself, in a new tab, and the result is read
+        from `GET /v1/settings/sign-in/test-results/{flowId}`. Runs while the provider is off; signs nobody in."""
+        await people.require_admin(actor, "settings", "manage")
+        started = await sso.start_test(actor.tenant_id, provider_id, user_id=actor.user_id)
+        return ok({"redirectUrl": started.redirect_url, "flowId": started.flow_id})
+
+    @app.get(
+        "/v1/settings/sign-in/test-results/{flow_id}",
+        tags=["sign-in-providers"],
+        response_model=Envelope[SignInTestOut],
+        responses=ERRORS,
+    )
+    async def signin_test_result(  # pyright: ignore[reportUnusedFunction]
+        flow_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """What a test sign-in got back: email, name and groups, or the check that failed. 404 to anyone but the admin
+        who started it."""
+        await people.require_admin(actor, "settings", "manage")
+        result = await signin_store.test_result(actor.tenant_id, flow_id, actor.user_id)
+        if result is None:
+            raise NotFound("sign-in test")
+        return ok(result)
 
     @app.get(
         "/v1/settings/sign-in/break-glass",

@@ -697,6 +697,31 @@ class SignInStore:
         async with self.db.tenant_tx(flow.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
 
+    async def record_test(self, flow: Flow, result: dict[str, Any], *, at: str) -> bool:
+        """Keeps a test flow's result, once and before it expires. Sets no handoff, so no session can follow."""
+        async with self.db.tenant_tx(flow.tenant_id) as c:
+            done = await c.execute(
+                signin_flows.update()
+                .where(
+                    signin_flows.c.id == flow.id,
+                    signin_flows.c.purpose == "test",
+                    signin_flows.c.answered_at.is_(None),
+                    signin_flows.c.expires_at > at,
+                )
+                .values(test_result=result, answered_at=at)
+            )
+        return bool(done.rowcount)
+
+    async def test_result(self, tenant_id: str, flow_id: str, user_id: str) -> dict[str, Any] | None:
+        """A test flow's result for the admin who started it: `waiting` until the provider answers."""
+        f = signin_flows.c
+        q = sa.select(f.test_result, f.answered_at).where(f.id == flow_id, f.purpose == "test", f.user_id == user_id)
+        async with self.db.tenant_tx(tenant_id) as c:
+            row = (await c.execute(q)).first()
+        if row is None:
+            return None
+        return dict(row[0]) if row[0] else {"state": "waiting"}
+
     async def take(self, flow: Flow, *, browser_hash: str, at: str) -> bool:
         """Spends the handoff, once, for the browser that started the flow, while the flow lives."""
         q = (
