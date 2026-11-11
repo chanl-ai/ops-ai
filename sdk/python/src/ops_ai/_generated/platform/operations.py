@@ -136,6 +136,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "auth_saml_provider_acs": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/saml/acs/{sp_id}",
+        "pathParams": ["sp_id"],
+        "query": [],
+        "stream": False,
+    },
+    "auth_saml_provider_metadata": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/auth/saml/metadata/{sp_id}",
+        "pathParams": ["sp_id"],
+        "query": [],
+        "stream": False,
+    },
     "auth_session": {
         "body": None,
         "headers": [],
@@ -796,9 +814,17 @@ class Operations:
         "Saml Acs"
         return self._t.call(SERVICE, OPERATIONS["auth_saml_acs"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def auth_saml_provider_acs(self, sp_id: str) -> Any:
+        "Saml Provider Acs"
+        return self._t.call(SERVICE, OPERATIONS["auth_saml_provider_acs"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def auth_saml_metadata(self) -> Any:
         "Saml Metadata"
         return self._t.call(SERVICE, OPERATIONS["auth_saml_metadata"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def auth_saml_provider_metadata(self, sp_id: str) -> Any:
+        "Saml Provider Metadata"
+        return self._t.call(SERVICE, OPERATIONS["auth_saml_provider_metadata"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def auth_session(self) -> Principal:
         "Session"
@@ -1182,9 +1208,17 @@ class AsyncOperations:
         "Saml Acs"
         return await self._t.call(SERVICE, OPERATIONS["auth_saml_acs"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def auth_saml_provider_acs(self, sp_id: str) -> Any:
+        "Saml Provider Acs"
+        return await self._t.call(SERVICE, OPERATIONS["auth_saml_provider_acs"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def auth_saml_metadata(self) -> Any:
         "Saml Metadata"
         return await self._t.call(SERVICE, OPERATIONS["auth_saml_metadata"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def auth_saml_provider_metadata(self, sp_id: str) -> Any:
+        "Saml Provider Metadata"
+        return await self._t.call(SERVICE, OPERATIONS["auth_saml_provider_metadata"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def auth_session(self) -> Principal:
         "Session"

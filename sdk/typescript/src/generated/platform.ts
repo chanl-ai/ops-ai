@@ -268,9 +268,31 @@ export interface paths {
         put?: never;
         /**
          * Saml Acs
-         * @description The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page.
+         * @description The SAML POST binding for providers saved before each had its own address: a form with SAMLResponse and
+         *     RelayState, posted by the provider's page.
          */
         post: operations["auth_saml_acs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/saml/acs/{sp_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Saml Provider Acs
+         * @description One provider's own consumer URL. A response that answers none of our requests (an app-portal tile) is
+         *     checked, discarded, and the browser is sent to start a normal sign-in.
+         */
+        post: operations["auth_saml_provider_acs"];
         delete?: never;
         options?: never;
         head?: never;
@@ -290,6 +312,26 @@ export interface paths {
          *     certificate for signed requests and encrypted assertions. Public: it holds nothing secret.
          */
         get: operations["auth_saml_metadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/saml/metadata/{sp_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Saml Provider Metadata
+         * @description One provider's own SAML service provider metadata: its entity id and consumer URL. Public.
+         */
+        get: operations["auth_saml_provider_metadata"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2821,23 +2863,38 @@ export interface components {
             signRequests: boolean;
             /** Ssourl */
             ssoUrl: string;
+            /**
+             * Tiles
+             * @default true
+             */
+            tiles: boolean;
         };
         /** SamlSettingsOut */
         SamlSettingsOut: {
+            /** Acsurl */
+            acsUrl: string | null;
             /** Certificate */
             certificate: string;
             /** Emailattribute */
             emailAttribute: string | null;
             /** Idpentityid */
             idpEntityId: string;
+            /** Metadataurl */
+            metadataUrl: string | null;
             /** Nameattribute */
             nameAttribute: string | null;
             /** Requireencryption */
             requireEncryption: boolean;
+            /** Signonurl */
+            signOnUrl: string | null;
             /** Signrequests */
             signRequests: boolean;
+            /** Spentityid */
+            spEntityId: string | null;
             /** Ssourl */
             ssoUrl: string;
+            /** Tiles */
+            tiles: boolean;
         };
         /** SessionOut */
         SessionOut: {
@@ -2901,12 +2958,17 @@ export interface components {
             /** Label */
             label: string;
         };
-        /** SsoStartIn */
+        /**
+         * SsoStartIn
+         * @description Either the person's work email, or a provider's address id (`/sso?provider=`, from an app-portal tile).
+         */
         SsoStartIn: {
             /** Email */
-            email: string;
+            email?: string | null;
             /** Next */
             next?: string | null;
+            /** Provider */
+            provider?: string | null;
         };
         /** SsoStarted */
         SsoStarted: {
@@ -4514,11 +4576,217 @@ export interface operations {
             };
         };
     };
+    auth_saml_provider_acs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sp_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     auth_saml_metadata: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/samlmetadata+xml": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    auth_saml_provider_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sp_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

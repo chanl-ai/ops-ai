@@ -450,16 +450,22 @@ class SamlSettings(TypedDict, closed=True):
     requireEncryption: NotRequired[bool]
     signRequests: NotRequired[bool]
     ssoUrl: str
+    tiles: NotRequired[bool]
 
 
 class SamlSettingsOut(TypedDict, closed=True):
+    acsUrl: str | None
     certificate: str
     emailAttribute: str | None
     idpEntityId: str
+    metadataUrl: str | None
     nameAttribute: str | None
     requireEncryption: bool
+    signOnUrl: str | None
     signRequests: bool
+    spEntityId: str | None
     ssoUrl: str
+    tiles: bool
 
 
 class SignIn(TypedDict, closed=True):
@@ -495,8 +501,9 @@ class SsoOption(TypedDict, closed=True):
 
 
 class SsoStartIn(TypedDict, closed=True):
-    email: str
+    email: NotRequired[str | None]
     next: NotRequired[str | None]
+    provider: NotRequired[str | None]
 
 
 class SsoStarted(TypedDict, closed=True):

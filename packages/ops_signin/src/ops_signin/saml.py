@@ -146,10 +146,23 @@ class SamlServiceProvider:
             query = f"{query}&Signature={quote_plus(base64.b64encode(signature).decode())}"
         return SamlStart(f"{c.idp_sso_url}{'&' if '?' in c.idp_sso_url else '?'}{query}", request_id)
 
+    def check_unsolicited(self, *, saml_response: str, now: datetime | None = None) -> None:
+        """Checks a response no request asked for (an app-portal tile) exactly as `complete` does, with no
+        InResponseTo anywhere and a Destination that names this consumer URL; returns nothing, so nobody is ever signed
+        in from it. Raises SignInRefused."""
+        self.complete(saml_response=saml_response, request_id=None, now=now)
+
     def complete(
-        self, *, saml_response: str, request_id: str, now: datetime | None = None, fresh_since: int | None = None
+        self,
+        *,
+        saml_response: str,
+        request_id: str | None,
+        now: datetime | None = None,
+        fresh_since: int | None = None,
     ) -> VerifiedIdentity:
-        """`fresh_since` (Unix seconds) is set for a forced sign-in: the assertion's AuthnInstant must not be older."""
+        """The person a response vouches for. `request_id` is the AuthnRequest it must answer; None checks an
+        unsolicited response, which must carry no InResponseTo and must name this consumer URL as Destination.
+        `fresh_since` (Unix seconds) is set for a forced sign-in: the assertion's AuthnInstant must not be older."""
         c = self.config
         now = now or datetime.now(UTC)
         try:
@@ -182,6 +195,8 @@ class SamlServiceProvider:
             raise SignInRefused("response answers another request")
         if posted.get("Destination") not in (None, c.acs_url):
             raise SignInRefused("response is for another destination")
+        if request_id is None and posted.get("Destination") != c.acs_url:
+            raise SignInRefused("an unsolicited response must name this consumer URL")
         if encrypted:
             assertion = self._decrypted(raw, posted, encrypted[0])
             return self._read(assertion, request_id=request_id, now=now, fresh_since=fresh_since)
@@ -231,7 +246,7 @@ class SamlServiceProvider:
             raise SignInRefused("the signature covers neither the response nor the assertion")
         return signed
 
-    def _read(self, a: Element, *, request_id: str, now: datetime, fresh_since: int | None) -> VerifiedIdentity:
+    def _read(self, a: Element, *, request_id: str | None, now: datetime, fresh_since: int | None) -> VerifiedIdentity:
         c = self.config
         if _text(a.find("saml:Issuer", NS)) != c.idp_entity_id:
             raise SignInRefused("assertion from another issuer")

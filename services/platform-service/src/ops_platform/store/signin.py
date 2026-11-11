@@ -72,6 +72,8 @@ class Provider:
     jit_role: str | None
     domains: list[str] = field(default_factory=list[str])
     claims: list[DomainClaim] = field(default_factory=list[DomainClaim])
+    # The random id in this provider's own SAML addresses; None for one saved before providers had them.
+    sp_id: str | None = None
 
     @property
     def verified_domains(self) -> set[str]:
@@ -89,6 +91,17 @@ class DomainHit:
     label: str
     enabled: bool
     password_enabled: bool
+
+
+@dataclass(frozen=True)
+class SpHit:
+    """The provider a SAML address names, found before its tenant is known."""
+
+    tenant_id: str
+    provider_id: str
+    kind: str
+    enabled: bool
+    tiles: bool
 
 
 @dataclass(frozen=True)
@@ -142,6 +155,13 @@ class SignInStore:
             DomainHit(str(row[0]), str(row[1]), str(row[2]), str(row[3]), bool(row[4]), bool(row[5])) if row else None
         )
 
+    async def sp(self, sp_id: str) -> SpHit | None:
+        """The provider whose own SAML addresses carry `sp_id`, through the pre-tenant lookup."""
+        q = sa.text("SELECT tenant_id, provider_id, kind, enabled, tiles FROM platform_signin_sp(:s)")
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            row = (await c.execute(q, {"s": sp_id})).first()
+        return SpHit(str(row[0]), str(row[1]), str(row[2]), bool(row[3]), bool(row[4])) if row else None
+
     async def providers(self, tenant_id: str) -> list[Provider]:
         async with self.db.tenant_tx(tenant_id) as c:
             return await _providers(c)
@@ -175,7 +195,9 @@ class SignInStore:
                 done = await c.execute(signin_providers.update().where(signin_providers.c.id == p.id).values(**values))
                 if done.rowcount == 0:
                     await c.execute(
-                        signin_providers.insert().values(id=p.id, tenant_id=p.tenant_id, created_at=at, **values)
+                        signin_providers.insert().values(
+                            id=p.id, tenant_id=p.tenant_id, created_at=at, sp_id=p.sp_id, **values
+                        )
                     )
                 await _keep_claims(c, p, at)
                 await record(
@@ -776,6 +798,7 @@ async def _providers(c: AsyncConnection, provider_id: str | None = None) -> list
             jit_role=r["jit_role"],
             domains=[x.domain for x in claims.get(str(r["id"]), [])],
             claims=claims.get(str(r["id"]), []),
+            sp_id=r["sp_id"],
         )
         for r in rows
     ]

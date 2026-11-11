@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
 from pydantic.alias_generators import to_camel
 
 from ops_service_kit.flags import FlagName
@@ -631,8 +631,17 @@ class OptionsOut(Out):
 
 
 class SsoStartIn(In):
-    email: str = Field(min_length=3, max_length=320, pattern=EMAIL)
+    """Either the person's work email, or a provider's address id (`/sso?provider=`, from an app-portal tile)."""
+
+    email: str | None = Field(default=None, min_length=3, max_length=320, pattern=EMAIL)
+    provider: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
     next: str | None = Field(default=None, pattern=NEXT_PATH)
+
+    @model_validator(mode="after")
+    def _one_of(self) -> SsoStartIn:
+        if (self.email is None) == (self.provider is None):
+            raise ValueError("give either email or provider")
+        return self
 
 
 class StepUpSsoStartIn(In):
@@ -676,6 +685,8 @@ class SamlSettings(In):
     # Sign each AuthnRequest, and refuse an assertion that is not encrypted; both need the SP key.
     sign_requests: bool = False
     require_encryption: bool = False
+    # Whether an app-portal tile (a response nobody asked for) sends the person round a normal sign-in.
+    tiles: bool = True
 
 
 class JitSettings(In):
@@ -728,6 +739,13 @@ class SamlSettingsOut(Out):
     name_attribute: str | None
     sign_requests: bool
     require_encryption: bool
+    tiles: bool
+    # What the identity provider is told about Ops AI: its entity id, consumer (reply) URL and metadata URL.
+    sp_entity_id: str | None
+    acs_url: str | None
+    metadata_url: str | None
+    # The console address an app-portal tile opens; null for a provider saved before providers had their own address.
+    sign_on_url: str | None
 
 
 class JitOut(Out):

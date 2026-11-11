@@ -374,15 +374,21 @@ class SignInRig:
             back = httpx.URL(at_idp.headers["location"])
             r = await self.public.get(back.path, params=dict(back.params))
         else:
-            form = dict(re.findall(r'name="(\w+)" value="([^"]*)"', at_idp.text))
-            form = {k: html.unescape(v) for k, v in form.items()}
-            r = await self.public.post(
-                "/v1/auth/saml/acs",
-                content=urlencode(form),
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
+            r = await self.post_form(at_idp.text)
         assert r.status_code == 303, r.text
         return r.headers["location"]
+
+    async def post_form(self, page: str, *, to: str | None = None) -> httpx.Response:
+        """Posts the identity provider's auto-submit form to platform-service, at the consumer URL the form names
+        (or `to`), as the browser would."""
+        form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page)}
+        action = re.search(r'action="([^"]*)"', page)
+        assert action is not None, page[:200]
+        return await self.public.post(
+            to or httpx.URL(html.unescape(action.group(1))).path,
+            content=urlencode(form),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
 
     async def sign_in_sso(self, email: str, *, user: str | None = None, stale: bool = False) -> Round:
         r = await self.public.post("/v1/auth/sso/start", json={"email": email})

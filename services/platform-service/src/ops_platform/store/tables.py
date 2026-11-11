@@ -250,7 +250,10 @@ signin_providers = sa.Table(
     sa.Column("jit_role", sa.String(16)),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("updated_at", sa.String(40), nullable=False),
+    # Random, set at creation: names the provider in its own SAML addresses across workspaces (migration 0033).
+    sa.Column("sp_id", sa.String(40)),
     sa.ForeignKeyConstraint(["tenant_id", "jit_team_id"], ["teams.tenant_id", "teams.id"], name="fk_signin_jit_team"),
+    sa.Index("ux_signin_providers_sp_id", "sp_id", unique=True),
     info=TENANT_SCOPED,
 )
 

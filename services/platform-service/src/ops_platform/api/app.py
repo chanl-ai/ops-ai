@@ -350,7 +350,10 @@ def create_public_app(
     async def sso_start(body: SsoStartIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Where to send the browser to sign in at the email domain's provider, and the flow key that browser keeps
         to finish."""
-        started = await sso.start(body.email, next_path=body.next)
+        if body.provider is not None:
+            started = await sso.start_tile(body.provider, next_path=body.next)
+        else:
+            started = await sso.start(body.email or "", next_path=body.next)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
     @app.get("/v1/auth/oidc/callback", tags=["auth"], status_code=303, responses=ERRORS)
@@ -373,19 +376,46 @@ def create_public_app(
     async def saml_metadata() -> Response:  # pyright: ignore[reportUnusedFunction]
         """The SAML service provider metadata a bank's identity provider imports: entity id, consumer URL and the
         certificate for signed requests and encrypted assertions. Public: it holds nothing secret."""
-        return Response(sso.sp_metadata(), media_type="application/samlmetadata+xml")
+        return Response(await sso.sp_metadata(), media_type="application/samlmetadata+xml")
 
-    @app.post("/v1/auth/saml/acs", tags=["auth"], status_code=303, responses=ERRORS)
-    async def saml_acs(request: Request) -> RedirectResponse:  # pyright: ignore[reportUnusedFunction]
-        """The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page."""
+    @app.get(
+        "/v1/auth/saml/metadata/{sp_id}",
+        tags=["auth"],
+        response_class=Response,
+        responses={
+            200: {"content": {"application/samlmetadata+xml": {"schema": {"type": "string"}}}},
+            **ERRORS,
+        },
+    )
+    async def saml_provider_metadata(  # pyright: ignore[reportUnusedFunction]
+        sp_id: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,40}$")],
+    ) -> Response:
+        """One provider's own SAML service provider metadata: its entity id and consumer URL. Public."""
+        return Response(await sso.sp_metadata(sp_id), media_type="application/samlmetadata+xml")
+
+    async def _saml_post(request: Request, sp_id: str | None) -> RedirectResponse:
         raw = await request.body()
         if len(raw) > 512 * 1024:
             raise ValidationFailed("The SAML response is too large.", code="saml_too_large")
         form = {k: v[0] for k, v in parse_qs(raw.decode(errors="replace")).items()}
         target = await sso.saml_answer(
-            relay_state=form.get("RelayState", ""), saml_response=form.get("SAMLResponse", "")
+            relay_state=form.get("RelayState", ""), saml_response=form.get("SAMLResponse", ""), sp_id=sp_id
         )
         return RedirectResponse(target, status_code=303)
+
+    @app.post("/v1/auth/saml/acs", tags=["auth"], status_code=303, responses=ERRORS)
+    async def saml_acs(request: Request) -> RedirectResponse:  # pyright: ignore[reportUnusedFunction]
+        """The SAML POST binding for providers saved before each had its own address: a form with SAMLResponse and
+        RelayState, posted by the provider's page."""
+        return await _saml_post(request, None)
+
+    @app.post("/v1/auth/saml/acs/{sp_id}", tags=["auth"], status_code=303, responses=ERRORS)
+    async def saml_provider_acs(  # pyright: ignore[reportUnusedFunction]
+        request: Request, sp_id: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,40}$")]
+    ) -> RedirectResponse:
+        """One provider's own consumer URL. A response that answers none of our requests (an app-portal tile) is
+        checked, discarded, and the browser is sent to start a normal sign-in."""
+        return await _saml_post(request, sp_id)
 
     @app.post("/v1/auth/sso/complete", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def sso_complete(body: SsoCompleteIn) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -662,7 +692,13 @@ def create_public_app(
         return ok(view | ({"name": who.name, "email": who.email} if who else {}))
 
     signin_settings = SignInSettings(
-        signin_store, people, signin_secrets, sign.dns, sp_key_set=sign.saml_sp_key is not None
+        signin_store,
+        people,
+        signin_secrets,
+        sign.dns,
+        sp_key_set=sign.saml_sp_key is not None,
+        public_url=sign.public_url,
+        console_url=sign.console_url,
     )
 
     @app.get(

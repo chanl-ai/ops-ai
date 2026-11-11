@@ -28,7 +28,7 @@ NS = {"samlp": "urn:oasis:names:tc:SAML:2.0:protocol", "saml": "urn:oasis:names:
 
 
 def response(
-    request_id: str,
+    request_id: str | None,
     *,
     by: Idp = BANK,
     audience: str = SP,
@@ -261,3 +261,38 @@ def test_the_metadata_names_the_consumer_and_the_certificate() -> None:
     xml = sp_metadata(entity_id=SP, acs_url=ACS, certificate=SP_CERT, sign_requests=True).decode()
     body = "".join(line for line in SP_CERT.splitlines() if "CERTIFICATE" not in line)
     assert f'Location="{ACS}"' in xml and 'AuthnRequestsSigned="true"' in xml and xml.count(body) == 2
+
+
+def _strip_destination(root: Element) -> None:
+    del root.attrib["Destination"]
+
+
+def test_an_unsolicited_response_passes_only_with_every_check_and_this_destination() -> None:
+    sp = SamlServiceProvider(CONFIG)
+    sp.check_unsolicited(saml_response=response(None))
+    for bad in (
+        response(None, by=OTHER),
+        response(None, audience="https://elsewhere.test/saml"),
+        edit(response(None), _strip_destination),
+        # A response that answers some request is not a tile's, whichever request it was.
+        response("_some_request"),
+    ):
+        with pytest.raises(SignInRefused):
+            sp.check_unsolicited(saml_response=bad)
+
+
+def test_a_response_signed_on_both_the_response_and_the_assertion_signs_in() -> None:
+    """The default of some providers (Okta) signs the Response and the Assertion inside it."""
+    sp = SamlServiceProvider(CONFIG)
+    start = sp.begin(relay_state="r")
+    both = saml_response(
+        BANK,
+        issuer=ISSUER,
+        audience=SP,
+        acs=ACS,
+        in_response_to=start.request_id,
+        email="ana@bank.test",
+        auth_time=int(datetime.now(UTC).timestamp()),
+        sign_response=True,
+    )
+    assert sp.complete(saml_response=both, request_id=start.request_id).email == "ana@bank.test"

@@ -69,6 +69,22 @@ def _groups_source(config: dict[str, Any]) -> str | None:
     return str(groups.get("source") or "groups") if groups.get("map") else None
 
 
+def saml_addresses(public_url: str, sp_id: str | None) -> dict[str, str]:
+    """What a provider's identity provider is told about Ops AI: entity id, consumer URL and metadata URL. A provider
+    with its own `sp_id` gets its own three, so one identity-provider tenant can serve two workspaces (Entra needs a
+    distinct identifier per application) and an unsolicited post names its provider in the path; one saved before
+    that keeps the shared addresses."""
+    public = public_url.rstrip("/")
+    if sp_id is None:
+        return {
+            "entityId": f"{public}{SAML_SP}",
+            "acsUrl": f"{public}{SAML_ACS}",
+            "metadataUrl": f"{public}{SAML_SP}/metadata",
+        }
+    metadata = f"{public}{SAML_SP}/metadata/{sp_id}"
+    return {"entityId": metadata, "acsUrl": f"{public}{SAML_ACS}/{sp_id}", "metadataUrl": metadata}
+
+
 def _refused() -> Unauthorized:
     return Unauthorized("Sign in again.")
 
@@ -137,12 +153,18 @@ class Sso:
             return r.content
         return await self.fetch.get(self.http, url)
 
-    def sp_metadata(self) -> bytes:
-        """The service provider's SAML metadata for a bank's identity provider."""
+    async def sp_metadata(self, sp_id: str | None = None) -> bytes:
+        """The service provider's SAML metadata for a bank's identity provider: the shared one, or a provider's own.
+        Raises NotFound for an id that names no SAML provider."""
         public, _ = self._urls()
+        if sp_id is not None:
+            hit = await self.store.sp(sp_id)
+            if hit is None or hit.kind != "saml":
+                raise NotFound("sign-in provider")
+        at = saml_addresses(public, sp_id)
         return sp_metadata(
-            entity_id=f"{public}{SAML_SP}",
-            acs_url=f"{public}{SAML_ACS}",
+            entity_id=at["entityId"],
+            acs_url=at["acsUrl"],
             certificate=self.sp_certificate,
             sign_requests=self.sp_key is not None,
         )
@@ -153,13 +175,14 @@ class Sso:
         needs_key = bool(c.get("signRequests") or c.get("requireEncryption"))
         if needs_key and self.sp_key is None:
             raise ServiceUnavailable("The service provider key is not set.", code="sso_not_configured")
+        at = saml_addresses(public, p.sp_id)
         return SamlServiceProvider(
             SamlConfig(
                 idp_entity_id=str(c["idpEntityId"]),
                 idp_sso_url=str(c["ssoUrl"]),
                 idp_certificate=str(c["certificate"]),
-                sp_entity_id=f"{public}{SAML_SP}",
-                acs_url=f"{public}{SAML_ACS}",
+                sp_entity_id=at["entityId"],
+                acs_url=at["acsUrl"],
                 email_attribute=c.get("emailAttribute"),
                 name_attribute=c.get("nameAttribute"),
                 groups_attribute=_groups_source(c),
@@ -227,6 +250,15 @@ class Sso:
             raise ValidationFailed("This email does not sign in through a company provider.", code="sso_not_enabled")
         return await self._begin(p, purpose=SIGN_IN, login_hint=email, next_path=next_path)
 
+    async def start_tile(self, sp_id: str, *, next_path: str | None) -> Started:
+        """A sign-in an app-portal tile opened (`/sso?provider=`): the same round trip as `start`, for the provider the
+        id names, while it is on and its tile is."""
+        hit = await self.store.sp(sp_id)
+        p = await self.store.provider(hit.tenant_id, hit.provider_id) if hit and hit.enabled and hit.tiles else None
+        if p is None or not p.enabled or p.kind not in SSO_METHODS:
+            raise ValidationFailed("This sign-in link does not lead to a company provider.", code="sso_not_enabled")
+        return await self._begin(p, purpose=SIGN_IN, login_hint=None, next_path=next_path)
+
     async def oidc_answer(self, *, state: str, code: str) -> str:
         """The console URL the browser goes to after the provider's OIDC answer."""
         flow = await self.store.flow_by_state(_hash(state)) if state else None
@@ -247,11 +279,24 @@ class Sso:
             log.info("signin_refused", kind="oidc", flow=flow.id if flow else None, reason=e.reason)
             return self._failed(flow)
 
-    async def saml_answer(self, *, relay_state: str, saml_response: str) -> str:
-        """The console URL the browser goes to after the provider's SAML answer."""
+    async def saml_answer(self, *, relay_state: str, saml_response: str, sp_id: str | None = None) -> str:
+        """The console URL the browser goes to after the provider's SAML answer, posted to the shared consumer URL or
+        to a provider's own (`sp_id`). A post to a provider's own URL that answers no flow is an app-portal tile: it is
+        checked and then discarded, and the browser starts a normal sign-in, so nobody is signed in by a response
+        no request of ours asked for."""
         flow = await self.store.flow_by_state(_hash(relay_state)) if relay_state else None
         try:
+            if sp_id is not None:
+                hit = await self.store.sp(sp_id)
+                if hit is None:
+                    raise SignInRefused("no provider has this address")
+                if flow is None:
+                    return await self._unsolicited(hit.tenant_id, hit.provider_id, sp_id, saml_response, hit.tiles)
+                if (flow.tenant_id, flow.provider_id) != (hit.tenant_id, hit.provider_id):
+                    raise SignInRefused("answer posted to another provider's address")
             p = await self._live(flow, "saml")
+            if p.sp_id != sp_id:
+                raise SignInRefused("answer posted to another provider's address")
             if flow is None or not flow.request_id:
                 raise SignInRefused("flow has no SAML request id")
             who = self._saml(p).complete(
@@ -263,6 +308,14 @@ class Sso:
         except SignInRefused as e:
             log.info("signin_refused", kind="saml", flow=flow.id if flow else None, reason=e.reason)
             return self._failed(flow)
+
+    async def _unsolicited(self, tenant_id: str, provider_id: str, sp_id: str, saml_response: str, tiles: bool) -> str:
+        p = await self.store.provider(tenant_id, provider_id)
+        if p is None or not p.enabled or p.kind != "saml" or not tiles:
+            raise SignInRefused("unsolicited response for a provider that is off or takes no tiles")
+        self._saml(p).check_unsolicited(saml_response=saml_response)
+        _, console = self._urls()
+        return f"{console}/sso?{urlencode({'provider': sp_id})}"
 
     async def _live(self, flow: Flow | None, kind: str) -> Provider:
         """The flow's provider, when the flow exists, has not expired and was started for a provider of this kind."""

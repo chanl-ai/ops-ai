@@ -4237,6 +4237,11 @@
             "pattern": "^https?://",
             "title": "Ssourl",
             "type": "string"
+          },
+          "tiles": {
+            "default": true,
+            "title": "Tiles",
+            "type": "boolean"
           }
         },
         "required": [
@@ -4250,6 +4255,17 @@
       "SamlSettingsOut": {
         "additionalProperties": false,
         "properties": {
+          "acsUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acsurl"
+          },
           "certificate": {
             "title": "Certificate",
             "type": "string"
@@ -4269,6 +4285,17 @@
             "title": "Idpentityid",
             "type": "string"
           },
+          "metadataUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataurl"
+          },
           "nameAttribute": {
             "anyOf": [
               {
@@ -4284,13 +4311,39 @@
             "title": "Requireencryption",
             "type": "boolean"
           },
+          "signOnUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signonurl"
+          },
           "signRequests": {
             "title": "Signrequests",
             "type": "boolean"
           },
+          "spEntityId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spentityid"
+          },
           "ssoUrl": {
             "title": "Ssourl",
             "type": "string"
+          },
+          "tiles": {
+            "title": "Tiles",
+            "type": "boolean"
           }
         },
         "required": [
@@ -4300,7 +4353,12 @@
           "emailAttribute",
           "nameAttribute",
           "signRequests",
-          "requireEncryption"
+          "requireEncryption",
+          "tiles",
+          "spEntityId",
+          "acsUrl",
+          "metadataUrl",
+          "signOnUrl"
         ],
         "title": "SamlSettingsOut",
         "type": "object"
@@ -4482,13 +4540,21 @@
       },
       "SsoStartIn": {
         "additionalProperties": false,
+        "description": "Either the person's work email, or a provider's address id (`/sso?provider=`, from an app-portal tile).",
         "properties": {
           "email": {
-            "maxLength": 320,
-            "minLength": 3,
-            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
-            "title": "Email",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "minLength": 3,
+                "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
           },
           "next": {
             "anyOf": [
@@ -4501,11 +4567,22 @@
               }
             ],
             "title": "Next"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           }
         },
-        "required": [
-          "email"
-        ],
         "title": "SsoStartIn",
         "type": "object"
       },
@@ -7294,7 +7371,7 @@
     },
     "/v1/auth/saml/acs": {
       "post": {
-        "description": "The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page.",
+        "description": "The SAML POST binding for providers saved before each had its own address: a form with SAMLResponse and\nRelayState, posted by the provider's page.",
         "operationId": "auth_saml_acs",
         "responses": {
           "303": {
@@ -7397,6 +7474,129 @@
           }
         },
         "summary": "Saml Acs",
+        "tags": [
+          "auth"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/auth/saml/acs/{sp_id}": {
+      "post": {
+        "description": "One provider's own consumer URL. A response that answers none of our requests (an app-portal tile) is\nchecked, discarded, and the browser is sent to start a normal sign-in.",
+        "operationId": "auth_saml_provider_acs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sp_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,40}$",
+              "title": "Sp Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Saml Provider Acs",
         "tags": [
           "auth"
         ],
@@ -7510,6 +7710,131 @@
           }
         },
         "summary": "Saml Metadata",
+        "tags": [
+          "auth"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/auth/saml/metadata/{sp_id}": {
+      "get": {
+        "description": "One provider's own SAML service provider metadata: its entity id and consumer URL. Public.",
+        "operationId": "auth_saml_provider_metadata",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sp_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,40}$",
+              "title": "Sp Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/samlmetadata+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Saml Provider Metadata",
         "tags": [
           "auth"
         ],

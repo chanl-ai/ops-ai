@@ -19,8 +19,10 @@ from typing import Any
 from cryptography import x509
 
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
+from ops_service_kit.ids import new_id
 from ops_signin.dns import TxtResolver, record_value
 
+from .sso import saml_addresses
 from .store.members import Actor
 from .store.signin import PASSWORD, DomainListedError, DomainTakenError, Provider, SignInStore
 from .store.signin_secrets import SignInSecretStore
@@ -34,7 +36,31 @@ def _iso(t: datetime) -> str:
     return t.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def provider_out(p: Provider) -> dict[str, Any]:
+def _saml_out(p: Provider, public_url: str | None, console_url: str | None) -> dict[str, Any]:
+    c = p.config
+    at = saml_addresses(public_url, p.sp_id) if public_url else {}
+    tile = (
+        f"{console_url.rstrip('/')}/sso?provider={p.sp_id}"
+        if console_url and p.sp_id and c.get("tiles", True)
+        else None
+    )
+    return {
+        "idpEntityId": c.get("idpEntityId"),
+        "ssoUrl": c.get("ssoUrl"),
+        "certificate": c.get("certificate"),
+        "emailAttribute": c.get("emailAttribute"),
+        "nameAttribute": c.get("nameAttribute"),
+        "signRequests": bool(c.get("signRequests")),
+        "requireEncryption": bool(c.get("requireEncryption")),
+        "tiles": bool(c.get("tiles", True)),
+        "spEntityId": at.get("entityId"),
+        "acsUrl": at.get("acsUrl"),
+        "metadataUrl": at.get("metadataUrl"),
+        "signOnUrl": tile,
+    }
+
+
+def provider_out(p: Provider, public_url: str | None = None, console_url: str | None = None) -> dict[str, Any]:
     c = p.config
     return {
         "id": p.id,
@@ -58,17 +84,7 @@ def provider_out(p: Provider) -> dict[str, Any]:
         }
         if p.kind == "oidc"
         else None,
-        "saml": {
-            "idpEntityId": c.get("idpEntityId"),
-            "ssoUrl": c.get("ssoUrl"),
-            "certificate": c.get("certificate"),
-            "emailAttribute": c.get("emailAttribute"),
-            "nameAttribute": c.get("nameAttribute"),
-            "signRequests": bool(c.get("signRequests")),
-            "requireEncryption": bool(c.get("requireEncryption")),
-        }
-        if p.kind == "saml"
-        else None,
+        "saml": _saml_out(p, public_url, console_url) if p.kind == "saml" else None,
         "jit": {"team": p.jit_team_id, "role": p.jit_role} if p.jit_role else None,
         "groups": c.get("groups"),
     }
@@ -92,10 +108,16 @@ class SignInSettings:
     dns: TxtResolver
     # Whether the installation has a SAML service provider key; without one, signing and encryption cannot be asked.
     sp_key_set: bool = False
+    # Where the addresses an identity provider is told about are built (platform-service's public URL, the console).
+    public_url: str | None = None
+    console_url: str | None = None
+
+    def _out(self, p: Provider) -> dict[str, Any]:
+        return provider_out(p, self.public_url, self.console_url)
 
     async def list(self, actor: Actor) -> list[dict[str, Any]]:
         await self.members.require_admin(actor, "settings", "view")
-        return [provider_out(p) for p in await self.store.providers(actor.tenant_id)]
+        return [self._out(p) for p in await self.store.providers(actor.tenant_id)]
 
     async def secret_names(self, actor: Actor) -> list[str]:
         """The names a provider may give as `clientSecretRef`: the workspace's saved secrets, never their values."""
@@ -159,7 +181,7 @@ class SignInSettings:
         saved = await self.store.provider(actor.tenant_id, claim.provider_id)
         if saved is None:
             raise NotFound("sign-in provider")
-        return provider_out(saved)
+        return self._out(saved)
 
     async def save(self, actor: Actor, provider_id: str, body: dict[str, Any]) -> dict[str, Any]:
         await self.members.require_admin(actor, "settings", "manage")
@@ -194,6 +216,9 @@ class SignInSettings:
             config["groups"] = {"source": groups.get("source"), "map": [dict(r) for r in rules]}
         if await self.store.verified_elsewhere(actor.tenant_id, domains):
             raise Conflict("Another workspace has verified one of these domains.", code="domain_taken")
+        before = await self.store.provider(actor.tenant_id, provider_id)
+        # A provider keeps the addresses it was created with; a new company provider gets its own.
+        sp_id = before.sp_id if before else (new_id("ssp") if kind != PASSWORD else None)
         p = Provider(
             id=provider_id,
             tenant_id=actor.tenant_id,
@@ -204,6 +229,7 @@ class SignInSettings:
             jit_team_id=str(team) if team else None,
             jit_role=role,
             domains=domains,
+            sp_id=sp_id,
         )
         try:
             await self.store.save_provider(
@@ -218,7 +244,7 @@ class SignInSettings:
         saved = await self.store.provider(actor.tenant_id, provider_id)
         if saved is None:
             raise NotFound("sign-in provider")
-        return provider_out(saved)
+        return self._out(saved)
 
     async def delete(self, actor: Actor, provider_id: str) -> None:
         await self.members.require_admin(actor, "settings", "manage")

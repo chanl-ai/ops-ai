@@ -145,6 +145,28 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "auth_saml_provider_acs": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/saml/acs/{sp_id}",
+    "pathParams": [
+      "sp_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "auth_saml_provider_metadata": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/auth/saml/metadata/{sp_id}",
+    "pathParams": [
+      "sp_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "auth_session": {
     "body": null,
     "headers": [],

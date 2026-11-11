@@ -252,16 +252,36 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
             sign_assertion=bool(known.get("signAssertion", True)),
             sign_response=bool(known.get("signResponse", False)),
         )
-        fields = {"SAMLResponse": response, "RelayState": q.get("RelayState", "")}
-        inputs = "".join(
-            f'<input type="hidden" name="{k}" value="{html.escape(v, quote=True)}">' for k, v in fields.items()
+        return _post_form(acs, {"SAMLResponse": response, "RelayState": q.get("RelayState", "")})
+
+    @app.get("/saml/{name}/unsolicited", response_class=HTMLResponse)
+    async def unsolicited(name: str, user: str, acs: str, audience: str) -> str:  # pyright: ignore[reportUnusedFunction]
+        """What an app-portal tile does when set to post straight to the service: a response nobody asked for."""
+        i = idp(name)
+        email = user.strip().lower()
+        response = saml_response(
+            i,
+            issuer=f"{base}/saml/{name}",
+            audience=audience,
+            acs=acs,
+            in_response_to=None,
+            email=email,
+            auth_time=i.login_time(email, forced=False, stale=False),
         )
-        return (
-            f'<html><body onload="document.forms[0].submit()"><form method="post" action="{html.escape(acs)}">'
-            f"{inputs}</form></body></html>"
-        )
+        return _post_form(acs, {"SAMLResponse": response, "RelayState": ""})
 
     return app
+
+
+def _post_form(action: str, fields: dict[str, str]) -> str:
+    """The page a provider returns to post its answer to the service with the POST binding."""
+    inputs = "".join(
+        f'<input type="hidden" name="{k}" value="{html.escape(v, quote=True)}">' for k, v in fields.items()
+    )
+    return (
+        f'<html><body onload="document.forms[0].submit()"><form method="post" action="{html.escape(action)}">'
+        f"{inputs}</form></body></html>"
+    )
 
 
 def saml_response(
@@ -270,7 +290,7 @@ def saml_response(
     issuer: str,
     audience: str,
     acs: str,
-    in_response_to: str,
+    in_response_to: str | None,
     email: str,
     auth_time: int,
     groups: list[str] | None = None,
@@ -291,8 +311,9 @@ def saml_response(
         Version="2.0",
         IssueInstant=_iso(now),
         Destination=acs,
-        InResponseTo=in_response_to,
     )
+    if in_response_to is not None:
+        response.set("InResponseTo", in_response_to)
     etree.SubElement(response, f"{{{ASSERTION}}}Issuer").text = issuer
     status = etree.SubElement(response, f"{{{PROTOCOL}}}Status")
     etree.SubElement(status, f"{{{PROTOCOL}}}StatusCode", Value="urn:oasis:names:tc:SAML:2.0:status:Success")
@@ -308,13 +329,11 @@ def saml_response(
     sc = etree.SubElement(
         subject, f"{{{ASSERTION}}}SubjectConfirmation", Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"
     )
-    etree.SubElement(
-        sc,
-        f"{{{ASSERTION}}}SubjectConfirmationData",
-        InResponseTo=in_response_to,
-        Recipient=acs,
-        NotOnOrAfter=_iso(later),
+    confirmation = etree.SubElement(
+        sc, f"{{{ASSERTION}}}SubjectConfirmationData", Recipient=acs, NotOnOrAfter=_iso(later)
     )
+    if in_response_to is not None:
+        confirmation.set("InResponseTo", in_response_to)
     cond = etree.SubElement(
         a, f"{{{ASSERTION}}}Conditions", NotBefore=_iso(now - timedelta(minutes=1)), NotOnOrAfter=_iso(later)
     )
