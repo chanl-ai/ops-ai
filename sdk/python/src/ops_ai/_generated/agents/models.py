@@ -442,7 +442,7 @@ class ConnectWait(TypedDict, closed=True):
 class CopyRef(TypedDict, closed=True):
     detachedAt: NotRequired[str | None]
     id: str
-    kind: Literal["agent", "skill", "workflow", "case_type", "task_type"]
+    kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
     recordId: str
     source: str
     templateId: str
@@ -1927,7 +1927,7 @@ class TemplateView(TypedDict, closed=True):
     copy: NotRequired[CopyRef | None]
     id: str
     installed: Installed
-    kind: Literal["agent", "skill", "workflow", "case_type", "task_type"]
+    kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
     plugin: TemplatePlugin
     removeCell: NotRequired[RemoveCell | None]
     requires: TemplateRequires
@@ -3110,6 +3110,7 @@ class PlanItem(TypedDict, closed=True):
         "agent",
         "skill",
         "workflow",
+        "guardrail",
         "case_type",
         "task_type",
         "document_type",

@@ -1344,7 +1344,8 @@ export interface paths {
         head?: never;
         /**
          * Update Guardrail
-         * @description Saves the next version as a draft; agents keep the version they pin until a publish and a re-pin.
+         * @description Saves into the open draft, or opens the next version when the newest is published or under review; agents keep
+         *     the version they pin until a publish and a re-pin.
          */
         patch: operations["agents_update_guardrail"];
         trace?: never;
@@ -4741,7 +4742,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "case_type" | "task_type";
+            kind: "agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type";
             /** Recordid */
             recordId: string;
             /** Source */
@@ -7700,7 +7701,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "case_type" | "task_type" | "document_type" | "knowledge_source";
+            kind: "agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type" | "document_type" | "knowledge_source";
             refusal?: components["schemas"]["PlanRefusal"] | null;
             /** Resource */
             resource: string;
@@ -9414,7 +9415,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "case_type" | "task_type";
+            kind: "agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type";
             plugin: components["schemas"]["TemplatePlugin"];
             removeCell?: components["schemas"]["RemoveCell"] | null;
             requires: components["schemas"]["TemplateRequires"];
@@ -24340,7 +24341,7 @@ export interface operations {
     templates_list_templates: {
         parameters: {
             query?: {
-                kind?: ("agent" | "skill" | "workflow" | "case_type" | "task_type") | null;
+                kind?: ("agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type") | null;
                 source?: string | null;
             };
             header?: never;

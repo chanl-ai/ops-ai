@@ -5054,6 +5054,7 @@
               "agent",
               "skill",
               "workflow",
+              "guardrail",
               "case_type",
               "task_type"
             ],
@@ -12963,6 +12964,7 @@
               "agent",
               "skill",
               "workflow",
+              "guardrail",
               "case_type",
               "task_type",
               "document_type",
@@ -18275,6 +18277,7 @@
               "agent",
               "skill",
               "workflow",
+              "guardrail",
               "case_type",
               "task_type"
             ],
@@ -38029,7 +38032,7 @@
         "x-ops-public": "sdk"
       },
       "patch": {
-        "description": "Saves the next version as a draft; agents keep the version they pin until a publish and a re-pin.",
+        "description": "Saves into the open draft, or opens the next version when the newest is published or under review; agents keep\nthe version they pin until a publish and a re-pin.",
         "operationId": "agents_update_guardrail",
         "parameters": [
           {
@@ -47854,6 +47857,7 @@
                     "agent",
                     "skill",
                     "workflow",
+                    "guardrail",
                     "case_type",
                     "task_type"
                   ],
