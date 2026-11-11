@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.parse import urlencode
@@ -49,21 +51,28 @@ def challenge_of(verifier: str) -> str:
 @dataclass
 class OidcClient:
     """One provider's relying party. `metadata` caches each issuer's discovery document and key set across clients;
-    the caller keeps one dict for the life of the process."""
+    the caller keeps one dict for the life of the process. `fetch` reads the discovery document and the key set when
+    set: the caller's guarded fetch, which refuses addresses inside the network (it raises ValueError)."""
 
     config: OidcConfig
     http: httpx.AsyncClient
     metadata: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
     leeway_s: int = 60
+    fetch: Callable[[str], Awaitable[bytes]] | None = None
+
+    async def _get_json(self, url: str) -> Any:
+        if self.fetch is not None:
+            return json.loads(await self.fetch(url))
+        r = await self.http.get(url)
+        r.raise_for_status()
+        return r.json()
 
     async def _document(self) -> dict[str, Any]:
         issuer = self.config.issuer.rstrip("/")
         doc = self.metadata.get(issuer)
         if doc is None:
             try:
-                r = await self.http.get(f"{issuer}/.well-known/openid-configuration")
-                r.raise_for_status()
-                doc = cast(dict[str, Any], r.json())
+                doc = cast(dict[str, Any], await self._get_json(f"{issuer}/.well-known/openid-configuration"))
             except (httpx.HTTPError, ValueError) as e:
                 raise SignInRefused(f"discovery failed: {e}") from e
             if str(doc.get("issuer", "")).rstrip("/") != issuer:
@@ -75,9 +84,7 @@ class OidcClient:
         cached = doc.get("_jwks")
         if cached is None or refresh:
             try:
-                r = await self.http.get(str(doc["jwks_uri"]))
-                r.raise_for_status()
-                cached = r.json()
+                cached = await self._get_json(str(doc["jwks_uri"]))
             except (httpx.HTTPError, ValueError, KeyError) as e:
                 raise SignInRefused(f"key set unavailable: {e}") from e
             doc["_jwks"] = cached

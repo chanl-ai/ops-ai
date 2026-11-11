@@ -323,6 +323,11 @@ class Settings(BaseSettings):
     # system's resolvers. A bank that resolves through its own servers names them here.
     signin_dns_servers: list[str] = Field(default_factory=list[str])
     signin_dns_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    # Identity-provider metadata and OIDC discovery are fetched over https from public addresses only
+    # (ops_service_kit.public_address). A bank whose provider sits on its own network lists that network here, in CIDR.
+    signin_fetch_ranges: list[str] = Field(default_factory=list[str])
+    # Dev only: those fetches reach the local fake identity provider over plain http on loopback, unchecked.
+    signin_fetch_local: bool = False
     # Wrong passwords (sign-in and step-up together) a person may type in a window before both refuse them for the
     # lockout time, and reset links one person may be sent per window. A used reset link ends a lock.
     # The service provider's own key pair for SAML, PEM: it signs requests to identity providers that ask for
@@ -506,6 +511,8 @@ class Settings(BaseSettings):
             raise ValueError("secrets_key must be 64 hex characters (an AES-256 key)")
         if self.environment not in ("dev", "test") and self.credential_store == "memory":
             raise ValueError("credential_store 'memory' is for dev and test only; its values are lost on restart")
+        if self.environment != "dev" and self.signin_fetch_local:
+            raise ValueError("signin_fetch_local is for dev only; elsewhere provider fetches reach public https only")
         if self.environment != "dev" and self.egress_resolve:
             raise ValueError("egress_resolve is for dev only; outside dev, names resolve through DNS")
         faults = self.engine_fault_kill_after_node is not None or self.engine_fault_ignore_recorded

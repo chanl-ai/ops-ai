@@ -18,6 +18,7 @@ from ops_platform.signin_options import SignInOptions
 from ops_platform.store.identity import IdentityStore
 from ops_platform.store.tables import users
 from ops_platform.store.tenancy import ROLE, TenantDb
+from ops_service_kit.public_address import PublicFetch
 
 from .conftest import CONSOLE, DEMO_PASSWORD, PUBLIC_URL, SERVICE, SERVICES, Platform, SignInRig
 
@@ -120,13 +121,14 @@ async def test_sign_in_lookups_work_as_the_app_role(app_url: str, signin: SignIn
             console_url=CONSOLE,
             mail=signin.mail,
             transport=signin.idp._transport,  # pyright: ignore[reportPrivateUsage]
+            fetch=PublicFetch(resolver=signin.resolver, require_https=False),
         ),
     )
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=public), base_url=PUBLIC_URL) as pub:
             rig = SignInRig(
                 pub, signin.idp, signin.mail, signin.engine, signin.tenant, signin.security_team, signin.ops_team,
-                signin.admin, public,
+                signin.admin, public, signin.resolver,
             )  # fmt: skip
             r = await pub.post("/v1/auth/options", json={"email": f"x@least.{signin.zone}"})
             assert r.json()["data"]["sso"] == {"kind": "oidc", "label": "Bank SSO"}, r.text

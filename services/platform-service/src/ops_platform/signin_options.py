@@ -8,6 +8,7 @@ import httpx
 from pydantic import SecretStr
 
 from ops_email import MailSender
+from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_signin.dns import TxtResolver
 
@@ -42,6 +43,8 @@ class SignInOptions:
     # The SAML service provider's key and certificate, PEM; both or neither.
     saml_sp_key: SecretStr | None = None
     saml_sp_certificate: str | None = None
+    # How identity-provider metadata and OIDC discovery are fetched; None fetches unchecked (dev's local fake only).
+    fetch: PublicFetch | None = field(default_factory=PublicFetch)
 
     @classmethod
     def from_settings(cls, settings: Settings, *, mail: MailSender | None = None) -> SignInOptions:
@@ -56,6 +59,7 @@ class SignInOptions:
             dns=TxtResolver(settings.signin_dns_servers, timeout_s=settings.signin_dns_timeout_seconds),
             saml_sp_key=settings.saml_sp_key,
             saml_sp_certificate=settings.saml_sp_certificate,
+            fetch=None if settings.signin_fetch_local else PublicFetch(ranges=tuple(settings.signin_fetch_ranges)),
             limits=Limits(
                 max_failures=settings.signin_max_failures,
                 failure_window_s=settings.signin_failure_window_seconds,

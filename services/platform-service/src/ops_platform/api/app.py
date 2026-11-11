@@ -283,6 +283,7 @@ def create_public_app(
         flow_ttl_s=sign.flow_ttl_s,
         sp_key=sign.saml_sp_key,
         sp_certificate=sign.saml_sp_certificate,
+        fetch=sign.fetch,
     )
     app = FastAPI(title="Ops AI platform service", version="0.1.0", generate_unique_id_function=operation_id)
     install_error_handlers(app)

@@ -26,6 +26,7 @@ from pydantic import SecretStr
 
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unauthorized, ValidationFailed
 from ops_service_kit.logging import get_logger
+from ops_service_kit.public_address import PublicFetch
 from ops_signin import (
     OidcClient,
     OidcConfig,
@@ -91,6 +92,8 @@ class Sso:
     # The SAML service provider's key and certificate; None when the installation has none.
     sp_key: SecretStr | None = None
     sp_certificate: str | None = None
+    # Guards every fetch of a URL an admin typed (metadata, OIDC discovery and keys); None only for dev's local fake.
+    fetch: PublicFetch | None = None
     _metadata: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
 
     # ── Discovery ──
@@ -124,7 +127,15 @@ class Sso:
             scopes=tuple(c.get("scopes") or ("openid", "email", "profile")),
             groups_claim=_groups_source(c),
         )
-        return OidcClient(config, self.http, self._metadata)
+        return OidcClient(config, self.http, self._metadata, fetch=self.guarded_get if self.fetch else None)
+
+    async def guarded_get(self, url: str) -> bytes:
+        """The body at `url`, through the public-address guard when there is one. Raises ValueError when refused."""
+        if self.fetch is None:
+            r = await self.http.get(url, timeout=5)
+            r.raise_for_status()
+            return r.content
+        return await self.fetch.get(self.http, url)
 
     def sp_metadata(self) -> bytes:
         """The service provider's SAML metadata for a bank's identity provider."""

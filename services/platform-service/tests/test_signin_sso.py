@@ -201,3 +201,10 @@ async def test_a_password_session_cannot_start_an_sso_step_up(signin: SignInRig)
     ).json()["data"]["token"]
     r = await signin.public.post("/v1/auth/step-up/sso/start", json={}, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401 and r.json()["error"]["code"] == "wrong_method"
+
+
+async def test_oidc_discovery_never_reaches_an_address_inside_the_network(signin: SignInRig) -> None:
+    await signin.oidc(f"inside.{signin.zone}")
+    signin.resolver.answers["idp.test"] = ["10.0.0.7"]
+    r = await signin.public.post("/v1/auth/sso/start", json={"email": f"i@inside.{signin.zone}"})
+    assert r.status_code == 503 and r.json()["error"]["code"] == "sso_unavailable", r.text

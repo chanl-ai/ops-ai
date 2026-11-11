@@ -610,6 +610,8 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
         "OPS_SIGNIN_DNS_SERVERS": json.dumps([f"127.0.0.1:{IDP_PORT}"]),
         "OPS_SAML_SP_KEY": SAML_SP_KEY,
         "OPS_SAML_SP_CERTIFICATE": SAML_SP_CERT,
+        # The fake identity provider listens on loopback over http, which the provider-fetch guard refuses.
+        "OPS_SIGNIN_FETCH_LOCAL": "true",
         "OPS_MAIL_PROVIDER": "fake",
         "OPS_MAIL_FROM": "ops@harborpine.example",
         "OPS_MAIL_FAKE_OUT_DIR": str(mail),
