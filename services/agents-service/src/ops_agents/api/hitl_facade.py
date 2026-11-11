@@ -519,7 +519,7 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
         "error": payload.get("error") or None,
         "consequence": (described["consequence"] or described["sentence"]) if described else None,
         "actionFields": described["fields"] if described else [],
-        # Who decides it, as _check_thread_decider checks: a write's approving team, else the thread's team.
+        # Who decides it, as check_thread_decider checks: a write's approving team, else the thread's team.
         "decidingTeam": await deciding_team(rt, row.get("team_id")),
     }
 
@@ -842,7 +842,7 @@ async def decide(
     call = option_call(chosen, inputs, amount) if chosen else (payload.get("call") if decision == "approved" else None)
     recorded_as = "approved" if option else decision
     # An approval is checked against the call it sends; a rejection against every write the step holds.
-    await _check_thread_decider(rt, approver, row, payload, [call] if call else held_calls(payload))
+    await check_thread_decider(rt, approver, row, payload, [call] if call else held_calls(payload))
     # Recorded on the decision only once verified: a token sent where none was needed proves nothing.
     verified_step_up: str | None = None
     # The chosen call's policy decides the step-up, not the step's other options (a flag's note asks for none).
@@ -888,7 +888,7 @@ async def decide(
     return await get_review(rt, thread_id)
 
 
-async def _check_thread_decider(
+async def check_thread_decider(
     rt: Runtime, approver: Principal, row: dict[str, Any], payload: dict[str, Any], calls: list[dict[str, Any]]
 ) -> None:
     """Who may decide a paused thread step: a reviewer or admin of the thread's team, whatever the writes it decides
@@ -928,7 +928,7 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         if not waiting:
             return False
         payload = cast(dict[str, Any], waiting[0]["payload"])
-        await _check_thread_decider(rt, approver, row, payload, held_calls(payload))
+        await check_thread_decider(rt, approver, row, payload, held_calls(payload))
     except ApiError:
         return False
     return True

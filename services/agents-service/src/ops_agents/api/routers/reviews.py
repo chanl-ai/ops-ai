@@ -28,7 +28,6 @@ from ..auth import (
     Principal,
     principal,
     reader_teams,
-    require_not_own,
     require_reviews_decide,
     require_step_up,
     review_teams,
@@ -73,17 +72,9 @@ async def record_approval(
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
     policy = await policy_of(rt, call["tool"])
     payload: dict[str, Any] = waiting[0]["payload"] if waiting else {}
-    # The thread's team reviews it, by its reviewers and admins; the asker too where requesterMayDecide lets them. A
-    # card the person in chat answers (ask_first) is the asker's own confirmation: hitl_facade already required the
-    # asker, so neither the reviewer role nor the four-eyes rule applies to it.
-    if not payload.get("ask_first"):
-        require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
-        require_not_own(
-            approver,
-            [hitl_facade.requester_of(row, payload)],
-            team=str(row["team_id"]),
-            what=f"the write {call['tool']}",
-        )
+    # Every route that records an approval passes through the one decider check: the asker alone for a card the person
+    # answers (ask_first), else a reviewer of the card's role who is not its asker unless requesterMayDecide lets them.
+    await hitl_facade.check_thread_decider(rt, approver, row, payload, [call])
     if policy.approvers > 1 or workspace_step_up(approver):
         require_step_up(rt, approver.email, step_up_token)
     digest = input_hash(call["input"])
