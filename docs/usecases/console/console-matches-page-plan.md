@@ -2,8 +2,8 @@
 
 Status: current. Id: `uc-100`. Service: `console`. Layers: ui.
 
-The Overview shows only what waits on a person: the Reviews count and the Cases "Needs a person" view. Agents has no
-Templates tab or "Start from template" until templates have an API. Chat reaches Conversations from the sidebar. The
+The Overview shows only what waits on a person: the Human Tasks waiting for the person and the Cases due. Agents has no
+Templates tab or "Start from template" until templates have an API. Chat reaches All chats (the conversations) from the sidebar, which lists one area at a time. The
 fourth role is called reviewer everywhere a person reads it. Sources: [strategy](../../console/strategy.md),
 [page plan](../../console/page-plan.md).
 
@@ -19,17 +19,17 @@ The script starts the stack with the console's mock sign-in (James).
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Open the Overview | "Waiting on review" and "Needs a person"; no agent task tiles, chart or Workflow health |
-| 2 | Click Needs a person | Cases opens |
+| 1 | Open the Overview | "Human Tasks waiting for you" and "Cases due"; no agent task tiles, chart or Workflow health |
+| 2 | Click Open all on Cases due | Cases opens |
 | 3 | Open Agents | No Templates tab, no Start from template |
-| 4 | Click Conversations under Chat in the sidebar | `/chat/conversations` opens |
+| 4 | Click All chats under Chat in the sidebar | `/chat/conversations` opens, and the sidebar lists one area (no Agents row) |
 | 5 | Open Settings, Members | Roles read Reviewer, never Approver |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-100-ui.mjs` | passing |
+| ui | `console/scripts/test-uc-100-ui.mjs` | failing |
 
 ## Non-vacuous check
 

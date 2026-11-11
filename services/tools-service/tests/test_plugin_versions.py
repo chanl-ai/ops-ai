@@ -163,6 +163,14 @@ async def test_after_an_upgrade_a_team_keeps_calling_its_version(up: Upgrade) ->
     assert after["fields_transfer"]["enabled"] is False and after["fields_close_case"]["enabled"] is True
 
 
+async def test_a_tool_only_the_new_version_has_names_the_update_even_when_the_team_added_a_list(up: Upgrade) -> None:
+    # A team that picked its tools has a list; a tool its version lacks is not in it, and "add it" would be a dead end.
+    await up.bindings.set_tools(up.tenant, "team_ops", ID, ["find", "post_message"])
+    up.upgrade()
+    new = await up.call("team_ops", "close_case", {"id": "case-1"})
+    assert not new.ok and "takes the update" in new.output["error"]["message"], new
+
+
 async def test_a_team_that_takes_the_update_runs_it_and_the_other_team_does_not(up: Upgrade) -> None:
     up.upgrade()
     await up.host.ensure(up.tenant, datetime.now(UTC))

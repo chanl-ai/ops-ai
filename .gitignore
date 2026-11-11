@@ -46,5 +46,8 @@ examples/**/.ops-profile.json
 .pnpm-store/
 .playwright-mcp/
 
+# make version: the installed commit or release, kept by scripts/update_from_diff.sh
+/VERSION
+
 # Agent settings for one machine (see .claude/workspace.example.md)
 .claude/workspace.local.md

@@ -92,7 +92,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-040 | tools-service | Security decides a tool module review | api, ui | passing |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | passing |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | passing |
-| uc-047 | console | Sub-pages show as rows in the sidebar | ui | passing |
+| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | ui | failing |
 | uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | passing |
 | uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api, ui | passing |
 | uc-052 | console | Access is Read or Write in the console | ui | passing |
@@ -129,7 +129,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-097 | console | A builder saves create dialogs and account settings with Enter, and Cancel never saves | ui | passing |
 | uc-098 | console | A builder pages and searches a growing list on the server | ui | passing |
 | uc-099 | console | A viewer sees the team's records read-only | api, ui | passing |
-| uc-100 | console | The console matches the page plan: Overview, no Templates, Conversations under Chat, reviewer | ui | passing |
+| uc-100 | console | The console matches the page plan: Overview, no Templates, All chats under Chat, reviewer | ui | failing |
 | uc-103 | console | A builder edits a widget with forms; JSON stays the advanced view | ui | passing |
 | uc-104 | console | A guardrail has its own page and an agent pins one of its versions | ui | passing |
 | uc-105 | console | A Security admin sets where each purpose stores its files and with which credential | ui | passing |
@@ -261,7 +261,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-526 | agents-service | Another team's records answer not found | api, ui | passing |
 | uc-531 | tools-service | A builder adds a Python function tool that runs sandboxed: it reads two bound tools through ops.call, hands a secret by name that the bank receives and no log holds, and is stopped at an unbound tool, a socket, its time limit and its memory cap | api, ui | passing |
 | uc-532 | models-service | An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one | ui | passing |
-| uc-552 | console | A person works from one Chat, with Overview, their chats and every page in one folding sidebar, and an ended session keeps their draft | api,ui | passing |
+| uc-552 | console | A person works from one Chat, with Overview, their chats and the pages of one area in a folding sidebar, and an ended session keeps their draft | api,ui | failing |
 | uc-560 | console | Screens open from saved data, and every request logs its time and returns Server-Timing, with one request id across services | api, ui | passing |
 | uc-558 | tools-service | People connect their own Salesforce account: a call acts as the person who asked, an unconnected person gets a connect link made for them alone, and the body never chooses a token | api,ui | planned |
 | uc-561 | agents-service | Memory follows a person across a team's agents and they take it back | api | api passing |
@@ -332,3 +332,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
 | uc-731 | agents-service | A team that makes a second guardrail of the same name is refused with name_taken, and the first keeps the plain slug | api | draft |
+| uc-723 | console | The console shows one area of pages at a time, chosen from the top bar and offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams, on a desktop and a phone | ui | failing |
+| uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |

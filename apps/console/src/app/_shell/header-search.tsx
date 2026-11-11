@@ -12,15 +12,16 @@ import { useFlagged } from '@/hooks/flag-queries';
 import { useNavAllows } from '@/hooks/me-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
 import { useTeam } from '@/hooks/use-team';
-import { NAV } from '@/lib/nav';
+import { childrenOffered, itemOffered, NAV, SETTINGS_VIEW } from '@/lib/nav';
+import type { NavNeed } from '@/lib/nav';
 import type { FlagName } from '@/lib/types/flags';
 import type { SearchHit } from '@/lib/types/search';
 
 /** Sub-pages that are not in the sidebar but are worth jumping to; one with a `flag` shows only while the install turns it on. */
-const EXTRA_PAGES: (PalettePage & { flag?: FlagName })[] = [
+const EXTRA_PAGES: (PalettePage & { flag?: FlagName; needs?: NavNeed })[] = [
   // Connecting an assistant is the MCP channel of Deployments, so the page entry opens that tab.
-  { title: 'Connect your assistant', href: '/channels/mcp', section: 'Agents · Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway' },
-  { title: 'Gate policies', href: '/settings/policies/gates', section: 'Human Tasks', icon: IconShieldCheck },
+  { title: 'Connect your assistant', href: '/channels/mcp', area: 'Build', section: 'Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway', needs: { area: 'deployments', action: 'view' } },
+  { title: 'Gate policies', href: '/settings/policies/gates', area: 'Govern', section: 'Policies', icon: IconShieldCheck, needs: SETTINGS_VIEW },
 ];
 
 /**
@@ -59,12 +60,19 @@ export function HeaderSearch() {
     setOpen(false);
     router.push(href);
   };
-  // Child routes are tabs, not sidebar rows, so they are listed here to stay reachable by name.
-  // A child page the person's roles do not open is left out, as in the sidebar and the title switcher.
+  // Every page the person's cells open, grouped by area as the header offers them. Child routes are tabs, not sidebar
+  // rows, so they are listed here to stay reachable by name. The chat entry is the New chat action below.
   const navPages: PalettePage[] = NAV.flatMap((g) =>
-    g.items.flatMap((i) => [{ title: i.title, href: i.url, section: g.label, icon: i.icon }, ...(i.children ?? []).filter((c) => allows(c.needs) === true).map((c) => ({ title: c.title, href: c.url, section: `${g.label} · ${i.title}`, icon: i.icon }))]),
+    g.items
+      .filter((i) => i.url !== '/chat' && itemOffered(allows, i))
+      .flatMap((i) => [
+        { title: i.title, href: i.url, area: g.label, icon: i.icon },
+        ...childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: g.label, section: i.title, icon: c.icon ?? i.icon })),
+      ])
   );
-  const pages: PalettePage[] = [...navPages, ...extraPages.filter((e) => !navPages.some((p) => p.href === e.href))];
+  const chatPages: PalettePage[] = NAV.flatMap((g) => g.items.filter((i) => i.url === '/chat' && itemOffered(allows, i)).flatMap((i) => childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: g.label, section: 'Chat', icon: c.icon ?? i.icon }))));
+  const allowedExtra = extraPages.filter((e) => allows(e.needs) === true);
+  const pages: PalettePage[] = [...navPages, ...chatPages, ...allowedExtra.filter((e) => ![...navPages, ...chatPages].some((p) => p.href === e.href))];
   const newChat: PaletteAction = { id: 'new-chat', label: 'New chat', icon: MessageSquarePlus, keywords: 'ask conversation start', run: () => go('/chat') };
   const listed: (PaletteAction & { flag?: FlagName })[] = [
     ...(pathname.startsWith('/chat') ? [newChat] : []),

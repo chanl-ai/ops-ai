@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { AlertCircle, ChevronRight, LayoutGrid, RotateCw, SquarePen } from 'lucide-react';
+import { AlertCircle, ChevronRight, RotateCw, SquarePen } from 'lucide-react';
 
 import { NavUser } from '@/components/nav-user';
 import { SidebarChats } from '@/components/shell/sidebar-chats';
@@ -25,6 +25,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
@@ -36,7 +37,8 @@ import { useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useBrand, useLookups, useOverview } from '@/hooks/queries';
 import { usePreviewCheck } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
-import { NAV, navMatch } from '@/lib/nav';
+import { type NavItem, childrenOffered, itemOffered, navMatch, rowsOfArea } from '@/lib/nav';
+import { useAreas } from '@/components/shared/area-switcher';
 import { readOverview } from '@/lib/overview';
 
 // Parents a viewer has closed, kept in this browser only: every parent starts open, and the sidebar works the same
@@ -72,8 +74,6 @@ function useClosedSections(): [Set<string>, (url: string, open: boolean) => void
 // Groups a viewer has opened or folded, kept in this browser only. Chats starts open, the rest folded.
 const GROUPS_KEY = 'ops.sidebar.groups';
 const OPEN_AT_FIRST: Record<string, boolean> = { Chats: true };
-// The console's first group (Work) has no heading: its pages are rows at the top of the sidebar.
-const TOP_GROUP = NAV[0];
 
 function useGroupFolds(): [(label: string) => boolean, (label: string, open: boolean) => void] {
   const [saved, setSaved] = React.useState<Record<string, boolean>>({});
@@ -140,25 +140,26 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const identity = useWorkspaceIdentity();
   const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
   const allows = useNavAllows();
+  const { current: area, ready: cellsReady, failed: cellsFailed, retry: retryCells } = useAreas();
   const badges: Record<string, number | undefined> = { '/reviews': waiting };
 
   // One console page as a sidebar row, with its child pages as sub-rows under a fold.
-  const navRow = (item: (typeof NAV)[number]['items'][number]) => {
+  const navRow = (item: NavItem) => {
     const hit = navMatch(pathname);
     const inSection = hit?.item.url === item.url;
     // On a child page the child's own row is the active one; the parent only shows which section it is in.
     const onParentPage = inSection && !hit?.child;
     // A lone child reads as the section's only page, so the parent page gets its own sub-row beside it and the row that lights is always a sub-row.
     // A page the person's roles do not open is not offered (lib/nav.ts `needs`).
-    const children = item.children?.filter((c) => allows(c.needs) === true);
-    if (allows(item.needs) !== true && !children?.length) return null;
+    const children = childrenOffered(allows, item);
+    if (!itemOffered(allows, item)) return null;
     const parentSubRow = children?.length === 1;
     const subRows = parentSubRow && children ? [{ title: item.tabTitle ?? item.title, url: item.url, icon: item.tabIcon }, ...children] : (children ?? []);
     const active = onParentPage && !parentSubRow;
     const count = badges[item.url];
     const row = (
       <SidebarMenuButton asChild tooltip={item.title} isActive={active}>
-        <Link href={item.url} onClick={closeOnPhone}>
+        <Link href={item.url} onClick={closeOnPhone} data-testid={item.url === '/' ? 'sidebar-overview' : undefined}>
           <item.icon />
           <span className="flex-1">{item.title}</span>
           {isPreview(item.url) && <PreviewBadge className="ml-auto h-5 px-1.5 py-0 text-[10px] group-data-[collapsible=icon]:hidden" />}
@@ -217,45 +218,58 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           isCreating={create.isPending}
         />
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="New chat" isActive={pathname === '/chat'}>
-              <Link href="/chat" onClick={closeOnPhone} data-testid="sidebar-new-chat">
-                <SquarePen />
-                <span>New chat</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Overview" isActive={pathname === '/'}>
-              <Link href="/" onClick={closeOnPhone} data-testid="sidebar-overview">
-                <LayoutGrid />
-                <span className="flex-1">Overview</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          {/* The first group's pages (Cases, Human Tasks) sit with New chat and Overview, under no heading. */}
-          {TOP_GROUP.items.filter((item) => !item.top).map(navRow)}
+          {/* New chat leads Work; every other area is its rows alone. */}
+          {area === 'Work' && cellsReady && allows({ area: 'chat', action: 'run' }) === true && (
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="New chat" isActive={pathname === '/chat'}>
+                <Link href="/chat" onClick={closeOnPhone} data-testid="sidebar-new-chat">
+                  <SquarePen />
+                  <span>New chat</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="gap-0 [&>[data-sidebar=group]:not(:first-child)]:pt-1">
-        <div className="group-data-[collapsible=icon]:hidden">
-          <FoldingGroup label="Chats" open={groupOpen('Chats')} onOpenChange={(o) => setGroupOpen('Chats', o)}>
-            <SidebarChats onNavigate={closeOnPhone} />
-          </FoldingGroup>
-        </div>
-        {NAV.filter((group) => group !== TOP_GROUP).map((group) => {
-          const items = group.items.filter((item) => !item.top);
-          if (!items.length) return null;
-          // The current page's group opens even if the viewer folded it, so the active row is always in view.
-          const here = navMatch(pathname)?.group.label === group.label && !navMatch(pathname)?.item.top;
-          return (
-            <FoldingGroup key={group.label} label={group.label} open={groupOpen(group.label) || here} onOpenChange={(o) => setGroupOpen(group.label, o)}>
-              <SidebarMenu>
-                {items.map(navRow)}
-              </SidebarMenu>
-            </FoldingGroup>
-          );
-        })}
+        {!cellsReady ? (
+          cellsFailed ? (
+            <SidebarMenu className="px-2 pt-2">
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={retryCells} className="text-muted-foreground" aria-label="Pages unavailable. Try again">
+                  <RotateCw />
+                  <span className="flex flex-col leading-tight">
+                    <span>Pages unavailable</span>
+                    <span className="text-xs">Try again</span>
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          ) : (
+            <SidebarMenu className="px-2 pt-2" data-testid="sidebar-cells-loading">
+              {Array.from({ length: 5 }, (_, i) => (
+                <SidebarMenuItem key={i}>
+                  <SidebarMenuSkeleton showIcon />
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          )
+        ) : (
+          <>
+            <SidebarGroup className="pb-0">
+              <SidebarGroupContent>
+                <SidebarMenu>{rowsOfArea(area, allows).map(navRow)}</SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            {area === 'Work' && allows({ area: 'chat', action: 'run' }) === true && (
+              <div className="group-data-[collapsible=icon]:hidden">
+                <FoldingGroup label="Chats" open={groupOpen('Chats')} onOpenChange={(o) => setGroupOpen('Chats', o)}>
+                  <SidebarChats onNavigate={closeOnPhone} />
+                </FoldingGroup>
+              </div>
+            )}
+          </>
+        )}
       </SidebarContent>
       <SidebarFooter>
         {identity ? (

@@ -88,6 +88,41 @@ async def test_cursor_pages_neither_repeat_nor_skip_a_thread(stack: tuple[AsyncC
     assert bad.status_code == 400
 
 
+async def test_a_pinned_chat_leads_the_list_however_many_newer_chats_there_are(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    client, _ = stack
+    made = [(await new_thread(client))["id"] for _ in range(36)]
+    oldest = made[0]
+    assert (await client.patch(f"/chat/threads/{oldest}", json={"pinned": True})).status_code == 200
+    first = (await client.get("/chat/threads", params={"pageSize": 30})).json()["data"]
+    seen = [t["id"] for t in first["data"]]
+    assert seen[0] == oldest
+    assert seen[1:] == made[:0:-1][:29]  # then the rest, newest first
+    cursor = first.get("nextCursor")
+    while cursor:
+        page = (await client.get("/chat/threads", params={"pageSize": 30, "cursor": cursor})).json()["data"]
+        seen += [t["id"] for t in page["data"]]
+        cursor = page.get("nextCursor")
+    assert sorted(seen) == sorted(made) and len(seen) == len(set(seen))
+
+
+async def test_sorting_by_last_message_is_the_plain_sort_with_no_pinned_first(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    client, _ = stack
+    made = [(await new_thread(client))["id"] for _ in range(3)]
+    assert (await client.patch(f"/chat/threads/{made[0]}", json={"pinned": True})).status_code == 200
+    explicit = (await client.get("/chat/threads", params={"sortBy": "lastMessageAt"})).json()["data"]
+    assert [t["id"] for t in explicit["data"]] == made[::-1]
+    default = (await client.get("/chat/threads")).json()["data"]
+    assert default["data"][0]["id"] == made[0]
+    # The two orders differ, so a cursor from one is refused in the other.
+    cursor = (await client.get("/chat/threads", params={"pageSize": 1})).json()["data"]["nextCursor"]
+    replay = await client.get("/chat/threads", params={"pageSize": 1, "sortBy": "lastMessageAt", "cursor": cursor})
+    assert replay.status_code == 400
+
+
 async def test_a_cursor_from_another_sort_or_with_a_foreign_key_is_refused_not_a_500(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
 ) -> None:

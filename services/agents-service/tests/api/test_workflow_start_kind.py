@@ -146,3 +146,15 @@ async def test_the_pickers_offer_what_a_person_may_start_and_what_takes_a_file(s
     assert every["by_email"]["start"] == {"kind": "email", "byHand": True, "takesFiles": True}
     assert set(await listed(c, "startable=true")) == {"by_email", "by_form_file", "by_form", "extract_by_hand"}
     assert set(await listed(c, "startable=true&takesFiles=true")) == {"by_email", "by_form_file", "extract_by_hand"}
+
+
+async def test_the_runs_route_checks_a_schedule_triggers_input_as_fire_now_does(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    nightly = workflow("nightly", "ops.trigger.schedule", {"inputSchema": NOTICE_FORM})
+    assert (await c.post("/v1/workflows/definitions", json={"definition": nightly}, headers=BUILDER)).status_code == 201
+    fire_now = await c.post(
+        "/v1/runs/start", json={"workflowId": "nightly", "mode": "test", "values": {}}, headers=BUILDER
+    )
+    assert fire_now.status_code == 422 and fire_now.json()["error"]["code"] == "invalid_input", fire_now.text
+    posted = await c.post("/v1/runs", json={"workflowId": "nightly", "mode": "test", "input": {}}, headers=BUILDER)
+    assert posted.status_code == 422 and posted.json()["error"]["code"] == "invalid_input", posted.text

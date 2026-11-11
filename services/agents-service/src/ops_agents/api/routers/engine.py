@@ -1181,7 +1181,8 @@ async def start_engine_run(rt: Rt, me: Me, body: EngineRunInput) -> JSONResponse
     one workflow starts that one only, on the version it pins when it pins one."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
     form = start_form(stored["definition"], REGISTRY)
-    payload = run_starts.filled(form, body.input) if form and form.get("kind") == "form" else body.input
+    # A Schedule trigger's input schema is held to the same check as Fire now (POST /v1/runs/start).
+    payload = run_starts.filled(form, body.input) if form and form.get("kind") in ("form", "schedule") else body.input
     run, created = await start_run(
         runs(rt),
         stored,

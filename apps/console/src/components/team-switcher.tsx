@@ -65,9 +65,10 @@ export function TeamSwitcher({
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      const n = Number(e.key);
-      if (!Number.isInteger(n) || n < 1 || n > 9 || !teams[n - 1]) return;
+      // ⌘1 to ⌘4 belong to the areas; teams take ⌘⇧1 to ⌘⇧9. The digit comes from the key's position: Shift changes e.key.
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || !e.shiftKey) return;
+      const n = Number(/^Digit([1-9])$/.exec(e.code)?.[1]);
+      if (!Number.isInteger(n) || !teams[n - 1]) return;
       e.preventDefault();
       onSelect(teams[n - 1].id);
     };
@@ -130,7 +131,7 @@ export function TeamSwitcher({
                     <span className={team.id === activeTeam?.id ? 'font-medium' : undefined}>{team.name}</span>
                     <span className="text-xs text-muted-foreground">{team.scope === 'all' ? 'All teams' : plural(team.memberCount, 'member')}</span>
                   </div>
-                  {index < 9 && <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>}
+                  {index < 9 && <DropdownMenuShortcut>⌘⇧{index + 1}</DropdownMenuShortcut>}
                 </DropdownMenuItem>
               );
             })}

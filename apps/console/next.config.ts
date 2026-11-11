@@ -51,6 +51,16 @@ const nextConfig: NextConfig = {
     // so the build does not repeat it (and another branch's unfinished types do not stop the run).
     ignoreBuildErrors: process.env.OPS_CONSOLE_SKIP_TYPECHECK === '1',
   },
+  // Old addresses answer one 307 to their page, before any page renders (a redirect() inside a page streams a 200).
+  // The query carries through, so a link that opened one tool call (?id=) or a filtered list (?q=) opens the same thing.
+  async redirects() {
+    return [
+      { source: '/logs/tool-calls', destination: '/tools/calls', permanent: false },
+      { source: '/settings/policies', destination: '/policies', permanent: false },
+      { source: '/account', destination: '/settings/account', permanent: false },
+      { source: '/account/security', destination: '/settings/account/security', permanent: false },
+    ];
+  },
   experimental: {
     // Dev and build default to one worker per core and take several GB between them. Two workers compile the console
     // as fast as the dev loop needs, and worker threads stay off so a crash takes one process, not the server.
