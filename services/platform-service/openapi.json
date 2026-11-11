@@ -871,6 +871,55 @@
         "title": "CellIn",
         "type": "object"
       },
+      "CertificateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "addedAt": {
+            "title": "Addedat",
+            "type": "string"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "notAfter": {
+            "title": "Notafter",
+            "type": "string"
+          },
+          "notBefore": {
+            "title": "Notbefore",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "metadata",
+              "upload",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "current",
+              "expiring",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "notBefore",
+          "notAfter",
+          "source",
+          "addedAt",
+          "state"
+        ],
+        "title": "CertificateOut",
+        "type": "object"
+      },
       "CheckRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -1208,6 +1257,25 @@
           "data"
         ],
         "title": "Envelope[Me]",
+        "type": "object"
+      },
+      "Envelope_MetadataOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MetadataOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[MetadataOut]",
         "type": "object"
       },
       "Envelope_OptionsOut_": {
@@ -2860,6 +2928,90 @@
         "title": "MemberOut",
         "type": "object"
       },
+      "MetadataCertificateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "notAfter": {
+            "title": "Notafter",
+            "type": "string"
+          },
+          "notBefore": {
+            "title": "Notbefore",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "notBefore",
+          "notAfter"
+        ],
+        "title": "MetadataCertificateOut",
+        "type": "object"
+      },
+      "MetadataIn": {
+        "additionalProperties": false,
+        "description": "An identity provider's metadata to read: its URL, or the file's contents.",
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "pattern": "^https?://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "xml": {
+            "anyOf": [
+              {
+                "maxLength": 262144,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xml"
+          }
+        },
+        "title": "MetadataIn",
+        "type": "object"
+      },
+      "MetadataOut": {
+        "additionalProperties": false,
+        "properties": {
+          "certificates": {
+            "items": {
+              "$ref": "#/components/schemas/MetadataCertificateOut"
+            },
+            "title": "Certificates",
+            "type": "array"
+          },
+          "idpEntityId": {
+            "title": "Idpentityid",
+            "type": "string"
+          },
+          "ssoUrl": {
+            "title": "Ssourl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idpEntityId",
+          "ssoUrl",
+          "certificates"
+        ],
+        "title": "MetadataOut",
+        "type": "object"
+      },
       "OidcSettings": {
         "additionalProperties": false,
         "properties": {
@@ -4186,10 +4338,34 @@
         "additionalProperties": false,
         "properties": {
           "certificate": {
-            "maxLength": 20000,
-            "minLength": 100,
-            "title": "Certificate",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificate"
+          },
+          "certificates": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 20000,
+                  "minLength": 100,
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificates"
           },
           "emailAttribute": {
             "anyOf": [
@@ -4208,6 +4384,19 @@
             "minLength": 1,
             "title": "Idpentityid",
             "type": "string"
+          },
+          "metadataUrl": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "pattern": "^https?://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataurl"
           },
           "nameAttribute": {
             "anyOf": [
@@ -4246,8 +4435,7 @@
         },
         "required": [
           "idpEntityId",
-          "ssoUrl",
-          "certificate"
+          "ssoUrl"
         ],
         "title": "SamlSettings",
         "type": "object"
@@ -4267,8 +4455,22 @@
             "title": "Acsurl"
           },
           "certificate": {
-            "title": "Certificate",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificate"
+          },
+          "certificates": {
+            "items": {
+              "$ref": "#/components/schemas/CertificateOut"
+            },
+            "title": "Certificates",
+            "type": "array"
           },
           "emailAttribute": {
             "anyOf": [
@@ -4284,6 +4486,28 @@
           "idpEntityId": {
             "title": "Idpentityid",
             "type": "string"
+          },
+          "metadataError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataerror"
+          },
+          "metadataReadAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatareadat"
           },
           "metadataUrl": {
             "anyOf": [
@@ -4337,6 +4561,17 @@
             ],
             "title": "Spentityid"
           },
+          "spMetadataUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spmetadataurl"
+          },
           "ssoUrl": {
             "title": "Ssourl",
             "type": "string"
@@ -4350,6 +4585,10 @@
           "idpEntityId",
           "ssoUrl",
           "certificate",
+          "certificates",
+          "metadataUrl",
+          "metadataReadAt",
+          "metadataError",
           "emailAttribute",
           "nameAttribute",
           "signRequests",
@@ -4357,7 +4596,7 @@
           "tiles",
           "spEntityId",
           "acsUrl",
-          "metadataUrl",
+          "spMetadataUrl",
           "signOnUrl"
         ],
         "title": "SamlSettingsOut",
@@ -13241,6 +13480,163 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/settings/sign-in/providers/metadata": {
+      "post": {
+        "description": "What an identity provider's metadata says (entity id, sign-in URL, certificates and their dates), read from\nits URL or file; saves nothing. Security team admins only.",
+        "operationId": "sign_in_providers_read_signin_metadata",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MetadataOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Read Signin Metadata",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/settings/sign-in/providers/{provider_id}": {
       "delete": {
         "operationId": "sign_in_providers_delete_signin_provider",
@@ -13549,6 +13945,163 @@
           }
         },
         "summary": "Save Signin Provider",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/sign-in/providers/{provider_id}/refresh": {
+      "post": {
+        "description": "Reads the provider's metadata URL now and adds its new certificates for the same entity id.",
+        "operationId": "sign_in_providers_refresh_signin_provider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ProviderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Refresh Signin Provider",
         "tags": [
           "sign-in-providers"
         ],

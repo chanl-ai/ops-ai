@@ -532,6 +532,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sign_in_providers_read_signin_metadata": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/settings/sign-in/providers/metadata",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_refresh_signin_provider": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/settings/sign-in/providers/{provider_id}/refresh",
+        "pathParams": ["provider_id"],
+        "query": [],
+        "stream": False,
+    },
     "sign_in_providers_save_signin_provider": {
         "body": "json",
         "headers": [],
@@ -996,6 +1014,10 @@ class Operations:
         "List Signin Providers"
         return self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_providers"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def sign_in_providers_read_signin_metadata(self, body: MetadataIn) -> MetadataOut:
+        "Read Signin Metadata"
+        return self._t.call(SERVICE, OPERATIONS["sign_in_providers_read_signin_metadata"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def sign_in_providers_save_signin_provider(self, provider_id: str, body: ProviderIn) -> ProviderOut:
         "Save Signin Provider"
         return self._t.call(
@@ -1006,6 +1028,12 @@ class Operations:
         "Delete Signin Provider"
         return self._t.call(
             SERVICE, OPERATIONS["sign_in_providers_delete_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def sign_in_providers_refresh_signin_provider(self, provider_id: str) -> ProviderOut:
+        "Refresh Signin Provider"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_refresh_signin_provider"], {"provider_id": provider_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def sign_in_providers_list_signin_secret_names(self) -> list[str]:
@@ -1396,6 +1424,10 @@ class AsyncOperations:
         "List Signin Providers"
         return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_providers"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def sign_in_providers_read_signin_metadata(self, body: MetadataIn) -> MetadataOut:
+        "Read Signin Metadata"
+        return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_read_signin_metadata"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def sign_in_providers_save_signin_provider(self, provider_id: str, body: ProviderIn) -> ProviderOut:
         "Save Signin Provider"
         return await self._t.call(
@@ -1406,6 +1438,12 @@ class AsyncOperations:
         "Delete Signin Provider"
         return await self._t.call(
             SERVICE, OPERATIONS["sign_in_providers_delete_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_refresh_signin_provider(self, provider_id: str) -> ProviderOut:
+        "Refresh Signin Provider"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_refresh_signin_provider"], {"provider_id": provider_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def sign_in_providers_list_signin_secret_names(self) -> list[str]:

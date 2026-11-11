@@ -52,7 +52,7 @@ from ..passwords import Passwords, email_key_from
 from ..policies import Policies
 from ..roles import Roles
 from ..signin_options import SignInOptions
-from ..signin_settings import SignInSettings
+from ..signin_settings import ProviderMetadata, SignInSettings
 from ..sso import Sso
 from ..store.audit import AuditLog, record_delivered
 from ..store.holders import HolderStore
@@ -99,6 +99,8 @@ from .schemas import (
     Jwks,
     Me,
     MemberOut,
+    MetadataIn,
+    MetadataOut,
     OptionsIn,
     OptionsOut,
     PermissionsOut,
@@ -699,6 +701,7 @@ def create_public_app(
         sp_key_set=sign.saml_sp_key is not None,
         public_url=sign.public_url,
         console_url=sign.console_url,
+        metadata=ProviderMetadata(signin_store, sso.guarded_get),
     )
 
     @app.get(
@@ -710,6 +713,31 @@ def create_public_app(
     async def list_signin_providers(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's sign-in providers; Security team admins only."""
         return ok(await signin_settings.list(actor))
+
+    @app.post(
+        "/v1/settings/sign-in/providers/metadata",
+        tags=["sign-in-providers"],
+        response_model=Envelope[MetadataOut],
+        responses=ERRORS,
+    )
+    async def read_signin_metadata(  # pyright: ignore[reportUnusedFunction]
+        body: MetadataIn, actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """What an identity provider's metadata says (entity id, sign-in URL, certificates and their dates), read from
+        its URL or file; saves nothing. Security team admins only."""
+        return ok(await signin_settings.read_metadata(actor, url=body.url, xml=body.xml))
+
+    @app.post(
+        "/v1/settings/sign-in/providers/{provider_id}/refresh",
+        tags=["sign-in-providers"],
+        response_model=Envelope[ProviderOut],
+        responses=ERRORS,
+    )
+    async def refresh_signin_provider(  # pyright: ignore[reportUnusedFunction]
+        provider_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Reads the provider's metadata URL now and adds its new certificates for the same entity id."""
+        return ok(await signin_settings.refresh(actor, provider_id))
 
     @app.put(
         "/v1/settings/sign-in/providers/{provider_id}",

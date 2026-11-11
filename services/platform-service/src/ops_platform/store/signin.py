@@ -36,6 +36,7 @@ from .tables import (
     password_resets,
     role_assignments,
     sessions,
+    signin_certificates,
     signin_domains,
     signin_email_failures,
     signin_flows,
@@ -45,7 +46,7 @@ from .tables import (
     teams,
     users,
 )
-from .tenancy import RESET_LOOKUP, SIGNIN_LOCKOUT, SIGNIN_LOOKUP, TenantDb
+from .tenancy import RESET_LOOKUP, SIGNIN_LOCKOUT, SIGNIN_LOOKUP, SIGNIN_WATCH, TenantDb
 from .workspace import default_team_in, security_team_in
 
 PASSWORD = "password"
@@ -62,6 +63,19 @@ class DomainClaim:
 
 
 @dataclass(frozen=True)
+class TrustedCertificate:
+    """A signing certificate a provider is trusted with, and where it came from."""
+
+    fingerprint: str
+    pem: str
+    not_before: str
+    not_after: str
+    source: str
+    added_at: str
+    warned: str | None = None
+
+
+@dataclass(frozen=True)
 class Provider:
     id: str
     tenant_id: str
@@ -75,6 +89,8 @@ class Provider:
     claims: list[DomainClaim] = field(default_factory=list[DomainClaim])
     # The random id in this provider's own SAML addresses; None for one saved before providers had them.
     sp_id: str | None = None
+    # Its trusted signing certificates, not removed, newest end date first (SAML only).
+    certificates: list[TrustedCertificate] = field(default_factory=list[TrustedCertificate])
 
     @property
     def verified_domains(self) -> set[str]:
@@ -180,8 +196,19 @@ class SignInStore:
             kinds = (await c.execute(sa.select(signin_providers.c.kind, signin_providers.c.enabled))).all()
         return _password_on(kinds)
 
-    async def save_provider(self, p: Provider, *, actor: str, at: str, request_id: str) -> None:
-        """Creates or replaces the provider and its domains, audited, in one transaction."""
+    async def save_provider(
+        self,
+        p: Provider,
+        *,
+        actor: str,
+        at: str,
+        request_id: str,
+        certificates: Sequence[TrustedCertificate] | None = None,
+    ) -> None:
+        """Creates or replaces the provider and its domains, audited, in one transaction. `certificates`, when given,
+        are the ones the admin saved: listed ones are kept or added; an uploaded or typed one no longer listed is
+        removed; one read from metadata stays until it ends or an admin removes it, so a bad metadata read never
+        locks people out."""
         values = {
             "kind": p.kind,
             "label": p.label,
@@ -201,6 +228,8 @@ class SignInStore:
                         )
                     )
                 await _keep_claims(c, p, at)
+                if certificates is not None:
+                    await _keep_certificates(c, p, certificates, actor=actor, at=at, request_id=request_id)
                 await record(
                     c,
                     tenant_id=p.tenant_id,
@@ -216,6 +245,37 @@ class SignInStore:
             if "ux_signin_domains_verified" in str(e.orig):
                 raise DomainTakenError from e
             raise
+
+    async def add_certificates(
+        self, p: Provider, certificates: Sequence[TrustedCertificate], *, at: str, request_id: str
+    ) -> list[TrustedCertificate]:
+        """Adds the certificates the provider is not yet trusted with (a metadata refresh), each audited; returns
+        the ones added."""
+        async with self.db.tenant_tx(p.tenant_id) as c:
+            return await _add_certificates(c, p, certificates, actor="system", at=at, request_id=request_id)
+
+    async def metadata_read(self, p: Provider, *, at: str, error: str | None) -> None:
+        """Records when the provider's metadata URL was last read and what was wrong with it, if anything."""
+        config = {**p.config, "metadataReadAt": at, "metadataError": error}
+        async with self.db.tenant_tx(p.tenant_id) as c:
+            await c.execute(
+                signin_providers.update().where(signin_providers.c.id == p.id).values(config=config, updated_at=at)
+            )
+
+    async def mark_warned(self, tenant_id: str, provider_id: str, fingerprint: str, level: str) -> None:
+        q = (
+            signin_certificates.update()
+            .where(signin_certificates.c.provider_id == provider_id, signin_certificates.c.fingerprint == fingerprint)
+            .values(warned=level)
+        )
+        async with self.db.tenant_tx(tenant_id) as c:
+            await c.execute(q)
+
+    async def watched(self) -> list[tuple[str, str]]:
+        """(tenant, provider) of every SAML provider of an open workspace, for the daily certificate watch."""
+        async with self.db.system_tx(SIGNIN_WATCH) as c:
+            rows = (await c.execute(sa.text("SELECT tenant_id, provider_id FROM platform_signin_watch()"))).all()
+        return [(str(r[0]), str(r[1])) for r in rows]
 
     async def verified_elsewhere(self, tenant_id: str, domains: Sequence[str]) -> bool:
         """Whether another workspace has verified any of these domains, read through the pre-tenant lookup."""
@@ -267,6 +327,7 @@ class SignInStore:
 
     async def delete_provider(self, tenant_id: str, provider_id: str, *, actor: str, at: str, request_id: str) -> bool:
         async with self.db.tenant_tx(tenant_id) as c:
+            await c.execute(signin_certificates.delete().where(signin_certificates.c.provider_id == provider_id))
             await c.execute(signin_flows.delete().where(signin_flows.c.provider_id == provider_id))
             await c.execute(signin_identities.delete().where(signin_identities.c.provider_id == provider_id))
             await c.execute(signin_domains.delete().where(signin_domains.c.provider_id == provider_id))
@@ -789,6 +850,15 @@ async def _providers(c: AsyncConnection, provider_id: str | None = None) -> list
     ).order_by(signin_domains.c.domain)
     for d, pid, token, verified_at in (await c.execute(listed)).all():
         claims.setdefault(str(pid), []).append(DomainClaim(str(d), str(pid), str(token), verified_at))
+    certs: dict[str, list[TrustedCertificate]] = {}
+    k = signin_certificates.c
+    trusted = (
+        sa.select(k.provider_id, k.fingerprint, k.pem, k.not_before, k.not_after, k.source, k.added_at, k.warned)
+        .where(k.removed_at.is_(None))
+        .order_by(k.not_after.desc())
+    )
+    for pid, *rest in (await c.execute(trusted)).all():
+        certs.setdefault(str(pid), []).append(TrustedCertificate(*rest))
     return [
         Provider(
             id=str(r["id"]),
@@ -802,6 +872,7 @@ async def _providers(c: AsyncConnection, provider_id: str | None = None) -> list
             domains=[x.domain for x in claims.get(str(r["id"]), [])],
             claims=claims.get(str(r["id"]), []),
             sp_id=r["sp_id"],
+            certificates=certs.get(str(r["id"]), []),
         )
         for r in rows
     ]
@@ -848,6 +919,84 @@ async def _holds_admin(c: AsyncConnection, user_id: str) -> bool:
         role_assignments.c.role_id == "admin",
     )
     return (await c.execute(member.union_all(granted).limit(1))).first() is not None
+
+
+async def _add_certificates(
+    c: AsyncConnection,
+    p: Provider,
+    certificates: Sequence[TrustedCertificate],
+    *,
+    actor: str,
+    at: str,
+    request_id: str,
+) -> list[TrustedCertificate]:
+    k = signin_certificates.c
+    held = {
+        str(r[0]): r[1]
+        for r in (await c.execute(sa.select(k.fingerprint, k.removed_at).where(k.provider_id == p.id))).all()
+    }
+    added: list[TrustedCertificate] = []
+    for cert in certificates:
+        # A refresh never brings back a certificate an admin removed; only a save by a person does.
+        if cert.fingerprint in held and (held[cert.fingerprint] is None or actor == "system"):
+            continue
+        if cert.fingerprint in held:
+            await c.execute(
+                signin_certificates.update()
+                .where(k.provider_id == p.id, k.fingerprint == cert.fingerprint)
+                .values(removed_at=None, source=cert.source, added_at=at, added_by=actor, warned=None)
+            )
+        else:
+            await c.execute(
+                signin_certificates.insert().values(
+                    tenant_id=p.tenant_id,
+                    provider_id=p.id,
+                    fingerprint=cert.fingerprint,
+                    pem=cert.pem,
+                    not_before=cert.not_before,
+                    not_after=cert.not_after,
+                    source=cert.source,
+                    added_at=at,
+                    added_by=actor,
+                )
+            )
+        await record(
+            c,
+            tenant_id=p.tenant_id,
+            team_id=None,
+            actor=actor,
+            action="signin.certificate_added",
+            target_kind="signin_provider",
+            target_id=p.id,
+            request_id=request_id,
+            detail={"fingerprint": cert.fingerprint, "notAfter": cert.not_after, "source": cert.source},
+        )
+        added.append(cert)
+    return added
+
+
+async def _keep_certificates(
+    c: AsyncConnection,
+    p: Provider,
+    certificates: Sequence[TrustedCertificate],
+    *,
+    actor: str,
+    at: str,
+    request_id: str,
+) -> None:
+    k = signin_certificates.c
+    listed = [x.fingerprint for x in certificates]
+    await c.execute(
+        signin_certificates.update()
+        .where(
+            k.provider_id == p.id,
+            k.removed_at.is_(None),
+            k.source != "metadata",
+            k.fingerprint.not_in(listed),
+        )
+        .values(removed_at=at)
+    )
+    await _add_certificates(c, p, certificates, actor=actor, at=at, request_id=request_id)
 
 
 def _password_on(kinds: Sequence[Row[Any, Any]]) -> bool:

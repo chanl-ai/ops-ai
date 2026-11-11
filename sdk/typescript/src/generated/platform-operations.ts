@@ -591,6 +591,26 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "sign_in_providers_read_signin_metadata": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/settings/sign-in/providers/metadata",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_refresh_signin_provider": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/settings/sign-in/providers/{provider_id}/refresh",
+    "pathParams": [
+      "provider_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sign_in_providers_save_signin_provider": {
     "body": "json",
     "headers": [],

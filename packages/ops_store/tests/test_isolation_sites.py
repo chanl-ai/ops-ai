@@ -32,6 +32,8 @@ WIDENINGS: dict[str, set[str]] = {
     "KEY_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "INVITE_LOOKUP": {"services/platform-service/src/ops_platform/store/members.py"},
     "SIGNIN_LOCKOUT": {"services/platform-service/src/ops_platform/store/signin.py"},
+    # The daily certificate watch lists every SAML provider of an open workspace (platform_signin_watch).
+    "SIGNIN_WATCH": {"services/platform-service/src/ops_platform/store/signin.py"},
     "RESET_LOOKUP": {"services/platform-service/src/ops_platform/store/signin.py"},
     "PURGE_LOOKUP": {"services/platform-service/src/ops_platform/store/lifecycle.py"},
     "TESTS": {"services/agents-service/src/ops_agents/store/tenancy.py"},

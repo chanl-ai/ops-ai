@@ -84,6 +84,15 @@ class CellIn(TypedDict, closed=True):
     scope: NotRequired[Literal["all", "own"]]
 
 
+class CertificateOut(TypedDict, closed=True):
+    addedAt: str
+    fingerprint: str
+    notAfter: str
+    notBefore: str
+    source: Literal["metadata", "upload", "manual"]
+    state: Literal["current", "expiring", "expired"]
+
+
 class CheckRefusal(TypedDict, closed=True):
     code: str
     reason: str
@@ -265,6 +274,23 @@ class MemberOut(TypedDict, closed=True):
     workspaceRoles: NotRequired[list[str]]
 
 
+class MetadataCertificateOut(TypedDict, closed=True):
+    fingerprint: str
+    notAfter: str
+    notBefore: str
+
+
+class MetadataIn(TypedDict, closed=True):
+    url: NotRequired[str | None]
+    xml: NotRequired[str | None]
+
+
+class MetadataOut(TypedDict, closed=True):
+    certificates: list[MetadataCertificateOut]
+    idpEntityId: str
+    ssoUrl: str
+
+
 Scope: TypeAlias = str
 
 
@@ -442,10 +468,15 @@ class RoleRef(TypedDict, closed=True):
     name: str
 
 
+Certificate: TypeAlias = str
+
+
 class SamlSettings(TypedDict, closed=True):
-    certificate: str
+    certificate: NotRequired[str | None]
+    certificates: NotRequired[list[Certificate] | None]
     emailAttribute: NotRequired[str | None]
     idpEntityId: str
+    metadataUrl: NotRequired[str | None]
     nameAttribute: NotRequired[str | None]
     requireEncryption: NotRequired[bool]
     signRequests: NotRequired[bool]
@@ -455,15 +486,19 @@ class SamlSettings(TypedDict, closed=True):
 
 class SamlSettingsOut(TypedDict, closed=True):
     acsUrl: str | None
-    certificate: str
+    certificate: str | None
+    certificates: list[CertificateOut]
     emailAttribute: str | None
     idpEntityId: str
+    metadataError: str | None
+    metadataReadAt: str | None
     metadataUrl: str | None
     nameAttribute: str | None
     requireEncryption: bool
     signOnUrl: str | None
     signRequests: bool
     spEntityId: str | None
+    spMetadataUrl: str | None
     ssoUrl: str
     tiles: bool
 
@@ -724,6 +759,11 @@ class EnvelopeBulkOut(TypedDict, closed=True):
 
 class EnvelopeInvitePreview(TypedDict, closed=True):
     data: InvitePreview
+    success: Literal[True]
+
+
+class EnvelopeMetadataOut(TypedDict, closed=True):
+    data: MetadataOut
     success: Literal[True]
 
 

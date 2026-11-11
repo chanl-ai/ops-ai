@@ -42,7 +42,7 @@ async def test_a_new_provider_gets_its_own_addresses_and_metadata(signin: SignIn
     saml = await _saml_of(signin, provider)
     assert saml["acsUrl"].startswith("http://platform/v1/auth/saml/acs/ssp")
     assert saml["signOnUrl"] == f"{CONSOLE}/sso?provider={saml['acsUrl'].rsplit('/', 1)[1]}"
-    metadata = await signin.public.get(httpx.URL(saml["metadataUrl"]).path)
+    metadata = await signin.public.get(httpx.URL(saml["spMetadataUrl"]).path)
     assert metadata.status_code == 200 and saml["acsUrl"] in metadata.text and saml["spEntityId"] in metadata.text
 
 

@@ -986,6 +986,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/settings/sign-in/providers/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Signin Metadata
+         * @description What an identity provider's metadata says (entity id, sign-in URL, certificates and their dates), read from
+         *     its URL or file; saves nothing. Security team admins only.
+         */
+        post: operations["sign_in_providers_read_signin_metadata"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings/sign-in/providers/{provider_id}": {
         parameters: {
             query?: never;
@@ -1002,6 +1023,26 @@ export interface paths {
         post?: never;
         /** Delete Signin Provider */
         delete: operations["sign_in_providers_delete_signin_provider"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/settings/sign-in/providers/{provider_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Signin Provider
+         * @description Reads the provider's metadata URL now and adds its new certificates for the same entity id.
+         */
+        post: operations["sign_in_providers_refresh_signin_provider"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1646,6 +1687,27 @@ export interface components {
              */
             scope: "all" | "own";
         };
+        /** CertificateOut */
+        CertificateOut: {
+            /** Addedat */
+            addedAt: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Notafter */
+            notAfter: string;
+            /** Notbefore */
+            notBefore: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "metadata" | "upload" | "manual";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "current" | "expiring" | "expired";
+        };
         /** CheckRefusal */
         CheckRefusal: {
             /** Code */
@@ -1787,6 +1849,15 @@ export interface components {
         /** Envelope[Me] */
         Envelope_Me_: {
             data: components["schemas"]["Me"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[MetadataOut] */
+        Envelope_MetadataOut_: {
+            data: components["schemas"]["MetadataOut"];
             /**
              * Success
              * @constant
@@ -2445,6 +2516,34 @@ export interface components {
             /** Workspaceroles */
             workspaceRoles?: string[];
         };
+        /** MetadataCertificateOut */
+        MetadataCertificateOut: {
+            /** Fingerprint */
+            fingerprint: string;
+            /** Notafter */
+            notAfter: string;
+            /** Notbefore */
+            notBefore: string;
+        };
+        /**
+         * MetadataIn
+         * @description An identity provider's metadata to read: its URL, or the file's contents.
+         */
+        MetadataIn: {
+            /** Url */
+            url?: string | null;
+            /** Xml */
+            xml?: string | null;
+        };
+        /** MetadataOut */
+        MetadataOut: {
+            /** Certificates */
+            certificates: components["schemas"]["MetadataCertificateOut"][];
+            /** Idpentityid */
+            idpEntityId: string;
+            /** Ssourl */
+            ssoUrl: string;
+        };
         /** OidcSettings */
         OidcSettings: {
             /** Clientid */
@@ -2844,11 +2943,15 @@ export interface components {
         /** SamlSettings */
         SamlSettings: {
             /** Certificate */
-            certificate: string;
+            certificate?: string | null;
+            /** Certificates */
+            certificates?: string[] | null;
             /** Emailattribute */
             emailAttribute?: string | null;
             /** Idpentityid */
             idpEntityId: string;
+            /** Metadataurl */
+            metadataUrl?: string | null;
             /** Nameattribute */
             nameAttribute?: string | null;
             /**
@@ -2874,11 +2977,17 @@ export interface components {
             /** Acsurl */
             acsUrl: string | null;
             /** Certificate */
-            certificate: string;
+            certificate: string | null;
+            /** Certificates */
+            certificates: components["schemas"]["CertificateOut"][];
             /** Emailattribute */
             emailAttribute: string | null;
             /** Idpentityid */
             idpEntityId: string;
+            /** Metadataerror */
+            metadataError: string | null;
+            /** Metadatareadat */
+            metadataReadAt: string | null;
             /** Metadataurl */
             metadataUrl: string | null;
             /** Nameattribute */
@@ -2891,6 +3000,8 @@ export interface components {
             signRequests: boolean;
             /** Spentityid */
             spEntityId: string | null;
+            /** Spmetadataurl */
+            spMetadataUrl: string | null;
             /** Ssourl */
             ssoUrl: string;
             /** Tiles */
@@ -8637,6 +8748,111 @@ export interface operations {
             };
         };
     };
+    sign_in_providers_read_signin_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetadataIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_MetadataOut_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     sign_in_providers_save_signin_provider: {
         parameters: {
             query?: never;
@@ -8761,6 +8977,109 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sign_in_providers_refresh_signin_provider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ProviderOut_"];
+                };
             };
             /** @description Invalid request */
             400: {

@@ -204,6 +204,14 @@ PROCESSES: tuple[Process, ...] = (
         "Any workspace's restore window can end; each is purged in its own tenant.",
     ),
     Process(
+        "signin_watch",
+        "platform",
+        "Sign-in certificates",
+        "Re-reads SAML providers' metadata for new certificates and tells Security admins before one ends.",
+        86400.0,
+        "Every workspace's SAML providers are checked once a day; each is read and changed in its own tenant.",
+    ),
+    Process(
         "platform_relay",
         "platform",
         "Platform events",

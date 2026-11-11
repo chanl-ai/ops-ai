@@ -28,6 +28,7 @@ from ops_service_kit.errors import NotFound, ServiceUnavailable, Unauthorized, V
 from ops_service_kit.logging import get_logger
 from ops_service_kit.public_address import PublicFetch
 from ops_signin import (
+    CertificateExpired,
     OidcClient,
     OidcConfig,
     SamlConfig,
@@ -67,6 +68,19 @@ def _groups_source(config: dict[str, Any]) -> str | None:
     """The claim or attribute a provider's group mapping reads; None when it maps no groups."""
     groups: dict[str, Any] = config.get("groups") or {}
     return str(groups.get("source") or "groups") if groups.get("map") else None
+
+
+async def guarded_get(http: httpx.AsyncClient, fetch: PublicFetch | None, url: str) -> bytes:
+    """The body at `url` an admin typed: through `fetch`, the public-address guard, except on dev's local fake
+    identity provider (`fetch` None). Raises ValueError when refused or unreadable."""
+    if fetch is not None:
+        return await fetch.get(http, url)
+    try:
+        r = await http.get(url, timeout=5)
+        r.raise_for_status()
+    except httpx.HTTPError as e:
+        raise ValueError(f"{url} did not answer.") from e
+    return r.content
 
 
 def saml_addresses(public_url: str, sp_id: str | None) -> dict[str, str]:
@@ -152,11 +166,7 @@ class Sso:
 
     async def guarded_get(self, url: str) -> bytes:
         """The body at `url`, through the public-address guard when there is one. Raises ValueError when refused."""
-        if self.fetch is None:
-            r = await self.http.get(url, timeout=5)
-            r.raise_for_status()
-            return r.content
-        return await self.fetch.get(self.http, url)
+        return await guarded_get(self.http, self.fetch, url)
 
     async def sp_metadata(self, sp_id: str | None = None) -> bytes:
         """The service provider's SAML metadata for a bank's identity provider: the shared one, or a provider's own.
@@ -185,7 +195,7 @@ class Sso:
             SamlConfig(
                 idp_entity_id=str(c["idpEntityId"]),
                 idp_sso_url=str(c["ssoUrl"]),
-                idp_certificates=str(c["certificate"]),
+                idp_certificates=tuple(x.pem for x in p.certificates) or (str(c.get("certificate") or ""),),
                 sp_entity_id=at["entityId"],
                 acs_url=at["acsUrl"],
                 email_attribute=c.get("emailAttribute"),
@@ -360,7 +370,14 @@ class Sso:
     def _failed(self, flow: Flow | None, e: SignInRefused) -> str:
         """The console's error page. Only the reasons a person can act on are named; every failed check is
         `sign_in_refused`, so the page tells an attacker nothing about which check stopped them."""
-        return self._console(flow, {"error": "no_access" if isinstance(e, NoAccess) else "sign_in_refused"})
+        reason = (
+            "no_access"
+            if isinstance(e, NoAccess)
+            else "certificate_expired"
+            if isinstance(e, CertificateExpired)
+            else "sign_in_refused"
+        )
+        return self._console(flow, {"error": reason})
 
     async def _taken(self, code: str, flow_key: str, purpose: str) -> Flow:
         flow = await self.store.flow_by_handoff(_hash(code))

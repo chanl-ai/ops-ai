@@ -291,6 +291,33 @@ signin_domains = sa.Table(
     ),
     info=TENANT_SCOPED,
 )
+signin_certificates = sa.Table(
+    "signin_certificates",
+    metadata,
+    # A provider's trusted signing certificates (migration 0033). Keyed by fingerprint within the provider, since two
+    # workspaces may trust one identity provider's certificate.
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("provider_id", sa.String(64), primary_key=True),
+    sa.Column("fingerprint", sa.String(64), primary_key=True),
+    sa.Column("pem", sa.Text, nullable=False),
+    sa.Column("not_before", sa.String(40), nullable=False),
+    sa.Column("not_after", sa.String(40), nullable=False),
+    sa.Column("source", sa.String(16), nullable=False),  # metadata | upload | manual
+    sa.Column("added_at", sa.String(40), nullable=False),
+    sa.Column("added_by", sa.String(64), nullable=False),
+    # Set when an admin removes it or a save no longer lists it; a removed certificate is never trusted.
+    sa.Column("removed_at", sa.String(40)),
+    # The last expiry notice sent: "30", "7" or "expired".
+    sa.Column("warned", sa.String(16)),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "provider_id"],
+        ["signin_providers.tenant_id", "signin_providers.id"],
+        name="fk_signin_certificates_provider",
+        ondelete="CASCADE",
+    ),
+    sa.Index("ix_signin_certificates_not_after", "not_after"),
+    info=TENANT_SCOPED,
+)
 # One verified owner per domain, so a domain's people go to one workspace's provider; a pending claim blocks nobody.
 sa.Index(
     "ux_signin_domains_verified",

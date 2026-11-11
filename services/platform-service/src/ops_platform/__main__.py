@@ -22,9 +22,15 @@ from .api.app import create_internal_app, create_public_app
 from .keys import signer_from
 from .seed import seed
 from .signin_options import SignInOptions
+from .signin_settings import ProviderMetadata
+from .signin_watch import SecurityNotices, SignInWatch
+from .sso import guarded_get
 from .store.event_relay import SCOPES, keep_relaying
+from .store.holders import HolderStore
 from .store.identity import IdentityStore
 from .store.lifecycle import LifecycleStore
+from .store.signin import SignInStore
+from .store.workspace import WorkspaceStore
 from .workspace_lifecycle import WorkspacePurge
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
@@ -80,6 +86,16 @@ async def serve(settings: Settings) -> None:
     purge = WorkspacePurge(LifecycleStore(store.db), restore_days=settings.workspace_restore_days)
     stop = asyncio.Event()
     purging = asyncio.create_task(run_background("workspace_lifecycle", purge.once, stop=stop, store=LOCAL_BEATS))
+    # SAML providers' certificates: new ones from metadata, and Security admins told before one ends.
+    sign = SignInOptions.from_settings(settings, mail=mail)
+    signin_store = SignInStore(store.db)
+    http = httpx.AsyncClient(timeout=15)
+    watch = SignInWatch(
+        signin_store,
+        ProviderMetadata(signin_store, lambda url: guarded_get(http, sign.fetch, url)),
+        SecurityNotices(signin_store, HolderStore(store.db), WorkspaceStore(store.db), mail, settings.console_url),
+    )
+    watching = asyncio.create_task(run_background("signin_watch", watch.once, stop=stop, store=LOCAL_BEATS))
     # Events other services act on (event_relay.py) go to each one this install runs; with no address for a service,
     # its events are delivered by doing nothing.
     urls = {"tools": settings.tools_url, "agents": settings.agents_url}
@@ -97,6 +113,8 @@ async def serve(settings: Settings) -> None:
         stop.set()
         relaying.cancel()
         await purging
+        await watching
+        await http.aclose()
         await store.close()
 
 
