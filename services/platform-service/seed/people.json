@@ -6,7 +6,7 @@
     { "id": "team_platform", "name": "Platform", "ownerGroups": ["platform"], "scope": "all" }
   ],
   "people": [
-    { "id": "usr_admin", "name": "Priya Shah", "email": "p.shah@harborpine.example", "teams": { "team_ops": "admin", "team_security": "admin", "team_platform": "admin" }, "everyTeam": ["admin", "security_admin"] },
+    { "id": "usr_admin", "name": "Priya Shah", "email": "p.shah@harborpine.example", "teams": { "team_ops": "admin" } },
     { "id": "usr_builder", "name": "James Richardson", "email": "j.richardson@harborpine.example", "teams": { "team_ops": "builder" } },
     { "id": "usr_approver", "name": "Maya Okafor", "email": "m.okafor@harborpine.example", "teams": { "team_ops": "approver" } },
     { "id": "usr_viewer", "name": "Ravi Menon", "email": "r.menon@harborpine.example", "teams": { "team_ops": "viewer" } },

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Human Tasks shows what a workflow step proposes",
+  "description": "A task from a workflow step now lists the values the step carries. When an email and its attachment disagree, the task shows both case numbers.",
+  "tag": "fix"
+}
