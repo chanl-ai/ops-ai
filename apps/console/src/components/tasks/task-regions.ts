@@ -248,15 +248,14 @@ function readQuestion(read: DocumentRead): string {
 }
 
 const words = (key: string) => {
-  const s = key.replace(/[_-]+/g, ' ').trim().toLowerCase();
+  const s = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim().toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 const shown = (v: unknown): string =>
   v === null || v === undefined ? '' : Array.isArray(v) ? v.map(shown).filter(Boolean).join(', ') : typeof v === 'object' ? Object.entries(v as Data).map(([k, x]) => `${words(k)}: ${shown(x)}`).join(' · ') : String(v);
 
 /**
- * A workflow step's proposal is its summary as JSON. Every kind of task that carries one draws it here, once: each
- * top-level key is a card, and a list of disagreements ({field, values: [{source, value}]}) is one row per field with
+ * A workflow step's proposal may carry a list of disagreements; it is drawn here, once, for every kind of task. A list of disagreements ({field, values: [{source, value}]}) is one row per field with
  * every source's value, so a reviewer sees both sides. A proposal that is a sentence is the task's own words and is not repeated.
  */
 export function proposalNodes(proposal: string | null | undefined): KindNode[] {
@@ -270,12 +269,10 @@ export function proposalNodes(proposal: string | null | undefined): KindNode[] {
   if (!data || typeof data !== 'object') return [];
   const nodes: KindNode[] = [];
   for (const [key, value] of Object.entries(Array.isArray(data) ? { items: data } : (data as Data))) {
-    const list = Array.isArray(value) ? value : null;
-    const rows = list?.every((x) => x && typeof x === 'object' && !Array.isArray(x) && Array.isArray((x as Data).values))
-      ? list.map((x) => ({ label: words(text((x as Data).field) || 'value'), value: ((x as Data).values as Data[]).map((v) => `${text(v.source) ? `${words(text(v.source))}: ` : ''}${shown(v.value)}`).join(' · ') }))
-      : value && typeof value === 'object' && !list
-        ? Object.entries(value as Data).map(([k, v]) => ({ label: words(k), value: shown(v) }))
-        : [{ label: words(key), value: shown(value) }];
+    // Only the disagreement shape is drawn; any other JSON is a step summary the task already explains in its own regions.
+    const rows = Array.isArray(value) && value.length && value.every((x) => x && typeof x === 'object' && !Array.isArray(x) && Array.isArray((x as Data).values))
+      ? value.map((x) => ({ label: words(text((x as Data).field) || 'value'), value: ((x as Data).values as Data[]).map((v) => `${text(v.source) ? `${words(text(v.source))}: ` : ''}${shown(v.value)}`).join(' · ') }))
+      : [];
     const fields = rows.filter((f) => f.value);
     if (fields.length) nodes.push({ type: 'entity', title: words(key), fields });
   }
