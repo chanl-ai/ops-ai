@@ -4,6 +4,7 @@ token, minted once two different people have approved it in the chat widget."""
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from tests.api.test_chat import new_thread, send
 from tests.conftest import step_up
@@ -13,6 +14,7 @@ from tests.gateway.test_dispute_e2e import apps, runtime  # noqa: F401  # pyrigh
 LEE = "lee@harborpine.example"
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_a_chat_two_approver_action_runs_on_two_approvals_through_the_gateway(
     runtime: httpx.AsyncClient,  # noqa: F811
     gateway: Gateway,

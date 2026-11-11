@@ -50,7 +50,8 @@ async def client_for(**settings: Any) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
-    async for c in client_for():
+    # A workspace that turned requesterMayDecide on; `strict` is the default.
+    async for c in client_for(dev_policies={"requesterMayDecide": True}):
         yield c
 
 
