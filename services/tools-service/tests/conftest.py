@@ -303,6 +303,7 @@ def build_app(
     install_clients: Any = None,
     plugins: PluginHost | None = None,
     users: Any = None,
+    requester_policy: Any = None,
 ) -> FastAPI:
     """The gateway app as __main__ builds it, on the tenant's registry. `opa` defaults to an address nothing answers,
     for tests that never reach a decision; `upstream` is what http operations call. `mcp` serves /mcp: its SDK manager
@@ -388,6 +389,7 @@ def build_app(
         directory=directory if mcp else None,
         flags=flags if flags is not None else Flags(frozenset({"mcp_gateway"}) if mcp else frozenset()),
         modules=service,
+        requester_policy=requester_policy,
     )
 
 

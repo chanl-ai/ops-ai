@@ -143,3 +143,34 @@ async def test_an_admin_switching_a_write_back_to_false_after_the_migration_stic
             assert await _waits(engine) == {"mod_new": False}, "later migrations or a re-run put the setting back"
         finally:
             await engine.dispose()
+
+
+async def _chosen_in(zone: str, suffix: str) -> dict[str, bool]:
+    """The writes the migration turns on in a database whose session time zone is `zone`, for modules saved either
+    side of 1 November 00:00 UTC (a few hours apart, so a zone offset moves them across the cut-off)."""
+    async with scratch_database(suffix) as target:
+        _alembic(target, "upgrade", BEFORE)
+        engine = create_async_engine(target)
+        try:
+            async with engine.connect() as c:
+                autocommit = await c.execution_options(isolation_level="AUTOCOMMIT")
+                await autocommit.execute(
+                    sa.text(
+                        "do $$ begin execute format('alter database %I set timezone to %L', "
+                        f"current_database(), '{zone}'); end $$"
+                    )
+                )
+            await _write_tool(engine, "mod_just_after", datetime(2026, 11, 1, 3, 0, tzinfo=UTC), waits=False)
+            await _write_tool(engine, "mod_just_before", datetime(2026, 10, 31, 21, 0, tzinfo=UTC), waits=False)
+            _alembic(target, "upgrade", AFTER)
+            return await _waits(engine)
+        finally:
+            await engine.dispose()
+
+
+async def test_the_1_nov_cut_off_picks_the_same_writes_in_any_session_time_zone() -> None:
+    in_utc = await _chosen_in("UTC", "tools_wa_utc")
+    in_los_angeles = await _chosen_in("America/Los_Angeles", "tools_wa_la")
+    assert in_los_angeles == in_utc, (
+        f"the cut-off moved with the session zone: UTC {in_utc}, Los Angeles {in_los_angeles}"
+    )
