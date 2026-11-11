@@ -5,6 +5,7 @@ Status: current, updated 2026-10-22: the team is the workspace, and that rule ov
 Every run acts for someone. Detail: [ADR-0005](decisions/identity-and-entitlement.md) (workflow identities,
 delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
 [sign-in library](../packages/ops_signin/overview.md) (human sign-in, step-up).
+Company sign-in over SAML (providers, groups to teams, break-glass): [SAML sign-in](saml-sign-in.md).
 
 ## The team is the workspace
 
