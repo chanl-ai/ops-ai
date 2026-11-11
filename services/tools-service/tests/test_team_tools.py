@@ -1,8 +1,8 @@
-"""Which of an app's tools a team adds from the app's catalog, by failure mode: a new app hands every write tool to
-agents before anyone chose it; a tool not added still runs when called by name or is offered to agents; an app turned
-on before the catalog existed loses tools its agents hold; a person who may not manage the team's apps adds or removes
-a tool; the app's catalog does not say which tools are added; and the app's card does not count them, so the agent
-picker cannot say how many wait in the catalog."""
+"""Which of an app's tools a team adds from the app's catalog, by failure mode: a new app leaves a tool off, so a
+developer who connects it cannot write until someone finds the catalog; a tool not added still runs when called by
+name or is offered to agents; an app turned on before the catalog existed loses tools its agents hold; a person who
+may not manage the team's apps adds or removes a tool; the app's catalog does not say which tools are added; and the
+app's card does not count them, so the agent picker cannot say how many wait in the catalog."""
 
 from __future__ import annotations
 
@@ -35,14 +35,15 @@ async def _on(c: httpx.AsyncClient, tenant: str) -> dict[str, bool]:
     return {t["name"]: t["added"] for t in page["tools"]}
 
 
-async def test_a_new_app_starts_with_its_read_tools_on_and_its_write_tools_off(
+async def test_a_new_app_starts_with_every_tool_on_its_writes_included(
     desk_rig: tuple[Any, TokenDesk],  # noqa: F811
     tenant: str,
 ) -> None:
+    # Writes are on from the start; "Ask before changes" is what keeps a person in the loop, not a missing tool.
     (c, _, _, _), _ = desk_rig
     on = await _on(c, tenant)
-    assert {k for k, v in on.items() if v} == {"fields_search", "fields_find", "fields_echo"}, on
-    assert {k for k, v in on.items() if not v} == {"fields_post_message", "fields_transfer"}, on
+    every = ("fields_search", "fields_find", "fields_echo", "fields_post_message", "fields_transfer")
+    assert on == dict.fromkeys(every, True), on
 
 
 async def test_someone_who_manages_the_teams_apps_adds_and_removes_tools_and_a_viewer_cannot(
@@ -87,9 +88,9 @@ async def test_agents_are_not_offered_tools_the_team_has_not_added(
     # The grantable operations agents-service lists, grants and hands a run leave out what this answers.
     (c, host, _, _), _ = desk_rig
     await _on(c, tenant)
-    assert await host.tools_off(tenant, TEAM) == {"fields_post_message", "fields_transfer"}
-    await c.post(f"/v1/apps/{APP}/tools", json={"tools": ["fields_transfer"]}, headers=admin(tenant))
-    assert await host.tools_off(tenant, TEAM) == {"fields_post_message"}
+    assert await host.tools_off(tenant, TEAM) == set()
+    await c.delete(f"/v1/apps/{APP}/tools/fields_transfer", headers=admin(tenant))
+    assert await host.tools_off(tenant, TEAM) == {"fields_transfer"}
     assert await host.tools_off(tenant, "team_other") == set()
 
 
@@ -100,8 +101,8 @@ async def test_the_apps_card_counts_the_tools_added_of_its_catalog(
     (c, _, _, _), _ = desk_rig
     await _on(c, tenant)
     card = next(x for x in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if x["id"] == APP)
-    assert (card["toolsCount"], card["toolsAdded"]) == (5, 3), card
-    await c.post(f"/v1/apps/{APP}/tools", json={"tools": ["fields_transfer"]}, headers=admin(tenant))
+    assert (card["toolsCount"], card["toolsAdded"]) == (5, 5), card
+    await c.delete(f"/v1/apps/{APP}/tools/fields_transfer", headers=admin(tenant))
     card = next(x for x in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if x["id"] == APP)
     assert card["toolsAdded"] == 4, card
 
@@ -124,6 +125,10 @@ async def test_an_auth_configs_permissions_follow_the_added_tools(
         assert started.status_code == 200, started.text
         return parse_qs(urlsplit(str(started.json()["data"]["authorizeUrl"])).query)["scope"][0].split()
 
+    # A new app has every tool on, so its write permission is asked from the start; removing the write drops it.
+    assert "records:write" in await asked()
+    removed = await c.delete(f"/v1/apps/{sites}/tools/fields_sites_update_record", headers=admin(tenant))
+    assert removed.status_code == 200, removed.text
     assert "records:write" not in await asked()
 
     async def listed() -> list[str]:

@@ -35,8 +35,8 @@ from ..modules.tool_users import ToolUsers
 from ..store.connections import DEFAULT_VALUE, PLUGIN_APP, AccountNameTaken, plugin_of, split_config
 from .host import (
     PluginHost,
-    default_tools_added,
     filled_at_sign_in,
+    first_tools_on,
     fixed_fields,
     offered,
     per_account,
@@ -669,7 +669,7 @@ class PluginAccounts:
         return split_config(b.get("config_settings"), b.get("setting_modes"))
 
     async def start_binding(self, who: Caller, plugin: Plugin) -> dict[str, Any]:
-        """The team's binding of the plugin, made off when it has none, as a first turn-on makes it: its read tools
+        """The team's binding of the plugin, made off when it has none, as a first turn-on makes it: every tool
         added, and the installed version taken."""
         m = plugin.manifest
         found = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
@@ -683,8 +683,8 @@ class PluginAccounts:
 
     async def _first_binding(self, who: Caller, plugin: Plugin) -> None:
         m = plugin.manifest
-        # A new app hands agents its read tools only; a write tool waits until someone switches it on.
-        await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, default_tools_added(m))
+        # A new app hands agents every tool; its "Ask before changes" switch, not a missing tool, holds a write.
+        await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, first_tools_on(m))
         if self.host.versions:
             # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)

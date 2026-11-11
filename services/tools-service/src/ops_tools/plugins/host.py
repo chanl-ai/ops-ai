@@ -343,9 +343,11 @@ def tools_added(m: Manifest, binding: Mapping[str, Any] | None) -> set[str] | No
     return None if held is None else {m.operation(str(t)) for t in cast(list[Any], held)}
 
 
-def default_tools_added(m: Manifest) -> list[str]:
-    """What a new app starts with: its read tools added, its write tools left in the catalog until someone adds them."""
-    return sorted(t.name for t in m.tools if t.access == "read")
+def first_tools_on(m: Manifest) -> list[str]:
+    """What a new app starts with: every tool on, its writes included, so a person who connects it can write at once.
+    The app's "Ask before changes" switch (appsChangeWithoutAsking) keeps the person in chat asked before each write;
+    a binding made earlier keeps the list it holds."""
+    return sorted(t.name for t in m.tools)
 
 
 def tools_added_view(m: Manifest, binding: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -737,8 +739,8 @@ class PluginHost:
             by=by,
         )
         if b is None:
-            # A new app hands agents its read tools only, as turning it on does.
-            await self.bindings.set_tools(tenant_id, team, plugin.manifest.id, default_tools_added(plugin.manifest))
+            # A new app hands agents every tool, as turning it on does.
+            await self.bindings.set_tools(tenant_id, team, plugin.manifest.id, first_tools_on(plugin.manifest))
         if self.versions and not (b or {}).get("version"):
             await self.take_installed(tenant_id, team, plugin)
 
