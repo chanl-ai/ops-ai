@@ -15,8 +15,18 @@ const WRITE = `close_ticket_${RUN}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
+// Each policy change below raises the permission version, which refuses tokens issued before it (401
+// permissions_changed), so a person's headers sign them in again once and retry. Any other refusal throws: a refused
+// read must never count as "nothing ran".
+const signedIn = async (email, team) => Object.defineProperty(await as(email, team), 'renew', { value: () => as(email, team) });
 const call = async (method, url, headers, body) => {
-  const r = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const send = () => fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  let r = await send();
+  if (r.status === 401 && headers.renew) {
+    Object.assign(headers, await headers.renew());
+    r = await send();
+  }
+  if (!r.ok) throw new Error(`${method} ${new URL(url).pathname}: ${r.status} ${FLAT(await r.text().catch(() => '')).slice(0, 200)}`);
   return { status: r.status, data: (await r.json().catch(() => ({}))).data };
 };
 const FLAT = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
@@ -27,8 +37,8 @@ await withUiStack(
     const S = await as(SAM, 'team_security');
     await call('POST', `${tools}/v1/egress/hosts`, S, { value: stack.bank.host, note: 'uc-721' });
     await call('POST', `${tools}/v1/egress/ranges`, S, { value: stack.bank.range, note: 'uc-721' });
-    const J = await as(JAMES);
-    const P = await as(PRIYA);
+    const J = await signedIn(JAMES);
+    const P = await signedIn(PRIYA);
     const made = await call('POST', `${tools}/v1/tool-modules/blank`, J, { displayName: `Tickets ${RUN}`, name: `tickets-${RUN}`, type: 'http' });
     const moduleId = made.data?.id;
     await call('POST', `${tools}/v1/tool-modules/${moduleId}/operations`, J, { name: WRITE, description: 'Close a ticket', access: 'write', method: 'POST', url: `https://${stack.bank.host}/v1/accounts/{accountId}/holds` });
@@ -38,14 +48,11 @@ await withUiStack(
     const agent = (await call('POST', `${agents}/v1/agents`, J, { name: `Closer ${RUN}`, role: 'Closes tickets' })).data;
     const granted = (await call('PATCH', `${agents}/v1/agents/${agent.id}`, J, { toolIds: [WRITE] })).data;
     await call('POST', `${agents}/v1/agents/${agent.id}/publish-requests`, J, { version: granted.version, note: 'uc-721' });
-    const rowsOf = async () => {
-      const d = (await call('GET', `${tools}/v1/executions`, J)).data;
-      return (Array.isArray(d) ? d : d?.data ?? []).filter((r) => r.target === WRITE);
-    };
+    const rowsOf = async () => ((await call('GET', `${tools}/v1/executions?pageSize=200`, J)).data?.data ?? []).filter((r) => r.target === WRITE);
     const ran = async () => (await rowsOf()).filter((r) => r.status === 'ok' || r.effect === true);
 
     // The admin's switch, as Govern > Approvals saves it: on, ask the person, test accounts asked too.
-    const put = (value) => fetch(`${platform}/v1/policies/appChanges`, { method: 'PUT', headers: P, body: JSON.stringify({ value }) });
+    const put = (value) => call('PUT', `${platform}/v1/policies/appChanges`, P, { value }).then((r) => ({ ok: true, status: r.status }), (e) => ({ ok: false, status: String(e).slice(0, 300) }));
     const saved = await put({ ask: true, answer: 'person', reviewerRole: null, testAccountsNeverAsk: false });
     check('1 the admin turns asking on, with the person chosen', saved.ok, saved.status);
     // agents-service reads the tool directory through a 30-second cache; until it turns over an agent's write is
