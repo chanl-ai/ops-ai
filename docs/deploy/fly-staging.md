@@ -119,17 +119,24 @@ took about 21 minutes across 14 apps.
 
 ### On every merge
 
-Staging runs main. Every push to main of the public chanl-ai/ops-ai repository is tagged (`make release-tag`) and then
-deployed here with `make stg-deploy REF=<that commit>` by `.github/workflows/release-tag.yml`, one deploy at a time.
+Staging runs `develop`. When a push to `develop` passes `ci-ok`, the `staging` job of `.github/workflows/ci.yml` runs
+`make stg-deploy REF=<that commit>` (through `.github/actions/stg-deploy`, the same steps `release-tag.yml` uses). One
+deploy runs at a time: a newer merge replaces a deploy that is still waiting, and one already running finishes first.
+A push to `main` (a release) is tagged by `release-tag.yml` and deployed the same way.
 
 | To | Do |
 |---|---|
-| Put another commit on staging | Run the workflow by hand (Actions, release-tag, Run workflow) with that commit, tag or branch |
-| Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still tagged but not deployed |
-| Go back to main | Clear `STAGING_HOLD` and run the workflow by hand with `main`, or wait for the next merge |
+| Put another commit on staging | Run `release-tag` by hand (Actions, release-tag, Run workflow) with that commit, tag or branch |
+| Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still checked but not deployed |
+| Test a release on staging | Open the release PR from `develop` into `main`; while it is open, merges to `develop` skip the deploy with a notice. Merge or close it to resume |
+| Go back to `develop` | Clear `STAGING_HOLD`, or merge the release PR; the next merge to `develop` deploys |
 
-The deploy job needs three repository secrets and two repository variables, and is skipped with a notice while any is
-missing. The variables are the app names, written into `staging.env` on the runner:
+The local pin (`staging-pin` in the config folder, written by `repo.sh snapshot`) still stops `make stg-deploy` on the
+owner's machine; the runner has no such file, so it reads the open release PR and `STAGING_HOLD` instead.
+
+The deploy job runs in the GitHub environment `staging` (Settings, Environments) and needs three secrets and two
+variables there, and is skipped with a notice while any is missing. The variables are the app names, written into
+`staging.env` on the runner; the secrets are written to the files `stg_deploy.sh` reads and never printed:
 
 | Secret or variable | Value |
 |---|---|
@@ -140,12 +147,14 @@ missing. The variables are the app names, written into `staging.env` on the runn
 | `STAGING_DB_URL` | The contents of `<private-dir>/staging-db-url.txt` |
 | `STAGING_ADMIN_ENV` | The contents of `<private-dir>/staging-admin.env` |
 
+The runner installs Chromium (`playwright install --with-deps chromium`) for the click walk.
+
 ```
 fly tokens create deploy -a <your-app> -n "github ops-ai staging" -x 8760h
 fly tokens create deploy -a <app-prefix>-db -n "github ops-ai staging grants" -x 8760h
 ```
 
-Not yet run on GitHub: the comma-joined token and `fly ssh console` with a deploy token are checked on the first run.
+Not yet run on GitHub: the comma-joined token, `fly ssh console` with a deploy token, and the pin check are verified on the first run after the secrets are added.
 
 ## Idle, cold boot and memory
 
