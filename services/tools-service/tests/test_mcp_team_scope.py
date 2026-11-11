@@ -9,7 +9,7 @@ import contextvars
 from collections.abc import Coroutine
 from typing import Any
 
-from .test_mcp_server import Stack, stack  # noqa: F401  (the fixture)
+from .test_mcp_server import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]  (the fixture)
 
 
 def _in_empty_context[T](coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
