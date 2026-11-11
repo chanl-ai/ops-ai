@@ -29,7 +29,7 @@ Design: the several accounts per app design, B1.
 | 2 | A run acting for nobody names Mobile org · Maya | 403 ACCOUNT_NOT_YOURS; no query reaches Salesforce |
 | 3 | A run acting for Priya names it | 403 ACCOUNT_NOT_YOURS; nothing is sent |
 | 4 | A run acting for Maya names it | It runs in the EU org |
-| 5 | The Platform team has Brand org; a run in Operations names it | 404 ACCOUNT_NOT_FOUND; nothing is sent |
+| 5 | Wanjiru (Platform admin) gives the Platform team Brand org; a run in Operations names it | 404 ACCOUNT_NOT_FOUND; nothing is sent |
 
 ## What would make a step pass with the code broken
 
