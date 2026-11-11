@@ -39,7 +39,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope
 from ops_service_kit.ids import new_id
-from ops_service_kit.template_merge import FieldOutcome, apply, merge
+from ops_service_kit.template_merge import FieldOutcome, Strictness, apply, merge
 
 from ...store.agent_registry import SPEC_FIELDS
 from ...store.skills import LABELS as SKILL_LABELS
@@ -50,6 +50,8 @@ from ..auth import Principal, caller, require_builder
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..guardrails import check_config as check_guardrail
+from ..guardrails import guardrails
 from ..skills import check_content, skills
 
 # The agent create route's own checks, called rather than copied, so a copy is refused exactly as a create is.
@@ -67,17 +69,20 @@ resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
 
-Kind = Literal["agent", "skill", "workflow", "case_type", "task_type"]
-KINDS: tuple[Kind, ...] = ("agent", "skill", "workflow", "case_type", "task_type")
+Kind = Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
+KINDS: tuple[Kind, ...] = ("agent", "skill", "workflow", "guardrail", "case_type", "task_type")
 # Every kind this service keeps copy links for, which a detach looks a record up under.
 COPY_KINDS: tuple[Kind, ...] = KINDS
 # Every kind an app brings, for a preview that spans services.
-AnyKind = Literal["agent", "skill", "workflow", "case_type", "task_type", "document_type", "knowledge_source"]
+AnyKind = Literal[
+    "agent", "skill", "workflow", "guardrail", "case_type", "task_type", "document_type", "knowledge_source"
+]
 # The area a kind's create is checked in, as its create route checks it.
 AREAS: dict[str, str] = {
     "agent": "agents",
     "skill": "skills",
     "workflow": "workflows",
+    "guardrail": "guardrails",
     "case_type": "workflows",
     "task_type": "workflows",
 }
@@ -86,6 +91,7 @@ NOUNS: dict[str, tuple[str, str]] = {
     "agent": ("an agent", "agents"),
     "skill": ("a skill", "skills"),
     "workflow": ("a workflow", "workflows"),
+    "guardrail": ("a guardrail", "guardrails"),
     "case_type": ("a case type", "case types"),
     "task_type": ("a task type", "task types"),
     "document_type": ("a document type", "document types"),
@@ -96,6 +102,7 @@ SERVICES: dict[str, str] = {
     "agent": "agents",
     "skill": "agents",
     "workflow": "agents",
+    "guardrail": "agents",
     "case_type": "agents",
     "task_type": "agents",
     "document_type": "documents",
@@ -105,6 +112,7 @@ SERVICES: dict[str, str] = {
 ORDER: dict[str, int] = {
     "document_type": 0,
     "skill": 0,
+    "guardrail": 0,
     "knowledge_source": 0,
     "case_type": 0,
     "task_type": 0,
@@ -303,6 +311,9 @@ async def _record_name(rt: Runtime, kind: str, record_id: str) -> str | None:
             found = await skills(rt).version(record_id, int(row["version"]))
             content = cast(dict[str, Any], (found or {}).get("content") or {})
             return str(content.get("name") or "")
+        if kind == "guardrail":
+            found = await guardrails(rt).find(record_id)
+            return str(found["name"]) if found else None
     except NotFound:
         return None
     if kind in tt.TYPE_KINDS:
@@ -320,6 +331,10 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
         if kind == "skill":
             row = await skills(rt).row(record_id)
             found = await skills(rt).version(record_id, int(row["version"]))
+            return str(found["digest"]) if found else None
+        if kind == "guardrail":
+            row = await guardrails(rt).row(record_id)
+            found = await guardrails(rt).version(record_id, int(row["version"]))
             return str(found["digest"]) if found else None
     except NotFound:
         return None
@@ -443,6 +458,8 @@ async def _names_in_use(rt: Runtime, kind: str) -> set[str]:
         return {str(d["name"]).casefold() for d in await team_workflows(rt) if not d.get("archived_at")}
     if kind in tt.TYPE_KINDS:
         return await tt.names_in_use(rt, kind, current_team() or "")
+    if kind == "guardrail":
+        return {str(r["name"]).casefold() for r in await guardrails(rt).rows()}
     # A skill's name is unique by its slug, which the skill store refuses as name_taken itself.
     return set()
 
@@ -504,6 +521,19 @@ async def _make_skill(rt: Runtime, me: Principal, team: str, t: dict[str, Any], 
     b = cast(dict[str, Any], t.get("body") or {})
     content = await _skill_content(rt, team, t, body.name or str(b.get("name") or t["title"]), body.knowledge_bases)
     return await skills(rt).create(content, owner_team=team, team_id=team, origin="imported", by=me.email)
+
+
+async def _make_guardrail(rt: Runtime, me: Principal, team: str, t: dict[str, Any], name: str) -> str:
+    """An unpublished guardrail owned by the team, through the guardrail create route's own config checks."""
+    config = _guardrail_config(t)
+    return await guardrails(rt).create(
+        name=name, kind="blocked_topics", config=config, owner=str(t["plugin"]["title"]), team_id=team, by=me.email
+    )
+
+
+def _guardrail_config(t: dict[str, Any]) -> dict[str, Any]:
+    """The template's rule as a version holds it (check_config: normalised, refused when it could never fire)."""
+    return check_guardrail("blocked_topics", cast(dict[str, Any], t.get("body") or {}))
 
 
 def _pointed(definition: dict[str, Any], records: dict[str, str]) -> dict[str, Any]:
@@ -676,6 +706,13 @@ async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JS
             if e.code != "name_taken":
                 raise
             raise _name_taken(kind, name, str(t["plugin"]["title"])) from None
+    elif kind == "guardrail":
+        try:
+            record_id = await _make_guardrail(rt, me, team, t, name)
+        except Conflict as e:
+            if e.code != "name_taken":
+                raise
+            raise _name_taken(kind, name, str(t["plugin"]["title"])) from None
     elif kind in tt.TYPE_KINDS:
         record_id = await tt.make(rt, me, kind, t, name)
     else:
@@ -697,6 +734,8 @@ async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JS
         # workflow draft made here stays as an unused draft of the team's).
         if kind == "agent":
             await registry(rt).delete(record_id)
+        elif kind == "guardrail":
+            await guardrails(rt).delete(record_id)
         return ok({"copy": _copy_view(row), "created": False, "needs": []})
     needs = _needs(t, body.knowledge_bases, body.model_alias)
     return ok({"copy": _copy_view(row), "created": True, "needs": needs}, status=201)
@@ -787,11 +826,28 @@ async def plan_resources(rt: Rt, me: Me, body: PlanInput) -> JSONResponse:
 BINDINGS: dict[str, tuple[str, ...]] = {
     "agent": ("name", "model", "collections"),
     "skill": ("name", "slug", "knowledgeBases"),
+    # A guardrail's name is the record's, not a version field, so no version field is a binding.
+    "guardrail": (),
 }
 # The kind's own field list, from its store: the one list an update compares (store/agent_registry.py SPEC_FIELDS,
 # store/skills.py LABELS).
-FIELDS: dict[str, tuple[str, ...]] = {"agent": SPEC_FIELDS, "skill": tuple(SKILL_LABELS)}
-FIELD_LABELS: dict[str, str] = {**SKILL_LABELS, "toolIds": "tools", "collections": "knowledge bases"}
+FIELDS: dict[str, tuple[str, ...]] = {
+    "agent": SPEC_FIELDS,
+    "skill": tuple(SKILL_LABELS),
+    "guardrail": ("topics", "message", "scopes", "holdUntilChecked"),
+}
+FIELD_LABELS: dict[str, str] = {
+    **SKILL_LABELS,
+    "toolIds": "tools",
+    "collections": "knowledge bases",
+    "topics": "blocked topics",
+    "message": "refusal message",
+    "scopes": "topic scopes",
+    "holdUntilChecked": "hold the answer until checked",
+}
+# A merge never loosens a guardrail: when both sides changed the topic list, the team keeps the topics it added beside
+# the template's new ones.
+STRICT: dict[str, dict[str, Strictness]] = {"guardrail": {"topics": "union"}}
 
 
 def _base_of(kind: str, t: dict[str, Any], *, record_id_body: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -866,6 +922,9 @@ async def _newest(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any
     if kind == "agent":
         v = (await registry(rt).versions(record_id))[0]
         return cast(dict[str, Any], v["spec"]), v.get("published_at") is None
+    if kind == "guardrail":
+        v = (await guardrails(rt).versions(record_id))[0]
+        return cast(dict[str, Any], v["config"]), v.get("published_at") is None
     v = (await skills(rt).versions(record_id))[0]
     return cast(dict[str, Any], v["content"]), v.get("published_at") is None
 
@@ -893,6 +952,8 @@ async def _template_body(rt: Runtime, team: str, kind: str, t: dict[str, Any], y
             ) from e
         model, bases = str(yours.get("model") or ""), list(yours.get("collections") or [])
         return _spec_of(t, str(yours["name"]), model, tools, bases)
+    if kind == "guardrail":
+        return _guardrail_config(t)
     bases = list(yours.get("knowledgeBases") or [])
     return await _skill_content(rt, team, t, str(yours.get("name") or t["title"]), bases)
 
@@ -943,7 +1004,7 @@ async def _review(
         if base is None:
             base = await _legacy_base(rt, kind, record_id, row)
         fields = [f for f in FIELDS[kind] if f in template_body or (base is not None and f in base)]
-        outcomes = merge(base, yours, template_body, fields, bindings=BINDINGS[kind])
+        outcomes = merge(base, yours, template_body, fields, bindings=BINDINGS[kind], strict=STRICT.get(kind))
     elif kind in tt.TYPE_KINDS:
         yours, draft_open = await _newest_type(rt, kind, record_id)
         template_body = tt.body_of(kind, t)
@@ -983,6 +1044,9 @@ async def _save(rt: Runtime, me: Principal, kind: str, record_id: str, body: dic
     request names is never rewritten (the save opens the next version)."""
     if kind == "agent":
         return await registry(rt).save(record_id, body, by=me.email, note=note)
+    if kind == "guardrail":
+        # The guardrail store keeps no open draft to merge into: the update is the next version, a draft.
+        return await guardrails(rt).save(record_id, check_guardrail("blocked_topics", body), by=me.email, note=note)
     return await skills(rt).save_draft(record_id, body, by=me.email, note=note)
 
 
@@ -1031,6 +1095,8 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
         yours, _ = await _newest(rt, kind, copy)
         # A reset is the template's body with the copy's bindings, dropping every edit the team made.
         merged = template_body if mode == "reset" else apply(yours, outcomes, cast(dict[str, Any], choices))
+        if kind == "guardrail":
+            merged = check_guardrail("blocked_topics", merged)
         if merged != yours:
             version = await _save(rt, me, kind, copy, merged, note=note)
         base = copy_base(kind, template_body)

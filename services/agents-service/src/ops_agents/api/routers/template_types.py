@@ -133,8 +133,11 @@ def unflat(kind: str, merged: dict[str, Any], keys: list[str], name: str) -> dic
 def label(field: str, yours: Any, template: Any) -> str:
     if field in LABELS:
         return LABELS[field]
+    noun, sep, key = field.partition(":")
+    if not sep:
+        # A field of an agent or guardrail with no label of its own reads as its name.
+        return field
     named = cast(dict[str, Any], yours or template or {})
-    noun, _, key = field.partition(":")
     return f"{noun} {named.get('label') or named.get('name') or key}"
 
 
