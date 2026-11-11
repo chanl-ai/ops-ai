@@ -111,6 +111,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
 | `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, approvals, the access rules and the exceptions register |
+| `architecture/console-areas.md` | The console's four areas (Work, Build, Data, Govern), the cells that offer each page, the area switcher and chat's links back (switcher designed, not built) |
 | `architecture/logging-and-data-writes.md` | One JSON log line per event with ids and redaction (built), and the store helper for a person's edit with revision check, audit and outbox (designed) |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
