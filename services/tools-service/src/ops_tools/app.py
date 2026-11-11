@@ -37,7 +37,7 @@ from .held_hosts import install_held_hosts
 from .mcp_server import McpAdapter
 from .mocks import MockAnswers
 from .modules.directory import Directory
-from .modules.policy import WriteApprovals, app_ids, approves_own_writes
+from .modules.policy import RequesterMayDecide, WriteApprovals, app_ids, approves_own_writes
 from .modules.service import ModuleService
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash, registered_identities
 from .plugins.executor import PluginExecutor
@@ -198,6 +198,7 @@ def create_gateway_app(
     cors_origins: tuple[str, ...] = (),
     background: tuple[Callable[[], Coroutine[Any, Any, None]], ...] = (),
     write_approvals: WriteApprovals | None = None,
+    requester_policy: RequesterMayDecide | None = None,
     send_check: SendCheck | None = None,
     authenticator: Authenticator | None = None,
     directory: Directory | None = None,
@@ -217,6 +218,8 @@ def create_gateway_app(
     callers (ops_identity's shared dependency); by default it is built from Settings for audience "tools". `background`
     runs beside the server from start-up and is cancelled at shutdown (the copy of reviews into Reviews).
     `write_approvals` reads each team's toolWritesNeedApproval live; without it each write follows its registry flag.
+    `requester_policy` reads the tenant's requesterMayDecide live, so an approval the asker gave themselves is checked
+    again at the call; without it the dev policies decide.
     `authenticator` signs a module's calls in through its connection; without it a connection adds nothing.
     `directory` holds the teams the MCP adapter scopes each assistant's tools to; without it no /mcp.
     `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
@@ -281,6 +284,8 @@ def create_gateway_app(
         clock=clock,
         app_writes_wait=app_writes_wait,
         approver=approver,
+        # An approval the asker gave themselves counts only while today's policy lets an asker decide.
+        requester_may_decide=(requester_policy or RequesterMayDecide(None, dev=Settings().dev_policies)).allowed,
     )
     if modules is not None:
         # A tool page's Real run is this gateway's call, never a path of the registry's own.

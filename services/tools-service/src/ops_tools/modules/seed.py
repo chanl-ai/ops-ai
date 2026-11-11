@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
+from ops_access import write_waits
 from ops_identity.fastapi import DEV_TEAM
 from ops_store import isolation
 from ops_store.team_scope import acting_as
@@ -301,9 +302,8 @@ def runtime_module(
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # Declared on the tool; a write that declares nothing runs, as approvals are off by
-            # default.
-            "requires_approval": t["access"] != "read" and t.get("requires_approval") is True,
+            # Declared on the tool; a write that declares nothing waits.
+            "requires_approval": write_waits(t["access"], t.get("requires_approval")),
             "approvers": 1,
             "amount_max": None,
             "stub": {"ok": True},
@@ -579,8 +579,8 @@ def aggregates(
                     "masked_output": o.get("masked") or [],
                     "binding": o.get("binding"),
                     "rate_limit_per_min": o.get("rate") or 60,
-                    # Only a write the seed marks waits: approvals are off by default.
-                    "requires_approval": access == "write" and o.get("requiresApproval") is True,
+                    # A write the seed does not mark to run at once waits.
+                    "requires_approval": write_waits(access, o.get("requiresApproval")),
                     "approvers": int(base.get("approvers") or 1),
                     # Who approves a write when not the module's own team (Fraud Operations decides a wire hold).
                     **({"approver_team": base["approverTeam"]} if base.get("approverTeam") else {}),

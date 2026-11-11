@@ -229,7 +229,10 @@ def test_auth(settings: Settings, tenant: str, user: str, *, dev: bool) -> Auth:
     """The shared auth on this test's tenant: dev's fixed user, or production, where dev headers are refused and only
     a service token is accepted."""
     if dev:
-        return Auth.for_dev(settings, audience="tools", name=user, email=user, tenant_id=tenant)
+        # The dev caller carries OPS_DEV_POLICIES as the served app's dev identity does.
+        return Auth.for_dev(
+            settings, audience="tools", name=user, email=user, tenant_id=tenant, policies=settings.dev_policies
+        )
     dev_only = Auth.for_dev(settings, audience="tools", name=user, email=user, tenant_id=tenant)
     return Auth(Identity(audience="tools", jwks=no_keys, introspect=no_api_keys), dev_only.services)
 

@@ -277,8 +277,7 @@ class Tool(Strict):
     function: str | None = None
     knowledge: Literal["list_items", "get_item", "list_deleted", "list_changes", "list_scopes", "preview"] | None = None
     rate_limit_per_min: int = Field(default=60, ge=1, le=10_000)
-    # A write waits for a person's approval only when the plugin says so, or a team's policy turns approval on:
-    # approvals are off by default.
+    # Left out, a write waits for a person's approval; false runs it at once (a team's policy may still hold it).
     requires_approval: bool | None = None
     needs_person: bool = False
     scopes: list[str] = Field(default_factory=list[str])
@@ -305,11 +304,6 @@ class Tool(Strict):
         if self.function is not None and ":" not in self.function:
             raise ValueError(f"tool {self.name}: function is module:name")
         return self
-
-    @property
-    def waits(self) -> bool:
-        """Whether a call waits for approval: only a write the plugin marked requires_approval true."""
-        return self.access == "write" and self.requires_approval is True
 
 
 class Schedule(Strict):

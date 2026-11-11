@@ -102,7 +102,7 @@ async def test_the_line_names_only_switched_on_tools(
     await _signed_in(store, tenant, first, "priya@live.example")
     row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
     # A new app starts with every tool on; a tool switched off leaves the line.
-    assert row["canDo"] == "Reads: Read a record · Writes: Change a record", row["canDo"]
+    assert row["canDo"] == "Reads: Read a record · Writes, reviewed first: Change a record", row["canDo"]
     removed = await c.delete(f"/v1/apps/{SITES}/tools/fields_sites_update_record", headers=admin(tenant))
     assert removed.status_code == 200, removed.text
     row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)

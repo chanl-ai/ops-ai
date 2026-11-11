@@ -24,7 +24,7 @@ from ops_service_kit.ids import new_id, now_iso
 from .conftest import DEMO_PASSWORD, SignInRig
 
 DEFAULTS: dict[str, Any] = {
-    "requesterMayDecide": True,
+    "requesterMayDecide": False,
     "extractionFloor": 0.8,
     "stepUp": False,
     "publishReview": {},
@@ -81,13 +81,13 @@ async def test_a_new_workspace_has_every_policy_open_but_the_ai_uses_which_start
 async def test_a_change_is_audited_with_before_and_after_and_moves_the_permission_version(engine: AsyncEngine) -> None:
     db, t = TenantDb(engine), await tenant(engine)
     store, version = PolicyStore(db), await RoleStore(db).version(t)
-    assert await store.set(t, "requesterMayDecide", False, by=ADA, request_id="r1") == (True, False)
+    assert await store.set(t, "requesterMayDecide", True, by=ADA, request_id="r1") == (False, True)
     assert await store.set(t, "extractionFloor", 0.9, by=ADA, request_id="r2") == (0.8, 0.9)
     assert await store.set(t, "extractionFloor", None, by=ADA, request_id="r3") == (0.9, None)
-    assert await store.values(t) == {**DEFAULTS, "requesterMayDecide": False, "extractionFloor": None}
+    assert await store.values(t) == {**DEFAULTS, "requesterMayDecide": True, "extractionFloor": None}
     assert await RoleStore(db).version(t) == version + 3
     assert await audit(engine, t) == [
-        ("policy.set", "requesterMayDecide", {"before": True, "after": False}),
+        ("policy.set", "requesterMayDecide", {"before": False, "after": True}),
         ("policy.set", "extractionFloor", {"before": 0.8, "after": 0.9}),
         ("policy.set", "extractionFloor", {"before": 0.9, "after": None}),
     ]

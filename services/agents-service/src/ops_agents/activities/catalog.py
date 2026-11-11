@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from ops_access import write_waits
 from ops_agent_kernel.types import (
     TOOL_SEARCH_ABOVE,
     Access,
@@ -167,7 +168,7 @@ class ToolDefinition(_Model):
     requires_approval: bool | None = None
 
     def grant(self) -> ToolGrant:
-        waits = self.access == "write" and self.requires_approval is not False
+        waits = write_waits(self.access, self.requires_approval)
         return ToolGrant(self.name, self.server, self.description, self.access, self.input_schema, waits)
 
 

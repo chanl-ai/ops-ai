@@ -1,8 +1,9 @@
-"""The stricter rules an admin may switch on for a workspace. Each policy's default is open, the AI uses
-(aiSteps, taskAssist, checkBeforeSend) and each app's "Ask before changes" (appsChangeWithoutAsking) aside: a new
-workspace meets no control until an admin sets one, and every value is changed through `can(settings, manage)` in the
-security team. platform-service stores the values per tenant and puts them on every token; services read them there
-with `policy(p, key)`."""
+"""The rules an admin may set for a workspace, with each default in one place. Most defaults are open; the ones that
+hold something back are the approvals (requesterMayDecide off, and `write_waits`: a tool write waits unless its own
+setting says it runs at once), the AI uses (aiSteps, taskAssist, checkBeforeSend) and each app's "Ask before changes"
+(appsChangeWithoutAsking: no app listed, so a write in a chat asks the person). A team loosens any of them. Every value
+is changed through `can(settings, manage)` in the security team. platform-service stores the values per tenant and puts
+them on every token; services read them there with `policy(p, key)`."""
 
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from ops_identity import Principal
 @dataclass(frozen=True)
 class Policy:
     key: str
-    # The open value: the decision the policy names holds nothing back.
+    # The value a workspace has until an admin sets one.
     default: Any
     # One line, shown beside the switch.
     effect: str
@@ -53,8 +54,9 @@ DEFAULT_PUBLISH_MODE = "major"
 POLICIES: tuple[Policy, ...] = (
     Policy(
         "requesterMayDecide",
-        True,
-        "The person who asked for a decision may also make it. Off: someone else has to decide.",
+        # Off by default: someone other than the person who asked decides. A workspace that set it on keeps that.
+        False,
+        "The person who asked for a decision may also make it. Off (the default): someone else has to decide.",
         title="Requester may decide",
     ),
     Policy(
@@ -110,9 +112,8 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "toolWritesNeedApproval",
-        # Approvals are off by default: no team set, a write waits only when its tool's own switch
-        # is on or its app is listed in appWritesNeedApproval; when one waits, a person holding reviews.decide is not
-        # asked.
+        # No team set: each write follows its tool's own setting (write_waits), so a write with none waits and one
+        # switched to run at once runs. On, every write of the team waits, whatever its tool says.
         {},
         "Every tool write by the team waits for a person's approval, including the ones a tool lets run at once.",
         changed_by=("reviews", "manage"),
@@ -122,8 +123,9 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "appWritesNeedApproval",
-        # Off by default like every approval: a team lists the apps whose writes wait, by the id
-        # the Apps page shows (plugin:<id>, a connection's id, or module:<id>).
+        # None listed by default: each write follows its tool's own setting (write_waits). A team lists the apps whose
+        # writes wait even where a tool runs at once, by the id the Apps page shows (plugin:<id>, a connection's id, or
+        # module:<id>).
         {},
         "Writes from the listed apps wait for a person's approval. Other writes run unless their tool asks for one.",
         kind="names",
@@ -278,7 +280,7 @@ def check_value(key: str, value: Any) -> Any:
 
 
 def policy(p: Principal, key: str) -> Any:
-    """The policy's value for the caller's tenant, from the token; its open default when the token predates it."""
+    """The policy's value for the caller's tenant, from the token; its default when the token carries none."""
     return p.policies.get(key, BY_KEY[key].default)
 
 
@@ -293,6 +295,18 @@ def team_off(values: Any, team: str | None) -> bool:
     """Whether `team` turned a per-team switch that is on by default off (aiStepsMaskPersonalData): only an explicit
     false counts, so a team that set nothing keeps the protection."""
     return team is not None and isinstance(values, dict) and cast(dict[str, Any], values).get(team) is False
+
+
+def write_waits(access: str, requires_approval: bool | None) -> bool:
+    """Whether a call of a tool waits for a person's approval by the tool's own setting: a write waits unless its
+    setting is an explicit false (it runs at once); a read never does. Every place that turns a tool's setting into
+    a decision (the registry, plugin and seeded tools, the agents' catalogue) asks here, so the default is set once.
+
+    Args:
+        access: the tool's access class, "read" or "write" ("workflow" and others never wait here).
+        requires_approval: the tool's setting; None when it has none.
+    """
+    return access == "write" and requires_approval is not False
 
 
 def team_writes_need_approval(values: dict[str, Any], team: str | None) -> bool:
