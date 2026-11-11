@@ -807,6 +807,14 @@ class GroupRuleOut(Out):
     role: str
 
 
+class BreakGlassOut(Out):
+    user_id: str
+    email: str
+    added_by: str
+    added_at: str
+    last_used_at: str | None
+
+
 class GroupSettingsOut(Out):
     source: str | None
     map: list[GroupRuleOut]

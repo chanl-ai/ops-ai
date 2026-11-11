@@ -366,6 +366,21 @@ signin_grants = sa.Table(
     ),
     info=TENANT_SCOPED,
 )
+signin_break_glass = sa.Table(
+    "signin_break_glass",
+    metadata,
+    # The Security admins who may sign in by password while company sign-in is required (migration 0033, decision D7).
+    # A person who no longer holds settings.manage in the Security team is not counted, whatever this table holds.
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("user_id", sa.String(64), primary_key=True),
+    sa.Column("added_by", sa.String(64), nullable=False),
+    sa.Column("added_at", sa.String(40), nullable=False),
+    sa.Column("last_used_at", sa.String(40)),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "user_id"], ["users.tenant_id", "users.id"], name="fk_signin_break_glass_user", ondelete="CASCADE"
+    ),
+    info=TENANT_SCOPED,
+)
 # One verified owner per domain, so a domain's people go to one workspace's provider; a pending claim blocks nobody.
 sa.Index(
     "ux_signin_domains_verified",

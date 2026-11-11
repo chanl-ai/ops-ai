@@ -89,7 +89,7 @@ SMUDGED = pdf(
 
 
 def private_address() -> str:
-    import socket  # noqa: PLC0415
+    import socket
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("10.255.255.255", 1))

@@ -487,6 +487,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sign_in_providers_add_break_glass": {
+        "body": None,
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/settings/sign-in/break-glass/{user_id}",
+        "pathParams": ["user_id"],
+        "query": [],
+        "stream": False,
+    },
     "sign_in_providers_delete_signin_provider": {
         "body": None,
         "headers": [],
@@ -502,6 +511,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/settings/sign-in/secrets/{name}",
         "pathParams": ["name"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_list_break_glass": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/settings/sign-in/break-glass",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -547,6 +565,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/settings/sign-in/providers/{provider_id}/refresh",
         "pathParams": ["provider_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_remove_break_glass": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/settings/sign-in/break-glass/{user_id}",
+        "pathParams": ["user_id"],
         "query": [],
         "stream": False,
     },
@@ -1004,6 +1031,22 @@ class Operations:
         "Change Roles"
         return self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
+        "List Break Glass"
+        return self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_break_glass"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sign_in_providers_add_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Add Break Glass"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_add_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def sign_in_providers_remove_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Remove Break Glass"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_remove_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def sign_in_providers_verify_signin_domain(self, domain: str) -> ProviderOut:
         "Verify Signin Domain"
         return self._t.call(
@@ -1413,6 +1456,22 @@ class AsyncOperations:
     async def members_change_roles(self, body: RoleIn) -> BulkOut:
         "Change Roles"
         return await self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
+        "List Break Glass"
+        return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_break_glass"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sign_in_providers_add_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Add Break Glass"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_add_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_remove_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Remove Break Glass"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_remove_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def sign_in_providers_verify_signin_domain(self, domain: str) -> ProviderOut:
         "Verify Signin Domain"

@@ -15,7 +15,7 @@ from ops_platform.store.tables import audit_entries, members, users
 from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import IDP, SignInRig
-from .test_workspace_teams import _team
+from .test_workspace_teams import _team  # pyright: ignore[reportPrivateUsage]
 
 
 async def _provider(rig: SignInRig, domain: str, rules: list[dict[str, str]], **groups: Any) -> str:

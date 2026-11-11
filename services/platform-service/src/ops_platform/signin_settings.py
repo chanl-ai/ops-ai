@@ -23,6 +23,7 @@ from ops_service_kit.public_address import AddressRefused
 from ops_signin.dns import TxtResolver, record_value
 from ops_signin.saml_metadata import IdpMetadata, MetadataCertificate, MetadataRefused, certificate_of, read_metadata
 
+from .break_glass import BreakGlass
 from .sso import saml_addresses
 from .store.members import Actor
 from .store.signin import (
@@ -230,6 +231,19 @@ class SignInSettings:
     console_url: str | None = None
     # Reads providers' metadata (a URL through the public-address guard, or a file).
     metadata: ProviderMetadata | None = None
+    # Company sign-in required and its break-glass accounts: turning off the only way in is refused.
+    break_glass: BreakGlass | None = None
+
+    async def _keep_a_way_in(self, before: Provider | None, after_enabled: bool) -> None:
+        if (
+            self.break_glass is not None
+            and before is not None
+            and before.kind != PASSWORD
+            and before.enabled
+            and not after_enabled
+            and before.verified_domains
+        ):
+            await self.break_glass.guard_last_provider(before.tenant_id)
 
     async def read_metadata(self, actor: Actor, *, url: str | None, xml: str | None) -> dict[str, Any]:
         """What a provider's metadata says, for the admin to check before saving; saves nothing."""
@@ -362,6 +376,7 @@ class SignInSettings:
                 "keep" if before else "remove"
             )
             config["groups"] = {"source": groups.get("source"), "onMissing": groups.get("onMissing") or kept}
+        await self._keep_a_way_in(before, bool(body.get("enabled", True)))
         # A provider keeps the addresses it was created with; a new company provider gets its own.
         sp_id = before.sp_id if before else (new_id("ssp") if kind != PASSWORD else None)
         p = Provider(
@@ -398,6 +413,7 @@ class SignInSettings:
 
     async def delete(self, actor: Actor, provider_id: str) -> None:
         await self.members.require_admin(actor, "settings", "manage")
+        await self._keep_a_way_in(await self.store.provider(actor.tenant_id, provider_id), False)
         gone = await self.store.delete_provider(
             actor.tenant_id, provider_id, actor=actor.user_id, at=_iso(datetime.now(UTC)), request_id=actor.request_id
         )

@@ -276,6 +276,7 @@ fails the commit until it is classified.
 |---|---|---|---|---|---|
 | `requesterMayDecide` | on | yes | The person who asked for, saved or started a decision may take it; off: 403 `own_request` | `settings.manage` (Security team) | no (row E29) |
 | `stepUp` | off | yes | Every approver steps up, besides operations that ask for it | `settings.manage` | no |
+| `companySignInRequired` | off | yes | People on the workspace's verified company domains sign in only through its provider; the named break-glass Security admins (at most three) keep a password. Cannot turn on with nobody on the list (409 `break_glass_none`) | `settings.manage` | no |
 | `chatThreadsOwnerOnly` | on | no (row E02) | A chat thread is read only by whoever started it, admins included | `settings.manage` | no |
 | `publishReview` | `{}`: every area `major` | no (row E01) | Per team and area: `always`, `major` or `never` | `reviews.manage` | yes |
 | `toolWritesNeedApproval` | `{}`: off | yes | Every tool write of the team waits for a person, including those an operation lets run at once | `reviews.manage` | yes |

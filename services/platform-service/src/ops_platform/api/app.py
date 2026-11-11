@@ -48,11 +48,13 @@ from ..acting_for import ActingFor
 from ..api_keys import ApiKeys
 from ..audit_log import AuditReader
 from ..auth import Auth, Issued, Keys, principal_from_claims
+from ..break_glass import REQUIRED, BreakGlass
 from ..passwords import Passwords, email_key_from
 from ..policies import Policies
 from ..roles import Roles
 from ..signin_options import SignInOptions
 from ..signin_settings import ProviderMetadata, SignInSettings
+from ..signin_watch import SecurityNotices
 from ..sso import Sso
 from ..store.audit import AuditLog, record_delivered
 from ..store.holders import HolderStore
@@ -85,6 +87,7 @@ from .schemas import (
     AuditEventOut,
     AuditKind,
     AuditPage,
+    BreakGlassOut,
     BulkOut,
     DeleteIn,
     DevPerson,
@@ -693,6 +696,15 @@ def create_public_app(
         who = await store.user(tenant, person_id)
         return ok(view | ({"name": who.name, "email": who.email} if who else {}))
 
+    notices = SecurityNotices(signin_store, holder_store, WorkspaceStore(store.db), sign.mail, sign.console_url)
+
+    async def tell_security(tenant_id: str, target: str, subject: str, body: str) -> None:
+        await notices.tell(
+            tenant_id, action="signin.break_glass_told", target=target, subject=subject, body=body, once=new_id("bg")
+        )
+
+    break_glass = BreakGlass(signin_store, holder_store, WorkspaceStore(store.db), policy_store, people, tell_security)
+    passwords.break_glass = break_glass
     signin_settings = SignInSettings(
         signin_store,
         people,
@@ -702,6 +714,7 @@ def create_public_app(
         public_url=sign.public_url,
         console_url=sign.console_url,
         metadata=ProviderMetadata(signin_store, sso.guarded_get),
+        break_glass=break_glass,
     )
 
     @app.get(
@@ -815,7 +828,7 @@ def create_public_app(
         its provider. 422 `domain_unverified` with what DNS held, 409 `domain_taken` when another workspace has it."""
         return ok(await signin_settings.verify_domain(actor, domain.lower()))
 
-    policies = Policies(policy_store, people)
+    policies = Policies(policy_store, people, guards={REQUIRED: break_glass.guard_policy})
 
     @app.get("/v1/policies", tags=["policies"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
     async def list_policies(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -899,6 +912,41 @@ def create_public_app(
     ) -> Response:
         await signin_settings.delete(actor, provider_id)
         return Response(status_code=204)
+
+    @app.get(
+        "/v1/settings/sign-in/break-glass",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[BreakGlassOut]],
+        responses=ERRORS,
+    )
+    async def list_break_glass(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The Security admins who may sign in by password while company sign-in is required."""
+        return ok(await break_glass.list(actor))
+
+    @app.put(
+        "/v1/settings/sign-in/break-glass/{user_id}",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[BreakGlassOut]],
+        responses=ERRORS,
+    )
+    async def add_break_glass(  # pyright: ignore[reportUnusedFunction]
+        user_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Adds a Security admin to the list (at most three); 422 `break_glass_not_security_admin`,
+        `break_glass_full`. Returns the list."""
+        return ok(await break_glass.add(actor, user_id))
+
+    @app.delete(
+        "/v1/settings/sign-in/break-glass/{user_id}",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[BreakGlassOut]],
+        responses=ERRORS,
+    )
+    async def remove_break_glass(  # pyright: ignore[reportUnusedFunction]
+        user_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Takes a person off the list; 409 `break_glass_last` while company sign-in is required. Returns the list."""
+        return ok(await break_glass.remove(actor, user_id))
 
     team_admin = TeamAdmin(
         TeamAdminStore(store.db),

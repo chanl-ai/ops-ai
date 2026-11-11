@@ -78,6 +78,14 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class BreakGlassOut(TypedDict, closed=True):
+    addedAt: str
+    addedBy: str
+    email: str
+    lastUsedAt: str | None
+    userId: str
+
+
 class CellIn(TypedDict, closed=True):
     action: str
     area: str
@@ -107,6 +115,11 @@ class DeleteIn(TypedDict, closed=True):
 
 class EnvelopeAuditEventOut(TypedDict, closed=True):
     data: AuditEventOut
+    success: Literal[True]
+
+
+class EnvelopeListBreakGlassOut(TypedDict, closed=True):
+    data: list[BreakGlassOut]
     success: Literal[True]
 
 

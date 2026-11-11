@@ -546,7 +546,7 @@ def forms(api: httpx.Client) -> None:
     shown = got(public) or {}
     days = 0.0
     if form.get("expiresAt"):
-        from datetime import UTC, datetime  # noqa: PLC0415
+        from datetime import UTC, datetime
 
         days = (datetime.fromisoformat(str(form["expiresAt"]).replace("Z", "+00:00")) - datetime.now(UTC)).days
     check(

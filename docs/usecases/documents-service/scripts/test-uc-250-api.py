@@ -75,7 +75,7 @@ def read(documents: httpx.Client, fid: str, body: dict[str, Any]) -> dict[str, A
 def main() -> None:
     sys.path.insert(0, str(DOCS / "src"))
     # The service's own comparison, on fields carrying the version's date order as a read's fields do.
-    from ops_documents.document_types import dated, matches  # noqa: PLC0415
+    from ops_documents.document_types import dated, matches
 
     kinds = seeded()
     with (

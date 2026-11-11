@@ -21,6 +21,9 @@ each `member.group` entry becomes a `group` grant naming the provider's one rule
 role, or naming no rule when no single rule explains it; it still counts as given by groups. A membership with no
 entry at all counts as given by hand and is never removed by a sign-in.
 
+Break-glass. `signin_break_glass` names the Security admins who may sign in by password while the workspace's
+`companySignInRequired` policy is on, with when each last did.
+
 Revision ID: 0033_saml_sign_in
 Revises: 0032_webhooks_usage_cells
 """
@@ -56,7 +59,7 @@ WATCH_BODY = (
     "SELECT p.tenant_id, p.id FROM public.signin_providers p JOIN public.tenants t ON t.id = p.tenant_id "
     "WHERE p.kind = 'saml' AND t.status = 'active'"
 )
-TABLES = ("signin_certificates", "signin_group_rules", "signin_grants")
+TABLES = ("signin_certificates", "signin_group_rules", "signin_grants", "signin_break_glass")
 FUNCTIONS = {SIGNATURE: (RETURNS, BODY), WATCH: (WATCH_RETURNS, WATCH_BODY)}
 
 
@@ -215,6 +218,20 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
     )
+    op.create_table(
+        "signin_break_glass",
+        sa.Column("tenant_id", sa.String(64), primary_key=True),
+        sa.Column("user_id", sa.String(64), primary_key=True),
+        sa.Column("added_by", sa.String(64), nullable=False),
+        sa.Column("added_at", sa.String(40), nullable=False),
+        sa.Column("last_used_at", sa.String(40)),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "user_id"],
+            ["users.tenant_id", "users.id"],
+            name="fk_signin_break_glass_user",
+            ondelete="CASCADE",
+        ),
+    )
     _backfill()
     _backfill_groups()
     if op.get_bind().dialect.name != "postgresql":
@@ -241,6 +258,7 @@ def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         for signature in FUNCTIONS:
             op.execute(f"DROP FUNCTION {signature}")
+    op.drop_table("signin_break_glass")
     op.drop_table("signin_grants")
     op.drop_table("signin_group_rules")
     op.drop_table("signin_certificates")

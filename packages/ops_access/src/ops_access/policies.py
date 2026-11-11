@@ -83,6 +83,14 @@ POLICIES: tuple[Policy, ...] = (
         title="Publish reviews",
     ),
     Policy(
+        "companySignInRequired",
+        # Off: a password follows the sign-in providers, as before company sign-in could be required.
+        False,
+        "People on the workspace's verified company domains sign in only through the company's provider; named "
+        "break-glass Security admins keep a password. Off: passwords follow the sign-in providers.",
+        title="Company sign-in required",
+    ),
+    Policy(
         "chatThreadsOwnerOnly",
         # People's chats stay private by default; off lets the team's admins read them.
         True,

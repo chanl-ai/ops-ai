@@ -37,6 +37,7 @@ from .tables import (
     password_resets,
     role_assignments,
     sessions,
+    signin_break_glass,
     signin_certificates,
     signin_domains,
     signin_email_failures,
@@ -372,6 +373,54 @@ class SignInStore:
                 detail={},
             )
         return True
+
+    # ── Break-glass ──
+
+    async def break_glass(self, tenant_id: str) -> list[dict[str, Any]]:
+        """The people on the break-glass list, with their email; whether each still counts is the caller's check."""
+        b = signin_break_glass.c
+        q = (
+            sa.select(b.user_id, users.c.email, b.added_by, b.added_at, b.last_used_at)
+            .join(users, sa.and_(users.c.id == b.user_id, users.c.status == "active"))
+            .order_by(b.added_at)
+        )
+        async with self.db.tenant_tx(tenant_id) as c:
+            rows = (await c.execute(q)).all()
+        keys = ("userId", "email", "addedBy", "addedAt", "lastUsedAt")
+        return [dict(zip(keys, (str(r[0]), str(r[1]), str(r[2]), str(r[3]), r[4]), strict=True)) for r in rows]
+
+    async def add_break_glass(self, tenant_id: str, user_id: str, *, actor: str, at: str, request_id: str) -> None:
+        async with self.db.tenant_tx(tenant_id) as c:
+            held = await c.execute(
+                sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
+            )
+            if held.first() is None:
+                await c.execute(
+                    signin_break_glass.insert().values(
+                        tenant_id=tenant_id, user_id=user_id, added_by=actor, added_at=at
+                    )
+                )
+            await _record_break_glass(
+                c, tenant_id, user_id, "signin.break_glass_added", actor=actor, request_id=request_id
+            )
+
+    async def remove_break_glass(self, tenant_id: str, user_id: str, *, actor: str, request_id: str) -> bool:
+        async with self.db.tenant_tx(tenant_id) as c:
+            done = await c.execute(signin_break_glass.delete().where(signin_break_glass.c.user_id == user_id))
+            if done.rowcount:
+                await _record_break_glass(
+                    c, tenant_id, user_id, "signin.break_glass_removed", actor=actor, request_id=request_id
+                )
+        return bool(done.rowcount)
+
+    async def break_glass_used(self, tenant_id: str, user_id: str, *, at: str, request_id: str) -> None:
+        async with self.db.tenant_tx(tenant_id) as c:
+            await c.execute(
+                signin_break_glass.update().where(signin_break_glass.c.user_id == user_id).values(last_used_at=at)
+            )
+            await _record_break_glass(
+                c, tenant_id, user_id, "signin.break_glass_used", actor=user_id, request_id=request_id
+            )
 
     async def team_exists(self, tenant_id: str, team_id: str) -> bool:
         async with self.db.tenant_tx(tenant_id) as c:
@@ -996,8 +1045,25 @@ async def _keep_claims(c: AsyncConnection, p: Provider, at: str) -> None:
             raise DomainListedError(d)
 
 
+async def _record_break_glass(
+    c: AsyncConnection, tenant_id: str, user_id: str, action: str, *, actor: str, request_id: str
+) -> None:
+    await record(
+        c,
+        tenant_id=tenant_id,
+        team_id=None,
+        actor=actor,
+        action=action,
+        target_kind="user",
+        target_id=user_id,
+        request_id=request_id,
+        detail={},
+    )
+
+
 async def _holds_admin(c: AsyncConnection, user_id: str) -> bool:
-    """Whether the person is Admin of any team, by membership or by a grant."""
+    """Whether the person is Admin of any team, by membership or by a grant, or on the break-glass list: none of them
+    is ever linked to a provider by the email it asserts."""
     member = sa.select(members.c.id).where(
         members.c.user_id == user_id, members.c.role == "admin", members.c.status == "active"
     )
@@ -1006,7 +1072,8 @@ async def _holds_admin(c: AsyncConnection, user_id: str) -> bool:
         role_assignments.c.subject_id == user_id,
         role_assignments.c.role_id == "admin",
     )
-    return (await c.execute(member.union_all(granted).limit(1))).first() is not None
+    listed = sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
+    return (await c.execute(member.union_all(granted, listed).limit(1))).first() is not None
 
 
 async def _add_certificates(

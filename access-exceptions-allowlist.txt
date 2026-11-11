@@ -54,6 +54,7 @@ packages/ops_access/src/ops_access/policies.py policy-default aiSteps={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default aiStepsMaskPersonalData={} 1 E34
 packages/ops_access/src/ops_access/policies.py policy-default chatThreadsOwnerOnly=true 1 E02
 packages/ops_access/src/ops_access/policies.py policy-default checkBeforeSend={} 1 E03
+packages/ops_access/src/ops_access/policies.py policy-default companySignInRequired=false 1 open
 packages/ops_access/src/ops_access/policies.py policy-default egressNewHosts="ask_security" 1 E48
 packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.8 1 open
 packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open
@@ -69,6 +70,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 # 409 codes, each classified once (`* conflict <code> 0 state`): the record is in the wrong state, so the refusal is not
 # an access decision. A 409 that decides by who made a record gets a path line and a register row instead. A new code
 # fails until it is classified here; a code no 409 carries any more is stale. An access-deciding 409 carries its own code.
+* conflict account_in_use 0 state
 * conflict address_taken 0 state
 * conflict admin_holds_every_cell 0 state
 * conflict agent_paused 0 state
@@ -78,13 +80,14 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict already_resumed 0 state
 * conflict app_in_use 0 state
 * conflict archived_too_recently 0 state
+* conflict break_glass_last 0 state
+* conflict break_glass_none 0 state
 * conflict budget_paused 0 state
 * conflict builtin_role 0 state
 * conflict channel_managed_elsewhere 0 state
 * conflict channel_retired 0 state
 * conflict conflict 0 state
 * conflict connect_wait 0 state
-* conflict account_in_use 0 state
 * conflict connection_in_use 0 state
 * conflict connection_secret 0 state
 * conflict copy_edited 0 state
@@ -102,10 +105,12 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict file_not_ready 0 state
 * conflict form_needs_inputs 0 state
 * conflict guardrail_pinned 0 state
+* conflict host_waiting 0 state
 * conflict in_use 0 state
 * conflict invite_expired 0 state
 * conflict invite_used 0 state
 * conflict key_in_use 0 state
+* conflict last_sign_in_method 0 state
 * conflict live_workflows 0 state
 * conflict mailbox_in_use 0 state
 * conflict name_taken 0 state
@@ -152,7 +157,6 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict stale_pause 0 state
 * conflict stale_version 0 state
 * conflict sync_running 0 state
-* conflict host_waiting 0 state
 * conflict target_in_use 0 state
 * conflict team_archived 0 state
 * conflict team_name_taken 0 state

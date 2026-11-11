@@ -375,6 +375,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/platform-service/oidc-sign-in-creates-a-chat-user.md` | uc-161: a first OIDC sign-in makes one chat-only member; the console offers SSO for the email |
 | `usecases/platform-service/saml-sign-in-and-step-up.md` | uc-162: SAML sign-in, and a step-up at the same provider that must ask again |
 | `usecases/platform-service/saml-group-grants-and-removal.md` | uc-711: leaving a provider group ends only the membership that group gave |
+| `usecases/platform-service/company-sign-in-required-and-break-glass.md` | uc-712: company sign-in required, with a break-glass Security admin |
 | `usecases/platform-service/wrong-sign-in-provider-refused.md` | uc-163: a password in an SSO-only workspace, another provider's answer and a reused code are refused |
 | `usecases/platform-service/workspace-admins-manage-teams.md` | uc-164: workspace admins create, rename, archive and restore teams; an archived team leaves tokens |
 | `usecases/platform-service/workspace-security-default-teams-and-groups.md` | uc-212: a workspace sets its security and default teams; SSO groups map new people to teams |
