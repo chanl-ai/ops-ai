@@ -322,6 +322,18 @@ export const documentsOperations = {
     "query": [],
     "stream": false
   },
+  "resources_detach_copy": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies/{copy}/detach",
+    "pathParams": [
+      "resource",
+      "copy"
+    ],
+    "query": [],
+    "stream": false
+  },
   "resources_review_update": {
     "body": null,
     "headers": [],

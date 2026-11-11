@@ -39,7 +39,10 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope
 from ops_service_kit.ids import new_id
+from ops_service_kit.template_merge import FieldOutcome, Strictness, apply, merge
 
+from ...store.agent_registry import SPEC_FIELDS
+from ...store.skills import LABELS as SKILL_LABELS
 from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team
 from ..agent_registry import GUARDRAILS, registry
@@ -47,13 +50,17 @@ from ..auth import Principal, caller, require_builder
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..guardrails import check_config as check_guardrail
+from ..guardrails import guardrails
 from ..skills import check_content, skills
 
 # The agent create route's own checks, called rather than copied, so a copy is refused exactly as a create is.
 from . import agents as agent_routes
+from . import template_types as tt
 from .agents import require_known_alias
 from .engine import DefinitionInput, create_definition, definitions
 from .skills import SkillCreateInput
+from .tool_catalog import known_tools
 
 router = APIRouter(prefix="/v1/templates", tags=["templates"])
 # Add to team in the screen's words: a resource is an agent, skill or workflow an app brings, copied into the
@@ -62,17 +69,31 @@ resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
 
-Kind = Literal["agent", "skill", "workflow"]
-KINDS: tuple[Kind, ...] = ("agent", "skill", "workflow")
+Kind = Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
+KINDS: tuple[Kind, ...] = ("agent", "skill", "workflow", "guardrail", "case_type", "task_type")
+# Every kind this service keeps copy links for, which a detach looks a record up under.
+COPY_KINDS: tuple[Kind, ...] = KINDS
 # Every kind an app brings, for a preview that spans services.
-AnyKind = Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+AnyKind = Literal[
+    "agent", "skill", "workflow", "guardrail", "case_type", "task_type", "document_type", "knowledge_source"
+]
 # The area a kind's create is checked in, as its create route checks it.
-AREAS: dict[str, str] = {"agent": "agents", "skill": "skills", "workflow": "workflows"}
+AREAS: dict[str, str] = {
+    "agent": "agents",
+    "skill": "skills",
+    "workflow": "workflows",
+    "guardrail": "guardrails",
+    "case_type": "workflows",
+    "task_type": "workflows",
+}
 # What a kind is called in a sentence a person reads.
 NOUNS: dict[str, tuple[str, str]] = {
     "agent": ("an agent", "agents"),
     "skill": ("a skill", "skills"),
     "workflow": ("a workflow", "workflows"),
+    "guardrail": ("a guardrail", "guardrails"),
+    "case_type": ("a case type", "case types"),
+    "task_type": ("a task type", "task types"),
     "document_type": ("a document type", "document types"),
     "knowledge_source": ("a knowledge source", "knowledge sources"),
 }
@@ -81,11 +102,23 @@ SERVICES: dict[str, str] = {
     "agent": "agents",
     "skill": "agents",
     "workflow": "agents",
+    "guardrail": "agents",
+    "case_type": "agents",
+    "task_type": "agents",
     "document_type": "documents",
     "knowledge_source": "kb",
 }
 # A preview's add order: what nothing depends on first, so every copy finds the copies it needs.
-ORDER: dict[str, int] = {"document_type": 0, "skill": 0, "knowledge_source": 0, "agent": 1, "workflow": 2}
+ORDER: dict[str, int] = {
+    "document_type": 0,
+    "skill": 0,
+    "guardrail": 0,
+    "knowledge_source": 0,
+    "case_type": 0,
+    "task_type": 0,
+    "agent": 1,
+    "workflow": 2,
+}
 State = Literal["available", "added", "update_available", "removed_upstream"]
 MAX_PLAN = 50
 
@@ -120,6 +153,8 @@ class CopyRef(WireModel):
     source: str
     template_id: str
     version: int
+    # Set once the team detached the copy: it is the team's own and takes no updates.
+    detached_at: str | None = None
 
 
 class AddCell(WireModel):
@@ -213,24 +248,6 @@ class Plan(WireModel):
     ready: bool
 
 
-class UpdateInput(WireModel):
-    # The person saw that the update does not carry the team's edits, and takes it anyway.
-    confirm: bool = False
-
-
-class UpdateReview(WireModel):
-    copy_: CopyRef = Field(alias="copy")
-    # The version the copy was made from, and the one the app ships now.
-    from_version: int
-    to_version: int
-    # The fields the new template changes against the copy as it was made.
-    changes: list[str]
-    # The fields the team changed in its copy since; the new draft does not carry them.
-    edits: list[str]
-    # True once the update made the copy's new draft version.
-    taken: bool = False
-
-
 class TemplateNotFound(ApiError):
     status = 404
     code = "template_not_found"
@@ -258,8 +275,8 @@ async def _offered(rt: Runtime, team: str) -> list[dict[str, Any]]:
 
 
 def _copy_view(row: dict[str, Any]) -> dict[str, Any]:
-    keys = ("id", "kind", "record_id", "source", "template_id", "version")
-    return CopyRef.model_validate({k: row[k] for k in keys}).model_dump(by_alias=True)
+    keys = ("id", "kind", "record_id", "source", "template_id", "version", "detached_at")
+    return CopyRef.model_validate({k: row.get(k) for k in keys}).model_dump(by_alias=True)
 
 
 def _may_add(me: Principal, kind: str, team: str) -> bool:
@@ -294,8 +311,13 @@ async def _record_name(rt: Runtime, kind: str, record_id: str) -> str | None:
             found = await skills(rt).version(record_id, int(row["version"]))
             content = cast(dict[str, Any], (found or {}).get("content") or {})
             return str(content.get("name") or "")
+        if kind == "guardrail":
+            found = await guardrails(rt).find(record_id)
+            return str(found["name"]) if found else None
     except NotFound:
         return None
+    if kind in tt.TYPE_KINDS:
+        return await tt.name(rt, kind, record_id)
     found = await definitions(rt).get(record_id, team=current_team())
     return str(found["name"]) if found else None
 
@@ -310,8 +332,14 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
             row = await skills(rt).row(record_id)
             found = await skills(rt).version(record_id, int(row["version"]))
             return str(found["digest"]) if found else None
+        if kind == "guardrail":
+            row = await guardrails(rt).row(record_id)
+            found = await guardrails(rt).version(record_id, int(row["version"]))
+            return str(found["digest"]) if found else None
     except NotFound:
         return None
+    if kind in tt.TYPE_KINDS:
+        return await tt.digest(rt, kind, record_id)
     found = await definitions(rt).get(record_id, team=current_team())
     return str(found["digest"]) if found else None
 
@@ -428,6 +456,10 @@ async def _names_in_use(rt: Runtime, kind: str) -> set[str]:
         return {name.casefold() for name, _ in named.values()}
     if kind == "workflow":
         return {str(d["name"]).casefold() for d in await team_workflows(rt) if not d.get("archived_at")}
+    if kind in tt.TYPE_KINDS:
+        return await tt.names_in_use(rt, kind, current_team() or "")
+    if kind == "guardrail":
+        return {str(r["name"]).casefold() for r in await guardrails(rt).rows()}
     # A skill's name is unique by its slug, which the skill store refuses as name_taken itself.
     return set()
 
@@ -489,6 +521,19 @@ async def _make_skill(rt: Runtime, me: Principal, team: str, t: dict[str, Any], 
     b = cast(dict[str, Any], t.get("body") or {})
     content = await _skill_content(rt, team, t, body.name or str(b.get("name") or t["title"]), body.knowledge_bases)
     return await skills(rt).create(content, owner_team=team, team_id=team, origin="imported", by=me.email)
+
+
+async def _make_guardrail(rt: Runtime, me: Principal, team: str, t: dict[str, Any], name: str) -> str:
+    """An unpublished guardrail owned by the team, through the guardrail create route's own config checks."""
+    config = _guardrail_config(t)
+    return await guardrails(rt).create(
+        name=name, kind="blocked_topics", config=config, owner=str(t["plugin"]["title"]), team_id=team, by=me.email
+    )
+
+
+def _guardrail_config(t: dict[str, Any]) -> dict[str, Any]:
+    """The template's rule as a version holds it (check_config: normalised, refused when it could never fire)."""
+    return check_guardrail("blocked_topics", cast(dict[str, Any], t.get("body") or {}))
 
 
 def _pointed(definition: dict[str, Any], records: dict[str, str]) -> dict[str, Any]:
@@ -642,7 +687,8 @@ async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JS
     kind = cast(Kind, t["kind"])
     _require_add(me, kind, team)
     copies = TemplateCopies(rt.db)
-    held = await copies.live(source, template_id, int(t["version"]))
+    # Any version: a copy follows its template across versions and takes a newer one through an update.
+    held = await copies.live(source, template_id)
     if held is not None:
         if await _record_exists(rt, kind, str(held["record_id"])):
             return ok({"copy": _copy_view(held), "created": False, "needs": []})
@@ -660,6 +706,15 @@ async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JS
             if e.code != "name_taken":
                 raise
             raise _name_taken(kind, name, str(t["plugin"]["title"])) from None
+    elif kind == "guardrail":
+        try:
+            record_id = await _make_guardrail(rt, me, team, t, name)
+        except Conflict as e:
+            if e.code != "name_taken":
+                raise
+            raise _name_taken(kind, name, str(t["plugin"]["title"])) from None
+    elif kind in tt.TYPE_KINDS:
+        record_id = await tt.make(rt, me, kind, t, name)
     else:
         record_id = await _make_workflow(rt, me, t, body, records)
     row, made = await copies.add(
@@ -672,12 +727,15 @@ async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JS
         by=me.email,
         digest=cast(str | None, t.get("digest")),
         record_digest=await _record_digest(rt, kind, record_id),
+        base=_base_of(kind, t, record_id_body=(await _newest(rt, kind, record_id))[0] if kind in FIELDS else None),
     )
     if not made:
         # Another install of this version won the race: its copy stands, and the agent made here goes (a skill or
         # workflow draft made here stays as an unused draft of the team's).
         if kind == "agent":
             await registry(rt).delete(record_id)
+        elif kind == "guardrail":
+            await guardrails(rt).delete(record_id)
         return ok({"copy": _copy_view(row), "created": False, "needs": []})
     needs = _needs(t, body.knowledge_bases, body.model_alias)
     return ok({"copy": _copy_view(row), "created": True, "needs": needs}, status=201)
@@ -764,30 +822,164 @@ async def plan_resources(rt: Rt, me: Me, body: PlanInput) -> JSONResponse:
     return ok(Plan.model_validate({"items": items, "ready": ready}).model_dump(by_alias=True))
 
 
-def _fields_changed(before: dict[str, Any], after: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
-    return [k for k in keys if before.get(k) != after.get(k)]
+# The fields a team's copy always keeps as its own, per kind: never part of an update and left out of the base.
+BINDINGS: dict[str, tuple[str, ...]] = {
+    "agent": ("name", "model", "collections"),
+    "skill": ("name", "slug", "knowledgeBases"),
+    # A guardrail's name is the record's, not a version field, so no version field is a binding.
+    "guardrail": (),
+}
+# The kind's own field list, from its store: the one list an update compares (store/agent_registry.py SPEC_FIELDS,
+# store/skills.py LABELS).
+FIELDS: dict[str, tuple[str, ...]] = {
+    "agent": SPEC_FIELDS,
+    "skill": tuple(SKILL_LABELS),
+    "guardrail": ("topics", "message", "scopes", "holdUntilChecked"),
+}
+FIELD_LABELS: dict[str, str] = {
+    **SKILL_LABELS,
+    "toolIds": "tools",
+    "collections": "knowledge bases",
+    "topics": "blocked topics",
+    "message": "refusal message",
+    "scopes": "topic scopes",
+    "holdUntilChecked": "hold the answer until checked",
+}
+# A merge never loosens a guardrail: when both sides changed the topic list, the team keeps the topics it added beside
+# the template's new ones.
+STRICT: dict[str, dict[str, Strictness]] = {"guardrail": {"topics": "union"}}
 
 
-AGENT_FIELDS = ("name", "role", "model", "channels", "instructions", "toolIds", "collections")
-SKILL_FIELDS = ("name", "useWhen", "loading", "instructions", "tools", "knowledgeBases")
+def _base_of(kind: str, t: dict[str, Any], *, record_id_body: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The base a new copy link stores: the agent or skill body as made, a type's template record without its name,
+    and none for a workflow (compared whole, by digest)."""
+    if record_id_body is not None:
+        return copy_base(kind, record_id_body)
+    if kind in tt.TYPE_KINDS:
+        return {k: v for k, v in tt.body_of(kind, t).items() if k != "name"}
+    return None
 
 
-def _edits(
-    baseline: dict[str, Any] | None, now: dict[str, Any], changes: list[str], keys: tuple[str, ...]
-) -> list[str]:
-    """What the team changed since the copy (or its last update) was made. A draft saved over in place keeps no
-    earlier body, so then every field the update would replace counts, the team's edits among them."""
-    if baseline is None:
-        return changes or ["saved since it was added"]
-    return _fields_changed(baseline, now, keys) or ["saved since it was added"]
+def copy_base(kind: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The base a copy link stores: the kind's body made from the template, with the binding fields left out and no
+    choices applied."""
+    held = BINDINGS.get(kind, ())
+    return {k: v for k, v in body.items() if k not in held}
+
+
+class UpdateExpect(WireModel):
+    # The template digest and the copy's record digest the person reviewed; a take whose either moved is 409.
+    digest: str | None = None
+    record_digest: str | None = None
+
+
+class UpdateInput(WireModel):
+    # merge (the default) keeps the team's edits field by field; reset makes a new draft from the template and drops
+    # them. Left out with `confirm`, the call is a reset: an older console's "take the template as it is".
+    mode: Literal["merge", "reset"] | None = None
+    # Per conflicting field, which value the update writes; a conflict left out keeps the team's.
+    choices: dict[str, Literal["yours", "template"]] = Field(default_factory=dict[str, Literal["yours", "template"]])
+    expect: UpdateExpect | None = None
+    # For reset: the person saw the edits it drops.
+    confirm: bool = False
+
+
+class FieldReview(WireModel):
+    field: str
+    label: str
+    # kept: only the team changed it; taken: only the template did; conflict: both did, the team's unless chosen.
+    outcome: Literal["kept", "taken", "conflict"]
+    yours: Any = None
+    template: Any = None
+
+
+class UpdateReview(WireModel):
+    copy_: CopyRef = Field(alias="copy")
+    # The version the copy was made from, and the one the app ships now.
+    from_version: int
+    to_version: int
+    # Every field the update touches, in the store's order: kept, taken or a choice.
+    fields: list[FieldReview] = Field(default_factory=list[FieldReview])
+    # The copy's newest version is an unpublished draft, which the update merges into (counted as the team's).
+    draft_open: bool = False
+    # What the take names back, so a template or copy that moved since this review is refused.
+    expect: UpdateExpect = Field(default_factory=UpdateExpect)
+    # For older consoles: the fields the template changes, and the fields the team changed since the copy was made.
+    changes: list[str]
+    edits: list[str]
+    # True once the update was taken; `version` is the draft it made, None when nothing needed saving.
+    taken: bool = False
+    version: int | None = None
+
+
+class CopyDetached(ApiError):
+    status = 409
+    code = "detached"
+
+
+async def _newest(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any], bool]:
+    """The copy's newest body and whether that version is an unpublished draft."""
+    if kind == "agent":
+        v = (await registry(rt).versions(record_id))[0]
+        return cast(dict[str, Any], v["spec"]), v.get("published_at") is None
+    if kind == "guardrail":
+        v = (await guardrails(rt).versions(record_id))[0]
+        return cast(dict[str, Any], v["config"]), v.get("published_at") is None
+    v = (await skills(rt).versions(record_id))[0]
+    return cast(dict[str, Any], v["content"]), v.get("published_at") is None
+
+
+async def _newest_type(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any], bool]:
+    return await tt.newest(rt, kind, record_id)
+
+
+async def _template_body(rt: Runtime, team: str, kind: str, t: dict[str, Any], yours: dict[str, Any]) -> dict[str, Any]:
+    """The template's body now, made through the kind's create checks, with the copy's bindings in place."""
+    if kind == "agent":
+        wanted = list(t["requires"]["tools"])
+        try:
+            tools = await agent_routes._checked_tools(rt, wanted, [])  # pyright: ignore[reportPrivateUsage]
+        except ValidationFailed as e:
+            # The add check's refusal, as the update's 422: the request is well formed, and the template asks for a
+            # tool the team cannot call (a plugin off for it, or one no longer offered). Nothing is saved.
+            known = {x["id"] for x in await known_tools(rt, fresh=True)}
+            missing = [x for x in wanted if x not in known] or wanted
+            raise Unprocessable(
+                f"{t['title']} version {t['version']} needs tools your team cannot call: {', '.join(missing)}. Turn on "
+                "the app that brings them, then take the update.",
+                code="tool_not_available",
+                details={"tools": missing},
+            ) from e
+        model, bases = str(yours.get("model") or ""), list(yours.get("collections") or [])
+        return _spec_of(t, str(yours["name"]), model, tools, bases)
+    if kind == "guardrail":
+        return _guardrail_config(t)
+    bases = list(yours.get("knowledgeBases") or [])
+    return await _skill_content(rt, team, t, str(yours.get("name") or t["title"]), bases)
+
+
+async def _legacy_base(rt: Runtime, kind: str, record_id: str, row: dict[str, Any]) -> dict[str, Any] | None:
+    """A link made before bases were kept: the record's version whose digest the link names is the copy as made, when
+    it still exists; otherwise None, and every difference is a choice kept as the team's."""
+    versions = await (registry(rt) if kind == "agent" else skills(rt)).versions(record_id)
+    key = "spec" if kind == "agent" else "content"
+    found = next((v[key] for v in versions if v["digest"] == row.get("record_digest")), None)
+    return copy_base(kind, cast(dict[str, Any], found)) if found is not None else None
+
+
+def _labelled(outcomes: list[FieldOutcome]) -> list[dict[str, Any]]:
+    return [
+        {"field": o.field, "label": FIELD_LABELS.get(o.field) or tt.label(o.field, o.yours, o.template),
+         "outcome": o.outcome, "yours": o.yours, "template": o.template}
+        for o in outcomes
+    ]  # fmt: skip
 
 
 async def _review(
     rt: Runtime, me: Principal, team: str, resource: str, record_id: str
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None]:
-    """The copy's row, its template now, the review of taking it, and the record's new body for an agent or skill.
-    `changes` are the fields the new draft would change in the copy as it is now; `edits` are the team's changes since
-    the copy was made, which the new draft does not carry."""
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[FieldOutcome], dict[str, Any] | None]:
+    """The copy's row, its template now, the review of taking it, the merge's outcomes, and the template's body now
+    (for an agent or skill). 409 `detached` for a copy the team made its own."""
     source, template_id = resource_ref(resource)
     offered = {f"{x['source']}:{x['id']}": x for x in await _offered(rt, team)}
     t = _template(offered, source, template_id)
@@ -795,88 +987,175 @@ async def _review(
     row = await TemplateCopies(rt.db).of_record(kind, record_id)
     if row is None or row["source"] != source or row["template_id"] != template_id:
         raise NotFound(f"{record_id} is not the team's copy of {resource}.")
+    if row.get("detached_at"):
+        raise CopyDetached(
+            f"Your team detached its copy of {t['title']}, so it takes no updates. Add the template again under "
+            "another name for a fresh copy.",
+        )
     require_builder(me, area=AREAS[kind], team_id=team, action="edit", what=f"the team's copy of {t['title']}")
-    edited = row.get("record_digest") != await _record_digest(rt, kind, record_id)
-    new: dict[str, Any] | None = None
-    if kind == "agent":
-        versions = await registry(rt).versions(record_id)
-        now = cast(dict[str, Any], versions[0]["spec"])
-        baseline = next((v["spec"] for v in versions if v["digest"] == row.get("record_digest")), None)
-        tools = await agent_routes._checked_tools(rt, list(t["requires"]["tools"]), [])  # pyright: ignore[reportPrivateUsage]
-        # The copy's bindings are the team's: its name, model and knowledge bases stay as they are.
-        new = _spec_of(t, str(now["name"]), str(now.get("model") or ""), tools, list(now.get("collections") or []))
-        changes = _fields_changed(now, new, AGENT_FIELDS)
-        edits = _edits(baseline, now, changes, AGENT_FIELDS) if edited else []
-    elif kind == "skill":
-        versions = await skills(rt).versions(record_id)
-        now = cast(dict[str, Any], versions[0]["content"])
-        baseline = next((v["content"] for v in versions if v["digest"] == row.get("record_digest")), None)
-        bases = list(now.get("knowledgeBases") or [])
-        new = await _skill_content(rt, team, t, str(now.get("name") or t["title"]), bases)
-        changes = _fields_changed(now, new, SKILL_FIELDS)
-        edits = _edits(baseline, now, changes, SKILL_FIELDS) if edited else []
+    record_digest = await _record_digest(rt, kind, record_id)
+    outcomes: list[FieldOutcome]
+    template_body: dict[str, Any] | None = None
+    draft_open = False
+    if kind in FIELDS:
+        yours, draft_open = await _newest(rt, kind, record_id)
+        template_body = await _template_body(rt, team, kind, t, yours)
+        base = row.get("base")
+        if base is None:
+            base = await _legacy_base(rt, kind, record_id, row)
+        fields = [f for f in FIELDS[kind] if f in template_body or (base is not None and f in base)]
+        outcomes = merge(base, yours, template_body, fields, bindings=BINDINGS[kind], strict=STRICT.get(kind))
+    elif kind in tt.TYPE_KINDS:
+        yours, draft_open = await _newest_type(rt, kind, record_id)
+        template_body = tt.body_of(kind, t)
+        base = row.get("base")
+        keys = tt.order(kind, yours, template_body, base)
+        outcomes = merge(tt.flat(kind, base), tt.flat(kind, yours) or {}, tt.flat(kind, template_body) or {}, keys)
     else:
-        changes = ["definition"] if row.get("digest") != t.get("digest") else []
-        edits = ["definition"] if edited else []
+        # A workflow's body is pointed at the team's copies, so it compares by digest as a whole definition.
+        edited = row.get("record_digest") != record_digest
+        changed = row.get("digest") != t.get("digest")
+        outcomes = [FieldOutcome("definition", "conflict" if edited else "taken", None, None)] if changed else []
     review = {
         "copy": _copy_view(row),
         "fromVersion": int(row["version"]),
         "toVersion": int(t["version"]),
-        "changes": changes,
-        "edits": edits,
+        "fields": _labelled(outcomes),
+        "draftOpen": draft_open,
+        "expect": {"digest": t.get("digest"), "recordDigest": record_digest},
+        "changes": [o.field for o in outcomes if o.outcome != "kept"],
+        "edits": [o.field for o in outcomes if o.outcome != "taken"],
     }
-    return row, t, review, new
+    return row, t, review, outcomes, template_body
 
 
 @resources.get("/{resource}/copies/{copy}/update", response_model=Envelope[UpdateReview])
 async def review_update(rt: Rt, me: Me, resource: str, copy: str) -> JSONResponse:
-    """Review update: what taking the app's current template would change in the team's copy (`copy` is the copy's
-    record id), and the edits the team made to its copy since, which the new draft does not carry."""
+    """Review update: field by field, what taking the app's current template does to the team's copy (`copy` is the
+    copy's record id): the team's edits kept, the template's changes taken, and the fields both changed, which keep the
+    team's value unless the person chooses. 409 `detached` for a copy the team made its own."""
     team = _team(me)
-    _, _, review, _ = await _review(rt, me, team, resource, copy)
+    _, _, review, _, _ = await _review(rt, me, team, resource, copy)
     return ok(UpdateReview.model_validate(review).model_dump(by_alias=True))
+
+
+async def _save(rt: Runtime, me: Principal, kind: str, record_id: str, body: dict[str, Any], *, note: str) -> int:
+    """One draft through the kind's own save: an open draft is merged into, a published version or a draft a publish
+    request names is never rewritten (the save opens the next version)."""
+    if kind == "agent":
+        return await registry(rt).save(record_id, body, by=me.email, note=note)
+    if kind == "guardrail":
+        checked = check_guardrail("blocked_topics", body)
+        return await guardrails(rt).save_draft(record_id, checked, by=me.email, note=note)
+    return await skills(rt).save_draft(record_id, body, by=me.email, note=note)
 
 
 @resources.post("/{resource}/copies/{copy}/update", response_model=Envelope[UpdateReview])
 async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInput) -> JSONResponse:
-    """Take update: a new draft version of the copy made from the app's current template; the published version keeps
-    running until the draft goes through its publish review, and earlier versions stay in the copy's history. A copy the
-    team edited since it was added is refused with 409 `copy_edited`, listing the edits, until `confirm` says the
-    person saw that the new draft does not carry them; nothing is merged."""
+    """Take update. `merge` (the default) saves one draft that keeps every field the team edited, takes every field
+    only the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`
+    makes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What
+    runs keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy
+    moved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422
+    `tool_not_available`, naming the tools, when the template needs one the team cannot call."""
     team = _team(me)
-    row, t, review, new = await _review(rt, me, team, resource, copy)
-    if review["edits"] and not body.confirm:
+    row, t, review, outcomes, template_body = await _review(rt, me, team, resource, copy)
+    mode = body.mode or ("reset" if body.confirm else "merge")
+    if body.expect is not None and (
+        body.expect.digest != review["expect"]["digest"]
+        or body.expect.record_digest != review["expect"]["recordDigest"]
+    ):
         raise Conflict(
-            f"Your team changed {t['title']} since adding it ({', '.join(review['edits'])}). The update makes a new "
-            "draft from the app's template, without those changes. Confirm to take it.",
+            f"{t['title']} changed since you reviewed this update. Review it again before taking it.",
+            code="update_stale",
+        )
+    kept = [o.field for o in outcomes if o.outcome != "taken"]
+    if mode == "reset" and kept and not body.confirm:
+        raise Conflict(
+            f"Your team changed {t['title']} since adding it ({', '.join(kept)}). Resetting makes a new draft from the "
+            "app's template, without those changes. Confirm to reset.",
             code="copy_edited",
             details=review,
         )
     kind = str(t["kind"])
-    note = f"Update from {t['plugin']['title']}, template version {t['version']}"
-    if kind == "agent":
-        assert new is not None
-        await registry(rt).save(copy, new, by=me.email, note=note)
-    elif kind == "skill":
-        assert new is not None
-        await skills(rt).save_draft(copy, new, by=me.email, note=note)
-    else:
+    choices: dict[str, str] = (
+        {o.field: "template" for o in outcomes if o.outcome != "taken"} if mode == "reset" else dict(body.choices)
+    )
+    taken = [o.field for o in outcomes if o.outcome == "taken"]
+    chosen = [o.field for o in outcomes if o.outcome == "conflict" and choices.get(o.field) == "template"]
+    note = (
+        f"Update from {t['plugin']['title']}, template version {t['version']}: "
+        f"kept {', '.join(o.field for o in outcomes if o.outcome == 'kept') or 'none'}; "
+        f"taken {', '.join(taken) or 'none'}; chosen from the template {', '.join(chosen) or 'none'}"
+    )
+    version: int | None = None
+    base: dict[str, Any] | None = None
+    if kind in FIELDS:
+        assert template_body is not None
+        yours, _ = await _newest(rt, kind, copy)
+        # A reset is the template's body with the copy's bindings, dropping every edit the team made.
+        merged = template_body if mode == "reset" else apply(yours, outcomes, cast(dict[str, Any], choices))
+        if kind == "guardrail":
+            merged = check_guardrail("blocked_topics", merged)
+        if merged != yours:
+            version = await _save(rt, me, kind, copy, merged, note=note)
+        base = copy_base(kind, template_body)
+    elif kind in tt.TYPE_KINDS:
+        assert template_body is not None
+        yours, _ = await tt.newest(rt, kind, copy)
+        keys = tt.order(kind, yours, template_body, row.get("base"))
+        mine = tt.flat(kind, yours) or {}
+        merged = (
+            tt.flat(kind, template_body) or {}
+            if mode == "reset"
+            else apply(mine, outcomes, cast(dict[str, Any], choices))
+        )
+        if merged != mine:
+            version = await tt.save(rt, me, kind, copy, tt.unflat(kind, merged, keys, str(yours["name"])))
+        base = {k: v for k, v in template_body.items() if k != "name"}
+    elif taken or chosen:
         held = await definitions(rt).get(copy, team=current_team())
         assert held is not None
         offered = {f"{x['source']}:{x['id']}": x for x in await _offered(rt, team)}
         records = await _dependencies(rt, me, team, t, offered=offered, given={})
         definition = _pointed(dict(cast(dict[str, Any], t.get("body") or {})), records)
         definition["id"], definition["name"] = copy, held["name"]
-        await create_definition(rt, me, DefinitionInput(definition=definition))
+        answer = await create_definition(rt, me, DefinitionInput(definition=definition))
+        version = cast(int | None, json.loads(bytes(answer.body))["data"].get("version"))
+    # A workflow conflict kept as the team's moves the link to the new version and leaves its record digest, so the
+    # team's edit still reads as edited and the same update is not offered again.
+    saved = version is not None or kind in FIELDS or kind in tt.TYPE_KINDS
     await TemplateCopies(rt.db).updated(
         str(row["id"]),
         version=int(t["version"]),
         digest=cast(str | None, t.get("digest")),
-        record_digest=await _record_digest(rt, kind, copy),
+        record_digest=await _record_digest(rt, kind, copy) if saved else row.get("record_digest"),
+        base=base,
     )
     refreshed = await TemplateCopies(rt.db).of_record(cast(Kind, kind), copy)
-    taken = review | {"copy": _copy_view(refreshed or row), "taken": True}
-    return ok(UpdateReview.model_validate(taken).model_dump(by_alias=True))
+    out = review | {"copy": _copy_view(refreshed or row), "taken": True, "version": version}
+    return ok(UpdateReview.model_validate(out).model_dump(by_alias=True))
+
+
+@resources.post("/{resource}/copies/{copy}/detach", response_model=Envelope[CopyRef])
+async def detach_copy(rt: Rt, me: Me, resource: str, copy: str) -> JSONResponse:
+    """Detach: the team's copy becomes its own record, offered no update or reset again, and the template is offered
+    for a fresh copy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the
+    team's copy of `resource`."""
+    team = _team(me)
+    source, template_id = resource_ref(resource)
+    copies = TemplateCopies(rt.db)
+    row = None
+    for kind in COPY_KINDS:
+        row = await copies.of_record(kind, copy)
+        if row is not None:
+            break
+    if row is None or row["source"] != source or row["template_id"] != template_id:
+        raise NotFound(f"{copy} is not the team's copy of {resource}.")
+    kind = str(row["kind"])
+    require_builder(me, area=AREAS[kind], team_id=team, action="edit", what="the team's copy")
+    detached = await copies.detach(str(row["id"]), by=me.email)
+    return ok(_copy_view(detached))
 
 
 __all__ = ["resource_ref"]

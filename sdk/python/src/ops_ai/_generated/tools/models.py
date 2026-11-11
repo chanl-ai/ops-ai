@@ -1250,7 +1250,16 @@ class AppResource(TypedDict):
     copy: NotRequired[ResourceCopy | None]
     id: str
     installed: NotRequired[ResourceInstalled | None]
-    kind: Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
     plugin: PluginRef
     reason: NotRequired[str | None]
     requires: TemplateRequires
@@ -1731,7 +1740,16 @@ class PluginTemplate(TypedDict):
     body: NotRequired[dict[str, Any]]
     digest: str
     id: str
-    kind: Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
     plugin: PluginRef
     requires: TemplateRequires
     source: str

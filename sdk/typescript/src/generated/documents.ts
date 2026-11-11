@@ -534,6 +534,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resources/{resource}/copies/{copy}/detach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Detach Copy
+         * @description Detach: the team's type becomes its own, offered no update again, and the template is offered for a fresh
+         *     copy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the team's copy
+         *     of `resource`.
+         */
+        post: operations["resources_detach_copy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/{resource}/copies/{copy}/update": {
         parameters: {
             query?: never;
@@ -543,16 +565,21 @@ export interface paths {
         };
         /**
          * Review Update
-         * @description Review update: what a new version from the app's current template changes in the team's type (`copy` is the
-         *     type's id), and the versions the team saved since adding it, which the new version does not carry.
+         * @description Review update: field by field, what taking the app's current template does to the team's type (`copy` is the
+         *     type's id): the team's edits kept, the template's changes taken, and the fields both changed, which keep the
+         *     team's value unless the person chooses. Each extracted field is compared by its key. 409 `detached` for a copy
+         *     the team made its own.
          */
         get: operations["resources_review_update"];
         put?: never;
         /**
          * Take Update
-         * @description Take update: the type's next version made from the app's current template, as a person's new version is
-         *     made; earlier versions stay. A type the team gave a version of its own since adding it is refused with 409
-         *     `copy_edited` until `confirm` says the person saw the new version does not carry it; nothing is merged.
+         * @description Take update. `merge` (the default) makes the type's next version keeping every field the team edited,
+         *     taking every field only the template changed, and writing the template's value on a conflict only where
+         *     `choices` says so; `reset` makes it from the template as it is, after `confirm` (409 `copy_edited` listing the
+         *     edits it drops). A document type has no draft, so the version applies at once; earlier versions, and every pin
+         *     on them, stay. 409 `update_stale` when the template or the type moved since the review `expect` names, and
+         *     nothing is saved; 409 `detached` for a copy the team made its own.
          */
         post: operations["resources_take_update"];
         delete?: never;
@@ -739,6 +766,8 @@ export interface components {
         };
         /** CopyRef */
         CopyRef: {
+            /** Detachedat */
+            detachedAt?: string | null;
             /** Id */
             id: string;
             /**
@@ -974,6 +1003,15 @@ export interface components {
         /** Envelope[Classification] */
         Envelope_Classification_: {
             data: components["schemas"]["Classification"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[CopyRef] */
+        Envelope_CopyRef_: {
+            data: components["schemas"]["CopyRef"];
             /**
              * Success
              * @constant
@@ -1294,6 +1332,22 @@ export interface components {
             reviewBelow?: number | null;
             /** Version */
             version?: number | null;
+        };
+        /** FieldReview */
+        FieldReview: {
+            /** Field */
+            field: string;
+            /** Label */
+            label: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "kept" | "taken" | "conflict";
+            /** Template */
+            template?: unknown;
+            /** Yours */
+            yours?: unknown;
         };
         /**
          * FileFacts
@@ -1814,21 +1868,48 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** UpdateExpect */
+        UpdateExpect: {
+            /** Digest */
+            digest?: string | null;
+            /** Recorddigest */
+            recordDigest?: string | null;
+        };
         /** UpdateInput */
         UpdateInput: {
+            /** Choices */
+            choices?: {
+                [key: string]: "yours" | "template";
+            };
             /**
              * Confirm
              * @default false
              */
             confirm: boolean;
+            expect?: components["schemas"]["UpdateExpect"] | null;
+            /** Mode */
+            mode?: ("merge" | "reset") | null;
         };
         /** UpdateReview */
         UpdateReview: {
+            /**
+             * Appliesnow
+             * @default true
+             */
+            appliesNow: boolean;
             /** Changes */
             changes: string[];
             copy: components["schemas"]["CopyRef"];
+            /**
+             * Draftopen
+             * @default false
+             */
+            draftOpen: boolean;
             /** Edits */
             edits: string[];
+            expect?: components["schemas"]["UpdateExpect"];
+            /** Fields */
+            fields?: components["schemas"]["FieldReview"][];
             /** Fromversion */
             fromVersion: number;
             /**
@@ -1838,6 +1919,8 @@ export interface components {
             taken: boolean;
             /** Toversion */
             toVersion: number;
+            /** Version */
+            version?: number | null;
         };
         /** Word */
         Word: {
@@ -4675,6 +4758,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Installation_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not ready or already in another state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    resources_detach_copy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                copy: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CopyRef_"];
                 };
             };
             /** @description Invalid request */

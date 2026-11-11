@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { useCan } from '@/hooks/me-queries';
-import { Bot, FileText, Library, Sparkles, Workflow } from 'lucide-react';
+import { Bot, FileText, Library, ListChecks, Scale, ShieldCheck, Sparkles, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -45,14 +45,21 @@ const COPY_HREF: Record<ResourceKind, string> = {
   workflow: '/workflows',
   document_type: '/document-types',
   knowledge_source: '/knowledge/sources',
+  guardrail: '/guardrails',
+  // Case and task types have no page of their own; the cases page is where a team meets them.
+  case_type: '/cases',
+  task_type: '/cases',
 };
-const ICON: Record<ResourceKind, typeof Bot> = { agent: Bot, skill: Sparkles, workflow: Workflow, document_type: FileText, knowledge_source: Library };
+const ICON: Record<ResourceKind, typeof Bot> = { agent: Bot, skill: Sparkles, workflow: Workflow, document_type: FileText, knowledge_source: Library, guardrail: ShieldCheck, case_type: Scale, task_type: ListChecks };
 const KIND: Record<ResourceKind, string> = {
   agent: 'agent',
   skill: 'skill',
   workflow: 'workflow',
   document_type: 'document type',
   knowledge_source: 'knowledge source',
+  guardrail: 'guardrail',
+  case_type: 'case type',
+  task_type: 'task type',
 };
 const USER_HREF: Record<string, string> = { workflow: '/workflows', agent: '/agents' };
 

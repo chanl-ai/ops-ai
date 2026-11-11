@@ -13,21 +13,22 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_service_kit.errors import NotFound
+from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.dialect import locked
 from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-from .agent_registry import digest_of
+from .agent_registry import digest_of, publish_requested
 from .base import metadata
 
 registry_guardrails = sa.Table(
     "registry_guardrails",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("slug", sa.String(120), nullable=False, unique=True),
+    sa.Column("slug", sa.String(120), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("kind", sa.String(32), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
@@ -40,6 +41,8 @@ registry_guardrails = sa.Table(
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
+    # A guardrail's name is unique within its team only, so many teams can hold a copy of the same template.
+    sa.UniqueConstraint("team_id", "slug", name="uq_registry_guardrails_team_slug"),
     info=TEAM_OWNED,
 )
 
@@ -138,10 +141,14 @@ class GuardrailRegistry:
             team = (await c.execute(q)).scalar()
         return str(team) if team else None
 
-    async def find(self, guardrail_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
+    async def find(
+        self, guardrail_id: str, c: AsyncConnection | None = None, *, lock: bool = False
+    ) -> dict[str, Any] | None:
         q = sa.select(registry_guardrails).where(
             registry_guardrails.c.id == guardrail_id, team_visible(registry_guardrails)
         )
+        if lock:
+            q = locked(q, registry_guardrails)
         if c is None:
             async with self.engine.connect() as conn:
                 r = (await conn.execute(q)).mappings().first()
@@ -149,8 +156,8 @@ class GuardrailRegistry:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r else None
 
-    async def row(self, guardrail_id: str, c: AsyncConnection | None = None) -> dict[str, Any]:
-        r = await self.find(guardrail_id, c)
+    async def row(self, guardrail_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
+        r = await self.find(guardrail_id, c, lock=lock)
         if r is None:
             raise NotFound(f"Guardrail {guardrail_id}")
         return r
@@ -191,21 +198,18 @@ class GuardrailRegistry:
         gid = guardrail_id or new_id("gr")
         at = now_iso()
         async with self.engine.begin() as c:
-            base, n = _slug(name), 2
-            slug = base
-            taken = {
-                str(s)
-                for s in (
-                    await c.execute(
-                        sa.select(registry_guardrails.c.slug).where(
-                            registry_guardrails.c.slug.like(f"{base}%"),
-                            any_team(registry_guardrails, "a slug is unique across every team"),
-                        )
+            slug = _slug(name)
+            taken = (
+                await c.execute(
+                    sa.select(registry_guardrails.c.id).where(
+                        registry_guardrails.c.slug == slug,
+                        registry_guardrails.c.team_id == team_id,
+                        any_team(registry_guardrails, "a slug is unique within the team that will own the guardrail"),
                     )
-                ).scalars()
-            }
-            while slug in taken:
-                slug, n = f"{base}-{n}", n + 1
+                )
+            ).first()
+            if taken is not None:
+                raise Conflict(f"A guardrail named {name} exists; give this one another name.", code="name_taken")
             await c.execute(
                 registry_guardrails.insert().values(
                     id=gid,
@@ -241,24 +245,66 @@ class GuardrailRegistry:
         at = now_iso()
         async with self.engine.begin() as c:
             row = await self.row(guardrail_id, c)
-            n = int(row["version"]) + 1
-            await c.execute(
-                registry_guardrail_versions.insert().values(
-                    guardrail_id=guardrail_id,
-                    version=n,
-                    config=config,
-                    digest=digest_of(config),
-                    note=note,
-                    saved_at=at,
-                    saved_by=by,
-                )
+            return await self._append(c, guardrail_id, int(row["version"]) + 1, config, by=by, note=note, at=at)
+
+    @staticmethod
+    async def _append(
+        c: AsyncConnection, guardrail_id: str, n: int, config: dict[str, Any], *, by: str, note: str, at: str
+    ) -> int:
+        await c.execute(
+            registry_guardrail_versions.insert().values(
+                guardrail_id=guardrail_id,
+                version=n,
+                config=config,
+                digest=digest_of(config),
+                note=note,
+                saved_at=at,
+                saved_by=by,
             )
-            await c.execute(
-                registry_guardrails.update()
-                .where(registry_guardrails.c.id == guardrail_id)
-                .values(version=n, updated_at=at)
-            )
+        )
+        await c.execute(
+            registry_guardrails.update()
+            .where(registry_guardrails.c.id == guardrail_id)
+            .values(version=n, updated_at=at)
+        )
         return n
+
+    async def save_draft(self, guardrail_id: str, config: dict[str, Any], *, by: str, note: str = "") -> int:
+        """The agent store's draft rule: rewrites the newest version while it is unpublished and no publish request
+        has named it; otherwise opens the next version as the draft. What a reviewer saw or what runs never changes."""
+        at = now_iso()
+        v = registry_guardrail_versions
+        async with self.engine.begin() as c:
+            # Locked so two saves at once take turns: unlocked, both read the same newest version and the second
+            # fails on the version key.
+            row = await self.row(guardrail_id, c, lock=True)
+            n = int(row["version"])
+            newest = (
+                (
+                    await c.execute(
+                        sa.select(v).where(v.c.guardrail_id == guardrail_id, v.c.version == n, team_visible(v))
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if newest["published_at"] is None and not await publish_requested(c, "guardrail", guardrail_id, n):
+                await c.execute(
+                    v.update()
+                    .where(v.c.guardrail_id == guardrail_id, v.c.version == n)
+                    .values(
+                        config=config,
+                        digest=digest_of(config),
+                        note=note or newest["note"],
+                        saved_at=at,
+                        saved_by=by,
+                    )
+                )
+                await c.execute(
+                    registry_guardrails.update().where(registry_guardrails.c.id == guardrail_id).values(updated_at=at)
+                )
+                return n
+            return await self._append(c, guardrail_id, n + 1, config, by=by, note=note, at=at)
 
     async def publish(self, guardrail_id: str, version: int, *, by: str, review_id: str) -> None:
         at = now_iso()

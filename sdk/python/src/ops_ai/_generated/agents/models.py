@@ -440,8 +440,9 @@ class ConnectWait(TypedDict, closed=True):
 
 
 class CopyRef(TypedDict, closed=True):
+    detachedAt: NotRequired[str | None]
     id: str
-    kind: Literal["agent", "skill", "workflow"]
+    kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
     recordId: str
     source: str
     templateId: str
@@ -658,6 +659,11 @@ class EnvelopeChangeWaits(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeCopyRef(TypedDict, closed=True):
+    data: CopyRef
+    success: Literal[True]
+
+
 class EnvelopeDefinitionShapes(TypedDict, closed=True):
     data: DefinitionShapes
     success: Literal[True]
@@ -751,6 +757,14 @@ class Evidence(TypedDict, closed=True):
     detail: str
     kind: str
     label: str
+
+
+class FieldReview(TypedDict, closed=True):
+    field: str
+    label: str
+    outcome: Literal["kept", "taken", "conflict"]
+    template: NotRequired[Any]
+    yours: NotRequired[Any]
 
 
 class FileLink(TypedDict, closed=True):
@@ -1913,7 +1927,7 @@ class TemplateView(TypedDict, closed=True):
     copy: NotRequired[CopyRef | None]
     id: str
     installed: Installed
-    kind: Literal["agent", "skill", "workflow"]
+    kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
     plugin: TemplatePlugin
     removeCell: NotRequired[RemoveCell | None]
     requires: TemplateRequires
@@ -2057,17 +2071,29 @@ class TypedTask(TypedDict, closed=True):
     warnings: list[TaskWarning]
 
 
+class UpdateExpect(TypedDict, closed=True):
+    digest: NotRequired[str | None]
+    recordDigest: NotRequired[str | None]
+
+
 class UpdateInput(TypedDict, closed=True):
+    choices: NotRequired[dict[str, Literal["yours", "template"]]]
     confirm: NotRequired[bool]
+    expect: NotRequired[UpdateExpect | None]
+    mode: NotRequired[Literal["merge", "reset"] | None]
 
 
 class UpdateReview(TypedDict, closed=True):
     changes: list[str]
     copy: CopyRef
+    draftOpen: NotRequired[bool]
     edits: list[str]
+    expect: NotRequired[UpdateExpect]
+    fields: NotRequired[list[FieldReview]]
     fromVersion: int
     taken: NotRequired[bool]
     toVersion: int
+    version: NotRequired[int | None]
 
 
 class UploadedFile(TypedDict, closed=True):
@@ -3080,7 +3106,16 @@ class PlanItem(TypedDict, closed=True):
     broughtBy: list[str]
     held: NotRequired[CopyRef | None]
     heldRecordId: NotRequired[str | None]
-    kind: Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "guardrail",
+        "case_type",
+        "task_type",
+        "document_type",
+        "knowledge_source",
+    ]
     refusal: NotRequired[PlanRefusal | None]
     resource: str
     service: str

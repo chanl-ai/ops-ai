@@ -30,6 +30,21 @@ An agent follows the same path: publish compiles a one-node plan (`ag_x@7`), and
 | Old versions stay alive | A version stays compiled in each process while any thread pins it. Retiring it means waiting until no thread pins it, or migrating those threads |
 | Stable names | Node names and state keys are part of the contract between versions: keep node names stable and add state keys rather than renaming |
 
+## Template copies
+
+A team's agent, skill, workflow, case type or task type made from a plugin's template is an ordinary record with its
+own versions; its `template_copies` row names the template and keeps the base the copy was last merged against
+(ADR-0018, [decisions/template-copy-updates.md](decisions/template-copy-updates.md)).
+
+| Rule | Detail |
+|---|---|
+| An update is one save | Taken through the kind's own save, so a published version, or a draft a publish request names, never changes; an open draft nobody asked to publish is merged into |
+| Field by field | Kept where only the team edited, taken where only the template changed, a choice where both did, kept as the team's by default (`ops_service_kit.template_merge`) |
+| The base never moves on a save | Only an install or an update writes it, and it is the template's body, never the merged result, so a conflict kept as the team's is asked about again only when the template changes that field again |
+| Detach | The copy becomes the team's own and is offered no update |
+| Case and task types | A copy takes an id of its own (`ct_…`, `tt_…`), since types are keyed by team and id and two packs may ship the same id; it is made and saved through the type's own create and draft routes, starts as draft version 1, and merges each case field or task action by its key |
+| Document types | documents-service keeps the same link (`documents_template_copies`) and compares each extracted field by its key; a type has no draft, so a taken update is the type's next version at once (`appliesNow`), and versions a workflow pinned keep reading as they were |
+
 ## What happens without the pin
 
 From [pause-survives-graph-change](../services/agents-service/experiments/pause-survives-graph-change.md): a thread

@@ -1956,6 +1956,9 @@
               "skill",
               "workflow",
               "document_type",
+              "case_type",
+              "task_type",
+              "guardrail",
               "knowledge_source"
             ],
             "title": "Kind",
@@ -9106,6 +9109,9 @@
               "skill",
               "workflow",
               "document_type",
+              "case_type",
+              "task_type",
+              "guardrail",
               "knowledge_source"
             ],
             "title": "Kind",
@@ -23996,6 +24002,9 @@
                     "skill",
                     "workflow",
                     "document_type",
+                    "case_type",
+                    "task_type",
+                    "guardrail",
                     "knowledge_source"
                   ],
                   "type": "string"

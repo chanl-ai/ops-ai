@@ -37,7 +37,7 @@ from ..callers import tools_reader
 from ..modules.routes import ERRORS
 from .host import PluginHost
 
-Kind = Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+Kind = Literal["agent", "skill", "workflow", "document_type", "case_type", "task_type", "guardrail", "knowledge_source"]
 
 
 class TemplateOutside(ValueError):
@@ -139,6 +139,9 @@ SERVICES: dict[str, str] = {
     "skill": "agents",
     "workflow": "agents",
     "document_type": "documents",
+    "case_type": "agents",
+    "task_type": "agents",
+    "guardrail": "agents",
     "knowledge_source": "kb",
 }
 # Who may add a knowledge source: those who may edit the knowledge base it goes into.

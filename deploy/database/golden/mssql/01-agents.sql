@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0099_review_asker_is_person
+-- agents-service, stamped at 0102_guardrail_names_per_team
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -598,7 +598,7 @@ CREATE TABLE registry_guardrails (
 	created_at VARCHAR(32) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
 	CONSTRAINT registry_guardrails_pkey PRIMARY KEY (id), 
-	CONSTRAINT registry_guardrails_slug_key UNIQUE (slug)
+	CONSTRAINT uq_registry_guardrails_team_slug UNIQUE (team_id, slug)
 );
 GO
 CREATE TABLE agent_memories (
@@ -709,7 +709,7 @@ CREATE TABLE registry_skills (
 	created_by VARCHAR(200) NOT NULL DEFAULT '', 
 	published_loading VARCHAR(16) NULL, 
 	CONSTRAINT registry_skills_pkey PRIMARY KEY (id), 
-	CONSTRAINT registry_skills_slug_key UNIQUE (slug)
+	CONSTRAINT uq_registry_skills_team_slug UNIQUE (team_id, slug)
 );
 GO
 CREATE TABLE task_assists (
@@ -770,13 +770,16 @@ CREATE TABLE template_copies (
 	version INTEGER NOT NULL, 
 	digest VARCHAR(64) NULL, 
 	record_digest VARCHAR(64) NULL, 
+	base NVARCHAR(max) NULL, 
 	installed_by VARCHAR(320) NOT NULL, 
 	installed_at VARCHAR(32) NOT NULL, 
 	removed_at VARCHAR(32) NULL, 
+	detached_at VARCHAR(32) NULL, 
+	detached_by VARCHAR(320) NULL, 
 	CONSTRAINT template_copies_pkey PRIMARY KEY (id)
 );
 GO
-CREATE UNIQUE INDEX uq_template_copies_live ON template_copies (tenant_id, team_id, source, template_id, version) WHERE removed_at IS NULL;
+CREATE UNIQUE INDEX uq_template_copies_live ON template_copies (tenant_id, team_id, source, template_id) WHERE removed_at IS NULL AND detached_at IS NULL;
 GO
 CREATE TABLE thread_budgets (
 	thread_id VARCHAR(64) NOT NULL, 
@@ -1277,5 +1280,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0099_review_asker_is_person');
+INSERT INTO alembic_version (version_num) VALUES ('0102_guardrail_names_per_team');
 GO
