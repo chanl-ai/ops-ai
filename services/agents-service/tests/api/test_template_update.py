@@ -90,7 +90,7 @@ async def publish_skill(client: AsyncClient, sid: str) -> int:
 async def versions(client: AsyncClient, sid: str) -> list[dict[str, Any]]:
     from ops_agents.api.skills import skills  # noqa: PLC0415
 
-    return cast(list[dict[str, Any]], await skills(store(client)).versions(sid))
+    return await skills(store(client)).versions(sid)
 
 
 def path(sid: str, tid: str = "cite-policy") -> str:
@@ -245,7 +245,10 @@ async def test_an_update_naming_a_tool_the_team_cannot_call_is_refused_and_saves
     wire(client, [AGENT])
     aid = ok(await client.post(f"/v1/resources/{SOURCE}:case-helper/copies", json={}, headers=OPS), 201)
     aid = aid["copy"]["recordId"]
-    more = AGENT | {"version": 3, "requires": {**AGENT["requires"], "tools": [*TOOLS, "billing_refund"]}}
+    more: dict[str, Any] = AGENT | {
+        "version": 3,
+        "requires": {**cast(dict[str, Any], AGENT["requires"]), "tools": [*TOOLS, "billing_refund"]},
+    }
     wire(client, [more])
     r = await client.post(f"/v1/resources/{SOURCE}:case-helper/copies/{aid}/update", json={}, headers=OPS)
     # 422, not the add path's 400: the request is well formed, and the template asks for what the team lacks.

@@ -279,7 +279,11 @@ class GuardrailRegistry:
             row = await self.row(guardrail_id, c, lock=True)
             n = int(row["version"])
             newest = (
-                (await c.execute(sa.select(v).where(v.c.guardrail_id == guardrail_id, v.c.version == n)))
+                (
+                    await c.execute(
+                        sa.select(v).where(v.c.guardrail_id == guardrail_id, v.c.version == n, team_visible(v))
+                    )
+                )
                 .mappings()
                 .one()
             )

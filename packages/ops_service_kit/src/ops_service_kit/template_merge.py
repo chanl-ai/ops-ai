@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 Outcome = Literal["kept", "taken", "conflict"]
 Choice = Literal["yours", "template"]
@@ -46,10 +46,10 @@ def _union(yours: list[Any], template: list[Any]) -> list[Any]:
 
 def _strict(rule: Strictness, yours: Any, template: Any) -> Any:
     if rule == "union" and isinstance(yours, list) and isinstance(template, list):
-        return _union(list(yours), list(template))  # pyright: ignore[reportUnknownArgumentType]
+        return _union(cast(list[Any], yours), cast(list[Any], template))
     if rule == "min" and isinstance(yours, int | float) and isinstance(template, int | float):
         return min(yours, template)
-    return yours
+    return cast(Any, yours)
 
 
 def merge(

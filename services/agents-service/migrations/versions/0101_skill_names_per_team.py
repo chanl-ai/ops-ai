@@ -5,7 +5,7 @@ Revises: 0100_copies_base_and_detach
 
 A skill's slug was unique across every team, so the second team to add the same skill template was refused. The key
 becomes (team_id, slug). This only relaxes a unique key: every stored row already meets the narrower one, so no row
-changes. The old key was made inline, so its name differs per database and is read from the catalogue. Runs on
+changes. The old key was made inline, so SQL Server names it and the revision finds it by its column. Runs on
 PostgreSQL and SQL Server.
 """
 
@@ -23,15 +23,23 @@ TABLE = "registry_skills"
 TEAM_KEY = "uq_registry_skills_team_slug"
 
 
-def _slug_keys() -> list[str]:
-    """The names of the unique keys on the slug column alone."""
-    found = sa.inspect(op.get_bind()).get_unique_constraints(TABLE)
-    return [str(u["name"]) for u in found if u["column_names"] == ["slug"] and u["name"]]
+def _drop_slug_key() -> None:
+    """Drops the unique key on the slug column alone. Plain SQL, so the revision also renders as offline SQL."""
+    if op.get_bind().dialect.name == "mssql":
+        # A key made inline has a generated name on SQL Server, so it is found by its column.
+        op.execute(
+            f"DECLARE @n sysname = (SELECT k.name FROM sys.key_constraints k "
+            f"JOIN sys.index_columns ic ON ic.object_id = k.parent_object_id AND ic.index_id = k.unique_index_id "
+            f"JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
+            f"WHERE k.type = 'UQ' AND k.parent_object_id = OBJECT_ID(N'{TABLE}') AND c.name = N'slug'); "
+            f"IF @n IS NOT NULL EXEC (N'ALTER TABLE {TABLE} DROP CONSTRAINT ' + QUOTENAME(@n))"
+        )
+    else:
+        op.execute(f"ALTER TABLE {TABLE} DROP CONSTRAINT IF EXISTS {TABLE}_slug_key")
 
 
 def upgrade() -> None:
-    for name in _slug_keys():
-        op.drop_constraint(name, TABLE, type_="unique")
+    _drop_slug_key()
     op.create_unique_constraint(TEAM_KEY, TABLE, ["team_id", "slug"])
 
 

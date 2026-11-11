@@ -6,7 +6,7 @@ test_template_install."""
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import AsyncClient
@@ -44,7 +44,7 @@ async def test_an_update_merges_into_the_open_draft_without_a_new_version(client
 async def test_an_update_never_rewrites_a_draft_a_publish_request_names(client: AsyncClient) -> None:
     wire(client, [advice()])
     gid = ok(await client.post(f"/v1/resources/{PACK}:no-advice/copies", json={}, headers=OPS), 201)["copy"]["recordId"]
-    rt: Any = client._transport.app.state.runtime  # type: ignore[attr-defined]
+    rt = cast(Any, client._transport.app.state.runtime)  # type: ignore[attr-defined]  # pyright: ignore[reportUnknownMemberType]
     # A review the owner has not decided yet: the request that names v1 is what a reviewer is reading.
     await registry(rt).open_request(
         "guardrail", gid, 1, note="", by="ops@example.com", body={"guardrailId": gid}, approved=False

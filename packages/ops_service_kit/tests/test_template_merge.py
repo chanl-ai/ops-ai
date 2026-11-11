@@ -4,7 +4,7 @@ copy with no stored base silently takes the template; and a guardrail merge ends
 
 from __future__ import annotations
 
-from ops_service_kit.template_merge import FieldOutcome, apply, merge
+from ops_service_kit.template_merge import FieldOutcome, Strictness, apply, merge
 
 FIELDS = ("name", "useWhen", "instructions", "model", "collections")
 BINDINGS = ("name", "model", "collections")
@@ -71,7 +71,7 @@ def test_a_guardrail_merge_keeps_the_teams_topic_and_the_smaller_limit() -> None
     base = {"topics": ["refunds", "fees"], "maxActions": 10}
     yours = {"topics": ["refunds", "fees", "legal advice"], "maxActions": 5}
     template = {"topics": ["refunds"], "maxActions": 20}
-    strict = {"topics": "union", "maxActions": "min"}
+    strict: dict[str, Strictness] = {"topics": "union", "maxActions": "min"}
     result = merge(base, yours, template, ("topics", "maxActions"), strict=strict)
     assert outcomes(result) == {"topics": "kept", "maxActions": "kept"}
     merged = apply(yours, result, {})
