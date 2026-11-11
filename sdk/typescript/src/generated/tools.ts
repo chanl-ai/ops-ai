@@ -3337,6 +3337,11 @@ export interface components {
             access: string;
             /** Approvers */
             approvers: number;
+            /**
+             * Asksfirst
+             * @default false
+             */
+            asksFirst: boolean;
             /** Description */
             description: string;
             /** Inputschema */
@@ -3358,6 +3363,11 @@ export interface components {
              * @default false
              */
             stepUp: boolean;
+            /**
+             * Testaccount
+             * @default false
+             */
+            testAccount: boolean;
             /** Title */
             title?: string | null;
         };

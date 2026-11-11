@@ -5425,6 +5425,11 @@
             "title": "Approvers",
             "type": "integer"
           },
+          "asksFirst": {
+            "default": false,
+            "title": "Asksfirst",
+            "type": "boolean"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -5471,6 +5476,11 @@
           "stepUp": {
             "default": false,
             "title": "Stepup",
+            "type": "boolean"
+          },
+          "testAccount": {
+            "default": false,
+            "title": "Testaccount",
             "type": "boolean"
           },
           "title": {

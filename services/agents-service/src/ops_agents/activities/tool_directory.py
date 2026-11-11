@@ -51,6 +51,11 @@ class OperationRef:
     step_up: bool = False
     # What people see in place of the name: a plugin tool's manifest title; None for any other tool.
     title: str | None = None
+    # The app's "Ask before changes" is on for the team (tools-service appsChangeWithoutAsking): in a chat with a
+    # person, this write asks that person first.
+    asks_first: bool = False
+    # The team has a test account of the app, so a test turn's write changes nothing real and never asks.
+    test_account: bool = False
 
     def grant(self) -> ToolGrant:
         return ToolGrant(
@@ -117,6 +122,8 @@ class ToolsOperations:
                 output_shape=o.get("outputShape"),
                 step_up=bool(o.get("stepUp")) or int(o.get("approvers") or 1) > 1,
                 title=o.get("title"),
+                asks_first=bool(o.get("asksFirst")),
+                test_account=bool(o.get("testAccount")),
             )
             for o in rows
         ]

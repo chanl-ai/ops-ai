@@ -182,7 +182,60 @@ const APPROVAL_STATE: Record<ApprovalWidget['state'], { label: string; icon: typ
   rejected: { label: 'Rejected', icon: XCircle, cls: 'text-destructive-text' },
 };
 
+// A write whose app asks before changes is the person's own answer, so its states read as theirs.
+const ASK_FIRST_STATE: Partial<Record<ApprovalWidget['state'], string>> = { pending: 'Asks before changing anything', approved: 'Allowed', rejected: 'Denied' };
+
 function ApprovalView({ widget, onAction }: WidgetProps<ApprovalWidget>) {
+  if (widget.askFirst) return <AskFirstView widget={widget} onAction={onAction} />;
+  return <ReviewerApprovalView widget={widget} onAction={onAction} />;
+}
+
+/**
+ * The person's own Allow or Deny before an app changes something (its "Ask before changes" is on). Allow for this chat
+ * stops the asking for that app in this chat; Deny needs no reason. Nobody else answers it, so no reviewer is named.
+ */
+function AskFirstView({ widget, onAction }: WidgetProps<ApprovalWidget>) {
+  const [busy, setBusy] = React.useState<'allow' | 'chat' | 'deny' | null>(null);
+  const open = widget.state === 'pending';
+  const s = APPROVAL_STATE[widget.state];
+  const act = async (which: 'allow' | 'chat' | 'deny') => {
+    setBusy(which);
+    try {
+      await onAction?.(which === 'deny' ? { type: 'reject', reason: '' } : { type: 'approve', forChat: which === 'chat' || undefined });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <WidgetFrame widget={widget} actions={<RiskBadge risk={widget.risk} />}>
+      <div className="space-y-1 px-3 pt-3">
+        <p className="text-sm font-medium">{widget.action}</p>
+        <p className="text-xs text-muted-foreground">{widget.consequence ?? widget.summary}</p>
+      </div>
+      <Fields fields={widget.fields} />
+      <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2" data-testid="ask-first-card">
+        <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium', s.cls)}>
+          <s.icon className="size-3.5" /> <span data-testid="approval-waiting-on">{ASK_FIRST_STATE[widget.state] ?? s.label}</span>
+        </span>
+        {open && onAction && widget.canDecide !== false && (
+          <span className="ml-auto flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => act('deny')} disabled={!!busy} data-testid="ask-first-deny">
+              Deny
+            </Button>
+            <LoadingButton variant="outline" size="sm" isLoading={busy === 'chat'} loadingText="Allowing…" onClick={() => act('chat')} disabled={!!busy} data-testid="ask-first-allow-chat">
+              Allow for this chat
+            </LoadingButton>
+            <LoadingButton size="sm" isLoading={busy === 'allow'} loadingText="Allowing…" onClick={() => act('allow')} disabled={!!busy} data-testid="ask-first-allow">
+              Allow
+            </LoadingButton>
+          </span>
+        )}
+      </div>
+    </WidgetFrame>
+  );
+}
+
+function ReviewerApprovalView({ widget, onAction }: WidgetProps<ApprovalWidget>) {
   const [busy, setBusy] = React.useState<'approve' | 'reject' | null>(null);
   const [rejecting, setRejecting] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);

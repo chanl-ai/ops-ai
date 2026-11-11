@@ -241,6 +241,13 @@ def require_not_own(me: Principal, requested_by: Iterable[str | None], *, team: 
     )
 
 
+def require_asker(me: Principal, asked_by: str, *, what: str) -> None:
+    """A person's own answer before their app changes something (an app that asks before changes): only the person
+    who asked in the chat gives it, so an admin or a reviewer cannot answer it for them."""
+    if not me.email or me.email != asked_by:
+        raise Forbidden(f"Only the person who asked can answer {what}.", code="not_the_asker")
+
+
 # Route wording to catalogue action: a definition is created, published or deleted; every other change (a save, a
 # pause, a restore, a test run, a migration, an event or message posted to a thread) edits it, and polling a deployment
 # runs it.
