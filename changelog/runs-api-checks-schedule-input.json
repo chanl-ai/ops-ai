@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Starting a scheduled workflow by API checks its input",
+  "description": "Starting a workflow with a Schedule trigger through the runs API now refuses input that does not fit the trigger's schema, with the same message Start scheduled run gives, instead of starting a run that fails later.",
+  "tag": "fix"
+}
