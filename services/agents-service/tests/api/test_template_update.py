@@ -282,3 +282,20 @@ async def test_an_edited_workflow_keeps_its_definition_and_is_not_offered_the_sa
     assert kept["definition"].get("description") == "Reads the case before the review meeting"
     listed = ok(await client.get("/v1/templates", params={"kind": "workflow"}, headers=OPS))
     assert listed[0]["state"] == "added"
+
+
+async def test_a_second_team_adds_the_same_skill_template_as_its_own(client: AsyncClient) -> None:
+    lending = person("lena", "team_lending", "builder")
+    first = await add_skill(client)
+    made = await client.post(f"/v1/resources/{SOURCE}:cite-policy/copies", json={}, headers=lending)
+    assert made.status_code == 201, made.text
+    second = made.json()["data"]["copy"]["recordId"]
+    assert second != first
+    theirs = ok(await client.get(f"/v1/skills/{second}", headers=lending))
+    assert theirs["name"] == "Cite the policy" and theirs["slug"] == "cite-the-policy"
+    clash = await client.post(
+        "/v1/skills",
+        json={"name": "Cite the policy", "useWhen": "Asked", "instructions": "Another.", "ownerTeam": "team_ops"},
+        headers=OPS,
+    )
+    assert clash.status_code == 409 and clash.json()["error"]["code"] == "name_taken", clash.text

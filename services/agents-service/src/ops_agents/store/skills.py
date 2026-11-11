@@ -28,7 +28,7 @@ registry_skills = sa.Table(
     "registry_skills",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("slug", sa.String(64), nullable=False, unique=True),
+    sa.Column("slug", sa.String(64), nullable=False),
     sa.Column("owner_team", sa.String(200), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("origin", sa.String(16), nullable=False),
@@ -45,6 +45,8 @@ registry_skills = sa.Table(
     # The published version's loading (on_match or always), kept on the row so the agent page's picker filters it in
     # the query; null until a first publish.
     sa.Column("published_loading", sa.String(16)),
+    # A skill's name is unique within its team only, so many teams can hold a copy of the same template.
+    sa.UniqueConstraint("team_id", "slug", name="uq_registry_skills_team_slug"),
     info=TEAM_OWNED,
 )
 
@@ -199,7 +201,8 @@ class SkillRegistry:
                 await c.execute(
                     sa.select(registry_skills.c.id).where(
                         registry_skills.c.slug == content["slug"],
-                        any_team(registry_skills, "a slug is unique across every team"),
+                        registry_skills.c.team_id == team_id,
+                        any_team(registry_skills, "a slug is unique within the team that will own the skill"),
                     )
                 )
             ).first()

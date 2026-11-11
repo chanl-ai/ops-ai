@@ -171,7 +171,7 @@ async def _skill_copies(
 ) -> list[tuple[str, str, int, bool]]:
     """The team's published copy of each of the app's skills, made on first turn-on as the template install makes a
     copy, through the skill's content checks; published at once, since the admin turning the app on chose to give it
-    to the assistant. A name another team's copy holds takes a number, as slugs are unique across teams. A copy the
+    to the assistant. A name the team already uses takes a number, as a slug is unique within its team. A copy the
     app's template has since changed, and the team has not edited, takes the new text as its next published version
     (the plugin's update reaches the assistant); each entry is (skill id, name, version to pin, renewed)."""
     copies, out = TemplateCopies(rt.db), list[tuple[str, str, int, bool]]()
