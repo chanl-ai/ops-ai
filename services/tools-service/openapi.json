@@ -5421,6 +5421,11 @@
             "title": "Access",
             "type": "string"
           },
+          "added": {
+            "default": true,
+            "title": "Added",
+            "type": "boolean"
+          },
           "approvers": {
             "title": "Approvers",
             "type": "integer"
@@ -5471,6 +5476,11 @@
           "stepUp": {
             "default": false,
             "title": "Stepup",
+            "type": "boolean"
+          },
+          "testAccount": {
+            "default": false,
+            "title": "Testaccount",
             "type": "boolean"
           },
           "title": {

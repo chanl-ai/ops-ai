@@ -1,6 +1,7 @@
 """The rules an admin may set for a workspace, with each default in one place. Most defaults are open; the ones that
 hold something back are the approvals (requesterMayDecide off, and `write_waits`: a tool write waits unless its own
-setting says it runs at once) and the AI uses (aiSteps, taskAssist, checkBeforeSend). A team loosens either. Every value
+setting says it runs at once), the AI uses (aiSteps, taskAssist, checkBeforeSend) and each app's "Ask before changes"
+(appsChangeWithoutAsking: no app listed, so a write in a chat asks the person). A team loosens any of them. Every value
 is changed through `can(settings, manage)` in the security team. platform-service stores the values per tenant and puts
 them on every token; services read them there with `policy(p, key)`."""
 
@@ -132,6 +133,19 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Approve writes of these apps",
+    ),
+    Policy(
+        "appsChangeWithoutAsking",
+        # On for every app by default: {} lists no app, so the person in chat is asked before each write of every
+        # app. A team admin lists the apps whose writes run without asking, by the id the Apps page shows.
+        {},
+        "Writes from the listed apps run in chat without asking the person first. Every other app asks before changes.",
+        kind="names",
+        # A team admin's: settings.manage in the team, which builders and members do not hold.
+        changed_by=("settings", "manage"),
+        per_team=True,
+        live=True,
+        title="Apps that change without asking",
     ),
     Policy(
         "aiSteps",

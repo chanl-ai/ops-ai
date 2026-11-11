@@ -1,6 +1,6 @@
-"""A write in a test run, by failure mode: a person who may approve writes runs a tool page's Real test of a write on
-the app's live account and it reaches the system, with nobody asked (their role approved it for them); the same
-write on the app's test account is held back; and a live run's write stops following the team's approval policy."""
+"""A write in a test run, by failure mode: a tool page's Real test of a write on the app's live account is held where
+a live write by the same person is not; the same write on the app's test account is held back; and a live run's
+write stops following the team's approval policy."""
 
 from __future__ import annotations
 
@@ -72,12 +72,15 @@ async def _real(g: Gateway, environment: str) -> dict[str, Any]:
     return r.json()["data"]
 
 
-async def test_a_test_runs_write_on_a_live_account_never_reaches_the_system(g: Gateway, engine: AsyncEngine) -> None:
+async def test_a_test_runs_write_on_a_live_account_meets_the_rules_a_live_one_does(
+    g: Gateway, engine: AsyncEngine
+) -> None:
+    # The person who pressed Run decided to send it; the gateway adds no hold of its own for a test run, so the
+    # approver's write is sent once, as their live write is (below).
     await _on_accounts(g, engine, test_account=False)
     out = await _real(g, "test")
-    assert out["decision"] == "deny", out
-    assert "approval" in out["denyMessage"], out
-    assert not [r for r in g.received if r["path"] == "/v1/holds"], g.received
+    assert out["decision"] == "allow", out
+    assert len([r for r in g.received if r["path"] == "/v1/holds"]) == 1, g.received
 
 
 async def test_a_test_runs_write_on_a_test_account_is_sent(g: Gateway, engine: AsyncEngine) -> None:

@@ -2,6 +2,7 @@
 
 - a write nobody turned approval on for still waits for a token;
 - a team that lists an app in appWritesNeedApproval has that app's writes run without one;
+- a team that lists an app in appsChangeWithoutAsking loosens that app's own wait, a failed read does not;
 - a person who decides the team's reviews approves their own write only while requesterMayDecide is on (off by
   default), and one who does not is never let through (an imported write starts waiting, test_import).
 
@@ -21,7 +22,7 @@ from ops_identity import Principal
 from ops_tools.modules.policy import WriteApprovals, approves_own_writes
 from ops_tools.store.modules import ModuleStore
 
-from .test_write_approval_gateway import Call, _gateway, reasons  # pyright: ignore[reportPrivateUsage]
+from .test_write_approval_gateway import ADDRESS, Call, _gateway, reasons  # pyright: ignore[reportPrivateUsage]
 
 CASE = {"subject": "Card stopped working abroad"}
 
@@ -39,6 +40,43 @@ class ListsCaseApp(WriteApprovals):
     async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
         mods = await ModuleStore(self.engine).all_teams(tenant_id)
         return [f"module:{m['id']}" for m in mods if any(o["name"] == "open_case" for o in m["operations"])]
+
+
+class ChangesWithoutAsking(WriteApprovals):
+    """The apps the team listed in appsChangeWithoutAsking (None: the list could not be read)."""
+
+    def __init__(self, engine: AsyncEngine, *, readable: bool = True) -> None:
+        super().__init__(cast(Any, None))
+        self.engine = engine
+        self.readable = readable
+
+    async def all_writes(self, tenant_id: str, team_id: str | None) -> bool:
+        return False
+
+    async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
+        return []
+
+    async def change_without_asking(self, tenant_id: str, team_id: str | None) -> list[str] | None:
+        if not self.readable:
+            return None
+        mods = await ModuleStore(self.engine).all_teams(tenant_id)
+        return [f"module:{m['id']}" for m in mods if any(o["name"] == "update_address" for o in m["operations"])]
+
+
+@pytest.fixture
+async def quiet(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> AsyncIterator[Call]:
+    async for call in _gateway(engine, seed, tenant, catalog_tools, ChangesWithoutAsking(engine)):
+        yield call
+
+
+@pytest.fixture
+async def unreadable(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> AsyncIterator[Call]:
+    async for call in _gateway(engine, seed, tenant, catalog_tools, ChangesWithoutAsking(engine, readable=False)):
+        yield call
 
 
 @pytest.fixture
@@ -65,6 +103,16 @@ async def test_a_write_nobody_turned_approval_on_for_runs_without_a_token(gatewa
 
 async def test_a_listed_apps_write_waits_for_a_token(listed: Call) -> None:
     r = await listed("open_case", CASE, "off-2")
+    assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
+
+
+async def test_an_app_listed_in_apps_change_without_asking_runs_its_write_without_a_token(quiet: Call) -> None:
+    r = await quiet("update_address", ADDRESS, "quiet-1")
+    assert r.status_code == 200 and r.json()["data"]["decision"] == "allow", r.text
+
+
+async def test_an_unreadable_apps_change_without_asking_keeps_the_write_waiting(unreadable: Call) -> None:
+    r = await unreadable("update_address", ADDRESS, "quiet-2")
     assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
 
 

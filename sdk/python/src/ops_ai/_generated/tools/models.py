@@ -399,6 +399,7 @@ class FenceIn(TypedDict, closed=True):
 
 class GrantableOperation(TypedDict, closed=True):
     access: str
+    added: NotRequired[bool]
     approvers: int
     description: str
     inputSchema: dict[str, Any]
@@ -408,6 +409,7 @@ class GrantableOperation(TypedDict, closed=True):
     outputShape: NotRequired[str | None]
     requiresApproval: bool
     stepUp: NotRequired[bool]
+    testAccount: NotRequired[bool]
     title: NotRequired[str | None]
 
 

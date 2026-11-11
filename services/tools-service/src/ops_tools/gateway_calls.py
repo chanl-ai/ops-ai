@@ -147,7 +147,10 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         title = str(cast(dict[str, Any], module.get("tool_titles") or {}).get(op["name"]) or op["name"])
         who = "someone who manages the team's apps"
         said = f"{app}'s {title} is not added to this team; {who} adds it from {app}'s Tools tab."
-        return 403, "TOOL_NOT_ADDED", said, {}
+        # What the chat's card offers in place: Turn on <tool> on the app's Tools tab, or Ask an admin.
+        template = str(module.get("template_id") or "")
+        app_id = template if template.startswith("plugin:") else f"module:{module['id']}"
+        return 403, "TOOL_NOT_ADDED", said, {"app": app, "appId": app_id, "tool": op["name"], "toolTitle": title}
     if module.get("sign_in_needed"):
         # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
@@ -231,6 +234,7 @@ class GatewayCalls:
         all_writes_wait: Callable[[str, str | None], Awaitable[bool]],
         clock: Callable[[], float] = time.time,
         app_writes_wait: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
+        app_changes_quietly: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
         approver: Callable[[Principal], bool] | None = None,
         requester_may_decide: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
@@ -245,6 +249,9 @@ class GatewayCalls:
         self.all_writes_wait = all_writes_wait
         # Whether the team listed the module's app in appWritesNeedApproval; none listed without it.
         self.app_writes_wait = app_writes_wait
+        # Whether the team's admin listed the module's app in appsChangeWithoutAsking: the only input that loosens a
+        # write's own wait. Team-wide and per-app holds and MCP still win. None without it: nothing loosens.
+        self.app_changes_quietly = app_changes_quietly
         # Whether the caller holds the approver role in the team (can() over the roles grid); nobody without it.
         self.approver = approver
         self.clock = clock
@@ -434,21 +441,23 @@ class GatewayCalls:
         # A write waits when its tool's setting says so (a write with none waits, `write_waits`), the team has every
         # write wait, or the team listed its app.
         module = resolved.module if resolved else None
-        # A test run on an app with no sandbox account signs in with its live one (connections.records account_for);
-        # its write then waits for a person's approval, so testing never changes live data unseen. The person running
-        # the test is not that approval, whatever their role: trying a tool is not deciding to change live data.
-        live_test_write = (
+        # A write signed in with the app's test account changes nothing real, so it never waits, whatever the tool or
+        # the team holds. A test run on an app with no test account signs in with its live one
+        # (connections.records account_for) and meets the rules a live write meets.
+        on_test_account = bool((module or {}).get("sandbox"))
+        needs = (
             access in WRITES
-            and run == TEST
-            and bool((module or {}).get("connection_id"))
-            and not (module or {}).get("sandbox")
-        )
-        needs = live_test_write or (
-            access in WRITES
+            and not on_test_account
             and (
                 # Over MCP every write waits for a person, whatever the operation declares.
                 channel == MCP
-                or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
+                or (
+                    await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
+                    and not (
+                        self.app_changes_quietly is not None
+                        and await self.app_changes_quietly(caller.tenant_id, caller.team_id, module)
+                    )
+                )
                 or await self.all_writes_wait(caller.tenant_id, caller.team_id)
                 or (
                     self.app_writes_wait is not None
@@ -461,7 +470,6 @@ class GatewayCalls:
         # requesterMayDecide is read now: the token's copy dates from when it was minted and may since be off.
         self_approved = bool(
             needs
-            and not live_test_write
             and req.approval_token is None
             and self.approver
             and self.approver(await self._with_live_policy(caller))

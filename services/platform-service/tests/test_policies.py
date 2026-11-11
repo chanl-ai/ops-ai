@@ -17,7 +17,7 @@ from ops_access.policies import BY_KEY, KINDS
 from ops_identity import dev_service_signer, mint_service_token
 from ops_platform.store.policies import PolicyStore
 from ops_platform.store.roles import RoleStore
-from ops_platform.store.tables import audit_entries, tenants
+from ops_platform.store.tables import audit_entries, members, tenants
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id, now_iso
 
@@ -36,6 +36,8 @@ DEFAULTS: dict[str, Any] = {
     "toolWritesNeedApproval": {},
     # Approvals are off by default: no team lists an app whose writes wait.
     "appWritesNeedApproval": {},
+    # Every app asks the person in chat before changes until a team admin lists it here.
+    "appsChangeWithoutAsking": {},
     # No team set: off for every team until one turns it on.
     "aiSteps": {},
     "taskAssist": {},
@@ -103,6 +105,7 @@ async def test_a_change_is_audited_with_before_and_after_and_moves_the_permissio
         ("reviewSlaHours", None),
         ("appWritesNeedApproval", "plugin:opsai.salesforce"),
         ("appWritesNeedApproval", [""]),
+        ("appsChangeWithoutAsking", "plugin:opsai.salesforce"),
         ("noSuchPolicy", True),
     ],
 )
@@ -271,3 +274,20 @@ async def test_a_team_lists_the_apps_whose_writes_wait_through_the_route(signin:
     assert put.json()["data"]["kind"] == "names"
     value = put.json()["data"]["value"]
     assert list(value.values()) == [["plugin:opsai.salesforce"]], value
+
+
+async def test_a_team_admin_switches_an_apps_ask_before_changes_off_and_a_builder_cannot(signin: SignInRig) -> None:
+    """appsChangeWithoutAsking is a team admin's (settings.manage): a builder manages apps but does not decide whether
+    their writes stop asking the person in chat."""
+    body = {"value": ["plugin:opsai.salesforce"]}
+    put = await signin.public.put("/v1/policies/appsChangeWithoutAsking", json=body, headers=signin.admin)
+    assert put.status_code == 200 and put.json()["data"]["kind"] == "names", put.text
+    assert list(put.json()["data"]["value"].values()) == [["plugin:opsai.salesforce"]], put.text
+    email = f"b.lane@{signin.zone}"
+    user = await signin.person(email, role="builder")
+    async with signin.engine.connect() as c:
+        team = (await c.execute(sa.select(members.c.team_id).where(members.c.user_id == user))).scalar_one()
+    token = (await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})).json()
+    builder = {"Authorization": f"Bearer {token['data']['token']}", "X-Team-Id": team}
+    refused = await signin.public.put("/v1/policies/appsChangeWithoutAsking", json={"value": []}, headers=builder)
+    assert refused.status_code == 403, refused.text

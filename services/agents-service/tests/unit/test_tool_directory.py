@@ -104,3 +104,15 @@ async def test_a_run_gets_only_granted_names_the_registry_still_offers_with_thei
     ]
     assert grants[0].description == "get_account does a thing"
     assert grants[0].input_schema["required"] == ["id"]
+
+
+async def test_a_tool_the_team_turned_off_reaches_the_run_and_is_never_offered() -> None:
+    # A run that holds it calls it and is refused with the fix (Turn on <tool>); a picker or the apps line never
+    # offers it, so nobody grants a tool the team turned off.
+    tools = Tools({"acme": [op("get_account"), {**op("update_address", "write"), "added": False}]})
+    d = directory(tools, Clock())
+    with tenant_scope("acme"):
+        grants = await grants_for(d, ["get_account", "update_address"])
+        offered = [o.name for o in await d.operations()]
+    assert [g.name for g in grants] == ["get_account", "update_address"], grants
+    assert offered == ["get_account"], offered

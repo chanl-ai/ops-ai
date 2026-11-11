@@ -777,8 +777,11 @@ async def decide(
     step_up_token: str | None,
     amount: float | None = None,
     inputs: dict[str, Any] | None = None,
+    for_chat: bool = False,
 ) -> dict[str, Any]:
-    """Decides as `approver`, from the teams where they hold reviews.decide (any team for dev). Records the decision,
+    """Decides as `approver`, from the teams where they hold reviews.decide (any team for dev); a write whose app
+    asks before changes is decided by the person who asked instead, and `for_chat` (their "Allow for this chat")
+    stops later writes of that app in the chat from asking. Records the decision,
     then resumes the thread with it. See the module docstring for the retry contract. A publish request's id is decided
     under the publish rules instead (publish_reviews.decide).
 
@@ -851,6 +854,8 @@ async def decide(
         resume["reason"] = reason
     if step_up_token:
         resume["step_up_token"] = step_up_token
+    if for_chat and recorded_as == "approved" and payload.get("ask_first"):
+        resume["for_chat"] = True
     if call and option:
         resume["call"] = call
     if call and rt.gateway:
@@ -888,6 +893,8 @@ async def _check_thread_decider(
     (`calls`) are, and not who asked for it while requesterMayDecide is off."""
     del calls
     team = str(row["team_id"])
+    # A card the person in chat answers (ask_first) goes through this one path too: the asker decides it only where
+    # requesterMayDecide lets them, else a reviewer does.
     require_reviews_decide(review_teams(approver), team, "this review")
     require_not_own(approver, [requester_of(row, payload)], team=team, what="this")
 

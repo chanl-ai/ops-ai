@@ -67,6 +67,16 @@ class WriteApprovals:
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
             return None
 
+    async def change_without_asking(self, tenant_id: str, team_id: str | None) -> list[str] | None:
+        """The apps whose "Ask before changes" `team_id`'s admin switched off (appsChangeWithoutAsking), by the ids
+        the Apps page shows; every other app's writes ask the person in chat first. None when the policy cannot be
+        read, which counts as no app listed, so a failed read never stops the asking."""
+        try:
+            data = await self.platform.get("/v1/policies/appsChangeWithoutAsking", tenant=tenant_id)
+            return team_names(data.get("value"), team_id)
+        except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
+            return None
+
 
 def approves_own_writes(access: Access, p: Principal) -> bool:
     """Whether the caller is their own approver: a person holding reviews.decide in the team they

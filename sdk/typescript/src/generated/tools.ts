@@ -3335,6 +3335,11 @@ export interface components {
         GrantableOperation: {
             /** Access */
             access: string;
+            /**
+             * Added
+             * @default true
+             */
+            added: boolean;
             /** Approvers */
             approvers: number;
             /** Description */
@@ -3358,6 +3363,11 @@ export interface components {
              * @default false
              */
             stepUp: boolean;
+            /**
+             * Testaccount
+             * @default false
+             */
+            testAccount: boolean;
             /** Title */
             title?: string | null;
         };

@@ -72,9 +72,10 @@ async def record_approval(
     if call is None:
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
     policy = await policy_of(rt, call["tool"])
-    # The thread's team reviews it, by its reviewers and admins.
-    require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
     payload: dict[str, Any] = waiting[0]["payload"] if waiting else {}
+    # The thread's team reviews it, by its reviewers and admins; the asker too where requesterMayDecide lets them. A
+    # card the person in chat answers (ask_first) takes this same path.
+    require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
     require_not_own(
         approver,
         [hitl_facade.requester_of(row, payload)],

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -20,6 +21,7 @@ from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.gateway import LIVE, TEST, acting_as, current_run_context
 from ops_agents.activities.overrides import limits_for
+from ops_agents.activities.tool_directory import CatalogTools, OperationRef
 from ops_agents.activities.tools import fill
 from ops_agents.domain.accounts import chosen_accounts
 from ops_contracts.chat import EffectiveSettings
@@ -78,6 +80,9 @@ class AgentState(TypedDict):
     # Each assistant entry may carry the skills that turn loaded (`skills`) and lines for what it read (`reads`).
     history: NotRequired[list[dict[str, Any]]]
     requested_by: NotRequired[str]
+    # The apps the person answered "Allow for this chat" for (module id, else server name): kept by the thread's
+    # checkpoint, so later turns of this chat only stop asking before their changes.
+    writes_allowed: NotRequired[list[str]]
     # Set by a chat run: the settings the override resolver allowed for this turn, and the raw overrides it
     # resolved them from, kept on the run as they were sent.
     settings: NotRequired[dict[str, Any]]
@@ -130,7 +135,7 @@ def build(
             settings=await with_apps(
                 deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
             ),
-            tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
+            tools=[*await asked(state, _switched_on(await agent_grants(deps, a), effective)), *offers],
             transcript=transcript,
             carried_skills=carried,
             earlier_reads=reads,
@@ -158,8 +163,33 @@ def build(
             "reply": result.text,
         }
 
+    async def operations() -> list[OperationRef]:
+        return await (deps.tools or CatalogTools(deps.catalog)).operations()
+
+    async def allowed_now(state: AgentState, decision: dict[str, Any] | None) -> list[str]:
+        """The app the decision being resumed answered "Allow for this chat" for; none for any other answer."""
+        d = decision or {}
+        if d.get("decision") != "approved" or not d.get("for_chat"):
+            return []
+        tool = (state.get("pending") or {}).get("tool")
+        return [app_of(o) for o in await operations() if o.name == tool][:1]
+
+    async def asked(state: AgentState, grants: list[ToolGrant], allowed: list[str] | None = None) -> list[ToolGrant]:
+        """The grants with each write its app asks the person about made to pause (ask_first)."""
+        return ask_first(
+            grants,
+            await operations(),
+            person=state.get("requested_by"),
+            live=turn_environment(state) == LIVE,
+            allowed=[*(state.get("writes_allowed") or []), *(allowed or [])],
+        )
+
     async def approval(state: AgentState) -> dict[str, Any]:
         p = state.get("pending") or {}
+        op = next((o for o in await operations() if o.name == p["tool"]), None)
+        # The person in the chat answers this one themselves (Allow, Deny, Allow for this chat): their app asks before
+        # changes and no reviewer's approval holds the write.
+        asks = bool(state.get("requested_by")) and asks_person(op, live=turn_environment(state) == LIVE)
         definition = deps.catalog.tool(p["tool"])
         tpl = definition.approval if definition else None
         values = {k: str(v) for k, v in p["input"].items()}
@@ -179,6 +209,7 @@ def build(
                 "action_id": p["action_id"],
                 "needed": p["needed"],
                 **({"requested_by": asker} if (asker := state.get("requested_by")) else {}),
+                **({"ask_first": True, "app": app_of(op)} if asks and op is not None else {}),
             }
         )
         return {"decision": decision}
@@ -188,6 +219,7 @@ def build(
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
         d = state.get("decision") or {}
         approved = d.get("decision") == "approved"
+        now = await allowed_now(state, d)
         effective = _effective(state)
         req = TurnRequest(
             turn_id=new_id("turn"),
@@ -195,7 +227,7 @@ def build(
             settings=await with_apps(
                 deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
             ),
-            tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
+            tools=[*await asked(state, _switched_on(await agent_grants(deps, a), effective), now), *offers],
             # The same bases as the turn it resumes, so a search after the approval keeps to them.
             kb_ids=_granted(state, _kb_grants(a, deps.model_alias, effective)),
             all_team_knowledge=a.all_team_knowledge,
@@ -216,6 +248,7 @@ def build(
             "messages": [{"role": "assistant", "content": result.text}],
             "pending": interrupt_to_state(result.interrupt) if result.interrupt else None,
             "decision": None,
+            "writes_allowed": [*(state.get("writes_allowed") or []), *now],
             "reply": result.text,
             "tool_results": [{"tool": c.tool, "status": c.status, "output": c.output} for c in result.tool_calls],
         }
@@ -238,6 +271,39 @@ def turn_accounts(agent: AgentDefinition, state: Mapping[str, Any]) -> dict[str,
     """The account each app's calls use in a turn: the chat's pick (its thread's `accounts`) over the agent's own."""
     chosen = cast(dict[str, Any], (state.get("thread_overrides") or {}).get("accounts") or {})
     return chosen_accounts(agent=agent.accounts, chat=chosen)
+
+
+def app_of(op: OperationRef) -> str:
+    """The app an "Allow for this chat" answer covers: the operation's module, else its server's name."""
+    return op.module_id or op.module_name
+
+
+def asks_person(op: OperationRef | None, *, live: bool) -> bool:
+    """Whether a write's wait is the person in chat's to answer first (Allow / Deny / Allow for this chat): the tool
+    waits (`requiresApproval`, which already folds in the app's "Ask before changes") and it does not land on a test
+    account (a test turn on an app that has one)."""
+    return bool(op and op.access not in ("read", "workflow") and op.requires_approval and (live or not op.test_account))
+
+
+def ask_first(
+    grants: list[ToolGrant], ops: list[OperationRef], *, person: str | None, live: bool, allowed: list[str]
+) -> list[ToolGrant]:
+    """The turn's grants with the waits the person in chat does not need to answer lifted: an app they allowed for
+    this chat, and a test turn on an app with a test account. Every other wait stays as the tool declares it, so the
+    kernel stops before it and the chat draws the card. A turn with nobody in it (a workflow's or a schedule's agent)
+    keeps its grants as they are."""
+    if not person:
+        return grants
+    by_name = {o.name: o for o in ops}
+    return [
+        replace(g, requires_approval=False)
+        if g.requires_approval
+        and (op := by_name.get(g.name)) is not None
+        and op.access not in ("read", "workflow")
+        and (app_of(op) in allowed or (not live and op.test_account))
+        else g
+        for g in grants
+    ]
 
 
 def _effective(state: AgentState) -> EffectiveSettings | None:

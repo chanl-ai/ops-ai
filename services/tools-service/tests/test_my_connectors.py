@@ -101,16 +101,13 @@ async def test_the_line_names_only_switched_on_tools(
     first = await _sites_on(c, tenant)
     await _signed_in(store, tenant, first, "priya@live.example")
     row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
-    # A new app starts with its reads on; the write waits in the catalog until someone adds it.
+    # A new app starts with every tool on; a tool switched off leaves the line.
+    assert row["canDo"] == "Reads: Read a record · Writes, reviewed first: Change a record", row["canDo"]
+    removed = await c.delete(f"/v1/apps/{SITES}/tools/fields_sites_update_record", headers=admin(tenant))
+    assert removed.status_code == 200, removed.text
+    row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
     assert [t["title"] for t in row["tools"]] == ["Read a record"], row["tools"]
     assert row["canDo"] == "Reads: Read a record", row["canDo"]
-    added = await c.post(
-        f"/v1/apps/{SITES}/tools", json={"tools": ["fields_sites_update_record"]}, headers=admin(tenant)
-    )
-    assert added.status_code == 200, added.text
-    row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
-    # The write says nothing about approval, so it waits for a person.
-    assert row["canDo"] == "Reads: Read a record · Writes, reviewed first: Change a record", row["canDo"]
 
 
 async def test_a_write_the_teams_policy_holds_is_marked_reviewed() -> None:
