@@ -39,6 +39,7 @@ export const SETTINGS_NAV: SettingsEntry[] = [
   { id: 'webhooks', title: 'Webhooks', href: '/settings/team/webhooks', icon: IconWebhook, description: 'Send events to the bank’s other systems', group: 'Team', needs: WEBHOOKS },
   { id: 'api-keys', title: 'API keys', href: '/settings/team/api-keys', icon: IconKey, description: 'Keys for systems that start runs or read logs', group: 'Team', needs: API_KEYS },
   { id: 'policies', title: 'Workspace policies', href: '/settings/policies', icon: IconShieldCheck, description: 'Who may decide what, and how long things may wait', group: 'Govern', section: 'Policies' },
+  { id: 'approvals', title: 'Approvals', href: '/settings/approvals', icon: IconShieldCheck, description: 'Whether agents ask before they change an app, and who answers', group: 'Govern', section: 'Policies' },
   { id: 'publish-reviews', title: 'Publish reviews', href: '/settings/policies/publish-reviews', icon: IconGitPullRequest, description: 'Which publishes need a second person’s review', group: 'Govern', section: 'Policies' },
   { id: 'gates', title: 'Gate policies', href: '/settings/policies/gates', icon: IconGavel, description: 'Who reviews at each gate and how long they have', group: 'Govern', section: 'Policies' },
   { id: 'sign-in', title: 'Sign-in', href: '/settings/security/sign-in', icon: IconLogin, description: 'Sign-in methods, single sign-on, two-step verification and sessions', group: 'Govern', section: 'Security' },

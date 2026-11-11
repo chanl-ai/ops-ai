@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, KeyRound } from 'lucide-react';
 
+import { useTeamWritesWait } from '@/hooks/policy-queries';
 import { DetailSheet, type DetailSheetNavigation } from '@/components/shared/detail-sheet';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -79,6 +80,7 @@ export function OperationSheet({
     setD(op ? draftOf(op, appBase) : null);
     setInputErrors({});
   }, [op, appBase]);
+  const teamWaits = useTeamWritesWait();
   if (!op || !d) return <DetailSheet open={false} onOpenChange={onOpenChange} title="">{null}</DetailSheet>;
 
   const write = d.access === 'write';
@@ -317,7 +319,7 @@ export function OperationSheet({
               <div>
                 <p className="text-sm font-medium">Every call waits for an approval</p>
                 <p className="text-xs text-muted-foreground">
-                  {twoApprovers ? 'Two different people approve every call, as the operation’s approval policy requires.' : d.requiresApproval === null ? 'Team default (waits): follows the team’s approval settings until you switch it.' : 'Off: only a gate policy’s approval token lets the call run. Turning it off is a major version.'}
+                  {twoApprovers ? 'Two different people approve every call, as the operation’s approval policy requires.' : d.requiresApproval === null ? `Team default (${teamWaits ? 'waits' : 'runs'}): follows the team’s approval settings until you switch it.` : 'Off: only a gate policy’s approval token lets the call run. Turning it off is a major version.'}
                 </p>
               </div>
               <Switch checked={d.requiresApproval !== false || twoApprovers} disabled={twoApprovers} onCheckedChange={(v) => set({ requiresApproval: v })} aria-label="Every call waits for an approval" />

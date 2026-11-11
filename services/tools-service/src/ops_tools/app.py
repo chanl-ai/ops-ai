@@ -400,7 +400,10 @@ def create_gateway_app(
         if write_approvals is not None:
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
             rows = [r | {"test_account": str(r.get("module_id") or "") in tested} for r in rows]
-        data = [GrantableOperation.model_validate(r).model_dump(by_alias=True) for r in rows]
+        data = [
+            GrantableOperation.model_validate({k: v for k, v in r.items() if k != "setting"}).model_dump(by_alias=True)
+            for r in rows
+        ]
         return JSONResponse({"success": True, "data": data})
 
     @app.get("/v1/tools/{name}", tags=["gateway"], responses=error_responses())

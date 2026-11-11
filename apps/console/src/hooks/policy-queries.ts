@@ -11,6 +11,13 @@ import { useTeamQuery } from './team-query';
 const KEY = ['workspace-policies'] as const;
 
 export const useWorkspacePolicies = () => useTeamQuery({ queryKey: KEY, queryFn: () => api.workspacePolicies.list() });
+/** Whether the team in view asks before an agent changes an app (appChanges): what an unset write's "Team default" means. */
+export function useTeamWritesWait(): boolean {
+  const { team } = useTeam();
+  const value = useWorkspacePolicies().data?.find((p) => p.key === 'appChanges')?.value;
+  const mine = value && typeof value === 'object' && !Array.isArray(value) && team ? (value as Record<string, unknown>)[team.id] : undefined;
+  return !!mine && typeof mine === 'object' && (mine as { ask?: boolean }).ask === true;
+}
 /** Whether the person may change policies in the team they act in, as the server's own permissions say. */
 export function usePolicyEditor() {
   // The resolved team: the stored choice may name a team the person is not in, and the requests then act in their first one.
