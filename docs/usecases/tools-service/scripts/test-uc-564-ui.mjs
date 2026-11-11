@@ -134,7 +134,9 @@ try {
       const login = sf.info.login_url;
       // The team's own client is made under Credentials, with no account, and the turn-on picks it.
       const own = await call(tools, 'POST', '/v1/app-credentials', priya, { app: `plugin:${PLUGIN}`, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
-      const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, credentialId: own.data?.id });
+      const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, signIn: 'team', settings: { login_url: login }, credentialId: own.data?.id });
+      // A new app hands agents its read tools only; the team admin adds the write, as from the app's Tools tab.
+      await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/tools`, priya, { tools: ['salesforce_update_record'] });
       const connectionId = on.data?.connectionId;
       const started = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in`, priya, { account: 'team' });
       const back = started.data?.authorizeUrl ? await signInAt(started.data.authorizeUrl, 'acme.integration') : {};
