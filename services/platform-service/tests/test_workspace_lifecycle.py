@@ -194,7 +194,9 @@ async def test_a_closed_workspace_answers_only_its_owner_until_restored(signin: 
     await signin.person(email, role="builder")
     member_h = await _signed_in(signin, email)
     in_ops = {**signin.admin, "X-Team-Id": signin.ops_team}
-    key = await signin.public.post("/v1/api-keys", json={"name": "k", "scopes": ["read"]}, headers=in_ops)
+    key = await signin.public.post(
+        "/v1/api-keys", json={"name": "k", "scopes": ["read"], "expiresInDays": 90}, headers=in_ops
+    )
     assert key.status_code == 201, key.text
     service = mint_service_token(
         dev_service_signer(), service="agents", audience="platform", tenant_id=signin.tenant, scopes=["settings:view"]

@@ -38,9 +38,11 @@ def service(platform: Platform) -> FastAPI:
 
 async def test_a_signed_in_person_and_their_key_resolve_at_another_service(platform: Platform) -> None:
     admin, h = await as_admin(platform)
-    made = (await platform.public.post("/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["read"]})).json()[
-        "data"
-    ]
+    made = (
+        await platform.public.post(
+            "/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["read"], "expiresInDays": 90}
+        )
+    ).json()["data"]
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=service(platform)), base_url="http://agents") as c:
         r = await c.get("/v1/agents", headers={"Authorization": h["Authorization"]})
         assert r.status_code == 200, r.text

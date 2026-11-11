@@ -60,7 +60,9 @@ with platform() as (api, internal):
     )
 
     rami = {"Authorization": f"Bearer {accepted.get('token', '')}"}
-    key = data(api.post("/v1/api-keys", headers=rami, json={"name": "rami-ci", "scopes": ["read"]}))["secret"]
+    key = data(
+        api.post("/v1/api-keys", headers=rami, json={"name": "rami-ci", "scopes": ["read"], "expiresInDays": 90})
+    )["secret"]
     gone = member_id(api, priya, f"r.ahmed.{RUN}@harborpine.example")
     api.post("/v1/settings/members/delete", headers=priya, json={"ids": [gone]})
     r = api.get("/v1/me", headers=rami)

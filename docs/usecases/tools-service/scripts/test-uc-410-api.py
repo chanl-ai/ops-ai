@@ -119,10 +119,18 @@ with ExitStack() as stack:
         security=approver,
     )
     ops_key = data(
-        api.post("/v1/api-keys", headers=bearer(priya, "team_ops"), json={"name": "uc410", "scopes": ["read"]})
+        api.post(
+            "/v1/api-keys",
+            headers=bearer(priya, "team_ops"),
+            json={"name": "uc410", "scopes": ["read"], "expiresInDays": 90},
+        )
     )
     other_key = data(
-        api.post("/v1/api-keys", headers=bearer(wanjiru, "team_platform"), json={"name": "uc410", "scopes": ["read"]})
+        api.post(
+            "/v1/api-keys",
+            headers=bearer(wanjiru, "team_platform"),
+            json={"name": "uc410", "scopes": ["read"], "expiresInDays": 90},
+        )
     )
     OPS_KEY, OTHER_KEY = ops_key["secret"], other_key["secret"]
 

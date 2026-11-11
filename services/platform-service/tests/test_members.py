@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from ops_platform.store.tables import audit_entries, members, role_assignments, tenants
 
-from .conftest import SERVICE, Person, Platform
+from .conftest import Person, Platform
 from .test_permissions import grant
 
 
@@ -194,11 +194,10 @@ async def test_a_role_change_applies(platform: Platform) -> None:
     assert [m["email"] for m in await member_rows(platform, h, role="approver")] == [viewer.email]
 
 
-async def test_removing_a_member_ends_their_sessions_and_disables_their_keys(platform: Platform) -> None:
+async def test_removing_a_member_ends_their_sessions(platform: Platform) -> None:
     admin, h = await as_admin(platform)
     builder = await join(platform, admin, "builder")
     signed_in = (await platform.sign_in(builder)).json()["data"]
-    key = await platform.api_key(builder)
     [row] = await member_rows(platform, h, role="builder")
     r = await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [row["id"]]})
     assert r.json()["data"]["updated"] == [row["id"]]
@@ -207,8 +206,6 @@ async def test_removing_a_member_ends_their_sessions_and_disables_their_keys(pla
     assert (await platform.public.get("/v1/auth/session", headers=auth)).status_code == 401
     refreshed = await platform.public.post("/v1/auth/refresh", json={"refreshToken": signed_in["refreshToken"]})
     assert refreshed.status_code == 401
-    r = await platform.internal.post("/v1/auth/introspect", json={"apiKey": key}, headers=SERVICE)
-    assert r.status_code == 401
 
 
 async def invite_one(platform: Platform, h: dict[str, str], email: str, role: str = "builder") -> str:

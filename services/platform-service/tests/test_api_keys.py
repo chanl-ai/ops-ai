@@ -17,7 +17,9 @@ from .test_members import as_admin, join
 
 
 async def create(platform: Platform, h: dict[str, str], **body: object) -> dict[str, object]:
-    r = await platform.public.post("/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["read"], **body})
+    r = await platform.public.post(
+        "/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["read"], "expiresInDays": 90, **body}
+    )
     assert r.status_code == 201, r.text
     return r.json()["data"]
 

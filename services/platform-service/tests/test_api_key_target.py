@@ -28,12 +28,12 @@ async def test_the_target_reaches_introspection(platform: Platform) -> None:
 async def test_a_target_the_key_could_never_start_is_refused(platform: Platform) -> None:
     _, h = await as_admin(platform)
     read_only = await platform.public.post(
-        "/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["read"], "target": TARGET}
+        "/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["read"], "target": TARGET, "expiresInDays": 90}
     )
     assert read_only.status_code == 400 and "write scope" in read_only.text
     pinned_agent = {"kind": "agent", "id": "ag_levy", "version": 2}
     r = await platform.public.post(
-        "/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["write"], "target": pinned_agent}
+        "/v1/api-keys", headers=h, json={"name": "ci", "scopes": ["write"], "target": pinned_agent, "expiresInDays": 90}
     )
     assert r.status_code == 400 and "latest published" in r.text
 
