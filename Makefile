@@ -1,7 +1,7 @@
 # Ops AI. The root Makefile only orchestrates: it includes make/*.mk by concern and delegates to each service's own
 # Makefile with $(MAKE) -C. Strategy and the daily commands: docs/architecture/make.md. `make help` lists the targets.
 .DEFAULT_GOAL := help
-.PHONY: help install verify clean
+.PHONY: help agent-preflight install verify clean
 
 include make/env.mk
 include make/dev.mk
@@ -9,6 +9,7 @@ include make/cli.mk
 include make/db.mk
 include make/db-scripts.mk
 include make/release.mk
+include make/update.mk
 include make/staging.mk
 include make/services.mk
 include make/console.mk
@@ -20,8 +21,10 @@ include make/sdk.mk
 include make/usecase.mk
 include make/experiments.mk
 include make/git.mk
+include make/preview.mk
 include make/plugins.mk
 include make/box.mk
+include make/agents.mk
 
 ##@ General
 
@@ -29,6 +32,9 @@ help: ## List targets
 	@awk "$$HELP_AWK" $(MAKEFILE_LIST)
 	@printf '\nPer service (generated; SERVICES=%s)\n' "$(SERVICES)"
 	@printf '  %-20s %s\n' "<verb>-<svc>" "make -C <svc dir> <verb>; verbs: $(SERVICE_VERBS)"
+
+agent-preflight: ## A builder's first step: make agent-preflight CARD=c-1 (needs CL_AGENT); one line and exit 1 if not ready
+	@python3 scripts/agents/preflight.py "$(CARD)"
 
 install: console-install python-install ## Install the console and the Python workspace, for contributors (only the opsai command: make install-cli)
 

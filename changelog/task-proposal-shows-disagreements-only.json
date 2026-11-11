@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Human Tasks no longer repeats a step's plain fields",
+  "description": "A task now shows a workflow step's proposal only when two sources disagree, one row per field. Other step details are no longer drawn as extra cards.",
+  "tag": "fix"
+}

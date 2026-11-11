@@ -12,7 +12,7 @@ per service, the bundle, grants), guarded upgrade and downgrade SQL between two 
 | `golden/mssql/` | The reviewed SQL Server DDL per chain, plus roles.sql and grants.sql; `make db-ddl-golden` rewrites it after a model change |
 | `chain_tables.py` | The tables a service's code declares, read from its migrations' env |
 | `proof.sh` | The proof on a throwaway PostgreSQL: baseline equals Alembic, upgrade equals head, runtime roles refused DDL, drift red and green, a service refusing an old schema |
-| `tests/test_offline.py` | Every revision after the eight named renders as offline SQL (run by `make verify`) |
+| `tests/test_offline.py` | Every revision after the nine named renders as offline SQL (run by `make verify`) |
 | `tests/test_mssql_ddl.py` | The golden files equal what the models compile to; a policy on every TENANT_SCOPED table and no other; nullable unique keys filtered; upgrades before the baseline refused (run by `make verify`) |
 
 ## Working here

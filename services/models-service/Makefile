@@ -24,8 +24,8 @@ lint: ## ruff format check and lint
 typecheck: ## Strict pyright
 	uv run pyright $(PY_DIRS)
 
-test: ## pytest on the test database (make db-up)
-	$(TEST_DB) uv run pytest
+test: ## pytest on the test database (make db-up); T= runs only those files
+	$(TEST_DB) uv run pytest $(T)
 
 verify: lint typecheck test openapi-check ## lint, typecheck, test and the OpenAPI gate
 
