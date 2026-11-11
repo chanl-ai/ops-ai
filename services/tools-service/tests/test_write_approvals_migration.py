@@ -60,7 +60,10 @@ async def _waits(engine: AsyncEngine) -> dict[str, bool]:
 
 
 async def _audit(engine: AsyncEngine) -> list[dict[str, Any]]:
-    return await _rows(engine, "select * from operation_audit order by operation_id")
+    """The shared audit log's entries (ops_store.audit) the migration recorded in the service outbox, by tool."""
+    rows = await _rows(engine, "select tenant_id, payload from service_outbox where name = 'audit.recorded'")
+    entries = [{"tenant_id": r["tenant_id"], **r["payload"]} for r in rows]
+    return sorted(entries, key=lambda e: e["targetId"])
 
 
 async def test_a_write_saved_since_1_nov_holding_false_waits_and_an_earlier_one_is_untouched() -> None:
@@ -89,7 +92,7 @@ async def test_a_write_saved_before_1_nov_holding_false_is_unchanged() -> None:
             await engine.dispose()
 
 
-async def test_one_audit_row_per_changed_tool_names_the_tool_and_the_reason() -> None:
+async def test_each_changed_tool_is_recorded_in_the_shared_audit_log_with_its_operation_and_reason() -> None:
     async with scratch_database("tools_write_approvals_audit") as target:
         _alembic(target, "upgrade", BEFORE)
         engine = create_async_engine(target)
@@ -99,11 +102,16 @@ async def test_one_audit_row_per_changed_tool_names_the_tool_and_the_reason() ->
             await _write_tool(engine, "mod_kept", SAVED_AFTER, waits=True)  # already waits: not a change
             await _write_tool(engine, "mod_old", SAVED_BEFORE, waits=False)
             _alembic(target, "upgrade", AFTER)
-            rows = await _audit(engine)
-            assert [r["operation_id"] for r in rows] == ["mod_a_op", "mod_b_op"], rows
-            for r in rows:
-                assert r["tenant_id"] == T and r["reason"], "a row names the tenant and gives the reason"
-                assert r["module_id"] == r["operation_id"].removesuffix("_op")
+            entries = await _audit(engine)
+            assert [e["targetId"] for e in entries] == ["mod_a_op", "mod_b_op"], entries
+            for e in entries:
+                assert e["tenant_id"] == T and e["action"] and e["targetKind"], e
+                assert e["detail"]["summary"], "the Audit page shows the line"
+                assert e["detail"]["moduleId"] == e["targetId"].removesuffix("_op"), "names the tool"
+                assert e["detail"]["operationId"] == e["targetId"], "names the operation"
+                assert e["detail"]["reason"], "gives the reason"
+            tables = {r["table_name"] for r in await _rows(engine, "select table_name from information_schema.tables")}
+            assert "operation_audit" not in tables, "a second audit table beside the shared log"
         finally:
             await engine.dispose()
 
@@ -119,7 +127,7 @@ async def test_running_the_migration_twice_changes_nothing_the_second_time() -> 
             _alembic(target, "downgrade", BEFORE)
             _alembic(target, "upgrade", AFTER)
             assert await _waits(engine) == first
-            ops = [r["operation_id"] for r in await _audit(engine)]
+            ops = [e["targetId"] for e in await _audit(engine)]
             assert ops == ["mod_new_op"], f"the second run wrote audit again: {ops}"
         finally:
             await engine.dispose()
