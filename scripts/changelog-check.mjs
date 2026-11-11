@@ -216,7 +216,7 @@ function selfTest() {
   const red = {
     'a file path': { description: 'The page in apps/console/src/app/page.tsx loads faster.' },
     'a bare path with an extension': { description: 'The layout in case-page.tsx loads faster.' },
-    // Joined so the public-view scan does not read the fixture as a tracker id.
+    // Joined so the public-view and leak scans do not read this fixture as a real tracker id.
     'a tracker id': { description: 'Built for ' + 'c' + '-505 so pages wait.' },
     'a commit hash': { description: 'Since 23cad692 pages wait for your team.' },
     'first person': { description: 'We made pages wait for your team.' },
