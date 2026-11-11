@@ -416,7 +416,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
 | `usecases/models-service/an-account-admin-saves-a-model.md` | uc-532: An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one |
 | `usecases/models-service/a-refused-model-call-says-what-to-do.md` | uc-720: A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member |
-| `usecases/tools-service/a-connected-app-writes-at-once.md` | uc-721: A connected app writes at once and asks the person in chat first |
+| `usecases/tools-service/a-connected-app-writes-at-once.md` | uc-721: A connected app writes at once; a team admin turns asking on per team or per app |
+| `usecases/console/an-admin-decides-approvals-with-one-switch.md` | uc-730: A team admin decides whether agents ask before changing an app with one switch on Approvals, and a test-account checkbox under Advanced |
 | `usecases/models-service/a-team-connects-azure-openai.md` | uc-605: A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region |
 | `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
 | `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
