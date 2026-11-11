@@ -58,18 +58,8 @@ delete, run, decide, manage). Every check in every service goes through that gri
 
 ### Approval settings
 
-Every approval behaviour is a setting or a permission. Nothing below is fixed in the product. Policies are changed in
-Settings › Policies, or with `PUT /v1/policies/{key}`; each change is audited.
-
-| Setting | What it does | Default | Who can change it | Where |
-|---|---|---|---|---|
-| Tool's own approval switch (`requires_approval`, read by `write_waits`) | A write of that one Tool waits for a person. A read never waits | A write waits unless its switch is off | A builder who can edit the Tool; turning it off is a major change that Security reviews | Tools › the Tool › Operation › Access and approval; `PATCH /v1/tool-modules/{id}/operations/{op}` |
-| Ask before changes (`appsChangeWithoutAsking`) | Lists the Apps whose writes run in chat without asking the person. Any other App asks the person in the chat to Allow or Deny, and only that person answers | No App listed, so every App asks | A team admin (`settings.manage`) | The App's Tools tab, or Settings › Policies |
-| Tool writes need approval (`toolWritesNeedApproval`) | Every write of the team waits for a reviewer, whatever the Tool says | Off | A team admin (`reviews.manage`) | Settings › Policies |
-| Apps whose writes need approval (`appWritesNeedApproval`) | The writes of the listed Apps wait for a reviewer, even where the Tool runs at once | No App listed | A team admin (`reviews.manage`) | Settings › Policies |
-| Requester may decide (`requesterMayDecide`) | The person who asked for, saved or started a decision may also make it | Off, so someone else decides | A team admin (`settings.manage`) | Settings › Policies |
-| Approve permission on a role (`reviews.decide`, a cell in the roles grid) | Who may decide a review at all. Without it a person cannot approve, whatever the policies say | Held by the built-in Reviewer role; the grid is seeded per workspace and custom roles are planned ([Roles](#roles)) | Not editable by a team admin yet; the workspace's role grid sets it | The roles grid |
-| Test accounts | A write on a test account does not wait or ask | Always, because a test account holds no live data | Not a setting; use a live account to test approvals | The App's Accounts tab |
+Every approval behaviour is a setting or a permission. The full list, with each setting's default, who changes it,
+where, and the code that owns it, is in [Roles and permissions › Approvals](../architecture/roles-and-permissions.md#approvals).
 
 ## The tool gateway
 
