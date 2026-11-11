@@ -45,3 +45,7 @@ You review what a person sees. You change nothing; you report, with the rule beh
 ## Report (at most 10 lines)
 Blocking findings first, then should and nice, each as "route, element: problem (heuristic or criterion) → fix";
 states and roles not reached; proposed rules.
+
+## Forms
+
+Every form uses one zod schema with react-hook-form and zodResolver through the shadcn Form parts and FormField (apps/console/CLAUDE.md, "Any form"). A form that keeps fields in useState or validates by hand is a finding.

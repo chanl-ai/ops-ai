@@ -50,6 +50,7 @@ profile's "Commands an agent runs" table names the make targets.
 | Keep each tool call under 2 minutes; run tests, builds and walks in the background and poll | here |
 | One slice per run, about 45 minutes; then commit, write the handoff (done, next slice, file state) to the tracker or, if the tracker refuses, to `HANDOFF.md` on the branch, and stop | here |
 | While building, run only the test files for the code you changed; the full suite runs once at the QA stage | here |
+| Owner instructions become rules: when the person who briefed you gives a standing instruction, add it to the agent, skill or doc it belongs in during the same task, and say which file changed | here |
 | Fewer, stronger tests: one per failure mode, within the card's budget (5 small, 10 medium, 15 large); a suite should shrink or hold when a change lands, never grow by habit | here |
 | Tests and code are written by different agents: the test writer commits failing tests and changes no product code; the coder changes no test file after that commit (`python scripts/agents/tests_untouched.py <tests-commit>` must pass); a test the coder thinks is wrong goes back through the tracker | here |
 | Before adding any shared part, list what already does that job (file:line) and reuse it; a second owner needs a stated reason | the project's architecture rules (profile) |
