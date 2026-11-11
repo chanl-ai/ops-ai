@@ -28,7 +28,6 @@ from ..auth import (
     Principal,
     principal,
     reader_teams,
-    require_asker,
     require_not_own,
     require_reviews_decide,
     require_step_up,
@@ -74,18 +73,15 @@ async def record_approval(
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
     policy = await policy_of(rt, call["tool"])
     payload: dict[str, Any] = waiting[0]["payload"] if waiting else {}
-    if payload.get("ask_first"):
-        # The app asks the person before changes: their own Allow is the approval.
-        require_asker(approver, hitl_facade.requester_of(row, payload), what=f"the write {call['tool']}")
-    else:
-        # The thread's team reviews it, by its reviewers and admins.
-        require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
-        require_not_own(
-            approver,
-            [hitl_facade.requester_of(row, payload)],
-            team=str(row["team_id"]),
-            what=f"the write {call['tool']}",
-        )
+    # The thread's team reviews it, by its reviewers and admins; the asker too where requesterMayDecide lets them. A
+    # card the person in chat answers (ask_first) takes this same path.
+    require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
+    require_not_own(
+        approver,
+        [hitl_facade.requester_of(row, payload)],
+        team=str(row["team_id"]),
+        what=f"the write {call['tool']}",
+    )
     if policy.approvers > 1 or workspace_step_up(approver):
         require_step_up(rt, approver.email, step_up_token)
     digest = input_hash(call["input"])

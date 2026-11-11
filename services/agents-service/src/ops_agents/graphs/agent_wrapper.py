@@ -279,26 +279,28 @@ def app_of(op: OperationRef) -> str:
 
 
 def asks_person(op: OperationRef | None, *, live: bool) -> bool:
-    """Whether a write asks the person in chat first: its app's "Ask before changes" is on, no reviewer's approval
-    already holds it, and it does not land on a test account (a test turn on an app that has one)."""
-    return bool(
-        op and op.access not in ("read", "workflow") and op.asks_first and not op.requires_approval
-        and (live or not op.test_account)
-    )  # fmt: skip
+    """Whether a write's wait is the person in chat's to answer first (Allow / Deny / Allow for this chat): the tool
+    waits (`requiresApproval`, which already folds in the app's "Ask before changes") and it does not land on a test
+    account (a test turn on an app that has one)."""
+    return bool(op and op.access not in ("read", "workflow") and op.requires_approval and (live or not op.test_account))
 
 
 def ask_first(
     grants: list[ToolGrant], ops: list[OperationRef], *, person: str | None, live: bool, allowed: list[str]
 ) -> list[ToolGrant]:
-    """The turn's grants with each write that asks the person first made to pause, so the kernel stops before it and
-    the chat draws an Allow / Deny card. A turn with nobody in it (a workflow's or a schedule's agent) keeps its grants
-    as they are, and an app the person allowed for this chat runs without asking."""
+    """The turn's grants with the waits the person in chat does not need to answer lifted: an app they allowed for
+    this chat, and a test turn on an app with a test account. Every other wait stays as the tool declares it, so the
+    kernel stops before it and the chat draws the card. A turn with nobody in it (a workflow's or a schedule's agent)
+    keeps its grants as they are."""
     if not person:
         return grants
     by_name = {o.name: o for o in ops}
     return [
-        replace(g, requires_approval=True)
-        if asks_person(op := by_name.get(g.name), live=live) and op is not None and app_of(op) not in allowed
+        replace(g, requires_approval=False)
+        if g.requires_approval
+        and (op := by_name.get(g.name)) is not None
+        and op.access not in ("read", "workflow")
+        and (app_of(op) in allowed or (not live and op.test_account))
         else g
         for g in grants
     ]
