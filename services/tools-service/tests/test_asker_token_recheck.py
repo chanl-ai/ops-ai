@@ -17,6 +17,7 @@ from ops_tools.tokens import Binding, mint
 
 from .conftest import REVIEW_KEY
 from .test_calls import Gateway, gateway
+from .test_write_approval_gateway import TeamAsksReviewer
 
 __all__ = ["gateway"]  # the fixture, used by name
 
@@ -80,3 +81,21 @@ async def test_the_askers_own_approval_runs_while_the_policy_lets_them_decide(ga
 @pytest.fixture
 def requester_may_decide_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": true}')
+
+
+@pytest.fixture
+def team_asks_the_person(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def levels(self: Any, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
+        return {"ask": True, "answer": "person", "reviewerRole": None}, {}
+
+    monkeypatch.setattr(TeamAsksReviewer, "levels", levels)
+
+
+@pytest.mark.usefixtures("team_asks_the_person")
+async def test_when_the_team_asks_the_person_their_allow_runs_the_write(gateway: Gateway) -> None:
+    # "Ask the person" is the asker's own confirmation; the own-request rule belongs to reviewer mode only.
+    ran = await send(gateway, ASKER)
+    assert ran.status_code == 200, ran.text
+    logged = await gateway.client.get("/v1/executions", params={"tool": gateway.tool("place_hold")})
+    [row] = logged.json()["data"]["data"]
+    assert row["status"] == "ok", row

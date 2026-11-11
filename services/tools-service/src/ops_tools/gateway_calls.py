@@ -437,6 +437,8 @@ class GatewayCalls:
         # A write signed in with the app's test account changes nothing real; the team's checkbox decides if it asks.
         on_test_account = bool((module or {}).get("sandbox"))
         needs = False
+        # An answer of "person" is the asker's own confirmation in chat, so the four-eyes check below does not apply.
+        confirmed_by_asker = False
         if access in WRITES:
             setting, setting_role = await self.registry.approval_setting(req.tool, caller.tenant_id, caller.team_id)
             answer = await self.approvals.answer(
@@ -451,6 +453,7 @@ class GatewayCalls:
                 test_account=on_test_account,
             )
             needs = bool(answer["waits"])
+            confirmed_by_asker = answer["answer"] == "person"
         # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.
         # requesterMayDecide is read now: the token's copy dates from when it was minted and may since be off.
@@ -493,7 +496,8 @@ class GatewayCalls:
             error = {"code": "gateway_refused", "message": "; ".join(decision.reasons)}
             await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 403, "gateway_refused", decision.reasons)
-        if needs and req.approval_token and (own := await self._asker_refusal(caller.tenant_id, req)) is not None:
+        asked_again = needs and not confirmed_by_asker and req.approval_token
+        if asked_again and (own := await self._asker_refusal(caller.tenant_id, req)) is not None:
             # The token was valid when minted, but the person the call acts for approved it themselves and today's
             # policy no longer lets an asker decide (it changed mid-turn, or the write now needs a reviewer).
             row.update(decision="deny", reasons=[own.message])
