@@ -24,8 +24,8 @@ lint: ## ruff format check and lint
 typecheck: ## Strict pyright
 	uv run pyright $(PY_DIRS)
 
-test: wasm ## pytest; runs real guests on the pinned build
-	uv run pytest
+test: wasm ## pytest; runs real guests on the pinned build; T= runs only those files
+	uv run pytest $(T)
 
 verify: lint typecheck test ## lint, typecheck and test
 
