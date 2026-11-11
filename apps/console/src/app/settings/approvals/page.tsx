@@ -91,7 +91,7 @@ export default function ApprovalsPage() {
 
   const saveTeam = form.handleSubmit(async (v) => {
     try {
-      await set.mutateAsync({ key: 'appChanges', teamId, value: { ask: v.ask, answer: v.answer, reviewerRole: v.answer === BY_REVIEWER ? v.reviewerRole : null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false } });
+      await set.mutateAsync({ key: 'appChanges', teamId, value: { ask: v.ask, answer: v.answer, reviewerRole: v.answer === BY_REVIEWER ? v.reviewerRole : null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: saved.testRunsAsk !== false } });
       if (v.requesterMayDecide !== (mayDecide?.value === true)) await set.mutateAsync({ key: 'requesterMayDecide', value: v.requesterMayDecide });
       toast.success(`Saved: ${SWITCH}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
     } catch (e) {
@@ -101,7 +101,7 @@ export default function ApprovalsPage() {
   // Saves the checkbox alone, on top of what the team saved, so a half-edited switch above is not stored with it.
   const saveTestAccounts = async () => {
     try {
-      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: form.getValues('testAccountsNeverAsk') };
+      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: form.getValues('testAccountsNeverAsk'), testRunsAsk: saved.testRunsAsk !== false };
       await set.mutateAsync({ key: 'appChanges', teamId, value });
       toast.success(`Saved: ${TEST_ACCOUNTS}`);
     } catch (e) {

@@ -294,12 +294,14 @@ def check_value(key: str, value: Any) -> Any:
             and answer in ANSWERS
             and (role is None or isinstance(role, str))
             and isinstance(held.get("testAccountsNeverAsk", True), bool)
+            and isinstance(held.get("testRunsAsk", True), bool)
         ):
             return {
                 "ask": held.get("ask", False),
                 "answer": answer,
                 "reviewerRole": role,
                 "testAccountsNeverAsk": held.get("testAccountsNeverAsk", True),
+                "testRunsAsk": held.get("testRunsAsk", True),
             }
     if policy.kind == "app_changes_by_app" and isinstance(value, dict):
         out: dict[str, Any] = {}
@@ -323,7 +325,7 @@ def check_value(key: str, value: Any) -> Any:
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
-        "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk}",
+        "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk, testRunsAsk}",
         "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
@@ -387,7 +389,8 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
 
     The most specific level wins: the tool's `approvalMode`, then the app's entry of `appChangesByApp`, then the team's
     `appChanges`. A read never waits; a write over MCP always does (nobody is in the chat); a tool with two approvers
-    always asks a reviewer. A team's checkbox `testAccountsNeverAsk` (on unless saved off) lets a test account through.
+    always asks a reviewer. A test run (channel "test") of a write on a live account asks the person while `testRunsAsk`
+    is on. A team's checkbox `testAccountsNeverAsk` (on unless saved off) lets a test account through.
     "Ask the person" with nobody in the chat (a workflow) goes to the reviewer role. An unreadable team policy (None)
     fails closed: the write waits for a reviewer.
 
@@ -415,6 +418,15 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
         answer, role, source = mode, tool.get("reviewerRole") or role, "tool"
     if answer == "person" and channel == "workflow":
         answer = "reviewer"
+    # A test run of a write on a live account pauses for the person's yes unless the team turned `testRunsAsk` off
+    # (on unless saved off); chats and workflows keep the answer above.
+    if (
+        answer == "none"
+        and channel == "test"
+        and not test_account
+        and (cast(dict[str, Any], team).get("testRunsAsk", True) if isinstance(team, dict) else True)
+    ):
+        answer, role, source = "person", None, "test-run"
     if answer == "none":
         return {"waits": False, "answer": "none", "reviewerRole": None, "source": source}
     if test_account and (

@@ -2317,6 +2317,7 @@ class ModuleService:
                     reviewer_role=o.get("reviewer_role"),
                     approvers=approval_policy(m, o)["approvers"],
                     test_account=bool(m.get("sandbox")),
+                    channel="test",
                 )
             )["waits"]
         )

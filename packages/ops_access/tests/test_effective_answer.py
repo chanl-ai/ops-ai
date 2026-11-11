@@ -81,3 +81,12 @@ def test_ask_the_person_with_nobody_in_the_chat_goes_to_the_teams_reviewer_role(
 def test_a_policy_that_cannot_be_read_keeps_the_write_waiting() -> None:
     got = answer(team=None)
     assert got["waits"] is True and got["answer"] != "none", got
+
+
+def test_a_test_run_of_a_live_write_asks_the_person_until_the_team_turns_it_off() -> None:
+    live = answer(channel="test")
+    off = answer(channel="test", team={"testRunsAsk": False})
+    on_test_account = answer(channel="test", test_account=True)
+    in_chat = answer(channel="chat")
+    assert (live["waits"], live["answer"], live["source"]) == (True, "person", "test-run"), live
+    assert [a["waits"] for a in (off, on_test_account, in_chat)] == [False, False, False]

@@ -449,7 +449,7 @@ class GatewayCalls:
                 setting=setting,
                 reviewer_role=setting_role,
                 approvers=(policy or {}).get("approvers") or 1,
-                channel="mcp" if channel == MCP else "chat",
+                channel="mcp" if channel == MCP else "test" if channel == CONSOLE else "chat",
                 test_account=on_test_account,
             )
             needs = bool(answer["waits"])
