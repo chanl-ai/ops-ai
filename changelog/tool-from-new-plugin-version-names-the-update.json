@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "A tool from a newer app version says it needs the update",
+  "description": "A tool that exists only in a newer version of an app now tells the team that an admin takes the update first, instead of saying the tool is not added to the team.",
+  "tag": "fix"
+}
