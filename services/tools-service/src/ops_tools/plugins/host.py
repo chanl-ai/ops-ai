@@ -386,6 +386,9 @@ def operation_of(m: Manifest, t: Tool, op_id: str) -> dict[str, Any]:
         "binding": None,
         "rate_limit_per_min": t.rate_limit_per_min,
         "requires_approval": tool_waits(t.access),
+        # The manifest's ask-first flag is the tool's default answer, a reviewer's approval; left out, the app and the
+        # team decide.
+        "approval_mode": "reviewer" if t.access == "write" and t.requires_approval is True else None,
         "approvers": 1,
         "amount_max": t.amount_max,
         "needs_person": t.needs_person,

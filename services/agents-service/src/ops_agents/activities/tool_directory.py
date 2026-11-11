@@ -173,7 +173,7 @@ class CatalogTools:
                 description=t.description,
                 access=t.access,
                 input_schema=t.input_schema,
-                requires_approval=tool_waits(t.access),
+                requires_approval=tool_waits(t.access, t.approval_mode),
                 module_id=None,
                 module_name=t.server,
                 approvers=t.approvers,

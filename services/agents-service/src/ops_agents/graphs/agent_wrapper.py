@@ -283,11 +283,13 @@ def app_of(op: OperationRef) -> str:
 def asks_person(op: OperationRef | None, *, live: bool) -> bool:
     """Whether a write's wait is the person in chat's to answer first (Allow / Deny / Allow for this chat): the tool
     waits (`requiresApproval`), the team, app or tool chose "ask the person" over a reviewer, and it does not land on a
-    test account (a test turn on an app that has one)."""
+    test account (a test turn on an app that has one). An operation with no tools-service row (`module_id` None, the
+    agents' own catalogue) has no team setting that chose the person, so its wait goes to a reviewer."""
     return bool(
         op
         and op.access not in ("read", "workflow")
         and op.requires_approval
+        and op.module_id is not None
         and op.answer == "person"
         and (live or not op.test_account)
     )

@@ -146,11 +146,13 @@ async def test_an_asker_who_decides_reviews_is_not_asked_until_the_tenant_switch
     production: AsyncClient,
 ) -> None:
     """Roles decide: James decides Operations' reviews, so in a workspace that turned requesterMayDecide on his own
-    write waits for his own Allow; with it off, the default, Maya decides it."""
+    write is decided as his at once and the card is no longer waiting; with it off, the default, Maya decides it."""
     james = person("usr_james", ["team_ops"], policies={"requesterMayDecide": True})
     url = await drafted(production, james)
-    own_allow = await production.post(url, json={"type": "approve"}, headers=james)
-    assert own_allow.status_code == 200, own_allow.text
+    again = await production.post(url, json={"type": "approve"}, headers=james)
+    assert (again.status_code, again.json()["error"]["message"]) == (409, "This approval was already decided."), (
+        again.text
+    )
     thread = url.split("/")[3]
     messages: list[dict[str, Any]] = (await production.get(f"/chat/threads/{thread}", headers=james)).json()["data"][
         "messages"
@@ -208,10 +210,10 @@ async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> 
     async for c in _client(
         Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies=loose), platform=False
     ):
-        # The operation asks for no step-up and step-up is off: the dev asker, who passes every role rule, allows
-        # their own write with no step-up.
+        # The operation asks for no step-up and step-up is off: the dev asker, who passes every role rule, is not
+        # asked, so the card is decided as theirs.
         own = await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)
-        assert own.status_code == 200, own.text
+        assert own.status_code == 409, own.text
     strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True, **loose})
     async for c in _client(strict, platform=False):
         url = await drafted(c, dana)

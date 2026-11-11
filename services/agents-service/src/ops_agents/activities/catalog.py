@@ -163,12 +163,16 @@ class ToolDefinition(_Model):
     approvers: int = 1
     # Approving asks for a step-up even with one approver (the registry's `stepUp`).
     step_up: bool = False
-    # Whether a write waits for a person's approval; every write declares it (tests/unit/test_write_declarations.py),
-    # and one that does not waits.
+    # The tool's "ask first" flag (tests/unit/test_write_declarations.py). True is the tool's own default answer, a
+    # reviewer's approval, which beats its app and team like any tool-level setting; left out, they decide.
     requires_approval: bool | None = None
 
+    @property
+    def approval_mode(self) -> str | None:
+        return "reviewer" if self.access == "write" and self.requires_approval is True else None
+
     def grant(self) -> ToolGrant:
-        waits = tool_waits(self.access)
+        waits = tool_waits(self.access, self.approval_mode)
         return ToolGrant(self.name, self.server, self.description, self.access, self.input_schema, waits)
 
 
