@@ -81,20 +81,21 @@ class WriteApprovals:
         team's, through `effective_answer`. Everything that shows or enforces a wait calls here."""
         team, by_app = levels or await self.levels(tenant_id, team_id)
         app = next((by_app[i] for i in sorted(app_ids(module) if module else ()) if i in by_app), None)
-        # `setting` is the tool's own mode (see `tool_mode`). A bare True is the older "waits" flag, a reviewer's
-        # answer; a bare False is no override, since it cannot be told from the old open default.
-        mode = "reviewer" if setting is True else setting if isinstance(setting, str) else None
+        # `setting` is the tool's own mode (see `tool_mode`). A bare True or False is a stored requires_approval, which
+        # cannot be told from the old default, so it is no override: the app and the team decide.
+        mode = setting if isinstance(setting, str) else None
         tool = {"access": access, "approvalMode": mode, "reviewerRole": reviewer_role, "approvers": approvers}
         return effective_answer(tool=tool, app=app, team=team, channel=channel, test_account=test_account)
 
 
 def tool_mode(op: dict[str, Any]) -> str | None:
-    """The tool's own answer (none, person or reviewer) from its operation row: its approval_mode, else the older
-    requires_approval flag where it waits; None follows the tool's app, then the team."""
+    """The tool's own answer (none, person or reviewer) from its operation row: its approval_mode only. The older
+    requires_approval flag is not read: a stored true cannot be told from the old default, so it follows the tool's
+    app, then the team."""
     mode = op.get("approval_mode")
     if mode in ("none", "person", "reviewer"):
         return str(mode)
-    return "reviewer" if op.get("requires_approval") is True else None
+    return None
 
 
 def approves_own_writes(access: Access, p: Principal) -> bool:
