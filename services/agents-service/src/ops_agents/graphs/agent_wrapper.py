@@ -210,6 +210,8 @@ def build(
                 "needed": p["needed"],
                 **({"requested_by": asker} if (asker := state.get("requested_by")) else {}),
                 **({"ask_first": True, "app": app_of(op)} if asks and op is not None else {}),
+                # The role whose holders approve this write; nobody else, and never the asker.
+                **({"reviewer_role": op.reviewer_role} if op is not None and not asks and op.reviewer_role else {}),
             }
         )
         return {"decision": decision}
@@ -280,9 +282,15 @@ def app_of(op: OperationRef) -> str:
 
 def asks_person(op: OperationRef | None, *, live: bool) -> bool:
     """Whether a write's wait is the person in chat's to answer first (Allow / Deny / Allow for this chat): the tool
-    waits (`requiresApproval`, which already folds in the app's "Ask before changes") and it does not land on a test
-    account (a test turn on an app that has one)."""
-    return bool(op and op.access not in ("read", "workflow") and op.requires_approval and (live or not op.test_account))
+    waits (`requiresApproval`), the team, app or tool chose "ask the person" over a reviewer, and it does not land on a
+    test account (a test turn on an app that has one)."""
+    return bool(
+        op
+        and op.access not in ("read", "workflow")
+        and op.requires_approval
+        and op.answer == "person"
+        and (live or not op.test_account)
+    )
 
 
 def ask_first(

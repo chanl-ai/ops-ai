@@ -174,7 +174,7 @@ class AssistantBuilder:
             risk=tpl.risk if tpl else "high",
             consequence=tpl.consequence if tpl else None,
             step_up=bool(p.get("step_up")) or None,
-            ask_first=bool(p.get("ask_first")) or None,
+            ask_first=bool(p.get("ask_first")),
             state=state,
             decided_by=decision["decided_by"] if decision else None,
             reason=decision["reason"] if decision else None,

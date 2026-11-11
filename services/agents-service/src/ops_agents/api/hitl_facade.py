@@ -32,6 +32,8 @@ from . import engine_reviews, publish_reviews
 from .agent_registry import registry
 from .auth import (
     Principal,
+    caller_of,
+    require_asker,
     require_not_own,
     require_reviews_decide,
     require_step_up,
@@ -893,9 +895,19 @@ async def _check_thread_decider(
     (`calls`) are, and not who asked for it while requesterMayDecide is off."""
     del calls
     team = str(row["team_id"])
-    # A card the person in chat answers (ask_first) goes through this one path too: the asker decides it only where
-    # requesterMayDecide lets them, else a reviewer does.
-    require_reviews_decide(review_teams(approver), team, "this review")
+    if payload.get("ask_first"):
+        # "Ask the person" is a confirmation: the asker alone answers it, whatever roles they hold and whatever
+        # requesterMayDecide says. Nobody else may answer for them.
+        require_asker(approver, requester_of(row, payload), what="this")
+        return
+    who = caller_of(approver)
+    require_reviews_decide(
+        review_teams(approver),
+        team,
+        "this review",
+        role=payload.get("reviewer_role"),
+        held=who.access.get(team) or [who.roles.get(team)],
+    )
     require_not_own(approver, [requester_of(row, payload)], team=team, what="this")
 
 

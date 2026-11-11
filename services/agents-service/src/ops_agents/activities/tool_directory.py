@@ -56,6 +56,10 @@ class OperationRef:
     test_account: bool = False
     # False for a tool the team turned off in its app's catalog (ToolsOperations.off_operations).
     added: bool = True
+    # Who answers a write that waits, from tools-service's one resolver: "person" (the asker confirms in the chat) or
+    # "reviewer" (someone holding `reviewer_role`). A row that names none is the person.
+    answer: str = "person"
+    reviewer_role: str | None = None
 
     def grant(self) -> ToolGrant:
         return ToolGrant(
@@ -104,7 +108,7 @@ class ToolsOperations:
         self.tools = tools
         self.ttl_s = ttl_s
         self.clock = clock
-        # Per tenant and team: a team's toolWritesNeedApproval changes which of its writes wait (tools-service).
+        # Per tenant and team: a team's appChanges and appChangesByApp change which of its writes wait (tools-service).
         self._cache: dict[tuple[str, str | None], tuple[float, list[OperationRef]]] = {}
 
     async def operations(self) -> list[OperationRef]:
@@ -142,6 +146,8 @@ class ToolsOperations:
                 title=o.get("title"),
                 test_account=bool(o.get("testAccount")),
                 added=o.get("added") is not False,
+                answer=str(o.get("answer") or "person"),
+                reviewer_role=o.get("reviewerRole"),
             )
             for o in rows
         ]
