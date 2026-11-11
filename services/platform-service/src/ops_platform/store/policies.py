@@ -120,7 +120,12 @@ class PolicyStore:
             return dict(row.value if row else {})
 
         team = dict((await part("appChanges")).get(team_id) or {})
-        apps = dict((await part("appChangesByApp")).get(team_id) or {})
+        # A `tool:<name>` entry is one tool's answer, not an app: the old per-app lists never named it.
+        apps = {
+            a: e
+            for a, e in dict((await part("appChangesByApp")).get(team_id) or {}).items()
+            if not a.startswith("tool:")
+        }
         derived: dict[str, Any] = {
             "toolWritesNeedApproval": bool(team.get("ask")) and team.get("answer") == "reviewer",
             "appWritesNeedApproval": [a for a, e in apps.items() if e.get("answer") == "reviewer"],

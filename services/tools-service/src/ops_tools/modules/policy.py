@@ -76,16 +76,29 @@ class WriteApprovals:
         channel: str = "chat",
         test_account: bool = False,
         levels: tuple[Any, dict[str, Any]] | None = None,
+        tool: str | None = None,
     ) -> dict[str, Any]:
         """The one answer to "does this call wait, and who answers": the tool's own setting, its app's entry and the
-        team's, through `effective_answer`. Everything that shows or enforces a wait calls here."""
+        team's, through `effective_answer`. Everything that shows or enforces a wait calls here.
+
+        `tool` is the tool's name. An admin's answer for that tool, kept in the team's `appChangesByApp` under
+        `tool:<name>`, replaces the tool's own setting, so a plugin tool whose manifest asks first (its module row
+        cannot be edited) is still changed by a team admin."""
         team, by_app = levels or await self.levels(tenant_id, team_id)
         app = next((by_app[i] for i in sorted(app_ids(module) if module else ()) if i in by_app), None)
         # `setting` is the tool's own mode (see `tool_mode`). A bare True or False is a stored requires_approval, which
         # cannot be told from the old default, so it is no override: the app and the team decide.
         mode = setting if isinstance(setting, str) else None
+        mine = by_app.get(tool_key(tool)) if tool else None
+        if isinstance(mine, dict) and mine.get("answer") in ("none", "person", "reviewer"):
+            mode, reviewer_role = str(mine["answer"]), mine.get("reviewerRole") or reviewer_role
         tool = {"access": access, "approvalMode": mode, "reviewerRole": reviewer_role, "approvers": approvers}
         return effective_answer(tool=tool, app=app, team=team, channel=channel, test_account=test_account)
+
+
+def tool_key(tool: str) -> str:
+    """Where a team admin's answer for one tool lives in `appChangesByApp`; no app id starts with `tool:`."""
+    return f"tool:{tool}"
 
 
 def tool_mode(op: dict[str, Any]) -> str | None:

@@ -460,6 +460,7 @@ class GatewayCalls:
                     else "chat"
                 ),
                 test_account=on_test_account,
+                tool=req.tool,
             )
             needs = bool(answer["waits"])
             confirmed_by_asker = answer["answer"] == "person"

@@ -389,6 +389,7 @@ def create_gateway_app(
                     approvers=r["approvers"],
                     levels=levels,
                     test_account=str(r.get("module_id") or "") in tested,
+                    tool=str(r["name"]),
                 )
                 out.append(
                     r

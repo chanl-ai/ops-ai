@@ -34,18 +34,25 @@ class TeamAsksReviewer(WriteApprovals):
 
     def __init__(self) -> None:
         super().__init__(None)
+        # What an admin saved in appChangesByApp; a test fills it as the Approvals page would.
+        self.by_app: dict[str, Any] = {}
 
     async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
-        return {"ask": True, "answer": "reviewer", "reviewerRole": None, "testAccountsNeverAsk": True}, {}
+        return {"ask": True, "answer": "reviewer", "reviewerRole": None, "testAccountsNeverAsk": True}, self.by_app
+
+
+@pytest.fixture
+def team() -> TeamAsksReviewer:
+    return TeamAsksReviewer()
 
 
 @pytest.fixture
 async def asking(
-    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]], team: TeamAsksReviewer
 ) -> AsyncIterator[Api]:
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     async with opa_client() as opa:
-        app = build_app(engine, seed, tenant, opa=opa, write_approvals=TeamAsksReviewer())
+        app = build_app(engine, seed, tenant, opa=opa, write_approvals=team)
         hooks = {"response": [response_checker(app)]}
         async with (
             app.router.lifespan_context(app),
@@ -122,3 +129,23 @@ async def test_a_read_takes_no_approval_mode(asking: Api) -> None:
     op = await _op(asking, "get_customer_profile")
     r = await asking.call("PATCH", f"{MOD}/operations/{op['id']}", json={"approvalMode": "none"})
     assert r.status_code == 422, r.text
+
+
+async def test_an_admin_loosens_a_tool_whose_default_asks_first_and_the_write_runs(
+    asking: Api, team: TeamAsksReviewer
+) -> None:
+    """A plugin tool's manifest default is a stored reviewer mode on a row no route edits. The admin's answer for the
+    tool, kept in the policy store, replaces it without touching the row."""
+    await _set(asking, "update_address", {"approvalMode": "reviewer"})
+    await _publish_and_decide(asking)
+    body = {"tool": "update_address", "input": ADDRESS, "runContext": {"act": "test"}}
+
+    async def call(key: str) -> httpx.Response:
+        return await asking.client.post("/v1/calls", json={**body, "key": key}, headers=service_headers(asking.tenant))
+
+    waits = await call("p0")
+    assert waits.status_code == 403 and "needs an approval token" in waits.text, waits.text
+    team.by_app["tool:update_address"] = {"answer": "none"}
+    ran = await call("p1")
+    assert ran.status_code == 200 and ran.json()["data"]["decision"] == "allow", ran.text
+    assert (await _op(asking, "update_address"))["approvalMode"] == "reviewer", "the row is not edited"

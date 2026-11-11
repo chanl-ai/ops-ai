@@ -2318,6 +2318,7 @@ class ModuleService:
                     approvers=approval_policy(m, o)["approvers"],
                     test_account=bool(m.get("sandbox")),
                     channel="test",
+                    tool=o["name"],
                 )
             )["waits"]
         )

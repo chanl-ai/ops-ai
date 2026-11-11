@@ -151,6 +151,7 @@ async def _reviewed(apps: Apps, who: Caller, tools: list[dict[str, Any]]) -> lis
                 setting=t.get("setting"),
                 reviewer_role=t.get("settingRole"),
                 levels=levels,
+                tool=str(t["name"]),
             )
             waits = bool(answer["waits"])
         out.append({**t, "reviewed": waits})
