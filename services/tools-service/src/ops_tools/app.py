@@ -282,6 +282,7 @@ def create_gateway_app(
     if modules is not None:
         # A tool page's Real run is this gateway's call, never a path of the registry's own.
         modules.real_runs = calls.console_run
+        modules.approvals = calls.approvals
 
     resolved_auth = auth or Auth.from_settings(Settings(), audience="tools")
     mcp = (

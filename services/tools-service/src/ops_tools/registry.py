@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from ops_access import write_waits
+from ops_access import tool_waits
 from ops_agents.activities.catalog import Catalog
 from ops_store.team_scope import acting_team
 
@@ -149,7 +149,7 @@ class ToolRegistry:
                     "description": t.description,
                     "access": t.access,
                     "input_schema": t.input_schema,
-                    "requires_approval": write_waits(t.access, t.requires_approval),
+                    "requires_approval": tool_waits(t.access),
                     "setting": t.requires_approval,
                     "setting_role": None,
                     "approvers": t.approvers,
@@ -200,7 +200,7 @@ class ToolRegistry:
                         "description": op["description"],
                         "access": op["access"],
                         "input_schema": input_schema(op["input"]),
-                        "requires_approval": write_waits(op["access"], op["requires_approval"]),
+                        "requires_approval": tool_waits(op["access"], tool_mode(op)),
                         # The tool's own setting before the team's and app's answer is applied (app.py).
                         "setting": tool_mode(op),
                         "setting_role": op.get("reviewer_role"),

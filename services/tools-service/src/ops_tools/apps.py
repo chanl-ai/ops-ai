@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
-from ops_access import write_waits
+from ops_access import tool_waits
 from ops_identity import ActingPerson
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
@@ -1704,7 +1704,7 @@ async def app_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                     "access": str(op["access"]),
                     "added": added,
                     "askedAtSignIn": asked,
-                    "waits": write_waits(str(op["access"]), op.get("requires_approval")),
+                    "waits": tool_waits(str(op["access"]), tool_mode(op)),
                     "setting": tool_mode(op),
                     "settingRole": op.get("reviewer_role"),
                     "moduleId": module_id,

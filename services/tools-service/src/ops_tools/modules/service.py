@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import httpx
 import yaml
 
-from ops_access import Access, require_provisioner, write_waits
+from ops_access import Access, require_provisioner
 from ops_identity import Principal
 from ops_service_kit.errors import (
     ApiError,
@@ -57,7 +57,7 @@ from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError
 from . import openapi
 from .directory import Directory, Team
 from .executions import call_row
-from .policy import PublishPolicy, RequesterMayDecide, ToolsMode
+from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event
 from .reviews import ReviewOpener
 from .seed import blank, kind_of, major_of, open_connection, tool_title
@@ -335,6 +335,9 @@ class ModuleService:
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
     # checks, never a path of its own.
     real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
+    # The gateway's own reader of the team's approval settings, set by create_gateway_app: a test run waits exactly
+    # when the same call from chat would. Left as is, no team has saved a setting.
+    approvals: WriteApprovals = WriteApprovals()
 
     def __init__(
         self,
@@ -2303,7 +2306,20 @@ class ModuleService:
             }
         if amount_refusal(o, args) is not None:  # the gateway's own check (ops_tools.limits)
             return deny("constraint")
-        would_pause = o["access"] in WRITES and write_waits(o["access"], o["requires_approval"])
+        would_pause = o["access"] in WRITES and bool(
+            (
+                await self.approvals.answer(
+                    who.tenant_id,
+                    who.team.id,
+                    m,
+                    access=o["access"],
+                    setting=tool_mode(o),
+                    reviewer_role=o.get("reviewer_role"),
+                    approvers=approval_policy(m, o)["approvers"],
+                    test_account=bool(m.get("sandbox")),
+                )
+            )["waits"]
+        )
         # A real write in a workflow's context needs a real approval; simulate_approval stands in for one on Mock only.
         if would_pause and sandbox and ctx is not None:
             return deny("approval_token_missing")

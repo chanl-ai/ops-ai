@@ -347,19 +347,6 @@ def team_off(values: Any, team: str | None) -> bool:
     return team is not None and isinstance(values, dict) and cast(dict[str, Any], values).get(team) is False
 
 
-def write_waits(access: str, requires_approval: bool | None) -> bool:
-    """Whether a call of a tool waits for a person's approval by the tool's own setting: a write waits only when its
-    setting is an explicit true; a write with none runs, unless the team's switches (toolWritesNeedApproval,
-    appWritesNeedApproval) hold it; a read never waits. Every place that turns a tool's setting into
-    a decision (the registry, plugin and seeded tools, the agents' catalogue) asks here, so the default is set once.
-
-    Args:
-        access: the tool's access class, "read" or "write" ("workflow" and others never wait here).
-        requires_approval: the tool's setting; None when it has none.
-    """
-    return access == "write" and requires_approval is True
-
-
 def team_writes_need_approval(values: dict[str, Any], team: str | None) -> bool:
     """Whether `team` set toolWritesNeedApproval on."""
     return team_on(values, team)
@@ -435,3 +422,15 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
     ):
         return {"waits": False, "answer": "none", "reviewerRole": None, "source": "test-account"}
     return {"waits": True, "answer": answer, "reviewerRole": None if answer == "person" else role, "source": source}
+
+
+def tool_waits(access: str, mode: str | None = None) -> bool:
+    """Whether a call of a tool waits on its own setting alone, for a place with no team to ask (a seeded or plugin
+    tool's row, the agents' catalogue): `effective_answer` for a team that saved nothing. `mode` is the tool's own
+    answer (none, person or reviewer), None when it has none. The team's and app's levels are applied where the team
+    is known (the gateway's `WriteApprovals.answer`)."""
+    return bool(
+        effective_answer(
+            tool={"access": access, "approvalMode": mode}, app=None, team={}, channel="chat", test_account=False
+        )["waits"]
+    )

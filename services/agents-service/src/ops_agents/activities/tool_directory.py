@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
-from ops_access import write_waits
+from ops_access import tool_waits
 from ops_agent_kernel.types import Access, ToolGrant
 from ops_identity import (
     ACTING_FOR_HEADER,
@@ -173,7 +173,7 @@ class CatalogTools:
                 description=t.description,
                 access=t.access,
                 input_schema=t.input_schema,
-                requires_approval=write_waits(t.access, t.requires_approval),
+                requires_approval=tool_waits(t.access),
                 module_id=None,
                 module_name=t.server,
                 approvers=t.approvers,
