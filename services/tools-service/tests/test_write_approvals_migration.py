@@ -1,19 +1,26 @@
-"""tools_0072 makes every tool write saved since 2026-11-01 wait for approval, by failure mode: a write saved on or
-after that day that holds requires_approval=false still runs unattended; an earlier write is changed too, so a team's
-deliberate setting is overridden; a changed write leaves no audit row, or a row that names no tool or reason; a second
-run changes rows or writes audit again; and an admin can no longer switch a write back to false afterwards."""
+"""tools_0072 sets every stored requires_approval=false to not set (NULL), at any date, so the team default decides, by
+failure mode: an off write still runs unattended; an older off is skipped because of its date; a write that already
+waits is changed; a changed write leaves no audit row, or one that names no tool or reason; a second run changes rows
+or writes audit again; an admin's off after the migration is put back; a newly created tool stores off instead of not
+set; and a not-set write runs at once or waits regardless of the team default."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_tools.modules.policy import WriteApprovals
 from ops_tools.store.modules import ModuleStore
 
+from .conftest import Api
+from .fake_upstream import ENDPOINT, HOST
 from .test_registry_store import _alembic, scratch_database  # pyright: ignore[reportPrivateUsage]
+from .test_write_approval_gateway import ADDRESS, Call, _gateway, reasons  # pyright: ignore[reportPrivateUsage]
 
 BEFORE = "tools_0071_account_key"
 AFTER = "tools_0072_write_approvals_on"
@@ -52,7 +59,7 @@ async def _write_tool(engine: AsyncEngine, mid: str, saved: datetime, *, waits: 
     )  # fmt: skip
 
 
-async def _waits(engine: AsyncEngine) -> dict[str, bool]:
+async def _waits(engine: AsyncEngine) -> dict[str, bool | None]:
     return {
         r["module_id"]: r["requires_approval"]
         for r in await _rows(engine, "select module_id, requires_approval from module_operations")
@@ -66,28 +73,29 @@ async def _audit(engine: AsyncEngine) -> list[dict[str, Any]]:
     return sorted(entries, key=lambda e: e["targetId"])
 
 
-async def test_a_write_saved_since_1_nov_holding_false_waits_and_an_earlier_one_is_untouched() -> None:
+async def test_every_stored_off_becomes_not_set_whatever_its_date_and_a_write_that_waits_is_left() -> None:
     async with scratch_database("tools_write_approvals") as target:
         _alembic(target, "upgrade", BEFORE)
         engine = create_async_engine(target)
         try:
             await _write_tool(engine, "mod_new", SAVED_AFTER, waits=False)
             await _write_tool(engine, "mod_old", SAVED_BEFORE, waits=False)
+            await _write_tool(engine, "mod_on", SAVED_BEFORE, waits=True)
             _alembic(target, "upgrade", AFTER)
-            assert await _waits(engine) == {"mod_new": True, "mod_old": False}
+            assert await _waits(engine) == {"mod_new": None, "mod_old": None, "mod_on": True}
         finally:
             await engine.dispose()
 
 
-async def test_a_write_saved_before_1_nov_holding_false_is_unchanged() -> None:
+async def test_a_write_saved_30_oct_holding_off_is_audited_like_any_other() -> None:
     async with scratch_database("tools_write_approvals_old") as target:
         _alembic(target, "upgrade", BEFORE)
         engine = create_async_engine(target)
         try:
             await _write_tool(engine, "mod_old", SAVED_BEFORE, waits=False)
             _alembic(target, "upgrade", AFTER)
-            assert await _waits(engine) == {"mod_old": False}
-            assert await _audit(engine) == [], "an untouched write has no audit row"
+            assert await _waits(engine) == {"mod_old": None}
+            assert [e["targetId"] for e in await _audit(engine)] == ["mod_old_op"]
         finally:
             await engine.dispose()
 
@@ -103,7 +111,7 @@ async def test_each_changed_tool_is_recorded_in_the_shared_audit_log_with_its_op
             await _write_tool(engine, "mod_old", SAVED_BEFORE, waits=False)
             _alembic(target, "upgrade", AFTER)
             entries = await _audit(engine)
-            assert [e["targetId"] for e in entries] == ["mod_a_op", "mod_b_op"], entries
+            assert [e["targetId"] for e in entries] == ["mod_a_op", "mod_b_op", "mod_old_op"], entries
             for e in entries:
                 assert e["tenant_id"] == T and e["action"] and e["targetKind"], e
                 assert e["detail"]["summary"], "the Audit page shows the line"
@@ -124,6 +132,7 @@ async def test_running_the_migration_twice_changes_nothing_the_second_time() -> 
             await _write_tool(engine, "mod_new", SAVED_AFTER, waits=False)
             _alembic(target, "upgrade", AFTER)
             first = await _waits(engine)
+            assert first == {"mod_new": None}
             _alembic(target, "downgrade", BEFORE)
             _alembic(target, "upgrade", AFTER)
             assert await _waits(engine) == first
@@ -140,7 +149,7 @@ async def test_an_admin_switching_a_write_back_to_false_after_the_migration_stic
         try:
             await _write_tool(engine, "mod_new", SAVED_AFTER, waits=False)
             _alembic(target, "upgrade", AFTER)
-            assert await _waits(engine) == {"mod_new": True}
+            assert await _waits(engine) == {"mod_new": None}
             store = ModuleStore(engine)
             module = await store.get(T, "mod_new")
             assert module is not None
@@ -153,32 +162,68 @@ async def test_an_admin_switching_a_write_back_to_false_after_the_migration_stic
             await engine.dispose()
 
 
-async def _chosen_in(zone: str, suffix: str) -> dict[str, bool]:
-    """The writes the migration turns on in a database whose session time zone is `zone`, for modules saved either
-    side of 1 November 00:00 UTC (a few hours apart, so a zone offset moves them across the cut-off)."""
-    async with scratch_database(suffix) as target:
-        _alembic(target, "upgrade", BEFORE)
-        engine = create_async_engine(target)
-        try:
-            async with engine.connect() as c:
-                autocommit = await c.execution_options(isolation_level="AUTOCOMMIT")
-                await autocommit.execute(
-                    sa.text(
-                        "do $$ begin execute format('alter database %I set timezone to %L', "
-                        f"current_database(), '{zone}'); end $$"
-                    )
-                )
-            await _write_tool(engine, "mod_just_after", datetime(2026, 11, 1, 3, 0, tzinfo=UTC), waits=False)
-            await _write_tool(engine, "mod_just_before", datetime(2026, 10, 31, 21, 0, tzinfo=UTC), waits=False)
-            _alembic(target, "upgrade", AFTER)
-            return await _waits(engine)
-        finally:
-            await engine.dispose()
-
-
-async def test_the_1_nov_cut_off_picks_the_same_writes_in_any_session_time_zone() -> None:
-    in_utc = await _chosen_in("UTC", "tools_wa_utc")
-    in_los_angeles = await _chosen_in("America/Los_Angeles", "tools_wa_la")
-    assert in_los_angeles == in_utc, (
-        f"the cut-off moved with the session zone: UTC {in_utc}, Los Angeles {in_los_angeles}"
+async def test_a_newly_created_tool_stores_not_set_not_off(bank_api: Api, engine: AsyncEngine) -> None:
+    """An imported write, created with no approval setting, keeps none: a later change of the team default then
+    reaches it without a migration."""
+    r = await bank_api.client.post("/v1/egress/hosts", json={"value": HOST})
+    assert r.status_code in (200, 201), r.text
+    hold: dict[str, Any] = {"name": "place_hold", "description": "", "access": "write", "group": "x", "input": []}
+    r = await bank_api.call(
+        "POST",
+        "/mod_document_service/operations/import",
+        json={"source": {"kind": "openapi", "specUrl": f"{ENDPOINT}/openapi.json"}, "operations": [hold]},
     )
+    assert r.status_code == 200, r.text
+    rows = await _rows(
+        engine,
+        "select requires_approval from module_operations "
+        f"where tenant_id = '{bank_api.tenant}' and name = 'place_hold'",
+    )
+    assert [r["requires_approval"] for r in rows] == [None], rows
+
+
+class TeamDefault(WriteApprovals):
+    """The team's appsChangeWithoutAsking, read live: empty until `loosened` (the app's writes then run at once)."""
+
+    loosened = False
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        super().__init__(cast(Any, None))
+        self.engine = engine
+
+    async def all_writes(self, tenant_id: str, team_id: str | None) -> bool:
+        return False
+
+    async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
+        return []
+
+    async def change_without_asking(self, tenant_id: str, team_id: str | None) -> list[str] | None:
+        if not self.loosened:
+            return []
+        mods = await ModuleStore(self.engine).all_teams(tenant_id)
+        return [f"module:{m['id']}" for m in mods if any(o["name"] == "update_address" for o in m["operations"])]
+
+
+@pytest.fixture
+async def team_default_gateway(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> AsyncIterator[tuple[Call, TeamDefault]]:
+    default = TeamDefault(engine)
+    async for call in _gateway(engine, seed, tenant, catalog_tools, default):
+        await _sql(
+            engine,
+            "update module_operations set requires_approval = null where tenant_id = :t and name = 'update_address'",
+            t=tenant,
+        )
+        yield call, default
+
+
+async def test_a_not_set_write_waits_by_default_and_runs_at_once_when_the_team_default_is_loosened(
+    team_default_gateway: tuple[Call, TeamDefault],
+) -> None:
+    call, default = team_default_gateway
+    waits = await call("update_address", ADDRESS, "unset-1")
+    assert (waits.status_code, reasons(waits)) == (403, ["write needs an approval token"]), waits.text
+    default.loosened = True
+    runs = await call("update_address", ADDRESS, "unset-2")
+    assert runs.status_code == 200 and runs.json()["data"]["decision"] == "allow", runs.text
