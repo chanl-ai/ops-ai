@@ -14,6 +14,7 @@ import { QueryError } from '@/components/shared/query-states';
 import { ChoiceCards } from '@/components/shared/setting/choice-cards';
 import { SettingCard } from '@/components/shared/setting/setting-card';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,10 +29,12 @@ import { ApiError } from '@/lib/api/contract';
 // The answer that asks someone other than the asker (an answer, not a role name).
 const BY_REVIEWER = 'reviewer';
 const SWITCH = 'Ask before an agent changes anything in an app';
+const OWN_REQUESTS = 'People can approve their own requests';
+const TEST_ACCOUNTS = 'Test accounts never ask';
 const NOT_THESE_ROLES = new Set(['viewer', 'chat_user', 'owner', 'builder']);
 
 const teamSchema = z
-  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable() })
+  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), requesterMayDecide: z.boolean(), testAccountsNeverAsk: z.boolean() })
   .refine((v) => !v.ask || v.answer !== BY_REVIEWER || !!v.reviewerRole, { message: 'Choose the role that reviews.', path: ['reviewerRole'] });
 type TeamForm = z.infer<typeof teamSchema>;
 
@@ -60,6 +63,7 @@ export default function ApprovalsPage() {
   const changes = policies.data?.find((p) => p.key === 'appChanges');
   const byApp = policies.data?.find((p) => p.key === 'appChangesByApp');
   const saved = ofTeam(changes?.value, teamId);
+  const mayDecide = policies.data?.find((p) => p.key === 'requesterMayDecide');
   const savedByApp = React.useMemo(() => ofTeam(byApp?.value, teamId) as Record<string, Entry>, [byApp?.value, teamId]);
   // Both policies are changed under settings.manage; the cell is held in the Security team or the acting team.
   const locked = useCan('settings', 'manage') !== true || sample;
@@ -67,7 +71,13 @@ export default function ApprovalsPage() {
 
   const form = useForm<TeamForm>({
     resolver: zodResolver(teamSchema),
-    values: { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null },
+    values: {
+      ask: saved.ask === true,
+      answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person',
+      reviewerRole: (saved.reviewerRole as string | null) ?? null,
+      requesterMayDecide: mayDecide?.value === true,
+      testAccountsNeverAsk: saved.testAccountsNeverAsk !== false,
+    },
   });
   const ask = form.watch('ask');
   const answer = form.watch('answer');
@@ -82,11 +92,22 @@ export default function ApprovalsPage() {
   const saveTeam = form.handleSubmit(async (v) => {
     try {
       await set.mutateAsync({ key: 'appChanges', teamId, value: { ask: v.ask, answer: v.answer, reviewerRole: v.answer === BY_REVIEWER ? v.reviewerRole : null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false } });
+      if (v.requesterMayDecide !== (mayDecide?.value === true)) await set.mutateAsync({ key: 'requesterMayDecide', value: v.requesterMayDecide });
       toast.success(`Saved: ${SWITCH}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
     } catch (e) {
       toast.error('Couldn’t save the approval setting', { description: (e as Error).message });
     }
   });
+  // Saves the checkbox alone, on top of what the team saved, so a half-edited switch above is not stored with it.
+  const saveTestAccounts = async () => {
+    try {
+      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: form.getValues('testAccountsNeverAsk') };
+      await set.mutateAsync({ key: 'appChanges', teamId, value });
+      toast.success(`Saved: ${TEST_ACCOUNTS}`);
+    } catch (e) {
+      toast.error('Couldn’t save the test account setting', { description: (e as Error).message });
+    }
+  };
   const saveApps = async () => {
     try {
       await set.mutateAsync({ key: 'appChangesByApp', teamId, value: overrides });
@@ -114,10 +135,10 @@ export default function ApprovalsPage() {
             description="Off: agents change apps without asking. On: the person in the chat confirms, or a reviewer approves. Reading never asks."
             help="Default: off · Changed by a team admin"
             locked={locked}
-            requiredRole="Admin"
+            requiredRole="admin"
             onSave={saveTeam}
             saving={set.isPending}
-            dirty={form.formState.isDirty}
+            dirty={Object.keys(form.formState.dirtyFields).some((k) => k !== 'testAccountsNeverAsk')}
           >
             <div className="flex flex-col gap-4">
               <Controller
@@ -166,6 +187,21 @@ export default function ApprovalsPage() {
                       )}
                     />
                   )}
+                  {answer === BY_REVIEWER && (
+                    <Controller
+                      control={form.control}
+                      name="requesterMayDecide"
+                      render={({ field }) => (
+                        <label className="flex items-start gap-2 text-sm">
+                          <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} disabled={locked} aria-label={OWN_REQUESTS} className="mt-0.5" />
+                          <span>
+                            {OWN_REQUESTS}
+                            <span className="block text-xs text-muted-foreground">Off: someone else has to approve. Applies to every team in the workspace.</span>
+                          </span>
+                        </label>
+                      )}
+                    />
+                  )}
                 </>
               )}
             </div>
@@ -174,16 +210,38 @@ export default function ApprovalsPage() {
           <Collapsible>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="sm" data-testid="approvals-advanced">
-                Advanced: by app <ChevronDown className="size-4" />
+                Advanced <ChevronDown className="size-4" />
               </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2">
+            <CollapsibleContent className="mt-2 flex flex-col gap-4">
+              <SettingCard
+                id="approvals-test-accounts"
+                title={TEST_ACCOUNTS}
+                description="A write signed in with an app’s test account changes nothing real, so it runs without asking even while the switch above is on."
+                help="Default: on · Changed by a team admin"
+                locked={locked}
+                requiredRole="admin"
+                onSave={saveTestAccounts}
+                saving={set.isPending}
+                dirty={form.formState.dirtyFields.testAccountsNeverAsk === true}
+              >
+                <Controller
+                  control={form.control}
+                  name="testAccountsNeverAsk"
+                  render={({ field }) => (
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} disabled={locked} aria-label={TEST_ACCOUNTS} />
+                      {TEST_ACCOUNTS}
+                    </label>
+                  )}
+                />
+              </SettingCard>
               <SettingCard
                 id="approvals-apps"
                 title="By app"
                 description="An app can follow the team or choose its own answer. The app’s answer wins over the team’s. A tool can override its app on the tool’s own page."
                 locked={locked}
-                requiredRole="Admin"
+                requiredRole="admin"
                 onSave={saveApps}
                 saving={set.isPending}
                 dirty={JSON.stringify(overrides) !== JSON.stringify(savedByApp)}

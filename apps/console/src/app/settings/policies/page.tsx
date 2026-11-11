@@ -27,7 +27,7 @@ import type { PolicyKind, PolicyValue, WorkspacePolicy } from '@/lib/types/works
 import { toast } from 'sonner';
 
 // The approval policies are set on Approvals; the old keys are derived from it.
-const APPROVAL_KEYS = new Set(['appChanges', 'appChangesByApp', 'toolWritesNeedApproval', 'appWritesNeedApproval', 'appsChangeWithoutAsking']);
+const APPROVAL_KEYS = new Set(['appChanges', 'appChangesByApp', 'toolWritesNeedApproval', 'appWritesNeedApproval', 'appsChangeWithoutAsking', 'requesterMayDecide']);
 const FLOOR = [
   { value: 'none', title: 'None', description: '' },
   { value: '0.7', title: '70%', description: '' },

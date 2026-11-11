@@ -12,10 +12,12 @@ Settings, defaults and who changes them: `docs/architecture/roles-and-permission
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | A first-time admin sees one switch, off, and is asked who answers only once it is on | ui | 1-2 | 1, 2 |
+| S1 | A first-time admin sees one switch, off, and is asked who answers only once it is on | ui | 1-2 | 2 |
 | S2 | Self-approval is offered only while a reviewer answers, and starts off | ui | 2 | 2 |
 | S3 | Test accounts never ask is on until a team saves it off, and the saved choice survives a reload | ui | 3 | 3 |
-| S4 | Policies holds none of the approval rows and no Requester may decide | ui | 4 | 4 |
+| S4 | Policies holds none of the approval rows and no Requester may decide, and loads without a refused request | ui | 4 | 4 |
+| S5 | A saved self-approval choice is kept | ui | 5 | 5 |
+| S6 | A member who cannot change a setting reads "Only an admin can change this", with the right article | ui | 6 | 6 |
 
 ## Preconditions
 
@@ -33,13 +35,15 @@ Priya Shah is an admin of Operations, whose team has saved no approval setting.
 | 1 | Priya opens Settings > Approvals | One switch, off; no question about who answers; no self-approval checkbox |
 | 2 | She turns it on, then picks Ask a reviewer | Ask the person is chosen first and shows no self-approval checkbox; after she picks a reviewer, "People can approve their own requests" appears, off |
 | 3 | She opens Advanced, unchecks "Test accounts never ask", saves and reloads | It was on before; it stays off after the reload; she checks it again and saves |
-| 4 | She opens Settings > Policies | None of the approval rows, and no "Requester may decide" |
+| 4 | She opens Settings > Policies | None of the approval rows, and no "Requester may decide"; no request the page makes is refused or missing |
+| 5 | She turns the switch on, picks Ask a reviewer and a role, ticks self-approval, saves and reloads | It is still ticked |
+| 6 | Ravi, a viewer, opens Settings > Approvals | The lock reads "Only an admin can change this" |
 
 ## Acceptance layers
 
 | Layer | Script | Proves |
 |---|---|---|
-| ui | `scripts/test-uc-730-ui.mjs` | Steps 1 to 4 in a real browser |
+| ui | `scripts/test-uc-730-ui.mjs` | Steps 1 to 6 in a real browser |
 
 ## Non-vacuous check
 
