@@ -12,6 +12,8 @@
     { "id": "usr_viewer", "name": "Ravi Menon", "email": "r.menon@harborpine.example", "teams": { "team_ops": "viewer" } },
     { "id": "usr_security", "name": "Nadia Petrov", "email": "n.petrov@harborpine.example", "teams": { "team_security": "approver" } },
     { "id": "usr_security_admin", "name": "Sam Adeyemi", "email": "s.adeyemi@harborpine.example", "teams": { "team_security": "admin" } },
+    { "id": "usr_chat", "name": "Lena Brandt", "email": "l.brandt@harborpine.example", "teams": { "team_ops": "chat_user" } },
+    { "id": "usr_two_teams", "name": "Tomas Reyes", "email": "t.reyes@harborpine.example", "teams": { "team_ops": "builder", "team_platform": "chat_user" } },
     { "id": "usr_workspace_admin", "name": "Wanjiru Kamau", "email": "w.kamau@harborpine.example", "teams": { "team_platform": "admin" }, "everyTeam": ["admin", "security_admin"] }
   ]
 }
