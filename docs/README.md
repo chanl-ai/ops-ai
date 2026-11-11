@@ -106,6 +106,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/workflows-as-tools.md` | Workflows as agent tools: an agent starts a published workflow as a child thread and gets its result or a review handle |
 | `architecture/human-in-the-loop.md` | Interrupt kinds, review rules, approval tokens, step-up, two approvers, SLA timers, pauses per channel |
 | `architecture/tool-lifecycle.md` | A tool from connect to import, review, access, grant, call, write approval and display; built versus target; the per-operation approval policy |
+| `architecture/mcp.md` | MCP both ways: the server per team and person, the client for outside servers, built-in tools, sign-in, audit, rate limits and masking; one owner per job; built versus not built |
 | `architecture/workflow-runner.md` | Workflow runner: LangGraph with a step journal, Postgres queue and workers; the ops_engine split from agents through ports; resilience, scale, console, versioning, proof |
 | `architecture/channels-and-deployments.md` | Deployments, the adapter contract, identity and keys per channel, busy-thread input, the mailbox adapter |
 | `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |

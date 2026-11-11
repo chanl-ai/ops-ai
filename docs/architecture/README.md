@@ -23,6 +23,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Human in the loop | [human-in-the-loop.md](human-in-the-loop.md) | Interrupts, reviews, approval tokens, step-up, two approvers, SLA timers | Builder |
 | Agent guardrails and skills | [agent-guardrails.md](agent-guardrails.md) | Pinned guardrails and skills, the check before and after the answer, fail-closed exits, what is enforced | Builder |
 | Tool lifecycle | [tool-lifecycle.md](tool-lifecycle.md) | Connect, import, review, access, grant, call, approve and show a tool, with what is built and what is not | Builder |
+| MCP | [mcp.md](mcp.md) | Ops AI as an MCP server and client, agents and workflows on MCP tools, sign-in, audit, limits and masking, with what is built and what is not | Builder |
 | Channels | [channels-and-deployments.md](channels-and-deployments.md) | Deployments, the adapter contract, identity per channel, external keys, the mailbox adapter | Builder |
 | Identity | [identity-and-tenancy.md](identity-and-tenancy.md) | Sign-in, delegation, process principals, the tools gateway, tenancy, prototype shortcuts | Builder |
 | Versions | [definitions-and-versions.md](definitions-and-versions.md) | Draft to publish, pointers, the pin per thread, migrate | Builder |
