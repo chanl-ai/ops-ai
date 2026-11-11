@@ -34,6 +34,7 @@ from .tables import (
     members,
     password_credentials,
     password_resets,
+    role_assignments,
     sessions,
     signin_domains,
     signin_email_failures,
@@ -657,7 +658,9 @@ class SignInStore:
         created = False
         jit_team = (p.jit_team_id or await default_team_in(c, p.tenant_id)) if p.jit_role else None
         if existing is not None:
-            if existing[1] != "active":
+            if existing[1] != "active" or await _holds_admin(c, str(existing[0])):
+                # An admin links from their own signed-in session, never by an email the provider asserts: whoever
+                # controls the provider could otherwise sign in as any admin on a verified domain.
                 return None
             user_id = str(existing[0])
         elif jit_team and p.jit_role:
@@ -832,6 +835,19 @@ async def _keep_claims(c: AsyncConnection, p: Provider, at: str) -> None:
         elif held[d] != p.id:
             # One provider per domain: moving it is removing it from the other provider first, on purpose.
             raise DomainListedError(d)
+
+
+async def _holds_admin(c: AsyncConnection, user_id: str) -> bool:
+    """Whether the person is Admin of any team, by membership or by a grant."""
+    member = sa.select(members.c.id).where(
+        members.c.user_id == user_id, members.c.role == "admin", members.c.status == "active"
+    )
+    granted = sa.select(role_assignments.c.id).where(
+        role_assignments.c.subject_kind == "person",
+        role_assignments.c.subject_id == user_id,
+        role_assignments.c.role_id == "admin",
+    )
+    return (await c.execute(member.union_all(granted).limit(1))).first() is not None
 
 
 def _password_on(kinds: Sequence[Row[Any, Any]]) -> bool:

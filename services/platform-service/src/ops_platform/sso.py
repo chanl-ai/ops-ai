@@ -85,6 +85,11 @@ def saml_addresses(public_url: str, sp_id: str | None) -> dict[str, str]:
     return {"entityId": metadata, "acsUrl": f"{public}{SAML_ACS}/{sp_id}", "metadataUrl": metadata}
 
 
+class NoAccess(SignInRefused):
+    """The provider proved who the person is, but nobody here may sign in as them: no link, no first-sign-in team,
+    or an admin, whom a provider never signs in by email. The person is told to ask an admin."""
+
+
 def _refused() -> Unauthorized:
     return Unauthorized("Sign in again.")
 
@@ -277,7 +282,7 @@ class Sso:
             return await self._answer(flow, p, who)
         except SignInRefused as e:
             log.info("signin_refused", kind="oidc", flow=flow.id if flow else None, reason=e.reason)
-            return self._failed(flow)
+            return self._failed(flow, e)
 
     async def saml_answer(self, *, relay_state: str, saml_response: str, sp_id: str | None = None) -> str:
         """The console URL the browser goes to after the provider's SAML answer, posted to the shared consumer URL or
@@ -307,7 +312,7 @@ class Sso:
             return await self._answer(flow, p, who)
         except SignInRefused as e:
             log.info("signin_refused", kind="saml", flow=flow.id if flow else None, reason=e.reason)
-            return self._failed(flow)
+            return self._failed(flow, e)
 
     async def _unsolicited(self, tenant_id: str, provider_id: str, sp_id: str, saml_response: str, tiles: bool) -> str:
         p = await self.store.provider(tenant_id, provider_id)
@@ -337,7 +342,7 @@ class Sso:
                 p, subject=who.subject, email=who.email, name=who.name, at=now, request_id=flow.id, groups=who.groups
             )
             if person is None:
-                raise SignInRefused("no person may sign in as this answer")
+                raise NoAccess("no person may sign in as this answer")
             user_id = person.user_id
         handoff = secrets.token_urlsafe(32)
         if not await self.store.answer(flow, user_id=user_id, handoff_hash=_hash(handoff), at=now):
@@ -352,8 +357,10 @@ class Sso:
             params = {**params, "next": flow.next_path}
         return f"{console}/sso/callback?{urlencode(params)}"
 
-    def _failed(self, flow: Flow | None) -> str:
-        return self._console(flow, {"error": "sign_in_refused"})
+    def _failed(self, flow: Flow | None, e: SignInRefused) -> str:
+        """The console's error page. Only the reasons a person can act on are named; every failed check is
+        `sign_in_refused`, so the page tells an attacker nothing about which check stopped them."""
+        return self._console(flow, {"error": "no_access" if isinstance(e, NoAccess) else "sign_in_refused"})
 
     async def _taken(self, code: str, flow_key: str, purpose: str) -> Flow:
         flow = await self.store.flow_by_handoff(_hash(code))

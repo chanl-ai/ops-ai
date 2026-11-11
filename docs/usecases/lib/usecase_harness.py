@@ -738,17 +738,24 @@ def sso_round_trip(
         back = httpx.URL(at_idp.headers["location"])
         answered = api.get(back.path, params=dict(back.params))
     else:
-        form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', at_idp.text)}
-        answered = api.post(
-            "/v1/auth/saml/acs", content=str(httpx.QueryParams(form)),
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )  # fmt: skip
+        answered = post_saml_form(api, at_idp.text)
     location = answered.headers.get("location", "")
     query = dict(httpx.URL(location).params) if location else {}
     completed = None
     if "code" in query:
         completed = api.post("/v1/auth/sso/complete", json={"code": query["code"], "flowKey": started["flowKey"]})
     return {"start": start, "location": location, "query": query, "flowKey": started["flowKey"], "completed": completed}
+
+
+def post_saml_form(api: httpx.Client, page: str) -> httpx.Response:
+    """Posts an identity provider's auto-submit SAML form to platform-service at the consumer URL the form names, as a
+    browser would: each provider saved since providers had their own addresses has its own."""
+    form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page)}
+    action = re.search(r'action="([^"]*)"', page)
+    path = httpx.URL(html.unescape(action.group(1))).path if action else "/v1/auth/saml/acs"
+    return api.post(
+        path, content=str(httpx.QueryParams(form)), headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
 
 
 def approve_tool_review(gw: httpx.Client, module_id: str, headers: dict[str, str]) -> dict[str, Any]:

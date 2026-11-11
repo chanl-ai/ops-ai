@@ -82,14 +82,14 @@ async def test_an_email_outside_the_providers_domains_makes_nobody(signin: SignI
     await signin.oidc(f"dom.{signin.zone}")
     # The provider vouches for an address on a domain this provider was not given.
     r = await signin.sign_in_sso(f"someone@dom.{signin.zone}", user=f"ceo@other.{signin.zone}")
-    assert r.query == {"error": "sign_in_refused"} and r.completed is None
+    assert r.query == {"error": "no_access"} and r.completed is None
     assert await _people(signin, f"ceo@other.{signin.zone}") == 0
 
 
 async def test_a_provider_with_no_first_sign_in_team_signs_in_only_people_it_knows(signin: SignInRig) -> None:
     await signin.oidc(f"nojit.{signin.zone}", jit=False)
     unknown = await signin.sign_in_sso(f"stranger@nojit.{signin.zone}")
-    assert unknown.query == {"error": "sign_in_refused"}
+    assert unknown.query == {"error": "no_access"}
     await signin.person(f"member@nojit.{signin.zone}", role="builder")
     known = await signin.sign_in_sso(f"member@nojit.{signin.zone}")
     assert known.completed is not None and known.completed.status_code == 200
