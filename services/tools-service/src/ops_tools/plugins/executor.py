@@ -29,6 +29,7 @@ from ops_identity import ActingForPerson
 from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginError, RateLimited, Response, TooLarge
 from ops_plugin_sdk import EgressDenied as PluginEgressDenied
 from ops_plugin_sdk import paging as paged
+from ops_plugin_sdk.answers import answer_error
 from ops_plugin_sdk.formats import InputRefused
 from ops_plugin_sdk.knowledge import source_hosts as knowledge_source_hosts
 from ops_plugin_sdk.knowledge import source_of
@@ -144,6 +145,7 @@ class PluginExecutor:
         allowed = list(module.get("egress_hosts") or [])
         reachable = {*allowed, *sites}
         plugin_headers = {h["key"]: h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])}
+        rule = cast(dict[str, Any] | None, op.get("error_when"))
         loop = asyncio.get_running_loop()
         policy = self.http.policy
         client = self.http.client
@@ -181,6 +183,14 @@ class PluginExecutor:
             finally:
                 await r.aclose()
             text = content.decode(r.encoding or "utf-8", errors="replace")
+            if rule is not None and r.status_code < 400:
+                # Parsed only for a plugin that declares error_when, so a page or file it fetches costs nothing more.
+                try:
+                    refused = answer_error(json.loads(text), rule)
+                except ValueError:
+                    refused = None
+                if refused is not None:
+                    raise refused
             return Response(r.status_code, text, dict(r.headers), content)
 
         def send(

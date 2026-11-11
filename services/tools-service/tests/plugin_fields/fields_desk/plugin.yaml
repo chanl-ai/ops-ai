@@ -8,12 +8,16 @@ connection:
   kinds: [bearer]
   sign_in: [team]
   health_check: { path: "/fields/me" }
+  sign_in_errors:
+    - { error: invalid_auth, say: "Connect {app} again to keep posting.", who: person }
 settings:
   base_url: { type: string, title: System address, default: "https://api.multi.test" }
   api_version: { type: string, title: API version, default: "2026-10" }
 egress: ["{base_url}"]
 endpoint: "{base_url}/fields"
 headers: { X-Api-Version: "{api_version}" }
+# The system answers 200 with `ok: false` and its error code here, as Slack does.
+error_when: error
 tools:
   - name: search
     title: Search records

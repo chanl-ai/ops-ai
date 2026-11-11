@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "A call fails when the app says so inside a successful answer",
+  "description": "Some apps, such as Slack, answer a failed call with success and put the error inside, and a plugin can now say where that error sits. The call then fails with the app's own error, or asks you to connect again when the error means the sign-in ended.",
+  "tag": "fix"
+}

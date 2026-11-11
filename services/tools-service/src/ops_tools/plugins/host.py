@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 
 from ops_plugin_sdk import Manifest, Plugin
+from ops_plugin_sdk.answers import error_rule
 from ops_plugin_sdk.loader import Loaded, discover
 from ops_plugin_sdk.manifest import AfterSignIn, InputField, Other, Setting, SignInError, Tool
 from ops_plugin_sdk.paging import at
@@ -1159,6 +1160,8 @@ class PluginHost:
             **op,
             "amount_max": tool.amount_max,
             "headers": headers_of(headers, tool, module.get("plugin_settings") or {}),
+            # Where the system reports a failure inside a 200, read by both executors on every JSON answer.
+            "error_when": error_rule(m),
         }
         if tool.request is not None and tool.request.form is not None:
             # The manifest's `form` is a form body, the one form path a builder's tool takes too.
