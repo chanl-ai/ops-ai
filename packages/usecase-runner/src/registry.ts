@@ -13,7 +13,8 @@ export interface UseCase {
 export class RegistryError extends Error {}
 
 const HEADER = ['id', 'service', 'title', 'layers', 'status'];
-const ID = /^uc-\d{3}$/;
+// uc-NNN for the original numbering, uc-<area>-<n> for the use cases the coverage plan adds (uc-platform-1).
+const ID = /^uc-(\d{3}|[a-z]+-\d+)$/;
 
 function cells(line: string): string[] {
   return line
@@ -34,7 +35,7 @@ export function parseRegistry(markdown: string): UseCase[] {
   for (const line of lines.slice(start + 2)) {
     if (!line.trim().startsWith('|')) break;
     const [id, service, title, layerCell, status] = cells(line);
-    if (!id || !ID.test(id)) throw new RegistryError(`row "${line.trim()}": id must look like uc-001`);
+    if (!id || !ID.test(id)) throw new RegistryError(`row "${line.trim()}": id must look like uc-001 or uc-platform-1`);
     if (seen.has(id)) throw new RegistryError(`${id} is listed twice`);
     seen.add(id);
     const layers = (layerCell ?? '').split(',').map((l) => l.trim()).filter(Boolean);

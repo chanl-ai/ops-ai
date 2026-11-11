@@ -6,7 +6,7 @@ import type { UseCase } from './registry.ts';
 import { USECASE_DIR } from './resolve.ts';
 
 export function nextId(registry: UseCase[]): string {
-  const max = registry.reduce((m, u) => Math.max(m, Number(u.id.slice(3))), 0);
+  const max = registry.reduce((m, u) => (/^uc-\d{3}$/.test(u.id) ? Math.max(m, Number(u.id.slice(3))) : m), 0);
   return `uc-${String(max + 1).padStart(3, '0')}`;
 }
 
@@ -84,7 +84,7 @@ export function scaffold(root: string, registry: UseCase[], service: string, tit
   }
   const readme = join(root, USECASE_DIR, 'README.md');
   const lines = readFileSync(readme, 'utf8').split('\n');
-  const last = lines.findLastIndex((l) => /^\| `?uc-\d{3}/.test(l));
+  const last = lines.findLastIndex((l) => /^\| `?uc-(\d{3}|[a-z]+-\d+)/.test(l));
   lines.splice(last + 1, 0, `| ${id} | ${service} | ${title} | api | draft |`);
   writeFileSync(readme, lines.join('\n'));
   const index = join(root, 'docs/README.md');

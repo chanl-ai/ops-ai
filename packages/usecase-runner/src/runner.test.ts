@@ -14,7 +14,7 @@ import { parseRegistry, RegistryError } from './registry.ts';
 import { EXIT, exitFor, parseChecks, verdict } from './report.ts';
 import { resolveScript } from './resolve.ts';
 import { childEnv } from './run.ts';
-import { scaffold } from './scaffold.ts';
+import { nextId, scaffold } from './scaffold.ts';
 
 const TABLE = `# Use cases
 
@@ -37,6 +37,12 @@ function repo(): string {
 test('registry rows parse with their layers', () => {
   const r = parseRegistry(TABLE);
   assert.deepEqual(r.map((u) => [u.id, u.layers]), [['uc-001', ['api']], ['uc-002', ['api', 'ui']]]);
+});
+
+test('an area id parses and does not move the next numbered id', () => {
+  const r = parseRegistry(TABLE.replace('uc-002', 'uc-platform-1'));
+  assert.deepEqual(r.map((u) => u.id), ['uc-001', 'uc-platform-1']);
+  assert.equal(nextId(r), 'uc-002');
 });
 
 test('a row with an unknown layer is refused, not silently dropped', () => {

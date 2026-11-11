@@ -331,3 +331,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
+| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
+| uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |

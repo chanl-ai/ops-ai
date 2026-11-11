@@ -535,3 +535,5 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
 | `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
 | `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
+| `usecases/agents-service/a-schedule-starts-a-run-once.md` | uc-workflows-1: A Schedule trigger starts one run per tick key |
+| `usecases/platform-service/team-usage-guards-team-deletion.md` | uc-platform-1: A team's running work is counted for that team only and stops its deletion |
