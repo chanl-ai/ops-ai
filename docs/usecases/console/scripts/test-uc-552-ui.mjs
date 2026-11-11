@@ -105,7 +105,8 @@ await withUiStack(
         const count = Number(await page.getByTestId('sidebar-count-reviews').innerText());
         const overviewCount = await page.getByTestId('sidebar-overview-count').count();
         const mine = (await json(await fetch(`${agents}/reviews?view=mine&pageSize=1`, { headers: maya })))?.viewCounts?.mine;
-        const top = (await page.locator('[data-sidebar=header] [data-sidebar=menu-button]').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim()).filter(Boolean);
+        // New chat sits in the sidebar header and the area's pages in its content.
+        const top = (await page.locator('[data-sidebar=header] [data-sidebar=menu-button], [data-sidebar=content] [data-sidebar=menu-button]').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim()).filter(Boolean);
         const search = await page.getByTestId('sidebar-search').count();
         // One area at a time: the Agents, Data Hub and Govern headings are gone, and the pages of the other areas sit
         // behind the header's area control, which is named "Area".
@@ -248,7 +249,9 @@ await withUiStack(
             // A normal click: Playwright refuses when another element (an invisible group label) would take it.
             await page.getByTestId('sidebar-new-chat').click({ timeout: 5000 });
             await page.waitForURL((u) => u.pathname === '/chat', { timeout: 15_000 });
-            await page.locator('[data-sidebar=header] a[href="/reviews"]').first().click({ timeout: 5000 });
+            // New chat shows the area she was last in (Build, from step 5); Human Tasks is on Work.
+            await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').filter({ hasText: 'Work' }).first().click({ timeout: 5000 });
+            await page.locator('[data-sidebar=content] a[href="/reviews"]').first().click({ timeout: 5000 });
             await page.waitForURL((u) => u.pathname === '/reviews', { timeout: 15_000 });
             hits[`${w}-${folded ? 'folded' : 'open'}`] = 'ok';
           }
