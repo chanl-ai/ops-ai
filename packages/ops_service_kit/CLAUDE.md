@@ -26,6 +26,7 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 | `testdb` | `refusal` and `isolate_from_stack`: a test refuses any PostgreSQL database except `OPS_TEST_DATABASE_URL` | service conftests |
 | `opa_server`, `harness_containers` | A private OPA container per test session, and container cleanup for killed runs | tests and use cases only |
 | `testapps` | Frees the FastAPI app a test built | tests |
+| `template_merge` | `merge(base, yours, template, fields)` and `apply(...)`: the field-by-field rule a team's copy of a template takes an update by (kept, taken, conflict); pure, no input or output | agents-service, documents-service |
 
 ## Contract with callers
 
