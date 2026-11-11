@@ -1,9 +1,8 @@
-"""The rules an admin may set for a workspace, with each default in one place. Most defaults are open; the ones that
-hold something back are the approvals (requesterMayDecide off, and `write_waits`: a tool write waits unless its own
-setting says it runs at once), the AI uses (aiSteps, taskAssist, checkBeforeSend) and each app's "Ask before changes"
-(appsChangeWithoutAsking: no app listed, so a write in a chat asks the person). A team loosens any of them. Every value
-is changed through `can(settings, manage)` in the security team. platform-service stores the values per tenant and puts
-them on every token; services read them there with `policy(p, key)`."""
+"""The rules an admin may set for a workspace, with each default in one place. Most defaults are open, agents' changes
+to apps included (appChanges: no team asks); the ones that hold something back are requesterMayDecide (off) and the
+AI uses (aiSteps, taskAssist, checkBeforeSend). A team changes any of them. Every value is changed through
+`can(settings, manage)` in the security team. platform-service stores the values per tenant and puts them on every
+token; services read them there with `policy(p, key)`."""
 
 from __future__ import annotations
 
@@ -23,6 +22,8 @@ class Policy:
     # "bool"; "floor": a number from 0 to 1, or None for no floor; "days": a whole number of days, or None for no limit;
     # "hours": a whole number of hours; "publish_modes": one team's {area: mode}, see PUBLISH_AREAS and PUBLISH_MODES.
     # "names": a list of names (appWritesNeedApproval: app ids). "choice": one of `choices`.
+    # "app_changes": one team's {ask, answer, reviewerRole, testAccountsNeverAsk} (appChanges); "app_changes_by_app":
+    # one team's {app id: {answer, reviewerRole}} (appChangesByApp).
     kind: str = "bool"
     # The grid cell a change needs; the security team holds it.
     changed_by: tuple[str, str] = ("settings", "manage")
@@ -39,7 +40,7 @@ class Policy:
     note: str = ""
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice")
+KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app")
 
 
 # Which publishes wait for a second person's review (moved here), per team and area:
@@ -111,9 +112,32 @@ POLICIES: tuple[Policy, ...] = (
         title="Review deadline",
     ),
     Policy(
+        "appChanges",
+        # No team set: nobody is asked before an agent changes an app. A team turns it on and picks who answers.
+        {},
+        "Ask before an agent changes anything in an app. Off: agents change apps without asking. On: the person in "
+        "the chat confirms, or a reviewer of a chosen role approves.",
+        kind="app_changes",
+        # A team admin's: settings.manage in the team.
+        changed_by=("settings", "manage"),
+        per_team=True,
+        live=True,
+        title="Ask before an agent changes anything in an app",
+    ),
+    Policy(
+        "appChangesByApp",
+        # No app listed: every app follows the team's switch. An app's entry overrides the team for that app.
+        {},
+        "Per app: use the team setting, or change without asking, ask the person, or ask a reviewer.",
+        kind="app_changes_by_app",
+        changed_by=("settings", "manage"),
+        per_team=True,
+        live=True,
+        title="Approval by app",
+    ),
+    Policy(
         "toolWritesNeedApproval",
-        # No team set: each write follows its tool's own setting (write_waits), so a write with none runs and one
-        # switched to ask first waits. On, every write of the team waits, whatever its tool says.
+        # Derived from appChanges for one release (on when the team asks a reviewer); a write to it lands in appChanges.
         {},
         "Every tool write by the team waits for a person's approval, including the ones a tool lets run at once.",
         changed_by=("reviews", "manage"),
@@ -123,9 +147,8 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "appWritesNeedApproval",
-        # None listed by default: each write follows its tool's own setting (write_waits). A team lists the apps whose
-        # writes wait even where a tool runs at once, by the id the Apps page shows (plugin:<id>, a connection's id, or
-        # module:<id>).
+        # Derived from appChangesByApp for one release: the apps whose answer is a reviewer, by the id the Apps page
+        # shows (plugin:<id>, a connection's id, or module:<id>); a write to it lands in appChangesByApp.
         {},
         "Writes from the listed apps wait for a person's approval. Other writes run unless their tool asks for one.",
         kind="names",
@@ -136,8 +159,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "appsChangeWithoutAsking",
-        # On for every app by default: {} lists no app, so the person in chat is asked before each write of every
-        # app. A team admin lists the apps whose writes run without asking, by the id the Apps page shows.
+        # Derived from appChangesByApp for one release: the apps whose answer is "none"; a write lands there.
         {},
         "Writes from the listed apps run in chat without asking the person first. Every other app asks before changes.",
         kind="names",
@@ -263,6 +285,31 @@ def check_value(key: str, value: Any) -> Any:
         return list(dict.fromkeys(cast(list[str], value)))
     if policy.kind == "choice" and isinstance(value, str) and value in {c[0] for c in policy.choices}:
         return value
+    if policy.kind == "app_changes" and isinstance(value, dict):
+        held = cast(dict[str, Any], value)
+        answer = held.get("answer", "person")
+        role = held.get("reviewerRole")
+        if (
+            isinstance(held.get("ask", False), bool)
+            and answer in ANSWERS
+            and (role is None or isinstance(role, str))
+            and isinstance(held.get("testAccountsNeverAsk", True), bool)
+        ):
+            return {
+                "ask": held.get("ask", False),
+                "answer": answer,
+                "reviewerRole": role,
+                "testAccountsNeverAsk": held.get("testAccountsNeverAsk", True),
+            }
+    if policy.kind == "app_changes_by_app" and isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for app, entry in cast(dict[Any, Any], value).items():
+            role = entry.get("reviewerRole") if isinstance(entry, dict) else None
+            if not (isinstance(app, str) and isinstance(entry, dict) and entry.get("answer") in ANSWERS):
+                break
+            out[app] = {"answer": entry["answer"], **({"reviewerRole": role} if isinstance(role, str) else {})}
+        else:
+            return out
     if policy.kind == "publish_modes" and isinstance(value, dict):
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
@@ -275,6 +322,8 @@ def check_value(key: str, value: Any) -> Any:
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
+        "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk}",
+        "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 
