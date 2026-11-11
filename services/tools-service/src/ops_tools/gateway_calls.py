@@ -137,7 +137,10 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if resolved is None or resolved.operation is None or resolved.module is None:
         return None
     op, module = resolved.operation, resolved.module
-    if module.get("tools_on") is not None and op["name"] not in module["tools_on"]:
+    # A tool the team's plugin version lacks is refused as that (operation_hidden, naming the update below): adding it
+    # from the catalog cannot help until the team takes the update.
+    version_hidden = not op["enabled"] and bool(op.get("hidden_reason"))
+    if module.get("tools_on") is not None and op["name"] not in module["tools_on"] and not version_hidden:
         # The team has not added this tool from its app's catalog: refused before any sign-in is asked for.
         app = str(module.get("app_title") or module["display_name"])
         title = str(cast(dict[str, Any], module.get("tool_titles") or {}).get(op["name"]) or op["name"])
