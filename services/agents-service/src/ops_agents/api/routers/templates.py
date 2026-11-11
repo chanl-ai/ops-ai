@@ -1045,8 +1045,8 @@ async def _save(rt: Runtime, me: Principal, kind: str, record_id: str, body: dic
     if kind == "agent":
         return await registry(rt).save(record_id, body, by=me.email, note=note)
     if kind == "guardrail":
-        # The guardrail store keeps no open draft to merge into: the update is the next version, a draft.
-        return await guardrails(rt).save(record_id, check_guardrail("blocked_topics", body), by=me.email, note=note)
+        checked = check_guardrail("blocked_topics", body)
+        return await guardrails(rt).save_draft(record_id, checked, by=me.email, note=note)
     return await skills(rt).save_draft(record_id, body, by=me.email, note=note)
 
 

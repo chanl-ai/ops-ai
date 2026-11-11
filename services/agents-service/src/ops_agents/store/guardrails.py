@@ -20,7 +20,7 @@ from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-from .agent_registry import digest_of
+from .agent_registry import digest_of, publish_requested
 from .base import metadata
 
 registry_guardrails = sa.Table(
@@ -140,10 +140,14 @@ class GuardrailRegistry:
             team = (await c.execute(q)).scalar()
         return str(team) if team else None
 
-    async def find(self, guardrail_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
+    async def find(
+        self, guardrail_id: str, c: AsyncConnection | None = None, *, lock: bool = False
+    ) -> dict[str, Any] | None:
         q = sa.select(registry_guardrails).where(
             registry_guardrails.c.id == guardrail_id, team_visible(registry_guardrails)
         )
+        if lock:
+            q = q.with_for_update()
         if c is None:
             async with self.engine.connect() as conn:
                 r = (await conn.execute(q)).mappings().first()
@@ -151,8 +155,8 @@ class GuardrailRegistry:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r else None
 
-    async def row(self, guardrail_id: str, c: AsyncConnection | None = None) -> dict[str, Any]:
-        r = await self.find(guardrail_id, c)
+    async def row(self, guardrail_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
+        r = await self.find(guardrail_id, c, lock=lock)
         if r is None:
             raise NotFound(f"Guardrail {guardrail_id}")
         return r
@@ -240,24 +244,62 @@ class GuardrailRegistry:
         at = now_iso()
         async with self.engine.begin() as c:
             row = await self.row(guardrail_id, c)
-            n = int(row["version"]) + 1
-            await c.execute(
-                registry_guardrail_versions.insert().values(
-                    guardrail_id=guardrail_id,
-                    version=n,
-                    config=config,
-                    digest=digest_of(config),
-                    note=note,
-                    saved_at=at,
-                    saved_by=by,
-                )
+            return await self._append(c, guardrail_id, int(row["version"]) + 1, config, by=by, note=note, at=at)
+
+    @staticmethod
+    async def _append(
+        c: AsyncConnection, guardrail_id: str, n: int, config: dict[str, Any], *, by: str, note: str, at: str
+    ) -> int:
+        await c.execute(
+            registry_guardrail_versions.insert().values(
+                guardrail_id=guardrail_id,
+                version=n,
+                config=config,
+                digest=digest_of(config),
+                note=note,
+                saved_at=at,
+                saved_by=by,
             )
-            await c.execute(
-                registry_guardrails.update()
-                .where(registry_guardrails.c.id == guardrail_id)
-                .values(version=n, updated_at=at)
-            )
+        )
+        await c.execute(
+            registry_guardrails.update()
+            .where(registry_guardrails.c.id == guardrail_id)
+            .values(version=n, updated_at=at)
+        )
         return n
+
+    async def save_draft(self, guardrail_id: str, config: dict[str, Any], *, by: str, note: str = "") -> int:
+        """The agent store's draft rule: rewrites the newest version while it is unpublished and no publish request
+        has named it; otherwise opens the next version as the draft. What a reviewer saw or what runs never changes."""
+        at = now_iso()
+        v = registry_guardrail_versions
+        async with self.engine.begin() as c:
+            # Locked so two saves at once take turns: unlocked, both read the same newest version and the second
+            # fails on the version key.
+            row = await self.row(guardrail_id, c, lock=True)
+            n = int(row["version"])
+            newest = (
+                (await c.execute(sa.select(v).where(v.c.guardrail_id == guardrail_id, v.c.version == n)))
+                .mappings()
+                .one()
+            )
+            if newest["published_at"] is None and not await publish_requested(c, "guardrail", guardrail_id, n):
+                await c.execute(
+                    v.update()
+                    .where(v.c.guardrail_id == guardrail_id, v.c.version == n)
+                    .values(
+                        config=config,
+                        digest=digest_of(config),
+                        note=note or newest["note"],
+                        saved_at=at,
+                        saved_by=by,
+                    )
+                )
+                await c.execute(
+                    registry_guardrails.update().where(registry_guardrails.c.id == guardrail_id).values(updated_at=at)
+                )
+                return n
+            return await self._append(c, guardrail_id, n + 1, config, by=by, note=note, at=at)
 
     async def publish(self, guardrail_id: str, version: int, *, by: str, review_id: str) -> None:
         at = now_iso()
