@@ -59,6 +59,8 @@ def main() -> None:
     ):
         priya = bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops")
         gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=priya)
+        # A new app hands agents its read tools only; the team admin adds the write the agent template grants.
+        gw.post(f"/v1/apps/plugin:{PLUGIN}/tools", json={"tools": ["templates_close_case"]}, headers=priya)
         ops = OpsAI.sign_in("p.shah@harborpine.example", "northfield-demo", team="team_ops", **CONN)
 
         # 21. The SDK's list matches the API's, and an install makes the copy once.
@@ -91,6 +93,8 @@ def main() -> None:
 def desk_steps(gw: Any, api: Any, priya: dict[str, str]) -> None:
     """Steps 60 to 63: a builder browses, previews, adds and removes the desk's resources through the SDK's words."""
     on = gw.put(f"/v1/apps/{DESK}/team", json={"enabled": True}, headers=priya)
+    # A new app hands agents its read tools only; the team admin adds the write the agent template grants.
+    gw.post(f"/v1/apps/{DESK}/tools", json={"tools": ["resources_close_ticket"]}, headers=priya)
     ops = signed_sdk("builder")
 
     # 60. The SDK's list says, for each resource, its state for the team; the knowledge source is one of them, with no

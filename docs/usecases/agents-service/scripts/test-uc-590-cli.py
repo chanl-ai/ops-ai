@@ -30,6 +30,8 @@ def main() -> None:
     ):
         admin = as_role(accounts, "admin", "team_ops")
         on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=admin)
+        # A new app hands agents its read tools only; the team admin adds the write the agent template grants.
+        gw.post(f"/v1/apps/plugin:{PLUGIN}/tools", json={"tools": ["templates_close_case"]}, headers=admin)
         check("set-up: the plugin is on for team_ops", on.status_code == 200, on.text[:200])
 
         # 23. opsai resources list and add, as the team admin.
