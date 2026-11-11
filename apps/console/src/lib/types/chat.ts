@@ -293,6 +293,8 @@ export interface ChatOverrides {
   widgetsOff?: string[];
   composeOff?: boolean;
   widgetsPerTurn?: number;
+  /** The account each app's calls use in this chat, app id to account name; over the agent's own. */
+  accounts?: Record<string, string>;
 }
 
 /** A settings save: a field sent replaces it, null clears it, a field left out keeps what the thread has. */
@@ -350,6 +352,18 @@ export interface ChatConnector {
   /** The person signs in with their own account, so Connect is theirs to press. */
   personal: boolean;
   tools: string[];
+  /** The account this chat uses for the app, by name, when the chat or its agent chose one; null uses the default. */
+  account?: string | null;
+  /** The accounts the chat may use for the app, listed only when it has two or more. */
+  accounts?: ChatAccount[];
+}
+
+/** One account a chat may use for an app, with what tells it apart; `own` is one of the person's own. */
+export interface ChatAccount {
+  name: string;
+  identity: { label: string; value: string; shown: string }[];
+  default: boolean;
+  own: boolean;
 }
 
 export interface ChatConnectors {

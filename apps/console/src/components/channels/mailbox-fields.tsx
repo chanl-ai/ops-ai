@@ -122,7 +122,7 @@ function SecretPicker({ id, value, onChange }: { id: string; value: string | nul
         <KeyRound className="size-4" /> Add secret
       </Button>
       {/* Rendered here, outside the mailbox form's submit: a dialog's submit would otherwise reach the outer form. */}
-      <SecretDialog open={adding} rotating={null} onOpenChange={setAdding} onSaved={(name) => (onChange(name), setAdding(false))} />
+      <SecretDialog open={adding} rotating={null} onOpenChange={setAdding} onSaved={(s) => (onChange(s.name), setAdding(false))} />
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useEngineOptions } from '@/hooks/engine-queries';
+import { AccountSelect } from '@/components/connections/account-select';
+
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
 type Params = Record<string, unknown>;
@@ -122,6 +124,8 @@ function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id
       return <OptionsInput id={id} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} />;
     case 'json':
       return <JsonInput id={id} value={value} onChange={onChange} />;
+    case 'account':
+      return <AccountSelect id={id} value={asObject(value)} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />;
   }
 }
 

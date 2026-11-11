@@ -171,7 +171,11 @@ export function ConnectWindow({
   const tuned = fields.filter((f) => f.advanced);
 
   // Whose account it is and its name sit under More options; another account or a sandbox opens with them showing.
-  const [more, setMore] = React.useState(another || sandbox);
+  const [more, setMore] = React.useState(sandbox);
+  // A second live account may become the team's default as it is added; a test account never can (D10, M5).
+  const [makeDefault, setMakeDefault] = React.useState(false);
+  // A second account is named by the person adding it: steps, agents and chats pick it by that name.
+  const namesIt = another && !sandbox;
   // A test account is the one test runs use and live runs never do; a test sign-in place turns it on.
   const [testAccount, setTestAccount] = React.useState(sandbox);
   const suggested = freeName(testAccount ? `${card.name} test account` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`, taken);
@@ -284,6 +288,7 @@ export function ConnectWindow({
       setError(card.appState === 'needs_auth_config' ? addAuthConfigFirst(card.name) : `Pick the auth config ${card.name} signs in with.`);
       return;
     }
+    if (namesIt && !(values.accountName ?? '').trim()) errors.accountName = 'Name the account. Steps and chats pick it by this name.';
     if (Object.keys(errors).length) {
       for (const [name, msg] of Object.entries(errors)) form.setError(name, { type: 'schema', message: msg });
       // A field folded under More options opens it, so its error is seen.
@@ -306,7 +311,10 @@ export function ConnectWindow({
       const offered = plugin.signIn.includes('person_or_team') ? 'person_or_team' : asTeam ? undefined : plugin.signIn.includes('person') ? 'person' : undefined;
       let id: string;
       if (adding) {
-        const body = newAccountBody(kind, plugin, client, draft, accountName, testAccount, offered) as AccountBody;
+        const body = {
+          ...(newAccountBody(kind, plugin, client, draft, accountName, testAccount, offered) as AccountBody),
+          ...(makeDefault && !testAccount ? { makeDefault: true } : {}),
+        } as AccountBody;
         const account = await addAccount.mutateAsync({ appId: card.id, body });
         id = account.id;
         made.current = { id, turnedOn: false };
@@ -379,7 +387,7 @@ export function ConnectWindow({
     <label className="flex items-start gap-2">
       <Checkbox checked={testAccount} onCheckedChange={(v) => setTestAccount(v === true)} className="mt-0.5" data-testid="connect-window-test-account" />
       <span className="grid gap-1">
-        <span className="text-sm">Test account</span>
+        <span className="text-sm">Use only for test runs</span>
         <span className="text-xs text-muted-foreground">Test runs use this account; live runs never do.</span>
       </span>
     </label>
@@ -456,7 +464,7 @@ export function ConnectWindow({
 
         {turningOn && plugin.signIn.length > 1 && (
           <div className="flex flex-col gap-2" data-testid="connect-window-whose">
-            <span className="text-sm font-medium">Whose account do tools use?</span>
+            <span className="text-sm font-medium">Who signs in?</span>
             <WhoSignsIn value={whose} onChange={setWhose} offered={plugin.signIn} />
           </div>
         )}
@@ -485,6 +493,9 @@ export function ConnectWindow({
           </label>
         )}
 
+        {namesIt && (
+          <FormTextField control={form.control} name="accountName" label="Account name" placeholder="EU org" hint="Steps, agents and chats pick an account by this name." testId="connect-window-name" />
+        )}
         {needed.map(setting)}
 
         <Collapsible open={more} onOpenChange={setMore}>
@@ -497,7 +508,19 @@ export function ConnectWindow({
           <CollapsibleContent className="flex flex-col gap-4 pt-3">
             {turningOn && testAccountBox}
             {tuned.map(setting)}
-            <FormTextField control={form.control} name="accountName" label="Account name" optional placeholder={suggested} hint="Steps and tools pick an account by this name." testId="connect-window-name" />
+            {namesIt ? (
+              <label className="flex items-start gap-2" data-testid="connect-window-default">
+                <Checkbox checked={makeDefault && !testAccount} disabled={testAccount} onCheckedChange={(v) => setMakeDefault(v === true)} className="mt-0.5" data-testid="connect-window-make-default" />
+                <span className="grid gap-1">
+                  <span className="text-sm">Make it the team’s default</span>
+                  <span className="text-xs text-muted-foreground">
+                    {testAccount ? 'A test account is used by test runs only, so it cannot be the default.' : 'Calls that name no account use it.'}
+                  </span>
+                </span>
+              </label>
+            ) : (
+              <FormTextField control={form.control} name="accountName" label="Account name" optional placeholder={suggested} hint="Steps and tools pick an account by this name." testId="connect-window-name" />
+            )}
           </CollapsibleContent>
         </Collapsible>
 

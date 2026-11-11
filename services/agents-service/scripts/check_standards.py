@@ -1,7 +1,9 @@
 """Standards spec 17 section 8 enforces. Exits non-zero with file:line for each breach.
 
 1 layers import one direction · 3 fixtures only under tests/fixtures · 3b source names no tests/ path · 4 env read
-only in ops_service_kit/settings.py · 5 every route authenticated · 6 no print or logging.getLogger in packages. 1b
+only in ops_service_kit/settings.py · 5 every route authenticated · 6 no print or logging.getLogger in packages · 6b log
+setup only in ops_service_kit.logging (no logging.basicConfig; a service's uvicorn runs with log_config=None and
+access_log=False, never log_level) and every log call's event a string literal, its values keywords. 1b
 ops_engine imports nothing from ops_agents (docs/architecture/workflow-runner.md section 2). Database drivers outside a
 store are the drivers-only-in-stores contract in .importlinter (`uv run lint-imports`).
 """
@@ -153,14 +155,44 @@ def check_env(path: Path, tree: ast.AST, out: list[str]) -> None:
             out.append(f"{path.relative_to(ROOT)}:{node.lineno} rule 4: dotenv import")
 
 
+LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical"}
+# What every module names its `get_logger(__name__)`.
+LOGGER_NAMES = {"log", "logger"}
+
+
 def check_logging(path: Path, tree: ast.AST, out: list[str]) -> None:
+    at = path.relative_to(ROOT)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print":
-            out.append(f"{path.relative_to(ROOT)}:{node.lineno} rule 6: print in package code")
+            out.append(f"{at}:{node.lineno} rule 6: print in package code")
         if path != LOGGING and isinstance(node, ast.Attribute) and node.attr == "getLogger":
+            out.append(f"{at}:{node.lineno} rule 6: logging.getLogger outside ops_service_kit.logging")
+        if path != LOGGING and isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            check_log_call(at, path, node, node.func, out)
+
+
+def check_log_call(at: Path, path: Path, node: ast.Call, func: ast.Attribute, out: list[str]) -> None:
+    """Rule 6b: one log setup (a second format, or uvicorn's own handlers, would print lines a collector cannot
+    parse), and event names a search can find (a value in the event makes every line a different event)."""
+    if func.attr == "basicConfig":
+        out.append(f"{at}:{node.lineno} rule 6b: logging.basicConfig; a process calls configure_logging")
+    receiver = func.value.id if isinstance(func.value, ast.Name) else None
+    if receiver == "uvicorn" and func.attr in {"run", "Config"} and path.is_relative_to(ROOT / "services"):
+        kw = {k.arg: (k.value.value if isinstance(k.value, ast.Constant) else k.value) for k in node.keywords}
+        if (
+            "log_level" in kw
+            or "log_config" not in kw
+            or kw["log_config"] is not None
+            or kw.get("access_log") is not False
+        ):
             out.append(
-                f"{path.relative_to(ROOT)}:{node.lineno} rule 6: logging.getLogger outside ops_service_kit.logging"
+                f"{at}:{node.lineno} rule 6b: uvicorn.{func.attr} needs log_config=None and access_log=False and no "
+                "log_level, so its lines reach configure_logging's handler"
             )
+    if receiver in LOGGER_NAMES and func.attr in LOG_METHODS:
+        first = node.args[0] if node.args else None
+        if not (isinstance(first, ast.Constant) and isinstance(first.value, str)) or len(node.args) > 1:
+            out.append(f"{at}:{node.lineno} rule 6b: a log call's event is a string literal and its values keywords")
 
 
 def check_fixtures(out: list[str]) -> None:

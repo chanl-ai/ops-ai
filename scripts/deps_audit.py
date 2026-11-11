@@ -172,6 +172,10 @@ def cmd_vulns() -> int:
             failing.append(f)
         state = f"baselined: {baseline[known]}" if known else "NEW"
         print(f"  {f['score']:>4} {f['ecosystem']} {f['name']} {f['version']} {', '.join(f['ids'][:2])}  [{state}]")
+    # Advisories below critical are reported and do not fail the run: the owner reads them in the log and raises the
+    # bar when the list is short enough to act on.
+    for f in sorted((f for f in findings if f["score"] < CRITICAL), key=lambda f: (-f["score"], f["name"])):
+        print(f"  {f['score']:>4} {f['ecosystem']} {f['name']} {f['version']} {', '.join(f['ids'][:2])}  [advisory]")
     report_unused(baseline, used, advisories=True)
     if failing:
         print(f"FAIL: {len(failing)} critical advisories are not in {BASELINE.relative_to(ROOT)}")

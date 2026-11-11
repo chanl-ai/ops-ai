@@ -55,3 +55,14 @@ export function useTakePluginUpdate(appId: string) {
     onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['apps'] }), qc.invalidateQueries({ queryKey: ['systems'] })]),
   });
 }
+
+export type AccountUses = Awaited<ReturnType<Agents['workflows_account_uses']>>;
+
+/** How many of the team's workflow drafts and published versions, and agents, name one account of an app: what the
+ * rename and delete of that account warn with. Asked only while `enabled` (the dialog is open). */
+export const useAccountUses = (app: string, name: string, enabled = true) =>
+  useTeamQuery({
+    queryKey: ['account-uses', app, name],
+    queryFn: () => sdk((ops) => ops.raw.agents.workflows_account_uses({ query: { app, name } })),
+    enabled: enabled && Boolean(app && name),
+  });

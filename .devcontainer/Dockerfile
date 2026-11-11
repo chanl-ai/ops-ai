@@ -6,10 +6,10 @@
 # Behind a company mirror (docs/deploy/install.md, "Behind a company mirror"): IMAGE_REGISTRY prefixes the base images
 # (end it with a slash), and the other arguments point each download at the mirror. Empty keeps the public address.
 ARG IMAGE_REGISTRY=
-FROM ${IMAGE_REGISTRY}node:22.23.4-bookworm-slim AS node-image
-FROM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-image
+FROM ${IMAGE_REGISTRY}node:22.23.4-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS node-image
+FROM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4@sha256:40775a79214294fb51d097c9117592f193bcfdfc634f4daa0e169ee965b10ef0 AS uv-image
 
-FROM ${IMAGE_REGISTRY}mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+FROM ${IMAGE_REGISTRY}mcr.microsoft.com/devcontainers/python:1-3.12-bookworm@sha256:7876580dc67fd460fd962f004cbeb480027e9bbc0657096f1087db11f9eaff39
 ARG APT_MIRROR=
 ARG UV_DEFAULT_INDEX=
 ARG NPM_CONFIG_REGISTRY=

@@ -27,18 +27,20 @@ on:
         default: main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   tag:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write # pushes the date tag
     concurrency:
       group: release-tag
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Tag the merge
@@ -68,7 +70,7 @@ jobs:
       STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
       STAGING_ADMIN_ENV: ${{ secrets.STAGING_ADMIN_ENV }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: What to deploy
@@ -93,13 +95,13 @@ jobs:
             echo "Deploying $ASKED ($sha) to the staging app"
           fi
       - if: steps.plan.outputs.ready == 'true'
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@98172f70657cb3e15db199af139be99bd3e61200 # master
       - if: steps.plan.outputs.ready == 'true'
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - if: steps.plan.outputs.ready == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v4.4.0
       - if: steps.plan.outputs.ready == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm

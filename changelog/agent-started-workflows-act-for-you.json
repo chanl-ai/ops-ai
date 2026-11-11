@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "Workflows an agent starts from chat use your app accounts",
+  "description": "When you ask an agent in chat to start a workflow, its app steps now run as you, with the account you signed in with. Before, those steps were refused with a message that no team member had that email.",
+  "tag": "fix"
+}

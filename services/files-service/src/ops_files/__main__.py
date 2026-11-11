@@ -92,7 +92,7 @@ def main() -> None:
     settings = Settings()
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
-    configure_logging()
+    configure_logging(service="files-service")
     files = build(settings)
     # Released knowledge snapshots are deleted once their days pass.
     background: list[Callable[[], Coroutine[Any, Any, None]]] = [lambda: keep_purging(files)]
@@ -108,7 +108,7 @@ def main() -> None:
         settings=files.settings,
         background=background,
     )
-    uvicorn.run(app, host=settings.bind_host, port=settings.files_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.files_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

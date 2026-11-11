@@ -4,8 +4,8 @@ Human Task itself: agents-service's event workflow for the event does, in the ac
 A team account the system refused, or whose sign-in ended with nothing to renew it, is reported once per breakage: its
 key names the account, the state and what the account was when it broke, so every call while it
 stays broken finds the event already written, and an account fixed and broken again is reported again. A person who
-connects their own account reports it under the key a refusal for them named (auth._not_linked), so a run paused for
-them goes on."""
+connects their own account reports it under the key a refusal for them named (auth._not_linked), and a team account
+signed in again reports it under the key its needs-reconnecting refusal named, so a run paused for either goes on."""
 
 from __future__ import annotations
 
@@ -41,9 +41,14 @@ def needs_reconnect_event(
     }
 
 
+# The person part of the key a run waiting for a team account's new sign-in waits on.
+TEAM = "team"
+
+
 def connected_key(connection_id: str, person: str) -> str:
-    """What a run waiting for `person`'s own account of the app waits on, and what their connecting reports."""
-    return f"{connection_id}:{person}"
+    """What a run waiting for `person`'s own account of the app waits on, and what their connecting reports; for the
+    team's own sign-in (`person` empty), what a run waiting for an admin to sign the team account in again waits on."""
+    return f"{connection_id}:{person or TEAM}"
 
 
 def connected_event(conn: dict[str, Any], person: str) -> dict[str, Any]:

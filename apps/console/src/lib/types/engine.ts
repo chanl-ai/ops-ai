@@ -13,7 +13,7 @@ export interface EnginePort {
 /** A field of a node type's generated form. `item` is the form of each object in a `list`. */
 export interface NodeFormField {
   label: string;
-  widget: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'switch' | 'mapping' | 'mappings' | 'list' | 'options' | 'source' | 'json';
+  widget: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'switch' | 'mapping' | 'mappings' | 'list' | 'options' | 'source' | 'json' | 'account';
   help?: string;
   placeholder?: string;
   /** Where a `source` field's choices come from: GET /v1/workflows/option-sources, or the definition's own steps. */

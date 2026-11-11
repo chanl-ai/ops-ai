@@ -23,8 +23,10 @@ from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
+from ops_service_kit.logging import get_logger
 
 from ...activities.tool_directory import ToolsUnavailable
+from ...domain.accounts import chosen_accounts
 from ...store.team_defaults import TeamDefaults
 from ..agent_calls import agent_team
 from ..auth import Principal, principal, require_chat_use
@@ -33,6 +35,7 @@ from ..envelope import ok
 from ..runs import graph_store
 from .chat_settings import _thread, merge  # pyright: ignore[reportPrivateUsage] - one reader of a thread's settings
 
+log = get_logger("ops_agents.chat_connectors")
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
@@ -41,6 +44,15 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 # no tools, and one that is gone is not listed.
 ADMIN = "needs_admin"
 PERSON = ("person", "person_or_team")
+
+
+class ChatAccount(Out):
+    """One account the chat may use for an app: the team's, or the person's own (`own`), with what tells it apart."""
+
+    name: str
+    identity: list[dict[str, str]] = Field(default_factory=list[dict[str, str]])
+    default: bool = False
+    own: bool = False
 
 
 class ChatConnector(Out):
@@ -56,6 +68,10 @@ class ChatConnector(Out):
     # The sign-in the person gives themselves, so the picker offers Connect; False when the team's account signs in.
     personal: bool = False
     tools: list[str] = Field(default_factory=list[str])
+    # The account this chat's calls use, by name, when it or the agent chose one; null uses the app's default (the
+    # person's own default, else the team's). Listed with `accounts` only for an app with two or more.
+    account: str | None = None
+    accounts: list[ChatAccount] = Field(default_factory=list["ChatAccount"])
 
 
 class ChatConnectors(Out):
@@ -66,14 +82,25 @@ class ChatConnectors(Out):
 class ConnectorsIn(WireModel):
     # The apps this chat leaves out, by id; every other app the agent holds is on.
     off: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(max_length=100)
+    # The account each app's calls use in this chat, app id to account name, as the whole set; left out keeps the
+    # chat's choice. A name is checked against the app's accounts the person may use (the team's and their own).
+    accounts: dict[str, Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=50)
 
 
-async def _by_app(rt: Runtime, me: Principal, team: str, held: list[str]) -> list[dict[str, Any]]:
-    """The apps whose tools the agent holds, each with those tools, then the installed apps the team has off."""
+async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: list[str]) -> list[dict[str, Any]]:
+    """The apps whose tools the agent holds, each with those tools, then the installed apps the team has off.
+
+    An empty answer for an agent that holds tools reads "This agent uses no connector." in the picker, which is also
+    what an unreachable app list or an unwired one looks like, so each of those is logged as chat.connectors.empty.
+    """
+    reason: str | None = None
     try:
-        cards = await rt.app_states.cards(me.email or None, team) if rt.app_states is not None else []
+        if rt.app_states is None:
+            cards, reason = [], "no_app_states"
+        else:
+            cards = await rt.app_states.cards(me.email or None, team)
     except ToolsUnavailable:
-        cards = []
+        cards, reason = [], "tools_unavailable"
     module_of = {o.name: o.module_id for o in await rt.directory().operations()}
     out: list[dict[str, Any]] = []
     for card in cards:
@@ -86,6 +113,34 @@ async def _by_app(rt: Runtime, me: Principal, team: str, held: list[str]) -> lis
             out.append({**card, "tools": []})
         elif tools:
             out.append({**card, "tools": tools})
+    if not out and (reason or held):
+        log.warning(
+            "chat.connectors.empty",
+            team=team,
+            agent=agent_id,
+            held=len(held),
+            cards=len(cards),
+            reason=reason or "no_app_for_held_tools",
+        )
+    return out
+
+
+async def _with_accounts(
+    rt: Runtime, me: Principal, team: str, apps: list[dict[str, Any]], chosen: dict[str, str]
+) -> list[dict[str, Any]]:
+    """Each app with the accounts the person may pick for this chat, when there are two or more, and the one in use."""
+    if rt.app_states is None:
+        return apps
+    out: list[dict[str, Any]] = []
+    for a in apps:
+        listed: list[dict[str, Any]] = []
+        if a["appGroup"] != ADMIN and a.get("kind") == "plugin":
+            try:
+                listed = await rt.app_states.accounts(me.email or None, team, str(a["id"]))
+            except ToolsUnavailable:
+                listed = []
+        live = [x for x in listed if not x.get("sandbox")]
+        out.append({**a, "accountList": live if len(live) > 1 else [], "account": chosen.get(str(a["id"]))})
     return out
 
 
@@ -101,6 +156,16 @@ def _view(thread_id: str, apps: list[dict[str, Any]], off: set[str]) -> dict[str
             on=a["appGroup"] != ADMIN and not set(a["tools"]) <= off,
             personal=a.get("signIn") in PERSON,
             tools=a["tools"],
+            account=a.get("account"),
+            accounts=[
+                ChatAccount(
+                    name=str(x["name"]),
+                    identity=cast(list[dict[str, str]], x.get("identity") or []),
+                    default=bool(x.get("default")),
+                    own=bool(x.get("own")),
+                )
+                for x in cast(list[dict[str, Any]], a.get("accountList") or [])
+            ],
         )
         for a in apps
     ]
@@ -120,7 +185,10 @@ async def new_chat_connectors(
     if agent is not None:
         require_chat_use(me, team_id=await agent_team(rt, agent.id))
     held = list(limits_for(agent, rt.settings.model_alias).switchable_tool_ids) if agent is not None else []
-    apps = await _by_app(rt, me, me.team_id, held) if agent is not None else []
+    apps = await _by_app(rt, me, me.team_id, agent.id, held) if agent is not None else []
+    # A new chat starts on the agent's accounts, else each app's default, so the picker names the one in use.
+    if agent is not None:
+        apps = await _with_accounts(rt, me, me.team_id, apps, dict(agent.accounts))
     return ok(_view("", apps, set()))
 
 
@@ -128,9 +196,11 @@ async def new_chat_connectors(
 async def get_connectors(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """The chat's connectors for the composer's picker: each app the agent holds tools of, with its state for the
     person and whether this chat uses it, then the apps the team has off."""
-    row, _, limits = await _thread(rt, me, thread_id)
-    apps = await _by_app(rt, me, str(row["team_id"]), list(limits.switchable_tool_ids))
+    row, agent, limits = await _thread(rt, me, thread_id)
+    apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
     stored = cast(dict[str, Any], row.get("overrides") or {})
+    chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], stored.get("accounts") or {}))
+    apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen)
     return ok(_view(thread_id, apps, set(cast(list[str], stored.get("toolsOff") or []))))
 
 
@@ -140,7 +210,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     back on gets every tool back, and a tool the settings panel switched off one by one stays off while its app is
     on. 422 naming the app for one this chat does not hold."""
     row, agent, limits = await _thread(rt, me, thread_id)
-    apps = await _by_app(rt, me, str(row["team_id"]), list(limits.switchable_tool_ids))
+    apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
     held = {str(a["id"]): a for a in apps if a["appGroup"] != ADMIN}
     if unknown := [a for a in body.off if a not in held]:
         raise Unprocessable(
@@ -159,8 +229,30 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
             off -= tools  # turned back on: every tool of the app runs again
         # an app left on keeps any of its tools the settings panel switched off one by one
     off = sorted(off)
-    merged = parse(merge(stored, {"toolsOff": off or None}), "thread")
+    accounts = cast(dict[str, str], stored.get("accounts") or {})
+    if body.accounts is not None:
+        accounts = await _checked_accounts(rt, me, str(row["team_id"]), held, body.accounts)
+    merged = parse(merge(stored, {"toolsOff": off or None, "accounts": accounts or None}), "thread")
     resolve(limits, agent.default_kb_ids, thread=merged, widgets_per_turn=agent.widgets_per_turn)
     saved = (merged.model_dump(mode="json", by_alias=True, exclude_none=True) if merged else None) or None
     await graph_store(rt).set_overrides(thread_id, saved, updated_at=now_iso())
+    apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen_accounts(agent=agent.accounts, chat=accounts))
     return ok(_view(thread_id, apps, set(off)))
+
+
+async def _checked_accounts(
+    rt: Runtime, me: Principal, team: str, held: dict[str, dict[str, Any]], wanted: dict[str, str]
+) -> dict[str, str]:
+    """The chat's account choice, each one an account of an app this chat holds that the person may use; 422 naming
+    the first that is not. tools-service compares the name, and checks it again on every call."""
+    out: dict[str, str] = {}
+    for app_id, name in wanted.items():
+        found = await rt.app_states.accounts(me.email or None, team, app_id, name=name) if rt.app_states else []
+        if app_id not in held or not found:
+            raise Unprocessable(
+                f"This chat cannot use an account named {name} for that app.",
+                code="account_unknown",
+                details={"appId": app_id, "account": name},
+            )
+        out[app_id] = str(found[0]["name"])
+    return out

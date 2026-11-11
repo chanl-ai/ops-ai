@@ -7,7 +7,6 @@ import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import { IdleTimeout, withIdleTimeout } from '@/lib/api/idle';
 import { withPart } from '@/lib/chat-parts';
-import { modelRefusalText } from '@/lib/model-refusals';
 import type { BudgetAnswer, ChatFilters, ChatMessage, ChatThreadListParams, ChatThreadInput, ChatThreadPatch, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { ListParams } from '@/lib/types/query';
 import { teamKey, useTeamInfiniteQuery, useTeamQuery } from './team-query';
@@ -148,7 +147,8 @@ async function run(qc: QueryClient, threadId: string, input: SendInput, cutFrom?
       else if (ev.type === 'replace') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, content: ev.text } }));
       else if (ev.type === 'citations') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, citations: ev.citations } }));
       else if (ev.type === 'done') patch(threadId, (t) => ({ ...t, assistant: ev.message }));
-      else if (ev.type === 'error') patch(threadId, (t) => ({ ...t, assistant: { ...ev.partial, error: modelRefusalText(ev.code) ?? ev.message } }));
+      // The reply keeps the service's message and the refusal's code; the message view words the code for its reader.
+      else if (ev.type === 'error') patch(threadId, (t) => ({ ...t, assistant: { ...ev.partial, error: ev.message, errorCode: ev.code ?? ev.partial?.errorCode } }));
     }
   } catch (e) {
     if (e instanceof IdleTimeout) {

@@ -9,8 +9,12 @@ docs/services/kb-service/overview.md gives the designed surface and says which p
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
+import dataclasses
 import re
+import time
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -37,6 +41,7 @@ from .ai import AiClients, ai_run, spent_on
 from .embedding import Embedder, EmbedFailed, embed_pending
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .origin import Origin, source_team
+from .query_steps import RERANK_POOL, REWRITE_MODES, QueryModel, QueryStepFailed, ms_since, steps_for
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .repeats import lines_of, repeated, without
 from .retrieval import Found, Lane, Passage, Retriever, Search
@@ -55,10 +60,11 @@ from .source_settings import (
 )
 from .store import DECIDABLE, KnowledgeStore
 from .store.vectors import PgVectorStore
-from .tool_sources import ToolReader, source_config, sync_tool_source
+from .tool_sources import ToolReader, declared_source, source_config, sync_tool_source
 
-# A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and threshold decide every search of
-# it (retrieval.py); the rest are the console's.
+# A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and the thresholds decide every search
+# of it (retrieval.py); rerank, rewrite and rewriteInstructions turn on the steps around it (query_steps.py), on the
+# chat-model alias queryModel (empty: the environment's kb_query_alias); the rest are the console's.
 DEFAULT_RETRIEVAL: dict[str, Any] = {
     "searchMode": "hybrid",
     "hybridWeight": 0.6,
@@ -66,11 +72,12 @@ DEFAULT_RETRIEVAL: dict[str, Any] = {
     "reranker": "hosted",
     "chunkLimit": 8,
     "threshold": 0.5,
-    "meaningThreshold": 0.3,
+    "meaningThreshold": 0.38,
     "asOf": "",
     "rewrite": "off",
     "expandCount": 3,
     "rewriteInstructions": "",
+    "queryModel": "",
     "scopeSourceIds": [],
     "answerShape": "answer_with_citations",
     "model": "bank-standard",
@@ -87,11 +94,16 @@ DEFAULT_RETRIEVAL: dict[str, Any] = {
     "structuredTables": False,
 }
 PRESETS: dict[str, dict[str, Any]] = {
-    "balanced": {"chunkLimit": 8, "threshold": 0.5, "meaningThreshold": 0.3, "answerShape": "answer_with_citations"},
-    "precise": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.4, "answerShape": "answer_with_citations"},
-    "raw": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.25, "answerShape": "chunks"},
+    "balanced": {"chunkLimit": 8, "threshold": 0.5, "meaningThreshold": 0.38, "answerShape": "answer_with_citations"},
+    "precise": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.45, "answerShape": "answer_with_citations"},
+    "raw": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.3, "answerShape": "chunks"},
 }
-SOURCE_TYPES_IN_PHASE = ("file", "tool")
+SOURCE_TYPES_IN_PHASE = ("file", "text", "push", "tool")
+# Kinds whose items are written through the API (POST /v1/sources/{id}/items) and kept as files like uploads: typed
+# text from the console's editor, and items another system pushes. A file source's items come from Files instead.
+WRITTEN_TYPES = ("text", "push")
+# The mime an item written as text is stored under unless the caller names another text type.
+WRITTEN_TEXT_MIMES = {"text/markdown": ".md", "text/plain": ".txt", "text/html": ".html"}
 SENSITIVITIES = ("internal", "confidential", "restricted")
 MAX_PAGE_SIZE = 100
 # A sync or rebuild holds its source's lease this long at a time and renews it every third of that while it runs, so
@@ -255,6 +267,8 @@ class KnowledgeService:
         embedder: Embedder | None = None,
         vectors: PgVectorStore | None = None,
         ai_clients: AiClients | None = None,
+        query_model: QueryModel | None = None,
+        query_alias: str = "default",
     ) -> None:
         """`tools` reads "tool" sources through tools-service's gateway; without it none can be made. `readings` gives
         each file's reading from documents-service, read with OCR mode `ocr` (settings.kb_ocr); without it a file
@@ -271,6 +285,11 @@ class KnowledgeService:
         self.vectors = vectors
         # Each run's model client for the sources' approved AI steps (ai.py); None in a stack with no models-service.
         self.ai_clients = ai_clients
+        # Rerank and rewrite through models-service (query_steps.py); None in a stack with no models-service, where a
+        # base asking for either is searched without it and the answer says why. `query_alias` is the environment's
+        # chat-model alias for both, used by a base that names none.
+        self.query_model = query_model
+        self.query_alias = query_alias
         # Rebuilds running in this process, so stopping the service ends them and their runs say why.
         self.rebuilds: set[asyncio.Task[None]] = set()
 
@@ -600,7 +619,7 @@ class KnowledgeService:
             if patch.get(key) is not None:
                 values[key] = patch[key]
         if patch.get("retrieval") is not None:
-            values["retrieval"] = {**b["retrieval"], **patch["retrieval"]}
+            values["retrieval"] = checked_retrieval({**b["retrieval"], **patch["retrieval"]})
         if values:
             entry = audit_entry(who, "knowledge.base.settings", "knowledge_base", kb_id, b["name"], b, values)
             await self.store.update_base(who.tenant_id, kb_id, values, audit=entry)
@@ -770,7 +789,8 @@ class KnowledgeService:
     async def source_kinds(self, who: Who) -> list[dict[str, Any]]:
         """Files, then each knowledge source the team's apps offer (none when this service reads no tools)."""
         out: list[dict[str, Any]] = [
-            {"type": "file", "kind": "file", "group": "built_in", "title": "Files", **kind_defaults("file", self.ocr)}
+            {"type": t, "kind": t, "group": "built_in", "title": KIND_LABEL[t], **kind_defaults(t, self.ocr)}
+            for t in ("file", *WRITTEN_TYPES)
         ]
         if self.tools is None or not who.team_id:
             return out
@@ -832,6 +852,34 @@ class KnowledgeService:
             "pages": pages,
             "capped": bool(out.get("capped")),
         }
+
+    async def source_scopes(self, who: Who, i: dict[str, Any]) -> dict[str, Any]:
+        """A plugin source's pickers: its scopes tool asked, as the team's connection, for what matches `query` (or
+        what `parent` holds). Refused for a kind of source that has no pickers."""
+        who.require_builder(who.team_id, "pick what a source takes in", "create")
+        found = await declared_source(self.tools, who, str(i["plugin"]), str(i["source"]))
+        tool = found.get("scopesTool")
+        if not tool or self.tools is None:
+            raise ValidationFailed(f"{found['title']} has nothing to pick.", code="scopes_unavailable")
+        given = {k: i[k] for k in ("query", "parent", "cursor") if i.get(k) not in (None, "")}
+        answer = await self.tools.call(who.tenant_id, str(who.team_id), str(tool), given, act="kb-scopes")
+        if not answer.ok:
+            raise ServiceUnavailable(f"The picker could not ask {found['title']}: {answer.message or answer.code}",
+                                     code="scopes_failed")  # fmt: skip
+        out = cast(dict[str, Any], answer.output or {})
+        rows = [cast(dict[str, Any], r) for r in cast(list[Any], out.get("scopes") or []) if isinstance(r, dict)]
+        scopes = [
+            {
+                "id": str(r["id"]),
+                "title": str(r.get("title") or r["id"]),
+                "kind": str(r.get("kind") or ""),
+                **({"parent": str(r["parent"])} if r.get("parent") else {}),
+                **({"detail": str(r["detail"])} if r.get("detail") else {}),
+            }
+            for r in rows
+            if r.get("id")
+        ]
+        return {"scopes": scopes, **({"nextCursor": str(out["next_cursor"])} if out.get("next_cursor") else {})}
 
     async def remove_source(self, who: Who, source_id: str) -> None:
         await self._changeable_source(who, source_id, "delete")
@@ -928,16 +976,24 @@ class KnowledgeService:
         return Lease(self.store, tenant, source_id, owner)
 
     async def _held_sync(
-        self, who: Who, s: dict[str, Any], *, full: bool, retry: bool, trigger: str | None = None
+        self,
+        who: Who,
+        s: dict[str, Any],
+        *,
+        full: bool,
+        retry: bool,
+        trigger: str | None = None,
+        only: str | None = None,
     ) -> dict[str, Any]:
-        """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once."""
+        """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once.
+        `only` names the one item to read (an item just written), so a write costs one file, not the whole source."""
         source_id = str(s["id"])
         lease = await self.take_lease(who.tenant_id, source_id)
         if lease is None:
             raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
-                return await self._sync(who, s, full=full, retry=retry, trigger=trigger)
+                return await self._sync(who, s, full=full, retry=retry, trigger=trigger, only=only)
         finally:
             await lease.release()
 
@@ -1089,7 +1145,7 @@ class KnowledgeService:
                 else:
                     found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
                                    str(item["digest"]), False)  # fmt: skip
-                    origin = Origin(str(item["path"]), str(item["title"])) if s["type"] != "file" else None
+                    origin = Origin(str(item["path"]), str(item["title"])) if s["type"] == "tool" else None
                     done = await self._read_file(
                         who, s, item, name=str(item["path"]), found=found, rebuild=True, origin=origin
                     )
@@ -1135,7 +1191,14 @@ class KnowledgeService:
         return _run((await self.store.runs(who.tenant_id, run_id=run_id))[0])
 
     async def _sync(
-        self, who: Who, s: dict[str, Any], *, full: bool, retry: bool, trigger: str | None = None
+        self,
+        who: Who,
+        s: dict[str, Any],
+        *,
+        full: bool,
+        retry: bool,
+        trigger: str | None = None,
+        only: str | None = None,
     ) -> dict[str, Any]:
         """Reads every file of the source and indexes what changed: a new name is a new document, a known name with
         different content is its next version, identical content is unchanged. `full` rebuilds every document from its
@@ -1156,7 +1219,7 @@ class KnowledgeService:
         superseded: set[str] = set()
         uploaded: dict[str, str] = s.get("file_names") or {}
         counts["reading"] = 0
-        for file_id in s["file_ids"]:
+        for file_id in s["file_ids"] if only is None else [f for f in s["file_ids"] if uploaded.get(f) == only]:
             try:
                 found = await self.files.describe(who.tenant_id, source_team(s), file_id)
             except FileMissing:
@@ -1451,7 +1514,7 @@ class KnowledgeService:
         settings = self.settings_of(s)
         built = item.get("indexed_with") or index_key(stored(kind_of(s), None, ocr=self.ocr))
         read_ocr = str(item.get("read_with") or "").split(":")
-        reread = s["type"] == "file" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
+        reread = s["type"] != "tool" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
         return built != self.key_of(s) or reread
 
     async def _read_file(
@@ -1559,7 +1622,7 @@ class KnowledgeService:
             found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
                            str(item["digest"]), False)  # fmt: skip
             # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
-            origin = Origin(str(item["path"]), str(item["title"])) if source["type"] != "file" else None
+            origin = Origin(str(item["path"]), str(item["title"])) if source["type"] == "tool" else None
             done = await self._read_file(
                 who, source, item, name=str(item["path"]), found=found, rebuild=False, origin=origin
             )
@@ -1714,9 +1777,59 @@ class KnowledgeService:
         if missing := [k for k in kb_ids if k not in readable and k not in retired]:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
         live = [k for k in dict.fromkeys(kb_ids) if k in readable]
-        how = search_settings([readable[k] for k in live], limit=limit)
-        found = await self.retriever.search(tenant, live, question, how)
+        found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit)
         return found_out(found)
+
+    async def _retrieve(
+        self, tenant: str, bases: list[dict[str, Any]], question: str, *, limit: int | None = None
+    ) -> Found:
+        """The one search every caller goes through: the question rewritten when a base asks, the lanes, then the best
+        fused pieces reranked when a base asks. A step that fails leaves the search as it was and says why."""
+        how = search_settings(bases, limit=limit)
+        steps = steps_for([{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases], self.query_alias)
+        searched: str = question
+        rewrite: dict[str, Any] | None = None
+        if steps.rewrite_alias is not None:
+            started = time.monotonic()
+            rewrite = {"asked": question, "rewritten": None}
+            try:
+                if self.query_model is None:
+                    raise QueryStepFailed("no_query_model")
+                searched = await self.query_model.rewrite(
+                    question, steps.instruction, alias=steps.rewrite_alias, tenant=tenant
+                )
+                rewrite["rewritten"] = searched
+            except QueryStepFailed as e:
+                rewrite["skipped"] = e.reason
+            rewrite["ms"] = ms_since(started)
+        pool = dataclasses.replace(how, limit=max(how.limit, RERANK_POOL)) if steps.rerank_alias else how
+        found = await self.retriever.search(tenant, [b["id"] for b in bases], searched, pool)
+        found = dataclasses.replace(found, rewrite=rewrite)
+        if steps.rerank_alias is None:
+            return found
+        return await self._reranked(tenant, found, searched, steps.rerank_alias, how.limit)
+
+    async def _reranked(self, tenant: str, found: Found, question: str, alias: str, limit: int) -> Found:
+        """The fused pieces in the order the reranker scores them, cut to the bases' limit; the fused order cut to it
+        when the reranker cannot answer."""
+        started = time.monotonic()
+        pool = found.passages
+        rerank: dict[str, Any] = {"ran": False, "model": alias, "scored": 0}
+        passages = pool[:limit]
+        if pool:
+            try:
+                if self.query_model is None:
+                    raise QueryStepFailed("no_query_model")
+                scores = await self.query_model.scores(question, [p.text for p in pool], alias=alias, tenant=tenant)
+                ranked = sorted(
+                    zip(pool, scores, strict=True), key=lambda ps: ps[1], reverse=True
+                )  # sorted is stable, so equal scores keep the fused order
+                passages = [dataclasses.replace(p, reranked=s) for p, s in ranked[:limit]]
+                rerank |= {"ran": True, "scored": len(pool)}
+            except QueryStepFailed as e:
+                rerank["skipped"] = e.reason
+        rerank["ms"] = ms_since(started)
+        return dataclasses.replace(found, passages=passages, rerank=rerank)
 
     async def query(self, who: Who, kb_id: str, question: str) -> dict[str, Any]:
         """The query route and the console's Playground: the passages one knowledge base returns for a question, with
@@ -1728,7 +1841,7 @@ class KnowledgeService:
         if b["last_refreshed_at"] is None:
             raise Conflict("This knowledge base has not indexed anything yet; sync a source first.", code="not_indexed")
         started = datetime.now(UTC)
-        found = await self.retriever.search(who.tenant_id, [kb_id], question, search_settings([b]))
+        found = await self._retrieve(who.tenant_id, [b], question)
         passages = found.passages
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
         items = {i["id"]: i for i in await self.store.items(who.tenant_id)}
@@ -2174,17 +2287,48 @@ class KnowledgeService:
         source = next((x for x in attached if x["name"] == name), None)
         if source is None:
             source = await self.create_source(
-                who, {"type": "file", "name": name, "collection": "Pages", "owner": b["owner"], "kbIds": [kb_id]}
+                who, {"type": "text", "name": name, "collection": "Pages", "owner": b["owner"], "kbIds": [kb_id]}
             )
-        path = f"{_slug(title) or 'page'}.md"
-        body = f"# {title}\n\n{text}\n".encode()
-        await self.upload(who, str(source["id"]), body, name=path, mime="text/markdown")
-        await self.sync(who, str(source["id"]))
-        found = await self.store.sources(who.tenant_id, [str(source["id"])])
-        item = next(
-            i for i in await self.store.items(who.tenant_id, source_ids=[str(source["id"])]) if i["path"] == path
+        elif source["type"] == "file":
+            # A base's pages source made before typed text existed holds its pages as files; it becomes the typed text
+            # source it always was, keeping its files and versions, so the next page is written into it.
+            await self.store.update_source(who.tenant_id, str(source["id"]), {"type": "text"})
+        put = await self.put_item(who, str(source["id"]), {"name": f"{_slug(title) or 'page'}.md", "title": title,
+                                                            "text": text})  # fmt: skip
+        return cast(dict[str, Any], put["item"])
+
+    async def put_item(self, who: Who, source_id: str, i: dict[str, Any]) -> dict[str, Any]:
+        """One item written into a typed text or push source, by its `name`: stored as a file through files-service
+        like an upload, then indexed by the source's sync. The same name with the same content is `unchanged` and
+        starts no run, so a caller may send it again safely; the same name with new content is its next version.
+        `text` is Markdown (a `title` becomes its heading) or another text type by `mime`; `content` is base64 bytes
+        of a file such as a PDF, with its `mime`."""
+        s = await self._changeable_source(who, source_id)
+        if s["type"] not in WRITTEN_TYPES:
+            raise ValidationFailed(
+                f"{s['name']} takes its items from {KIND_LABEL.get(kind_of(s), s['type'])}; items are written only "
+                "into a typed text or push source.",
+                code="source_not_written",
+            )
+        name, title = str(i.get("name") or "").strip(), str(i.get("title") or "").strip()
+        if not name:
+            raise ValidationFailed("Give the item a name, such as escrow-analysis.md.")
+        data, mime = written_bytes(i, title)
+        if not name.endswith(tuple(WRITTEN_TEXT_MIMES.values())) and mime in WRITTEN_TEXT_MIMES:
+            # The reader takes a written item's type from its name, as it does an upload's.
+            name = f"{name}{WRITTEN_TEXT_MIMES[mime]}"
+        before = next(
+            (x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name), None
         )
-        return self._item(item, found[0])
+        stored_file = await self.upload(who, source_id, data, name=name, mime=mime)
+        same = before is not None and before["digest"] == stored_file["digest"] and before["status"] == "indexed"
+        if not same:
+            # The same run as a sync, reading only this item: the source's other items are as they were.
+            await self._held_sync(who, await self._source_row(who, source_id), full=False, retry=False, only=name)
+        found = (await self.store.sources(who.tenant_id, [source_id]))[0]
+        item = next(x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name)
+        outcome = "unchanged" if same else "created" if before is None else "updated"
+        return {"outcome": outcome, "item": self._item(item, found)}
 
     async def add_documents(self, who: Who, kb_id: str, file_ids: list[str]) -> dict[str, Any]:
         """Files from Files added to the base: into its own documents source, made and attached the first
@@ -2499,8 +2643,11 @@ def kind_defaults(kind: str, ocr: str, *, plugin_schedule: Any = None) -> dict[s
 
 def scope_summary(s: dict[str, Any]) -> str:
     """What a source takes in, in a few words: a site's start address, or a plugin source's name, or its files."""
+    if s["type"] in WRITTEN_TYPES:
+        return f"{len(s['file_ids'])} {'pages' if s['type'] == 'text' else 'pushed items'}"
     if s["type"] != "tool":
-        return f"{len(s['file_ids'])} uploaded files"
+        n = len(s["file_ids"])
+        return f"{n} uploaded file" if n == 1 else f"{n} uploaded files"
     cfg = dict(s.get("config") or {})
     values = cast(dict[str, Any], cfg.get("values") or {})
     start = cast(list[Any], values.get("start") or [])
@@ -2511,7 +2658,7 @@ def scope_summary(s: dict[str, Any]) -> str:
 
 
 # A source's kind in words, when its plugin's own title for it is not kept (a source made before titles were).
-KIND_LABEL = {"file": "Files", "web": "Website", "tool": "App source"}
+KIND_LABEL = {"file": "Files", "text": "Typed text", "push": "Pushed by API", "web": "Website", "tool": "App source"}
 
 
 def kind_label(s: dict[str, Any]) -> str:
@@ -2525,6 +2672,34 @@ def ai_steps_waiting(settings: IngestSettings) -> list[str]:
     return [
         step for step in settings.strategies if step in AI_STEPS and not ai_step_allowed(settings, step, preview=False)
     ]
+
+
+def written_bytes(i: dict[str, Any], title: str) -> tuple[bytes, str]:
+    """The bytes and mime of an item written through the API: its `text` (Markdown by default, headed by its title) or
+    its base64 `content`, one of the two."""
+    text, content = i.get("text"), i.get("content")
+    if (text is None) == (content is None):
+        raise ValidationFailed("Send the item's text or its base64 content, one of the two.")
+    if content is not None:
+        mime = str(i.get("mime") or "")
+        if not mime:
+            raise ValidationFailed("Name the content's type in mime, such as application/pdf.")
+        try:
+            data = base64.b64decode(str(content), validate=True)
+        except (ValueError, binascii.Error) as e:
+            raise ValidationFailed("The content is not base64.") from e
+        if not data:
+            raise ValidationFailed("The content is empty.")
+        return data, mime
+    mime = str(i.get("mime") or "text/markdown")
+    if mime not in WRITTEN_TEXT_MIMES:
+        raise ValidationFailed(f"Text is one of {', '.join(WRITTEN_TEXT_MIMES)}; send other files as content.")
+    body = str(text).strip()
+    if not body:
+        raise ValidationFailed("Write the item's text.")
+    if title and mime == "text/markdown" and not body.startswith("# "):
+        body = f"# {title}\n\n{body}"
+    return f"{body}\n".encode(), mime
 
 
 def kind_of(s: dict[str, Any]) -> str:
@@ -2694,7 +2869,23 @@ def found_out(found: Found) -> dict[str, Any]:
         "passages": [passage_out(p) for p in found.passages],
         "lanes": found.lanes_out(),
         "cost": {"embeddingTokens": found.embedding_tokens},
+        **({"rewrite": found.rewrite} if found.rewrite is not None else {}),
+        **({"rerank": found.rerank} if found.rerank is not None else {}),
     }
+
+
+def checked_retrieval(r: dict[str, Any]) -> dict[str, Any]:
+    """A base's retrieval settings as saved: the steps around the search refused when they are not ones it runs."""
+    if r.get("rewrite") not in REWRITE_MODES:
+        raise ValidationFailed(
+            f"Rewrite is one of {', '.join(REWRITE_MODES)}; expanding a question into several is not built.",
+            code="invalid_retrieval",
+        )
+    if not isinstance(r.get("rerank"), bool):
+        raise ValidationFailed("Rerank is on or off.", code="invalid_retrieval")
+    if len(str(r.get("rewriteInstructions") or "")) > 1000:
+        raise ValidationFailed("Keep the rewrite instruction under 1,000 characters.", code="invalid_retrieval")
+    return r
 
 
 def passage_out(p: Passage) -> dict[str, Any]:
@@ -2713,4 +2904,5 @@ def passage_out(p: Passage) -> dict[str, Any]:
         "matched": p.matched,
         "lanes": p.lanes,
         "verified": p.verified,
+        **({"reranked": p.reranked} if p.reranked is not None else {}),
     }

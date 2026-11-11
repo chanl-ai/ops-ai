@@ -61,7 +61,7 @@ export function SecretPicker({ onPick, disabled, label = 'Insert a secret' }: { 
           </Command>
         </PopoverContent>
       </Popover>
-      {canAdd && <SecretDialog open={adding} rotating={null} onOpenChange={setAdding} onSaved={(name) => pick(name)} />}
+      {canAdd && <SecretDialog open={adding} rotating={null} onOpenChange={setAdding} onSaved={(s) => pick(s.name)} />}
     </>
   );
 }

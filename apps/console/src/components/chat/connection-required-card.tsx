@@ -191,6 +191,8 @@ export interface AppOff {
   message: string;
   /** The app's state for the team, from the refusal's code: off, or on with its team account not signed in yet. */
   appState: 'off' | 'needs_sign_in';
+  /** The team account was signed in and its sign-in ended (expired, refused or revoked): it is signed in again. */
+  again?: boolean;
 }
 
 // The refusals for an app the team sets up first, by the app state each means.
@@ -202,10 +204,12 @@ export function appOffForTeam(call: ToolCall): AppOff | null {
   let error = (call.output as { error?: unknown }).error;
   if (error && typeof error === 'object' && 'error' in error) error = (error as { error: unknown }).error;
   if (!error || typeof error !== 'object') return null;
-  const e = error as { code?: string; message?: string; details?: Partial<AppOff> };
-  const appState = TEAM_FIRST[e.code ?? ''];
+  const e = error as { code?: string; message?: string; details?: Partial<AppOff> & { account?: string; connectedEvent?: unknown } };
+  // A team account whose sign-in ended names the event its next sign-in reports; any other AUTH_FAILED draws no card.
+  const again = e.code === 'AUTH_FAILED' && e.details?.account === 'team' && Boolean(e.details.connectedEvent);
+  const appState = again ? 'needs_sign_in' : TEAM_FIRST[e.code ?? ''];
   if (!appState || !e.details?.appId) return null;
-  return { app: e.details.app ?? 'This app', appId: e.details.appId, teamId: e.details.teamId, message: e.message ?? '', appState };
+  return { app: e.details.app ?? 'This app', appId: e.details.appId, teamId: e.details.teamId, message: e.message ?? '', appState, again };
 }
 
 /**
@@ -220,8 +224,16 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
   const teamName = team?.name ?? 'this team';
   const signIn = off.appState === 'needs_sign_in';
   const label = labelFor(off.appState, manages);
-  const title = signIn ? `${off.app} is on for ${teamName}, but its team account is not signed in` : `${off.app} is off for ${teamName}`;
-  const said = manages
+  const title = off.again
+    ? `${off.app} needs signing in again`
+    : signIn
+      ? `${off.app} is on for ${teamName}, but its team account is not signed in`
+      : `${off.app} is off for ${teamName}`;
+  const said = off.again
+    ? manages
+      ? 'Its sign-in ended. Sign it in again; this chat then carries on with it, never with another account.'
+      : 'Its sign-in ended. Only a team admin can sign it in again.'
+    : manages
     ? signIn
       ? `Connect the team account; its tools then work in chat.`
       : `You can turn it on for ${teamName}; its tools then work in chat.`
@@ -229,7 +241,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
       ? 'Only a team admin can connect the team account.'
       : 'Only a team admin can turn it on.';
   return (
-    <div className="flex flex-col gap-2" data-testid="app-off-card" data-app={off.appId} data-state={off.appState}>
+    <div className="flex flex-col gap-2" data-testid="app-off-card" data-app={off.appId} data-state={off.again ? 'sign_in_ended' : off.appState}>
       <ChatToolCall
         name={call.label ?? call.name}
         state="failed"
@@ -255,7 +267,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {manages ? (
                 <Button size="sm" asChild data-testid="app-off-turn-on">
-                  <Link href={appPageHref(off.appId)}>{signIn ? 'Connect the team account' : `Turn on ${off.app}`}</Link>
+                  <Link href={appPageHref(off.appId)}>{off.again ? 'Sign in' : signIn ? 'Connect the team account' : `Turn on ${off.app}`}</Link>
                 </Button>
               ) : (
                 <AskAnAdmin testId="app-off-ask" />
@@ -275,7 +287,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
 export interface AccountChoice {
   app: string;
   appId: string;
-  accounts: { connectionId: string; name: string; account?: string | null }[];
+  accounts: { connectionId: string; name: string; account?: string | null; identity?: { label: string; shown: string; value: string }[] }[];
 }
 
 /** The accounts a call asks the person to choose between, from the gateway's error, or null. */
@@ -340,7 +352,16 @@ export function AccountChoiceCard({ call, choice, onReply }: { call: ToolCall; c
                     )
                   }
                 >
-                  {label(a)}
+                  <span>{label(a)}</span>
+                  {/* Where it points, beside who signed in: two accounts of one person differ only here. */}
+                  {(a.identity ?? []).some((e) => e.shown !== label(a)) && (
+                    <span className="truncate text-xs text-muted-foreground">
+                      {(a.identity ?? [])
+                        .filter((e) => e.shown !== label(a))
+                        .map((e) => e.shown)
+                        .join(' · ')}
+                    </span>
+                  )}
                 </Button>
               ))}
             </div>

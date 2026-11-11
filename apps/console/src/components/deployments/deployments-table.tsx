@@ -28,6 +28,7 @@ import {
 } from '@/hooks/queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { useFlag } from '@/hooks/flag-queries';
+import { useCreatedRows } from '@/hooks/use-created-rows';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
 import type { DeployChannel, Deployment } from '@/lib/types/domain';
@@ -100,6 +101,7 @@ export function DeploymentsTable({
   const query = useDeployments(params);
   const workflows = useWorkflows(ALL);
   const create = useCreateDeployment();
+  const created = useCreatedRows<Row>();
   const update = useUpdateDeployment();
   const rotate = useRotateKey();
   const promote = usePromoteDeployment();
@@ -142,6 +144,7 @@ export function DeploymentsTable({
           columns={cols}
           data={rows}
           getRowId={(r) => r.id}
+          created={created}
           searchColumn="name"
           searchPlaceholder="Search deployments…"
           initialColumnVisibility={{ workflowId: false, updatedAt: false }}
@@ -219,6 +222,7 @@ export function DeploymentsTable({
         isPending={create.isPending}
         onSubmit={async (input) => {
           const d = await create.mutateAsync(input);
+          created.show({ ...d, onRowClick: (x: Deployment) => setActiveId(x.id) });
           toast.success(`Deployed ${d.name} to ${d.environment}`, { description: `Serving ${d.workflowName} v${d.version}.` });
           setActiveId(d.id);
         }}

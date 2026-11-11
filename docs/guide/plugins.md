@@ -151,6 +151,7 @@ paging, knowledge sources and templates.
 | `connection.health_check` | The path Test connection calls |
 | `connection.sign_in_errors` | What a refused sign-in says, by the system's error code: `{error, description_contains?, say, who}`; see Where a team signs in |
 | `connection.credential_settings` | Settings that belong to the OAuth app's registration (a Microsoft tenant, an Okta domain): the team's app credential holds them, and every account signing in with it reads them from there |
+| `connection.identity` | Up to three settings whose values tell one account of the app from another (Salesforce's `instance_url`), shown under each account's name on every screen and in what the model is told. Never a secret. With none declared, the platform shows what the sign-in filled, then the account's own sign-in address, then who signed in, so every account shows something |
 | `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), `from_token` or `after_sign_in` (only the sign-in sets it), and `choices` and `other` (the only values it takes; see Where a team signs in), and `asked` (which window asks for it; see Where a setting is asked) |
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
@@ -435,7 +436,7 @@ how to talk to its system. Every tool is a read, called through tools-service, s
 | Changes since | `changes` (`list_changes`), takes `cursor` | Items added or changed since the cursor, deleted ones as `{id, deleted: true}`, and the next `cursor` | No: without it each run lists from the watermark |
 | Deleted | `deleted` (`list_deleted`) | Ids removed since a time | No: the weekly full listing finds deletes |
 | Who can see | `allowed` on a fetched item | User and group ids from the system, stored per version, not yet enforced | No |
-| Pickers | `scopes` (`list_scopes`), takes `query` | What a person picks when adding the source: sites and libraries, spaces | No |
+| Pickers | `scopes` (`list_scopes`), takes `query`, and `parent` for what one picked scope holds, and `cursor` | `{scopes: [{id, title, kind, parent?, detail?}], next_cursor?}`: sites by name, a site's libraries, spaces. An input naming `picker: <kind>` is filled from the scopes of that kind in Add source, through kb-service's `POST /v1/sources/scopes` | No |
 | Preview | `preview` (`preview`), takes `source` | What a source with these settings would take in, before anything is stored: `{found, will_fetch, pages: [{id, outcome, will_fetch}], capped}` | No |
 
 `inputs` describes what a source of this kind is set up with (start addresses, sites, spaces); kb-service checks a
@@ -457,6 +458,14 @@ true` says the items are one website's pages, so a source starts with a website'
 A Python tool may set its own `If-None-Match`, `If-Modified-Since`, `Accept` and `Accept-Language` on a request
 (`ctx.http.get(url, headers=...)`); any other header is refused. `Response.content` holds the body's bytes for an
 answer that is not text, and a function raises `NotFound` (NOT_FOUND) for an item gone at its source. The answer to one request is read as it streams in and refused past 25 MB with `RESPONSE_TOO_LARGE` (`TooLarge` in the SDK); redirects are not followed for a tool, which follows them itself (the website plugin follows up to five on its own site).
+
+SharePoint and OneDrive (`plugins/sharepoint`) and Confluence Cloud and Data Center (`plugins/confluence`) are on the
+same contract, pinned in `deploy/plugins.json`. SharePoint lists picked sites' document libraries (or picked libraries)
+through Microsoft Graph, finds changes and deletes with one delta token per library, stores each file's permissions as
+`allowed`, and picks sites then libraries; Confluence lists picked spaces' pages (and their attachments when
+`attachments` is on), finds changes with CQL `lastmodified` and picks spaces. Both pass `knowledge_contract` against a
+fake of their system in their own tests, and kb-service's `tests/test_connector_plugins.py` syncs each through its one
+sync path; neither has been run against a real tenant or site.
 
 The Website plugin (`plugins/web` in the plugins repository, pinned in `deploy/plugins.json`) is the first source on
 this contract: a site's pages from its sitemaps and links, robots.txt obeyed, one request a second, a conditional
@@ -652,6 +661,88 @@ never answered back. `GET /v1/me/accounts?every=true` lists every account of the
 `CONNECTION_NOT_LINKED` naming `authKind` and `personFields`, so the console asks for the key in place; a call with
 nobody behind it is refused with reason `no_person`. A wrong key fails that person's call with the system's 401 and
 leaves everyone else's working; Disconnect removes it.
+
+### Several accounts of one app
+
+A team keeps several named accounts of one app: two Salesforce orgs, two GitHub servers. Each account has a name that
+no other account of the app in the team holds (case and spaces aside), held by a filtered unique index on
+`connections.account_key` (`services/tools-service/migrations/versions/0071_account_key.py`), so two adds at the same
+moment make one account and the other is refused 409 `account_name_taken`.
+
+| Who | Call | What it does |
+|---|---|---|
+| Whoever holds `connections.manage` | `POST /v1/apps/{app}/accounts` with `{name, settings, makeDefault}` | Adds a live account signing in where its `settings` say (its own sign-in address); `makeDefault` makes it the team's default. A test account cannot be the default |
+| Any member | `POST /v1/me/accounts/{id}/another` with `{name, settings}` | Adds a second account of their own, signing in where `settings` say. Only for apps that sign in with an account; with no body it is named "<person>'s other account" and signs in where `{id}` does |
+| Any caller | `GET /v1/apps/{app}/accounts?usable=1&name=…&mine=1` | The accounts a call may name, each with `identity`: `usable` keeps the team's live accounts (what a workflow step or an agent names), `mine` adds the caller's own, `name` keeps the one so named |
+| A run | `POST /v1/calls` with `runContext.accounts: {appId: name}` | Each app's call uses the account named for its app; `runContext.account` (one name) is still read |
+| A builder | an `ops.action.tool` step's `accounts` parameter, or an agent's `accounts` (`PATCH /v1/agents/{id}`) | The step's or agent's choice per app. Publishing checks each against tools-service (`?usable=1&name=`) and refuses 422 `account_name_unknown`; a draft may name one not made yet |
+| A person | `PUT /chat/threads/{id}/connectors` with `{off, accounts}` | The chat's choice per app, kept on the chat; `GET` lists each app's accounts when it has two or more, and `account` in use |
+| A delete | `DELETE /v1/apps/{app}/accounts/{id}` | Refused 409 `account_in_use` while a workflow draft or published version, or an agent, names the account, with `published`, `drafts`, `workflows` and `agents` in the details; tools-service asks agents-service's `GET /v1/account-uses` (the same count as below), and refuses 503 when it cannot answer |
+| Before a rename | `GET /v1/workflows/definitions/account-uses?app=…&name=…` | How many drafts and published versions name the account. A rename rewrites none of them: a published version is refused at its next call until its next publish names the new name |
+
+Agents-service sends what was chosen and never picks or compares names itself: a step's choice over a chat's over
+the agent's, decided in one place (`domain/accounts.py` chosen_accounts); a call run as the team account keeps only
+the step's. The model is told the account in use and where it points on its apps line ("Salesforce: on · uses EU org
+(kestrel-eu.my.salesforce.test)", `api/apps_line.py`), read from the row's `pointsAt` (the first identity entry that
+is not who signed in), so a person's email never reaches the prompt; it has no tool input to change the account. How a call's
+account is chosen, in tools-service only (`plugins/host.py` `PluginHost.for_call` and `_named`):
+
+| Case | Account used |
+|---|---|
+| The call names an account for its app | That account of the call's team. An unknown name is refused 404 `ACCOUNT_NOT_FOUND`, never the default |
+| It names one person's own account | Only when the call acts for that person; otherwise 403 `ACCOUNT_NOT_YOURS`, so a step or schedule never signs in as someone |
+| A test run names a live account | The app's test account; with none, 409 `SANDBOX_REQUIRED` |
+| It names none and acts for a person with their own sign-ins | Their default; with two or more and none chosen, `ACCOUNT_CHOICE_NEEDED` |
+| Otherwise | The team's default |
+| The named account's team sign-in ended (expired, refused or revoked) | None: 200 with `AUTH_FAILED` in the output, its details naming the account (`connection`) and `connectedEvent`. A run waits on that event ("Sign in to EU org again to continue"), a chat draws the sign-in card, and an admin's new sign-in reports the event so the run goes on. No other account is tried |
+
+Changing an account's who signs in from `team` to `person_or_team` with `teamBackup` makes a call acting for a person
+sign in as that person, and a call acting for nobody (a schedule) keep the team's login (uc-709).
+
+Every account row (the app's Accounts list, Connectors › Mine, the account pickers) carries `identity`: what tells it
+apart, built once in `plugins/host.py` `account_identity`. A plugin's `connection.identity` names the settings to show;
+with none declared it shows what the sign-in filled, then the account's own sign-in address, and for a custom app its
+address; who signed in comes last. A second account pointing at the same place carries `samePlaceAs` with the first's
+name, a warning only. A member's Accounts tab lists the team's accounts and counts their own sign-ins (`me.signIns`);
+their own accounts are on Connectors › Mine. Each team row also carries `signIn` (whose login its calls use: `team`,
+`person` or `person_or_team`) and `peopleSignedIn` (how many people hold their own sign-in on that account). The row's
+Settings dialog (`components/connections/account-settings-dialog.tsx`, apart from Connect, which signs in) changes the
+name, who signs in and the auth config; the team default is the star on the row; "Each person signs in" shows the count against
+the team's members, and a rename or a change of who signs in first shows how many drafts and published versions name
+the account. A first turn-on through Ops AI's app keeps the sign-in address it asked as
+a default on Ops AI's auth config, so a second account may type its own; a team whose first turn-on kept it fixed keeps
+it fixed, and adds an auth config holding the address as a default for a second org.
+
+### Package apps
+
+A package app is a plugin whose tools run inside another app, such as a lending or life-sciences package installed in
+a Salesforce org. It has no accounts of its own: each call signs in with the chosen account of the app it runs on and
+reaches that account's address. The manifest says so in `connection`:
+
+| Field | What it does |
+|---|---|
+| `kinds: [none]` | Required with `runs_on`: the package never signs in by itself |
+| `runs_on` | The plugin id of the app it runs inside (`opsai.salesforce`). `endpoint`, `egress` and headers render with that app's settings for the chosen account, so `{instance_url}` is the org's |
+| `requires` | The objects the package installs in the app. Optional |
+| `requires_check` | A path from `/`, with `{name}` for each required object, that answers 404 or 400 where the object is missing (`/services/data/v{api_version}/sobjects/{name}/describe`). Required with `requires` |
+
+`opsai plugin validate` refuses `runs_on` with another kind, `runs_on` naming the plugin itself, `requires` without
+`runs_on`, and a check path that names no object. Turning a package on for a team makes no account, and is refused
+409 `host_app_missing` when the install lacks the app it runs on.
+
+| Case | What happens (`plugins/host.py` `PluginHost.for_call`) |
+|---|---|
+| A call names an account under the app it runs on (`runContext.accounts: {"plugin:opsai.salesforce": "EU org"}`) | The package's tool signs in with that account, chosen as that app's own calls choose one (`_choose`) |
+| A call names an account under the package's own app id | 404 `ACCOUNT_NOT_FOUND`: the package has none |
+| The app it runs on is off for the team, or not installed | 403 `APP_OFF_FOR_TEAM` naming that app, or `PLUGIN_DISABLED` |
+| The chosen account's last Test found a required object missing | 409 `PACKAGE_MISSING` naming the account, before any request leaves tools-service |
+| The account was never checked (signed in before the package was installed) | The call runs; its next Test records the check |
+
+The check runs with every passing Test, which also runs after each sign-in (`connections/service.py` `_packages`): it
+reads each object's path through the account's sign-in and saves `health.packages` on the account, by package id, with
+the objects missing. `GET /v1/apps/plugin:{package}/accounts` lists the accounts of the app it runs on, each with
+`appId` (the key a step or agent names it under) and `missingObjects`, so a picker shows an account unavailable.
+`docs/usecases/lib/plugins/loan_desk` is a fictional package for the use cases (uc-706).
 
 After that, builders grant the plugin's tools to agents as any other tool, and a knowledge base adds a source with
 `POST /v1/sources` and `{type: "tool", config: {plugin: "opsai.salesforce", source: "articles"}}`. Nobody can edit,

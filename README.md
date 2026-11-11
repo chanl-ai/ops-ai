@@ -22,6 +22,11 @@
   <a href="package.json"><img src="https://img.shields.io/badge/Node-20%2B-339933?logo=nodedotjs&logoColor=white" alt="Node 20 or newer" /></a>
   <a href="apps/console"><img src="https://img.shields.io/badge/Next.js-console-000000?logo=nextdotjs&logoColor=white" alt="Next.js console" /></a>
   <a href="docs/deploy/database.md"><img src="https://img.shields.io/badge/PostgreSQL-15%2B-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 15 or newer" /></a>
+  <br />
+  <a href="https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml"><img src="https://github.com/chanl-ai/ops-ai/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/chanl-ai/ops-ai"><img src="https://api.scorecard.dev/projects/github.com/chanl-ai/ops-ai/badge" alt="OpenSSF Scorecard" /></a>
+  <a href="https://github.com/chanl-ai/ops-ai/actions/workflows/dependency-check.yml"><img src="https://github.com/chanl-ai/ops-ai/actions/workflows/dependency-check.yml/badge.svg?branch=main" alt="Dependency check" /></a>
+  <a href="docs/deploy/security-scanning.md"><img src="https://img.shields.io/badge/releases-signed%20%C2%B7%20SBOM%20%C2%B7%20provenance-2ea44f" alt="Releases signed, with SBOM and provenance" /></a>
 </p>
 
 <p align="center">
@@ -179,7 +184,9 @@ The rest of what that dispute touched, and what a review asks about next:
   answers for test, and a review before it is published; approvals are off until a team turns them on.
 - **Guardrails and skills.** Pinned to an agent's version and checked before and after each answer; a check fails
   closed.
-- **Knowledge.** Knowledge bases built from uploads or synced sources, served to the agents granted each base.
+- **Knowledge.** Knowledge bases built from uploads, typed text, items your systems push, websites, SharePoint and
+  Confluence, searched by meaning and by keyword with an optional rerank and question rewrite, and served to the agents
+  granted each base. The SharePoint and Confluence plugins are tested against fakes of those systems, not a real tenant.
 - **Files and document types.** Every upload and attachment with its purpose, sensitivity, scan, versions and legal
   hold. Each file is read once per team, scans with OCR, and that one reading feeds extraction, knowledge bases, chat
   attachments and an agent's `read_file`; another team holding the same file reads it itself. Reads keep quotes and
@@ -205,7 +212,6 @@ together.
 | Ready-made workflows | Governed flows to start from: card disputes, fraud alerts, loan packets, KYC refresh, claims intake, complaints |
 | Templates and agent cards | Teams publish agents and workflows to a catalog, and other teams install a copy of their own |
 | SQL Server | The store packages are being extended from PostgreSQL to SQL Server ([design](docs/design/data/sql-server.md)) |
-| Semantic knowledge search | Retrieval by meaning next to today's PostgreSQL full-text search ([today](services/kb-service/src/ops_kb/retrieval.py)) |
 | SDK and more channels | A generated TypeScript and Python SDK; Slack and Teams ([today](apps/console/src/lib/types/channels.ts)) |
 
 Limits worth knowing today: a mailbox is proven on a local IMAP server and a test provider, and a Microsoft 365 or
@@ -297,7 +303,7 @@ and use cases make their own throwaway databases and never touch the stack's.
 | `make review BRANCH=feat/x` | Runs that branch from the review worktree on the same ports |
 | `make test PKG=services/tools-service` | One package's or service's tests; `make test` alone runs what changed since `origin/main` |
 | `make health` | Each service's port, whether it answers and who started it |
-| `make logs SVC=agents` | Follows one service's log |
+| `make logs SVC=agents` | Follows one service's log, one JSON object per line ([logging](docs/packages/ops_service_kit/logging.md)) |
 | `make down KEEP_DB=1` | Stops the services and keeps the database |
 | `make verify` | Everything a commit must pass, on the scripted model |
 | `make usecase-test UC=uc-010` | Runs one end-to-end use case on its own database and free ports |
@@ -348,6 +354,7 @@ file (`scripts/sample-team/admin.env.example`) to `uv run python scripts/sample_
 | [`docs/architecture/README.md`](docs/architecture/README.md) | The system as built, what is proven and the decision records |
 | [`docs/usecases/README.md`](docs/usecases/README.md) | The end-to-end checks behind each feature and how to run them |
 | [`docs/deploy/install-guide.md`](docs/deploy/install-guide.md) | Installing and running Ops AI |
+| [`docs/deploy/security-scanning.md`](docs/deploy/security-scanning.md) | Every security scan, signed releases and how to verify them; reporting a vulnerability is in [`SECURITY.md`](SECURITY.md) |
 
 ## Contributing
 

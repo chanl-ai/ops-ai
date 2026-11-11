@@ -17,18 +17,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: "3.12"
     - if: inputs.python == 'true'
-      uses: astral-sh/setup-uv@v5
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       with:
         enable-cache: true
         cache-dependency-glob: uv.lock
     # The environment itself, keyed on the lockfile: uv sync then only checks it. The runner's checkout path is the same
     # every run, so the workspace's editable installs still point at this checkout.
     - if: inputs.python == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .venv
         key: venv-${{ runner.os }}-py3.12-${{ hashFiles('uv.lock') }}
@@ -36,9 +36,9 @@ runs:
       shell: bash
       run: uv sync --frozen --all-packages --all-groups --quiet
     - if: inputs.node == 'true'
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v4.4.0
     - if: inputs.node == 'true'
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: 22
         cache: pnpm
@@ -46,7 +46,7 @@ runs:
       shell: bash
       run: pnpm install --frozen-lockfile
     - if: inputs.browser == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}

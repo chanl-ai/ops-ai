@@ -397,7 +397,10 @@ class Authenticator:
             f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
         )
         details = {
-            "connectionId": connection_id, "appId": str(conn["app_id"]), "app": name, "account": "team", "state": state
+            "connectionId": connection_id, "appId": str(conn["app_id"]), "app": name, "connection": name,
+            "account": "team", "state": state,
+            # What a run waits on until an admin signs the team account in again: that sign-in reports it.
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(connection_id, SHARED)},
         }  # fmt: skip
         return AuthFailed(e.code, message, side=e.side, status=e.status, details=details)
 

@@ -24,9 +24,10 @@ export interface AllowList {
 
 export type EgressKind = 'host' | 'range';
 
-/** `changed` is false when the value was already listed. */
+/** `changed` is false when the value was already listed. An add returns the entry as its list shows it. */
 export interface EgressChange {
   kind: EgressKind;
   value: string;
   changed: boolean;
+  entry?: ListedHost | ListedRange | null;
 }

@@ -1,0 +1,21 @@
+# A package app: it runs inside Sites desk, on the account a call chooses there, and has no accounts of its own. Its
+# loan object is installed in some sites only, which the package check reads per account.
+schema: ops-ai/plugin@2
+id: test.packages-loans
+title: Loan desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [none]
+  sign_in: [team]
+  runs_on: test.fields-sites
+  requires: [LNDK__Loan__c]
+  requires_check: "/sites/{site_id}/objects/{name}"
+egress: ["{base_url}"]
+endpoint: "{base_url}/sites/{site_id}/loans-api"
+tools:
+  - name: get_loan
+    title: Read a loan
+    access: read
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: GET, path: "/loans/{id}" }

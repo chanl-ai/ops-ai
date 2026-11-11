@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { APP_STATES, accountOwnerWords, appStateFor, headerActionFor, labelFor, whoseState, type AppGroupId, type AppStateId } from './app-state.ts';
+import { APP_STATES, accountOwnerWords, addAccountBlocked, appStateFor, headerActionFor, labelFor, whoseState, type AppGroupId, type AppStateId } from './app-state.ts';
 
 // The states and groups tools-service can answer, read from its OpenAPI document, so a new one cannot ship without
 // words and an action here.
@@ -36,9 +36,9 @@ test('a sign-in the team account needs is asked of an admin; one that is the per
   assert.equal(APP_STATES.auth_config_broken.on, true);
 });
 
-test('the app page header: a member on a connected team app has nothing to do; an admin may connect another account', () => {
+test('the app page header never adds an account: a connected app shows nothing to a member or an admin', () => {
   assert.equal(headerActionFor({ appState: 'connected', appGroup: 'on', mayManage: false }), null);
-  assert.equal(headerActionFor({ appState: 'connected', appGroup: 'on', mayManage: true }), 'connect');
+  assert.equal(headerActionFor({ appState: 'connected', appGroup: 'on', mayManage: true }), null);
   // A member whose team account needs signing in asks an admin; one whose own sign-in is missing goes to Mine.
   assert.equal(headerActionFor({ appState: 'needs_sign_in', appGroup: 'needs_admin', mayManage: false }), 'ask_admin');
   assert.equal(headerActionFor({ appState: 'needs_sign_in', appGroup: 'needs_you', mayManage: false }), 'own_sign_in');
@@ -61,4 +61,11 @@ test('on an app each person signs in to, the badge is the person’s own and the
   assert.equal(whoseState({ ownSignIn: 'connected', appGroup: 'gone' }), null);
   assert.equal(accountOwnerWords('team'), 'Team account');
   assert.equal(accountOwnerWords('each'), null);
+});
+
+test('Add account is disabled with its reason while the app has no working auth config, and enabled otherwise', () => {
+  assert.match(addAccountBlocked({ appState: 'needs_auth_config' }) ?? '', /auth config first/);
+  assert.match(addAccountBlocked({ appState: 'auth_config_broken' }) ?? '', /Fix the auth config/);
+  assert.equal(addAccountBlocked({ appState: 'connected' }), null);
+  assert.equal(addAccountBlocked({ appState: 'needs_sign_in' }), null);
 });

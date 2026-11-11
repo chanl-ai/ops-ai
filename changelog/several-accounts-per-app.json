@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Several accounts of one app, each named and told apart",
+  "description": "A team can keep two Salesforce orgs or two GitHub servers side by side: each new account signs in at its own address, shows what it points at, and a call that names it runs there. A call never uses another person's own account, and a test run never uses a named live one.",
+  "tag": "new"
+}

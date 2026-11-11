@@ -258,6 +258,35 @@ await withUiStack(
           { adminPicker, viewerPicker, ask, whose, row, line, how, viewerHow, errors: [...errs(), ...gone()] });
       }, priyaPage);
 
+      // The picker is a fixed width at every screen width, so a row's reason has to wrap under the name, not beside it.
+      await step('11 Every app name in the chat picker reads in full, as a member and an admin, at 1440 and 390', async () => {
+        const read = async (page, who, width) => {
+          await page.setViewportSize({ width, height: 900 });
+          await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId('connectors-picker').click({ timeout: 60_000 });
+          await page.getByTestId(`connector-off-${GH}`).waitFor({ timeout: 30_000 });
+          // The list fades and zooms in; read and shoot it once it has settled.
+          await page.getByTestId('connectors-picker-list').evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
+          const rows = await page.getByTestId('connectors-picker-list').locator('[data-testid^="connector-"][data-state]').evaluateAll((els) =>
+            els.map((el) => {
+              const name = el.querySelector('span.truncate');
+              return { name: name?.textContent ?? '', cut: !name || name.scrollWidth > name.clientWidth, ask: /ask an admin/i.test(el.textContent ?? '') };
+            }),
+          );
+          await page.screenshot({ path: join(SHOTS, `picker-${who}-${width}.png`) });
+          await page.keyboard.press('Escape');
+          return rows;
+        };
+        const seen = {};
+        for (const [who, page] of [['member', ravi], ['admin', priyaPage]]) for (const width of [1440, 390]) seen[`${who}-${width}`] = await read(page, who, width);
+        await ravi.setViewportSize({ width: 1280, height: 900 });
+        await priyaPage.setViewportSize({ width: 1280, height: 900 });
+        const cut = Object.entries(seen).flatMap(([k, rows]) => rows.filter((r) => r.cut).map((r) => `${k}: ${r.name}`));
+        check('11 Every app name in the chat picker reads in full, as a member and an admin, at 1440 and 390',
+          Object.values(seen).every((rows) => rows.length > 0) && seen['member-1440'].some((r) => r.ask) && cut.length === 0,
+          { cut, seen });
+      }, ravi);
+
       // Auth configs are a builder's and an admin's: a viewer's page has no Auth configs tab and no Auth config column.
       await step('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab', async () => {
         const configsOf = async (page) => {

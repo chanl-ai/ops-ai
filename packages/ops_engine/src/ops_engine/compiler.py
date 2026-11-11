@@ -39,6 +39,7 @@ from .journal import Journal, StepRow, StepStatus
 from .node_types import CASE_PRIORITIES, DEFAULT_MAX_ITEMS, RETRY_BY_EFFECTS, NodeType, TypeRegistry
 from .ports import (
     AS_TEAM_ACCOUNT,
+    STEP_ACCOUNTS,
     AgentRequest,
     CaseNotFoundError,
     CaseTypeNotFoundError,
@@ -464,11 +465,15 @@ def _error_code(output: Any) -> str | None:
 # The gateway's refusal for a call acting for a person who has not connected their own account (tools-service
 # auth._not_linked); its details name the event their connecting reports, absent when nobody acts behind the call.
 NOT_LINKED = "CONNECTION_NOT_LINKED"
+# The gateway's refusal for a call on a team account whose sign-in ended (tools-service auth._team_account_stopped);
+# its details name the event an admin's new sign-in reports.
+SIGN_IN_ENDED = "AUTH_FAILED"
 
 
 def connect_wait(output: Any) -> dict[str, Any] | None:
-    """The event and key to wait on when `output` is a refusal a person answers by connecting; None otherwise."""
-    if _error_code(output) != NOT_LINKED:
+    """The event and key to wait on when `output` is a refusal a person answers by signing in: their own account not
+    connected yet, or a team account whose sign-in ended. None otherwise, and for any refusal naming no event."""
+    if _error_code(output) not in (NOT_LINKED, SIGN_IN_ENDED):
         return None
     details: Any = cast(dict[str, Any], cast(dict[str, Any], output)["error"]).get("details")
     if not isinstance(details, dict):
@@ -486,12 +491,22 @@ def connect_wait(output: Any) -> dict[str, Any] | None:
         # The account's app, under which the person's Connect my account opens it.
         "appId": d.get("appId"),
         "teamAccount": bool(d.get("teamAccount")),
+        # The team account itself needs signing in again, by an admin, rather than a person's own account.
+        "again": d.get("account") == "team",
     }
 
 
 def _step(key: str) -> str:
     """`run:node:iteration` of a tool key `run:node:iteration:attempt`: the step a review approved, any attempt."""
     return key.rsplit(":", 1)[0]
+
+
+def step_accounts(value: object) -> dict[str, str]:
+    """A tool step's `accounts` setting, app id to account name, keeping only named entries."""
+    if not isinstance(value, Mapping):
+        return {}
+    given = cast(Mapping[object, object], value)
+    return {str(k): v.strip() for k, v in given.items() if isinstance(v, str) and v.strip()}
 
 
 async def gateway_call(call: NodeCall) -> Outcome:
@@ -513,10 +528,18 @@ async def gateway_call(call: NodeCall) -> Outcome:
         else:
             token = None
 
+    # The step's account per app (app id to name), as the builder set it; sent only when set, so a port that predates
+    # it keeps working.
+    accounts = step_accounts(call.params.get("accounts"))
+
     async def send() -> ToolResult:
-        return await call.ports.tools.call(
-            str(call.params["operation"]), arguments, call.key, call.generation, str(token) if token else None
-        )
+        named = STEP_ACCOUNTS.set(accounts or None)
+        try:
+            return await call.ports.tools.call(
+                str(call.params["operation"]), arguments, call.key, call.generation, str(token) if token else None
+            )
+        finally:
+            STEP_ACCOUNTS.reset(named)
 
     result = await send()
     if (wait := connect_wait(result.output)) is not None:
@@ -529,7 +552,9 @@ async def gateway_call(call: NodeCall) -> Outcome:
             call,
             event=wait["name"],
             key=wait["key"],
-            title=f"Connect your {app} account to continue",
+            title=f"Sign in to {app} again to continue"
+            if wait.get("again")
+            else f"Connect your {app} account to continue",
             timeout_seconds=0,
             app=app,
             connectionId=wait.get("connectionId"),

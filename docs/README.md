@@ -155,6 +155,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/demo-mailbox.md` | A demo mailbox on Fly: the Stalwart mail server, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
+| `deploy/security-scanning.md` | Every security scan (CodeQL, Scorecard, the dependency check, the release image scan), the SBOM, signatures and build provenance on each release, the settings the owner switches on, and how to verify a release |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
 | `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
 | `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |
@@ -243,6 +244,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/a-builder-adds-a-python-function-tool.md` | uc-531: a Python function tool runs sandboxed, reads bound tools through ops.call, hands a secret by name, and is stopped at an unbound tool, a socket, its time limit and its memory cap |
 | `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews, on the shared stack |
 | `usecases/console/knowledge-bases-end-to-end.md` | uc-096: James creates a knowledge base, adds files and a page, watches them index (a scan fails with its reason), tests a question in the playground and retires the base |
+| `usecases/console/new-row-shows-after-add.md` | uc-710: a Security admin adds a host to a full, sorted, searched Egress list and sees it first, marked New; a member reads the list |
 | `usecases/console/edit-an-operation.md` | uc-090: James edits an operation's input in a form (a wrong-typed default refused on its field, an optional field minor, a required one major), sets step-up and access, and sees the secrets it reads as set or not |
 | `usecases/console/import-to-governed-call.md` | uc-086: James stores the bank's keys as secrets, imports its OpenAPI document, Nadia approves it on the module page, a second version publishes, the agent reads and holds, Maya approves and the bank holds once; the call log names actor, approver and outcome |
 | `usecases/console/chat-find-start-continue.md` | uc-087: James starts a chat from a suggested prompt, regenerates, stops a slow reply, retries a refused send, pages his chats by cursor and finds an old one by its question through server search |
@@ -339,7 +341,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/real-pages-not-mocks.md` | uc-517: the console has no preview mock pages; the pieces they drew that the real pages lacked are built |
 | `usecases/console/wait-for-long-work.md` | uc-525: a workflow waits for long-running work and carries on when it finishes |
 | `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop |
-| `usecases/console/screen-speed.md` | uc-560: with OPS_REQUEST_TIMING on, each request's JSON line and Server-Timing, one request id across services and in the error envelope; screens open from saved data, wiped on sign-out and team switch |
+| `usecases/console/screen-speed.md` | uc-560: each request's http.request line, and with OPS_REQUEST_TIMING on its Server-Timing, one request id across services and in the error envelope; screens open from saved data, wiped on sign-out and team switch |
 | `usecases/console/connect-every-system.md` | uc-580, superseded by uc-607: kept for the record; its steps moved to uc-607 |
 | `usecases/console/connect-apps.md` | uc-607: a team connects apps from one catalog; a catalog of apps, Connect in a small window, and an app's page where a person connects their own account |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
@@ -413,6 +415,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |
 | `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
 | `usecases/models-service/an-account-admin-saves-a-model.md` | uc-532: An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one |
+| `usecases/models-service/a-refused-model-call-says-what-to-do.md` | uc-720: A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member |
 | `usecases/models-service/a-team-connects-azure-openai.md` | uc-605: A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region |
 | `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
 | `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
@@ -467,6 +470,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/agents-service/experiments/chat-on-graph.md` | Console chat as a facade over agent_wrapper threads: a message is a run, approvals go through decide, the old chat tables are dropped |
 | `services/agents-service/workflow-node-coverage.md` | Which seeded workflow runs each node type and which use-case check proves it (customer_hold uc-248, complaint_triage uc-249) |
 | `services/kb-service/overview.md` | kb-service: knowledge bases with owners, file sources, sync into page and section passages, full-text retrieval, changes, and what is not built |
+| `services/kb-service/experiments/meaning-threshold.md` | Meaning threshold: where the meaning lane's floor sits, from real embeddings |
 | `services/models-service/overview.md` | models-service: aliases, keys with budgets, admission and OpenAI-compatible egress with a metadata-only call log |
 | `services/platform-service/overview.md` | platform-service: sign-in, sessions, members, invites, API keys and audit; the only token issuer, verified elsewhere through ops_identity |
 | `services/tools-service/design.md` | tools-service design: the flow, the API, the data and the sequences; the console's screens are the Apps menu (guide/apps.md) |
@@ -481,6 +485,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `packages/ops_email/overview.md` | Email library: mail in and out behind two protocols, providers picked by settings |
 | `packages/ops_email/test-with-gmail.md` | Steps to run the Email received trigger from a real Gmail mailbox with an app password |
 | `packages/ops_signin/overview.md` | Sign-in library: password hashing, OIDC with PKCE, SAML, and a fake identity provider |
+| `packages/ops_service_kit/logging.md` | Logging: one JSON line per event on stdout, its fields and ids, what is redacted, the rules and checks |
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
@@ -508,3 +513,25 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/scanned-chat-attachment.md` | uc-673: A scanned file attached in chat is read with OCR and reaches the agent whole |
 | `usecases/tools-service/app-page-one-state.md` | uc-674: An app's page shows one state and its next action |
 | `usecases/kb-service/a-website-source-keeps-a-knowledge.md` | uc-675: A website source keeps a knowledge base current, and answers cite it |
+| `usecases/tools-service/a-second-org-signs-in-at-its-own-address.md` | uc-691: A second live org signs in at its own address and a call naming it reaches it |
+| `usecases/tools-service/a-package-app-runs-on-the-chosen-org.md` | uc-706: A package app runs on the chosen org and never on one without the package |
+| `usecases/agents-service/an-account-in-use-is-not-deleted.md` | uc-707: An account a workflow or agent names is not deleted until nothing names it |
+| `usecases/agents-service/an-expired-named-account-waits-for-sign-in.md` | uc-708: An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account |
+| `usecases/tools-service/a-second-server-signs-in-at-its-own-address.md` | uc-692: A second account of an app that is not Salesforce signs in at its own server |
+| `usecases/tools-service/every-account-says-what-it-points-at.md` | uc-693: Every account row says what it points at, also for an app that declares nothing and a custom app |
+| `usecases/tools-service/a-call-never-uses-someone-elses-account.md` | uc-694: A call naming another person's own account or another team's account is refused |
+| `usecases/tools-service/a-deleted-account-name-is-refused.md` | uc-698: A call naming an account that no longer exists is refused, never sent to the default |
+| `usecases/tools-service/changing-who-signs-in-to-each-person.md` | uc-709: Changing who signs in to each person makes calls act as the person, and schedules keep the shared login |
+| `usecases/tools-service/two-accounts-never-share-a-name.md` | uc-699: Two accounts of one app in one team never share a name |
+| `usecases/tools-service/a-test-run-never-uses-a-named-live-account.md` | uc-700: A test run that names a live account uses the test account or is refused |
+| `usecases/agents-service/a-step-runs-in-the-account-it-names.md` | uc-695: A workflow step that names an account runs in that account |
+| `usecases/agents-service/a-rename-changes-no-published-version.md` | uc-701: Renaming an account changes no published version, and the next publish names the dead name |
+| `usecases/agents-service/an-agent-runs-in-the-account-it-names.md` | uc-696: An agent runs in the account it names, and a step it starts runs in the step's |
+| `usecases/agents-service/a-chat-uses-the-account-picked-for-it.md` | uc-697: A chat uses the account picked for it, and a new chat starts on the default |
+| `usecases/agents-service/the-model-is-told-the-account-in-use.md` | uc-704: The model is told the account each app uses and cannot switch it in words |
+| `usecases/tools-service/a-person-adds-a-second-account-of-their-own.md` | uc-702: A person adds a second account of their own at their own address and makes it their default |
+| `usecases/tools-service/callers-from-before-several-accounts-keep-working.md` | uc-705: Callers from before several accounts keep working |
+| `usecases/tools-service/add-account-lives-on-the-accounts-tab.md` | uc-703: Add account is on the Accounts tab for whoever manages apps, and never for a member |
+| `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
+| `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
+| `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |

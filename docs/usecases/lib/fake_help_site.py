@@ -81,7 +81,8 @@ class HelpSite:
         self.lastmod.pop(path, None)
 
 
-def _certificate(folder: Path, host: str = HOST) -> tuple[Path, Path]:
+def _certificate(folder: Path, host: str = HOST, *more: str) -> tuple[Path, Path]:
+    """A self-signed certificate for `host` and any `more` names, which is also the CA tools-service trusts."""
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, host)])
     now = datetime.now(UTC)
@@ -93,7 +94,7 @@ def _certificate(folder: Path, host: str = HOST) -> tuple[Path, Path]:
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(minutes=5))
         .not_valid_after(now + timedelta(days=1))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName(host)]), critical=False)
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(h) for h in (host, *more)]), critical=False)
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         .sign(key, hashes.SHA256())
     )

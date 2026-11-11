@@ -147,8 +147,8 @@ class Settings(BaseSettings):
     engine_concurrency: int = 4
     # How often the worker's run reconciler looks for runs nothing is working on and marks them Stuck.
     engine_reconcile_seconds: float = Field(default=60.0, gt=0)
-    # One JSON line per request on the ops.request logger and a Server-Timing header; off by default because
-    # Server-Timing tells a caller how long internal work took.
+    # A Server-Timing header on every response; off by default because it tells a caller how long internal work took.
+    # The request's log line (http.request) is written either way.
     request_timing: bool = False
     # Feature flags turned on for this install, from the install config: OPS_FLAGS=mcp_gateway,tool_search (a
     # JSON list also reads). Every flag is off unless named; a name not in ops_service_kit.flags.FLAGS stops the service
@@ -273,6 +273,9 @@ class Settings(BaseSettings):
     # What kb-service's key may spend on likely questions, FAQ drafts and embeddings in one UTC day, across every
     # tenant (models-service refuses past it); each source's own ceiling per run is a source setting ($5 by default).
     kb_ai_daily_cap: float = 50.0
+    # The chat-model alias kb-service reranks and rewrites questions on, for a knowledge base that names none of its
+    # own (its retrieval's queryModel). Both steps are off on a base until its owner turns them on.
+    kb_query_alias: str = "bank-standard"
     embedding_width: int = 1536
     # Dev only: provider credentials by the name a provider connection's `keyRef` gives, as JSON in
     # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key

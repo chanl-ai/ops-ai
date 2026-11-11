@@ -236,7 +236,7 @@ resource "docker_container" "postgres" {
 
 resource "docker_container" "opa" {
   count       = data.coder_workspace.me.start_count
-  image       = "${var.base_image_prefix}openpolicyagent/opa:1.21.1"
+  image       = "${var.base_image_prefix}openpolicyagent/opa:1.21.4"
   name        = "coder-${data.coder_workspace.me.id}-opa"
   memory      = 512 * 1024 * 1024
   cpus        = 1

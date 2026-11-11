@@ -31,6 +31,8 @@ export interface Agent {
   model: string;
   channels: Channel[];
   toolIds: string[];
+  /** The account each app's calls use, app id to account name. */
+  accounts?: Record<string, string>;
   /** Granted tool ids the catalogue no longer offers (unpublished, hidden or deleted); saving the agent drops them. */
   staleToolIds: string[];
   collections: string[];

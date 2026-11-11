@@ -4,6 +4,7 @@ re-implementing the adapters, nothing else."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
@@ -35,13 +36,22 @@ class ToolResult:
 # team account"); the host's tool port then sends the call acting for nobody, which the gateway signs in with the team
 # account where the app allows one. A context value, so no ToolPort implementation changes its signature.
 AS_TEAM_ACCOUNT: ContextVar[bool] = ContextVar("ops_engine_as_team_account", default=False)
+# Set while a step sends a call that names an account per app (app id to name); the host's tool port sends it over the
+# run's own choice, and the gateway checks it. A context value for the same reason as AS_TEAM_ACCOUNT.
+STEP_ACCOUNTS: ContextVar[Mapping[str, str] | None] = ContextVar("ops_engine_step_accounts", default=None)
 
 
 class ToolPort(Protocol):
     async def call(
-        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+        self,
+        operation: str,
+        input: dict[str, Any],
+        key: str,
+        generation: int | None,
+        token: str | None,
     ) -> ToolResult:
-        """One call through the tool gateway under `key` (run:node:iteration:attempt), fenced by `generation`."""
+        """One call through the tool gateway under `key` (run:node:iteration:attempt), fenced by `generation`, on
+        the accounts the step names (STEP_ACCOUNTS) over the run's own."""
         ...
 
     async def access(self, operation: str) -> Access:

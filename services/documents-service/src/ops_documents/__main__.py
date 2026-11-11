@@ -72,8 +72,10 @@ def build(settings: Settings) -> FastAPI:
 def main() -> None:
     settings = Settings()
     require_current_schema(settings.database_url, MIGRATIONS)
-    configure_logging()
-    uvicorn.run(build(settings), host=settings.bind_host, port=settings.documents_port, log_level="info")
+    configure_logging(service="documents-service")
+    uvicorn.run(
+        build(settings), host=settings.bind_host, port=settings.documents_port, log_config=None, access_log=False
+    )
 
 
 if __name__ == "__main__":

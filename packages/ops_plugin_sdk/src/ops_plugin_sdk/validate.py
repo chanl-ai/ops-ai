@@ -353,6 +353,47 @@ def _function(root: Path, path: str) -> tuple[Any, str | None]:
     return fn, None
 
 
+# Shown under an account's name on one line, so a few values at most.
+IDENTITY_MAX = 3
+
+
+def _identity(manifest: Manifest) -> list[Problem]:
+    """Each `connection.identity` name is one of the plugin's settings and never a secret, since it is shown under the
+    account's name to everyone who sees the account; at most IDENTITY_MAX."""
+    names = manifest.connection.identity
+    out: list[Problem] = []
+    if len(names) > IDENTITY_MAX:
+        out.append(Problem("connection.identity", f"names {len(names)} settings; at most three fit under a name"))
+    for name in names:
+        setting = manifest.settings.get(name)
+        if setting is None:
+            out.append(Problem(f"connection.identity.{name}", f"{name} is not one of the plugin's settings"))
+        elif setting.secret:
+            out.append(Problem(f"connection.identity.{name}", f"{name} is a secret, which is never shown"))
+    return out
+
+
+def _package(manifest: Manifest) -> list[Problem]:
+    """A package app (`connection.runs_on`) signs in through the app it runs on and no other way; `requires` and its
+    check belong to a package only, and the check names each object with {name}."""
+    c = manifest.connection
+    out: list[Problem] = []
+    if c.runs_on is not None:
+        if c.kinds != ["none"]:
+            out.append(Problem("connection.runs_on", "a package signs in through the app it runs on: kinds: [none]"))
+        if c.runs_on == manifest.id:
+            out.append(Problem("connection.runs_on", "a plugin cannot run on itself"))
+    elif c.requires or c.requires_check:
+        out.append(Problem("connection.requires", "requires names objects of the app a package runs on: set runs_on"))
+    if c.requires_check is not None and (not c.requires_check.startswith("/") or "{name}" not in c.requires_check):
+        out.append(
+            Problem("connection.requires_check", "a package check is a path from / naming each object as {name}")
+        )
+    if c.requires and c.requires_check is None:
+        out.append(Problem("connection.requires_check", "required objects need the path that checks each, with {name}"))
+    return out
+
+
 def check(manifest: Manifest, root: Path) -> list[Problem]:
     out: list[Problem] = []
     if manifest.sdk != SDK_MAJOR:
@@ -380,9 +421,14 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
         out.append(
             Problem("connection.token_hosts", "a setting read from the token needs the host suffixes it may name")
         )
-    for i, host in enumerate(manifest.egress):
-        out += _placeholders(manifest, host, f"egress[{i}]")
-    out += _placeholders(manifest, manifest.endpoint, "endpoint")
+    out += _identity(manifest)
+    out += _package(manifest)
+    if manifest.connection.runs_on is None:
+        # A package's endpoint and egress render with the settings of the app it runs on, which this folder does not
+        # hold; tools-service renders them at each call and refuses one whose app is not installed.
+        for i, host in enumerate(manifest.egress):
+            out += _placeholders(manifest, host, f"egress[{i}]")
+        out += _placeholders(manifest, manifest.endpoint, "endpoint")
     out += _headers(manifest, manifest.headers, "headers")
     out += _sign_in_steps(manifest)
     out += _offered(manifest)

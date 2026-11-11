@@ -18,7 +18,7 @@ export interface HealthView {
 const CODE_WORDS: Record<string, string> = {
   AUTH_FAILED: 'Sign-in refused',
   AUTH_EXPIRED: 'Sign-in expired',
-  NOT_SIGNED_IN: 'Not signed in yet',
+  NOT_SIGNED_IN: 'Needs sign-in',
   CONNECTION_REVOKED: 'Sign-in ended',
   SECRET_MISSING: 'A key is missing',
   SECRET_UNAVAILABLE: 'A key could not be read',

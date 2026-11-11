@@ -31,6 +31,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.app import create_app
+from ops_agents.api.apps_line import HEAD as APPS_HEAD
 from ops_agents.graphs.models import Facts, Grade
 from ops_agents.store.base import metadata
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
@@ -161,6 +162,10 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart("Here is what I found.")])
     text = _last_user_text(messages)
     tools = {t.name for t in info.function_tools}
+    # Repeats the apps line the turn was given, so a use case reads what the model is told about each app (uc-704).
+    if "which apps can you reach" in text.lower() and APPS_HEAD in (prompt := _prompt_text(messages)):
+        told = prompt.split(APPS_HEAD, 1)[1].split("\n\n", 1)[0].strip()
+        return ModelResponse(parts=[TextPart(told)])
     if text.startswith("<remember>") and info.model_request_parameters.output_mode in ("native", "tool"):
         return structured(info, remembered(text))
     if "<knowledge>" in text and "limit" in text.lower():

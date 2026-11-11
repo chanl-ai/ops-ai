@@ -16,6 +16,7 @@ from ops_access import can
 from ops_identity import CurrentTenantCaller
 from ops_service_kit.http import Envelope, Out
 
+from ..account_names import account_uses_in
 from ..agent_registry import registry as agent_registry
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
@@ -26,6 +27,7 @@ from .agents import used_in_all
 router = APIRouter(prefix="/v1/tool-uses")
 # Which of a team's workflows read each document type, for documents-service's delete of one.
 document_type_router = APIRouter(prefix="/v1/document-type-uses")
+account_router = APIRouter(prefix="/v1/account-uses")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 MAX_TOOLS = 200
 
@@ -127,3 +129,27 @@ async def list_document_type_uses(
     can(caller, "workflows", "view", team=team, what="which workflows read a document type")
     names = [n for n in dict.fromkeys(t.strip() for t in types.split(",")) if n][:MAX_TOOLS]
     return ok(await document_type_uses(rt, names))
+
+
+class AccountUsers(Out):
+    """The definitions that name one account of an app: what blocks its delete and warns before its rename."""
+
+    drafts: int
+    published: int
+    workflows: list[str]
+    agents: list[str]
+
+
+@account_router.get("", response_model=Envelope[AccountUsers])
+async def list_account_uses(
+    rt: Rt,
+    caller: CurrentTenantCaller,
+    app: Annotated[str, Query(min_length=1, max_length=120)],
+    name: Annotated[str, Query(min_length=1, max_length=200)],
+) -> JSONResponse:
+    """The acting team's workflow drafts and published versions, and agents, naming the account `name` of `app`;
+    tools-service asks before it deletes an account."""
+    team = None if caller.kind == "service" else caller.team_id
+    can(caller, "agents", "view", team=team, what="who names an account")
+    found = await account_uses_in(rt, str(caller.team_id), app, name)
+    return ok(AccountUsers(**found).model_dump(by_alias=True))

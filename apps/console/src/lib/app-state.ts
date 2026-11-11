@@ -77,17 +77,20 @@ export type HeaderAction = 'turn_on' | 'add_auth_config' | 'fix_auth_config' | '
 
 /**
  * The app page header's one control, from the card's state and who acts next, and nothing else: the caller's own
- * sign-in is made on Mine; a team account's, by someone who manages the team's apps, in the Connect window.
+ * sign-in is made on Mine; a team account's, by someone who manages the team's apps, in the Connect window. The header
+ * never adds an account: a connected app shows nothing here, and Add account lives on the Accounts tab's toolbar
+ * (several accounts per app, D1), so adding one never depends on the app's state.
  */
 export function headerActionFor(card: { appState: AppStateId; appGroup: AppGroupId; mayManage?: boolean | null }): HeaderAction {
   const { action } = appStateFor(card.appState, card.appGroup, Boolean(card.mayManage));
   switch (action) {
     case 'sign_in':
       return card.appGroup === 'needs_you' ? 'own_sign_in' : 'connect';
+    case 'connect':
+      return null;
     case 'turn_on':
     case 'add_auth_config':
     case 'fix_auth_config':
-    case 'connect':
     case 'reconnect':
     case 'ask_admin':
       return action;
@@ -107,3 +110,13 @@ export function whoseState(card: { ownSignIn?: string | null; appGroup: AppGroup
 
 /** An account row's owner, said beside its state when the page's own badge is the person's. */
 export const accountOwnerWords = (owner: 'team' | 'person' | 'each'): string | null => (owner === 'team' ? 'Team account' : null);
+
+/**
+ * Why Add account cannot sign anything in yet, from the card's state, or null when it can: an app with no auth config,
+ * or one whose auth config is broken, opens a window that cannot finish, so the button is shown disabled with this.
+ */
+export function addAccountBlocked(card: { appState: AppStateId }): string | null {
+  if (card.appState === 'needs_auth_config') return 'Add an auth config first: accounts sign in through one.';
+  if (card.appState === 'auth_config_broken') return 'Fix the auth config first: accounts sign in through it.';
+  return null;
+}

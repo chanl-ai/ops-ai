@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -27,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTablePagination, ServerPaginationProps } from './data-table-pagination';
 import { EdgeFade, useMoreToTheRight } from '@/components/shared/edge-fade';
@@ -42,6 +44,8 @@ import { useBulkSelectionTransport } from '@/components/bulk-selection-context';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { type ColumnMeta, kindClass } from '@/components/data-table-column-kinds';
 import { idLast } from '@/lib/column-order';
+import { withCreatedRows } from '@/lib/created-rows';
+import type { CreatedRows } from '@/hooks/use-created-rows';
 
 // Re-export ExternalFilter for backwards compatibility
 export type { ExternalFilter };
@@ -121,6 +125,12 @@ interface DataTableWithViewsProps<TData, TValue> {
    * record's id and a stale key simply drops instead.
    */
   getRowId?: (row: TData) => string;
+  /**
+   * Rows the person just created here (`useCreatedRows`): shown first and marked New, whatever page, sort or search
+   * the list is on, until the person pages, searches, filters or sorts, or a later write removes or changes the row.
+   * Needs `getRowId`.
+   */
+  created?: CreatedRows<TData>;
   /** Custom empty state to render when data is empty and not loading */
   emptyState?: React.ReactNode;
   /** Callback when column filters change (for server-side search) */
@@ -223,6 +233,7 @@ export function DataTableWithViews<TData, TValue>({
   toolbarExtra,
   prependFilters,
   getRowId,
+  created,
 }: DataTableWithViewsProps<TData, TValue>) {
   // A row checkbox only where picking rows does something: a bulk action the person may take, or a page that reads the
   // selection. Without either (a viewer, whose bulk actions are all withheld) the column is left out.
@@ -260,10 +271,16 @@ export function DataTableWithViews<TData, TValue>({
 
   // The record id after the data columns for every person, whatever order or columns a page gives.
   const columnOrder = React.useMemo(() => idLast(columns.map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey ?? '').filter(Boolean)), [columns]);
+  // A created row is pinned to the top and kept when the page, the sort or the search would leave it out.
+  const shownData = React.useMemo(
+    () => (created?.rows.length && getRowId ? withCreatedRows(data, created.rows, getRowId) : { rows: data, pinned: [] as string[] }),
+    [data, created?.rows], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const table = useReactTable({
-    data,
+    data: shownData.rows,
     columns,
     state: {
+      rowPinning: { top: shownData.pinned, bottom: [] },
       columnOrder,
       sorting,
       columnVisibility,
@@ -275,6 +292,8 @@ export function DataTableWithViews<TData, TValue>({
     manualPagination: serverPagination?.enabled ?? false,
     pageCount: serverPagination?.enabled ? serverTotalPages : undefined,
     enableRowSelection: true,
+    enableRowPinning: true,
+    keepPinnedRows: true,
     ...(getRowId ? { getRowId: (row: TData) => getRowId(row) } : {}),
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
@@ -296,6 +315,36 @@ export function DataTableWithViews<TData, TValue>({
   const hasSelect = visible[0]?.id === 'select';
   const pinOf = (id: string): 'select' | 'name' | null => (!pinnedName ? null : id === pinnedName ? 'name' : id === 'select' && hasSelect ? 'select' : null);
 
+  const isCreated = new Set(shownData.pinned);
+  const shownRows = isCreated.size ? [...table.getTopRows(), ...table.getCenterRows()] : table.getRowModel().rows;
+
+  // The created rows follow the list again once the person moves on: another page, page size, search, filter or sort.
+  const clearCreated = created?.clear;
+  const didMountCreatedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!didMountCreatedRef.current) {
+      didMountCreatedRef.current = true;
+      return;
+    }
+    clearCreated?.();
+  }, [clientPagination.pageIndex, clientPagination.pageSize, columnFilters, sorting, clearCreated]);
+
+  // A created row leaves the top once a write sent after it was shown names it: a remove, revoke, archive or bulk
+  // delete, or an edit. A removed row on another page leaves the refetched page unchanged, so the writes are the only
+  // place that shows it is gone.
+  const queryClient = useQueryClient();
+  const createdWritten = created?.written;
+  const rowIdOf = React.useRef(getRowId);
+  rowIdOf.current = getRowId;
+  React.useEffect(() => {
+    if (!createdWritten) return;
+    return queryClient.getMutationCache().subscribe((e) => {
+      const idOf = rowIdOf.current;
+      if (idOf && e.type === 'updated' && e.action.type === 'success')
+        createdWritten({ variables: e.mutation.state.variables, submittedAt: e.mutation.state.submittedAt }, idOf);
+    });
+  }, [queryClient, createdWritten]);
+
   // Notify parent of column filter changes (for server-side search)
   React.useEffect(() => {
     if (onColumnFiltersChangeProp) {
@@ -314,6 +363,10 @@ export function DataTableWithViews<TData, TValue>({
   // Imperative selection clear — parent bumps selectionResetKey after a bulk
   // action so the checkboxes don't linger on rows that shifted under a refetch.
   const tableBox = React.useRef<HTMLDivElement>(null);
+  const newest = shownData.pinned[0];
+  React.useEffect(() => {
+    if (newest) tableBox.current?.querySelector('[data-created]')?.scrollIntoView({ block: 'nearest' });
+  }, [newest]);
   const moreColumns = useMoreToTheRight(tableBox, '[data-slot=table-container]');
   const didMountResetRef = React.useRef(false);
   React.useEffect(() => {
@@ -487,17 +540,20 @@ export function DataTableWithViews<TData, TValue>({
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => {
+                ) : shownRows.length ? (
+                  shownRows.map((row) => {
                     const rowData = row.original as any;
                     // The first data cell is the row's open control; the select box, the copyable id and the actions menu keep their own (a button inside a button is invalid).
-                    const openCellId = rowData?.onRowClick ? row.getVisibleCells().find((c) => !['select', 'recordId', 'actions'].includes(c.column.id))?.id : undefined;
+                    const firstDataCellId = row.getVisibleCells().find((c) => !['select', 'recordId', 'actions'].includes(c.column.id))?.id;
+                    const openCellId = rowData?.onRowClick ? firstDataCellId : undefined;
+                    const isNew = isCreated.has(row.id);
                     return (
                       <TableRow
                         key={row.id}
                         data-state={row.getIsSelected() && 'selected'}
                         data-testid={rowData?.rowTestId}
-                        className={rowData?.onRowClick ? 'cursor-pointer' : undefined}
+                        data-created={isNew || undefined}
+                        className={[rowData?.onRowClick && 'cursor-pointer', isNew && 'bg-primary/5'].filter(Boolean).join(' ') || undefined}
                         onClick={(e) => {
                           // The name cell's own link navigates; running the row's open as well would push the address twice.
                           if ((e.target as HTMLElement).closest('a[href]')) return;
@@ -522,6 +578,11 @@ export function DataTableWithViews<TData, TValue>({
                               title={meta?.kind === 'name' && typeof value === 'string' ? value : undefined}
                             >
                               {cell.id === openCellId ? <RowOpen href={rowData.href}>{content}</RowOpen> : content}
+                              {isNew && cell.id === firstDataCellId && (
+                                <Badge variant="secondary" className="ml-2 align-middle text-xs font-normal">
+                                  New
+                                </Badge>
+                              )}
                             </TableCell>
                           );
                         })}
@@ -539,13 +600,13 @@ export function DataTableWithViews<TData, TValue>({
             </Table>
           </div>
           {/* Outside the scrolling table: in a colSpan cell the message centres on a table wider than a phone. */}
-          {!serverPagination?.isLoading && !table.getRowModel().rows?.length && emptyState ? <div data-testid="table-empty">{emptyState}</div> : null}
+          {!serverPagination?.isLoading && !shownRows.length && emptyState ? <div data-testid="table-empty">{emptyState}</div> : null}
         </div>
       ) : (
         <div className="min-h-[400px]" data-testid="grid-view">
-          {table.getRowModel().rows?.length ? (
+          {shownRows.length ? (
             <div className={gridClassName || 'flex flex-wrap items-stretch gap-4'}>
-              {table.getRowModel().rows.map((row) => (
+              {shownRows.map((row) => (
                 <div
                   key={row.id}
                   className={gridClassName ? undefined : gridItemClassName}

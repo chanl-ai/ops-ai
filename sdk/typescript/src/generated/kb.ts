@@ -475,6 +475,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Source Scopes
+         * @description What a plugin source can be pointed at, for Add source's pickers: its plugin's scopes tool searched by name
+         *     (sites, spaces), or what one picked site holds (`parent`). Nothing is stored.
+         */
+        post: operations["sources_source_scopes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/{source_id}": {
         parameters: {
             query?: never;
@@ -567,7 +588,12 @@ export interface paths {
         /** List Items */
         get: operations["sources_list_items"];
         put?: never;
-        post?: never;
+        /**
+         * Put Item
+         * @description Writes one item into a typed text or push source by its name, kept as a file and indexed at once. Sending
+         *     the same name and content again changes nothing and starts no sync; new content is the item's next version.
+         */
+        post: operations["sources_put_item"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1081,6 +1107,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ScopesPage] */
+        Envelope_ScopesPage_: {
+            data: components["schemas"]["ScopesPage"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SearchOut] */
         Envelope_SearchOut_: {
             data: components["schemas"]["SearchOut"];
@@ -1120,6 +1155,15 @@ export interface components {
         /** Envelope[SyncRun] */
         Envelope_SyncRun_: {
             data: components["schemas"]["SyncRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[WrittenItem] */
+        Envelope_WrittenItem_: {
+            data: components["schemas"]["WrittenItem"];
             /**
              * Success
              * @constant
@@ -1959,6 +2003,8 @@ export interface components {
             matched: string;
             /** Page */
             page?: number | null;
+            /** Reranked */
+            reranked?: number | null;
             /** Score */
             score: number;
             /** Section */
@@ -2003,8 +2049,10 @@ export interface components {
             passages: components["schemas"]["PassageOut"][];
             /** Question */
             question: string;
+            rerank?: components["schemas"]["RerankOut"] | null;
             /** Retrievalms */
             retrievalMs: number;
+            rewrite?: components["schemas"]["RewriteOut"] | null;
             /** Shape */
             shape: string;
             /** Synthesisms */
@@ -2055,6 +2103,85 @@ export interface components {
             /** Slug */
             slug: string;
         };
+        /**
+         * RerankOut
+         * @description Present when a base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped.
+         */
+        RerankOut: {
+            /** Model */
+            model: string;
+            /**
+             * Ms
+             * @default 0
+             */
+            ms: number;
+            /** Ran */
+            ran: boolean;
+            /**
+             * Scored
+             * @default 0
+             */
+            scored: number;
+            /** Skipped */
+            skipped?: string | null;
+        };
+        /**
+         * RewriteOut
+         * @description The question as asked and as searched, present when a base rewrites questions.
+         */
+        RewriteOut: {
+            /** Asked */
+            asked: string;
+            /**
+             * Ms
+             * @default 0
+             */
+            ms: number;
+            /** Rewritten */
+            rewritten?: string | null;
+            /** Skipped */
+            skipped?: string | null;
+        };
+        /** Scope */
+        Scope: {
+            /** Detail */
+            detail?: string | null;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Parent */
+            parent?: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ScopesIn
+         * @description What a person searches for while picking what a plugin source takes in: sites or spaces by name, or, with
+         *     `parent`, what one picked site holds (its libraries).
+         */
+        ScopesIn: {
+            /** Cursor */
+            cursor?: string | null;
+            /** Parent */
+            parent?: string | null;
+            /** Plugin */
+            plugin: string;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /** Source */
+            source: string;
+        };
+        /** ScopesPage */
+        ScopesPage: {
+            /** Nextcursor */
+            nextCursor?: string | null;
+            /** Scopes */
+            scopes: components["schemas"]["Scope"][];
+        };
         /** SearchCost */
         SearchCost: {
             /** Embeddingtokens */
@@ -2075,6 +2202,8 @@ export interface components {
             lanes: components["schemas"]["Lanes"];
             /** Passages */
             passages: components["schemas"]["PassageOut"][];
+            rerank?: components["schemas"]["RerankOut"] | null;
+            rewrite?: components["schemas"]["RewriteOut"] | null;
         };
         /** SkippedLane */
         SkippedLane: {
@@ -2674,6 +2803,32 @@ export interface components {
         VerifyIn: {
             /** Verified */
             verified: boolean;
+        };
+        /** WrittenItem */
+        WrittenItem: {
+            item: components["schemas"]["Item"];
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "created" | "updated" | "unchanged";
+        };
+        /**
+         * WrittenItemIn
+         * @description One item written into a typed text or push source. `name` is its key: sent again with the same content it is
+         *     unchanged, with new content it is the item's next version.
+         */
+        WrittenItemIn: {
+            /** Content */
+            content?: string | null;
+            /** Mime */
+            mime?: string | null;
+            /** Name */
+            name: string;
+            /** Text */
+            text?: string | null;
+            /** Title */
+            title?: string | null;
         };
     };
     responses: never;
@@ -5772,6 +5927,111 @@ export interface operations {
             };
         };
     };
+    sources_source_scopes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScopesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ScopesPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     sources_get_source: {
         parameters: {
             query?: never;
@@ -6422,6 +6682,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ListResult_Item__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_put_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WrittenItemIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WrittenItem_"];
                 };
             };
             /** @description Invalid request */

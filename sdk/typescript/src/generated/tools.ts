@@ -186,12 +186,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Account Choices
+         * @description The app's accounts a call may name, each with what tells it apart: with `usable`, the team's live accounts
+         *     only, which a workflow step or an agent names; with `mine`, also the caller's own, which their chats name;
+         *     with `name`, the one so named (an empty list when none is), which the publish check reads.
+         */
+        get: operations["apps_list_account_choices"];
         put?: never;
         /**
          * Add Account
          * @description Another account of one of the team's apps: a sandbox, which test runs use, or another named account
-         *     (a second org of the same system). The first stays the default.
+         *     (a second org of the same system). The first stays the default unless `makeDefault` is set. 409
+         *     account_name_taken for a name another account of the app in the team holds.
          */
         post: operations["apps_add_account"];
         delete?: never;
@@ -761,7 +768,9 @@ export interface paths {
         /**
          * Add Own Account
          * @description Add another account of the caller's own on this account's app, through the same auth config: where to
-         *     send the browser. Signing in as an identity the caller already linked updates that account instead.
+         *     send the browser. The body names it and says where it signs in (409 account_name_taken for a name another
+         *     account of the app holds); with no body it is "<name>'s other account" and signs in where this account does.
+         *     Signing in as an identity the caller already linked updates that account instead.
          */
         post: operations["apps_add_own_account"];
         delete?: never;
@@ -1392,6 +1401,39 @@ export interface components {
             /** Output */
             output?: unknown;
         };
+        /**
+         * AccountChoice
+         * @description One account a step, an agent or a chat may name for an app's calls, with what tells it apart.
+         */
+        AccountChoice: {
+            /** Appid */
+            appId?: string | null;
+            /**
+             * Default
+             * @default false
+             */
+            default: boolean;
+            /** Id */
+            id: string;
+            /** Identity */
+            identity?: components["schemas"]["IdentityEntry"][];
+            /** Missingobjects */
+            missingObjects?: string[];
+            /** Name */
+            name: string;
+            /**
+             * Own
+             * @default false
+             */
+            own: boolean;
+            /** Pointsat */
+            pointsAt?: string | null;
+            /**
+             * Sandbox
+             * @default false
+             */
+            sandbox: boolean;
+        };
         /** AccountDetail */
         AccountDetail: {
             /** Accountname */
@@ -1500,6 +1542,8 @@ export interface components {
             };
             /** Kind */
             kind?: string | null;
+            /** Makedefault */
+            makeDefault?: boolean | null;
             /** Name */
             name: string;
             /**
@@ -1596,6 +1640,20 @@ export interface components {
             ranges: components["schemas"]["ListedRange"][];
         };
         /**
+         * AnotherOwnIn
+         * @description A person's second account of their own on an app: its name, which steps and chats pick it by and which no other
+         *     account of the app in the team holds, and where it signs in (the app's per-account settings, such as a company
+         *     server's address), kept as given rather than copied from the account it starts from.
+         */
+        AnotherOwnIn: {
+            /** Name */
+            name: string;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * AppAccount
          * @description One row of the app's Accounts list: one of the team's accounts (the default is the one live calls use unless
          *     they name another, and a sandbox one is what test runs use), or one person's own sign-in on it (`kind` person).
@@ -1614,6 +1672,8 @@ export interface components {
             health?: components["schemas"]["ConnectionHealth"] | null;
             /** Id */
             id: string;
+            /** Identity */
+            identity?: components["schemas"]["IdentityEntry"][];
             /**
              * Kind
              * @default team
@@ -1630,12 +1690,20 @@ export interface components {
             /** Name */
             name: string;
             owner: components["schemas"]["AccountOwner"];
+            /** Peoplesignedin */
+            peopleSignedIn?: number | null;
+            /** Pointsat */
+            pointsAt?: string | null;
             /** Revision */
             revision: number;
             /** Rowid */
             rowId: string;
+            /** Sameplaceas */
+            samePlaceAs?: string | null;
             /** Sandbox */
             sandbox: boolean;
+            /** Signin */
+            signIn?: ("team" | "person" | "person_or_team") | null;
             /** Signinvalues */
             signInValues?: components["schemas"]["SignInValue"][];
             /**
@@ -1878,6 +1946,11 @@ export interface components {
             account?: string | null;
             /** Connected */
             connected: boolean;
+            /**
+             * Signins
+             * @default 0
+             */
+            signIns: number;
         };
         /**
          * AppPage
@@ -2209,6 +2282,8 @@ export interface components {
         Change: {
             /** Changed */
             changed: boolean;
+            /** Entry */
+            entry?: components["schemas"]["ListedHost"] | components["schemas"]["ListedRange"] | null;
             /**
              * Kind
              * @enum {string}
@@ -2424,6 +2499,10 @@ export interface components {
             latencyMs?: number | null;
             /** Message */
             message?: string | null;
+            /** Packages */
+            packages?: {
+                [key: string]: components["schemas"]["PackageCheck"];
+            };
             /**
              * Status
              * @enum {string}
@@ -2470,8 +2549,15 @@ export interface components {
             account?: string | null;
             /** Connectionid */
             connectionId: string;
+            /** Identity */
+            identity?: components["schemas"]["ConnectorIdentity"][];
             /** Name */
             name: string;
+            /**
+             * Own
+             * @default false
+             */
+            own: boolean;
             /**
              * Primary
              * @default false
@@ -2484,6 +2570,15 @@ export interface components {
              * @enum {string}
              */
             state: "connected" | "expired" | "not_connected";
+        };
+        /** ConnectorIdentity */
+        ConnectorIdentity: {
+            /** Label */
+            label: string;
+            /** Shown */
+            shown: string;
+            /** Value */
+            value: string;
         };
         /** ConnectorTool */
         ConnectorTool: {
@@ -3064,6 +3159,16 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[list[AccountChoice]] */
+        Envelope_list_AccountChoice__: {
+            /** Data */
+            data: components["schemas"]["AccountChoice"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[AppCredential]] */
         Envelope_list_AppCredential__: {
             /** Data */
@@ -3342,6 +3447,19 @@ export interface components {
             name: string;
             /** Url */
             url: string;
+        };
+        /**
+         * IdentityEntry
+         * @description One thing that tells an account apart from the app's others (an org's address, a server, who signed in), as
+         *     plugins.host.account_identity builds it.
+         */
+        IdentityEntry: {
+            /** Label */
+            label: string;
+            /** Shown */
+            shown: string;
+            /** Value */
+            value: string;
         };
         /** IdsIn */
         IdsIn: {
@@ -4213,6 +4331,16 @@ export interface components {
             /** Timeoutms */
             timeoutMs?: number | null;
         };
+        /**
+         * PackageCheck
+         * @description One package app's check on an account: the objects it requires that the account's system does not have.
+         */
+        PackageCheck: {
+            /** Missing */
+            missing?: string[];
+            /** Title */
+            title: string;
+        };
         /** PageOut */
         PageOut: {
             /** Deltalink */
@@ -4507,6 +4635,10 @@ export interface components {
         RunContext: {
             /** Account */
             account?: string | null;
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            } | null;
             /** Act */
             act?: string | null;
             /** Environment */
@@ -6998,6 +7130,131 @@ export interface operations {
             };
         };
     };
+    apps_list_account_choices: {
+        parameters: {
+            query?: {
+                usable?: boolean;
+                name?: string | null;
+                mine?: boolean;
+            };
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_AccountChoice__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     apps_add_account: {
         parameters: {
             query?: never;
@@ -9373,6 +9630,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already listed; nothing was written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Change_"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -9583,6 +9849,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Already listed; nothing was written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Change_"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {
@@ -10588,7 +10863,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AnotherOwnIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

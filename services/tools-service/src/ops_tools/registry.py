@@ -6,7 +6,7 @@ module holds is unknown. Without one (the agents-service gateway tests) the agen
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -302,14 +302,15 @@ class ToolRegistry:
         team_id: str | None = None,
         run: str = LIVE,
         account: str | None = None,
+        accounts: Mapping[str, str] | None = None,
         person: str | None = None,
     ) -> Resolved | None:
         """`run` is the kind of run the call is made in (test or live). The module comes back with the account
         its call signs in with (`connection_id`, from connections.records.account_for, and whether it is a `sandbox`),
         which picks its address, instance and hosts; a listing or an access check, which shows the same tools either
         way, takes production's.
-        `account` names one of the team's accounts of the plugin's app for the call; none uses `person`'s
-        default account, else the team's."""
+        `accounts` names, per app, one of the team's accounts for the call (`account`, one name, is what older
+        callers send); none uses `person`'s default account, else the team's."""
         if self.modules is None:
             access = self.access(tool)
             return None if access == "unknown" else Resolved(access, "local")
@@ -333,7 +334,9 @@ class ToolRegistry:
             # One binding lookup per call: the team's connection, endpoint and egress hosts, and a rate window
             # of the team's own, since windows are kept per tenant and operation.
             team = team_id if team_id is not None else acting_team()
-            module = await self.plugins.for_call(tenant_id, team, module, run, account=account, person=person)
+            module = await self.plugins.for_call(
+                tenant_id, team, module, run, account=account, accounts=accounts, person=person
+            )
             op = {**self.plugins.operation(module, op), "rate_key": f"{op['name']}@{team}"}
         else:
             conn = (

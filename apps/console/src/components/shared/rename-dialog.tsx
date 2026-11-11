@@ -17,6 +17,7 @@ export function RenameDialog({
   description,
   busy,
   error,
+  notice,
   testId,
   onClose,
   onSave,
@@ -25,6 +26,8 @@ export function RenameDialog({
   description: string;
   busy: boolean;
   error?: string | null;
+  /** What a rename changes elsewhere (what still names the old name), shown above the field. */
+  notice?: React.ReactNode;
   testId: string;
   onClose: () => void;
   onSave: (name: string) => void;
@@ -50,6 +53,7 @@ export function RenameDialog({
         </>
       }
     >
+      {notice}
       <FormField id={`${testId}-name`} label="Name">
         <Input id={`${testId}-name`} value={value} onChange={(e) => setValue(e.target.value)} />
       </FormField>

@@ -13,6 +13,7 @@ import type {
   SourceRow,
   SyncRun,
 } from '@/lib/types/knowledge';
+import { plural } from '@/lib/format';
 import type { IngestSettings, ItemVersionRow } from '@/lib/types/knowledge-ingest';
 import type { ConnectionRef } from '@/lib/types/integrations';
 
@@ -613,7 +614,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             kindLabel: kind === 'file' ? 'Files' : kind === 'web' ? 'Website' : 'App source',
             aiStepsWaiting: [],
             waitingHosts: [],
-            scopeSummary: input.type === 'file' ? `${fileIds?.length ?? 0} uploaded files` : input.name,
+            scopeSummary: input.type === 'file' ? plural(fileIds?.length ?? 0, 'uploaded file') : input.name,
             titleFrom: 'source',
             permissions: { mode: 'workspace' },
             deletedAtSource: 'remove',
@@ -658,6 +659,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         }),
       // Overridden in mock/index.ts, which holds the files the ids name.
       addFiles: () => Promise.reject(new ApiError('Files are added on kb-service.', 501)),
+      putItem: () => Promise.reject(new ApiError('Items are written to kb-service; the mock does not index them.', 501)),
       sync: (sid, opts) =>
         run(() => {
           const s = sourceOr404(sid);
@@ -700,6 +702,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           return list(rows, p, { text: (r) => r.id, value: (r, key) => String((r as unknown as Record<string, unknown>)[key]), facetKeys: ['status', 'trigger'] }, m);
         }),
       run: (rid) => run(() => runs.find((r) => r.id === rid) ?? notFound('Sync run')),
+      scopes: () => Promise.reject(new ApiError('Pickers ask the app through kb-service; the mock has no apps to ask.', 501)),
       preview: (config) =>
         run(() => {
           const rows = previewRows({ type: 'crawl', config });

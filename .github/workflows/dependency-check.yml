@@ -1,0 +1,44 @@
+# Known vulnerabilities in every locked dependency: uv.lock (Python) and pnpm-lock.yaml (console, SDK, CLI), checked
+# by scripts/deps_audit.py against OSV and, when the repository has an OSS Index account, Sonatype OSS Index. Every
+# advisory is listed in the log; a critical one (CVSS 9.0 or higher) that deploy/mirror-test/audit-baseline.txt does
+# not name fails the job. Runs when a lockfile changes, on main, and daily, since advisories are published for
+# versions already locked.
+name: dependency-check
+
+on:
+  pull_request:
+    paths:
+      - uv.lock
+      - pnpm-lock.yaml
+      - deploy/mirror-test/audit-baseline.txt
+      - scripts/deps_audit.py
+      - .github/workflows/dependency-check.yml
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vulns:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: OSV and Sonatype OSS Index
+        env:
+          # OSS Index answers only signed-in requests: the account's email and its API token. Without them the OSS
+          # Index half is skipped with a line in the log and OSV still gates.
+          OSSINDEX_USER: ${{ secrets.OSSINDEX_USER }}
+          OSSINDEX_TOKEN: ${{ secrets.OSSINDEX_TOKEN }}
+          # The scanner image by digest, so a moved tag cannot change what runs here.
+          OPS_OSV_IMAGE: ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+        run: python3 scripts/deps_audit.py vulns

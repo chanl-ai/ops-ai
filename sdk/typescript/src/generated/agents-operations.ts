@@ -1630,6 +1630,18 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_account_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/account-uses",
+    "pathParams": [],
+    "query": [
+      "app",
+      "name"
+    ],
+    "stream": false
+  },
   "workflows_archive_definition": {
     "body": null,
     "headers": [],
@@ -1773,6 +1785,18 @@ export const agentsOperations = {
       "workflow_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "workflows_list_account_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/account-uses",
+    "pathParams": [],
+    "query": [
+      "app",
+      "name"
+    ],
     "stream": false
   },
   "workflows_list_definitions": {

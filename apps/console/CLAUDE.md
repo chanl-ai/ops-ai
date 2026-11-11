@@ -93,7 +93,7 @@ A `feat` or `fix` that changes this folder needs a What's new entry ([Commits](.
 | --- | --- | --- |
 | Page header | `PageLayout` (icon, title, one-line description, actions, `backHref` on record pages) | hand-built headers |
 | Switch between a section's pages | `TitleSwitcher` via `PageLayout` `switcher` (pages from `sectionFor` in `lib/nav.ts`) | a tab strip of sibling routes under the header |
-| List | `DataTableWithViews` + `DataTableColumnHeader` + faceted filters with counts + server pagination via `useListParams` + `selectColumn` + bulk actions | raw `<table>`, client-side paging of full lists |
+| List | `DataTableWithViews` + `DataTableColumnHeader` + faceted filters with counts + server pagination via `useListParams` + `selectColumn` + bulk actions; a list that adds rows in place passes `useCreatedRows` as `created`, so the new row shows first, marked New, whatever page or search it is on, until a later write removes or changes it; removes go through a query hook so the table sees them (standards rule 22) | raw `<table>`, client-side paging of full lists |
 | Create one thing (≤ 7 fields) | `DialogShell` size `md`, then navigate to its page to edit | a `/new` page |
 | Create an entity | One-screen New X dialog (name plus one required field) → draft on its detail page; the guided wizard, template or import is the second button | a wizard as the only way in |
 | Sign in / step-up | AuthProvider seam via `hooks/auth-queries`; `useStepUpGate` before money approvals (the API refuses them without a step-up) | importing an adapter directly |

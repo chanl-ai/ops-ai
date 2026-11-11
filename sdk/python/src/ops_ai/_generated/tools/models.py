@@ -34,6 +34,7 @@ class AccountIn(TypedDict, closed=True):
     credentialId: NotRequired[str | None]
     credentials: NotRequired[dict[str, str]]
     kind: NotRequired[str | None]
+    makeDefault: NotRequired[bool | None]
     name: str
     sandbox: NotRequired[bool]
     settings: NotRequired[dict[str, Any]]
@@ -76,6 +77,11 @@ class ActivityDay(TypedDict, closed=True):
     p95Ms: int
 
 
+class AnotherOwnIn(TypedDict, closed=True):
+    name: str
+    settings: NotRequired[dict[str, Any]]
+
+
 Scope: TypeAlias = str
 
 
@@ -112,6 +118,7 @@ class AppKindIn(TypedDict, closed=True):
 class AppMe(TypedDict, closed=True):
     account: NotRequired[str | None]
     connected: bool
+    signIns: NotRequired[int]
 
 
 class AppSkill(TypedDict, closed=True):
@@ -209,12 +216,6 @@ class CardCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
-class Change(TypedDict, closed=True):
-    changed: bool
-    kind: Literal["host", "range"]
-    value: str
-
-
 class CheckedCredential(TypedDict, closed=True):
     account: NotRequired[str | None]
     at: str
@@ -281,17 +282,6 @@ class Connection(TypedDict, closed=True):
     username: NotRequired[str | None]
 
 
-class ConnectionHealth(TypedDict, closed=True):
-    account: Literal["own", "team"]
-    at: str
-    by: str
-    code: NotRequired[str | None]
-    httpStatus: NotRequired[int | None]
-    latencyMs: NotRequired[int | None]
-    message: NotRequired[str | None]
-    status: Literal["ok", "failed"]
-
-
 class ConnectionIn(TypedDict, closed=True):
     connectionId: str | None
 
@@ -305,13 +295,10 @@ class ConnectionRef(TypedDict, closed=True):
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
 
 
-class ConnectorAccount(TypedDict, closed=True):
-    account: NotRequired[str | None]
-    connectionId: str
-    name: str
-    primary: NotRequired[bool]
-    since: NotRequired[str | None]
-    state: Literal["connected", "expired", "not_connected"]
+class ConnectorIdentity(TypedDict, closed=True):
+    label: str
+    shown: str
+    value: str
 
 
 class ConnectorTool(TypedDict, closed=True):
@@ -375,11 +362,6 @@ class EnvelopeAppUsers(TypedDict, closed=True):
 
 class EnvelopeCallResult(TypedDict, closed=True):
     data: CallResult
-    success: Literal[True]
-
-
-class EnvelopeChange(TypedDict, closed=True):
-    data: Change
     success: Literal[True]
 
 
@@ -462,6 +444,12 @@ class HttpOperationIn(TypedDict, closed=True):
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
     name: str
     url: str
+
+
+class IdentityEntry(TypedDict, closed=True):
+    label: str
+    shown: str
+    value: str
 
 
 class IdsIn(TypedDict, closed=True):
@@ -666,39 +654,6 @@ class MyAccount(TypedDict, closed=True):
     test: NotRequired[AccountTest | None]
 
 
-class MyConnector(TypedDict, closed=True):
-    account: NotRequired[str | None]
-    accountCount: NotRequired[int]
-    accounts: list[ConnectorAccount]
-    appGroup: Literal["on", "needs_you", "needs_admin", "gone"]
-    appId: str
-    appState: Literal[
-        "connected",
-        "test_failed",
-        "needs_sign_in",
-        "auth_config_broken",
-        "needs_auth_config",
-        "off",
-        "not_installed",
-        "removed",
-    ]
-    appStateReason: NotRequired[str | None]
-    authConfig: NotRequired[str | None]
-    authKind: NotRequired[str | None]
-    canDo: str
-    docsUrl: NotRequired[str | None]
-    inChat: NotRequired[bool]
-    logo: NotRequired[str | None]
-    mayManage: NotRequired[bool]
-    method: NotRequired[str | None]
-    name: str
-    personFields: NotRequired[list[str]]
-    primaryAccountId: NotRequired[str | None]
-    since: NotRequired[str | None]
-    tools: list[ConnectorTool]
-    used: ConnectorUse
-
-
 class NewAppIn(TypedDict, closed=True):
     authKind: NotRequired[str | None]
     category: NotRequired[str | None]
@@ -733,6 +688,11 @@ class OperationChange(TypedDict, closed=True):
 class OperationHeader(TypedDict, closed=True):
     key: str
     value: str
+
+
+class PackageCheck(TypedDict, closed=True):
+    missing: NotRequired[list[str]]
+    title: str
 
 
 class PageOut(TypedDict):
@@ -850,6 +810,7 @@ class RotateIn(TypedDict, closed=True):
 
 class RunContext(TypedDict, closed=True):
     account: NotRequired[str | None]
+    accounts: NotRequired[dict[str, str] | None]
     act: NotRequired[str | None]
     environment: NotRequired[Literal["test", "live"] | None]
     step: NotRequired[str | None]
@@ -1254,76 +1215,16 @@ class AbandonResult(TypedDict, closed=True):
     call: AbandonedCall | None
 
 
-class AccountDetail(TypedDict, closed=True):
-    accountName: NotRequired[str | None]
-    activity: list[AccountEvent]
-    appId: str
-    authKind: str
-    category: NotRequired[str | None]
-    certificate: NotRequired[SigningCertificate | None]
-    credentialId: NotRequired[str | None]
-    description: NotRequired[str | None]
-    docsUrl: NotRequired[str | None]
-    health: NotRequired[ConnectionHealth | None]
+class AccountChoice(TypedDict, closed=True):
+    appId: NotRequired[str | None]
+    default: NotRequired[bool]
     id: str
-    kindLabel: str
-    mayManage: bool
+    identity: NotRequired[list[IdentityEntry]]
+    missingObjects: NotRequired[list[str]]
     name: str
-    people: NotRequired[list[PersonSignedIn]]
-    platformApp: NotRequired[str | None]
-    pluginSecrets: NotRequired[dict[str, bool] | None]
-    pluginSettings: NotRequired[dict[str, Any] | None]
-    redirectUri: NotRequired[str | None]
-    revision: int
-    sandbox: bool
-    secrets: dict[str, SecretPart]
-    settings: dict[str, str]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
-    signedIn: NotRequired[SignedIn | None]
-    status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
-    statusDetail: NotRequired[str | None]
-    teamBackup: NotRequired[bool]
-    teamId: str
-    updatedAt: NotRequired[str | None]
-    usedBy: list[ModuleUse]
-
-
-class AppAccount(TypedDict, closed=True):
-    account: NotRequired[str | None]
-    actions: NotRequired[
-        list[
-            Literal[
-                "rename",
-                "sign_in",
-                "reconnect",
-                "make_default",
-                "make_team_default",
-                "disconnect",
-                "delete",
-                "move",
-                "connect_mine",
-            ]
-        ]
-    ]
-    configId: NotRequired[str | None]
-    configName: NotRequired[str | None]
-    default: bool
-    health: NotRequired[ConnectionHealth | None]
-    id: str
-    kind: NotRequired[Literal["team", "person"]]
-    mine: NotRequired[bool]
-    myDefault: NotRequired[bool | None]
-    name: str
-    owner: AccountOwner
-    revision: int
-    rowId: str
-    sandbox: bool
-    signInValues: NotRequired[list[SignInValue]]
-    state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
-    stateReason: NotRequired[str | None]
-    status: str
-    statusDetail: NotRequired[str | None]
-    test: NotRequired[AccountTest | None]
+    own: NotRequired[bool]
+    pointsAt: NotRequired[str | None]
+    sandbox: NotRequired[bool]
 
 
 class AppCredential(TypedDict, closed=True):
@@ -1409,11 +1310,34 @@ class ConfigField(TypedDict, closed=True):
     value: NotRequired[str | None]
 
 
+class ConnectionHealth(TypedDict, closed=True):
+    account: Literal["own", "team"]
+    at: str
+    by: str
+    code: NotRequired[str | None]
+    httpStatus: NotRequired[int | None]
+    latencyMs: NotRequired[int | None]
+    message: NotRequired[str | None]
+    packages: NotRequired[dict[str, PackageCheck]]
+    status: Literal["ok", "failed"]
+
+
 class ConnectionKinds(TypedDict, closed=True):
     certificate: list[KindField]
     common: list[KindField]
     kinds: list[AuthKind]
     redirectUri: NotRequired[str | None]
+
+
+class ConnectorAccount(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    connectionId: str
+    identity: NotRequired[list[ConnectorIdentity]]
+    name: str
+    own: NotRequired[bool]
+    primary: NotRequired[bool]
+    since: NotRequired[str | None]
+    state: Literal["connected", "expired", "not_connected"]
 
 
 class CredentialField(TypedDict, closed=True):
@@ -1460,11 +1384,6 @@ class DiscoveryResult(TypedDict, closed=True):
 
 class EnvelopeAbandonResult(TypedDict, closed=True):
     data: AbandonResult
-    success: Literal[True]
-
-
-class EnvelopeAccountDetail(TypedDict, closed=True):
-    data: AccountDetail
     success: Literal[True]
 
 
@@ -1558,6 +1477,11 @@ class EnvelopeWaitOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListAccountChoice(TypedDict, closed=True):
+    data: list[AccountChoice]
+    success: Literal[True]
+
+
 class EnvelopeListAppCredential(TypedDict, closed=True):
     data: list[AppCredential]
     success: Literal[True]
@@ -1580,11 +1504,6 @@ class EnvelopeListKnowledgeSourceView(TypedDict, closed=True):
 
 class EnvelopeListMyAccount(TypedDict, closed=True):
     data: list[MyAccount]
-    success: Literal[True]
-
-
-class EnvelopeListMyConnector(TypedDict, closed=True):
-    data: list[MyConnector]
     success: Literal[True]
 
 
@@ -1737,6 +1656,39 @@ class ModuleVersion(TypedDict, closed=True):
     version: str
 
 
+class MyConnector(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    accountCount: NotRequired[int]
+    accounts: list[ConnectorAccount]
+    appGroup: Literal["on", "needs_you", "needs_admin", "gone"]
+    appId: str
+    appState: Literal[
+        "connected",
+        "test_failed",
+        "needs_sign_in",
+        "auth_config_broken",
+        "needs_auth_config",
+        "off",
+        "not_installed",
+        "removed",
+    ]
+    appStateReason: NotRequired[str | None]
+    authConfig: NotRequired[str | None]
+    authKind: NotRequired[str | None]
+    canDo: str
+    docsUrl: NotRequired[str | None]
+    inChat: NotRequired[bool]
+    logo: NotRequired[str | None]
+    mayManage: NotRequired[bool]
+    method: NotRequired[str | None]
+    name: str
+    personFields: NotRequired[list[str]]
+    primaryAccountId: NotRequired[str | None]
+    since: NotRequired[str | None]
+    tools: list[ConnectorTool]
+    used: ConnectorUse
+
+
 class OperationPatchIn(TypedDict, closed=True):
     access: NotRequired[Literal["read", "write"] | None]
     amountMax: NotRequired[float | None]
@@ -1816,15 +1768,6 @@ class SecretMeta(TypedDict, closed=True):
     version: int
 
 
-class SignInFinished(TypedDict, closed=True):
-    account: NotRequired[AccountDetail | None]
-    accountId: str
-    alreadyConnectedAs: NotRequired[str | None]
-    appId: str
-    check: bool
-    health: NotRequired[CheckedCredential | None]
-
-
 class SystemPlugin(TypedDict, closed=True):
     fixed: list[str]
     kinds: list[str]
@@ -1897,9 +1840,86 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUser]
 
 
+class AccountDetail(TypedDict, closed=True):
+    accountName: NotRequired[str | None]
+    activity: list[AccountEvent]
+    appId: str
+    authKind: str
+    category: NotRequired[str | None]
+    certificate: NotRequired[SigningCertificate | None]
+    credentialId: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
+    health: NotRequired[ConnectionHealth | None]
+    id: str
+    kindLabel: str
+    mayManage: bool
+    name: str
+    people: NotRequired[list[PersonSignedIn]]
+    platformApp: NotRequired[str | None]
+    pluginSecrets: NotRequired[dict[str, bool] | None]
+    pluginSettings: NotRequired[dict[str, Any] | None]
+    redirectUri: NotRequired[str | None]
+    revision: int
+    sandbox: bool
+    secrets: dict[str, SecretPart]
+    settings: dict[str, str]
+    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
+    signedIn: NotRequired[SignedIn | None]
+    status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
+    statusDetail: NotRequired[str | None]
+    teamBackup: NotRequired[bool]
+    teamId: str
+    updatedAt: NotRequired[str | None]
+    usedBy: list[ModuleUse]
+
+
 class AllowList(TypedDict, closed=True):
     hosts: list[ListedHost]
     ranges: list[ListedRange]
+
+
+class AppAccount(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    actions: NotRequired[
+        list[
+            Literal[
+                "rename",
+                "sign_in",
+                "reconnect",
+                "make_default",
+                "make_team_default",
+                "disconnect",
+                "delete",
+                "move",
+                "connect_mine",
+            ]
+        ]
+    ]
+    configId: NotRequired[str | None]
+    configName: NotRequired[str | None]
+    default: bool
+    health: NotRequired[ConnectionHealth | None]
+    id: str
+    identity: NotRequired[list[IdentityEntry]]
+    kind: NotRequired[Literal["team", "person"]]
+    mine: NotRequired[bool]
+    myDefault: NotRequired[bool | None]
+    name: str
+    owner: AccountOwner
+    peopleSignedIn: NotRequired[int | None]
+    pointsAt: NotRequired[str | None]
+    revision: int
+    rowId: str
+    samePlaceAs: NotRequired[str | None]
+    sandbox: bool
+    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    signInValues: NotRequired[list[SignInValue]]
+    state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
+    stateReason: NotRequired[str | None]
+    status: str
+    statusDetail: NotRequired[str | None]
+    test: NotRequired[AccountTest | None]
 
 
 class AppCredentialChange(TypedDict, closed=True):
@@ -1973,6 +1993,18 @@ class AuthConfig(TypedDict, closed=True):
     type: Literal["ops_ai", "own", "account"]
 
 
+class Change(TypedDict, closed=True):
+    changed: bool
+    entry: NotRequired[ListedHost | ListedRange | None]
+    kind: Literal["host", "range"]
+    value: str
+
+
+class EnvelopeAccountDetail(TypedDict, closed=True):
+    data: AccountDetail
+    success: Literal[True]
+
+
 class EnvelopeAllowList(TypedDict, closed=True):
     data: AllowList
     success: Literal[True]
@@ -1990,6 +2022,11 @@ class EnvelopeAppCredentialDetail(TypedDict, closed=True):
 
 class EnvelopeAppTool(TypedDict, closed=True):
     data: AppTool
+    success: Literal[True]
+
+
+class EnvelopeChange(TypedDict, closed=True):
+    data: Change
     success: Literal[True]
 
 
@@ -2023,11 +2060,6 @@ class EnvelopeSecretMeta(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeSignInFinished(TypedDict, closed=True):
-    data: SignInFinished
-    success: Literal[True]
-
-
 class EnvelopeTestOut(TypedDict, closed=True):
     data: TestOut
     success: Literal[True]
@@ -2040,6 +2072,11 @@ class EnvelopeToolModuleDetail(TypedDict, closed=True):
 
 class EnvelopeListAppTool(TypedDict, closed=True):
     data: list[AppTool]
+    success: Literal[True]
+
+
+class EnvelopeListMyConnector(TypedDict, closed=True):
+    data: list[MyConnector]
     success: Literal[True]
 
 
@@ -2058,6 +2095,15 @@ class SecretList(TypedDict, closed=True):
     data: list[SecretMeta]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+
+
+class SignInFinished(TypedDict, closed=True):
+    account: NotRequired[AccountDetail | None]
+    accountId: str
+    alreadyConnectedAs: NotRequired[str | None]
+    appId: str
+    check: bool
+    health: NotRequired[CheckedCredential | None]
 
 
 class SystemCard(TypedDict, closed=True):
@@ -2119,6 +2165,11 @@ class EnvelopeAppPage(TypedDict, closed=True):
 
 class EnvelopeHostList(TypedDict, closed=True):
     data: HostList
+    success: Literal[True]
+
+
+class EnvelopeSignInFinished(TypedDict, closed=True):
+    data: SignInFinished
     success: Literal[True]
 
 

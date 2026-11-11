@@ -358,6 +358,7 @@ class PassageOut(TypedDict, closed=True):
     lanes: NotRequired[dict[str, float]]
     matched: NotRequired[str]
     page: NotRequired[int | None]
+    reranked: NotRequired[float | None]
     score: float
     section: str
     snippet: str
@@ -395,6 +396,42 @@ class Reader(TypedDict, closed=True):
     id: str
     name: str
     slug: str
+
+
+class RerankOut(TypedDict, closed=True):
+    model: str
+    ms: NotRequired[int]
+    ran: bool
+    scored: NotRequired[int]
+    skipped: NotRequired[str | None]
+
+
+class RewriteOut(TypedDict, closed=True):
+    asked: str
+    ms: NotRequired[int]
+    rewritten: NotRequired[str | None]
+    skipped: NotRequired[str | None]
+
+
+class Scope(TypedDict, closed=True):
+    detail: NotRequired[str | None]
+    id: str
+    kind: str
+    parent: NotRequired[str | None]
+    title: str
+
+
+class ScopesIn(TypedDict):
+    cursor: NotRequired[str | None]
+    parent: NotRequired[str | None]
+    plugin: str
+    query: NotRequired[str]
+    source: str
+
+
+class ScopesPage(TypedDict, closed=True):
+    nextCursor: NotRequired[str | None]
+    scopes: list[Scope]
 
 
 class SearchCost(TypedDict, closed=True):
@@ -519,6 +556,19 @@ class VerifyIn(TypedDict):
     verified: bool
 
 
+class WrittenItem(TypedDict, closed=True):
+    item: Item
+    outcome: Literal["created", "updated", "unchanged"]
+
+
+class WrittenItemIn(TypedDict):
+    content: NotRequired[str | None]
+    mime: NotRequired[str | None]
+    name: str
+    text: NotRequired[str | None]
+    title: NotRequired[str | None]
+
+
 class AddedDocuments(TypedDict, closed=True):
     files: list[AddedFile]
     run: SyncRun
@@ -580,6 +630,11 @@ class EnvelopeOptionsPage(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeScopesPage(TypedDict, closed=True):
+    data: ScopesPage
+    success: Literal[True]
+
+
 class EnvelopeSourcePreview(TypedDict, closed=True):
     data: SourcePreview
     success: Literal[True]
@@ -587,6 +642,11 @@ class EnvelopeSourcePreview(TypedDict, closed=True):
 
 class EnvelopeSyncRun(TypedDict, closed=True):
     data: SyncRun
+    success: Literal[True]
+
+
+class EnvelopeWrittenItem(TypedDict, closed=True):
+    data: WrittenItem
     success: Literal[True]
 
 
@@ -684,7 +744,9 @@ class PlaygroundAnswer(TypedDict, closed=True):
     noAnswer: NotRequired[bool | None]
     passages: list[PassageOut]
     question: str
+    rerank: NotRequired[RerankOut | None]
     retrievalMs: int
+    rewrite: NotRequired[RewriteOut | None]
     shape: str
     synthesisMs: int
 
@@ -693,6 +755,8 @@ class SearchOut(TypedDict, closed=True):
     cost: SearchCost
     lanes: Lanes
     passages: list[PassageOut]
+    rerank: NotRequired[RerankOut | None]
+    rewrite: NotRequired[RewriteOut | None]
 
 
 class Source(TypedDict, closed=True):

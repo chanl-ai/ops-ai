@@ -21,6 +21,7 @@ from ops_agent_kernel.types import PromptFragment
 from ops_service_kit.logging import get_logger
 
 from ..activities.tool_directory import ToolsUnavailable
+from ..domain.accounts import chosen_accounts
 from ..store.team_defaults import TeamDefaults
 from .child_runs import TURN_PERSON
 from .deps import Runtime
@@ -37,7 +38,17 @@ HEAD = "Apps for this conversation, from the team's settings:"
 
 def describe(card: dict[str, Any]) -> str | None:
     """One app as the model reads it, or None for one it should not hear of: a built-in (its tools are offered as
-    they are) or a plugin the install does not load."""
+    they are) or a plugin the install does not load. An app whose account this chat or its agent chose names it, so
+    the model says which org it acted in; it cannot switch accounts, the person does with Change in the composer."""
+    line = _describe(card)
+    uses = card.get("usesAccount")
+    if line is None or not uses or not line.startswith(f"{card.get('name')}: on"):
+        return line
+    where = f" ({card['usesAccountShown']})" if card.get("usesAccountShown") else ""
+    return f"{line} · uses {uses}{where}"
+
+
+def _describe(card: dict[str, Any]) -> str | None:
     kind, state, name = card.get("kind"), card.get("appState"), str(card.get("name") or "")
     if not name or kind == "builtin" or card.get("appGroup") == "gone":
         return None
@@ -133,8 +144,12 @@ class AppsLine:
         except RuntimeError:
             return cards
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        off = set(cast(list[str], (cast(dict[str, Any], (thread or {}).get("overrides") or {})).get("toolsOff") or []))
+        overrides = cast(dict[str, Any], (thread or {}).get("overrides") or {})
+        off = set(cast(list[str], overrides.get("toolsOff") or []))
         agent = self.rt.catalog.agent(agent_id)
+        if agent is not None:
+            chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], overrides.get("accounts") or {}))
+            cards = await self._uses(cards, chosen, str((thread or {}).get("team_id") or ""))
         if not off or agent is None:
             return cards
         try:
@@ -142,6 +157,28 @@ class AppsLine:
         except ToolsUnavailable:
             return cards
         return left_out(cards, list(agent.tools), {o.name: o.module_id for o in ops}, off)
+
+    async def _uses(self, cards: list[dict[str, Any]], chosen: dict[str, str], team: str) -> list[dict[str, Any]]:
+        """The cards with the account each chosen app uses, and what it points at, from tools-service's own list."""
+        if not chosen or self.rt.app_states is None:
+            return cards
+        out: list[dict[str, Any]] = []
+        for c in cards:
+            name = chosen.get(str(c.get("id")))
+            if not name:
+                out.append(c)
+                continue
+            person = TURN_PERSON.get()
+            try:
+                found = await self.rt.app_states.accounts(
+                    person.email if person else None, team, str(c["id"]), name=name
+                )
+            except ToolsUnavailable:
+                found = []
+            # Where it points, never who signed in: the prompt must not carry a person's email.
+            shown = str(found[0]["pointsAt"]) if found and found[0].get("pointsAt") else None
+            out.append({**c, "usesAccount": name, **({"usesAccountShown": shown} if shown else {})})
+        return out
 
     async def line(self, team: str, email: str, now: float | None = None) -> str | None:
         cards = await self.cards(team, email, now)

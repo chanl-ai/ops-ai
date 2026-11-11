@@ -383,6 +383,16 @@
     "outputsUnless": [],
     "parameters": {
       "properties": {
+        "accounts": {
+          "additionalProperties": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": "The team account each app's call uses, by app id to account name; none set uses the app's default. A test run uses the app's test account",
+          "maxProperties": 20,
+          "type": "object"
+        },
         "approvalToken": {
           "description": "A token minted elsewhere for this call: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
         },
@@ -434,6 +444,11 @@
     "timeoutSeconds": 60.0,
     "ui": {
       "fields": {
+        "accounts": {
+          "help": "Which of the app's team accounts this step uses",
+          "label": "Account",
+          "widget": "account"
+        },
         "approvalToken": {
           "help": "Only for a token minted outside this workflow",
           "label": "Approval token",
@@ -469,6 +484,7 @@
       },
       "order": [
         "operation",
+        "accounts",
         "input",
         "approvedBy",
         "approvalToken",

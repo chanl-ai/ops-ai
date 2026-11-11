@@ -22,7 +22,6 @@ from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.flags import Flags
 from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, operation_id
-from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
@@ -65,7 +64,11 @@ class RunContext(_Wire):
     # The kind of run the call is made in: live runs send production, everything else test. Absent is test,
     # so a caller that does not say never reaches a live account's write unseen.
     environment: RunKind | None = None
-    # One of the team's accounts of the tool's app, by name; none uses the default.
+    # The account each app's calls use, app id to account name, as a step, an agent or a chat chose; an app with no
+    # entry uses the person's default, else the team's. The call reads its own app's entry.
+    accounts: dict[str, Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=50)
+    # Deprecated: one account name for the call's app, as older callers send it; read for one release, `accounts`
+    # wins.
     account: str | None = Field(default=None, min_length=1, max_length=200)
 
 
@@ -207,9 +210,6 @@ def create_gateway_app(
     `directory` holds the teams the MCP adapter scopes each assistant's tools to; without it no /mcp.
     `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
     `code` runs code operations on runner-service and checks their calls back; without it they fail."""
-    # Resolved secrets go into the URLs this gateway requests, and httpx logs each URL at INFO; the gateway turns those
-    # lines off whether or not its process called configure_logging.
-    quiet_request_logs()
     rules = policy if policy is not None else POLICY_FILE.read_text()
     client = http_client or (egress_client(egress) if egress else httpx.AsyncClient())
     http_executor = HttpExecutor(client, egress, secret_resolver, authenticator)

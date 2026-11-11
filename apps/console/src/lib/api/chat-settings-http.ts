@@ -10,6 +10,6 @@ export function createChatSettingsHttp(get: Get, send: Send): ChatSettingsApi {
     save: (threadId, patch) => send('PATCH', `/chat/threads/${threadId}/settings`, patch),
     newChatConnectors: (agentId) => get(agentId ? `/chat/connectors?agentId=${encodeURIComponent(agentId)}` : '/chat/connectors'),
     connectors: (threadId) => get(`/chat/threads/${threadId}/connectors`),
-    setConnectors: (threadId, off) => send('PUT', `/chat/threads/${threadId}/connectors`, { off }),
+    setConnectors: (threadId, off, accounts) => send('PUT', `/chat/threads/${threadId}/connectors`, { off, ...(accounts ? { accounts } : {}) }),
   };
 }

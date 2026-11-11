@@ -307,3 +307,27 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | current |
 | uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing |
+| uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, ui | passing |
+| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | passing |
+| uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | passing |
+| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current |
+| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current |
+| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |
+| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current |
+| uc-695 | agents-service | A workflow step that names an account runs in that account | api | current |
+| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api | current |
+| uc-697 | agents-service | A chat uses the account picked for it, and a new chat starts on the default | ui | current |
+| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current |
+| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current |
+| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current |
+| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current |
+| uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current |
+| uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current |
+| uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api | current |
+| uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current |
+| uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api | current |
+| uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api, ui | current |
+| uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api | current |
+| uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
+| uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
+| uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |

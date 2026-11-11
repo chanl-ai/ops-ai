@@ -168,3 +168,8 @@ async def test_folder_fields_and_allowed_ids_are_kept(kb: httpx.AsyncClient, wik
     detail = data(await kb.get(f"/v1/items/{item['id']}"))
     assert detail["detail"]["versions"][0]["allowed"] == ["group:servicing", "user:7"]
     assert all(c["metadata"]["department_detail"] == "Mortgage servicing" for c in detail["detail"]["chunks"])
+
+
+async def test_a_kind_of_source_with_no_pickers_refuses_a_scopes_search(kb: httpx.AsyncClient) -> None:
+    refused = await kb.post("/v1/sources/scopes", json={"plugin": "opsai.wiki", "source": "space", "query": "serv"})
+    assert refused.status_code == 400 and refused.json()["error"]["code"] == "scopes_unavailable", refused.text

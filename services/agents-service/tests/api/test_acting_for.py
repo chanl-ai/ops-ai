@@ -15,7 +15,7 @@ from ops_agents.activities.gateway import GatewayClient, GatewayRefused, RunCont
 from ops_agents.api import runs
 from ops_agents.api.acting_for import CallPeople
 from ops_agents.api.auth import Principal
-from ops_agents.api.child_runs import acting_for
+from ops_agents.api.child_runs import _started_by, acting_for  # pyright: ignore[reportPrivateUsage]
 from ops_agents.api.run_person import running_for
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceClient, dev_service_signer
 from ops_policy import mint, verify
@@ -28,7 +28,7 @@ RUNS = {
     "wfrun_top": {"id": "wfrun_top", "team_id": "team_a", "created_by": "j.richardson@bank.test"},
     "wfrun_child": {"id": "wfrun_child", "team_id": "team_a", "created_by": "run:wfrun_top"},
     "wfrun_key": {"id": "wfrun_key", "team_id": "team_a", "created_by": "key:key_abc"},
-    "wfrun_mail": {"id": "wfrun_mail", "team_id": "team_a", "created_by": "mailbox:claims"},
+    "wfrun_mail": {"id": "wfrun_mail", "team_id": "team_a", "created_by": "mailbox:claims@bank.test"},
 }
 
 
@@ -60,6 +60,23 @@ async def test_a_runs_calls_act_for_its_starter_and_a_child_runs_for_its_parents
     who = people(Minted())
     assert await who.email(RunContext(thread=None, run_id="wfrun_top")) == "j.richardson@bank.test"
     assert await who.email(RunContext(thread=None, run_id="wfrun_child")) == "j.richardson@bank.test"
+
+
+async def test_a_run_an_agent_started_from_chat_acts_for_the_person_who_asked() -> None:
+    # The starter is written by the path a chat's workflow tool takes, so the reader is held to the writer's format.
+    person = Principal(tenant_id="ten_a", sub="usr_maya", email="m.okafor@bank.test", name="Maya", team_id="team_a")
+    with acting_for(person):
+        started_by = _started_by({"agentId": "agt_case_desk"})
+    RUNS["wfrun_agent"] = {"id": "wfrun_agent", "team_id": "team_a", "created_by": started_by}
+    RUNS["wfrun_agent_child"] = {"id": "wfrun_agent_child", "team_id": "team_a", "created_by": "run:wfrun_agent"}
+    minted = Minted()
+    who = people(minted)
+    for run in ("wfrun_agent", "wfrun_agent_child"):
+        ctx = RunContext(thread=None, run_id=run)
+        assert await who.headers(ctx, tenant_id="ten_a", team_id="team_a") == {
+            ACTING_FOR_HEADER: "token-for-m.okafor@bank.test"
+        }
+    assert minted.asked == ["m.okafor@bank.test"]
 
 
 async def test_a_run_an_api_key_or_a_mailbox_started_acts_for_nobody() -> None:

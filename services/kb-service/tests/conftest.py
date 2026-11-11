@@ -21,6 +21,7 @@ from ops_kb.ai import AiClients
 from ops_kb.app import create_kb_app, who
 from ops_kb.embedding import Embedder
 from ops_kb.files import FileIntake, KnowledgeFiles
+from ops_kb.query_steps import QueryModel
 from ops_kb.readings import Readings
 from ops_kb.service import Who
 from ops_service_kit.contract import response_checker
@@ -67,6 +68,7 @@ def kb_client(
     readings: Readings | None = None,
     embedder: Embedder | None = None,
     ai_clients: AiClients | None = None,
+    query_model: QueryModel | None = None,
 ) -> httpx.AsyncClient:
     """kb-service as the dev user `email` in `tenant`; each test runs on its own tenant's rows and its own files."""
     auth = Auth.for_dev(Settings(), audience="kb", name=email.split("@", maxsplit=1)[0], email=email, tenant_id=tenant)
@@ -79,6 +81,7 @@ def kb_client(
         readings=readings or LocalReadings(intake),
         embedder=embedder,
         ai_clients=ai_clients,
+        query_model=query_model,
     )
     if admin:
         # Dev sign-in carries no roles, and `can()` passes the dev caller as it would a team admin.

@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_policy import context_of
+from ops_service_kit.errors import Conflict
 from ops_service_kit.settings import PluginClient
 from ops_store import Guarantee, isolation
 from ops_store.outbox import add as add_event
@@ -71,9 +72,11 @@ connections = sa.Table(
     sa.Column("app_id", sa.String(120), nullable=False),
     # The account a test run of its app uses (records.account_for); a live run never signs in with it.
     sa.Column("sandbox", sa.Boolean, nullable=False, server_default=sa.false()),
-    # The account's name, which a tool or step names to use it ("EU org"). One per team and plugin, checked when an
-    # account is made: a unique index would treat nulls as equal on SQL Server, refusing a second by-name connection.
+    # The account's name, which a tool or step names to use it ("EU org"), and the same name case-folded, written with
+    # every row that has one (name_key), so the filtered unique index below holds one name per app in a team on every
+    # database: SQL Server has no index over an expression.
     sa.Column("account_name", sa.String(200)),
+    sa.Column("account_key", sa.String(200)),
     # The kind's plain settings (header name, username, token address, scopes, a client certificate's PEM, the base
     # address); never the OAuth client, which is the app credential's (credential_id) or Ops AI's (platform_app).
     sa.Column("settings", sa.JSON, nullable=False),
@@ -101,6 +104,28 @@ connections = sa.Table(
     # Held to its team by the database: only a transaction run as ROLE in that team reads it.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
+NAMED = connections.c.account_key.isnot(None)
+# Two accounts of one app in one team never share a name, since steps, agents and chats pick an account by its name:
+# the guarantee behind name lookups (PluginHost.account_named), including two adds at the same moment. Filtered, as a
+# plain unique index would hold every unnamed row equal on SQL Server.
+sa.Index(
+    "uq_connections_account_key",
+    connections.c.tenant_id,
+    connections.c.team_id,
+    connections.c.app_id,
+    connections.c.account_key,
+    unique=True,
+    postgresql_where=NAMED,
+    mssql_where=NAMED,
+    sqlite_where=NAMED,
+)
+
+
+def name_key(name: object) -> str | None:
+    """An account name as its uniqueness and lookups compare it: trimmed and case-folded; None for no name."""
+    text = str(name or "").strip()
+    return text.casefold() if text else None
+
 
 # A team's own OAuth client of an app (the app credential): its client id and the name of the team secret holding its
 # client secret. The one place a team's client is kept, made under Credentials with no account; an account points at it
@@ -272,6 +297,17 @@ def split_config(
 
 class StaleConnection(RuntimeError):
     """The connection changed since it was read; nothing was written."""
+
+
+class AccountNameTaken(Conflict):
+    """Another account of the app in the team holds this name (uq_connections_account_key); nothing was written. A
+    409 `account_name_taken` wherever it is raised, so every route that makes or renames an account answers the same,
+    including the one of two adds at the same moment that the index refused."""
+
+    code = "account_name_taken"
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Another account of this app is already named {name}. Choose another name.")
 
 
 class ConnectionInUse(RuntimeError):
@@ -584,11 +620,16 @@ class ConnectionStore:
         """False when the id is taken (nothing written). `row` carries the account's settings and secret names; an
         OAuth client in them goes to the account's app credential."""
         fields: Row = {"settings": row.get("settings") or {}, "secrets": row.get("secrets") or {}}
+        row = {**row, "account_key": name_key(row.get("account_name"))}
         async with self._tx() as c:
             try:
                 async with c.begin_nested():
                     await c.execute(connections.insert().values(**{**row, "settings": {}, "secrets": {}}))
-            except IntegrityError:
+            except IntegrityError as e:
+                k = connections.c
+                taken = sa.select(k.id).where(k.tenant_id == row["tenant_id"], k.id == row["id"])
+                if (await c.execute(taken)).first() is None:
+                    raise AccountNameTaken(str(row.get("account_name"))) from e
                 return False
             if fields["settings"] or fields["secrets"]:
                 put = await self._put_client(c, row["tenant_id"], row["id"], fields, actor=actor, at=at)
@@ -615,6 +656,8 @@ class ConnectionStore:
         """Writes `values` (its settings and secret names, `platform_app` and `plugin_settings` among them) only
         against the revision read, with its audit row; StaleConnection otherwise. An OAuth client in the settings goes
         to the account's app credential."""
+        if "account_name" in values:
+            values = {**values, "account_key": name_key(values["account_name"])}
         async with self._tx() as c:
             if "settings" in values or "secrets" in values or "platform_app" in values:
                 values = await self._put_client(c, tenant_id, connection_id, values, actor=actor, at=at)
@@ -627,7 +670,12 @@ class ConnectionStore:
                 )
                 .values(**values, revision=expected_revision + 1, updated_by=actor, updated_at=at)
             )
-            if (await c.execute(q)).rowcount != 1:
+            try:
+                async with c.begin_nested():
+                    changed = (await c.execute(q)).rowcount
+            except IntegrityError as e:
+                raise AccountNameTaken(str(values.get("account_name"))) from e
+            if changed != 1:
                 raise StaleConnection(connection_id)
             if "team_id" in values:
                 # A connection moved to another team takes its sign-in rows; only a tenant-wide caller may move one,

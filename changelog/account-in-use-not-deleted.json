@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "An account in use is not deleted",
+  "description": "Deleting an app account that a workflow step or an agent names is refused, with how many published and draft versions name it. Point them at another account first.",
+  "tag": "improved"
+}

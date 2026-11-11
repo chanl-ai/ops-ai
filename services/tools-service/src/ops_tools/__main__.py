@@ -95,7 +95,7 @@ def main() -> None:
     settings = Settings()
     require_keys(settings, "review_key", "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
-    configure_logging()
+    configure_logging(service="tools-service")
     catalog = load_catalog(settings.seed_dir)
     seed = json.loads(settings.tools_seed_file.read_text())
     dev = settings.environment == "dev"
@@ -203,6 +203,7 @@ def main() -> None:
     )
     connection_service.app_display = plugins.display_of if plugins else None
     connection_service.sign_in_scopes = plugins.sign_in_scopes if plugins else None
+    connection_service.package_checks = plugins.package_checks if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
     modules.users = tool_users
     # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.
@@ -324,7 +325,7 @@ def main() -> None:
             ),
         ),
     )
-    uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_level="info")
+    uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":

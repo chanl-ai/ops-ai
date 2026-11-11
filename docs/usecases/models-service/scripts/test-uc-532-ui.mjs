@@ -94,10 +94,15 @@ await withUiStack(
 
       await save('sk-not-the-fakes-key', true);
       const wrong = await chat();
+      const refusal = (await wrong.json()).error ?? {};
       await save(FAKE_OPENAI_KEY, true);
       const right = await chat();
       const rows = await data(await fetch(`${models}/v1/provider-keys`, { headers: N }));
-      check('3 a replaced value is what reaches the provider: a wrong key is refused by it, the right one answers again', wrong.status === 502 && right.status === 200 && rows[0]?.version === 3, { wrong: wrong.status, right: right.status, rows });
+      check(
+        '3 a replaced value is what reaches the provider: a wrong key is refused by it as provider_auth_failed, saying where an admin checks it and never quoting the key, and the right one answers again',
+        wrong.status === 502 && refusal.code === 'provider_auth_failed' && String(refusal.message).includes('Settings > Model providers') && !JSON.stringify(refusal).includes('sk-not-the-fakes-key') && right.status === 200 && rows[0]?.version === 3,
+        { wrong: wrong.status, refusal, right: right.status, rows },
+      );
 
       const gone = await fetch(`${models}/v1/provider-keys/${KEY}`, { method: 'DELETE', headers: N });
       check('4 a key a connection signs in with is not removed', gone.status === 409 && (await gone.json()).error?.code === 'key_in_use', gone.status);

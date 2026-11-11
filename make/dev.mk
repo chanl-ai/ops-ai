@@ -28,6 +28,7 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@# A migration that just landed makes every process started before it stale: stopped here, started below.
 	@$(STACK) stop-stale
 	@$(STACK) up
+	@$(MAKE) -s plugins-check
 	@# The dev mail and bank fakes answer at this machine's private address, which moves with the network; the
 	@# egress list is brought up to date with it so mail and bank calls are not refused after a move.
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/dev_egress.py
@@ -67,6 +68,7 @@ restart: ## Restart the services `make up` started (SVC=agents|worker|tools|kb|f
 		for d in $(SVC_DIR_agents) $(SVC_DIR_tools) $(SVC_DIR_models) $(SVC_DIR_kb) $(SVC_DIR_platform) $(SVC_DIR_files) $(SVC_DIR_documents); do $(MAKE) -s -C $$d migrate || exit 1; done && \
 		$(STACK) note-migrations && $(STACK) up; \
 	fi
+	@$(MAKE) -s plugins-check
 	@$(STACK) health $(SVC)
 
 health: ## Probe every service, OPA and PostgreSQL; shows port, state and who owns the listener

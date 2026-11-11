@@ -327,6 +327,11 @@ export interface StackOptions {
   /** Settings for platform-service when `platform` is on, e.g. `{ OPS_TEAM_DELETE_AFTER_DAYS: '0' }`. */
   platformEnv?: Record<string, string>;
   /**
+   * Settings for kb-service, applied last: the tools-service it reads plugin sources through (OPS_TOOLS_URL) and the
+   * plugins it may read (OPS_PLUGIN_PATHS), for a use case whose sources come from a plugin.
+   */
+  kbEnv?: Record<string, string>;
+  /**
    * Also start platform-service on the run's database (its own migration chain, the dev seed of team_ops with Priya,
    * James and Maya) and sign the console in through it, so every call carries a person's token.
    */
@@ -367,6 +372,9 @@ export interface StackOptions {
    * for a use case whose model calls the demo does not answer (documents' Detect, say).
    */
   fakeModelRules?: string;
+  /** With `demo`, kb-service calls models-service too (its own key), so its embeddings, rerank and rewrite run on the
+   * fake OpenAI; off, kb-service runs without models as before. */
+  kbModels?: boolean;
   /**
    * The demo stack, with mail, plus the sample team installed in one call by scripts/sample_team.py (`make sample-team`, without the
    * levy story), as the workspace admin: its team, people, agents and workflows. Opt-in, since no default seed reads it
@@ -441,7 +449,7 @@ async function startOpa(): Promise<{ url: string; stop: () => void }> {
   if (process.env.OPS_INFRA === 'external') return { url: process.env.OPS_OPA_URL ?? 'http://opa:8181', stop: () => {} };
   const policy = join(ROOT, 'services/tools-service/policy');
   reapHarnessContainers();
-  const cid = execFileSync('docker', ['run', '-d', '--rm', '--label', `ops.harness.owner=${process.pid}`, '-p', '127.0.0.1::8181', '-v', `${policy}:/policy:ro`, 'openpolicyagent/opa:1.21.1', 'run', '--server', '--addr', '0.0.0.0:8181', '--log-level', 'error', '/policy'], { encoding: 'utf8' }).trim();
+  const cid = execFileSync('docker', ['run', '-d', '--rm', '--label', `ops.harness.owner=${process.pid}`, '-p', '127.0.0.1::8181', '-v', `${policy}:/policy:ro`, 'openpolicyagent/opa:1.21.4', 'run', '--server', '--addr', '0.0.0.0:8181', '--log-level', 'error', '/policy'], { encoding: 'utf8' }).trim();
   const stopOpa = () => {
     cleanups.delete(stopOpa);
     try {
@@ -818,7 +826,9 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       // A knowledge base's "used by" comes from agents-service, on this run's port.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
+      ...(options.kbModels && modelsRoute.OPS_MODELS_URL ? { OPS_MODELS_URL: modelsRoute.OPS_MODELS_URL, OPS_MODELS_KEY: 'mk_dev_kb' } : {}),
       ...auth,
+      ...options.kbEnv,
     });
     await runToEnd('kb-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], kbDir, kbEnv);
     kbProc = await serve('kb', KB_PORT, ['uv', 'run', 'python', '-m', 'ops_kb'], kbDir, kbEnv, `http://127.0.0.1:${KB_PORT}/health`, 90_000);

@@ -125,6 +125,7 @@ def definition_of(agent_id: str, version: int, spec: dict[str, Any]) -> AgentDef
         tools=list(spec.get("toolIds") or []),
         default_kb_ids=list(spec.get("collections") or []),
         all_team_knowledge=bool(spec.get("allTeamKnowledgeBases")),
+        accounts={str(k): str(v) for k, v in dict(spec.get("accounts") or {}).items()},
         suggestions=list(spec.get("suggestions") or []),
         max_tool_calls=_cap(spec, "maxToolCallsPerTurn", None),
         max_model_calls=_cap(spec, "maxModelCallsPerTurn", LEGACY_MODEL_CALLS) or PLATFORM_MODEL_CALLS,
@@ -381,6 +382,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
         "toolIds": spec.get("toolIds") or [],
         "collections": spec.get("collections") or [],
         "allTeamKnowledgeBases": bool(spec.get("allTeamKnowledgeBases")),
+        "accounts": dict(spec.get("accounts") or {}),
         # The owning team comes from the creator's token; the console names it from its teams list.
         "teamId": row["team_id"],
         "paused": bool(row["paused"]),

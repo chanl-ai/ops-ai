@@ -257,8 +257,8 @@ try {
           check(
             '3 one Connect window: the auth config, test or team account and Connect; the sign-in window opens at once on the console’s connect page; a refusal shows in both windows and Connect works again',
             // What the account may do is shown once, in the auth config's details, so the window asks only how to sign in.
-            // Turning an app on asks once whose account tools use; Turn on saves it and opens no sign-in window.
-            /Auth config/.test(said) && /Add your own app/.test(said) && /Whose account do tools use\?/.test(said) && /Team account/.test(said) && button === 'Turn on' && early === 0 && /Saved\. Person desk is on for/.test(saved) && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
+            // Turning an app on asks once who signs in; Turn on saves it and opens no sign-in window.
+            /Auth config/.test(said) && /Add your own app/.test(said) && /Who signs in\?/.test(said) && /Shared team login/.test(said) && button === 'Turn on' && early === 0 && /Saved\. Person desk is on for/.test(saved) && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
               new URL(openedAt).pathname === '/connections/connect' && new URL(openedAt).searchParams.get('app') === 'Person desk' &&
               deniedShown && closeOffered && /not given/.test(told) && again,
             { said, button, early, saved, folded, openedAt, deniedShown, closeOffered, told, again },

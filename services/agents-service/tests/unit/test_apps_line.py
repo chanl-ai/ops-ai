@@ -146,3 +146,51 @@ def test_an_app_this_chat_left_out_reads_as_left_out_not_as_on() -> None:
     assert "Salesforce: left out of this chat" in text and "GitHub: on" in text, text
     # One of an app's tools switched off in the settings panel leaves the app in the chat.
     assert "left out" not in (render(left_out(cards, held, module_of, {"salesforce_query"})) or "")
+
+
+def test_an_app_with_a_chosen_account_names_it_and_where_it_points_and_an_app_off_does_not() -> None:
+    """Failure modes: the model is not told which org a chat's calls run in, so it says the wrong one; or it is told
+    an account for an app that is not on, which reads as if that app could be used."""
+    eu_host = "kestrel-eu.my.salesforce.test"
+    eu = {**card("Salesforce", "connected"), "usesAccount": "EU org", "usesAccountShown": eu_host}
+    off = {**card("Google Calendar", "off"), "usesAccount": "Team calendar"}
+    text = render([eu, off])
+    assert text is not None
+    assert "Salesforce: on · you are signed in · uses EU org (kestrel-eu.my.salesforce.test)" in text
+    assert "Team calendar" not in text, text
+
+
+class Accounts:
+    """tools-service's account rows of an app, as `GET /v1/apps/{app}/accounts?name=` returns them."""
+
+    def __init__(self, rows: dict[str, dict[str, Any]]) -> None:
+        self.rows = rows
+
+    async def accounts(self, person: str | None, team: str, app: str, *, name: str) -> list[dict[str, Any]]:
+        row = self.rows.get(name)
+        return [row] if row else []
+
+
+async def test_an_account_that_points_nowhere_never_puts_who_signed_in_into_the_prompt() -> None:
+    """Failure mode: an account whose identity is only who signed in sends that person's email to the model as where
+    the account points. tools-service's `pointsAt` (where it points, who signed in left out) is what the line shows."""
+    gh = {**card("GitHub", "connected"), "id": "plugin:opsai.github"}
+    sf = {**card("Salesforce", "connected"), "id": "plugin:opsai.salesforce"}
+    rows = {
+        "Maya's login": {"identity": [{"label": "Signed in as", "shown": "maya@bank.example"}], "pointsAt": None},
+        "EU org": {
+            "identity": [
+                {"label": "Instance", "shown": "kestrel-eu.my.salesforce.test"},
+                {"label": "Signed in as", "shown": "ops@bank.example"},
+            ],
+            "pointsAt": "kestrel-eu.my.salesforce.test",
+        },
+    }
+    line = AppsLine(SimpleNamespace(app_states=Accounts(rows)))  # type: ignore[arg-type]
+    chosen = {gh["id"]: "Maya's login", sf["id"]: "EU org"}
+    got = await line._uses([gh, sf], chosen, "team_a")  # pyright: ignore[reportPrivateUsage] - the prompt's seam
+    text = render(got)
+    assert text is not None
+    assert "bank.example" not in text.replace("kestrel-eu.my.salesforce.test", ""), text
+    assert "uses Maya's login" in text and "uses Maya's login (" not in text, text
+    assert "uses EU org (kestrel-eu.my.salesforce.test)" in text, text

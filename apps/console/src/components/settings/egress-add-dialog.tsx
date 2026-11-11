@@ -9,7 +9,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAddEgress } from '@/hooks/egress-queries';
-import type { EgressKind } from '@/lib/types/egress';
+import type { EgressChange, EgressKind } from '@/lib/types/egress';
 
 export const EGRESS_COPY = {
   host: { noun: 'host', label: 'Host', placeholder: 'e.g. api.bank.example', hint: 'A DNS name. Tool calls go to it over https on 443 only.' },
@@ -24,10 +24,13 @@ export function EgressAddDialog({
   kind,
   onOpenChange,
   preset = '',
+  onAdded,
 }: {
   kind: EgressKind | null;
   onOpenChange: (open: boolean) => void;
   /** The value the form opens with: the host a tool calls, when opened from that tool. */ preset?: string;
+  /** Called with what the add returned, so a list on the same page can show the new row (`useCreatedRows`). */
+  onAdded?: (change: EgressChange) => void;
 }) {
   const add = useAddEgress();
   const [value, setValue] = React.useState('');
@@ -42,6 +45,7 @@ export function EgressAddDialog({
     try {
       const r = await add.mutateAsync({ kind: kind!, value: value.trim(), note });
       toast.success(r.changed ? `Listed ${r.value}` : `${r.value} was already listed`);
+      onAdded?.(r);
       onOpenChange(false);
     } catch (e) {
       // The service names why a value can never be listed (400); show that, not a generic failure.

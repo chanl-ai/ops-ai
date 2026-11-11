@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-10",
+  "title": "Simpler account choices",
+  "description": "An account asks once who signs in, a star marks the default, and an agent's Tools section picks each app's account. Each account's Settings changes its name, who signs in and its auth config, shows how many people signed in, and counts the workflows and agents that name it before a change.",
+  "tag": "improved"
+}

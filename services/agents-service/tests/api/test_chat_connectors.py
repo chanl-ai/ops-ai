@@ -4,12 +4,14 @@ chat; and choosing connectors wipes a tool the person switched off one by one in
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
+import pytest
 from httpx import AsyncClient
 
-from ops_agents.activities.tool_directory import CatalogTools, OperationRef
+from ops_agents.activities.tool_directory import CatalogTools, OperationRef, ToolsUnavailable
 from ops_agents.api.deps import Runtime
 from tests.api.test_chat import new_thread, send
 from tests.api.test_chat_on_graph import stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
@@ -57,6 +59,17 @@ class Cards:
                 "moduleIds": ["mod_crm"],
             },
         ]  # fmt: skip
+
+    async def accounts(
+        self, person: str | None, team: str | None, app_id: str, *, usable: bool = False, name: str | None = None
+    ) -> list[dict[str, Any]]:
+        """The CRM has two accounts, the team's Retail desk (its default) and the person's own EU desk; every other
+        app has one, which the picker does not list."""
+        retail = {"name": "Retail desk", "identity": [{"label": "Org", "value": "x", "shown": "retail.crm.test"}]}
+        eu = {"name": "EU desk", "identity": [{"label": "Org", "value": "y", "shown": "eu.crm.test"}], "own": True}
+        rows: list[dict[str, Any]] = [{**retail, "default": True}, eu] if app_id == CRM else [{"name": "Only"}]
+        rows = [r for r in rows if not (usable and r.get("own"))]
+        return [r for r in rows if name is None or r["name"].casefold() == name.strip().casefold()]
 
 
 def wire(rt: Runtime) -> None:
@@ -172,3 +185,80 @@ async def test_an_app_the_person_has_not_signed_in_to_is_in_the_sign_in_group_no
     assert (wires["appGroup"], wires["personal"], wires["on"]) == ("needs_you", True, True), wires
     refused = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CORE]})
     assert refused.status_code == 422, refused.text
+
+
+async def test_a_chat_lists_an_apps_accounts_and_keeps_the_one_picked(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    """Failure modes: the picker shows no account for an app with two, so nobody can tell which org a chat uses; a
+    pick is not kept on the chat; a name the app does not have is saved and sent."""
+    client, rt = stack
+    wire(rt)
+    tid = (await new_thread(client))["id"]
+    start = await connectors(client, tid)
+    assert [a["name"] for a in start[CRM]["accounts"]] == ["Retail desk", "EU desk"], start[CRM]
+    assert start[CRM]["account"] is None and start[WIRES]["accounts"] == [], start
+    picked = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [], "accounts": {CRM: "eu desk"}})
+    assert picked.status_code == 200, picked.text
+    assert (await connectors(client, tid))[CRM]["account"] == "EU desk"
+    assert (await settings(client, tid))["overrides"]["accounts"] == {CRM: "EU desk"}
+    refused = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [], "accounts": {CRM: "Ghost desk"}})
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "account_unknown", refused.text
+
+
+def _fields(record: logging.LogRecord) -> dict[str, Any]:
+    """A structlog record's message is its fields."""
+    msg: object = record.msg
+    return cast(dict[str, Any], msg) if isinstance(msg, dict) else {}
+
+
+class Unreachable:
+    """tools-service not answering the app list."""
+
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        raise ToolsUnavailable("tools-service did not answer")
+
+
+class Unrelated:
+    """An app list with no app for any tool the agent holds."""
+
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        return [{"id": "plugin:test.other", "kind": "plugin", "name": "Other", "appState": "connected",
+                 "appGroup": "on", "moduleIds": ["mod_other"]}]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("states", "reason", "cards"),
+    [(Unreachable(), "tools_unavailable", 0), (None, "no_app_states", 0), (Unrelated(), "no_app_for_held_tools", 1)],
+)
+async def test_an_empty_picker_with_tools_held_logs_why(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    caplog: pytest.LogCaptureFixture,
+    states: Any,
+    reason: str,
+    cards: int,
+) -> None:
+    # The picker reads "This agent uses no connector." for each of these; only the log says which one happened.
+    client, rt = stack
+    rt.tool_directory, rt.app_states = Modules(rt), states
+    tid = (await new_thread(client))["id"]
+    with caplog.at_level(logging.WARNING, logger="ops_agents.chat_connectors"):
+        assert await connectors(client, tid) == {}
+    lines = [f for f in map(_fields, caplog.records) if f.get("event") == "chat.connectors.empty"]
+    assert len(lines) == 1, caplog.text
+    line = lines[0]
+    assert (line["reason"], line["cards"]) == (reason, cards), line
+    assert str(line["agent"]).startswith("ag_") and str(line["team"]).startswith("team_"), line
+    assert line["held"] >= 1, line
+
+
+async def test_a_picker_with_apps_logs_nothing(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client, rt = stack
+    wire(rt)
+    tid = (await new_thread(client))["id"]
+    with caplog.at_level(logging.WARNING, logger="ops_agents.chat_connectors"):
+        assert await connectors(client, tid)
+    assert "chat.connectors.empty" not in caplog.text
