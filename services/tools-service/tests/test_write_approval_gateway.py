@@ -80,12 +80,17 @@ def reasons(r: httpx.Response) -> list[str]:
     return list(r.json()["error"]["details"]["reasons"])
 
 
-async def test_open_case_needs_no_token_and_a_write_that_waits_still_does(gateway: Call) -> None:
+async def test_a_write_with_no_approval_setting_runs_without_a_token(gateway: Call) -> None:
     opened = await gateway("open_case", CASE, "s1")
     # Allowed by the policy; with no agents-service behind this runner the case itself is not opened.
     assert opened.json()["data"]["decision"] == "allow", opened.text
-    refused = await gateway("update_address", ADDRESS, "s2")
-    assert (refused.status_code, reasons(refused)) == (403, ["write needs an approval token"]), refused.text
+    ran = await gateway("update_address", ADDRESS, "s2")
+    assert ran.status_code == 200 and ran.json()["data"]["decision"] == "allow", ran.text
+
+
+async def test_a_team_with_ask_before_changes_on_holds_a_write_that_has_no_setting(strict: Call) -> None:
+    r = await strict("update_address", ADDRESS, "s5")
+    assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
 
 
 async def test_a_caller_cannot_say_its_write_needs_no_approval(gateway: Call) -> None:

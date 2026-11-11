@@ -20,6 +20,7 @@ from .conftest import build_app, opa_client
 from .fake_upstream import ENDPOINT, HOST, SlowAware, fake_bank
 from .test_calls import Gateway, bank_module, on_its_connection
 from .test_test_run_writes import _on_accounts, _real  # pyright: ignore[reportPrivateUsage]
+from .test_write_approval_gateway import EveryWriteWaits
 
 
 class PolicyNowOff:
@@ -38,7 +39,7 @@ async def stale_token_gateway(
     catalog_tools: list[dict[str, Any]],
 ) -> AsyncIterator[Gateway]:
     """The dev person's token carries requesterMayDecide=true, as one minted before the change would, while the
-    gateway's live read says off."""
+    gateway's live read says off. The team has ask before changes on: with it off a write never waits."""
     monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": true}')
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     module = await on_its_connection(engine, bank_module(tenant, "livepol"), ENDPOINT)
@@ -49,7 +50,15 @@ async def stale_token_gateway(
         opa_client() as opa,
         httpx.AsyncClient(transport=SlowAware(httpx.ASGITransport(app=bank))) as upstream,
     ):
-        app = build_app(engine, seed, tenant, opa=opa, upstream=upstream, requester_policy=PolicyNowOff())
+        app = build_app(
+            engine,
+            seed,
+            tenant,
+            opa=opa,
+            upstream=upstream,
+            requester_policy=PolicyNowOff(),
+            write_approvals=EveryWriteWaits(),
+        )
         async with (
             app.router.lifespan_context(app),
             httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as client,

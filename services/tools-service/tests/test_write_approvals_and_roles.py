@@ -111,9 +111,9 @@ async def test_an_app_listed_in_apps_change_without_asking_runs_its_write_withou
     assert r.status_code == 200 and r.json()["data"]["decision"] == "allow", r.text
 
 
-async def test_an_unreadable_apps_change_without_asking_keeps_the_write_waiting(unreadable: Call) -> None:
+async def test_an_unreadable_apps_change_without_asking_leaves_an_unset_write_running(unreadable: Call) -> None:
     r = await unreadable("update_address", ADDRESS, "quiet-2")
-    assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
+    assert r.status_code == 200 and r.json()["data"]["decision"] == "allow", r.text
 
 
 def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:

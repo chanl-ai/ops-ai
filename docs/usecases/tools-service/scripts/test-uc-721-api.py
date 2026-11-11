@@ -10,7 +10,7 @@ from apps_walk import app_path, apps_stack
 from usecase_harness import check, data, finish, service_headers
 
 APP = "plugin:test.header-key"
-POLICY = "/v1/policies/appsChangeWithoutAsking"
+POLICY = "/v1/policies/toolWritesNeedApproval"
 
 with apps_stack() as w:
     # 1. Turned on: every tool added, the write included.
@@ -28,33 +28,35 @@ with apps_stack() as w:
         rows = data(w.kept(w.gw.get("/v1/grantable-operations", headers=headers))) or []
         return {str(o["name"]): o for o in rows}
 
-    # 2. The write asks first; the read does not.
+    # 2. Nothing asks first by default: the write and the read both run.
     ops = grantable()
     close, read = ops.get("header_key_close_record") or {}, ops.get("header_key_get_record") or {}
     check(
-        "2 Close a record waits and Read a record does not",
-        close.get("requiresApproval") is True and read.get("requiresApproval") is False,
+        "2 Close a record does not wait by default, and neither does Read a record",
+        close.get("requiresApproval") is False and read.get("requiresApproval") is False,
         (close, read),
     )
 
-    # 3-4. Only a team admin turns it off.
-    builder = w.kept(w.api.put(POLICY, json={"value": [APP]}, headers=w.who["builder"]))
-    check("3 a builder cannot turn Ask before changes off (403)", builder.status_code == 403, builder.text[:200])
-    admin = w.kept(w.api.put(POLICY, json={"value": [APP]}, headers=w.who["admin"]))
-    after = grantable().get("header_key_close_record") or {}
-    check(
-        "4 the team admin turns it off and the write waits no more",
-        admin.status_code == 200 and after.get("requiresApproval") is False,
-        (admin.text[:200], after),
-    )
-
-    # 5. A live write runs with no approval of its own.
+    # 3. A live write runs with no approval of its own.
     ran = w.call("header_key_close_record", args={"id": "rec-1042"})
     check(
-        "5 a live run's write runs (200) with no approval",
+        "3 a live run's write runs (200) with no approval",
         ran.status_code == 200 and (data(ran) or {}).get("ok") is True,
         ran.text[:300],
     )
+
+    # 4-5. Only a person who manages reviews turns Ask before changes on; then the same write waits for a person.
+    viewer = w.kept(w.api.put(POLICY, json={"value": True}, headers=w.who["viewer"]))
+    check("4 a viewer cannot turn Ask before changes on (403)", viewer.status_code == 403, viewer.text[:200])
+    admin = w.kept(w.api.put(POLICY, json={"value": True}, headers=w.who["admin"]))
+    held = w.call("header_key_close_record", args={"id": "rec-1042"})
+    check(
+        "5 the team admin turns it on and the same write no longer runs without approval",
+        admin.status_code == 200 and held.status_code != 200 and "approval token" in held.text,
+        (admin.text[:200], held.status_code, held.text[:300]),
+    )
+    # Back off, so the next step meets only the removal.
+    w.kept(w.api.put(POLICY, json={"value": False}, headers=w.who["admin"]))
 
     # 6. A tool turned off says why and where to turn it on.
     removed = w.kept(w.gw.delete(f"{app_path(APP)}/tools/header_key_close_record", headers=w.who["admin"]))
