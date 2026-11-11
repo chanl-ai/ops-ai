@@ -47,7 +47,7 @@ async def test_a_guardrail_needs_a_topic_and_a_message(tmp_path: Path) -> None:
 
 async def test_only_a_published_version_pins_and_the_pin_keeps_its_version(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
-        draft = _ok(await c.post("/v1/guardrails", json=RULE), 201)
+        draft = _ok(await c.post("/v1/guardrails", json={**RULE, "name": "Draft rule"}), 201)
         r = await _pin(c, draft["id"], 1)
         assert (r.status_code, r.json()["error"]["code"]) == (422, "not_published")
 
@@ -68,6 +68,15 @@ async def test_only_a_published_version_pins_and_the_pin_keeps_its_version(tmp_p
         agent = _ok(await c.get(f"/v1/agents/{ADVISOR}"))
         assert agent["guardrailPins"][0]["topics"] == ["investment advice"]
         assert _ok(await c.get(f"/v1/guardrails/{g['id']}"))["usedBy"] == [agent["name"]]
+
+
+async def test_editing_a_draft_guardrail_rewrites_it_instead_of_opening_a_second_draft(tmp_path: Path) -> None:
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        g = _ok(await c.post("/v1/guardrails", json=RULE), 201)
+        _ok(await c.patch(f"/v1/guardrails/{g['id']}", json={"topics": ["tax advice"]}))
+        edited = _ok(await c.patch(f"/v1/guardrails/{g['id']}", json={"message": "No."}))
+        assert [v["version"] for v in edited["versions"]] == [1], edited["versions"]
+        assert edited["versions"][0]["config"]["topics"] == ["tax advice"]
 
 
 async def test_a_published_pin_reaches_the_served_definition(tmp_path: Path) -> None:

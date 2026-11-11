@@ -36,5 +36,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # The old key spans every team: a slug two teams hold would make it fail partway. Offline SQL cannot count.
+    if not op.get_context().as_sql:
+        bind = op.get_bind()
+        if bind.dialect.name == "postgresql":
+            # The migrating role may own the table; FORCE row-level security would otherwise hide other teams' rows.
+            op.execute("SET LOCAL row_security = off")
+        t = sa.table(TABLE, sa.column("slug"))
+        shared = sa.select(t.c.slug).group_by(t.c.slug).having(sa.func.count() > 1).subquery()
+        dupes = bind.execute(sa.select(sa.func.count()).select_from(shared)).scalar_one()
+        if dupes:
+            raise RuntimeError(
+                f"{TABLE}: {dupes} slugs are used by more than one team; rename or remove them before downgrading"
+            )
     op.drop_constraint(TEAM_KEY, TABLE, type_="unique")
     op.create_unique_constraint("registry_skills_slug_key", TABLE, ["slug"])

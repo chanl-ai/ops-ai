@@ -331,4 +331,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
-| uc-731 | agents-service | Two teams keep a guardrail of the same name and one team cannot hold two | api | draft |
+| uc-731 | agents-service | A team that makes a second guardrail of the same name is refused with name_taken, and the first keeps the plain slug | api | draft |

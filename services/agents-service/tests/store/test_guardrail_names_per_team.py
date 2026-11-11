@@ -6,11 +6,14 @@ meets a migration, so this runs the migrations."""
 from __future__ import annotations
 
 import asyncio
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 import pytest
 import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -41,3 +44,43 @@ def test_the_slug_key_is_per_team_on_the_migrated_database(database_url: str) ->
     asyncio.run(_insert(database_url, slug, "team_lending"))  # another team: allowed
     with pytest.raises(IntegrityError):
         asyncio.run(_insert(database_url, slug, "team_ops"))  # the same team: refused
+
+
+SKILL = (
+    "INSERT INTO registry_skills (id, slug, owner_team, team_id, origin, version, created_at, updated_at, updated_by) "
+    "VALUES (:id, :slug, 'Ops', :team, 'team', 1, :at, :at, 'lee@harborpine.example')"
+)
+
+
+async def _downgrade_refusal(url: str, revision: str, insert: str, slug: str) -> str:
+    """The migration's downgrade, run while two teams hold one slug; it must refuse before any DDL."""
+    engine = create_async_engine(url)
+    module = import_module(f"migrations.versions.{revision}")
+    try:
+        async with engine.begin() as c:
+            await c.execute(sa.text("SET LOCAL row_security = off"))
+            for team in ("team_ops", "team_lending"):
+                await c.execute(sa.text(insert), {"id": new_id("x"), "slug": slug, "team": team, "at": now_iso()})
+
+            def run(sync_conn: sa.Connection) -> None:
+                with Operations.context(MigrationContext.configure(sync_conn)):
+                    module.downgrade()
+
+            try:
+                await c.run_sync(run)
+            except RuntimeError as e:
+                return str(e)
+            finally:
+                await c.rollback()
+        return ""
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("revision", "insert"),
+    [("0101_skill_names_per_team", SKILL), ("0102_guardrail_names_per_team", INSERT)],
+)
+def test_downgrade_refuses_while_two_teams_hold_one_slug(database_url: str, revision: str, insert: str) -> None:
+    message = asyncio.run(_downgrade_refusal(database_url, revision, insert, f"same-{new_id('s')[-8:]}"))
+    assert "used by more than one team" in message, message
