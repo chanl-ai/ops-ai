@@ -388,6 +388,7 @@ def create_gateway_app(
                     reviewer_role=cast(str | None, r.get("setting_role")),
                     approvers=r["approvers"],
                     levels=levels,
+                    test_account=str(r.get("module_id") or "") in tested,
                 )
                 out.append(
                     r
