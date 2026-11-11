@@ -1,6 +1,6 @@
 """Which writes wait for approval is declared once per tool, and fails closed, by failure mode: a write that
 declares nothing, so its approval depends on a default somewhere; a write other than open_case declared to run at once
-without anyone deciding it; a team's toolWritesNeedApproval read for the wrong team; and a policy that cannot be read
+without anyone deciding it; a team's appChanges read for the wrong team; and a policy that cannot be read
 letting a write through unapproved. platform-service is a fake HTTP endpoint here."""
 
 from __future__ import annotations
@@ -65,17 +65,26 @@ def test_every_write_declares_whether_it_waits_and_only_the_decided_ones_run_at_
     assert at_once == sorted(AT_ONCE), f"writes declared to run at once without a decision: {at_once}"
 
 
-def _platform(stored: dict[str, Any]) -> WriteApprovals:
+def _platform(team_level: dict[str, Any], by_app: dict[str, Any]) -> WriteApprovals:
+    """platform-service holding appChanges and appChangesByApp for tenant t_a; any other tenant's read is a 404."""
+
     def answer(request: httpx.Request) -> httpx.Response:
-        if request.url.path != "/v1/policies/toolWritesNeedApproval" or claims(request)["tenant_id"] != "t_a":
+        stored = {"/v1/policies/appChanges": team_level, "/v1/policies/appChangesByApp": by_app}
+        if request.url.path not in stored or claims(request)["tenant_id"] != "t_a":
             return httpx.Response(404)
-        return httpx.Response(200, json={"success": True, "data": {"key": "toolWritesNeedApproval", "value": stored}})
+        key = request.url.path.rsplit("/", 1)[1]
+        return httpx.Response(200, json={"success": True, "data": {"key": key, "value": stored[request.url.path]}})
 
     return WriteApprovals(fake_service(answer, "platform", ["settings:view"]))
 
 
 async def test_the_policy_is_read_for_the_calling_team_and_a_failed_read_has_every_write_wait() -> None:
-    policy = _platform({"team_ops": True})
-    assert await policy.all_writes("t_a", "team_ops") is True
-    assert await policy.all_writes("t_a", "team_fraud") is False, "a team that set nothing follows each write's flag"
-    assert await policy.all_writes("t_b", "team_fraud") is True, "a policy that cannot be read has every write wait"
+    policy = _platform(
+        {"team_ops": {"ask": True, "answer": "reviewer"}}, {"team_ops": {"module:m1": {"answer": "none"}}}
+    )
+    ops = await policy.levels("t_a", "team_ops")
+    assert ops == ({"ask": True, "answer": "reviewer"}, {"module:m1": {"answer": "none"}}), ops
+    fraud = await policy.levels("t_a", "team_fraud")
+    assert fraud == ({}, {}), "a team that set nothing follows each write's own flag"
+    unread = await policy.levels("t_b", "team_fraud")
+    assert unread[0] is None, "a policy that cannot be read is None, which the resolver counts as every write waits"

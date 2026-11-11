@@ -1,9 +1,10 @@
 """Each app's "Ask before changes" switch as the grantable operations carry it to agents-service, by failure mode:
 
-- a write of an app nobody switched off is handed to agents as one that waits (requiresApproval);
+- a write that declares approval is handed to agents as one that waits (requiresApproval);
 - a read never waits;
-- an app a team admin switched off (appsChangeWithoutAsking) runs at once and no other app does;
-- a switch that cannot be read lets writes run, where a failed read must keep them waiting.
+- an app a team admin set to don't ask (appChangesByApp) does not hold a write with no setting of its own, and a tool
+  that declares approval still waits: the tool's answer is more specific than its app's;
+- a team policy that cannot be read keeps writes waiting.
 
 Whether the person in chat is then asked is agents-service's (test_ask_first_chat there); the gateway's own approvals
 (test_approvals_off_by_default) are unchanged by the switch.
@@ -27,21 +28,19 @@ from .conftest import build_app, opa_client, service_headers
 
 
 class Quiet(WriteApprovals):
-    """The apps the team switched "Ask before changes" off for, as the live read answers it (None: unreadable)."""
+    """The levels the team set, as the live read answers them: the apps `pick` names (by module id) answer "don't ask";
+    `pick` returning None is a team policy that could not be read."""
 
     def __init__(self, quiet: Callable[[list[dict[str, Any]]], list[str] | None]) -> None:
         super().__init__(cast(Any, None))
         self.pick = quiet
         self.modules: list[dict[str, Any]] = []
 
-    async def all_writes(self, tenant_id: str, team_id: str | None) -> bool:
-        return False
-
-    async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
-        return []
-
-    async def change_without_asking(self, tenant_id: str, team_id: str | None) -> list[str] | None:
-        return self.pick(self.modules)
+    async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
+        named = self.pick(self.modules)
+        if named is None:
+            return None, {}
+        return {"ask": True, "answer": "reviewer", "reviewerRole": None}, {i: {"answer": "none"} for i in named}
 
 
 Rows = Callable[[Quiet], Any]
@@ -75,10 +74,10 @@ async def test_a_write_that_declares_approval_waits_and_no_read_does(grantable: 
     assert all(o["requiresApproval"] is False for o in rows.values() if o["access"] == "read"), rows
 
 
-async def test_an_app_listed_runs_its_writes_at_once_and_other_apps_still_wait(grantable: Rows) -> None:
+async def test_a_tool_that_declares_approval_still_waits_where_its_app_is_set_to_dont_ask(grantable: Rows) -> None:
     rows = await grantable(Quiet(lambda mods: [_module_of(mods, "update_address")]))
-    assert rows["update_address"]["requiresApproval"] is False, rows["update_address"]
-    assert rows["place_wire_hold"]["requiresApproval"] is True, rows["place_wire_hold"]
+    assert rows["update_address"]["requiresApproval"] is True, rows["update_address"]
+    assert rows["update_address"]["source"] == "tool", rows["update_address"]
 
 
 async def test_a_switch_that_cannot_be_read_keeps_the_write_waiting(grantable: Rows) -> None:
