@@ -46,9 +46,8 @@ async def _write_tool(engine: AsyncEngine, mid: str, saved: datetime, *, waits: 
     await _sql(
         engine,
         "insert into module_operations (tenant_id, id, module_id, position, name, tool_id, description, access, "
-        "enabled, input, masked_output, rate_limit_per_min, requires_approval, stub, seed_calls24h, seed_error_rate, "
-        "seed_p95_ms) values (:t, :op, :id, 0, :op, :op, '', 'write', true, cast('[]' as json), cast('[]' as json), "
-        "60, :waits, cast('{}' as json), 0, 0, 0)",
+        "enabled, input, masked_output, rate_limit_per_min, requires_approval) values (:t, :op, :id, 0, :op, :op, "
+        "'', 'write', true, cast('[]' as json), cast('[]' as json), 60, :waits)",
         t=T, id=mid, op=f"{mid}_op", waits=waits,
     )  # fmt: skip
 
@@ -73,6 +72,19 @@ async def test_a_write_saved_since_1_nov_holding_false_waits_and_an_earlier_one_
             await _write_tool(engine, "mod_old", SAVED_BEFORE, waits=False)
             _alembic(target, "upgrade", AFTER)
             assert await _waits(engine) == {"mod_new": True, "mod_old": False}
+        finally:
+            await engine.dispose()
+
+
+async def test_a_write_saved_before_1_nov_holding_false_is_unchanged() -> None:
+    async with scratch_database("tools_write_approvals_old") as target:
+        _alembic(target, "upgrade", BEFORE)
+        engine = create_async_engine(target)
+        try:
+            await _write_tool(engine, "mod_old", SAVED_BEFORE, waits=False)
+            _alembic(target, "upgrade", AFTER)
+            assert await _waits(engine) == {"mod_old": False}
+            assert await _audit(engine) == [], "an untouched write has no audit row"
         finally:
             await engine.dispose()
 
