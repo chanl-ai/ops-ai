@@ -22,7 +22,7 @@ password. No model is called.
 | 3 | The admin makes them a builder (ui: Change role) | Their next token carries builder |
 | 4 | The admin removes them | Their next token carries no team_ops |
 | 5 | The admin invites into team_fraud | 403 |
-| 6 | The admin removes Priya, the workspace owner; then, in a team Priya makes with them as its only admin, demotes themselves | 409 `owner_must_transfer` (E42); their own demotion skipped `last_admin` |
+| 6 | A Platform admin removes Wanjiru, the workspace owner; then, in a team Wanjiru makes with them as its only admin, demotes themselves | 409 `owner_must_transfer` (E42); their own demotion skipped `last_admin` |
 
 ## Acceptance layers
 
