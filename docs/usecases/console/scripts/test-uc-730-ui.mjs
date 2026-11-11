@@ -1,9 +1,19 @@
 // uc-730 a first-time admin decides what happens when an agent changes an app with one switch, ui layer.
-// Platform sign-in as Priya Shah, admin of Operations, whose team has saved no approval setting. Govern › Approvals
+// Platform sign-in as Wanjiru Kamau, admin of every team, whose team has saved no approval setting. Govern › Approvals
 // shows one switch, off, and asks who answers only once it is on; the old approval rows and "Requester may decide" are no
 // longer on Policies. "People can approve their own requests" shows only while a reviewer answers, and Advanced holds the
 // "Test accounts never ask" checkbox, which is on until a team saves it off.
-import { check, chromium, finish, consoleSignIn, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, consoleSignIn, withUiStack } from '@ops-ai/usecase-runner/harness';
+
+const tools = `http://127.0.0.1:${TOOLS_PORT}`;
+const TAG = Math.random().toString(36).slice(2, 6);
+const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
+const as = async (email, team) => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
+const json = async (r) => {
+  const body = await r.json();
+  if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
+  return body.data;
+};
 
 const SWITCH = /Ask before an agent changes anything in an app/i;
 const OWN = /People can approve their own requests/i;
@@ -18,11 +28,11 @@ async function step(name, body) {
   }
 }
 
-await withUiStack(async (consoleUrl) => {
+await withUiStack(async (consoleUrl, stack) => {
   const browser = await chromium.launch();
   const errors = [];
   try {
-    const page = await consoleSignIn(browser, consoleUrl, 'p.shah@harborpine.example', 'northfield-demo', errors);
+    const page = await consoleSignIn(browser, consoleUrl, 'w.kamau@harborpine.example', 'northfield-demo', errors);
     page.setDefaultTimeout(30_000);
 
     await step('1 Approvals shows one switch, off, and no question about who answers', async () => {
@@ -99,6 +109,56 @@ await withUiStack(async (consoleUrl) => {
       check('4 the Policies page makes no request that is refused or missing', refused.length === 0, refused);
       const old = await page.getByText(/Approve every tool write|Approve writes of these apps|Apps that change without asking|Requester may decide/i).count();
       check('4 the approval rows moved to Approvals', old === 0, old);
+    });
+
+    // Runs before step 5: that step lets approvers approve their own requests, which would skip the card.
+    await step('7 A test run of a write on a live account shows the approval card; no refuses it, yes runs it', async () => {
+      // A published Operations module with one write, on the fake bank, and no account of its own: a live account.
+      const S = await as('s.adeyemi@harborpine.example', 'team_security');
+      const J = await as('j.richardson@harborpine.example', 'team_ops');
+      const N = await as('n.petrov@harborpine.example', 'team_security');
+      await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.host, note: 'uc-730' }) });
+      await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.range, note: 'uc-730' }) });
+      const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Holds ${TAG}`, name: `uc730-holds-${TAG}`, type: 'http' }) }))).id;
+      const op = `place_hold_${TAG}`;
+      await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: op, description: 'Place a hold', access: 'write', method: 'POST', url: `https://${stack.bank.host}/accounts/{account_id}/holds`, headers: [] }) }));
+      await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-730' }) }));
+      await approveToolReview(id, N, J);
+      const james = await consoleSignIn(browser, consoleUrl, 'j.richardson@harborpine.example', 'northfield-demo', errors);
+      await james.goto(`${consoleUrl}/tools/${id}/operations/${op}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const panel = james.getByTestId('module-test-panel');
+      await panel.waitFor();
+      const runs = [];
+      james.on('request', (r) => {
+        if (r.method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${id}/test`)) runs.push(r.postDataJSON());
+      });
+      const run = async () => {
+        await panel.getByRole('radio', { name: 'Real' }).or(panel.getByRole('button', { name: 'Real' })).first().click();
+        await panel.locator('#t-account_id').fill('CHQ-2219');
+        const answered = james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${id}/test`), { timeout: 60_000 });
+        await panel.getByRole('button', { name: 'Run' }).click();
+        return (await answered).json();
+      };
+      const first = await run();
+      check('7 the first run is held for the person, nothing sent', first.data?.denyReason === 'approval_token_missing', first.data);
+      const card = panel.getByTestId('ask-first-card');
+      await card.waitFor({ timeout: 15_000 }).catch(async (e) => {
+        throw new Error(`${e.message.split('\n')[0]} panel: ${(await panel.innerText()).replace(/\s+/g, ' ').slice(0, 600)}`);
+      });
+      check('7 the approval card shows Allow and Deny', (await card.getByTestId('ask-first-allow').count()) === 1 && (await card.getByTestId('ask-first-deny').count()) === 1);
+      check('7 the card has no Allow for this chat', (await panel.getByTestId('ask-first-allow-chat').count()) === 0);
+      await card.getByTestId('ask-first-deny').click();
+      await panel.getByText('Denied', { exact: true }).first().waitFor();
+      check('7 Deny sent no second run', runs.length === 1, runs.length);
+      check('7 the denied card has no buttons left', (await card.getByTestId('ask-first-allow').count()) === 0);
+      await panel.getByRole('button', { name: 'Run' }).click();
+      await card.getByTestId('ask-first-allow').waitFor();
+      const ran = james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${id}/test`) && r.request().postDataJSON()?.confirmed === true, { timeout: 60_000 });
+      await card.getByTestId('ask-first-allow').click();
+      const yes = (await ran).json();
+      const answer = await yes;
+      // The fake bank answers this route 401 (no key on a blank module); what matters is that the gateway sent the write.
+      check('7 Allow sends the write to the app', answer.data?.decision === 'allow' && answer.data?.stubbed === false && answer.data?.reachedHost === stack.bank.host && answer.data?.request?.method === 'POST', answer.data);
     });
 
     await step('5 A saved self-approval choice survives a reload', async () => {

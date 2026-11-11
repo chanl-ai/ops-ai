@@ -21,7 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { appOptions, useOptionLabels } from '@/hooks/options-queries';
 import { useCan, useRoles } from '@/hooks/me-queries';
-import { usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies } from '@/hooks/policy-queries';
+import { TOOL_KEY, usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies } from '@/hooks/policy-queries';
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
@@ -65,7 +65,10 @@ export default function ApprovalsPage() {
   const byApp = policies.data?.find((p) => p.key === 'appChangesByApp');
   const saved = ofTeam(changes?.value, teamId);
   const mayDecide = policies.data?.find((p) => p.key === 'requesterMayDecide');
-  const savedByApp = React.useMemo(() => ofTeam(byApp?.value, teamId) as Record<string, Entry>, [byApp?.value, teamId]);
+  const savedAll = React.useMemo(() => ofTeam(byApp?.value, teamId) as Record<string, Entry>, [byApp?.value, teamId]);
+  // A key starting `tool:` is one tool's answer, set on that tool's own page; it is kept as it is when apps are saved.
+  const savedByApp = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => !k.startsWith(TOOL_KEY))), [savedAll]);
+  const savedTools = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => k.startsWith(TOOL_KEY))), [savedAll]);
   // Both policies are changed under settings.manage; the cell is held in the Security team or the acting team.
   const locked = useCan('settings', 'manage') !== true || sample;
   const roleList = (roles.data ?? []).filter((r: { id: string }) => !NOT_THESE_ROLES.has(r.id));
@@ -121,7 +124,7 @@ export default function ApprovalsPage() {
   };
   const saveApps = async () => {
     try {
-      await set.mutateAsync({ key: 'appChangesByApp', teamId, value: overrides });
+      await set.mutateAsync({ key: 'appChangesByApp', teamId, value: { ...savedTools, ...overrides } });
       toast.success('Saved the app overrides');
     } catch (e) {
       toast.error('Couldn’t save the app overrides', { description: (e as Error).message });

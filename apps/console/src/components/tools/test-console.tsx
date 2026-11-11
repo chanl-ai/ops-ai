@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ms } from '@/lib/format';
+import { ChatWidgetView } from '@/components/chat/widgets';
+import type { ApprovalWidget, WidgetAction } from '@/lib/types/chat';
 import type { ModuleOperation, ModuleTestInput, ModuleTestResult, RunContextOption, SchemaField } from '@/lib/types/tool-modules';
 
 import { BINDING_LABEL } from './module-meta';
@@ -200,11 +202,17 @@ export function TestConsole({
     if (result?.decision === 'invalid' && result.invalid) setErrors(Object.fromEntries(result.invalid.map((x) => [x.field, x.message])));
   }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function run(simulateApproval = false) {
+  // What the last run sent, so the card shows the request it asks about even after the fields are edited.
+  const sent = React.useRef<Record<string, unknown>>({});
+  function run(simulateApproval = false, confirmed = false) {
     const input = collect();
     if (!op || !input) return;
-    onRun({ operation: op.name, contextId: ctx ? ctx.id : NO_CONTEXT, target, input, simulateApproval: simulateApproval || undefined });
+    sent.current = input;
+    onRun({ operation: op.name, contextId: ctx ? ctx.id : NO_CONTEXT, target, input, simulateApproval: simulateApproval || undefined, confirmed: confirmed || undefined });
   }
+  // A Real run as the owner (no workflow's approval involved) that the gateway holds for the person's yes.
+  const asksPerson = target === 'sandbox' && (ctx ? ctx.id : NO_CONTEXT) === NO_CONTEXT && result?.denyReason === 'approval_token_missing';
+
 
   return (
     <div className={stacked ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}>
@@ -277,11 +285,51 @@ export function TestConsole({
         ) : !result ? (
           <p className="py-10 text-center text-sm text-muted-foreground">Run the operation to see the response.</p>
         ) : (
-          <ResultBody result={result} op={op} running={running} onSimulate={() => run(true)} />
+          <>
+            {asksPerson && op && (
+              <AskBeforeRun key={result.callId} op={op} input={sent.current} running={running} onYes={() => onRun({ operation: op.name, contextId: NO_CONTEXT, target, input: sent.current, confirmed: true })} />
+            )}
+            {!asksPerson && <ResultBody result={result} op={op} running={running} onSimulate={() => run(true)} />}
+          </>
         )}
       </Section>
     </div>
   );
+}
+
+/**
+ * The card a Real test run of a write on a live account shows while it waits for the person who pressed Run: the
+ * chat's own ask-first card, without "Allow for this chat". Allow runs the same request again with the person's yes;
+ * Deny leaves it unsent. Give it a `key` that changes with each result, so a new run starts with an open card.
+ */
+export function AskBeforeRun({ op, input, running, onYes }: { op: ModuleOperation; input: Record<string, unknown>; running: boolean; onYes: () => void }) {
+  const [denied, setDenied] = React.useState(false);
+  const answer = async (a: WidgetAction) => {
+    if (a.type === 'approve') onYes();
+    else setDenied(true);
+  };
+  return <ChatWidgetView widget={askCard(op, input, denied ? 'rejected' : 'pending')} onAction={running ? undefined : answer} />;
+}
+
+function askCard(op: ModuleOperation, input: Record<string, unknown>, state: ApprovalWidget['state']): ApprovalWidget {
+  return {
+    id: `test-${op.name}`,
+    kind: 'approval',
+    title: 'This test run asks first',
+    app: 'Test run',
+    tool: op.name,
+    toolLabel: op.name,
+    asOf: new Date().toISOString(),
+    reviewId: '',
+    action: op.description || op.name,
+    summary: 'Send this to the app’s live account?',
+    consequence: 'Nothing is sent until you allow it. The app’s live account is changed.',
+    fields: Object.entries(input).map(([label, value]) => ({ label, value: typeof value === 'string' ? value : JSON.stringify(value) })),
+    risk: 'medium',
+    state,
+    askFirst: true,
+    allowForChat: false,
+  };
 }
 
 /** A run's answer: the gateway's decision, status and time, what to do about a refusal, and the result tabs. `badge`

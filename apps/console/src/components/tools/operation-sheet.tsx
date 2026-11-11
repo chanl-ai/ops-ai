@@ -4,7 +4,10 @@ import * as React from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, KeyRound } from 'lucide-react';
 
-import { useTeamWritesWait } from '@/hooks/policy-queries';
+import { toast } from 'sonner';
+
+import { useCan } from '@/hooks/me-queries';
+import { BY_REVIEWER, useTeamWritesWait, useToolAnswer, type ToolAnswer } from '@/hooks/policy-queries';
 import { DetailSheet, type DetailSheetNavigation } from '@/components/shared/detail-sheet';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -81,6 +84,8 @@ export function OperationSheet({
     setInputErrors({});
   }, [op, appBase]);
   const teamWaits = useTeamWritesWait();
+  const mine = useToolAnswer(op?.name ?? '');
+  const mayAnswer = useCan('settings', 'manage') === true;
   if (!op || !d) return <DetailSheet open={false} onOpenChange={onOpenChange} title="">{null}</DetailSheet>;
 
   const write = d.access === 'write';
@@ -323,6 +328,32 @@ export function OperationSheet({
                 </p>
               </div>
               <Switch checked={d.requiresApproval !== false || twoApprovers} disabled={twoApprovers} onCheckedChange={(v) => set({ requiresApproval: v })} aria-label="Every call waits for an approval" />
+            </div>
+          )}
+          {write && (
+            <div className="mt-3" data-testid="op-tool-answer">
+              <FormField id="op-tool-answer" label="When an agent calls this tool" hint="Your team’s answer for this tool alone. It wins over the app’s and the team’s, and a team admin changes it. A plugin’s tools are set here too.">
+                <Select
+                  value={mine.entry?.answer ?? 'app'}
+                  disabled={!mayAnswer || mine.pending}
+                  onValueChange={(v) =>
+                    mine
+                      .save(v === 'app' ? null : { answer: v as ToolAnswer['answer'], reviewerRole: v === BY_REVIEWER ? (mine.entry?.reviewerRole ?? mine.teamRole) : undefined })
+                      .then(() => toast.success('Saved the answer for this tool'))
+                      .catch((e: Error) => toast.error('Couldn’t save the answer for this tool', { description: e.message }))
+                  }
+                >
+                  <SelectTrigger id="op-tool-answer" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="app">Use the app’s setting</SelectItem>
+                    <SelectItem value="none">Don’t ask</SelectItem>
+                    <SelectItem value="person">Ask the person</SelectItem>
+                    <SelectItem value="reviewer">Ask a reviewer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
             </div>
           )}
           {write && (

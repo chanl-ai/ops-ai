@@ -18,6 +18,7 @@ Settings, defaults and who changes them: `docs/architecture/roles-and-permission
 | S4 | Policies holds none of the approval rows and no Requester may decide, and loads without a refused request | ui | 4 | 4 |
 | S5 | A saved self-approval choice is kept | ui | 5 | 5 |
 | S6 | A member who cannot change a setting reads "Only an admin can change this", with the right article | ui | 6 | 6 |
+| S7 | A Real test run of a write on a live account shows the approval card; Deny sends nothing, Allow runs it | ui | 7 | 7 |
 
 ## Preconditions
 
@@ -26,24 +27,25 @@ Settings, defaults and who changes them: `docs/architecture/roles-and-permission
 | PostgreSQL :5477 and OPA | `make db-up` |
 | The run's demo stack | the runner starts the console, platform sign-in and the services (`packages/usecase-runner/src/harness.ts`) |
 
-Priya Shah is an admin of Operations, whose team has saved no approval setting.
+Wanjiru Kamau is an admin of every team; her own team has saved no approval setting.
 
 ## Steps and expected results
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya opens Settings > Approvals | One switch, off; no question about who answers; no self-approval checkbox |
+| 1 | Wanjiru opens Settings > Approvals | One switch, off; no question about who answers; no self-approval checkbox |
 | 2 | She turns it on, then picks Ask a reviewer | Ask the person is chosen first and shows no self-approval checkbox; after she picks a reviewer, "People can approve their own requests" appears, off |
 | 3 | She opens Advanced, unchecks "Test accounts never ask", saves and reloads | It was on before; it stays off after the reload; she checks it again and saves |
 | 4 | She opens Settings > Policies | None of the approval rows, and no "Requester may decide"; no request the page makes is refused or missing |
 | 5 | She turns the switch on, picks Ask a reviewer and a role, ticks self-approval, saves and reloads | It is still ticked |
 | 6 | Ravi, a viewer, opens Settings > Approvals | The lock reads "Only an admin can change this" |
+| 7 | James runs (the script does this before step 5, which lets approvers approve their own requests) a write on a live account from a tool's Test panel (Real), then answers the card | The run is held and nothing is sent; the card offers Allow and Deny and no "Allow for this chat"; Deny sends no second run; running again and choosing Allow sends the write to the app (the gateway allowed it and reached the bank) |
 
 ## Acceptance layers
 
 | Layer | Script | Proves |
 |---|---|---|
-| ui | `scripts/test-uc-730-ui.mjs` | Steps 1 to 6 in a real browser |
+| ui | `scripts/test-uc-730-ui.mjs` | Steps 1 to 7 in a real browser |
 
 ## Non-vacuous check
 

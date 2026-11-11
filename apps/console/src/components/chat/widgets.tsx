@@ -222,9 +222,11 @@ function AskFirstView({ widget, onAction }: WidgetProps<ApprovalWidget>) {
             <Button variant="outline" size="sm" onClick={() => act('deny')} disabled={!!busy} data-testid="ask-first-deny">
               Deny
             </Button>
-            <LoadingButton variant="outline" size="sm" isLoading={busy === 'chat'} loadingText="Allowing…" onClick={() => act('chat')} disabled={!!busy} data-testid="ask-first-allow-chat">
-              Allow for this chat
-            </LoadingButton>
+            {widget.allowForChat !== false && (
+              <LoadingButton variant="outline" size="sm" isLoading={busy === 'chat'} loadingText="Allowing…" onClick={() => act('chat')} disabled={!!busy} data-testid="ask-first-allow-chat">
+                Allow for this chat
+              </LoadingButton>
+            )}
             <LoadingButton size="sm" isLoading={busy === 'allow'} loadingText="Allowing…" onClick={() => act('allow')} disabled={!!busy} data-testid="ask-first-allow">
               Allow
             </LoadingButton>

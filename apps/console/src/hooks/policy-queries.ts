@@ -29,3 +29,33 @@ export function useSetWorkspacePolicy() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (i: { key: string; value: PolicyValue; teamId?: string }) => api.workspacePolicies.set(i.key, i.value, i.teamId), onSuccess: () => qc.invalidateQueries({ queryKey: KEY }) });
 }
+
+/** Where one tool's answer sits inside the team's `appChangesByApp`; no app id starts with it. */
+export const TOOL_KEY = 'tool:';
+export const BY_REVIEWER = 'reviewer';
+export type ToolAnswer = { answer: 'none' | 'person' | typeof BY_REVIEWER; reviewerRole?: string | null };
+/**
+ * The team's own answer for one tool, kept in the policy store so it works for a plugin's tools too (their module row
+ * has no editor). `entry` is null while the tool follows its app; `save(null)` goes back to that.
+ */
+export function useToolAnswer(tool: string) {
+  const { team } = useTeam();
+  const teamId = team?.id ?? '';
+  const policies = useWorkspacePolicies();
+  const set = useSetWorkspacePolicy();
+  const read = (key: string) => {
+    const value = policies.data?.find((p) => p.key === key)?.value;
+    const mine = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>)[teamId] : undefined;
+    return mine && typeof mine === 'object' ? (mine as Record<string, unknown>) : {};
+  };
+  const all = read('appChangesByApp') as Record<string, ToolAnswer>;
+  return {
+    entry: all[`${TOOL_KEY}${tool}`] ?? null,
+    teamRole: (read('appChanges').reviewerRole as string | null | undefined) ?? null,
+    pending: set.isPending,
+    save: (next: ToolAnswer | null) => {
+      const { [`${TOOL_KEY}${tool}`]: _old, ...rest } = all;
+      return set.mutateAsync({ key: 'appChangesByApp', teamId, value: next ? { ...rest, [`${TOOL_KEY}${tool}`]: next } : rest });
+    },
+  };
+}

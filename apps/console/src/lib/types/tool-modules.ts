@@ -282,6 +282,8 @@ export interface ModuleTestInput {
   input: Record<string, unknown>;
   /** Test only: the gateway issues a test approval token for this exact input instead of waiting for a person. */
   simulateApproval?: boolean;
+  /** The person's yes to a Real test run that asks them first (the approval card). */
+  confirmed?: boolean;
   /** The workbench's unsaved definition, tried without staging it; agents never see it. */
   /** `responseTransform: null` runs with no transform; left out, the operation's own. */
   draft?: { responseTransform?: string | null };

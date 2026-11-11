@@ -86,6 +86,8 @@ export interface ApprovalWidget extends WidgetBase {
   canDecide?: boolean;
   /** The app asks before changes: the person who asked answers it, with Allow, Deny and Allow for this chat. */
   askFirst?: boolean;
+  /** An ask-first card offers "Allow for this chat" unless this is false (a test run has no chat to allow). */
+  allowForChat?: boolean;
   reason?: string;
 }
 
