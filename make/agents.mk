@@ -1,6 +1,6 @@
 # The agent scripts (scripts/agents/): the repeatable part of a review, a test audit, a browser walk and the finder
 # scorecard, run before an agent reads anything. Every path and command they use comes from .claude/project-profile.md.
-.PHONY: agent-review-context agent-test-audit agent-ui-walk agent-canary agent-canary-score agent-scripts-test
+.PHONY: agent-affected-usecases agent-review-context agent-test-audit agent-ui-walk agent-canary agent-canary-score agent-scripts-test
 
 ##@ Agent scripts
 
@@ -16,6 +16,9 @@ agent-ui-walk: ## Screenshots and findings per route, role and width on the runn
 	@[ -n "$(ROUTES)" ] || { echo "make agent-ui-walk: name the routes, e.g. ROUTES='/knowledge /tools'" >&2; exit 2; }
 	@node scripts/agents/ui_walk.mjs --routes $(ROUTES) $(if $(AS),--as $(AS)) $(if $(WIDTHS),--widths $(WIDTHS)) $(if $(STATES),--states) --out $(AGENT_OUT)/ui-walk
 
+agent-affected-usecases: ## The use cases to run for a change, with layers, and the changed files none covers: make agent-affected-usecases [BASE=origin/main] [HEAD=HEAD]
+	@python3 scripts/agents/affected_usecases.py $(or $(BASE),origin/main) $(or $(HEAD),HEAD)
+
 agent-canary: ## Plant known bugs on a throwaway branch for a finder to look for; the answer key stays in $(AGENT_OUT)/canary-keys: make agent-canary [COUNT=6] [SEED=n]
 	@python3 scripts/agents/seed_canaries.py plant --count $(or $(COUNT),6) $(if $(SEED),--seed $(SEED)) --key-dir $(AGENT_OUT)/canary-keys
 
@@ -27,3 +30,4 @@ agent-scripts-test: ## Every agent script's own red and green cases
 	python3 scripts/agents/seed_canaries.py --self-test
 	node scripts/agents/ui_walk.mjs --self-test
 	python3 scripts/agents/test_audit.py --self-test
+	python3 scripts/agents/affected_usecases.py --self-test
