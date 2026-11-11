@@ -38,7 +38,7 @@ async def test_a_new_team_asks_nobody_and_a_saved_switch_keeps_who_answers_and_i
     saved = await put(signin, "appChanges", {"ask": True, "answer": "person"}, admin)
     assert saved.status_code == 200, saved.text
     assert saved.json()["data"]["value"] == {
-        team: {"ask": True, "answer": "person", "reviewerRole": None, "testAccountsNeverAsk": True}
+        team: {"ask": True, "answer": "person", "reviewerRole": None, "testAccountsNeverAsk": True, "testRunsAsk": True}
     }
     assert [a for a in await audit(signin.engine, signin.tenant) if a[:2] == ("policy.set", "appChanges")], "no audit"
 
