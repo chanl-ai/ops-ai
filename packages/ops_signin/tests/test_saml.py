@@ -14,10 +14,16 @@ import pytest
 from lxml import etree
 from lxml.etree import _Element as Element  # pyright: ignore[reportPrivateUsage]
 
-from ops_signin import SamlConfig, SamlServiceProvider, SignInRefused
+from ops_signin import CertificateExpired, SamlConfig, SamlServiceProvider, SignInRefused
 from ops_signin.fake_idp import Idp, saml_response, self_signed
-from ops_signin.fake_idp.app import _new_idp, _signed_by  # pyright: ignore[reportPrivateUsage]
+from ops_signin.fake_idp.app import (  # pyright: ignore[reportPrivateUsage]
+    _new_idp,
+    _signed_by,
+    expired_idp,
+    metadata_xml,
+)
 from ops_signin.saml import DECRYPT_REFUSED, sp_metadata
+from ops_signin.saml_metadata import MetadataRefused, read_metadata
 
 BANK, OTHER = _new_idp("bank"), _new_idp("other")
 ISSUER = "https://idp.test/saml/bank"
@@ -296,3 +302,41 @@ def test_a_response_signed_on_both_the_response_and_the_assertion_signs_in() -> 
         sign_response=True,
     )
     assert sp.complete(saml_response=both, request_id=start.request_id).email == "ana@bank.test"
+
+
+def test_a_response_signed_by_an_expired_certificate_is_refused_as_expired() -> None:
+    old = expired_idp("old")
+    sp = SamlServiceProvider(SamlConfig(ISSUER, f"{ISSUER}/sso", (old.cert_pem,), SP, ACS))
+    start = sp.begin(relay_state="r")
+    with pytest.raises(CertificateExpired):
+        sp.complete(saml_response=response(start.request_id, by=old), request_id=start.request_id)
+    # Signed by a key no listed certificate holds: the one refusal, never "expired".
+    with pytest.raises(SignInRefused) as refused:
+        sp.complete(saml_response=response(start.request_id, by=OTHER), request_id=start.request_id)
+    assert not isinstance(refused.value, CertificateExpired)
+
+
+def test_during_a_rollover_either_listed_certificate_signs_in() -> None:
+    new = _new_idp("next")
+    sp = SamlServiceProvider(SamlConfig(ISSUER, f"{ISSUER}/sso", (BANK.cert_pem, new.cert_pem), SP, ACS))
+    for signer in (BANK, new):
+        start = sp.begin(relay_state="r")
+        who = sp.complete(saml_response=response(start.request_id, by=signer), request_id=start.request_id)
+        assert who.email == "ana@bank.test"
+
+
+def test_metadata_gives_the_entity_the_sign_in_url_and_every_signing_certificate() -> None:
+    i = _new_idp("meta")
+    i.previous.append(BANK.cert_pem)
+    read = read_metadata(metadata_xml("https://idp.test", i))
+    assert (read.entity_id, read.sso_url) == ("https://idp.test/saml/meta", "https://idp.test/saml/meta/sso")
+    assert {c.pem for c in read.certificates} == {i.cert_pem, BANK.cert_pem}
+    for bad, code in (
+        (b"<not-xml", "metadata_unreadable"),
+        (b"<x/>", "metadata_unreadable"),
+        (b"<x>" + b" " * (300 * 1024) + b"</x>", "metadata_too_large"),
+        (b'<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><x>&e;</x>', "metadata_unreadable"),
+    ):
+        with pytest.raises(MetadataRefused) as refused:
+            read_metadata(bad)
+        assert refused.value.code == code

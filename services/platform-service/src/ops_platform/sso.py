@@ -185,7 +185,7 @@ class Sso:
             SamlConfig(
                 idp_entity_id=str(c["idpEntityId"]),
                 idp_sso_url=str(c["ssoUrl"]),
-                idp_certificate=str(c["certificate"]),
+                idp_certificates=str(c["certificate"]),
                 sp_entity_id=at["entityId"],
                 acs_url=at["acsUrl"],
                 email_attribute=c.get("emailAttribute"),

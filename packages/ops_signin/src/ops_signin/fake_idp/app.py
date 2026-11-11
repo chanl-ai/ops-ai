@@ -29,7 +29,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import NameOID
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from jwt.algorithms import RSAAlgorithm
 from lxml import etree
 from lxml.etree import _Element as Element  # pyright: ignore[reportPrivateUsage]
@@ -56,6 +56,9 @@ class Idp:
     # What this provider knows of the service provider: its certificate, whether requests must be signed,
     # and how to encrypt assertions to it.
     sp: dict[str, Any] = field(default_factory=dict[str, Any])
+    # Certificates its metadata still lists after a rollover, and an entity id its metadata names instead of its own.
+    previous: list[str] = field(default_factory=list[str])
+    metadata_entity: str | None = None
 
     def login_time(self, email: str, *, forced: bool, stale: bool) -> int:
         now = int(time.time())
@@ -78,8 +81,7 @@ def self_signed(name: str) -> tuple[str, str]:
     return pair.key_pem().decode(), pair.cert_pem
 
 
-def _new_idp(name: str) -> Idp:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+def _certificate(name: str, key: rsa.RSAPrivateKey, *, starts: timedelta, ends: timedelta) -> str:
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"fake-idp-{name}")])
     now = datetime.now(UTC)
     cert = (
@@ -88,11 +90,45 @@ def _new_idp(name: str) -> Idp:
         .issuer_name(subject)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now - timedelta(days=1))
-        .not_valid_after(now + timedelta(days=365))
+        .not_valid_before(now + starts)
+        .not_valid_after(now + ends)
         .sign(key, hashes.SHA256())
     )
-    return Idp(name, key, cert.public_bytes(serialization.Encoding.PEM).decode(), kid=f"{name}-{secrets.token_hex(4)}")
+    return cert.public_bytes(serialization.Encoding.PEM).decode()
+
+
+def _new_idp(name: str, *, valid_days: int = 365) -> Idp:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cert = _certificate(name, key, starts=timedelta(days=-1), ends=timedelta(days=valid_days))
+    return Idp(name, key, cert, kid=f"{name}-{secrets.token_hex(4)}")
+
+
+def expired_idp(name: str) -> Idp:
+    """A provider whose only certificate ended yesterday: it still signs, with a key nobody should trust now."""
+    i = _new_idp(name)
+    i.cert_pem = _certificate(name, i.key, starts=timedelta(days=-400), ends=timedelta(days=-1))
+    return i
+
+
+def metadata_xml(base: str, i: Idp) -> bytes:
+    """The provider's SAML metadata: entity id, redirect sign-in URL and every signing certificate it lists."""
+    md, ds = "urn:oasis:names:tc:SAML:2.0:metadata", "http://www.w3.org/2000/09/xmldsig#"
+    root = etree.Element(
+        f"{{{md}}}EntityDescriptor", nsmap={"md": md, "ds": ds}, entityID=i.metadata_entity or f"{base}/saml/{i.name}"
+    )
+    idp_el = etree.SubElement(root, f"{{{md}}}IDPSSODescriptor", protocolSupportEnumeration=PROTOCOL)
+    for pem in (i.cert_pem, *i.previous):
+        body = "".join(line for line in pem.strip().splitlines() if "CERTIFICATE" not in line)
+        kd = etree.SubElement(idp_el, f"{{{md}}}KeyDescriptor", use="signing")
+        x = etree.SubElement(etree.SubElement(kd, f"{{{ds}}}KeyInfo"), f"{{{ds}}}X509Data")
+        etree.SubElement(x, f"{{{ds}}}X509Certificate").text = body
+    etree.SubElement(
+        idp_el,
+        f"{{{md}}}SingleSignOnService",
+        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+        Location=f"{base}/saml/{i.name}/sso",
+    )
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8")
 
 
 def subject_of(email: str) -> str:
@@ -211,6 +247,37 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
     @app.get("/saml/{name}/certificate", response_class=PlainTextResponse)
     async def certificate(name: str) -> str:  # pyright: ignore[reportUnusedFunction]
         return idp(name).cert_pem
+
+    @app.get("/saml/{name}/metadata")
+    async def metadata(name: str) -> Response:  # pyright: ignore[reportUnusedFunction]
+        return Response(metadata_xml(base, idp(name)), media_type="application/samlmetadata+xml")
+
+    @app.post("/saml/{name}/rollover")
+    async def rollover(name: str) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        """Signs with a new key from now on; the metadata lists the new certificate and the old one, as Entra and Okta
+        do during a rollover."""
+        i = idp(name)
+        fresh = _new_idp(name)
+        i.previous.insert(0, i.cert_pem)
+        i.key, i.cert_pem = fresh.key, fresh.cert_pem
+        return {"certificate": i.cert_pem}
+
+    @app.post("/saml/{name}/expire")
+    async def expire(name: str) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        """Replaces the provider's certificate with one for the same key that ended yesterday."""
+        i = idp(name)
+        i.cert_pem = _certificate(name, i.key, starts=timedelta(days=-400), ends=timedelta(days=-1))
+        return {"certificate": i.cert_pem}
+
+    @app.put("/saml/{name}/metadata-entity")
+    async def metadata_entity(name: str, request: Request) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        """`{entityId}`: the metadata names this entity id instead (a hijacked metadata URL), with a new key."""
+        i = idp(name)
+        i.metadata_entity = str((await request.json())["entityId"])
+        fresh = _new_idp(name)
+        i.previous.insert(0, i.cert_pem)
+        i.key, i.cert_pem = fresh.key, fresh.cert_pem
+        return {"entityId": i.metadata_entity}
 
     @app.put("/saml/{name}/sp")
     async def service_provider(name: str, request: Request) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]

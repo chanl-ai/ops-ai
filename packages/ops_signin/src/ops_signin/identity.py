@@ -26,3 +26,8 @@ class SignInRefused(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class CertificateExpired(SignInRefused):
+    """The response was signed by a certificate of the provider's that is past its end date. Unlike other refusals it
+    may be shown: the provider already proved who signed, and the state says nothing about the workspace's people."""
