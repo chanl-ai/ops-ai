@@ -1,6 +1,6 @@
 # MCP in Ops AI
 
-Status: current design. Each row says whether it is built or not built yet. Code cited at `origin/develop` `4b7e6a49`.
+Status: current design. Each row says whether it is built or not built yet.
 
 Ops AI speaks the Model Context Protocol in two directions. Outside assistants such as Claude, Cursor and ChatGPT
 reach a team's tools at one address, and Ops AI calls outside MCP servers as governed tools for its agents and
@@ -8,8 +8,8 @@ workflows. Every call in both directions goes through the same gateway, so it me
 masking and audit as any other tool call.
 
 Read with [tool lifecycle](tool-lifecycle.md), [workflows as tools](workflows-as-tools.md), the
-[MCP server design](../design/tools/mcp-server.md) and the [service map](service-map.md). `T/` below means
-`services/tools-service/src/ops_tools/`.
+[MCP server design](../design/tools/mcp-server.md) and the [service map](service-map.md). Code is cited at
+`origin/develop` `4b7e6a49`; `T/` below means `services/tools-service/src/ops_tools/`.
 
 ## Scope
 
@@ -28,7 +28,7 @@ Read with [tool lifecycle](tool-lifecycle.md), [workflows as tools](workflows-as
 | Knowledge, skills, guide | Nothing over MCP. A knowledge base carries an `access.mcp` switch that is always off | `services/kb-service/src/ops_kb/service.py:420` | `search_knowledge`; skills as prompts plus `search_skills`, `get_skill`, `save_skill`; `guide` |
 | Admin and builder | Nothing over MCP; the SDKs and the `opsai` CLI cover it | `sdk/python/src/ops_ai/`, `sdk/typescript/src/` | A built-in module over the public API, reads first, changes held for a person |
 | Sign-in | Inbound: API key `Bearer ok_…`. Outbound: RFC 9728 metadata, RFC 8414 issuer match, PKCE S256, RFC 8707 resource, optional dynamic registration | `resolve.py:125-126`; `T/auth/discovery.py:1-9`, `:80-141`; `T/auth/tokens.py:379` | An OAuth 2.1 server in platform-service; protected resource metadata; a 401 that points at it |
-| Audit, limits, masking | One `gateway_calls` row per call with `channel` and `client_name`; a per-operation rate window in PostgreSQL; output masks and secret scrub | `T/store/calls.py:65-67`; `T/store/rate_windows.py:1-6`; `T/gateway_calls.py:354-364`; `T/executor.py:106`, `:539` | A rate window per token; personal data masked per endpoint |
+| Audit, limits, masking | One `gateway_calls` row per call with `channel` and `client_name` (`T/store/calls.py:65-67`); a per-operation rate window in PostgreSQL (`T/store/rate_windows.py:1-6`, spent at `T/gateway_calls.py:354-364`); output masks and secret scrub (`T/executor.py:106`, `:539`) | As cited in the cell | A rate window per token; personal data masked per endpoint |
 
 ## One owner per job
 
@@ -42,8 +42,9 @@ There is one MCP server and one MCP client, both in tools-service, and one token
 | Issue tokens | platform-service | `services/platform-service/src/ops_platform/api/app.py:310` (signing keys today) |
 | Verify the caller | `ops_identity` `bearer` | `resolve.py:116` |
 | Who may run what | `ops_access.can` and the roles grid | `packages/ops_access/src/ops_access/check.py:53-60` |
-| Which account a call uses | `PluginHost.for_call` | `T/plugins/host.py:919` |
-| Curated endpoints and their keys | tools-service (not built yet) | — |
+| Which account a call uses | `PluginHost.for_call` | `T/plugins/host.py:916` |
+| Curated endpoints | tools-service (not built yet) | — |
+| Long-lived keys on an endpoint | platform-service mints an API key bound to one endpoint; tools-service stores the binding (not built yet) | — |
 | Knowledge search for assistants | kb-service search, reached as a tool through the gateway (not built yet) | — |
 | Skill records | agents-service `/v1/skills` | `services/agents-service/src/ops_agents/api/routers/skills.py:1` |
 | Held writes | agents-service Reviews, through a system workflow started by a service event | `T/modules/review_events.py:17` (the same seam tool access requests use) |
@@ -64,19 +65,20 @@ console's MCP page (`apps/console/src/app/channels/mcp/page.tsx`) reads `/connec
 | A key or token for another team gets 403 `team_forbidden` | Built (`resolve.py:116-120`) |
 | A service token on the MCP address is refused | Built (`resolve.py:127-128`) |
 | The tool list is filtered by the caller's rights and the team's visibility; an unknown team sees nothing | Built (`T/mcp_server.py:87-99`) |
-| `readOnlyHint` comes from the reviewed access class and the title is always set | Built (`T/mcp_server.py:109`) |
-| `destructiveHint` comes from the operation's approval policy | Not built yet |
+| The title is always set; every listed tool is a read, so `readOnlyHint` is always true | Built (`T/mcp_server.py:109`, `:112`) |
+| `readOnlyHint` and `destructiveHint` come per tool from the access class and the approval policy | Not built yet |
 | Every outside-assistant call is a test run, using an app's sandbox account when the team has one | Built (`T/mcp_server.py:121-125`) |
 | A write without an approval is refused | Built (`T/gateway_calls.py:405-438`) |
 | A write from a signed-in person is held: a pending result with a review link that expires after 24 hours; an approver other than the requester decides in Reviews; it runs once as the requester; `get_call` reads the outcome | Not built yet |
 | An API key runs reads only; a write answers 403 `insufficient_scope` | Reads only built (`check.py:53-60`); the 403 code not built yet |
 | Above 20 tools an endpoint serves `search_tools`, `get_tool`, `run_tool` over the same set; an empty set denies all | Not built yet (the threshold is `types.py:74`) |
-| The model never picks the account; the endpoint's account map does | Built for agents (`T/plugins/host.py:919`); endpoints not built yet |
+| The model never picks the account; the endpoint's account map does | Built for agents (`T/plugins/host.py:916`); endpoints not built yet |
 | A token works only on the exact address it was issued for, and a test token never reaches production | Not built yet |
 | With no issuer configured, the MCP address answers 503 with the reason; keys keep working | Not built yet |
 | A client registers by a pre-registered record or a client ID metadata document; dynamic registration is off | Not built yet |
 | Personal data is masked in what an MCP client receives unless a team manager turns it off, and that change is audited | Not built yet |
 | Knowledge is served as a search tool through the gateway, never as MCP resources, so each read is limited and audited | Not built yet |
+| A skill read with `prompts/get` runs as a `get_skill` gateway call, so it is limited and audited like a tool call | Not built yet |
 | A skill saved from a chat is a draft that a builder publishes | Not built yet |
 | An outside server's tools are pinned by schema; a changed tool is refused until re-imported and reviewed | Built (`T/modules/service.py:456`) |
 | Every request to an outside server goes through the egress allow-list at a checked address | Built (`T/mcp.py:1-8`, `:100-107`) |
@@ -87,7 +89,7 @@ console's MCP page (`apps/console/src/app/channels/mcp/page.tsx`) reads `/connec
 |---|---|---|---|
 | `gateway_calls` | tools | adds nothing; `channel` is `api`, `mcp` or `console`, with `client_name` | Built (`T/store/calls.py:65-67`) |
 | `mcp_endpoints` | tools | `id`, `team_id`, `slug`, `environment`, `tool_names`, `accounts`, `who`, `masked`, `paused` | Not built yet |
-| `mcp_endpoint_keys` | tools | `id`, `endpoint_id`, `person_id`, `key_hash`, `expires_at`, `revoked_at` | Not built yet |
+| `mcp_endpoint_keys` | tools | `endpoint_id`, `key_id` (a platform-service key), `person_id` | Not built yet |
 | OAuth clients, codes, refresh tokens | platform | client id, redirect addresses, metadata document address; codes bound to PKCE and resource | Not built yet |
 
 ## API
@@ -108,7 +110,7 @@ The MCP mount stays out of OpenAPI. Every other route is generated into the SDKs
 | Concern | Rule |
 |---|---|
 | Identity | From the verified key or token only (`resolve.py:116`) |
-| Approvals | Bound to the input hash, counted by OPA, decided in Reviews (`T/gateway_calls.py:449-469`; `services/tools-service/policy/gateway.rego:14-16`) |
+| Approvals | Bound to the input hash, counted by OPA, decided in Reviews (`T/gateway_calls.py:449-469`; `services/tools-service/policy/gateway.rego:23-65`) |
 | Tokens upstream | An inbound token never reaches an outside system; the gateway holds its own token per account (`T/auth/tokens.py:379`) |
 | Audit | One row per call in `gateway_calls`, with the channel and the client's claimed name shown as a claim |
 | Masking | Output paths and secrets are scrubbed before an answer is returned or logged (`T/executor.py:106`, `:539`) |
