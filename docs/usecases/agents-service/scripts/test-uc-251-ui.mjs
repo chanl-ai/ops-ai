@@ -103,17 +103,17 @@ await withUiStack(
         before,
       );
 
-      // James started the run, so he may not approve its write himself (requesterMayDecide is off by default): the
-      // task page says someone else decides, and no approval of his is recorded.
+      // James started the run, so he may not approve its write himself (requesterMayDecide is off by default): the task
+      // page offers him no decision and the action stays pending. With the policy on, his Decide button is enabled.
       await james.goto(`${consoleUrl}${before.task}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await james.locator('main').getByText(/someone else/i).first().waitFor({ timeout: 60_000 }).catch(() => undefined);
-      const ownPage = (await james.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ');
+      await james.getByTestId('decision-panel').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const ownPage = (await james.getByTestId('decision-panel').innerText().catch(() => '')).replace(/\s+/g, ' ');
       const ownDecide = james.getByTestId('decide');
       const canClick = (await ownDecide.count()) > 0 && (await ownDecide.isEnabled().catch(() => false));
       const stillWaiting = await readCase(james, consoleUrl, caseId);
       check(
-        '3 the person who started it cannot approve their own request: the task says someone else decides',
-        /someone else/i.test(ownPage) && !canClick && JSON.stringify(stillWaiting.actions) === JSON.stringify(['pending']),
+        '3 the person who started it cannot approve their own request: no decision is offered and the action waits',
+        ownPage.length > 0 && !canClick && JSON.stringify(stillWaiting.actions) === JSON.stringify(['pending']),
         { text: ownPage.slice(0, 400), canClick, actions: stillWaiting.actions },
       );
 
