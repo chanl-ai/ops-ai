@@ -31,13 +31,11 @@ The rules for both (CLAUDE.md "No hard coding"):
 | Definitions are database records | Built-in workflows, roles and task types are seeded and editable through `can()`, never locked in code |
 | Security sits in the step that acts | Separation of duties is a step setting (`notDecidedBy`) and a team policy (`requesterMayDecide`), never a lock on a definition |
 
-The safe defaults the owner chose for approvals:
+The safe default for approvals:
 
 | Row | Safe default | Setting that loosens it |
 |---|---|---|
-| E51 | A tool write with no approval setting waits for a person (`write_waits`) | The tool's own switch, set to run at once |
 | E51 | The person who asked for, saved or started a decision does not take it | `requesterMayDecide`, turned on |
-| E49 | In a chat, every app asks the person before each write | `appsChangeWithoutAsking`, listing the app |
 
 The other defaults that start closed are AI features off (E03, E36), publish review on major changes (E01), chat
 threads read only by whoever started them (E02), personal data masked in AI steps (E34) and new addresses asking
@@ -290,9 +288,9 @@ fails the commit until it is classified.
 | `stepUp` | off | yes | Every approver steps up, besides operations that ask for it | `settings.manage` | no |
 | `chatThreadsOwnerOnly` | on | no (row E02) | A chat thread is read only by whoever started it, admins included | `settings.manage` | no |
 | `publishReview` | `{}`: every area `major` | no (row E01) | Per team and area: `always`, `major` or `never` | `reviews.manage` | yes |
-| `toolWritesNeedApproval` | `{}`: each write follows its tool (one with no setting waits, row E51) | yes | Every tool write of the team waits for a person, including those an operation lets run at once | `reviews.manage` | yes |
+| `toolWritesNeedApproval` | `{}`: each write follows its tool, and a tool that is not set runs | yes | Every tool write of the team waits for a person, including those an operation lets run at once | `reviews.manage` | yes |
 | `appWritesNeedApproval` | `{}`: no app listed | yes | Writes of the apps the team lists wait for a person; a reviews.decide holder is not asked | `reviews.manage` | yes |
-| `appsChangeWithoutAsking` | `{}`: no app listed, every app asks | no (row E49) | Writes of the apps the team lists run in chat without asking the person first; every other app shows Allow / Deny before each write | `settings.manage` | yes |
+| `appsChangeWithoutAsking` | `{}`: no app listed, every app runs without asking | yes | Designed: one switch, "Ask before an agent changes anything in an app", off by default. On, a write in a chat shows Allow / Deny to the person who asked, or waits for a reviewer chosen by role (`appWritesNeedApproval`). Built today: the field lists the apps whose writes run without asking; the default change is being built on this branch | `settings.manage` | yes |
 | `aiSteps` | `{}`: off | no (row E03) | The team's workflows may use Classify, Summarise, Extract from text and Draft steps | `workflows.manage` | yes |
 | `taskAssist` | `{}`: off | no (row E03) | A typed task opens with AI help | `workflows.manage` | yes |
 | `checkBeforeSend` | `{}`: off | no (row E03) | Every write is checked against the team's sending policy first | `workflows.manage` | yes |
@@ -313,26 +311,16 @@ write waits for a person; every setting in the table feeds it. Policies are chan
 
 | Setting | What it does | Default | Who changes it (cell) | Where | Code owner |
 |---|---|---|---|---|---|
-| The tool's own switch (`requires_approval`) | A write of that one tool waits for a person. A read never waits | A write waits unless its switch is off (row E51) | Whoever may edit the tool (`tools.edit`); turning it off is a major change, so a publish review applies (row E01) | Tools › the tool › operation › Access and approval; `PATCH /v1/tool-modules/{id}/operations/{op}` (`services/tools-service/src/ops_tools/modules/routes.py:196`) | `write_waits`, `packages/ops_access/src/ops_access/policies.py:300`; read by `services/tools-service/src/ops_tools/registry.py:247` |
-| Ask before changes (`appsChangeWithoutAsking`) | Lists the apps whose writes run in chat without asking. Any other app asks the person in the chat to Allow or Deny, and only that person answers (row E50) | No app listed, so every app asks (row E49) | A team admin (`settings.manage`) | Apps › the app › Tools tab, or Settings › Policies | `packages/ops_access/src/ops_access/policies.py:138`; loosens `needs` through `app_changes_quietly` |
+| The tool's own switch (`requires_approval`) | Not set, on or off. Not set follows the team default, which is run. On: a write of that one tool waits for a person. Off: it runs. A read never waits | Not set, so the write runs (default being built on this branch) | Whoever may edit the tool (`tools.edit`); changing it is a major change, so a publish review applies (row E01) | Tools › the tool › operation › Access and approval; `PATCH /v1/tool-modules/{id}/operations/{op}` (`services/tools-service/src/ops_tools/modules/routes.py:196`) | `write_waits`, `packages/ops_access/src/ops_access/policies.py:300`; read by `services/tools-service/src/ops_tools/registry.py:247` |
+| Ask before an agent changes anything in an app (`appsChangeWithoutAsking`) | Off: writes run. On: the admin picks who decides, the person in the chat (Allow / Deny, and only that person answers, row E50) or a reviewer chosen by role (`appWritesNeedApproval`, `toolWritesNeedApproval`). Designed as one switch and not built; the code still has the separate fields | Off, so writes run (default being built on this branch) | A team admin (`settings.manage`; the reviewer choice needs `reviews.manage`) | Settings › Policies; the Advanced section is designed, not built | `packages/ops_access/src/ops_access/policies.py:138`; loosens `needs` through `app_changes_quietly` |
 | Requester may decide (`requesterMayDecide`) | The person who asked for, saved or started a decision may also take it. Off: 403 `own_request` | Off (row E51) | A team admin (`settings.manage`) | Settings › Policies | `packages/ops_access/src/ops_access/policies.py:56`; applied in `can()`, `packages/ops_access/src/ops_access/check.py:171`; checked again when a write is sent, `asker_refusal` in `services/tools-service/src/ops_tools/modules/policy.py:88` |
 | Tool writes need approval (`toolWritesNeedApproval`) | Every write of the team waits for a reviewer, whatever its tool says | Off | A team admin (`reviews.manage`) | Settings › Policies | `packages/ops_access/src/ops_access/policies.py:114` |
 | Apps whose writes need approval (`appWritesNeedApproval`) | The writes of the listed apps wait for a reviewer, even where the tool runs at once | No app listed | A team admin (`reviews.manage`) | Settings › Policies | `packages/ops_access/src/ops_access/policies.py:125` |
 | Approve cell (`reviews.decide`) | Who may decide a review at all. Without it a person cannot approve, whatever the policies say. A holder is not asked for their own write when approval is on | Held by the built-in Admin and Reviewer roles | An admin (`access.manage`) | Access › Roles; `PUT /v1/roles/{id}/permissions` (`services/platform-service/src/ops_platform/api/app.py:848`) | `packages/ops_access/src/ops_access/catalogue.py:94`; `approves_own_writes`, `services/tools-service/src/ops_tools/modules/policy.py:81` |
-| Test accounts never ask | A write on an app's test account does not wait or ask, because it changes no live data | Always. Fixed in code, becoming a setting | Nobody yet | The app's Accounts tab chooses the account | `on_test_account`, `services/tools-service/src/ops_tools/gateway_calls.py:447` |
+| Test accounts never ask | A write on an app's test account does not wait or ask, because it changes no live data | Always. Fixed in code at `gateway_calls.py`; becoming a team setting under Advanced (designed, not built) | Nobody yet | The app's Accounts tab chooses the account | `on_test_account`, `services/tools-service/src/ops_tools/gateway_calls.py:447` |
 
-Two rules in `needs` are not settings yet: every write over MCP waits for a person (`gateway_calls.py:453`), and a
-test account never waits (the last row).
+One owner decides whether a write waits: `needs()` in `gateway_calls.py`. The person who asked is checked again live when the write is sent (`asker_refusal`, `modules/policy.py:88`). Two rules in `needs` are not settings yet: every write over MCP waits for a person (`gateway_calls.py:453`), and a test account never waits (the last row).
 
-### Migration of existing tools
-
-Open question: when the safe default reached existing workspaces, which writes that were set to run at once switch to
-waiting? Either every one of them, whenever it was saved, or only those saved since 1 November, when the old open
-default began. The migration built so far (`services/tools-service/migrations/versions/0072_write_approvals_on.py`) takes the second
-reading and picks writes by their module's `updated_at`. A reviewer found
-that a plugin upgrade rewrites a tool's operations without stamping `updated_at`
-(`services/tools-service/src/ops_tools/plugins/host.py:613`), so a plugin tool upgraded since 1 November can look older
-than it is and keep running at once. Until the owner answers, the date cut-off cannot be trusted for plugin tools.
 
 ## Team and workspace scope
 
@@ -417,9 +405,9 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E46 | The `plugins` policy (the install switch) | — | Superseded 2026-11-03: the policy is gone; an installed plugin is available to every team, which turns it on for itself, and settings fixed for every team come from the install config (`OPS_PLUGIN_LOCKED`) | 2026-11-03 | superseded |
 | E47 | A members-only hosted form refuses anyone signed in outside the team that shares it, and answers the same for a form that does not exist (403 `form_members_only`) | `services/agents-service/src/ops_agents/api/routers/forms.py` (`_member_form`) | The form is the team's own start form shared with its members; reading it in another team would cross the team boundary, so a person outside it learns nothing about it | 2026-10-30 | prototype |
 | E48 | `egressNewHosts` defaults to `ask_security`: a host the account has not listed waits for the Security team, unless the policy says builders, any public host or block; an unreadable policy counts as `ask_security` | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/egress.py` (`NewHosts`) | Reaching a new outside address is a security decision, so the default asks Security; private, loopback, link-local and metadata addresses are refused under every value | 2026-11-03 | prototype |
-| E49 | `appsChangeWithoutAsking` defaults to no app listed: in a chat with a person, every write of every app asks that person first (Allow, Deny, Allow for this chat) until a team admin lists the app; a write on a test account never asks, and a workflow or an agent run with nobody in it is not asked | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/gateway_calls.py` (`needs`, loosened by `app_changes_quietly`); `services/tools-service/src/ops_tools/app.py` (grantable operations carry the same answer in `requiresApproval`); `services/agents-service/src/ops_agents/graphs/agent_wrapper.py` | A newly added app has every tool on, so the person in the chat consents to each change instead of an admin adding each write; an unreadable list keeps asking | 2026-11-10 | decided |
+| E49 | `appsChangeWithoutAsking` defaults to no app listed, so a write in a chat runs without asking. When a team turns asking on, the person in the chat answers Allow, Deny or Allow for this chat; a write on a test account never asks, and a workflow or an agent run with nobody in it is not asked | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/gateway_calls.py` (`needs`, loosened by `app_changes_quietly`); `services/tools-service/src/ops_tools/app.py` (grantable operations carry the same answer in `requiresApproval`); `services/agents-service/src/ops_agents/graphs/agent_wrapper.py` | Writes run by default; asking is one team switch, designed and not yet built (the code keeps the separate fields). An unreadable list counts as off | 2026-11-10 | decided |
 | E50 | A write whose app asks before changes is answered (Allow, Deny, Allow for this chat) only by the person who asked in the chat, whatever their role; an admin or reviewer cannot answer it for them, and a write any reviewer approval holds is decided as before | `services/agents-service/src/ops_agents/api/auth.py` (`require_asker`); `api/hitl_facade.py` (`_check_thread_decider`); `api/routers/reviews.py` (`record_approval`) | The answer is the person's consent to their own change, not an approval, so no grid cell grants it to anyone else | 2026-11-10 | decided |
-| E51 | Approvals are safe by default: `requesterMayDecide` is off, so the person who asked for, saved or started a decision does not take it (403 `own_request`), and a tool write with no approval setting waits for a person (`write_waits`); a team loosens either, by turning `requesterMayDecide` on or switching a tool to run at once | `packages/ops_access/src/ops_access/policies.py` (`requesterMayDecide`, `write_waits`); `services/tools-service/src/ops_tools/gateway_calls.py` (`asker_refusal` in `modules/policy.py`, through `can()`: an approval the asker gave themselves is checked against today's policy when the write is sent) | Owner, 2026-11-10: a person approving their own request, or a write running because nobody set its switch, was a security bug; a workspace or tool that set a value keeps it | 2026-11-10 | decided |
+| E51 | `requesterMayDecide` is off by default, so the person who asked for, saved or started a decision does not take it (403 `own_request`); a team loosens it by turning `requesterMayDecide` on | `packages/ops_access/src/ops_access/policies.py` (`requesterMayDecide`); `asker_refusal` in `services/tools-service/src/ops_tools/modules/policy.py`, through `can()`: an approval the asker gave themselves is checked against today's policy when the write is sent | Once review is on, nobody approves their own request, because a self-approval defeats the review | 2026-11-10 | decided |
 
 ## Decided questions
 
@@ -447,7 +435,7 @@ when a question comes up again.
 | D17 | Is a refusal outside the grid and policies allowed? | No. It is a defect unless this page records a decision for it | 2026-10-18 |
 | D18 | Are definitions code or records? | Database records seeded from files; built-in workflows, roles and task types are editable through `can()`, never locked | 2026-10-18 |
 | D19 | Where does security for a definition live? | In the step that acts (`notDecidedBy`, `requesterMayDecide`), never in a lock on the definition | 2026-10-18 |
-| D20 | Is `requesterMayDecide` a rule or a setting? | A team policy, off by default since 2026-11-10 (row E51) | 2026-11-10 |
+| D20 | Is `requesterMayDecide` a rule or a setting? | A team policy, off by default (row E51) | 2026-11-10 |
 | D21 | Is separation of duties part of `can()`? | Yes, as `not_by` and `requested_by`; two-approver counting stays where approvals are counted | 2026-10-17 |
 | D22 | How are roles shown to admins? | As a roles × permissions checkbox matrix; admins edit built-in roles' cells there | 2026-10-18 |
 | D23 | Is there a chat-only role? | Yes, Chat user: chats with the team's published agents, sees only its own threads | 2026-10-17 |
