@@ -303,9 +303,10 @@ def check_value(key: str, value: Any) -> Any:
             }
     if policy.kind == "app_changes_by_app" and isinstance(value, dict):
         out: dict[str, Any] = {}
-        for app, entry in cast(dict[Any, Any], value).items():
-            role = entry.get("reviewerRole") if isinstance(entry, dict) else None
-            if not (isinstance(app, str) and isinstance(entry, dict) and entry.get("answer") in ANSWERS):
+        for app, raw in cast(dict[Any, Any], value).items():
+            entry: dict[str, Any] = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+            role = entry.get("reviewerRole")
+            if not (isinstance(app, str) and entry.get("answer") in ANSWERS):
                 break
             out[app] = {"answer": entry["answer"], **({"reviewerRole": role} if isinstance(role, str) else {})}
         else:
