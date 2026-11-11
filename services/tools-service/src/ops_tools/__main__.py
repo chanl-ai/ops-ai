@@ -250,6 +250,10 @@ def main() -> None:
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),
         write_approvals=write_approvals,
+        requester_policy=RequesterMayDecide(
+            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
+            dev=settings.dev_policies,
+        ),
         # Check before sending: the team's checkBeforeSend read live, its sending policy here, and the judge on
         # this service's own model key; with no models-service, a team with the setting on has every write wait.
         send_check=SendCheck(

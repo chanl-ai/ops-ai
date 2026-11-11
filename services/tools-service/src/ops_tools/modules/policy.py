@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ops_access import BY_KEY, Access, publish_mode, team_names, team_on, team_writes_need_approval
-from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.errors import Forbidden
 
 Mode = Literal["always", "major", "never"]
 MODES: tuple[Mode, ...] = ("always", "major", "never")
@@ -72,6 +73,34 @@ def approves_own_writes(access: Access, p: Principal) -> bool:
     act in, as one who decides the team's reviews, while the requesterMayDecide policy lets an asker decide (off, the
     four-eyes rule, someone else decides). A service or an API key never is."""
     return p.kind == "person" and access.may(p, "reviews", "decide", requested_by=(p.email,))
+
+
+def asker_refusal(
+    access: Access, asker: ActingForPerson, tenant_id: str, approvers: list[str], *, may_decide: bool
+) -> Forbidden | None:
+    """The refusal `can` gives when an approval names the person the call acts for and requesterMayDecide, read at the
+    call (`may_decide`), does not let an asker decide; None when someone else approved or the policy allows it. Only
+    the separation-of-duties part counts here: the approver's role was checked when the approval was given."""
+    if asker.email.casefold() not in {a.casefold() for a in approvers}:
+        return None
+    person = Principal(
+        kind="person",
+        sub=asker.sub,
+        email=asker.email,
+        name=asker.name,
+        tenant_id=tenant_id,
+        team_id=asker.team_id,
+        team_ids=[asker.team_id] if asker.team_id else [],
+        roles={},
+        scopes=[],
+        auth_method="session",
+        policies={"requesterMayDecide": may_decide},
+    )
+    try:
+        access.can(person, "reviews", "decide", team=asker.team_id, requested_by=[asker.email], what="this write")
+    except Forbidden as refused:
+        return refused if refused.code == "own_request" else None
+    return None
 
 
 def app_ids(module: dict[str, Any]) -> set[str]:

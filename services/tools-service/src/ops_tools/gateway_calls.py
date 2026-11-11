@@ -13,10 +13,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from ops_access import BY_KEY, Access
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson, Principal
 from ops_policy import input_hash
-from ops_service_kit.errors import ApiError
+from ops_service_kit.errors import ApiError, Forbidden
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
@@ -24,6 +25,7 @@ from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
+from .modules.policy import asker_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
 from .registry import Resolved, ToolRegistry
@@ -115,6 +117,8 @@ def _approvers(token: str | None) -> list[str]:
 
 
 WRITES = {"write"}
+# Decides whether an approval the asker gave themselves still counts (asker_refusal).
+ACCESS = Access()
 
 
 def _text(value: object) -> str | None:
@@ -228,8 +232,11 @@ class GatewayCalls:
         clock: Callable[[], float] = time.time,
         app_writes_wait: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
         approver: Callable[[Principal], bool] | None = None,
+        requester_may_decide: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         self.registry = registry
+        # The tenant's requesterMayDecide, read live at each call; without it the policy's default (off) holds.
+        self.requester_may_decide = requester_may_decide
         self.log = log
         self.opa = opa
         self.executor = executor
@@ -284,6 +291,20 @@ class GatewayCalls:
         if isinstance(out, Refused):
             return {"callId": out.call_id, "status": out.status, "code": out.code, "reasons": out.reasons}
         return {"callId": out.call_id, "ok": out.ok, "output": out.output}
+
+    async def _asker_refusal(self, tenant_id: str, req: CallRequest) -> Forbidden | None:
+        """`can`'s own_request refusal when the call's approval names the person it acts for and the tenant's
+        requesterMayDecide, read now, does not let an asker decide; the token alone cannot say, since the policy may
+        have changed after it was minted."""
+        if req.acting_for is None:
+            return None
+        may_decide = (
+            await self.requester_may_decide(tenant_id)
+            if self.requester_may_decide is not None
+            else BY_KEY["requesterMayDecide"].default is True
+        )
+        approvers = _approvers(req.approval_token)
+        return asker_refusal(ACCESS, req.acting_for, tenant_id, approvers, may_decide=may_decide)
 
     async def call(
         self,
@@ -466,6 +487,14 @@ class GatewayCalls:
             error = {"code": "gateway_refused", "message": "; ".join(decision.reasons)}
             await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 403, "gateway_refused", decision.reasons)
+        if needs and req.approval_token and (own := await self._asker_refusal(caller.tenant_id, req)) is not None:
+            # The token was valid when minted, but the person the call acts for approved it themselves and today's
+            # policy no longer lets an asker decide (it changed mid-turn, or the write now needs a reviewer).
+            row.update(decision="deny", reasons=[own.message])
+            await self.log.record(
+                **row, outcome="refused", latency_ms=elapsed(), error={"code": own.code, "message": own.message}
+            )
+            return Refused(call_id, own.status, own.code, [own.message])
         if req.tool in SYSTEM_TOOLS and not system_call(req.approval_token, SYSTEM_TOOLS[req.tool]):
             # The token is verified by now; it must have been minted for the one system workflow this tool serves.
             reason = f"{req.tool} is applied only by the {SYSTEM_TOOLS[req.tool]} system workflow"
