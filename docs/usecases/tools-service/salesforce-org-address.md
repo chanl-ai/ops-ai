@@ -7,8 +7,9 @@ Service: `tools-service` with platform-service. Layers: api, ui. Guide: `docs/gu
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | A team admin saves the org's My Domain as an auth config's sign-in address, fixed; Connect signs in there, the account keeps the org address Salesforce's token answer names, and salesforce_query returns that org's records with no egress host listed by hand | api, ui | 1-4, 7-11 | 3, 10 |
+| S1 | A team admin saves the org's My Domain as an auth config's sign-in address, fixed; Connect signs in there, the account keeps the org address Salesforce's token answer names, and salesforce_query returns that org's records with no egress host listed by hand | api | 1-4 | 3 |
 | S2 | An auth config holding the address as a default lets a second account sign in at the sandbox's My Domain, and that account's calls reach the sandbox org | api | 5-6 | 6 |
+| S3 | In the console, a team admin picks "Your company's address" for a new auth config, connects with it, and runs a SOQL query that returns the org's case | ui | 7-11 | 10 |
 
 ## Preconditions
 
