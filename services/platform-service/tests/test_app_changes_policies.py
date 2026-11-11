@@ -130,3 +130,12 @@ def test_a_team_moves_to_the_new_default_and_keeps_only_a_policy_a_person_saved(
     assert by_tenant == {
         saved: {ops: {"ask": True, "answer": "reviewer", "reviewerRole": None, "testAccountsNeverAsk": True}}
     }
+
+
+async def test_an_old_key_is_saved_only_by_who_may_change_the_new_one_it_writes(signin: SignInRig) -> None:
+    team, admin = signin.admin["X-Team-Id"], signin.admin
+    _, builder = await _team_admin(signin, "bea", role="builder")
+    # The old key's own cell is reviews.manage; the value lands in appChanges, which takes settings.manage.
+    refused = await put(signin, "toolWritesNeedApproval", True, builder)
+    assert refused.status_code == 403, refused.text
+    assert not (await get(signin, "appChanges", admin)).get(team, {}).get("ask")

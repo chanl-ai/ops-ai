@@ -11,7 +11,7 @@ from ops_access import BY_KEY, POLICIES
 from ops_service_kit.errors import ValidationFailed
 
 from .store.members import Actor
-from .store.policies import PolicyStore
+from .store.policies import OLD_KEYS, PolicyStore
 from .store.roles import RoleStore
 from .teams import Members
 
@@ -33,7 +33,10 @@ class Policies:
 
     async def set(self, actor: Actor, key: str, value: Any) -> dict[str, Any]:
         # The cell the policy names: settings.manage in the security team for most, chat.manage for memory retention.
-        policy = BY_KEY.get(key)
+        # An old key lands in appChanges / appChangesByApp (the store moves it), so the cell checked is that key's:
+        # otherwise a holder of the old key's cell could change what its cell never covered.
+        landing = {"toolWritesNeedApproval": "appChanges"}.get(key, "appChangesByApp") if key in OLD_KEYS else key
+        policy = BY_KEY.get(landing)
         area, action = policy.changed_by if policy else ("settings", "manage")
         await self.members.require_admin(actor, area, action)
         await self._check_reviewer_roles(actor, key, value)
