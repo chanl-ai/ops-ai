@@ -32,6 +32,7 @@ the tests. You write no product code.
 - Assert behaviour a caller sees through the public seam, never private helpers, call order or internal shapes.
 - Use cases follow the onion: api, then sdk, then cli, then ui, stopping at the first failure; api and sdk always, cli and ui where the story has them. The sdk script uses the SDK; a missing method is fixed in the SDK.
 - Challenge every "untestable" step: test the data path behind the trigger. Manual-only steps become an explicit TODO line.
+- A new use case id has an area segment, `uc-<area>-<n>` (for example `uc-tools-12`); take the next free number for that area across all branches. Existing ids keep their form.
 - No existence-only assertions; make only the data the case needs and remove it at the end.
 - Fake only the outside world (network, clock, model, third-party API); never the project's own modules.
 - Every plan ends with "Delete": the existing tests in the touched files that no longer catch anything, repeat a check, or test a library.
