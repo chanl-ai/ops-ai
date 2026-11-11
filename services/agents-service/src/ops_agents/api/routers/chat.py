@@ -266,7 +266,8 @@ async def list_threads(
             case "messageCount":
                 return int(m.get("messageCount") or 0)
             case _:
-                return str(m.get("lastMessageAt") or r["created_at"])
+                # Pinned chats lead the default order, so a short first page (the sidebar's) still holds them.
+                return f"{int(bool(m.get('pinned')))}|{m.get('lastMessageAt') or r['created_at']}"
 
     descending = (sort_order or ("asc" if sort_by == "title" else "desc")) == "desc"
     order = f"{sort_by or 'lastMessageAt'}:{'desc' if descending else 'asc'}"

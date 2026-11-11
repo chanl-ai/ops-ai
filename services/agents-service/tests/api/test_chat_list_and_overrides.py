@@ -88,6 +88,25 @@ async def test_cursor_pages_neither_repeat_nor_skip_a_thread(stack: tuple[AsyncC
     assert bad.status_code == 400
 
 
+async def test_a_pinned_chat_leads_the_list_however_many_newer_chats_there_are(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    client, _ = stack
+    made = [(await new_thread(client))["id"] for _ in range(36)]
+    oldest = made[0]
+    assert (await client.patch(f"/chat/threads/{oldest}", json={"pinned": True})).status_code == 200
+    first = (await client.get("/chat/threads", params={"pageSize": 30})).json()["data"]
+    seen = [t["id"] for t in first["data"]]
+    assert seen[0] == oldest
+    assert seen[1:] == made[:0:-1][:29]  # then the rest, newest first
+    cursor = first.get("nextCursor")
+    while cursor:
+        page = (await client.get("/chat/threads", params={"pageSize": 30, "cursor": cursor})).json()["data"]
+        seen += [t["id"] for t in page["data"]]
+        cursor = page.get("nextCursor")
+    assert sorted(seen) == sorted(made) and len(seen) == len(set(seen))
+
+
 async def test_a_cursor_from_another_sort_or_with_a_foreign_key_is_refused_not_a_500(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
 ) -> None:
