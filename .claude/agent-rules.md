@@ -57,6 +57,7 @@ profile's "Commands an agent runs" table names the make targets.
 | Never print secrets or `.env` files; read single keys by name; never type a live secret into a field | here |
 | Model calls in tests are scripted; real calls are capped by the project's rule | profile "Tests" |
 | An agent that reviews, audits or tests does not change product code; it reports, with file:line | here |
+| On a tracker, act under your own name for your stage; a reviewer never uses the name of the builder whose work it reviews, so the review counts as separate | the tracker row in the workspace settings |
 | Tell the reader what to do, with the reason, in plain words; no narration of how the result was reached | here |
 
 ## Fixing a bug: cause first, once
