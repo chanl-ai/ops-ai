@@ -1,7 +1,6 @@
 """An app's "Ask before changes" in chat, through the real routes, by failure mode:
 
-- the asker answers their own card only where requesterMayDecide lets them; with it off the card offers them no Allow
-  and a reviewer decides;
+- the asker answers their own card whatever requesterMayDecide says, since it is a confirmation (test_ask_the_person);
 - an admin's own write is asked too, and waits like anyone's;
 - Deny needs a reason, or runs the write anyway;
 - "Allow for this chat" asks again in the same chat, or stops the asking in other chats too.
@@ -87,16 +86,6 @@ def _act(thread: str, message: str, card: dict[str, Any]) -> str:
 
 
 LOOSE = {"requesterMayDecide": True}
-
-
-async def test_with_requester_may_decide_off_the_asker_cannot_allow_and_a_reviewer_does(chat: AsyncClient) -> None:
-    james = person("usr_james", ["team_ops"], role="approver", policies={"requesterMayDecide": False})
-    maya = person("usr_maya", ["team_ops"], role="admin", policies={"requesterMayDecide": False})
-    thread, card, message = await _ask(chat, james)
-    assert card is not None and card["askFirst"] is True and card["canDecide"] is False, card
-    assert (await chat.post(_act(thread, message, card), json={"type": "approve"}, headers=james)).status_code == 403
-    allowed = await chat.post(_act(thread, message, card), json={"type": "approve"}, headers=maya)
-    assert allowed.status_code == 200 and allowed.json()["data"]["state"] == "approved", allowed.text
 
 
 async def test_with_requester_may_decide_on_the_asker_allows_their_own_write(chat: AsyncClient) -> None:

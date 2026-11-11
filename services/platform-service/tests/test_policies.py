@@ -36,8 +36,11 @@ DEFAULTS: dict[str, Any] = {
     "toolWritesNeedApproval": {},
     # Approvals are off by default: no team lists an app whose writes wait.
     "appWritesNeedApproval": {},
-    # Every app asks the person in chat before changes until a team admin lists it here.
+    # Derived from appChanges and appChangesByApp for one release: an app is listed when its answer is "none".
     "appsChangeWithoutAsking": {},
+    # The new switch and its per-app answers: no team asks until an admin turns it on (derived old keys above).
+    "appChanges": {},
+    "appChangesByApp": {},
     # No team set: off for every team until one turns it on.
     "aiSteps": {},
     "taskAssist": {},
