@@ -84,7 +84,11 @@ WIDENINGS: dict[str, set[str]] = {
 }
 # `isolation.enter` / `enter_caller` / `scope`: who sets a team scope that no verified principal set for them.
 ENTRIES: dict[str, set[str]] = {
-    "enter_caller": {"packages/ops_identity/src/ops_identity/fastapi.py"},
+    "enter_caller": {
+        "packages/ops_identity/src/ops_identity/fastapi.py",
+        # The MCP adapter is an ASGI app, so it enters its verified caller itself.
+        "services/tools-service/src/ops_tools/mcp_server.py",
+    },
     "enter": {
         # A hosted form's link enters the tenant and team its signed token names; a members-only form, each of
         # the signed-in person's own teams in turn.

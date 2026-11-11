@@ -29,6 +29,7 @@ from ops_identity import Auth, Principal
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable
 from ops_service_kit.http import error_body
 from ops_service_kit.ids import new_id
+from ops_store import isolation
 
 from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls
@@ -87,6 +88,10 @@ class McpAdapter:
         # An id the seed does not know is nobody's team, so it sees no module (never the all-scope fallback).
         team = self.directory.team_by_id(team_id) or Team(team_id, team_id, (), "owned")
         scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team)
+        # The team scope an API route gets from its auth dependency. This adapter is an ASGI app, so nothing else enters
+        # it, and the registry and connection store raise NoTenantError without it. The SDK starts each request's
+        # handler task from this task's context, so the scope reaches tools/list and tools/call.
+        isolation.enter_caller(principal, dev=self.auth.identity.dev_user is not None)
         if self.manager is None:
             await _refuse(send, ServiceUnavailable("The MCP server is starting or stopping."))
             return
