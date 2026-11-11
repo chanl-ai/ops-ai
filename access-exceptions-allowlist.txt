@@ -157,6 +157,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict team_name_taken 0 state
 * conflict tools_unavailable 0 state
 * conflict update_changed 0 state
+* conflict update_stale 0 state
 * conflict widget_paused 0 state
 * conflict widget_retired 0 state
 * conflict widget_taken 0 state

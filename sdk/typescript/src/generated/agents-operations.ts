@@ -1217,6 +1217,18 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "resources_detach_copy": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies/{copy}/detach",
+    "pathParams": [
+      "resource",
+      "copy"
+    ],
+    "query": [],
+    "stream": false
+  },
   "resources_plan_resources": {
     "body": "json",
     "headers": [],

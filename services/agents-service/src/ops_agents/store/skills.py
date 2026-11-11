@@ -77,9 +77,11 @@ LABELS = {
     "useWhen": "use-when line",
     "loading": "loading",
     "instructions": "instructions",
-    "toolIds": "tools",
+    # The stored content names its tools under `tools` (check_content), so that is the key compared.
+    "tools": "tools",
     "knowledgeBases": "knowledge bases",
     "guardrails": "guardrails",
+    "refusal": "refusal",
 }
 
 
