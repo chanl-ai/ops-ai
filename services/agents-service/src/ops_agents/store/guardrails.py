@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_service_kit.errors import NotFound
+from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.schema import TEAM_OWNED, team_owned_via
@@ -27,7 +27,7 @@ registry_guardrails = sa.Table(
     "registry_guardrails",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("slug", sa.String(120), nullable=False, unique=True),
+    sa.Column("slug", sa.String(120), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("kind", sa.String(32), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
@@ -40,6 +40,8 @@ registry_guardrails = sa.Table(
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
+    # A guardrail's name is unique within its team only, so many teams can hold a copy of the same template.
+    sa.UniqueConstraint("team_id", "slug", name="uq_registry_guardrails_team_slug"),
     info=TEAM_OWNED,
 )
 
@@ -191,21 +193,18 @@ class GuardrailRegistry:
         gid = guardrail_id or new_id("gr")
         at = now_iso()
         async with self.engine.begin() as c:
-            base, n = _slug(name), 2
-            slug = base
-            taken = {
-                str(s)
-                for s in (
-                    await c.execute(
-                        sa.select(registry_guardrails.c.slug).where(
-                            registry_guardrails.c.slug.like(f"{base}%"),
-                            any_team(registry_guardrails, "a slug is unique across every team"),
-                        )
+            slug = _slug(name)
+            taken = (
+                await c.execute(
+                    sa.select(registry_guardrails.c.id).where(
+                        registry_guardrails.c.slug == slug,
+                        registry_guardrails.c.team_id == team_id,
+                        any_team(registry_guardrails, "a slug is unique within the team that will own the guardrail"),
                     )
-                ).scalars()
-            }
-            while slug in taken:
-                slug, n = f"{base}-{n}", n + 1
+                )
+            ).first()
+            if taken is not None:
+                raise Conflict(f"A guardrail named {name} exists; give this one another name.", code="name_taken")
             await c.execute(
                 registry_guardrails.insert().values(
                     id=gid,
