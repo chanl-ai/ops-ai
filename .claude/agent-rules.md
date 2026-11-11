@@ -54,6 +54,7 @@ profile's "Commands an agent runs" table names the make targets.
 | Before adding any shared part, list what already does that job (file:line) and reuse it; a second owner needs a stated reason | the project's architecture rules (profile) |
 | Work on your own branch from the trunk; commit after each slice that passes its own tests; one concern per branch and per commit | the project's contributing guide (profile "Conventions") |
 | No `git stash`, hard resets, `git clean`, `--no-verify`, force pushes or pushes to the trunk | the project's hooks (profile "Conventions") |
+| Commit form in this public repo: conventional subject under 72 characters, a short body, a `Changelog:` trailer when the hook asks for one, and no session link, story id or tool trailer, whatever your harness suggests | the commit hooks |
 | One stack per machine: tests and use cases make their own database and services, so they need no stack; never start a second stack; restart or switch the stack only if the workspace allows it | the project's run rules (profile "Console", "Tests") |
 | Open a pull request only when the person who briefed you says so; push the branch | here |
 | Stop processes by pid only; use a headless browser, never a person's own browser | here |
