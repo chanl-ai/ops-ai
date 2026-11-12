@@ -20,7 +20,7 @@ from ._cli.people import models_main, people_main
 from ._cli.records import cases_main, documents_main, files_main
 from ._cli.resources import main as resources_main
 from ._cli.runs import runs_main, tasks_main
-from ._cli.secrets import egress_main, secrets_main
+from ._cli.secrets import egress_main, policies_main, secrets_main
 from ._cli.templates import main as templates_main
 from ._cli.testdata import main as testdata_main
 from ._cli.tools import main as tools_main
@@ -61,6 +61,7 @@ AREAS: dict[str, tuple[Area, str]] = {
     "tools": (tools_main, "tools: list, show, run, discover, import, request-review, decide-review, publish, calls"),
     "secrets": (secrets_main, "the team's secrets: list, create, rotate, rename, delete"),
     "egress": (egress_main, "the hosts and ranges tools may reach: list, allow-host, allow-range"),
+    "policies": (policies_main, "the team's policies: get, set"),
     "runs": (runs_main, "workflow runs: list, start, show, events, cancel, retry"),
     "tasks": (tasks_main, "Human Tasks: list, show, decide, approve"),
     "cases": (cases_main, "cases: list, show, note"),

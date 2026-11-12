@@ -37,6 +37,14 @@ def client(answer: Any, seen: list[httpx.Request]) -> OpsAI:
     )
 
 
+def test_a_module_is_made_empty_and_named_for_the_import() -> None:
+    seen: list[httpx.Request] = []
+    ops = client(lambda r: (200, {"id": "mod_1"}), seen)
+    ops.tools.create_module("core_banking", "Core banking")
+    assert seen[-1].url.path.endswith("/v1/tool-modules/blank")
+    assert json.loads(seen[-1].content) == {"name": "core_banking", "displayName": "Core banking", "type": "openapi"}
+
+
 def test_import_brings_in_exactly_the_ticked_operations_and_refuses_a_name_the_document_lacks() -> None:
     seen: list[httpx.Request] = []
     ops = client(lambda r: (200, SPEC if r.url.path.endswith("/discover") else {"id": "mod_1"}), seen)
@@ -51,14 +59,13 @@ def test_import_brings_in_exactly_the_ticked_operations_and_refuses_a_name_the_d
 def test_a_review_decision_goes_to_the_review_the_version_waits_on() -> None:
     seen: list[httpx.Request] = []
     waiting = {"id": "mod_1", "versions": [{"status": "published"}, {"status": "in_review", "reviewId": "rev_9"}]}
-    ops = client(lambda r: (200, waiting), seen)
-    ops.tools.decide_review("mod_1", "approved", reason="reads only")
-    decision = next(r for r in seen if r.method == "POST")
-    assert decision.url.path.endswith("/v1/publish-requests/rev_9/decision")
-    assert json.loads(decision.content) == {"decision": "approved", "reason": "reads only"}
-    quiet = client(lambda r: (200, {"id": "mod_1", "versions": [{"status": "published"}]}), [])
+    ops = client(lambda r: (200, {"status": "approved"}), seen)
+    review = ops.tools.review_of(waiting)
+    ops.tools.decide_review(review, "approved", reason="reads only")
+    assert seen[-1].url.path.endswith("/v1/publish-requests/rev_9/decision")
+    assert json.loads(seen[-1].content) == {"decision": "approved", "reason": "reads only"}
     with pytest.raises(ValueError, match="request one first"):
-        quiet.tools.decide_review("mod_1")
+        ops.tools.review_of({"id": "mod_1", "versions": [{"status": "published"}]})
 
 
 def test_granting_tools_keeps_the_ones_the_agent_already_holds() -> None:

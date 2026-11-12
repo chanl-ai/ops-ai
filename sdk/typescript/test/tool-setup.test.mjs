@@ -21,6 +21,14 @@ function client(answer, seen = []) {
   });
 }
 
+test('a module is made empty and named for the import', async () => {
+  const seen = [];
+  const ops = client(() => [200, { id: 'mod_1' }], seen);
+  await ops.tools.createModule('core_banking', 'Core banking');
+  assert.ok(seen.at(-1).path.endsWith('/v1/tool-modules/blank'));
+  assert.deepEqual(seen.at(-1).body, { name: 'core_banking', displayName: 'Core banking', type: 'openapi' });
+});
+
 test('import brings in exactly the ticked operations and refuses a name the document lacks', async () => {
   const seen = [];
   const ops = client(({ path }) => [200, path.endsWith('/discover') ? SPEC : { id: 'mod_1' }], seen);
@@ -34,13 +42,11 @@ test('import brings in exactly the ticked operations and refuses a name the docu
 test('a review decision goes to the review the version waits on', async () => {
   const seen = [];
   const waiting = { id: 'mod_1', versions: [{ status: 'published' }, { status: 'in_review', reviewId: 'rev_9' }] };
-  const ops = client(() => [200, waiting], seen);
-  await ops.tools.decideReview('mod_1', 'approved', { reason: 'reads only' });
-  const decision = seen.find((r) => r.method === 'POST');
-  assert.ok(decision.path.endsWith('/v1/publish-requests/rev_9/decision'));
-  assert.deepEqual(decision.body, { decision: 'approved', reason: 'reads only' });
-  const quiet = client(() => [200, { id: 'mod_1', versions: [{ status: 'published' }] }]);
-  await assert.rejects(quiet.tools.decideReview('mod_1'), /request one first/);
+  const ops = client(() => [200, { status: 'approved' }], seen);
+  await ops.tools.decideReview(ops.tools.reviewOf(waiting), 'approved', { reason: 'reads only' });
+  assert.ok(seen.at(-1).path.endsWith('/v1/publish-requests/rev_9/decision'));
+  assert.deepEqual(seen.at(-1).body, { decision: 'approved', reason: 'reads only' });
+  assert.throws(() => ops.tools.reviewOf({ versions: [{ status: 'published' }] }), /request one first/);
 });
 
 test('granting tools keeps the ones the agent already holds', async () => {

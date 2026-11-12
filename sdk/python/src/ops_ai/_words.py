@@ -392,6 +392,11 @@ class Tools:
             body["environment"] = environment
         return cast(dict[str, Any], self._raw.tools.tool_modules_run_tool(module, tool, body))
 
+    def create_module(self, name: str, display_name: str, *, type: str = "openapi") -> dict[str, Any]:
+        """An empty tool module for the team's builders to import operations into."""
+        body = {"name": name, "displayName": display_name, "type": type}
+        return cast(dict[str, Any], self._raw.tools.tool_modules_create_blank_module(body))
+
     def discover(self, spec_url: str, *, connection_id: str | None = None) -> dict[str, Any]:
         """Reads an OpenAPI document and lists the operations it would bring, each with the access the method gives
         it (GET is read, the rest write). Nothing is saved."""
@@ -411,12 +416,15 @@ class Tools:
         """Asks the Security team to review the module's draft."""
         return cast(dict[str, Any], self._raw.tools.tool_modules_request_review(module, {"note": note}))
 
-    def decide_review(self, module: str, decision: str = "approved", *, reason: str | None = None) -> dict[str, Any]:
-        """The Security team's answer to the review the module waits on; `approved` publishes it."""
-        review = _waiting_review(cast(dict[str, Any], self._raw.tools.tool_modules_get_module(module)))
+    def review_of(self, module: dict[str, Any]) -> str:
+        """The id of the security review a module detail (from `request_review` or `get`) waits on. Security does not
+        see the owner's module, so the owner passes this id on."""
+        return _waiting_review(module)
+
+    def decide_review(self, review: str, decision: str = "approved", *, reason: str | None = None) -> dict[str, Any]:
+        """The Security team's answer to a module's review; `approved` publishes the module."""
         body = {"decision": decision, **({"reason": reason} if reason else {})}
-        self._raw.agents.reviews_decide_publish_request(review, body)
-        return cast(dict[str, Any], self._raw.tools.tool_modules_get_module(module))
+        return cast(dict[str, Any], self._raw.agents.reviews_decide_publish_request(review, body))
 
     def publish_version(self, module: str, note: str = "") -> dict[str, Any]:
         return cast(dict[str, Any], self._raw.tools.tool_modules_publish_version(module, {"note": note}))
@@ -692,6 +700,11 @@ class AsyncTools:
             body["environment"] = environment
         return cast(dict[str, Any], await self._raw.tools.tool_modules_run_tool(module, tool, body))
 
+    async def create_module(self, name: str, display_name: str, *, type: str = "openapi") -> dict[str, Any]:
+        """An empty tool module for the team's builders to import operations into."""
+        body = {"name": name, "displayName": display_name, "type": type}
+        return cast(dict[str, Any], await self._raw.tools.tool_modules_create_blank_module(body))
+
     async def discover(self, spec_url: str, *, connection_id: str | None = None) -> dict[str, Any]:
         """Reads an OpenAPI document and lists the operations it would bring, each with the access the method gives
         it (GET is read, the rest write). Nothing is saved."""
@@ -711,14 +724,14 @@ class AsyncTools:
         """Asks the Security team to review the module's draft."""
         return cast(dict[str, Any], await self._raw.tools.tool_modules_request_review(module, {"note": note}))
 
+    def review_of(self, module: dict[str, Any]) -> str:
+        return _waiting_review(module)
+
     async def decide_review(
-        self, module: str, decision: str = "approved", *, reason: str | None = None
+        self, review: str, decision: str = "approved", *, reason: str | None = None
     ) -> dict[str, Any]:
-        """The Security team's answer to the review the module waits on; `approved` publishes it."""
-        review = _waiting_review(cast(dict[str, Any], await self._raw.tools.tool_modules_get_module(module)))
         body = {"decision": decision, **({"reason": reason} if reason else {})}
-        await self._raw.agents.reviews_decide_publish_request(review, body)
-        return cast(dict[str, Any], await self._raw.tools.tool_modules_get_module(module))
+        return cast(dict[str, Any], await self._raw.agents.reviews_decide_publish_request(review, body))
 
     async def publish_version(self, module: str, note: str = "") -> dict[str, Any]:
         return cast(dict[str, Any], await self._raw.tools.tool_modules_publish_version(module, {"note": note}))
@@ -818,3 +831,31 @@ class AsyncEgress:
 
     async def remove_range(self, cidr: str) -> dict[str, Any]:
         return cast(dict[str, Any], await self._raw.tools.egress_remove_range({"value": cidr}))
+
+
+class Policies:
+    """The team's settings a Security admin changes (Settings > Policies), such as `toolWritesNeedApproval`. They
+    belong to the team the client acts in."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    def get(self, key: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.platform.policies_get_policy(key))
+
+    def set(self, key: str, value: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.platform.policies_set_policy(key, {"value": value}))
+
+
+class AsyncPolicies:
+    """The team's settings a Security admin changes (Settings > Policies), such as `toolWritesNeedApproval`. They
+    belong to the team the client acts in."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    async def get(self, key: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.platform.policies_get_policy(key))
+
+    async def set(self, key: str, value: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.platform.policies_set_policy(key, {"value": value}))

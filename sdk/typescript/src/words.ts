@@ -30,7 +30,7 @@ function accountOf(page: Obj): string {
   return String(page.connection.id);
 }
 
-const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb', id: string, args: Obj = {}): Promise<any> =>
+const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb' | 'platform', id: string, args: Obj = {}): Promise<any> =>
   (raw[service] as unknown as Record<string, (a: Obj) => Promise<any>>)[id]!(args);
 
 const at = (app: string, account: string) => ({ app_id: app, account_id: account });
@@ -96,6 +96,19 @@ export class Egress {
 
   removeRange(cidr: string): Promise<Obj> {
     return call(this.raw, 'tools', 'egress_remove_range', { body: { value: cidr } });
+  }
+}
+
+/** The team's settings a Security admin changes (Settings > Policies), such as `toolWritesNeedApproval`. They belong to the team the client acts in. */
+export class Policies {
+  constructor(private readonly raw: Raw) {}
+
+  get(key: string): Promise<Obj> {
+    return call(this.raw, 'platform', 'policies_get_policy', { path: { key } });
+  }
+
+  set(key: string, value: unknown): Promise<Obj> {
+    return call(this.raw, 'platform', 'policies_set_policy', { path: { key }, body: { value } });
   }
 }
 
@@ -322,6 +335,11 @@ export class Tools {
     return call(this.raw, 'tools', 'tool_modules_run_tool', { path: { module_id: module, operation: tool }, body });
   }
 
+  /** An empty tool module for the team's builders to import operations into. */
+  createModule(name: string, displayName: string, { type = 'openapi' }: { type?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_create_blank_module', { body: { name, displayName, type } });
+  }
+
   /** Reads an OpenAPI document and lists the operations it would bring, each with the access its method gives it. Nothing is saved. */
   discover(specUrl: string, { connectionId }: { connectionId?: string } = {}): Promise<Obj> {
     return call(this.raw, 'tools', 'tool_modules_discover', { body: sourceOf(specUrl, connectionId) });
@@ -339,13 +357,16 @@ export class Tools {
     return call(this.raw, 'tools', 'tool_modules_request_review', { path: { module_id: module }, body: { note } });
   }
 
-  /** The Security team's answer to the review the module waits on; `approved` publishes it. */
-  async decideReview(module: string, decision = 'approved', { reason }: { reason?: string } = {}): Promise<Obj> {
-    const detail = await this.get(module);
-    const waiting = ((detail.versions ?? []) as Obj[]).find((v) => v.status === 'in_review' && v.reviewId);
+  /** The id of the security review a module detail (from `requestReview` or `get`) waits on. Security does not see the owner's module, so the owner passes this id on. */
+  reviewOf(module: Obj): string {
+    const waiting = ((module.versions ?? []) as Obj[]).find((v) => v.status === 'in_review' && v.reviewId);
     if (!waiting) throw new TypeError('this tool module has no version waiting on a security review; request one first');
-    await call(this.raw, 'agents', 'reviews_decide_publish_request', { path: { request_id: waiting.reviewId }, body: { decision, ...(reason ? { reason } : {}) } });
-    return this.get(module);
+    return String(waiting.reviewId);
+  }
+
+  /** The Security team's answer to a module's review; `approved` publishes the module. */
+  decideReview(review: string, decision = 'approved', { reason }: { reason?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'agents', 'reviews_decide_publish_request', { path: { request_id: review }, body: { decision, ...(reason ? { reason } : {}) } });
   }
 
   publishVersion(module: string, note = ''): Promise<Obj> {

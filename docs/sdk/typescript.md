@@ -46,7 +46,7 @@ The same attributes as the [Python SDK](python.md#what-the-client-offers), with 
 `raw.<service>.<operation>({ path, query, body })` for every other public operation. The Apps area's verbs are camel
 case and take their options as an object: `apps.turnOn(app, fields)`, `apps.addCustom(kind, name, { baseAddress })`,
 `credentials.set(app, { clientId, clientSecret })`, `accounts.makeDefault(account)`, `accounts.setKey(account, key)`,
-`tools.run(app, tool, input, { real })`. The setup words are camel case too: `tools.importOpenapi(module, specUrl, operations)`, `tools.decideReview(module, decision)`, `tools.runModule(module, tool, input)`, `secrets.create(name, value)`, `egress.allowHost(host)`, `agents.grantTools(id, toolIds)`, `tasks.approve(task, { password })`.
+`tools.run(app, tool, input, { real })`. The setup words are camel case too: `tools.importOpenapi(module, specUrl, operations)`, `tools.createModule(name, displayName)`, `tools.decideReview(review, decision)`, `tools.runModule(module, tool, input)`, `secrets.create(name, value)`, `egress.allowHost(host)`, `policies.set(key, value)`, `agents.grantTools(id, toolIds)`, `tasks.approve(task, { password })`.
 
 ## Knowledge, templates and connectors
 

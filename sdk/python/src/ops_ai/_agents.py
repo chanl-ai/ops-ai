@@ -396,12 +396,13 @@ def _collect_chat(events: Any, thread_id: str) -> dict[str, Any]:
             and (kind in {"tool_call", "tool_start", "tool_end"} or call.get("name") or call.get("tool"))
         ):
             seen.add(name)
-            tool_calls.append(call)
+            tool_calls.append({**call, "name": name})
     if isinstance(events, dict) and not reply and not parts:
         reply = _reply_text(events)
     return {
         "threadId": thread_id,
         "reply": "".join(parts) or reply,
+        "text": "".join(parts) or reply,
         "events": items,
         "citations": citations,
         "toolCalls": tool_calls,

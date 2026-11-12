@@ -73,7 +73,9 @@ export class Agents {
     return this.raw.agents.agents_create_agent({ body: body as never });
   }
 
-  publish(id: string, note = '', version: number) {
+  async publish(id: string, note = '', version?: number) {
+    // Left out, the version is the draft's current one, as the Python SDK does.
+    version ??= (await this.get(id)).version;
     return this.raw.agents.agents_request_publish({ path: { agent_id: id }, body: { note, version } as never });
   }
 
@@ -84,7 +86,7 @@ export class Agents {
   async chat(id: string, message: string, threadId?: string) {
     let tid = threadId;
     if (!tid) {
-      const created = (await this.raw.agents.threads_create_thread({ body: { graph: id } as never })) as {
+      const created = (await this.raw.agents.threads_create_thread({ body: { graph: id.startsWith('agent:') ? id : `agent:${id}` } as never })) as {
         threadId?: string;
         id?: string;
       };
@@ -102,12 +104,19 @@ export class Agents {
       events.push(stream);
     }
     let reply = '';
+    const toolCalls: Record<string, any>[] = [];
     for (const event of events) {
-      const rec = event && typeof event === 'object' ? (event as { data?: unknown }) : undefined;
-      const text = replyText(rec?.data ?? event);
+      const rec = event && typeof event === 'object' ? (event as { data?: any }) : undefined;
+      const data = rec?.data ?? event;
+      const text = replyText(data);
       if (text) reply = text;
+      const kind = data?.event;
+      const payload = data?.data;
+      const call = payload?.call ?? payload;
+      const name = call?.name ?? call?.tool;
+      if (name && ['tool_call', 'tool_start', 'tool_end'].includes(kind) && !toolCalls.some((c) => (c.name ?? c.tool) === name)) toolCalls.push({ ...call, name });
     }
-    return { threadId: tid, reply, events };
+    return { threadId: tid, reply, text: reply, events, toolCalls };
   }
 
   test(id: string, message: string) {
