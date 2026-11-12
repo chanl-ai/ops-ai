@@ -39,6 +39,8 @@ TENANT_HELD = {
     "api_keys": "an account key names the team it acts in; the key belongs to the account's admins",
     "role_assignments": "a person's role in one team or in every team ('*', the account admin): the account's access",
     "audit_entries": "sign-in and membership events have no team; team pages filter on the acting team",
+    "sessions": "a person's sign-in; only an assistant's grant at one team's MCP address names that team",
+    "signin_group_rules": "a sign-in provider's group mapping, set by the account's admins, names the team it grants",
     "service_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "files_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "documents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",

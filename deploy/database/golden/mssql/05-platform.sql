@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0034_mcp_sign_in
+-- platform-service, stamped at 0036_oauth_address_counts
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -31,6 +31,14 @@ CREATE TABLE oauth_clients (
 	consented_at VARCHAR(40) NULL, 
 	tenant_id VARCHAR(64) NULL, 
 	CONSTRAINT oauth_clients_pkey PRIMARY KEY (id)
+);
+GO
+CREATE TABLE oauth_address_counts (
+	kind VARCHAR(16) NOT NULL, 
+	address VARCHAR(64) NOT NULL, 
+	hits INTEGER NOT NULL, 
+	window_start VARCHAR(40) NOT NULL, 
+	CONSTRAINT oauth_address_counts_pkey PRIMARY KEY (kind, address)
 );
 GO
 CREATE TABLE platform_outbox (
@@ -265,9 +273,22 @@ CREATE TABLE signin_providers (
 	jit_role VARCHAR(16) NULL, 
 	created_at VARCHAR(40) NOT NULL, 
 	updated_at VARCHAR(40) NOT NULL, 
+	sp_id VARCHAR(40) NULL, 
 	CONSTRAINT signin_providers_pkey PRIMARY KEY (id, tenant_id), 
 	CONSTRAINT fk_signin_jit_team FOREIGN KEY(tenant_id, jit_team_id) REFERENCES teams (tenant_id, id), 
 	CONSTRAINT signin_providers_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
+);
+GO
+CREATE UNIQUE INDEX ux_signin_providers_sp_id ON signin_providers (sp_id) WHERE sp_id IS NOT NULL;
+GO
+CREATE TABLE signin_break_glass (
+	tenant_id VARCHAR(64) NOT NULL, 
+	user_id VARCHAR(64) NOT NULL, 
+	added_by VARCHAR(64) NOT NULL, 
+	added_at VARCHAR(40) NOT NULL, 
+	last_used_at VARCHAR(40) NULL, 
+	CONSTRAINT signin_break_glass_pkey PRIMARY KEY (tenant_id, user_id), 
+	CONSTRAINT fk_signin_break_glass_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id) ON DELETE CASCADE
 );
 GO
 CREATE TABLE password_credentials (
@@ -325,6 +346,41 @@ CREATE INDEX ix_signin_domains_tenant_id ON signin_domains (tenant_id);
 GO
 CREATE UNIQUE INDEX ux_signin_domains_verified ON signin_domains (domain) WHERE verified_at IS NOT NULL;
 GO
+CREATE TABLE signin_certificates (
+	tenant_id VARCHAR(64) NOT NULL, 
+	provider_id VARCHAR(64) NOT NULL, 
+	fingerprint VARCHAR(64) NOT NULL, 
+	pem VARCHAR(max) NOT NULL, 
+	not_before VARCHAR(40) NOT NULL, 
+	not_after VARCHAR(40) NOT NULL, 
+	source VARCHAR(16) NOT NULL, 
+	added_at VARCHAR(40) NOT NULL, 
+	added_by VARCHAR(64) NOT NULL, 
+	removed_at VARCHAR(40) NULL, 
+	warned VARCHAR(16) NULL, 
+	CONSTRAINT signin_certificates_pkey PRIMARY KEY (tenant_id, provider_id, fingerprint), 
+	CONSTRAINT fk_signin_certificates_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE
+);
+GO
+CREATE INDEX ix_signin_certificates_not_after ON signin_certificates (not_after);
+GO
+CREATE TABLE signin_group_rules (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	provider_id VARCHAR(64) NOT NULL, 
+	group_value VARCHAR(255) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	role VARCHAR(16) NOT NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	created_by VARCHAR(64) NOT NULL, 
+	CONSTRAINT signin_group_rules_pkey PRIMARY KEY (id), 
+	CONSTRAINT uq_signin_group_rules UNIQUE (provider_id, group_value, team_id), 
+	CONSTRAINT fk_signin_group_rules_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
+	CONSTRAINT fk_signin_group_rules_team FOREIGN KEY(tenant_id, team_id) REFERENCES teams (tenant_id, id)
+);
+GO
+CREATE INDEX ix_signin_group_rules_tenant_id ON signin_group_rules (tenant_id);
+GO
 CREATE TABLE signin_identities (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -360,6 +416,7 @@ CREATE TABLE signin_flows (
 	expires_at VARCHAR(40) NOT NULL, 
 	answered_at VARCHAR(40) NULL, 
 	used_at VARCHAR(40) NULL, 
+	test_result NVARCHAR(max) NULL, 
 	CONSTRAINT signin_flows_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_signin_flows_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_flows_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
@@ -369,6 +426,24 @@ GO
 CREATE INDEX ix_signin_flows_tenant_id ON signin_flows (tenant_id);
 GO
 CREATE UNIQUE INDEX signin_flows_handoff_hash_key ON signin_flows (handoff_hash) WHERE handoff_hash IS NOT NULL;
+GO
+CREATE TABLE signin_grants (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	member_id VARCHAR(64) NOT NULL, 
+	provider_id VARCHAR(64) NOT NULL, 
+	rule_id VARCHAR(64) NULL, 
+	why VARCHAR(8) NOT NULL, 
+	granted_at VARCHAR(40) NOT NULL, 
+	CONSTRAINT signin_grants_pkey PRIMARY KEY (id), 
+	CONSTRAINT fk_signin_grants_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
+	CONSTRAINT signin_grants_member_id_fkey FOREIGN KEY(member_id) REFERENCES members (id) ON DELETE CASCADE, 
+	CONSTRAINT signin_grants_rule_id_fkey FOREIGN KEY(rule_id) REFERENCES signin_group_rules (id) ON DELETE SET NULL
+);
+GO
+CREATE INDEX ix_signin_grants_member_id ON signin_grants (member_id);
+GO
+CREATE INDEX ix_signin_grants_tenant_id ON signin_grants (tenant_id);
 GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
@@ -458,6 +533,12 @@ CREATE SECURITY POLICY ops_security.signin_providers_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_providers AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.signin_break_glass_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_break_glass,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_break_glass AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_break_glass AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.password_credentials_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.password_credentials,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.password_credentials AFTER INSERT,
@@ -482,6 +563,18 @@ CREATE SECURITY POLICY ops_security.signin_domains_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_domains AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.signin_certificates_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_certificates,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_certificates AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_certificates AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.signin_group_rules_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_group_rules,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_group_rules AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_group_rules AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.signin_identities_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_identities,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_identities AFTER INSERT,
@@ -494,10 +587,16 @@ CREATE SECURITY POLICY ops_security.signin_flows_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_flows AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.signin_grants_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_grants,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_grants AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_grants AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_platform (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0034_mcp_sign_in');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0036_oauth_address_counts');
 GO

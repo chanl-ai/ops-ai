@@ -521,6 +521,7 @@ oauth_clients = sa.Table(
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("consented_at", sa.String(40)),
     sa.Column("tenant_id", sa.String(64)),
+    info=system("an assistant registers before anyone signs in, so a client has no tenant until a person allows it"),
 )
 
 # Assistant registrations and sign-in starts per caller address in the current one-minute window (migration 0036),
@@ -532,6 +533,7 @@ oauth_address_counts = sa.Table(
     sa.Column("address", sa.String(64), primary_key=True),
     sa.Column("hits", sa.Integer, nullable=False),
     sa.Column("window_start", sa.String(40), nullable=False),
+    info=system("counts callers by address before anyone signs in, so no row names a tenant"),
 )
 
 # The stricter rules an admin has switched on: one row per policy a tenant has set, the value as JSON; a policy

@@ -152,6 +152,7 @@ GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tenants TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_email_failures TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.oauth_clients TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.oauth_address_counts TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.platform_outbox TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.teams TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.users TO ops_platform_runtime;
@@ -165,12 +166,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.audit_entries TO ops_platform_runtim
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.role_permissions TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.role_assignments TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_providers TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_break_glass TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.password_credentials TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.password_resets TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_lockouts TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_domains TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_certificates TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_group_rules TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_identities TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_flows TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_grants TO ops_platform_runtime;
 GRANT SELECT ON dbo.alembic_version_platform TO ops_platform_runtime;
 GO
 -- files-service

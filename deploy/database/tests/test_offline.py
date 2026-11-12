@@ -1,6 +1,6 @@
-"""Every revision after the nine named in schema.ONLINE_ONLY renders as offline SQL, so an upgrade bundle can be
+"""Every revision after the twelve named in schema.ONLINE_ONLY renders as offline SQL, so an upgrade bundle can be
 generated for a DBA. A revision that reads rows or inspects tables (op.get_bind(), sa.inspect) fails here: write it
-with Alembic operations and plain SQL instead. The nine named still fail, so the list cannot go stale unseen."""
+with Alembic operations and plain SQL instead. The twelve named still fail, so the list cannot go stale unseen."""
 
 from __future__ import annotations
 
