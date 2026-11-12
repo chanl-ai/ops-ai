@@ -154,6 +154,7 @@ paging, knowledge sources and templates.
 | `connection.identity` | Up to three settings whose values tell one account of the app from another (Salesforce's `instance_url`), shown under each account's name on every screen and in what the model is told. Never a secret. With none declared, the platform shows what the sign-in filled, then the account's own sign-in address, then who signed in, so every account shows something |
 | `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), `from_token` or `after_sign_in` (only the sign-in sets it), and `choices` and `other` (the only values it takes; see Where a team signs in), and `asked` (which window asks for it; see Where a setting is asked) |
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
+| `error_when` | Where the system reports a failure inside a 200 answer (Slack's `error`); see the fields table below |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
 | `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, `headers`, `amount_max`, `requires_approval`, `rate_limit_per_min` (calls a minute, 60 when left out), `shape` (how chat draws the result), `knowledge` (`list_items` or `get_item` for a knowledge source's tools), then either `request` (method, path, `query`, `body` or `form`, `paging`) and an optional Jinja `transform`, or `function` |
@@ -234,7 +235,7 @@ is the worked example:
 
 ## Headers, forms and sign-in steps
 
-Seven fields cover what a system asks for beyond a path and a query. Each is data, checked by `opsai plugin validate`
+Eight fields cover what a system asks for beyond a path and a query. Each is data, checked by `opsai plugin validate`
 and run by tools-service.
 
 | Field | What it does | Example | What validate refuses, and why |
@@ -245,6 +246,7 @@ and run by tools-service.
 | `connection.client_auth` | How the OAuth client is sent on the token call: `body`, `basic` or `private_key_jwt` | Zoom takes only `basic` | On a plugin with no OAuth kind |
 | `connection.after_sign_in` | One GET with the token just issued, whose value at `read` fills `setting`. `url` is https, or a path on the sign-in host (the origin of `token_url`) | Salesforce: `{url: /services/oauth2/userinfo, read: urls.custom_domain, setting: instance_url}`; Atlassian: `read: "[0].id"` of accessible-resources | A host outside `egress`, a setting not marked `after_sign_in`, an unreadable path, no `token_hosts` |
 | `tools[].amount_max` | The most the tool's `amount` input may be; a call over it, or without an amount, is refused before it leaves | A core-banking transfer | No number input named `amount`, or a paged tool |
+| `error_when` | The answer path where the system reports a failure inside a 200 answer. A value there (text, `true`, an object's `message` or `code`, or a list's first item) fails the call, from a data tool and from a Python tool's `ctx.http` alike, as `UPSTREAM_ERROR` with `<App> refused the call: <code>.`; a code listed in `connection.sign_in_errors` fails as `AUTH_EXPIRED` with that entry's `say`. Nothing, `false`, an empty list or an answer that is not JSON is a success | Slack: `error_when: error` (`{ok: false, error: channel_not_found}`); a GraphQL API: `error_when: errors` | A path that does not parse, such as `errors[x` |
 | `tools[].shape` | How chat draws the result: `rows` (a table; one list inside an envelope, such as a query's `records` beside `totalSize` and `done`, is read as the rows), `series`, `record` or `metric`. Left out, chat infers it, and reads such an envelope the same way | A query tool that answers `{totalSize, done, records}` | A value other than the four shapes |
 
 Every request template also refuses a secret reference (`{{NAME}}` in capitals): tools-service resolves those from the

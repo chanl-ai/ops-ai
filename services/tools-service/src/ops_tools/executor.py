@@ -35,6 +35,8 @@ import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson
+from ops_plugin_sdk import NeedsReconnect
+from ops_plugin_sdk.answers import answer_error
 
 from . import mcp, transform
 from .auth import Authenticator, AuthFailed, Prepared
@@ -537,6 +539,14 @@ class HttpExecutor(_Secrets):
         # Scrubbed before the transform as well as after: a template given a secret could re-encode it (reverse,
         # join, a key lookup into an error) past any scrub of the literal value.
         output = scrub(masked(output, op.get("masked_output") or []), used)
+        # A system that reports failure inside a 200 (Slack's `ok: false`) fails the call in its own words.
+        refused = answer_error(output, op.get("error_when"))
+        if refused is not None:
+            if trial is not None:
+                trial.raw = output
+            if isinstance(refused, NeedsReconnect):
+                return _failure("AUTH_EXPIRED", str(refused), 401, UPSTREAM)
+            return _failure(refused.code, str(refused), res.status_code, UPSTREAM)
         if on_answer is not None:
             try:
                 output = on_answer(output, dict(res.headers))

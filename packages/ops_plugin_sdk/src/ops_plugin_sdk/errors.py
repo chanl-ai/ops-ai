@@ -38,3 +38,9 @@ class TooLarge(PluginError):
     """An answer larger than the service reads for one request (its byte cap): refused while it was read."""
 
     code = "RESPONSE_TOO_LARGE"
+
+
+class Refused(PluginError):
+    """The system answered with success, and its answer says the call failed (the manifest's `error_when`)."""
+
+    code = "UPSTREAM_ERROR"

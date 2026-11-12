@@ -60,6 +60,8 @@ class TeamSignIn:
 class Rig:
     def __init__(self, engine: AsyncEngine, store: ModuleStore, tenant: str, local_catalog: Any) -> None:
         self.seen: list[httpx.Request] = []
+        # What the system answers every call with, in place of the default, when a test sets it.
+        self.answer: httpx.Response | None = None
         self.tenant = tenant
         self.store = store
         self.bindings = PluginBindings(engine)
@@ -73,6 +75,8 @@ class Rig:
 
     def _answer(self, request: httpx.Request) -> httpx.Response:
         self.seen.append(request)
+        if self.answer is not None:
+            return self.answer
         if request.url.path.endswith("/echo"):
             return httpx.Response(200, json={"sent": dict(request.headers)})
         return httpx.Response(200, json={"ok": True})
@@ -148,6 +152,41 @@ async def test_a_form_tool_sends_its_fields_form_encoded(rig: Rig) -> None:
     sent = rig.seen[-1]
     assert sent.headers["content-type"] == "application/x-www-form-urlencoded"
     assert parse_qs(sent.content.decode()) == {"channel": ["C024BE91L"], "text": ["Card 1042 & more"]}
+
+
+SLACK_REFUSAL = {"ok": False, "error": "channel_not_found"}
+
+
+async def test_a_data_tool_whose_200_answer_holds_an_error_fails_with_the_systems_code(rig: Rig) -> None:
+    rig.answer = httpx.Response(200, json=SLACK_REFUSAL)
+    out = await rig.call("post_message", {"channel": "C024BE91L", "text": "hi"})
+    assert not out.ok, out
+    error = out.output["error"]
+    assert error["code"] == "UPSTREAM_ERROR" and error["side"] == "upstream", error
+    assert error["message"] == "Fields desk refused the call: channel_not_found.", error
+
+
+async def test_a_python_tools_request_whose_200_answer_holds_an_error_fails_the_call(rig: Rig) -> None:
+    rig.answer = httpx.Response(200, json=SLACK_REFUSAL)
+    refused = await rig.call("echo")
+    assert not refused.ok, refused
+    assert refused.output["error"] == {
+        "code": "UPSTREAM_ERROR",
+        "message": "Fields desk refused the call: channel_not_found.",
+        "side": "upstream",
+    }, refused
+    rig.answer = httpx.Response(200, json={"ok": False, "error": "invalid_auth"})
+    out = await rig.call("echo")
+    assert not out.ok, out
+    # The plugin names invalid_auth among its sign-in errors, so the call asks for the account to connect again.
+    assert out.output["error"]["code"] == "AUTH_EXPIRED", out
+    assert out.output["error"]["message"] == "Connect Fields desk again to keep posting.", out
+
+
+async def test_an_answer_that_is_not_json_is_still_a_success(rig: Rig) -> None:
+    rig.answer = httpx.Response(200, text="error: none here")
+    out = await rig.call("search")
+    assert out.ok, out
 
 
 async def test_a_form_tools_operation_is_a_form_body_as_a_custom_tools_is(rig: Rig) -> None:
