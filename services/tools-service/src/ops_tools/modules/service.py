@@ -1642,8 +1642,11 @@ class ModuleService:
                 detail = "Hidden from workflows; no workflow is approved for it"
                 changes.append({"operation": name, "kind": "removed", "detail": detail, "major": False})
             o["enabled"] = patch["enabled"]
+        flag_changed = patch.get("requires_approval") is not None and patch["requires_approval"] != o.get(
+            "requires_approval"
+        )
         if patch.get("requires_approval") is not None:
-            # Kept as sent for older readers; the change above (approval_mode) is what is logged and enforced.
+            # Kept as sent for older readers; the approval_mode change below is what is logged and enforced.
             o["requires_approval"] = patch["requires_approval"]
         if "approval_mode" in fields and mode != o.get("approval_mode"):
             before_mode = o.get("approval_mode")
@@ -1652,6 +1655,11 @@ class ModuleService:
             detail = f"Approval {_MODE_WORDS[before_mode]} → {_MODE_WORDS[mode]}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": mode != "reviewer"})
             o["approval_mode"] = mode
+        elif flag_changed:
+            # The stored flag moved but the answer did not (a tool already following its app, told false): still an
+            # edit, so a script that re-sends it is not refused as "Nothing changed". No effect on calls, so minor.
+            detail = f"Approval {_MODE_WORDS[o.get('approval_mode')]}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
         if "reviewer_role" in fields and patch.get("reviewer_role") != o.get("reviewer_role"):
             role = patch.get("reviewer_role")
             anyone = "anyone who can approve"

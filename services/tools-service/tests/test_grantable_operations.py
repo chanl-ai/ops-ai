@@ -62,8 +62,9 @@ async def test_each_operation_carries_a_json_schema_for_its_input(api: Api) -> N
         "required": ["customerId"],
         "additionalProperties": False,
     }
-    # A write waits by the team's and app's answer (effective_answer), never by a flag the seed carries.
-    assert by_name["send_reply"]["requiresApproval"] is False
+    # A write waits by its own answer, else its app's and the team's (effective_answer); the seed gives a declared wait
+    # the answer "reviewer".
+    assert by_name["send_reply"]["requiresApproval"] is True
 
 
 async def test_another_tenants_operations_are_not_listed(api: Api) -> None:
