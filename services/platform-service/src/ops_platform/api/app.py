@@ -7,7 +7,7 @@ introspection behind the service token and is bound to a port the public host ne
 import json
 import time
 from pathlib import Path as FilePath
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from urllib.parse import parse_qs
 
 import httpx
@@ -788,7 +788,9 @@ def create_public_app(
             raise OAuthError("invalid_client_metadata", "Send the registration as a JSON object.")
         address = request.client.host if request.client else "unknown"
         return JSONResponse(
-            await clients.register(body, address=address), status_code=201, headers={"Cache-Control": "no-store"}
+            await clients.register(cast(dict[str, Any], body), address=address),
+            status_code=201,
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.get("/oauth/authorize", include_in_schema=False)

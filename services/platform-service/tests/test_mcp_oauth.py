@@ -97,7 +97,8 @@ class Assistant:
     async def code(self, who: dict[str, str], params: dict[str, str]) -> str:
         r = await self.allow(who, params)
         assert r.status_code == 200, r.text
-        query = parse_qs(urlsplit(r.json()["data"]["redirectTo"]).query)
+        redirect: str = r.json()["data"]["redirectTo"]
+        query = parse_qs(urlsplit(redirect).query)
         assert query["state"] == [params["state"]]
         return query["code"][0]
 

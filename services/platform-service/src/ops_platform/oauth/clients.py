@@ -10,7 +10,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from ops_service_kit.ids import new_id
@@ -88,12 +88,10 @@ class Clients:
     limit: RegistrationLimit = field(default_factory=RegistrationLimit)
 
     async def register(self, body: dict[str, Any], *, address: str) -> dict[str, Any]:
-        uris = body.get("redirect_uris")
-        if (
-            not isinstance(uris, list)
-            or not 0 < len(uris) <= MAX_REDIRECTS
-            or not all(isinstance(u, str) for u in uris)
-        ):
+        given: object = body.get("redirect_uris")
+        listed = cast(list[object], given) if isinstance(given, list) else []
+        uris = [u for u in listed if isinstance(u, str)]
+        if not 0 < len(listed) <= MAX_REDIRECTS or len(uris) != len(listed):
             raise OAuthError("invalid_redirect_uri", f"Give between 1 and {MAX_REDIRECTS} redirect addresses.")
         for u in uris:
             check_redirect(u)
