@@ -39,6 +39,8 @@ NOT_YET_MARKED = {
     "api_keys",
     "audit_entries",
     "role_assignments",
+    # sign-in group mappings: read by provider for the workspace; the team is the grant's target, not its owner
+    "signin_group_rules",
 }
 
 

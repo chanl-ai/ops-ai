@@ -250,7 +250,7 @@ signin_providers = sa.Table(
     sa.Column("jit_role", sa.String(16)),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("updated_at", sa.String(40), nullable=False),
-    # Random, set at creation: names the provider in its own SAML addresses across workspaces (migration 0033).
+    # Random, set at creation: names the provider in its own SAML addresses across workspaces (migration 0034).
     sa.Column("sp_id", sa.String(40)),
     sa.ForeignKeyConstraint(["tenant_id", "jit_team_id"], ["teams.tenant_id", "teams.id"], name="fk_signin_jit_team"),
     sa.Index("ux_signin_providers_sp_id", "sp_id", unique=True),
@@ -294,7 +294,7 @@ signin_domains = sa.Table(
 signin_certificates = sa.Table(
     "signin_certificates",
     metadata,
-    # A provider's trusted signing certificates (migration 0033). Keyed by fingerprint within the provider, since two
+    # A provider's trusted signing certificates (migration 0034). Keyed by fingerprint within the provider, since two
     # workspaces may trust one identity provider's certificate.
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("provider_id", sa.String(64), primary_key=True),
@@ -321,7 +321,7 @@ signin_certificates = sa.Table(
 signin_group_rules = sa.Table(
     "signin_group_rules",
     metadata,
-    # A provider's group mapping (migration 0033): the person in `group_value` (the exact value the provider sends)
+    # A provider's group mapping (migration 0034): the person in `group_value` (the exact value the provider sends)
     # gets `role` in `team_id`. Never admin: the service refuses it on save (decision D5).
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), nullable=False, index=True),
@@ -369,7 +369,7 @@ signin_grants = sa.Table(
 signin_break_glass = sa.Table(
     "signin_break_glass",
     metadata,
-    # The Security admins who may sign in by password while company sign-in is required (migration 0033, decision D7).
+    # The Security admins who may sign in by password while company sign-in is required (migration 0034, decision D7).
     # A person who no longer holds settings.manage in the Security team is not counted, whatever this table holds.
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("user_id", sa.String(64), primary_key=True),
