@@ -309,7 +309,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/case-page-assembled.md` | uc-256: a case opened by a configured workflow shows its header and next action, fields in the case type's order, the task it waits on, the drafted action, linked records and recent activity from one case request; approved, the action reads approved |
 | `usecases/console/pdf-scripts-never-run.md` | uc-398: a crafted PDF carrying open-action, link and form-field scripts is drawn by the file viewer and none of its scripts run; the worker loaded is PDF.js 6.2.108 or later |
 | `usecases/console/table-column-kinds.md` | uc-257: tables size each column by what it holds, with names trimmed to one line, numbers right-aligned, a dash for an empty cell and the name pinned on a phone |
-| `usecases/console/shell-real-data.md` | uc-232: the header's workspace name and Tools › Workflows come from the services, not the mock |
+| `usecases/console/shell-real-data.md` | uc-232: the sidebar's workspace name and Tools › Workflows come from the services, and the header does not repeat it, not the mock |
 | `usecases/console/run-with-files.md` | uc-233: Start run is a form from the trigger's input schema, with files uploaded or picked |
 | `usecases/console/agent-channels.md` | uc-130: an agent's Channels tab shows its chat default, embeds with sites, keys and usage, and calling workflows; an embed retires for good |
 | `usecases/console/agent-shows-every-widget-kind.md` | uc-132: the agent shows every generic widget kind in a chat, each drawn once from its schema-checked data |

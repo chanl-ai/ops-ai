@@ -203,7 +203,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-229 | agents-service | A guarded answer streams as it is written and is replaced when its check fails | ui | passing |
 | uc-230 | tools-service | A workflow step notifies an outside system's webhook with a case's data | api | passing |
 | uc-231 | agents-service | A Calculate step works out a court order's amount and deadline | api, ui | passing |
-| uc-232 | console | The header names the workspace from platform-service and Tools › Workflows lists the registry directory, not the mock | ui | passing |
+| uc-232 | console | The sidebar names the workspace from platform-service, the header does not repeat it, and Tools › Workflows lists the registry directory, not the mock | ui | passing |
 | uc-245 | agents-service | A team's mailbox runs end to end: connected and tested in the console, bound through a review, a PDF read, checked and decided by a person, a case opened, the reply sent from the mailbox, a redelivery ignored | ui | passing |
 | uc-246 | agents-service | A mixed court order email is read by kind in parallel: a case and a webhook per document, a person checks the doubtful read, and the sender gets a reply | ui | passing |
 | uc-247 | agents-service | A builder tests an agent on a real chat thread the server marks test | api, ui | passing |
