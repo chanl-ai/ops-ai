@@ -227,19 +227,28 @@ def _item_counts(s: dict[str, Any]) -> dict[str, int]:
 logger = get_logger(__name__)
 
 # How far behind its schedule's latest slot a source may be and still be fresh: the beat that syncs it runs each minute.
+# Capped at half the schedule's period, so an hourly source whose sync died reads stale before its next slot arrives.
 FRESH_GRACE = timedelta(hours=1)
 
 
-def freshness(schedule: dict[str, Any], good: datetime | None, now: datetime, grace: timedelta | None = None) -> str:
-    """`no_schedule` when the source only syncs when asked. Otherwise `stale` once its latest slot is more than
-    `grace` past and no good sync has happened since the slot (a failed run does not count, and a source that never
+def _period(schedule: dict[str, Any]) -> timedelta:
+    kind = schedule["kind"]
+    if kind == "hourly":
+        return timedelta(hours=int(schedule["every"]))
+    return timedelta(days=7) if kind == "weekly" else timedelta(days=1)
+
+
+def freshness(schedule: dict[str, Any], good: datetime | None, now: datetime) -> str:
+    """`no_schedule` when the source only syncs when asked. Otherwise `stale` once its latest slot is more than the
+    grace past and no good sync has happened since the slot (a failed run does not count, and a source that never
     synced well is stale); `fresh` before that, since the beat has until then to run the slot."""
     slot = last_slot(schedule, now)
     if slot is None:
         return "no_schedule"
     if good is not None and good >= slot:
         return "fresh"
-    return "stale" if good is None or now > slot + (FRESH_GRACE if grace is None else grace) else "fresh"
+    grace = min(FRESH_GRACE, _period(schedule) / 2)
+    return "stale" if good is None or now > slot + grace else "fresh"
 
 
 # The one precedence rule the index applies: a document a sync replaces keeps only its newest version in search.
@@ -358,7 +367,7 @@ class KnowledgeService:
         state = self.freshness_of(s, now)
         schedule = self.schedule_of(s)
         when = last_slot(schedule, now) if state == "stale" else next_run(schedule, s.get("last_good_sync_at"), now)
-        return {"freshness": state, "reviewBy": _iso(when) if when else ""}
+        return {"freshness": state, "reviewBy": _iso(when) or ""}
 
     def key_of(self, s: dict[str, Any]) -> str:
         """The digest an item built now under the source's settings records (`indexed_with`)."""

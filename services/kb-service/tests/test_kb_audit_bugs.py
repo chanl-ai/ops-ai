@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.service import freshness
 from ops_kb.source_settings import defaults, stored, wire
+from ops_kb.store import knowledge
 from ops_kb.store.knowledge import kb_sources
 from ops_store import isolation
 
@@ -112,9 +113,39 @@ def test_freshness_adds_the_grace_to_the_slot(now: datetime, good: datetime | No
     assert freshness(DAILY_2AM, good, now) == expected
 
 
-def test_a_zero_grace_would_read_stale_inside_the_window() -> None:
-    now = datetime(2026, 11, 11, 2, 59, tzinfo=UTC)
-    assert freshness(DAILY_2AM, YESTERDAY_GOOD, now, grace=timedelta(0)) == "stale"
+HOURLY = {"kind": "hourly", "every": 1}
+HOURLY_GOOD = datetime(2026, 11, 11, 9, 1, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (datetime(2026, 11, 11, 10, 29, tzinfo=UTC), "fresh"),  # slot + 29m: half the period, still inside the grace
+        (datetime(2026, 11, 11, 10, 31, tzinfo=UTC), "stale"),  # slot + 31m: the 10:00 run never happened
+        (datetime(2026, 11, 11, 12, 45, tzinfo=UTC), "stale"),  # no good sync for hours: the slot keeps moving
+    ],
+)
+def test_an_hourly_source_whose_sync_died_reads_stale_within_half_its_period(now: datetime, expected: str) -> None:
+    assert freshness(HOURLY, HOURLY_GOOD, now) == expected
+
+
+async def test_freshness_is_read_on_the_databases_clock_not_the_services(
+    engine: AsyncEngine, tenant: str, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = await file_source(client)
+    await upload(client, src["id"], "hardship.pdf", HARDSHIP)
+    data(await client.post(f"/v1/sources/{src['id']}/sync"))
+    kb_row = await base_of(client, src["id"])
+    data(
+        await client.patch(
+            f"/v1/sources/{src['id']}", json={"schedule": {"kind": "daily", "time": "00:00", "tz": "UTC"}}
+        )
+    )
+    await _synced_ago(engine, tenant, src["id"], timedelta(minutes=1))
+    assert await _freshness(client, kb_row["id"]) == ["fresh"]
+    later = datetime.now(UTC) + timedelta(days=3)
+    monkeypatch.setattr(knowledge, "db_now", lambda: sa.literal(later, sa.DateTime(timezone=True)))
+    assert await _freshness(client, kb_row["id"]) == ["stale"]
 
 
 def test_settings_saved_under_an_old_preset_label_show_the_label_their_steps_match() -> None:
