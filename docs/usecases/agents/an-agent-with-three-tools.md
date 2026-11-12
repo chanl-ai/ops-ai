@@ -1,6 +1,6 @@
 # An agent with three tools
 
-Status: current. Layers: ui passes; sdk and cli have open gaps below.
+Status: current. Layers: ui passes; sdk and cli wait on the one gap below.
 
 | Use case | |
 |---|---|
@@ -60,40 +60,141 @@ export OPS_PROFILE=builder
 ### 1. Allow the bank's host and range
 
 ```python tab="Python" tab-group="language"
-security.raw.tools.egress_add_host({"value": "api.bank.test", "note": "core banking"})
-security.raw.tools.egress_add_range({"value": "127.0.0.0/8", "note": "core banking"})
+security.egress.allow_host("api.bank.test", "core banking")
+security.egress.allow_range("127.0.0.0/8", "core banking")
 ```
 
 ```ts tab="TypeScript"
-await security.raw.tools.egress_add_host({ body: { value: 'api.bank.test', note: 'core banking' } });
-await security.raw.tools.egress_add_range({ body: { value: '127.0.0.0/8', note: 'core banking' } });
+await security.egress.allowHost('api.bank.test', 'core banking');
+await security.egress.allowRange('127.0.0.0/8', 'core banking');
 ```
 
-Expected: both accepted. The CLI has no word for this step (see Gaps).
+```bash tab="CLI"
+opsai egress --profile security allow-host api.bank.test --note 'core banking'
+opsai egress --profile security allow-range 127.0.0.0/8 --note 'core banking'
+```
+
+Expected: both accepted.
 
 ### 2. Store the bank's two keys as secrets
 
-Expected: 201 each; no response shows the value. No word exists in the SDK or CLI (see Gaps).
+```python tab="Python" tab-group="language"
+builder.secrets.create("BANK_API_KEY", "dev-bank-key")
+builder.secrets.create("STATEMENTS_API_KEY", "dev-bank-key")
+```
+
+```ts tab="TypeScript"
+await builder.secrets.create('BANK_API_KEY', 'dev-bank-key');
+await builder.secrets.create('STATEMENTS_API_KEY', 'dev-bank-key');
+```
+
+```bash tab="CLI"
+printf %s dev-bank-key | opsai secrets create BANK_API_KEY
+printf %s dev-bank-key | opsai secrets create STATEMENTS_API_KEY
+```
+
+Expected: 201 each; no response shows the value.
 
 ### 3. Import the OpenAPI document, tick `place_hold`, untick `get_statement`, save the draft
 
-Expected: reads are Read, `place_hold` is Write. No word exists in the SDK or CLI (see Gaps).
+```python tab="Python" tab-group="language"
+module = builder.raw.tools.tool_modules_create_blank_module({"name": "core_banking", "displayName": "Core banking", "type": "openapi"})
+builder.tools.import_openapi(module["id"], "https://api.bank.test/openapi.json", ["get_account", "place_hold"])
+```
+
+```ts tab="TypeScript"
+const module = await builder.raw.tools.tool_modules_create_blank_module({ body: { name: 'core_banking', displayName: 'Core banking', type: 'openapi' } });
+await builder.tools.importOpenapi(module.id, 'https://api.bank.test/openapi.json', ['get_account', 'place_hold']);
+```
+
+```bash tab="CLI"
+MODULE=$(opsai tools --json list --search "Core banking" | jq -r '.[0].id')
+opsai tools import "$MODULE" https://api.bank.test/openapi.json --operation get_account --operation place_hold
+```
+
+Expected: reads are Read, `place_hold` is Write.
 
 ### 4. Request a security review; the Security approver publishes the module
 
-Expected: the module is published. No word exists in the SDK or CLI (see Gaps).
+```python tab="Python" tab-group="language"
+builder.tools.request_review(module["id"], "bank reads and one hold")
+security.tools.decide_review(module["id"], "approved")
+```
+
+```ts tab="TypeScript"
+await builder.tools.requestReview(module.id, 'bank reads and one hold');
+await security.tools.decideReview(module.id, 'approved');
+```
+
+```bash tab="CLI"
+opsai tools request-review "$MODULE" --note "bank reads and one hold"
+opsai tools --profile security decide-review "$MODULE" --decision approved
+```
+
+Expected: the module is published.
 
 ### 5. Import `get_statement` and publish a second version
 
-Expected: the version is listed; `get_statement` has no `api_key` input. No word exists in the SDK or CLI (see Gaps).
+```python tab="Python" tab-group="language"
+builder.tools.import_openapi(module["id"], "https://api.bank.test/openapi.json", ["get_statement"])
+builder.tools.publish_version(module["id"], "statements")
+```
+
+```ts tab="TypeScript"
+await builder.tools.importOpenapi(module.id, 'https://api.bank.test/openapi.json', ['get_statement']);
+await builder.tools.publishVersion(module.id, 'statements');
+```
+
+```bash tab="CLI"
+opsai tools import "$MODULE" https://api.bank.test/openapi.json --operation get_statement
+opsai tools publish "$MODULE" --note statements
+```
+
+Expected: the version is listed; `get_statement` has no `api_key` input.
 
 ### 6. Run `get_account` and `get_statement` from the test panel
 
-Expected: both reach the bank. The SDK's `tools.run` takes an app, not a module (see Gaps).
+```python tab="Python" tab-group="language"
+for tool, args in (("get_account", {"account_id": "CHQ-2219"}), ("get_statement", {"account_id": "CHQ-2219"})):
+    builder.tools.run_module(module["id"], tool, args, real=True)
+```
+
+```ts tab="TypeScript"
+for (const [tool, args] of [['get_account', { account_id: 'CHQ-2219' }], ['get_statement', { account_id: 'CHQ-2219' }]] as const) {
+  await builder.tools.runModule(module.id, tool, args, { real: true });
+}
+```
+
+```bash tab="CLI"
+opsai tools run --module --real "$MODULE" get_account --input account_id=CHQ-2219
+opsai tools run --module --real "$MODULE" get_statement --input account_id=CHQ-2219
+```
+
+Expected: both reach the bank.
 
 ### 7. Grant the three tools to Branch Concierge and publish it
 
-Expected: the agent holds all three. No word grants a module's tools to an agent (see Gaps).
+```python tab="Python" tab-group="language"
+agent = next(a for a in builder.agents.list() if a["name"] == "Branch Concierge")
+wanted = [o["id"] for o in builder.agents.tool_options("core_banking")]
+builder.agents.grant_tools(agent["id"], wanted)
+builder.agents.publish(agent["id"])
+```
+
+```ts tab="TypeScript"
+const found = (await builder.agents.list()) as any[];
+const agent = found.find((a: { name: string }) => a.name === 'Branch Concierge');
+await builder.agents.grantTools(agent.id, (await builder.agents.toolOptions('core_banking')).map((o: { id: string }) => o.id));
+await builder.agents.publish(agent.id);
+```
+
+```bash tab="CLI"
+AGENT=$(opsai agents --json list | jq -r '.[] | select(.name == "Branch Concierge") | .id')
+opsai agents grant-tools "$AGENT" $(opsai agents --json tool-options --search core_banking | jq -r '.[].id')
+opsai agents publish "$AGENT"
+```
+
+Expected: the agent holds all three.
 
 ### 8. Ask the agent for an account
 
@@ -122,11 +223,38 @@ Expected: "Here is what I found."; one call by the agent in the log.
 
 ### 9. Ask for a write: it is held
 
-Expected: an approval card; no call logged and no new hold at the bank. A chat write held for approval has no SDK or CLI word to read it (see Gaps).
+```python tab="Python" tab-group="language"
+held = builder.agents.chat(agent["id"], 'call place_hold {"account_id": "CHQ-2219", "amount": 25}')
+task = next(t for t in approver.tasks.list(view="open") if t.get("status") == "open")
+```
+
+```ts tab="TypeScript"
+const held = await builder.agents.chat(agent.id, 'call place_hold {"account_id": "CHQ-2219", "amount": 25}');
+const task = (await Array.fromAsync(approver.tasks.list({ view: 'open' }))).find((t: { status: string }) => t.status === 'open');
+```
+
+```bash tab="CLI"
+opsai agents chat "$AGENT" --message 'call place_hold {"account_id": "CHQ-2219", "amount": 25}'
+TASK=$(opsai tasks --profile approver --json list --view open | jq -r '.[0].id')
+```
+
+Expected: an approval card; no call logged and no new hold at the bank.
 
 ### 10. The approver approves it
 
-Expected: one call runs and the bank holds exactly one new hold of 25. No word answers a held chat write (see Gaps).
+```python tab="Python" tab-group="language"
+approver.tasks.approve(task["id"], password="northfield-demo")
+```
+
+```ts tab="TypeScript"
+await approver.tasks.approve(task.id, { password: 'northfield-demo' });
+```
+
+```bash tab="CLI"
+opsai tasks --profile approver approve "$TASK" --password northfield-demo
+```
+
+Expected: one call runs and the bank holds exactly one new hold of 25.
 
 ### 11. The call log names the write
 
@@ -153,17 +281,10 @@ Expected: the console script checks it; there is no SDK or CLI step.
 
 ## Gaps
 
-This page does not pass while a row here is open. Each open gap is a product change tracked on the board; no test helper stands in for it.
+This page does not pass while a row here is open. Each open gap is a product change tracked on the board; no test helper stands in for it. Creating the module still uses the generated `tool_modules_create_blank_module` call.
 
 | Product fix | Step | Tab | What is missing | Where |
 |---|---|---|---|---|
-| Egress words | 1 | CLI | no `opsai` verb allows a host or a range | `sdk/python/src/ops_ai/_cli/tools.py` |
-| Secrets words | 2 | All | the SDK and CLI cannot store a team secret; only `raw` calls reach it | no word yet in `sdk/python/src/ops_ai/_words.py` |
-| OpenAPI import words | 3, 5 | All | no word imports an OpenAPI document or ticks operations | no word yet in `sdk/python/src/ops_ai/_words.py` |
-| Publish review words | 4 | All | no word requests or answers a module's security review | no word yet in `sdk/python/src/ops_ai/_words.py` |
-| Module test run | 6 | All | `tools.run` takes an app; a module that is not an app cannot be run from the SDK | `sdk/python/src/ops_ai/_words.py:306` |
-| Granting tools | 7 | All | no word grants a module's tools to an agent | no word yet in `sdk/python/src/ops_ai/_words.py` |
-| Held writes | 9, 10 | All | no word lists or answers a chat write held for approval | no word yet in `sdk/python/src/ops_ai/_words.py` |
 | A bank on the page stack | All | All | `page_stack.py` starts no core-banking fake, so no step can reach the bank | `docs/usecases/lib/page_stack.py:259-302` |
 
 ## What proves it
