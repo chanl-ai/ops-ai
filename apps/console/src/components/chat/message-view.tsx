@@ -279,6 +279,12 @@ export function AssistantMessage({
           <AlertTitle>The answer stopped part-way</AlertTitle>
           <AlertDescription className="space-y-2">
             <p data-testid="reply-error">{refusal?.text ?? message.error}</p>
+            {refusal?.code && (
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer">Details</summary>
+                <span data-testid="reply-error-code">Code: {refusal.code}</span>
+              </details>
+            )}
             <div className="flex flex-wrap gap-2">
               {refusal?.fixAt && (
                 <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>

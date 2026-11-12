@@ -102,6 +102,9 @@ await withUiStack(
           await settle(page);
           const areas = await areasOf(page);
           await pick(page, 'Govern');
+          // Activity, Access and Evals start folded; open each so every listed sub-page is counted and walked.
+          const folded = page.getByRole('button', { name: /^Show .+ pages$/ });
+          while ((await folded.count()) > 0) await folded.first().click();
           const govern = await rowsOf(page);
           // Every area's rows open without a refusal (PERM-2): a listed page must answer for the person it is listed to.
           for (const area of AREAS) {
@@ -264,7 +267,7 @@ await withUiStack(
         await logIn(page, PRIYA);
         await open(page, '/chat');
         const priyaAgain = { lit: await lit(page), rows: await rowsOf(page) };
-        check('7 the remembered area belongs to the person, not the browser', first[0] === 'Work' && james[0] === 'Build' && priyaAgain.lit[0] === 'Govern' && priyaAgain.rows.includes('Audit log'), { first, james, priyaAgain });
+        check('7 the remembered area belongs to the person, not the browser', first[0] === 'Work' && james[0] === 'Build' && priyaAgain.lit[0] === 'Govern' && priyaAgain.rows.includes('Access'), { first, james, priyaAgain });
         await page.context().close();
       });
 
@@ -413,6 +416,40 @@ await withUiStack(
           seen.calls.status === 307 && seen.calls.to === '/tools/calls' && seen.policies.status === 307 && seen.policies.to === '/policies' && seen.account.status === 307 && seen.account.to === '/settings/account' && policies.lit[0] === 'Govern' && policies.rows.includes('Policies'),
           { seen, policies },
         );
+      });
+
+      await step('15 no crumb is cut at 1440, and Policies reads Govern / Policies', async () => {
+        await priya.setViewportSize({ width: 1440, height: 1000 });
+        const seen = {};
+        // The settings trails are the longest (four crumbs), then a Govern child page.
+        for (const route of ['/policies', '/settings/policies/gates', '/settings/security/egress', '/settings/workspace/model-providers', '/tools/calls', '/logs/background']) {
+          await open(priya, route);
+          seen[route] = await priya.evaluate(() => {
+            const nav = document.querySelector('header nav[aria-label=Breadcrumb]');
+            const labels = [...nav.querySelectorAll('a, span.truncate')];
+            return { text: labels.map((e) => e.textContent.trim()), cut: labels.filter((e) => e.scrollWidth > e.clientWidth).map((e) => e.textContent.trim()) };
+          });
+        }
+        await open(priya, '/policies');
+        await priya.screenshot({ path: join(SHOTS, 'trail-policies-1440.png') });
+        check('15 no crumb is cut at 1440, and Policies reads Govern / Policies', Object.values(seen).every((v) => v.cut.length === 0) && seen['/policies'].text.join('/') === 'Govern/Policies', seen);
+      });
+
+      await step('16 Govern starts with six rows, a folded row opens by its arrow, and the choice is remembered', async () => {
+        const person = await signedIn(PRIYA);
+        await person.setViewportSize({ width: 1440, height: 1000 });
+        await open(person, '/policies');
+        const rows = await rowsOf(person);
+        const names = ['Activity', 'Reviews', 'Access', 'Policies', 'Evals', 'Settings'];
+        const subRows = ['Tool calls', 'Audit log', 'Background', 'Roles', 'Tool access', 'Model inventory'];
+        const start = { rows: rows.filter((r) => names.includes(r) || subRows.includes(r)), count: await person.locator('[data-sidebar=content] a').count() };
+        await person.screenshot({ path: join(SHOTS, 'govern-folded-1440.png') });
+        await person.getByRole('button', { name: 'Show Access pages' }).click();
+        await person.getByRole('link', { name: 'Roles' }).waitFor({ timeout: 8_000 });
+        await open(person, '/policies');
+        const opened = overlap(await rowsOf(person), subRows);
+        check('16 Govern starts with six rows, a folded row opens by its arrow, and the choice is remembered', start.rows.join() === names.join() && start.count === 6 && opened.join() === 'Roles,Tool access', { start, opened });
+        await person.context().close();
       });
 
       check('no page errors', errors.length === 0, errors.slice(0, 3));

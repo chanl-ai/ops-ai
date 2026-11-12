@@ -41,34 +41,37 @@ import { type NavItem, childrenOffered, itemOffered, navMatch, rowsOfArea } from
 import { useAreas } from '@/components/shared/area-switcher';
 import { readOverview } from '@/lib/overview';
 
-// Parents a viewer has closed, kept in this browser only: every parent starts open, and the sidebar works the same
-// when storage is unavailable.
+// What a viewer chose for each parent, kept in this browser only: a parent starts open unless its entry says
+// `foldedAtStart`, and the sidebar works the same when storage is unavailable. The older key held only the closed ones.
+const SECTIONS_KEY = 'ops.sidebar.sections';
 const CLOSED_KEY = 'ops.sidebar.closed';
 
-function useClosedSections(): [Set<string>, (url: string, open: boolean) => void] {
-  const [closed, setClosed] = React.useState<Set<string>>(() => new Set());
+function useSectionChoices(): [Record<string, boolean>, (url: string, open: boolean) => void] {
+  const [chosen, setChosen] = React.useState<Record<string, boolean>>({});
   React.useEffect(() => {
     try {
-      const saved = JSON.parse(window.localStorage.getItem(CLOSED_KEY) ?? '[]');
-      if (Array.isArray(saved)) setClosed(new Set(saved.filter((x): x is string => typeof x === 'string')));
+      const saved = JSON.parse(window.localStorage.getItem(SECTIONS_KEY) ?? 'null');
+      const closed = JSON.parse(window.localStorage.getItem(CLOSED_KEY) ?? '[]');
+      const next: Record<string, boolean> = {};
+      if (Array.isArray(closed)) for (const x of closed) if (typeof x === 'string') next[x] = false;
+      if (saved && typeof saved === 'object') for (const [k, v] of Object.entries(saved)) if (typeof v === 'boolean') next[k] = v;
+      setChosen(next);
     } catch {
-      // No storage, or a value this version cannot read: every parent stays open.
+      // No storage, or a value this version cannot read: every parent starts as its entry says.
     }
   }, []);
   const toggle = React.useCallback((url: string, open: boolean) => {
-    setClosed((prev) => {
-      const next = new Set(prev);
-      if (open) next.delete(url);
-      else next.add(url);
+    setChosen((prev) => {
+      const next = { ...prev, [url]: open };
       try {
-        window.localStorage.setItem(CLOSED_KEY, JSON.stringify([...next]));
+        window.localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
       } catch {
         // Not remembered; the change still applies on this page.
       }
       return next;
     });
   }, []);
-  return [closed, toggle];
+  return [chosen, toggle];
 }
 
 // Groups a viewer has opened or folded, kept in this browser only. Chats starts open, the rest folded.
@@ -125,7 +128,7 @@ function FoldingGroup({ label, open, onOpenChange, children }: { label: string; 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const isPreview = usePreviewCheck();
-  const [closed, toggleSection] = useClosedSections();
+  const [chosen, toggleSection] = useSectionChoices();
   const brand = useBrand();
   // One count in the sidebar: Human Tasks waiting for you, the same number as Assigned to me and Overview's first widget.
   const overview = useOverview().data;
@@ -173,7 +176,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
     if (!item.children?.length) return <SidebarMenuItem key={item.url}>{row}</SidebarMenuItem>;
     // The current page's section opens even if the viewer closed it, so the active row is always in view.
-    const open = !closed.has(item.url) || (inSection && (!!hit?.child || parentSubRow));
+    const open = (chosen[item.url] ?? !item.foldedAtStart) || (inSection && (!!hit?.child || parentSubRow));
     return (
       <Collapsible key={item.url} asChild open={open} onOpenChange={(o) => toggleSection(item.url, o)}>
         <SidebarMenuItem>
