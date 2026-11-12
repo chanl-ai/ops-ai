@@ -1,4 +1,4 @@
-"""uc-732 a person connects an assistant to a team's MCP address with their company sign-in, api layer:
+"""uc-733 a person connects an assistant to a team's MCP address with their company sign-in, api layer:
 docs/usecases/platform-service/mcp-company-sign-in.md. Real platform-service and tools-service; the client is scripted
 with raw HTTP (registration, PKCE, consent, token). No model call."""
 
@@ -70,7 +70,7 @@ with (
     reg = api.post(
         "/oauth/register",
         json={
-            "client_name": "uc-732 assistant",
+            "client_name": "uc-733 assistant",
             "redirect_uris": [REDIRECT],
             "token_endpoint_auth_method": "none",
             "grant_types": ["authorization_code", "refresh_token"],

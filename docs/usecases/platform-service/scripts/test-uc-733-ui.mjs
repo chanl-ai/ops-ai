@@ -1,4 +1,4 @@
-// uc-732 the consent page of a person connecting an assistant to a team's MCP address, ui layer. Headless Chromium against
+// uc-733 the consent page of a person connecting an assistant to a team's MCP address, ui layer. Headless Chromium against
 // a console signed in through platform-service. The page is /oauth/authorize in the (auth) layout and reads
 // GET /v1/oauth/consent; its parts carry data-testid consent-client-name, consent-name-source, consent-redirect-host,
 // consent-team and consent-allow. Doc: docs/usecases/platform-service/mcp-company-sign-in.md.
@@ -10,7 +10,7 @@ import { PLATFORM_PORT, check, chromium, evidenceDir, finish, withUiStack } from
 
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const REDIRECT = 'https://claude.example/callback';
-const SHOTS = evidenceDir('732');
+const SHOTS = evidenceDir('733');
 
 async function call(method, path, body, token) {
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
@@ -74,7 +74,7 @@ await withUiStack(
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         check(`nothing is clipped sideways at ${width}`, overflow <= 0, overflow);
         check(`no page errors at ${width}`, errors.length === 0, errors);
-        await page.screenshot({ path: join(SHOTS, `uc-732-consent-${name}.png`) });
+        await page.screenshot({ path: join(SHOTS, `uc-733-consent-${name}.png`) });
         await context.close();
       }
     } finally {

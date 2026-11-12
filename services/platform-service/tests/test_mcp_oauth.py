@@ -13,7 +13,7 @@ import base64
 import hashlib
 import json
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -137,7 +137,7 @@ async def test_the_server_metadata_tells_a_client_how_to_register_and_which_chal
 
 
 # uc-mcp-7
-async def test_open_registration_is_rate_limited_and_refuses_redirects_a_browser_could_be_sent_to_by_anyone(
+async def test_registration_refuses_redirects_anyone_could_use_and_allows_10_a_minute_per_source_address(
     signin: SignInRig,
 ) -> None:
     a = Assistant(signin)
@@ -146,14 +146,34 @@ async def test_open_registration_is_rate_limited_and_refuses_redirects_a_browser
         assert r.status_code == 400, (bad, r.status_code, r.text)
     for ok in ("http://127.0.0.1:33418/callback", "cursor://anysphere.cursor-mcp/oauth/callback"):
         assert (await a.register(redirect=ok)).status_code == 201, ok
-    limited: httpx.Response | None = None
-    for _ in range(300):
-        r = await a.register()
-        if r.status_code == 429:
-            limited = r
-            break
-    assert limited is not None, "300 registrations from one address were never limited"
-    assert int(limited.headers["retry-after"]) > 0
+    # A source address of this test's own, so the other tests' registrations do not count against it.
+    transport = httpx.ASGITransport(app=signin.app, client=("203.0.113.7", 40000))
+    async with httpx.AsyncClient(transport=transport, base_url=PUBLIC_URL) as other:
+        a.api = other
+        statuses = [(await a.register()).status_code for _ in range(10)]
+        assert statuses == [201] * 10, statuses
+        eleventh = await a.register()
+    assert eleventh.status_code == 429 and 0 < int(eleventh.headers["retry-after"]) <= 60, eleventh.text
+
+
+# uc-mcp-7
+async def test_a_client_never_consented_to_is_pruned_after_24_hours_and_a_consented_one_is_kept(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    idle, used = await a.client(name="Idle"), await a.client(name="Used")
+    who, team = await a.person()
+    await a.connect(who, a.params(used, team))
+    old = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+    async with signin.engine.begin() as c:
+        await c.execute(
+            sa.text("UPDATE oauth_clients SET created_at = :t WHERE id IN (:a, :b)"), {"t": old, "a": idle, "b": used}
+        )
+    await a.client(name="Trigger")  # a registration runs the prune
+    gone = await signin.public.get("/oauth/authorize", params=a.params(idle, team), follow_redirects=False)
+    kept = await signin.public.get("/oauth/authorize", params=a.params(used, team), follow_redirects=False)
+    assert gone.status_code == 400 and "location" not in gone.headers
+    assert kept.status_code in (302, 303), kept.status_code
 
 
 # uc-mcp-6, uc-mcp-15
@@ -280,7 +300,9 @@ async def test_a_renewal_used_twice_ends_the_grant_and_no_renewal_works_at_the_o
 
 
 # uc-mcp-5
-async def test_a_person_removed_from_the_team_cannot_renew_and_the_grant_ends(signin: SignInRig) -> None:
+async def test_a_person_removed_from_the_team_or_who_disconnects_cannot_renew_and_each_end_is_audited(
+    signin: SignInRig,
+) -> None:
     a = Assistant(signin)
     client = await a.client()
     who, team = await a.person()
@@ -292,6 +314,25 @@ async def test_a_person_removed_from_the_team_cannot_renew_and_the_grant_ends(si
     assert removed.status_code == 200, removed.text
     renewed = await a.renew(got["refresh_token"], client)
     assert (renewed.status_code, renewed.json()["error"]) == (400, "invalid_grant"), "never a token with fewer teams"
+    # Disconnect by the person, on a second connection of the same person.
+    mine = await a.client(name="Cursor")
+    who2, team2 = await a.person()
+    second = await a.connect(who2, a.params(mine, team2))
+    grants = (await signin.public.get("/v1/oauth/grants", headers=who2)).json()["data"]
+    assert (await signin.public.delete(f"/v1/oauth/grants/{grants[0]['id']}", headers=who2)).status_code == 204
+    assert (await a.renew(second["refresh_token"], mine)).status_code == 400
+    async with signin.engine.connect() as c:
+        rows = (
+            (await c.execute(sa.select(audit_entries).where(audit_entries.c.tenant_id == signin.tenant)))
+            .mappings()
+            .all()
+        )
+    by_action = {(r["action"], r["team_id"]): r for r in rows}
+    assert ("oauth.grant_allowed", team) in by_action and ("oauth.grant_allowed", team2) in by_action
+    assert by_action[("oauth.grant_ended", team)]["detail"]["by"] == "admin"
+    assert by_action[("oauth.grant_ended", team2)]["detail"]["by"] == "person"
+    # The registration row had no tenant; the first consent adds the tenant and team.
+    assert by_action[("oauth.client_registered", team2)]["target_id"] == mine
 
 
 # uc-mcp-5
@@ -313,28 +354,3 @@ async def test_a_connection_lasts_the_workspace_setting_8_hours_unless_an_admin_
     assert 1.9 < await hours_left() <= 2.0
     too_long = await signin.public.put("/v1/policies/mcpConnectionHours", json={"value": 31 * 24}, headers=signin.admin)
     assert too_long.status_code == 422, "at most 30 days"
-
-
-# uc-mcp-17
-async def test_a_grant_allowed_and_a_grant_ended_each_write_an_audit_row_with_tenant_and_team(
-    signin: SignInRig,
-) -> None:
-    a = Assistant(signin)
-    client = await a.client()
-    who, team = await a.person()
-    got = await a.connect(who, a.params(client, team))
-    grants = (await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"]
-    ended = await signin.public.delete(f"/v1/oauth/grants/{grants[0]['id']}", headers=who)
-    assert ended.status_code == 204
-    assert (await a.renew(got["refresh_token"], client)).status_code == 400
-    async with signin.engine.connect() as c:
-        rows = (
-            (await c.execute(sa.select(audit_entries).where(audit_entries.c.tenant_id == signin.tenant)))
-            .mappings()
-            .all()
-        )
-    seen = {r["action"]: r for r in rows}
-    for action in ("oauth.grant_allowed", "oauth.grant_ended"):
-        assert action in seen, (action, sorted(seen))
-    assert seen["oauth.grant_allowed"]["team_id"] == team
-    assert seen["oauth.grant_ended"]["detail"]["by"] == "person"
