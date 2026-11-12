@@ -25,12 +25,14 @@ from ops_platform.api.app import create_public_app
 from ops_platform.keys import dev_signer
 from ops_platform.signin_options import SignInOptions
 from ops_platform.store.identity import IdentityStore
+from ops_platform.store.roles import mirror_membership
 from ops_platform.store.tables import audit_entries, members, role_assignments, sessions, users
 from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import DEMO_PASSWORD, MCP_URL, PUBLIC_URL, SignInRig
 
 REDIRECT = "https://claude.example/callback"
+REGISTRATION = {"client_name": "Claude", "redirect_uris": [REDIRECT], "token_endpoint_auth_method": "none"}
 
 
 def challenge_of(verifier: str) -> str:
@@ -188,6 +190,36 @@ async def test_sign_in_starts_are_limited_to_30_a_minute_per_source_address(sign
         last = await other.get("/oauth/authorize", params={"response_type": "code"})
     assert 429 not in statuses, statuses
     assert last.status_code == 429 and 0 < int(last.headers["retry-after"]) <= 60, last.text
+
+
+# uc-mcp-7
+async def test_callers_behind_the_proxy_are_counted_apart_and_every_replica_sees_the_same_count(
+    signin: SignInRig, database_url: str
+) -> None:
+    """Behind Caddy every request's peer is the proxy (127.0.0.1, trusted): the caller is read from X-Forwarded-For,
+    and the count is the database's, so a second platform-service replica refuses the same caller."""
+    caller_a = {"X-Forwarded-For": "203.0.113.21"}
+    a_statuses = [
+        (await signin.public.post("/oauth/register", json=REGISTRATION, headers=caller_a)).status_code
+        for _ in range(10)
+    ]
+    assert a_statuses == [201] * 10, a_statuses
+    eleventh = await signin.public.post("/oauth/register", json=REGISTRATION, headers=caller_a)
+    assert eleventh.status_code == 429, eleventh.text
+    # A left-hand entry the caller wrote itself does not make it someone else.
+    spoofed = {"X-Forwarded-For": "198.51.100.5, 203.0.113.21"}
+    assert (await signin.public.post("/oauth/register", json=REGISTRATION, headers=spoofed)).status_code == 429
+    caller_b = {"X-Forwarded-For": "203.0.113.22"}
+    assert (await signin.public.post("/oauth/register", json=REGISTRATION, headers=caller_b)).status_code == 201
+    store = IdentityStore.open(database_url)
+    replica = create_public_app(
+        store, dev_signer(), demo_password=None, audiences=["platform"],
+        signin=SignInOptions(password_iterations=1_000, password_min_length=12, flow_ttl_s=600, reset_ttl_s=3600),
+    )  # fmt: skip
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=replica), base_url=PUBLIC_URL) as other:
+        again = await other.post("/oauth/register", json=REGISTRATION, headers=caller_a)
+    await store.close()
+    assert again.status_code == 429, again.text
 
 
 # uc-mcp-7
@@ -460,3 +492,73 @@ async def test_a_connection_lasts_the_workspace_setting_8_hours_unless_an_admin_
     assert 1.9 < await hours_left() <= 2.0
     too_long = await signin.public.put("/v1/policies/mcpConnectionHours", json={"value": 31 * 24}, headers=signin.admin)
     assert too_long.status_code == 422, "at most 30 days"
+
+
+async def _admin_for(signin: SignInRig, team: str) -> tuple[dict[str, str], str]:
+    """The rig's admin signed in after `team` exists (a token carries the teams it was minted with), and their id."""
+    async with signin.engine.connect() as c:
+        email, admin = (
+            await c.execute(
+                sa.select(users.c.email, users.c.id).where(users.c.tenant_id == signin.tenant, users.c.name == "Sam")
+            )
+        ).one()
+    login = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
+    return {"Authorization": f"Bearer {login.json()['data']['token']}", "X-Team-Id": team}, str(admin)
+
+
+# uc-mcp-17
+async def test_removing_a_person_from_the_team_audits_the_assistant_connection_it_ends_without_a_renewal(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    who, team = await a.person()
+    await a.connect(who, a.params(client, team))
+    [grant] = (await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"]
+    admin, admin_id = await _admin_for(signin, team)
+    async with signin.engine.connect() as c:
+        member = (await c.execute(sa.select(members.c.id).where(members.c.team_id == team))).scalar_one()
+    removed = await signin.public.post("/v1/settings/members/delete", json={"ids": [member]}, headers=admin)
+    assert removed.status_code == 200, removed.text
+    # No renewal is tried: the removal itself writes the row.
+    async with signin.engine.connect() as c:
+        q = sa.select(audit_entries).where(
+            audit_entries.c.action == "oauth.grant_ended", audit_entries.c.team_id == team
+        )
+        rows = (await c.execute(q)).mappings().all()
+    assert [(r["target_id"], r["actor"], r["detail"]["by"]) for r in rows] == [(grant["id"], admin_id, "admin")], rows
+
+
+# uc-mcp-2
+async def test_a_person_in_two_teams_gets_a_token_for_the_addresses_team_only(signin: SignInRig) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    _, team = await a.person()
+    # Also a builder in the rig's ops team, so the person's own sign-in names two teams.
+    async with signin.engine.begin() as c:
+        user, email = (
+            await c.execute(sa.select(members.c.user_id, members.c.email).where(members.c.team_id == team))
+        ).one()
+        now = now_iso()
+        await c.execute(
+            members.insert().values(
+                id=new_id("mem"), tenant_id=signin.tenant, team_id=signin.ops_team, user_id=user, email=email,
+                role="builder", status="active", created_at=now, updated_at=now,
+            )
+        )  # fmt: skip
+        await mirror_membership(
+            c, tenant_id=signin.tenant, team_id=signin.ops_team, user_id=user, member_role="builder",
+            security_team=signin.security_team, granted_by="test", at=now,
+        )  # fmt: skip
+    login = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
+    console = claims_of(login.json()["data"]["token"])
+    assert {team, signin.ops_team} <= set(console["team_ids"]), console["team_ids"]
+    assert {team, signin.ops_team} <= set(console["roles"]), console["roles"]
+    got = await a.connect({"Authorization": f"Bearer {login.json()['data']['token']}"}, a.params(client, team))
+    claims = claims_of(got["access_token"])
+    assert claims["team_ids"] == [team]
+    assert set(claims["roles"]) == {team}, claims["roles"]
+    assert set(claims["access"]) <= {team, "*"}, claims["access"]
+    renewed = await a.renew(got["refresh_token"], client)
+    assert renewed.status_code == 200, renewed.text
+    assert claims_of(renewed.json()["access_token"])["team_ids"] == [team]

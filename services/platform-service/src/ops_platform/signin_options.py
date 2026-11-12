@@ -37,6 +37,8 @@ class SignInOptions:
     console_url: str | None = None
     # tools-service's public base: a team's MCP address, the resource an assistant's grant is for, is under it.
     mcp_url: str | None = None
+    # The install's proxies (forms_trusted_proxies): registration and sign-in start limits count the caller behind them.
+    trusted_proxies: list[str] = field(default_factory=lambda: ["127.0.0.1/32"])
     mail: MailSender | None = None
     transport: httpx.AsyncBaseTransport | None = None
     dns: TxtResolver = field(default_factory=TxtResolver)
@@ -55,6 +57,7 @@ class SignInOptions:
             public_url=settings.platform_public_url,
             console_url=settings.console_url,
             mcp_url=settings.tools_public_url,
+            trusted_proxies=settings.forms_trusted_proxies,
             mail=mail,
             dns=TxtResolver(settings.signin_dns_servers, timeout_s=settings.signin_dns_timeout_seconds),
             saml_sp_key=settings.saml_sp_key,

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import ipaddress
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -28,6 +27,7 @@ from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.store import DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
+from ops_service_kit.client_address import client_address
 from ops_service_kit.errors import (
     Conflict,
     Forbidden,
@@ -238,25 +238,6 @@ async def update_form(rt: Rt, me: Me, form_id: str, body: FormPatch) -> JSONResp
     return ok(_view(row))
 
 
-def _address(request: Request, trusted: list[str]) -> str:
-    """The client's address: the right-most X-Forwarded-For entry outside the trusted proxies, read from the raw
-    header; the peer only when there is no header. A left-hand entry a client wrote itself is never reached."""
-    nets = [ipaddress.ip_network(n, strict=False) for n in trusted]
-
-    def inside(raw: str) -> bool:
-        try:
-            ip = ipaddress.ip_address(raw)
-        except ValueError:
-            return False
-        return any(ip in n for n in nets)
-
-    chain = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
-    for hop in reversed(chain):
-        if not inside(hop):
-            return hop
-    return chain[0] if chain else (request.client.host if request.client else "unknown")
-
-
 def _opened(token: str, slug: str) -> tuple[str, str, str, str]:
     """The tenant, team, form and secret a link's token names; 401 when it is not one of ours."""
     m = TOKEN.match(token or "")
@@ -358,7 +339,7 @@ async def submit_public(
     rt: Rt, request: Request, slug: str, body: SubmitIn, t: Annotated[str, Query()] = ""
 ) -> JSONResponse:
     row = await _linked(rt, slug, t)
-    address = _address(request, rt.settings.forms_trusted_proxies)
+    address = client_address(request, rt.settings.forms_trusted_proxies)
     if limits.hit(f"form:{row['id']}:{address}", PER_MINUTE) is not None:
         await _record(
             rt, row, "rate_limited", address, {"message": "More than 10 submissions in a minute from one address."}

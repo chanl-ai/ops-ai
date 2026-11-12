@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert
 
 from ops_access import ANY_TEAM, OWNER, active, encode_grid
 from ops_service_kit.ids import new_id, now_iso
@@ -19,7 +20,17 @@ from ops_store import Guarantee
 
 from .audit import record
 from .roles import RoleStore, version_in
-from .tables import api_keys, members, oauth_clients, role_assignments, sessions, teams, tenants, users
+from .tables import (
+    api_keys,
+    members,
+    oauth_address_counts,
+    oauth_clients,
+    role_assignments,
+    sessions,
+    teams,
+    tenants,
+    users,
+)
 from .tenancy import KEY_LOOKUP, SESSION_LOOKUP, SIGNIN_LOOKUP, TenantDb
 
 
@@ -378,6 +389,30 @@ class IdentityStore:
         t = oauth_clients
         async with self.db.system_tx(SIGNIN_LOOKUP) as c:
             return int((await c.execute(sa.select(sa.func.count()).where(t.c.tenant_id == tenant_id))).scalar_one())
+
+    async def count_address(self, kind: str, address: str, *, at: str, window_start: str) -> tuple[int, str]:
+        """Counts one request of `kind` from `address` in one upsert; a window that started before `window_start` starts
+        again at `at`. Returns the count in the window, this one included, and when the window started. Rows whose
+        window has passed are deleted on the way, so the table holds only the last minute's callers."""
+        t = oauth_address_counts
+        stale = t.c.window_start < window_start
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            await c.execute(t.delete().where(stale))
+            hits, started = (
+                await c.execute(
+                    insert(t)
+                    .values(kind=kind, address=address[:64], hits=1, window_start=at)
+                    .on_conflict_do_update(
+                        index_elements=[t.c.kind, t.c.address],
+                        set_={
+                            "hits": sa.case((stale, 1), else_=t.c.hits + 1),
+                            "window_start": sa.case((stale, at), else_=t.c.window_start),
+                        },
+                    )
+                    .returning(t.c.hits, t.c.window_start)
+                )
+            ).one()
+        return int(hits), str(started)
 
     async def open_grant(
         self,

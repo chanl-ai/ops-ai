@@ -427,6 +427,17 @@ oauth_clients = sa.Table(
     sa.Column("tenant_id", sa.String(64)),
 )
 
+# Assistant registrations and sign-in starts per caller address in the current one-minute window (migration 0035),
+# `kind` naming which; no tenant, since nobody is signed in yet.
+oauth_address_counts = sa.Table(
+    "oauth_address_counts",
+    metadata,
+    sa.Column("kind", sa.String(16), primary_key=True),
+    sa.Column("address", sa.String(64), primary_key=True),
+    sa.Column("hits", sa.Integer, nullable=False),
+    sa.Column("window_start", sa.String(40), nullable=False),
+)
+
 # The stricter rules an admin has switched on: one row per policy a tenant has set, the value as JSON; a policy
 # with no row has its open default from ops_access.POLICIES. A change bumps `tenants.permission_version`, since tokens
 # carry the values, and is recorded in audit_entries with its before and after.

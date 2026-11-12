@@ -21,6 +21,7 @@ from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
 from ops_service_kit.background import BackgroundHealthOut
+from ops_service_kit.client_address import client_address
 from ops_service_kit.credentials import credential_store
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized, ValidationFailed
 from ops_service_kit.http import (
@@ -786,7 +787,7 @@ def create_public_app(
             body = None
         if not isinstance(body, dict):
             raise OAuthError("invalid_client_metadata", "Send the registration as a JSON object.")
-        address = request.client.host if request.client else "unknown"
+        address = client_address(request, sign.trusted_proxies)
         return JSONResponse(
             await clients.register(cast(dict[str, Any], body), address=address),
             status_code=201,
@@ -795,7 +796,7 @@ def create_public_app(
 
     @app.get("/oauth/authorize", include_in_schema=False)
     async def oauth_authorize(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
-        address = request.client.host if request.client else "unknown"
+        address = client_address(request, sign.trusted_proxies)
         return RedirectResponse(await authorizer.start(dict(request.query_params), address=address), status_code=303)
 
     @app.post("/oauth/token", include_in_schema=False)

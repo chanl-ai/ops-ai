@@ -1,13 +1,11 @@
 """Dynamic client registration (RFC 7591): any assistant may register, so what it may register is limited. A redirect
 is https, http on the loopback (any port), or an app's own scheme; a fragment or a scheme that runs script is refused.
-At most 10 registrations a minute per source address; a client nobody allowed within 24 hours is deleted by the next
+At most 10 registrations a minute per caller address; a client nobody allowed within 24 hours is deleted by the next
 registration."""
 
 from __future__ import annotations
 
 import re
-import time
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -23,7 +21,7 @@ LOOPBACK = {"127.0.0.1", "localhost", "[::1]", "::1"}
 REFUSED_SCHEMES = {"javascript", "data", "file", "vbscript", "blob", "about", "ftp", "ws", "wss"}
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*$")
 PER_MINUTE = 10
-# Sign-in starts a minute per source address: a person retrying a few times stays well under it.
+# Sign-in starts a minute per caller address: a person retrying a few times stays well under it.
 AUTHORIZE_PER_MINUTE = 30
 UNUSED_HOURS = 24
 MAX_REDIRECTS = 10
@@ -63,41 +61,37 @@ def redirect_allowed(client: Client, uri: str) -> bool:
 
 @dataclass
 class AddressLimit:
-    """Requests per source address in the last minute (registrations, sign-in starts), held by this process. A bank
-    runs one platform-service replica; with more, each replica counts its own, which loosens the limit by the replica
-    count."""
+    """Requests of one kind (registrations, sign-in starts) per caller address in a one-minute window, counted in the
+    database so every replica and a restart see the same count. The address is the caller past the install's proxies
+    (ops_service_kit.client_address), never the proxy's own."""
 
-    per_minute: int = PER_MINUTE
-    clock: Any = time.monotonic
-    seen: dict[str, deque[float]] = field(default_factory=dict[str, deque[float]])
+    store: IdentityStore
+    kind: str
+    per_minute: int
 
-    def retry_after(self, address: str) -> int:
-        """0 and counts this registration, or the seconds until the address may register again."""
-        now = self.clock()
-        window = self.seen.setdefault(address, deque())
-        while window and now - window[0] >= 60:
-            window.popleft()
-        if len(window) >= self.per_minute:
-            return max(1, int(60 - (now - window[0])) + 1)
-        window.append(now)
-        if len(self.seen) > 10_000:
-            self.seen = {a: w for a, w in self.seen.items() if w and now - w[-1] < 60}
-        return 0
-
-    def refuse_when_busy(self, address: str, what: str) -> None:
-        """429 with Retry-After once the address has made `per_minute` of these in the last minute."""
-        wait = self.retry_after(address)
-        if wait:
-            raise OAuthError(
-                "temporarily_unavailable", f"Too many {what} from this address.", status=429,
-                headers={"Retry-After": str(wait)},
-            )  # fmt: skip
+    async def refuse_when_busy(self, address: str, what: str) -> None:
+        """Counts this request; 429 with Retry-After once the address has made more than `per_minute` of these in its
+        window."""
+        now = datetime.now(UTC)
+        hits, started = await self.store.count_address(
+            self.kind, address, at=iso(now), window_start=iso(now - timedelta(seconds=60))
+        )
+        if hits <= self.per_minute:
+            return
+        left = 60 - (now - datetime.fromisoformat(started)).total_seconds()
+        raise OAuthError(
+            "temporarily_unavailable", f"Too many {what} from this address.", status=429,
+            headers={"Retry-After": str(max(1, int(left) + 1))},
+        )  # fmt: skip
 
 
 @dataclass
 class Clients:
     store: IdentityStore
-    limit: AddressLimit = field(default_factory=AddressLimit)
+    limit: AddressLimit = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.limit = AddressLimit(self.store, "register", PER_MINUTE)
 
     async def register(self, body: dict[str, Any], *, address: str) -> dict[str, Any]:
         given: object = body.get("redirect_uris")
@@ -113,7 +107,7 @@ class Clients:
             )
         raw = body.get("client_name")
         name = " ".join(raw.split())[:100] if isinstance(raw, str) and raw.strip() else "Unnamed assistant"
-        self.limit.refuse_when_busy(address, "registrations")
+        await self.limit.refuse_when_busy(address, "registrations")
         now = datetime.now(UTC)
         client = Client(new_id("cli"), name, list(dict.fromkeys(uris)), None, None)
         await self.store.register_client(client, at=iso(now), stale_before=iso(now - timedelta(hours=UNUSED_HOURS)))

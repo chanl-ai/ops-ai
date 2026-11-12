@@ -65,7 +65,10 @@ class Authorizer:
     # under another path.
     mcp_url: str | None
     console_url: str | None
-    limit: AddressLimit = field(default_factory=lambda: AddressLimit(per_minute=AUTHORIZE_PER_MINUTE))
+    limit: AddressLimit = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.limit = AddressLimit(self.store, "authorize", AUTHORIZE_PER_MINUTE)
 
     def _base(self) -> str:
         if not self.mcp_url:
@@ -96,7 +99,7 @@ class Authorizer:
 
     async def start(self, q: dict[str, str], *, address: str) -> str:
         """Where the browser goes to ask the person, once the request has checked out."""
-        self.limit.refuse_when_busy(address, "sign-in starts")
+        await self.limit.refuse_when_busy(address, "sign-in starts")
         if q.get("response_type") != "code":
             raise OAuthError("unsupported_response_type", "Only response_type=code is taken.")
         await self.check(q)

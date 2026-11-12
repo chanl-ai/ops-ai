@@ -461,9 +461,10 @@ class Settings(BaseSettings):
     # The embed app's own origins (apps/embed), such as https://ops.bank.example. A widget request from one of
     # them speaks for the bank page its session names; nothing in the request (Host, X-Forwarded-Host) can add one.
     embed_origins: list[str] = Field(default_factory=list[str])
-    # The proxies a hosted form's submission may pass through on its way here, as CIDRs: the client address is
-    # the right-most X-Forwarded-For entry outside them, so everyone behind the embed app is not counted as one address.
-    # Set per deploy: the compose network the embed app reaches agents from, or Caddy and the embed app on Fly.
+    # The proxies a request may pass through on its way here, as CIDRs (ops_service_kit.client_address): the caller is
+    # the right-most X-Forwarded-For entry outside them, so everyone behind Caddy or the embed app is not counted as one
+    # address. Read by every limit counted per address: hosted form submissions (agents-service) and assistant
+    # registrations and sign-in starts (platform-service). Set per deploy: the compose network, or Fly's private one.
     forms_trusted_proxies: list[str] = Field(default_factory=lambda: ["127.0.0.1/32"])
     gateway_sub: str = "runtime:local"
     opa_url: str = "http://127.0.0.1:8181"
