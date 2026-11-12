@@ -71,7 +71,13 @@ class McpAdapter:
         self.registry = registry
         self.directory = directory
         self.auth = auth
-        self.server: Server[Any] = Server("ops-ai-tools", on_list_tools=self._list_tools, on_call_tool=self._call_tool)
+        self.server: Server[Any] = Server(
+            "ops-ai-tools",
+            on_list_tools=self._list_tools,
+            on_call_tool=self._call_tool,
+            on_list_prompts=self._list_prompts,
+            on_get_prompt=self._get_prompt,
+        )
         self.manager: StreamableHTTPSessionManager | None = None
 
     @asynccontextmanager
@@ -134,6 +140,21 @@ class McpAdapter:
             if r["access"] not in WRITES
         ]
         return types.ListToolsResult(tools=[*self.platform.tools(), *tools])
+
+    async def _list_prompts(self, ctx: Any, _params: Any) -> types.ListPromptsResult:
+        """The team's skills as prompts, read from agents-service as the caller, so a person sees what they may read."""
+        who = _caller(ctx)
+        return types.ListPromptsResult(
+            prompts=await self.platform.prompts(authorization=who.authorization, team=who.team.id)
+        )
+
+    async def _get_prompt(self, ctx: Any, params: Any) -> types.GetPromptResult:
+        who = _caller(ctx)
+        args = {str(k): str(v) for k, v in dict(params.arguments or {}).items()}
+        found = await self.platform.prompt(str(params.name), args, authorization=who.authorization, team=who.team.id)
+        if found is None:
+            raise ValueError(f"No skill named {params.name} in this team.")
+        return found
 
     async def _call_tool(self, ctx: Any, params: Any) -> types.CallToolResult:
         who = _caller(ctx)

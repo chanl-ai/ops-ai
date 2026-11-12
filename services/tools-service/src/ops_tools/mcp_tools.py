@@ -141,6 +141,72 @@ class PlatformTools:
             is_error=True,
         )
 
+    async def _get(self, path: str, *, authorization: str, team: str, params: dict[str, Any] | None = None) -> Any:
+        headers = {"Authorization": authorization, "X-Team-Id": team, "Accept": "application/json"}
+        async with _Client(self.http) as http:
+            r = await http.get(f"{self.bases['agents']}{path}", headers=headers, params=params)
+        r.raise_for_status()
+        body: Any = r.json()
+        return cast(dict[str, Any], body).get("data") if isinstance(body, dict) else body
+
+    async def _skills(self, *, authorization: str, team: str) -> list[dict[str, Any]]:
+        """The team's skills the caller can read, each with its newest content (its inputs are on the version)."""
+        page: Any = await self._get("/v1/skills", authorization=authorization, team=team, params={"pageSize": 100})
+        rows = cast(
+            list[dict[str, Any]], cast(dict[str, Any], page).get("data") if isinstance(page, dict) else page or []
+        )
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            found: Any = await self._get(f"/v1/skills/{row['id']}", authorization=authorization, team=team)
+            out.append(cast(dict[str, Any], found))
+        return out
+
+    async def prompts(self, *, authorization: str, team: str) -> list[types.Prompt]:
+        """Each of the team's skills as an MCP prompt named by its slug, its inputs as the prompt's arguments."""
+        if "agents" not in self.bases:
+            return []
+        return [
+            types.Prompt(
+                name=str(s["slug"]),
+                title=str(s.get("name") or s["slug"]),
+                description=str(_content(s).get("useWhen") or ""),
+                arguments=[
+                    types.PromptArgument(
+                        name=str(i["name"]),
+                        description=str(i.get("description") or ""),
+                        required=bool(i.get("required")),
+                    )
+                    for i in cast(list[dict[str, Any]], _content(s).get("inputs") or [])
+                ],
+            )
+            for s in await self._skills(authorization=authorization, team=team)
+        ]
+
+    async def prompt(
+        self, name: str, args: dict[str, str], *, authorization: str, team: str
+    ) -> types.GetPromptResult | None:
+        """The skill's instructions with the arguments given, or None when the team has no skill by that slug."""
+        if "agents" not in self.bases:
+            return None
+        skill = next((s for s in await self._skills(authorization=authorization, team=team) if s["slug"] == name), None)
+        if skill is None:
+            return None
+        content = cast(dict[str, Any], skill.get("content") or {})
+        text = str(content.get("instructions") or "")
+        for k, v in args.items():
+            text = text.replace("{{" + k + "}}", v)
+        given = [f"- {k}: {v}" for k, v in args.items() if v]
+        if given:
+            text += "\n\nInputs:\n" + "\n".join(given)
+        return types.GetPromptResult(
+            description=str(skill.get("name") or name),
+            messages=[types.PromptMessage(role="user", content=types.TextContent(type="text", text=text))],
+        )
+
+
+def _content(skill: dict[str, Any]) -> dict[str, Any]:
+    return cast(dict[str, Any], skill.get("content") or {})
+
 
 class _Client:
     """The shared client when one was given (tests), else one per call."""
