@@ -2,7 +2,7 @@
 `/mcp/{team}` over streamable HTTP, through the same `GatewayCalls.call` as POST /v1/calls.
 
 The adapter only translates. It resolves the caller from the Bearer key or token with ops_identity, checks the URL's
-team is the caller's and that the caller holds `tools:run` there, and hands the request to the official SDK's
+team is the caller's, and hands the request to the official SDK's
 stateless server; tools/list reads the registry and tools/call is one gateway call. Nothing is decided or executed
 here: the registry, the schema, OPA, the rate window, the executor and the call log are the gateway's.
 
@@ -101,9 +101,9 @@ class McpAdapter:
                 raise NotFound("No MCP server answers at this URL; use /mcp/{team}.")
             team_id = found["team"]
             headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
-            # 401 without a credential, 403 team_forbidden when the key or token belongs to another team.
+            # 401 without a credential, 403 team_forbidden when the key or token belongs to another team. Any member
+            # opens a session and lists; each call checks its own right and a refusal is a tool error.
             principal = await self.auth.identity.bearer(headers.get("authorization"), team_id)
-            can(principal, "tools", "run", team=team_id, what="this team's tools")
         except ApiError as e:
             await _refuse(send, e)
             return
@@ -161,6 +161,14 @@ class McpAdapter:
         if self.platform.offers(str(params.name)):
             return await self.platform.call(
                 str(params.name), dict(params.arguments or {}), authorization=who.authorization, team=who.team.id
+            )
+        try:
+            can(who.principal, "tools", "run", team=who.team.id, what="this team's tools")
+        except ApiError as e:
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=f"{e.code}: {e.message}")],
+                structured_content={"code": e.code, "status": e.status, "message": e.message},
+                is_error=True,
             )
         request = CallRequest(
             tool=str(params.name),
