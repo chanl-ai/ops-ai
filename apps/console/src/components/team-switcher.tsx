@@ -21,6 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
+import { Skeleton } from '@/components/ui/skeleton';
 import { initials, plural } from '@/lib/format';
 import type { Team, TeamIcon, TeamInput } from '@/lib/types/team';
 
@@ -111,7 +112,7 @@ export function TeamSwitcher({
             >
               <Avatar className="size-8 rounded-md">
                 {brand.logo && <AvatarImage src={brand.logo} alt="" className="object-cover" />}
-                <AvatarFallback className="rounded-md bg-primary text-xs font-semibold text-primary-foreground">{activeTeam ? initials(activeTeam.name) : ''}</AvatarFallback>
+                <AvatarFallback className="rounded-md bg-primary text-xs font-semibold text-primary-foreground">{activeTeam ? initials(activeTeam.name) : <Skeleton className="size-full rounded-md" />}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-semibold" data-testid="sidebar-team">
