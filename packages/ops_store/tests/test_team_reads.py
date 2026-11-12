@@ -39,6 +39,8 @@ NOT_YET_MARKED = {
     "api_keys",
     "audit_entries",
     "role_assignments",
+    # an assistant's grant names its one team; read by its owner through platform's own routes
+    "sessions",
 }
 
 

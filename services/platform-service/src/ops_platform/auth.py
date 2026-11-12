@@ -18,13 +18,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ops_access import BUILTIN_ROLES
+from ops_access import ANY_TEAM, BUILTIN_ROLES, can
+from ops_identity import Principal
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer, TokenError, mint, verify
-from ops_service_kit.errors import Forbidden, Unauthorized
+from ops_service_kit.errors import ApiError, Forbidden, Unauthorized
 from ops_service_kit.ids import new_id
 
 from .passwords import Passwords
-from .store.identity import IdentityStore, SessionRef, User
+from .store.identity import Grant, IdentityStore, SessionRef, User
 from .store.policies import PolicyStore
 from .store.workspace import WorkspaceStore
 
@@ -128,6 +129,9 @@ class Auth:
         ref = await self.store.session(session_id) if secret else None
         if ref is None:
             raise _refused()
+        # An assistant's renewal is made at /oauth/token, never here, and is left untouched (not rotated, not revoked).
+        if await self.store.grant(ref) is not None:
+            raise _refused()
         now = datetime.now(UTC)
         fresh = secrets.token_urlsafe(32)
         rotated = await self.store.rotate(
@@ -192,7 +196,66 @@ class Auth:
         await self.store.step_up(ref, at=_iso(now), request_id=request_id, method=method)
         return StepUpIssued(token=minted, expires_at=_iso(now + timedelta(seconds=self.step_up_ttl_s)))
 
+    async def issue_for_grant(self, user: User, grant: Grant, refresh_token: str, now: datetime) -> Issued | None:
+        """The token an assistant holds for its grant: audience the one MCP address, the one team, and the client. None
+        when the person is no longer in that team or no longer holds the right to run tools there; the caller ends
+        the grant then, so a renewal never returns a token with fewer teams."""
+        teams = await self.store.acting_teams(user.tenant_id, user.id, now=_iso(now))
+        if grant.team_id not in teams:
+            return None
+        claims = await self._claims(
+            user, grant.id, grant.auth_method, now, audience=[grant.resource], team=grant.team_id,
+            client_id=grant.client_id,
+        )  # fmt: skip
+        if not self.may_run_tools(claims, grant.team_id):
+            return None
+        return self._sign(claims, refresh_token, now)
+
+    @staticmethod
+    def person_in_team(claims: dict[str, Any], team_id: str) -> Principal:
+        """The token's person acting in `team_id`, for the right to run its tools to be decided by ops_access."""
+        return Principal(
+            kind="person",
+            sub=str(claims["sub"]),
+            email=str(claims.get("email", "")),
+            name=str(claims.get("name", "")),
+            tenant_id=str(claims["tenant_id"]),
+            team_id=team_id,
+            team_ids=[team_id],
+            roles={str(k): str(v) for k, v in (claims.get("roles") or {}).items()},
+            scopes=[],
+            auth_method="session",
+            access={str(k): [str(r) for r in v] for k, v in (claims.get("access") or {}).items()},
+            grids={
+                str(r): {str(a): str(x) for a, x in dict(g).items()} for r, g in (claims.get("grids") or {}).items()
+            },
+            permission_version=claims.get("perm_version"),
+            policies=dict(claims.get("policies") or {}),
+            security_team=str(claims["security_team"]) if claims.get("security_team") else None,
+        )  # fmt: skip
+
+    @staticmethod
+    def may_run_tools(claims: dict[str, Any], team_id: str) -> bool:
+        try:
+            can(Auth.person_in_team(claims, team_id), "tools", "run", team=team_id, what="this team's tools")
+        except ApiError:
+            return False
+        return True
+
     async def _issue(self, user: User, session_id: str, refresh_token: str, method: str, now: datetime) -> Issued:
+        return self._sign(await self._claims(user, session_id, method, now), refresh_token, now)
+
+    async def _claims(
+        self,
+        user: User,
+        session_id: str,
+        method: str,
+        now: datetime,
+        *,
+        audience: list[str] | None = None,
+        team: str | None = None,
+        client_id: str | None = None,
+    ) -> dict[str, Any]:
         roles = await self.store.roles(user.tenant_id, user.id)
         version = await self.store.permission_version(user.tenant_id)
         access = await self.store.access(user.tenant_id, user.id, now=_iso(now))
@@ -204,13 +267,19 @@ class Auth:
         grids = await self.store.grids(user.tenant_id, builtin, stored_only=True)
         grids |= await self.store.grids(user.tenant_id, sorted(held))
         security = await self.workspace.security_team(user.tenant_id) if self.workspace else None
+        team_ids = await self.store.acting_teams(user.tenant_id, user.id, now=_iso(now))
+        if team is not None:
+            # An assistant's token names the one team its address names, and only the roles that apply there.
+            team_ids = [team]
+            roles = {t: r for t, r in roles.items() if t == team}
+            access = {t: r for t, r in access.items() if t in (team, ANY_TEAM)}
         claims = {
             "sub": user.id,
             "sid": session_id,
             "email": user.email,
             "name": user.name,
             "tenant_id": user.tenant_id,
-            "team_ids": await self.store.acting_teams(user.tenant_id, user.id, now=_iso(now)),
+            "team_ids": team_ids,
             # Which team holds the Security-team actions in this workspace, for ops_access; absent when it names none.
             **({"security_team": security} if security else {}),
             "roles": roles,
@@ -222,10 +291,14 @@ class Auth:
             "auth_method": method,
             # Unique per token: a refresh in the same second as the last one would otherwise repeat it exactly.
             "jti": new_id("tok"),
-            "aud": [AUDIENCE, *(a for a in self.audiences if a != AUDIENCE)],
+            "aud": audience or [AUDIENCE, *(a for a in self.audiences if a != AUDIENCE)],
             "amr": [],
             "auth_time": int(now.timestamp()),
+            **({"client_id": client_id} if client_id else {}),
         }
+        return claims
+
+    def _sign(self, claims: dict[str, Any], refresh_token: str, now: datetime) -> Issued:
         token = mint(claims, self.signer, ttl_s=self.token_ttl_s, now=now.timestamp())
         return Issued(
             token=token,

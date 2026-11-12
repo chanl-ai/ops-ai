@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from ops_access import BY_KEY, POLICIES
-from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.errors import Unprocessable, ValidationFailed
 
 from .store.members import Actor
 from .store.policies import OLD_KEYS, PolicyStore
@@ -39,6 +39,8 @@ class Policies:
         policy = BY_KEY.get(landing)
         area, action = policy.changed_by if policy else ("settings", "manage")
         await self.members.require_admin(actor, area, action)
+        if policy and policy.maximum and type(value) is int and value > policy.maximum:
+            raise Unprocessable(f"{policy.title} is at most {policy.maximum} hours.", code="policy_value")
         await self._check_reviewer_roles(actor, key, value)
         try:
             await self.store.set(

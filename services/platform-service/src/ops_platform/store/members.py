@@ -297,7 +297,27 @@ class TeamStore:
                 user_id = row["user_id"]
                 if user_id is not None:
                     await self._mirror(c, actor, str(user_id), None, at)
-                    # I10: their sessions end now, and keys they made for this team stop working.
+                    # I10: their sessions end now, and keys they made for this team stop working. An assistant they
+                    # connected is a session too; each one that ends is audited in its own team.
+                    live = (
+                        await c.execute(
+                            sa.select(sessions.c.id, sessions.c.team_id, sessions.c.client_id).where(
+                                sessions.c.user_id == user_id, sessions.c.kind == "mcp", sessions.c.revoked_at.is_(None)
+                            )
+                        )
+                    ).all()
+                    for sid, grant_team, client in live:
+                        await record(
+                            c,
+                            tenant_id=actor.tenant_id,
+                            team_id=grant_team,
+                            actor=actor.user_id,
+                            action="oauth.grant_ended",
+                            target_kind="session",
+                            target_id=sid,
+                            request_id=actor.request_id,
+                            detail={"by": "admin", "clientId": client},
+                        )
                     await c.execute(
                         sessions.update()
                         .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))

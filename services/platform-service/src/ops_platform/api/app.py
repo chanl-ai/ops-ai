@@ -13,7 +13,7 @@ from urllib.parse import parse_qs
 import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, Grant
@@ -48,6 +48,11 @@ from ..acting_for import ActingFor
 from ..api_keys import ApiKeys
 from ..audit_log import AuditReader
 from ..auth import Auth, Issued, Keys, principal_from_claims
+from ..oauth import OAuthError, iso
+from ..oauth.authorize import Authorizer
+from ..oauth.clients import Clients
+from ..oauth.metadata import server_metadata
+from ..oauth.token import Tokens
 from ..passwords import Passwords, email_key_from
 from ..policies import Policies
 from ..roles import Roles
@@ -56,7 +61,7 @@ from ..signin_settings import SignInSettings
 from ..sso import Sso
 from ..store.audit import AuditLog, record_delivered
 from ..store.holders import HolderStore
-from ..store.identity import IdentityStore
+from ..store.identity import IdentityStore, SessionRef
 from ..store.keys import KeyStore
 from ..store.lifecycle import LifecycleStore
 from ..store.members import Actor, TeamStore
@@ -86,10 +91,14 @@ from .schemas import (
     AuditKind,
     AuditPage,
     BulkOut,
+    ConsentDecided,
+    ConsentIn,
+    ConsentOut,
     DeleteIn,
     DevPerson,
     DevSignInIn,
     ForgotIn,
+    GrantOut,
     Health,
     HoldersOut,
     Introspect,
@@ -99,6 +108,7 @@ from .schemas import (
     Jwks,
     Me,
     MemberOut,
+    OAuthErrorOut,
     OptionsIn,
     OptionsOut,
     PermissionsOut,
@@ -749,6 +759,83 @@ def create_public_app(
         """Checks the domain's TXT record and, when it holds the claim's value, lets the domain route sign-in; returns
         its provider. 422 `domain_unverified` with what DNS held, 409 `domain_taken` when another workspace has it."""
         return ok(await signin_settings.verify_domain(actor, domain.lower()))
+
+    # ── Assistants at a team's MCP address: this service is their authorization server (ops_platform.oauth) ──
+
+    authorizer = Authorizer(store, auth, policy_store, sign.public_url, sign.console_url)
+    clients = Clients(store)
+    tokens = Tokens(store, auth, sign.public_url)
+
+    @app.exception_handler(OAuthError)
+    async def oauth_refusal(_: Request, e: OAuthError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        return JSONResponse(
+            {"error": e.error, "error_description": e.description},
+            status_code=e.status,
+            headers={"Cache-Control": "no-store", **e.headers},
+        )
+
+    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+    async def oauth_server_metadata() -> Any:  # pyright: ignore[reportUnusedFunction]
+        return server_metadata(sign.public_url)
+
+    @app.post("/oauth/register", status_code=201, include_in_schema=False)
+    async def oauth_register(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            raise OAuthError("invalid_client_metadata", "Send the registration as a JSON object.")
+        address = request.client.host if request.client else "unknown"
+        return JSONResponse(
+            await clients.register(body, address=address), status_code=201, headers={"Cache-Control": "no-store"}
+        )
+
+    @app.get("/oauth/authorize", include_in_schema=False)
+    async def oauth_authorize(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        return RedirectResponse(await authorizer.start(dict(request.query_params)), status_code=303)
+
+    @app.post("/oauth/token", include_in_schema=False)
+    async def oauth_token(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        form = {k: v[0] for k, v in parse_qs((await request.body()).decode("utf-8", "replace")).items()}
+        issued = await tokens.exchange(form, request_id=new_id("req"))
+        return JSONResponse(issued, headers={"Cache-Control": "no-store"})
+
+    oauth_errors = {**ERRORS, 400: {"model": OAuthErrorOut, "description": "The request was refused"}}
+
+    @app.get("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentOut], responses=oauth_errors)
+    async def oauth_consent(  # pyright: ignore[reportUnusedFunction]
+        request: Request, claims: Annotated[dict[str, Any], Depends(claims_of)]
+    ) -> Any:
+        """What the consent page shows for an assistant's request: the assistant, the team its address names, the
+        host the browser returns to and how long the connection lasts. 403 `team_forbidden` for a person outside the
+        team."""
+        return ok(await authorizer.show(claims, dict(request.query_params)))
+
+    @app.post("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentDecided], responses=oauth_errors)
+    async def oauth_decide(  # pyright: ignore[reportUnusedFunction]
+        body: ConsentIn, claims: Annotated[dict[str, Any], Depends(claims_of)]
+    ) -> Any:
+        """The person's answer. Allow opens a grant and returns where to send the browser, with a single-use code;
+        Deny sends it back with `access_denied`."""
+        q = body.model_dump(exclude={"decision"}, exclude_none=True)
+        return ok(await authorizer.decide(claims, q, allow=body.decision == "allow", request_id=new_id("req")))
+
+    @app.get("/v1/oauth/grants", tags=["oauth"], response_model=Envelope[list[GrantOut]], responses=ERRORS)
+    async def oauth_grants(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The assistants the signed-in person has connected, newest first."""
+        return ok(await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso()))
+
+    @app.delete("/v1/oauth/grants/{grant_id}", tags=["oauth"], status_code=204, responses=ERRORS)
+    async def oauth_disconnect(  # pyright: ignore[reportUnusedFunction]
+        grant_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+    ) -> Response:
+        """Ends one of the person's own connections; the assistant cannot renew."""
+        grant = await store.grant(SessionRef(str(claims["tenant_id"]), str(claims["sub"]), grant_id))
+        if grant is None or grant.user_id != str(claims["sub"]):
+            raise NotFound("No such connection.")
+        await store.end_grant(grant, at=iso(), by="person", actor=str(claims["sub"]), request_id=new_id("req"))
+        return Response(status_code=204)
 
     policies = Policies(policy_store, people)
 

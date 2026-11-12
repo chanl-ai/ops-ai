@@ -151,6 +151,18 @@ sessions = sa.Table(
     sa.Column("revoked_at", sa.String(40)),
     sa.Column("last_seen_at", sa.String(40), nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
+    # Migration 0034: `console` for a sign-in, `mcp` for an assistant a person allowed at a team's MCP address. A grant
+    # also holds the client, the one team and the address it was allowed for, and the authorization code it was
+    # opened with (stored hashed, bound to the redirect and the PKCE challenge, used once).
+    sa.Column("kind", sa.String(8), nullable=False, server_default="console"),
+    sa.Column("client_id", sa.String(64)),
+    sa.Column("team_id", sa.String(64)),
+    sa.Column("resource", sa.String(500)),
+    sa.Column("code_hash", sa.String(64)),
+    sa.Column("code_challenge", sa.String(64)),
+    sa.Column("redirect_uri", sa.String(500)),
+    sa.Column("code_expires_at", sa.String(40)),
+    sa.Column("code_used_at", sa.String(40)),
     sa.ForeignKeyConstraint(["tenant_id", "user_id"], ["users.tenant_id", "users.id"], name="fk_sessions_user"),
     info=TENANT_SCOPED,
 )
@@ -399,6 +411,20 @@ signin_email_failures = sa.Table(
     sa.Column("failures", sa.Integer, nullable=False),
     sa.Column("first_failed_at", sa.String(40), nullable=False),
     sa.Column("locked_until", sa.String(40)),
+)
+
+# Assistants that registered themselves at /oauth/register (migration 0034). Registration happens before anyone signs
+# in, so a client belongs to the install and holds no tenant until a person first allows it (`tenant_id`,
+# `consented_at`); one never consented to is deleted after 24 hours by the next registration.
+oauth_clients = sa.Table(
+    "oauth_clients",
+    metadata,
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("name", sa.String(100), nullable=False),
+    sa.Column("redirect_uris", sa.JSON, nullable=False),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    sa.Column("consented_at", sa.String(40)),
+    sa.Column("tenant_id", sa.String(64)),
 )
 
 # The stricter rules an admin has switched on: one row per policy a tenant has set, the value as JSON; a policy

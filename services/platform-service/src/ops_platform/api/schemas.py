@@ -818,3 +818,57 @@ class DevPerson(Out):
     name: str
     email: str
     teams: list[DevTeamRole]
+
+
+class OAuthErrorOut(BaseModel):
+    """An answer to an assistant's request in the shape OAuth clients read (RFC 6749 section 5.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+    error: str
+    error_description: str
+
+
+class ConsentClient(Out):
+    id: str
+    name: str
+    # The name is what the assistant called itself when it registered; nothing here checks it.
+    name_is_self_reported: bool
+
+
+class ConsentTeam(Out):
+    id: str
+    name: str
+
+
+class ConsentOut(Out):
+    client: ConsentClient
+    # Where the browser goes back to after the answer, as the person should read it.
+    redirect_host: str
+    team: ConsentTeam
+    resource: str
+    connection_hours: int
+
+
+class ConsentIn(In):
+    client_id: str = Field(min_length=1, max_length=64)
+    redirect_uri: str = Field(min_length=1, max_length=500)
+    code_challenge: str = Field(min_length=1, max_length=200)
+    code_challenge_method: str = Field(min_length=1, max_length=16)
+    resource: str = Field(min_length=1, max_length=500)
+    state: str | None = Field(default=None, max_length=500)
+    decision: Literal["allow", "deny"]
+
+
+class ConsentDecided(Out):
+    redirect_to: str
+
+
+class GrantOut(Out):
+    id: str
+    client_id: str
+    client_name: str
+    team_id: str
+    team_name: str
+    resource: str
+    created_at: str
+    expires_at: str

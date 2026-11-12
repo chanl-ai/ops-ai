@@ -89,6 +89,31 @@ class CheckRefusal(TypedDict, closed=True):
     reason: str
 
 
+class ConsentClient(TypedDict, closed=True):
+    id: str
+    name: str
+    nameIsSelfReported: bool
+
+
+class ConsentDecided(TypedDict, closed=True):
+    redirectTo: str
+
+
+class ConsentIn(TypedDict, closed=True):
+    clientId: str
+    codeChallenge: str
+    codeChallengeMethod: str
+    decision: Literal["allow", "deny"]
+    redirectUri: str
+    resource: str
+    state: NotRequired[str | None]
+
+
+class ConsentTeam(TypedDict, closed=True):
+    id: str
+    name: str
+
+
 Id: TypeAlias = str
 
 
@@ -98,6 +123,11 @@ class DeleteIn(TypedDict, closed=True):
 
 class EnvelopeAuditEventOut(TypedDict, closed=True):
     data: AuditEventOut
+    success: Literal[True]
+
+
+class EnvelopeConsentDecided(TypedDict, closed=True):
+    data: ConsentDecided
     success: Literal[True]
 
 
@@ -127,6 +157,17 @@ class FlagOut(TypedDict, closed=True):
 
 class ForgotIn(TypedDict, closed=True):
     email: str
+
+
+class GrantOut(TypedDict, closed=True):
+    clientId: str
+    clientName: str
+    createdAt: str
+    expiresAt: str
+    id: str
+    resource: str
+    teamId: str
+    teamName: str
 
 
 class GrantingRole(TypedDict, closed=True):
@@ -263,6 +304,11 @@ class MemberOut(TypedDict, closed=True):
     teamId: str
     userId: NotRequired[str | None]
     workspaceRoles: NotRequired[list[str]]
+
+
+class OAuthErrorOut(TypedDict, closed=True):
+    error: str
+    error_description: str
 
 
 Scope: TypeAlias = str
@@ -691,6 +737,14 @@ class BulkOut(TypedDict, closed=True):
     updated: list[str]
 
 
+class ConsentOut(TypedDict, closed=True):
+    client: ConsentClient
+    connectionHours: int
+    redirectHost: str
+    resource: str
+    team: ConsentTeam
+
+
 class DomainCheckOut(TypedDict, closed=True):
     domain: str
     record: TxtRecordOut
@@ -722,6 +776,11 @@ class EnvelopeAuditPage(TypedDict, closed=True):
 
 class EnvelopeBulkOut(TypedDict, closed=True):
     data: BulkOut
+    success: Literal[True]
+
+
+class EnvelopeConsentOut(TypedDict, closed=True):
+    data: ConsentOut
     success: Literal[True]
 
 
@@ -812,6 +871,11 @@ class EnvelopeListApiKeyOut(TypedDict, closed=True):
 
 class EnvelopeListApiKeySummary(TypedDict, closed=True):
     data: list[ApiKeySummary]
+    success: Literal[True]
+
+
+class EnvelopeListGrantOut(TypedDict, closed=True):
+    data: list[GrantOut]
     success: Literal[True]
 
 

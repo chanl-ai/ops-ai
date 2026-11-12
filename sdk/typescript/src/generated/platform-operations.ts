@@ -349,6 +349,44 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "oauth_oauth_consent": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/oauth/consent",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "oauth_oauth_decide": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/oauth/consent",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "oauth_oauth_disconnect": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/oauth/grants/{grant_id}",
+    "pathParams": [
+      "grant_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "oauth_oauth_grants": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/oauth/grants",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "people_give_role": {
     "body": "json",
     "headers": [],
