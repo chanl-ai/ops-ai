@@ -203,3 +203,14 @@ async def test_asking_for_two_approvers_turns_the_tools_approval_on(api: Api) ->
     staged = await _ok(await _patch(api, op, {"approvers": 2}))
     after = next(o for o in staged["operations"] if o["name"] == "get_payoff_statement")
     assert (after["approvers"], after["requiresApproval"]) == (2, True), after
+
+
+async def test_a_tool_page_reads_a_writes_answer_from_the_resolver_not_from_requires_approval(api: Api) -> None:
+    write = await _op(api, "update_address")
+    assert (write["requiresApproval"], write["answer"], write["waits"]) == (True, "none", False), (
+        "a stored requires_approval is not an answer: nothing set, so the team default runs it"
+    )
+    await _ok(await _patch(api, write, {"approvalMode": "reviewer"}))
+    asks = await _op(api, "update_address")
+    assert (asks["answer"], asks["answerSource"], asks["waits"]) == ("reviewer", "tool", True), asks
+    assert (await _op(api, "get_customer_profile")).get("answer") is None, "a read has no answer"

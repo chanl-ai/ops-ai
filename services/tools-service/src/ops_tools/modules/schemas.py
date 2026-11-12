@@ -185,6 +185,12 @@ class ModuleOperation(Out):
     # The tool's own answer (none, person or reviewer); None follows its app, then the team.
     approval_mode: Literal["none", "person", "reviewer"] | None = None
     reviewer_role: str | None = None
+    # What a call of a write does in a chat for the team in view, from the one resolver (the tool's own answer, a team
+    # admin's answer for it, its app and the team): waits, who answers, and the level it came from. Null for a read.
+    answer: Literal["none", "person", "reviewer"] | None = None
+    answer_source: str | None = None
+    answer_role: str | None = None
+    waits: bool | None = None
     amount_max: float | None = None
     # The write approval policy: distinct approvers (1 or 2) and the team they come from. Whether the person who asked
     # may approve is the tenant's requesterMayDecide policy, not a per-operation setting.

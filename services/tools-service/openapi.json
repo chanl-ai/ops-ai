@@ -7034,6 +7034,44 @@
             ],
             "title": "Amountmax"
           },
+          "answer": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "person",
+                  "reviewer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "answerRole": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answerrole"
+          },
+          "answerSource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answersource"
+          },
           "approvalMode": {
             "anyOf": [
               {
@@ -7298,6 +7336,17 @@
           "toolId": {
             "title": "Toolid",
             "type": "string"
+          },
+          "waits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waits"
           }
         },
         "required": [

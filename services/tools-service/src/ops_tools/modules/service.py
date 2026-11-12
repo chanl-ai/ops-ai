@@ -663,16 +663,55 @@ class ModuleService:
             "timeoutMs": m["timeout_ms"],
             "egressHosts": m["egress_hosts"],
             "dataClassification": m["data_classification"],
-            "operations": [
-                self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC), have)
-                for o in m["operations"]
-            ],
+            "operations": await self._with_answers(
+                m,
+                team,
+                [
+                    self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC), have)
+                    for o in m["operations"]
+                ],
+            ),
             "pendingChanges": m["pending"],
             "approvals": [self._approval_out(a) for a in ordered],
             "versions": [self._version_out(v) for v in reversed(m["versions"])],
             "runContexts": self._run_contexts(m, team),
             **(self._rights(who, m) if who is not None else {}),
         }
+
+    async def _with_answers(self, m: Aggregate, team: Team, shown: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Each write's answer for the team in view (waits, who answers, which level), from the resolver the gateway
+        runs, so the tool page and the operations table never apply the rule themselves."""
+        tenant = str(m["tenant_id"])
+        levels = await self.approvals.levels(tenant, team.id)
+        by_name = {str(o["name"]): o for o in m["operations"]}
+        out: list[dict[str, Any]] = []
+        for row in shown:
+            o = by_name[str(row["name"])]
+            if o["access"] not in WRITES:
+                out.append(row)
+                continue
+            ans = await self.approvals.answer(
+                tenant,
+                team.id,
+                m,
+                access=o["access"],
+                setting=tool_mode(o),
+                reviewer_role=o.get("reviewer_role"),
+                approvers=approval_policy(m, o)["approvers"],
+                levels=levels,
+                test_account=bool(m.get("sandbox")),
+                tool=str(o["name"]),
+            )
+            out.append(
+                row
+                | {
+                    "answer": ans["answer"],
+                    "answerSource": ans["source"],
+                    "answerRole": ans["reviewerRole"],
+                    "waits": ans["waits"],
+                }
+            )
+        return out
 
     @staticmethod
     def _drop_none(d: dict[str, Any]) -> dict[str, Any]:

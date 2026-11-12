@@ -1577,6 +1577,9 @@ class ModuleList(TypedDict, closed=True):
 class ModuleOperation(TypedDict, closed=True):
     access: Literal["read", "write"]
     amountMax: NotRequired[float | None]
+    answer: NotRequired[Literal["none", "person", "reviewer"] | None]
+    answerRole: NotRequired[str | None]
+    answerSource: NotRequired[str | None]
     approvalMode: NotRequired[Literal["none", "person", "reviewer"] | None]
     approvedWorkflows: int
     approverTeam: str | None
@@ -1611,6 +1614,7 @@ class ModuleOperation(TypedDict, closed=True):
     stub: NotRequired[Any]
     timeoutMs: NotRequired[int | None]
     toolId: str
+    waits: NotRequired[bool | None]
 
 
 class ModuleTestIn(TypedDict, closed=True):

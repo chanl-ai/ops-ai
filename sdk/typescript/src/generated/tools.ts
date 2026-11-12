@@ -3880,6 +3880,12 @@ export interface components {
             access: "read" | "write";
             /** Amountmax */
             amountMax?: number | null;
+            /** Answer */
+            answer?: ("none" | "person" | "reviewer") | null;
+            /** Answerrole */
+            answerRole?: string | null;
+            /** Answersource */
+            answerSource?: string | null;
             /** Approvalmode */
             approvalMode?: ("none" | "person" | "reviewer") | null;
             /** Approvedworkflows */
@@ -3952,6 +3958,8 @@ export interface components {
             timeoutMs?: number | null;
             /** Toolid */
             toolId: string;
+            /** Waits */
+            waits?: boolean | null;
         };
         /** ModuleRef */
         ModuleRef: {
