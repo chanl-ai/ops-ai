@@ -99,6 +99,9 @@ SETTINGS: dict[str, str] = {
     # Every address: Fly's health checks come over IPv4 and its private network is IPv6.
     "OPS_BIND_HOST": "*",
     "OPS_CORS_ORIGINS": json.dumps([ORIGIN]),
+    # Per-address limits (hosted forms, assistant sign-in) read the caller from X-Forwarded-For past these: the web
+    # app's Caddy and the embed pages reach the services over Fly's private network; a local Caddy is 127.0.0.1.
+    "OPS_FORMS_TRUSTED_PROXIES": json.dumps(["fdaa::/16", "127.0.0.1/32"]),
     "OPS_CONSOLE_URL": ORIGIN,
     "OPS_PLATFORM_PUBLIC_URL": f"{ORIGIN}/api/platform",
     "OPS_FILES_PUBLIC_URL": f"{ORIGIN}/api/files",

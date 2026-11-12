@@ -23,6 +23,7 @@ kill_timeout = 20
   OPS_AUTH_MODE = "platform"
   OPS_BIND_HOST = "*"
   OPS_CORS_ORIGINS = "[\"https://<app-prefix>-web.fly.dev\"]"
+  OPS_FORMS_TRUSTED_PROXIES = "[\"fdaa::/16\", \"127.0.0.1/32\"]"
   OPS_CONSOLE_URL = "https://<app-prefix>-web.fly.dev"
   OPS_PLATFORM_PUBLIC_URL = "https://<app-prefix>-web.fly.dev/api/platform"
   OPS_FILES_PUBLIC_URL = "https://<app-prefix>-web.fly.dev/api/files"
