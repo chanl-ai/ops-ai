@@ -98,7 +98,11 @@ def stored(kind: str, raw: dict[str, Any] | None, *, ocr: str = "auto") -> Sourc
     base = defaults(kind, ocr=ocr)
     if not raw:
         return base
-    return SourceSettings.model_validate({**wire(base), **raw})
+    out = SourceSettings.model_validate({**wire(base), **raw})
+    # The preset is only a label for the steps, so it is read from them: a source saved under an older label shows
+    # the one its steps match.
+    ingest = out.ingest.model_copy(update={"preset": preset_for(out.ingest.strategies)})
+    return out.model_copy(update={"ingest": ingest})
 
 
 def wire(s: SourceSettings) -> dict[str, Any]:

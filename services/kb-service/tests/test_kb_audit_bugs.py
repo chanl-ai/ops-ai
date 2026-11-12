@@ -12,6 +12,7 @@ import httpx
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_kb.source_settings import defaults, stored, wire
 from ops_kb.store.knowledge import kb_sources
 from ops_store import isolation
 
@@ -77,3 +78,8 @@ async def test_documents_are_fresh_stale_or_without_a_schedule_from_the_sources_
     await _synced_ago(engine, tenant, src["id"], timedelta(days=3))
     assert await _freshness(client, kb_row["id"]) == ["stale"]
     assert data(await client.get(f"/v1/knowledge-bases/{kb_row['id']}"))["stats"]["stale"] == 1
+
+
+def test_settings_saved_under_an_old_preset_label_show_the_label_their_steps_match() -> None:
+    saved = wire(defaults("file"))["ingest"] | {"preset": "email_templates"}
+    assert stored("file", {"ingest": saved}).ingest.preset == "documents"
