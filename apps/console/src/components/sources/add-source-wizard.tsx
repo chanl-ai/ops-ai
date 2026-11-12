@@ -27,10 +27,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useApproveAiSteps, useCreateSource, usePutSourceItem, useSourceKinds, useSourcePreview } from '@/hooks/knowledge-queries';
-import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
+import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, kindsToConnect, kindUnavailable, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
 import { appPageHref } from '@/lib/app-links';
 import { count, plural } from '@/lib/format';
-import { kindsToConnect } from '@/lib/source-kinds';
 import type { Schedule, Source, SourceKindOption, SourceKindPreview } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
@@ -251,7 +250,7 @@ export function AddSourceWizard({
                     {groups.map((g) => (
                       <CommandGroup key={g.id} heading={g.label}>
                         {g.kinds.map((k) => {
-                          const notConnected = (!!k.needsConnection && !k.connected) || k.canCreate === false;
+                          const notConnected = kindUnavailable(k);
                           return (
                             <CommandItem
                               key={kindKey(k)}
