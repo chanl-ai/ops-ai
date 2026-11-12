@@ -1,6 +1,6 @@
 {
   "date": "2026-11-12",
   "title": "Team shows once, in the sidebar",
-  "description": "The team and workspace name are gone from the page header, since the sidebar already shows them. When the sidebar is collapsed, the team is a logo square that shows the team name when you point at it.",
+  "description": "The team and workspace name are gone from the page header, since the sidebar already shows them. When the sidebar is collapsed, the team is a square with the workspace logo or the team's initials, and pointing at it shows the team name.",
   "tag": "improved"
 }
