@@ -233,7 +233,7 @@ Each URL is its own OAuth resource, so a token minted for one scope or environme
 
 | Rule | Detail |
 |---|---|
-| Resource server | tools-service answers 401 with `WWW-Authenticate: Bearer resource_metadata="…"` naming platform-service as the only authorization server |
+| Resource server | tools-service answers 401 with `WWW-Authenticate: Bearer resource_metadata="…"` naming platform-service as the only authorization server. The address, its metadata link and the token audience are on tools-service's own public base (`OPS_TOOLS_PUBLIC_URL`, e.g. `<origin>/api/tools/mcp/<team>`); the authorization server is platform-service's (`OPS_PLATFORM_PUBLIC_URL`) |
 | Authorization server | RFC 8414 metadata, authorize, consent, token, revoke, PKCE S256 required, exact redirect addresses, issuer returned, state single-use |
 | Clients | Any assistant may register itself (10 registrations a minute per source address per process, redirect addresses https, loopback or a private-use scheme, unconsented clients deleted after 24 hours). The consent page shows the registered name as the name the assistant gave itself, and the host of the redirect address. A URL client id is refused for now |
 | Audience | A token for `/mcp/test/ops` fails on `/mcp/production/ops` and on `/mcp/test/ops/modules/x` |

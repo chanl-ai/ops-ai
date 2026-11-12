@@ -2,7 +2,7 @@
 
 Status: draft. Id: `uc-733`. Service: `platform-service`. Layers: api, ui.
 
-A person pastes a team's MCP address (`<public URL>/mcp/<team>`) into Claude, Cursor, VS Code or ChatGPT. The assistant
+A person pastes a team's MCP address (`<OPS_TOOLS_PUBLIC_URL>/mcp/<team>`) into Claude, Cursor, VS Code or ChatGPT. The assistant
 finds platform-service as the authorization server from the 401, registers itself, and sends the person to the console's
 consent page. After the person signs in (password or OIDC first; a SAML group once the company-sign-in change is merged,
 which is the only reason step 6's SAML variant waits) and presses Allow, the assistant holds a 15-minute token for that
@@ -30,7 +30,7 @@ column `client_id`; table `oauth_clients` (`id`, `created_at`); registration lim
 |---|---|
 | PostgreSQL and OPA | `make db-up` |
 | Free use-case ports | the runner picks them and its own database |
-| The install's public URL | `OPS_PLATFORM_PUBLIC_URL` on platform-service and tools-service, the address the assistant pastes |
+| The install's public URLs | `OPS_TOOLS_PUBLIC_URL` (e.g. `<origin>/api/tools`), the base of the address the assistant pastes, and `OPS_PLATFORM_PUBLIC_URL` (`<origin>/api/platform`), the issuer; both services read both |
 
 ## Steps and expected results
 

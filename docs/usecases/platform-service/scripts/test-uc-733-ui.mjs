@@ -9,6 +9,8 @@ import { join } from 'node:path';
 import { PLATFORM_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
+// tools-service's public base, which a proxy serves on another path than platform-service's.
+const MCP_BASE = 'http://127.0.0.1:8890/api/tools';
 const REDIRECT = 'https://claude.example/callback';
 const SHOTS = evidenceDir('733');
 
@@ -36,7 +38,7 @@ await withUiStack(
       redirect_uri: REDIRECT,
       code_challenge: challenge,
       code_challenge_method: 'S256',
-      resource: `${platform}/mcp/team_ops`,
+      resource: `${MCP_BASE}/mcp/team_ops`,
       state: 's1',
     });
     mkdirSync(SHOTS, { recursive: true });
@@ -84,6 +86,6 @@ await withUiStack(
       await browser.close();
     }
   },
-  { platform: true, signIn: true },
+  { platform: true, signIn: true, platformEnv: { OPS_TOOLS_PUBLIC_URL: MCP_BASE } },
 );
 finish();

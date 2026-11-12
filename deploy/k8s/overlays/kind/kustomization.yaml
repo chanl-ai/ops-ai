@@ -31,6 +31,7 @@ configMapGenerator:
       - OPS_CONSOLE_URL=http://localhost:18891
       - OPS_PLATFORM_PUBLIC_URL=http://localhost:18891/api/platform
       - OPS_FILES_PUBLIC_URL=http://localhost:18891/api/files
+      - OPS_TOOLS_PUBLIC_URL=http://localhost:18891/api/tools
   - name: ops-console
     literals:
       - NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:18891/api/platform

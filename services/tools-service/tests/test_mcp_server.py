@@ -175,7 +175,8 @@ async def test_a_tool_of_a_module_outside_the_team_is_refused_and_logged(stack: 
 def issuer_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests run on an install that names its public address, as an install with MCP on does; one that names none
     answers 503 to a client with no key (test_mcp_company_sign_in)."""
-    monkeypatch.setenv("OPS_PLATFORM_PUBLIC_URL", "https://ops.bank.test")
+    monkeypatch.setenv("OPS_PLATFORM_PUBLIC_URL", "https://ops.bank.test/api/platform")
+    monkeypatch.setenv("OPS_TOOLS_PUBLIC_URL", "https://ops.bank.test/api/tools")
 
 
 @pytest.mark.parametrize(

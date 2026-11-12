@@ -68,7 +68,7 @@ a request.
 ## Assistants at a team's MCP address
 
 platform-service is the one authorization server for assistants (Claude, Cursor, VS Code, ChatGPT). The team's MCP
-address (`<public URL>/mcp/<team>`) names the team, so there is no team to choose and a person outside it is told so
+address (`<OPS_TOOLS_PUBLIC_URL>/mcp/<team>`, tools-service's own public base, not platform-service's) names the team, so there is no team to choose and a person outside it is told so
 on the consent page. A grant is a `sessions` row of kind `mcp` with `client_id`, `team_id` and `resource`; its access
 token has `aud` equal to the address only, `team_ids` equal to that team, and lives 15 minutes. A refresh rotates the
 token, re-reads the person's teams and role and ends the grant when the team or `tools.run` is gone; a token used twice

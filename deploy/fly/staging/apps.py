@@ -102,6 +102,7 @@ SETTINGS: dict[str, str] = {
     "OPS_CONSOLE_URL": ORIGIN,
     "OPS_PLATFORM_PUBLIC_URL": f"{ORIGIN}/api/platform",
     "OPS_FILES_PUBLIC_URL": f"{ORIGIN}/api/files",
+    "OPS_TOOLS_PUBLIC_URL": f"{ORIGIN}/api/tools",
     "OPS_PLATFORM_URL": f"http://{internal('platform', 8710)}",
     "OPS_PLATFORM_INTERNAL_URL": f"http://{internal('platform', 8711)}",
     "OPS_AGENTS_URL": f"http://{internal('agents', 8700)}",

@@ -762,7 +762,7 @@ def create_public_app(
 
     # ── Assistants at a team's MCP address: this service is their authorization server (ops_platform.oauth) ──
 
-    authorizer = Authorizer(store, auth, policy_store, sign.public_url, sign.console_url)
+    authorizer = Authorizer(store, auth, policy_store, sign.mcp_url, sign.console_url)
     clients = Clients(store)
     tokens = Tokens(store, auth, sign.public_url)
 

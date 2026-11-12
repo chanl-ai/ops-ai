@@ -5,7 +5,7 @@ person who left the team, a connection that never ends, and a lookalike client.
 Paths: /.well-known/oauth-authorization-server, POST /oauth/register, GET /oauth/authorize, POST /oauth/token, and
 the person's own side of the browser step as JSON, GET and POST /v1/oauth/consent (what the console's consent
 page calls with the person's sign-in), GET /v1/oauth/grants. The MCP address of a team is
-<platform public URL>/mcp/<team>."""
+<tools-service public URL>/mcp/<team>, on another base than this service's own."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import sqlalchemy as sa
 from ops_platform.store.tables import audit_entries, members, sessions, users
 from ops_service_kit.ids import new_id, now_iso
 
-from .conftest import DEMO_PASSWORD, PUBLIC_URL, SignInRig
+from .conftest import DEMO_PASSWORD, MCP_URL, PUBLIC_URL, SignInRig
 
 REDIRECT = "https://claude.example/callback"
 
@@ -74,7 +74,7 @@ class Assistant:
             "redirect_uri": REDIRECT,
             "code_challenge": challenge_of(self.verifier),
             "code_challenge_method": "S256",
-            "resource": f"{PUBLIC_URL}/mcp/{team}",
+            "resource": f"{MCP_URL}/mcp/{team}",
             "state": "st-1",
             **over,
         }
@@ -188,7 +188,8 @@ async def test_authorize_refuses_a_missing_or_plain_challenge_and_never_redirect
     for label, params in {
         "no challenge": {k: v for k, v in ok.items() if k != "code_challenge"},
         "plain": {**ok, "code_challenge_method": "plain"},
-        "resource of no team here": {**ok, "resource": f"{PUBLIC_URL}/mcp/{new_id('team')}"},
+        "resource of no team here": {**ok, "resource": f"{MCP_URL}/mcp/{new_id('team')}"},
+        "resource on this service's own base": {**ok, "resource": f"{PUBLIC_URL}/mcp/{team}"},
         "resource on another host": {**ok, "resource": f"https://evil.example/mcp/{team}"},
     }.items():
         r = await signin.public.get("/oauth/authorize", params=params, follow_redirects=False)
@@ -240,7 +241,7 @@ async def test_a_code_used_twice_revokes_what_it_issued_and_a_code_is_bound_to_i
     code = await a.code(who, params)
     assert (await a.exchange(code, params, code_verifier="x" * 50)).status_code == 400
     assert (await a.exchange(code, params, redirect_uri="https://claude.example/other")).status_code == 400
-    r = await a.exchange(code, params, resource=f"{PUBLIC_URL}/mcp/{new_id('team')}")
+    r = await a.exchange(code, params, resource=f"{MCP_URL}/mcp/{new_id('team')}")
     assert r.json()["error"] == "invalid_target", r.text
     fresh = await a.code(who, params)
     used = await a.exchange(fresh, params)

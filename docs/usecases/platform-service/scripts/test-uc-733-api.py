@@ -23,7 +23,9 @@ from usecase_harness import (
 )
 
 PUBLIC = f"http://127.0.0.1:{PLATFORM_PORT}"
-ADDRESS = f"{PUBLIC}/mcp/team_ops"
+# As deployed, one origin serves tools-service on another path than platform-service, and the proxy strips it.
+TOOLS_PUBLIC = "http://127.0.0.1:8890/api/tools"
+ADDRESS = f"{TOOLS_PUBLIC}/mcp/team_ops"
 REDIRECT = "https://claude.example/callback"
 AUTH = {
     "OPS_AUTH_MODE": "platform",
@@ -34,19 +36,20 @@ LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
 ACCEPT = {"Accept": "application/json, text/event-stream"}
 
 with (
-    platform(env={"OPS_PLATFORM_PUBLIC_URL": PUBLIC}) as (api, _),
+    platform(env={"OPS_PLATFORM_PUBLIC_URL": PUBLIC, "OPS_TOOLS_PUBLIC_URL": TOOLS_PUBLIC}) as (api, _),
     tools(
         {
             **AUTH,
             "OPS_FLAGS": "mcp_gateway",
             "OPS_PLATFORM_PUBLIC_URL": PUBLIC,
+            "OPS_TOOLS_PUBLIC_URL": TOOLS_PUBLIC,
             "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",
         }
     ) as gateway,
 ):
     r = gateway.post("/mcp/team_ops", json=LIST, headers=ACCEPT)
     header = r.headers.get("www-authenticate", "")
-    meta_url = f"{PUBLIC}/.well-known/oauth-protected-resource/mcp/team_ops"
+    meta_url = f"{TOOLS_PUBLIC}/.well-known/oauth-protected-resource/mcp/team_ops"
     check(
         "no token at the MCP address is 401 and names the resource metadata",
         r.status_code == 401 and meta_url in header,
@@ -54,8 +57,10 @@ with (
     )
     meta = gateway.get("/.well-known/oauth-protected-resource/mcp/team_ops")
     check(
-        "the metadata names platform-service as the authorization server",
-        meta.status_code == 200 and meta.json().get("authorization_servers") == [PUBLIC],
+        "the metadata names the address on tools-service's base and platform-service as the authorization server",
+        meta.status_code == 200
+        and meta.json().get("resource") == ADDRESS
+        and meta.json().get("authorization_servers") == [PUBLIC],
         meta.text[:200],
     )
     server = api.get("/.well-known/oauth-authorization-server")

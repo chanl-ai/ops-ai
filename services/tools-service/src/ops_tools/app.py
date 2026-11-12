@@ -293,7 +293,8 @@ def create_gateway_app(
             registry=registry,
             directory=directory,
             auth=resolved_auth,
-            public_url=Settings().platform_public_url,
+            public_url=Settings().tools_public_url,
+            issuer_url=Settings().platform_public_url,
         )
         if directory is not None and (flags or Flags()).on("mcp_gateway")
         else None
@@ -339,16 +340,16 @@ def create_gateway_app(
         @app.get("/.well-known/oauth-protected-resource/mcp/{team}", include_in_schema=False)
         async def mcp_resource_metadata(team: str) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
             """Tells an assistant that got a 401 at a team's MCP address where to sign in (RFC 9728): the address is the
-            resource, and platform-service at the same public address is its authorization server."""
-            if mcp.public_url is None or not _TEAM_PATH.match(team):
+            resource, on this service's own public base, and platform-service at its public base is its authorization
+            server."""
+            if mcp.public_url is None or mcp.issuer_url is None or not _TEAM_PATH.match(team):
                 return JSONResponse(
                     error_body(503, "unavailable", "No sign-in issuer is set for this install."), status_code=503
                 )
-            base = mcp.public_url
             return JSONResponse(
                 {
-                    "resource": f"{base}/mcp/{team}",
-                    "authorization_servers": [base],
+                    "resource": f"{mcp.public_url}/mcp/{team}",
+                    "authorization_servers": [mcp.issuer_url],
                     "bearer_methods_supported": ["header"],
                 }
             )

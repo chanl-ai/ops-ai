@@ -61,15 +61,18 @@ class Authorizer:
     store: IdentityStore
     auth: Auth
     policies: PolicyStore
-    public_url: str | None
+    # tools-service's public base, where a team's MCP address lives; not this service's own, which a proxy serves
+    # under another path.
+    mcp_url: str | None
     console_url: str | None
 
     def _base(self) -> str:
-        if not self.public_url:
+        if not self.mcp_url:
             raise OAuthError(
-                "server_error", "This install names no public address (OPS_PLATFORM_PUBLIC_URL).", status=503
-            )
-        return self.public_url.rstrip("/")
+                "server_error", "This install names no public address for its MCP service (OPS_TOOLS_PUBLIC_URL).",
+                status=503,
+            )  # fmt: skip
+        return self.mcp_url.rstrip("/")
 
     async def check(self, q: dict[str, str]) -> Request:
         base = self._base()

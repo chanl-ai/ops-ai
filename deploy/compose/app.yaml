@@ -24,6 +24,7 @@ x-settings: &settings
   OPS_CONSOLE_URL: ${OPS_PUBLIC_ORIGIN}
   OPS_PLATFORM_PUBLIC_URL: ${OPS_PUBLIC_ORIGIN}/api/platform
   OPS_FILES_PUBLIC_URL: ${OPS_PUBLIC_ORIGIN}/api/files
+  OPS_TOOLS_PUBLIC_URL: ${OPS_PUBLIC_ORIGIN}/api/tools
   OPS_PLATFORM_URL: http://platform:8710
   OPS_PLATFORM_INTERNAL_URL: http://platform:8711
   OPS_AGENTS_URL: http://agents:8700

@@ -58,10 +58,13 @@ class McpAdapter:
         directory: Directory,
         auth: Auth,
         public_url: str | None = None,
+        issuer_url: str | None = None,
     ) -> None:
-        # The install's public address: an assistant's token is for `<public_url>/mcp/<team>` and nothing else, and
-        # platform-service at the same address is its authorization server. Unset, only API keys open an MCP address.
-        self.public_url = public_url.rstrip("/") if public_url else None
+        # This service's public base (OPS_TOOLS_PUBLIC_URL): an assistant's token is for `<public_url>/mcp/<team>` and
+        # nothing else. platform-service at its own public base (OPS_PLATFORM_PUBLIC_URL) is the authorization server.
+        # Behind a proxy the two differ (/api/tools, /api/platform). Without both, only API keys open an MCP address.
+        self.public_url = public_url.rstrip("/") if public_url and issuer_url else None
+        self.issuer_url = issuer_url.rstrip("/") if public_url and issuer_url else None
         self.calls = calls
         self.registry = registry
         self.directory = directory
@@ -93,8 +96,9 @@ class McpAdapter:
             authorization = headers.get("authorization")
             if self.public_url is None and not (authorization or "").startswith("Bearer ok_"):
                 raise ServiceUnavailable(
-                    "This install names no public address (OPS_PLATFORM_PUBLIC_URL), so it has no sign-in issuer for "
-                    "assistants. API keys still work."
+                    "This install names no public address for its MCP service or its sign-in issuer "
+                    "(OPS_TOOLS_PUBLIC_URL, OPS_PLATFORM_PUBLIC_URL), so assistants cannot sign in. "
+                    "API keys still work."
                 )
             # 401 without a credential, 403 team_forbidden when the key or token belongs to another team.
             principal = await self.auth.identity.bearer(

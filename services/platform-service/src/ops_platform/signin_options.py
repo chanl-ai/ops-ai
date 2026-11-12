@@ -35,6 +35,8 @@ class SignInOptions:
     reset_ttl_s: int
     public_url: str | None = None
     console_url: str | None = None
+    # tools-service's public base: a team's MCP address, the resource an assistant's grant is for, is under it.
+    mcp_url: str | None = None
     mail: MailSender | None = None
     transport: httpx.AsyncBaseTransport | None = None
     dns: TxtResolver = field(default_factory=TxtResolver)
@@ -52,6 +54,7 @@ class SignInOptions:
             reset_ttl_s=settings.password_reset_seconds,
             public_url=settings.platform_public_url,
             console_url=settings.console_url,
+            mcp_url=settings.tools_public_url,
             mail=mail,
             dns=TxtResolver(settings.signin_dns_servers, timeout_s=settings.signin_dns_timeout_seconds),
             saml_sp_key=settings.saml_sp_key,

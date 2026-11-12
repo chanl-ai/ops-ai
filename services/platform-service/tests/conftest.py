@@ -213,6 +213,8 @@ async def platform(engine: AsyncEngine, database_url: str) -> AsyncIterator[Plat
 IDP = "http://idp.test"
 CONSOLE = "http://console.test"
 PUBLIC_URL = "http://platform"
+# tools-service's public base, as a proxy serves both services under one origin on different paths.
+MCP_URL = "http://ops.test/api/tools"
 OIDC_SECRET = "bank-oidc"
 # The SAML service provider's key pair every rig's platform-service holds.
 SP_KEY, SP_CERT = self_signed("sp")
@@ -397,6 +399,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         reset_ttl_s=3600,
         public_url=PUBLIC_URL,
         console_url=CONSOLE,
+        mcp_url=MCP_URL,
         mail=mail,
         transport=httpx.ASGITransport(app=create_idp(IDP, fake_dns)),
         dns=TxtResolver([f"127.0.0.1:{dns_port}"], timeout_s=2),

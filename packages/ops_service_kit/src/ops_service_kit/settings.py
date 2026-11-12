@@ -259,6 +259,11 @@ class Settings(BaseSettings):
     # files-service's public base, path included (e.g. https://ops.example/api/files), when a proxy serves it under a
     # path it strips: every upload and download URL the service hands out is built on it. Unset, the request's base.
     files_public_url: str | None = None
+    # tools-service's public base, path included (e.g. https://ops.example/api/tools). A team's MCP address is
+    # `<tools_public_url>/mcp/<team>`: an assistant's token is issued for that address only, so platform-service (which
+    # checks the resource it is asked for) and tools-service (which checks the token's audience) both read it. Unset,
+    # only API keys open an MCP address.
+    tools_public_url: str | None = None
     files_dir: Path = _REPO_ROOT / ".data" / "files"
     files_scanning: Literal["off", "eicar", "hook"] = "hook"
     # This process's own key at models-service: agents-service's turns, files-service's extractions. With
