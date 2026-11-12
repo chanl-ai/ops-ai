@@ -251,6 +251,60 @@ def _tools_stack(stack: ExitStack, names: list[str]) -> dict[str, dict[str, Any]
     }
 
 
+def _bank_stack(stack: ExitStack, names: list[str]) -> dict[str, dict[str, Any]]:
+    """The bank stack: platform-service signing people in, tools-service and agents-service (on the scripted model, with
+    the dev seed's Branch Concierge) verifying its tokens, and the core-banking fake serving as api.bank.test. Nothing
+    is allowed, stored or imported yet: the page does that. One profile per person, in the team the page needs them in."""
+    from usecase_harness import (
+        AGENTS_PORT,
+        PLATFORM_INTERNAL_PORT,
+        PLATFORM_PORT,
+        TOOLS_PORT,
+        agents,
+        core_bank,
+        platform,
+        security_admin_on_ops,
+        signed_in,
+        tools,
+    )
+
+    people = {
+        "builder": ("j.richardson@harborpine.example", "team_ops"),
+        "approver": ("m.okafor@harborpine.example", "team_ops"),
+        "security": ("s.adeyemi@harborpine.example", "team_security"),
+    }
+    auth = {
+        "OPS_AUTH_MODE": "platform",
+        "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+        "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
+    }
+    api, _inner = stack.enter_context(platform())
+    bank = stack.enter_context(core_bank())
+    stack.enter_context(tools({**bank["settings"], **auth, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
+    stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}", env=auth))
+    services = {
+        "tools": f"http://127.0.0.1:{TOOLS_PORT}",
+        "agents": f"http://127.0.0.1:{AGENTS_PORT}",
+        "platform": f"http://127.0.0.1:{PLATFORM_PORT}",
+    }
+    # Team-wide policies are changed by a Security admin who is a member of the team: Priya invites Sam to team_ops.
+    security_admin_on_ops(api)
+    out: dict[str, dict[str, Any]] = {}
+    for name in (n for n in names if n in people):
+        email, team = people[name]
+        session = signed_in(api, email)
+        out[name] = {
+            "baseUrl": f"http://127.0.0.1:{PLATFORM_PORT}",
+            "team": team,
+            "services": services,
+            "accessToken": session.get("token"),
+            "refreshToken": session.get("refreshToken"),
+            # The private range the bank serves on, which the Security admin lists beside its host.
+            "bankRange": bank["range"],
+        }
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
@@ -288,6 +342,12 @@ def main() -> None:
             profiles = agents_stack(
                 stack, ns.profiles.split(","), "MCP" in ns.services, "fake Salesforce" in ns.services
             )
+            Path(ns.config).write_text(json.dumps({"profiles": profiles, "current": next(iter(profiles))}))
+            print("READY", flush=True)
+            sys.stdin.read()
+            return
+        if "core-banking" in ns.services:
+            profiles = _bank_stack(stack, ns.profiles.split(","))
             Path(ns.config).write_text(json.dumps({"profiles": profiles, "current": next(iter(profiles))}))
             print("READY", flush=True)
             sys.stdin.read()

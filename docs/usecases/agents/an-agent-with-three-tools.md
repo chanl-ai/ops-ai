@@ -1,6 +1,6 @@
 # An agent with three tools
 
-Status: current. Layers: ui passes; sdk and cli wait on the one gap below.
+Status: current. Layers: ui, sdk and cli.
 
 | Use case | |
 |---|---|
@@ -43,6 +43,8 @@ approver = OpsAI(profile="approver")
 ```
 
 ```ts tab="TypeScript"
+import assert from 'node:assert/strict';
+
 import { OpsAI } from '@chanl-ai/ops-ai';
 
 const security = new OpsAI({ profile: 'security' });
@@ -60,21 +62,28 @@ export OPS_PROFILE=builder
 ### 1. Allow the bank's host and range
 
 ```python tab="Python" tab-group="language"
+import json
+import os
+
+bank_range = json.load(open(os.environ["OPS_CONFIG"]))["profiles"]["security"]["bankRange"]
 security.egress.allow_host("api.bank.test", "core banking")
-security.egress.allow_range("127.0.0.0/8", "core banking")
+security.egress.allow_range(bank_range, "core banking")
 ```
 
 ```ts tab="TypeScript"
+import { readFileSync } from 'node:fs';
+
+const bankRange = JSON.parse(readFileSync(process.env.OPS_CONFIG!, 'utf8')).profiles.security.bankRange;
 await security.egress.allowHost('api.bank.test', 'core banking');
-await security.egress.allowRange('127.0.0.0/8', 'core banking');
+await security.egress.allowRange(bankRange, 'core banking');
 ```
 
 ```bash tab="CLI"
 opsai egress --profile security allow-host api.bank.test --note 'core banking'
-opsai egress --profile security allow-range 127.0.0.0/8 --note 'core banking'
+opsai egress --profile security allow-range "$(jq -r .profiles.security.bankRange "$OPS_CONFIG")" --note 'core banking'
 ```
 
-Expected: both accepted.
+Expected: both accepted. The saved sign-in names the private range the bank serves on.
 
 ### 2. Store the bank's two keys as secrets
 
@@ -95,20 +104,20 @@ printf %s dev-bank-key | opsai secrets create STATEMENTS_API_KEY
 
 Expected: 201 each; no response shows the value.
 
-### 3. Import the OpenAPI document, tick `place_hold`, untick `get_statement`, save the draft
+### 3. Import the OpenAPI document, tick place_hold, untick get_statement, save the draft
 
 ```python tab="Python" tab-group="language"
-module = builder.raw.tools.tool_modules_create_blank_module({"name": "core_banking", "displayName": "Core banking", "type": "openapi"})
+module = builder.tools.create_module("core_banking", "Core banking")
 builder.tools.import_openapi(module["id"], "https://api.bank.test/openapi.json", ["get_account", "place_hold"])
 ```
 
 ```ts tab="TypeScript"
-const module = await builder.raw.tools.tool_modules_create_blank_module({ body: { name: 'core_banking', displayName: 'Core banking', type: 'openapi' } });
+const module = await builder.tools.createModule('core_banking', 'Core banking');
 await builder.tools.importOpenapi(module.id, 'https://api.bank.test/openapi.json', ['get_account', 'place_hold']);
 ```
 
 ```bash tab="CLI"
-MODULE=$(opsai tools --json list --search "Core banking" | jq -r '.[0].id')
+MODULE=$(opsai tools --json create core_banking --display-name "Core banking" | jq -r .id)
 opsai tools import "$MODULE" https://api.bank.test/openapi.json --operation get_account --operation place_hold
 ```
 
@@ -117,42 +126,45 @@ Expected: reads are Read, `place_hold` is Write.
 ### 4. Request a security review; the Security approver publishes the module
 
 ```python tab="Python" tab-group="language"
-builder.tools.request_review(module["id"], "bank reads and one hold")
-security.tools.decide_review(module["id"], "approved")
+asked = builder.tools.request_review(module["id"], "bank reads and one hold")
+security.tools.decide_review(builder.tools.review_of(asked), "approved")
 ```
 
 ```ts tab="TypeScript"
-await builder.tools.requestReview(module.id, 'bank reads and one hold');
-await security.tools.decideReview(module.id, 'approved');
+const asked = await builder.tools.requestReview(module.id, 'bank reads and one hold');
+await security.tools.decideReview(builder.tools.reviewOf(asked), 'approved');
 ```
 
 ```bash tab="CLI"
-opsai tools request-review "$MODULE" --note "bank reads and one hold"
-opsai tools --profile security decide-review "$MODULE" --decision approved
+REVIEW=$(opsai tools --json request-review "$MODULE" --note "bank reads and one hold" | jq -r '.versions[] | select(.status == "in_review") | .reviewId')
+opsai tools --profile security decide-review "$REVIEW" --decision approved
 ```
 
 Expected: the module is published.
 
-### 5. Import `get_statement` and publish a second version
+### 5. Import get_statement and publish a second version
 
 ```python tab="Python" tab-group="language"
 builder.tools.import_openapi(module["id"], "https://api.bank.test/openapi.json", ["get_statement"])
-builder.tools.publish_version(module["id"], "statements")
+made = builder.tools.publish_version(module["id"], "statements")
+security.tools.decide_review(builder.tools.review_of(made), "approved")
 ```
 
 ```ts tab="TypeScript"
 await builder.tools.importOpenapi(module.id, 'https://api.bank.test/openapi.json', ['get_statement']);
-await builder.tools.publishVersion(module.id, 'statements');
+const made = await builder.tools.publishVersion(module.id, 'statements');
+await security.tools.decideReview(builder.tools.reviewOf(made), 'approved');
 ```
 
 ```bash tab="CLI"
 opsai tools import "$MODULE" https://api.bank.test/openapi.json --operation get_statement
-opsai tools publish "$MODULE" --note statements
+REVIEW=$(opsai tools --json publish "$MODULE" --note statements | jq -r '.versions[] | select(.status == "in_review") | .reviewId')
+opsai tools --profile security decide-review "$REVIEW" --decision approved
 ```
 
 Expected: the version is listed; `get_statement` has no `api_key` input.
 
-### 6. Run `get_account` and `get_statement` from the test panel
+### 6. Run get_account and get_statement from the test panel
 
 ```python tab="Python" tab-group="language"
 for tool, args in (("get_account", {"account_id": "CHQ-2219"}), ("get_statement", {"account_id": "CHQ-2219"})):
@@ -175,23 +187,33 @@ Expected: both reach the bank.
 ### 7. Grant the three tools to Branch Concierge and publish it
 
 ```python tab="Python" tab-group="language"
+# A write waits for a person only while the team asks before an agent changes anything.
+security.with_team("team_ops").policies.set("toolWritesNeedApproval", True)
 agent = next(a for a in builder.agents.list() if a["name"] == "Branch Concierge")
-wanted = [o["id"] for o in builder.agents.tool_options("core_banking")]
+wanted = ["get_account", "get_statement", "place_hold"]
+offered = {o["id"] for o in builder.agents.tool_options("Core banking")}
+assert offered >= set(wanted), offered
 builder.agents.grant_tools(agent["id"], wanted)
-builder.agents.publish(agent["id"])
+assert builder.agents.publish(agent["id"])["status"] == "approved"
 ```
 
 ```ts tab="TypeScript"
-const found = (await builder.agents.list()) as any[];
+// A write waits for a person only while the team asks before an agent changes anything.
+await security.withTeam('team_ops').policies.set('toolWritesNeedApproval', true);
+const found = await Array.fromAsync(builder.agents.list());
 const agent = found.find((a: { name: string }) => a.name === 'Branch Concierge');
-await builder.agents.grantTools(agent.id, (await builder.agents.toolOptions('core_banking')).map((o: { id: string }) => o.id));
-await builder.agents.publish(agent.id);
+const wanted = ['get_account', 'get_statement', 'place_hold'];
+const offered = new Set((await builder.agents.toolOptions('Core banking')).map((o: { id: string }) => o.id));
+assert.ok(wanted.every((id) => offered.has(id)));
+await builder.agents.grantTools(agent.id, wanted);
+assert.equal((await builder.agents.publish(agent.id)).status, 'approved');
 ```
 
 ```bash tab="CLI"
+opsai policies set toolWritesNeedApproval true --profile security --team team_ops
 AGENT=$(opsai agents --json list | jq -r '.[] | select(.name == "Branch Concierge") | .id')
-opsai agents grant-tools "$AGENT" $(opsai agents --json tool-options --search core_banking | jq -r '.[].id')
-opsai agents publish "$AGENT"
+opsai agents grant-tools "$AGENT" get_account get_statement place_hold
+opsai agents --json publish "$AGENT" | jq -e '.status == "approved"'
 ```
 
 Expected: the agent holds all three.
@@ -199,24 +221,25 @@ Expected: the agent holds all three.
 ### 8. Ask the agent for an account
 
 ```python tab="Python" tab-group="language"
-agent = next(a for a in builder.agents.list() if a["name"] == "Branch Concierge")
-reply = builder.agents.chat(agent["id"], 'call get_account {"account_id": "CHQ-2219"}')
-assert reply["text"] == "Here is what I found."
-assert [call["name"] for call in reply["toolCalls"]] == ["get_account"]
+chat = builder.chat.start(agent["id"])["id"]
+list(builder.chat.say(chat, 'call get_account {"account_id": "CHQ-2219"}'))
+reply = [m for m in builder.chat.get(chat)["messages"] if m["role"] == "assistant"][-1]
+assert reply["content"] == "Here is what I found.", reply
+assert [call["name"] for call in reply["toolCalls"]] == ["get_account"], reply
 ```
 
 ```ts tab="TypeScript"
-const agents = await builder.agents.list();
-const agent = agents.find((a: { name: string }) => a.name === 'Branch Concierge');
-const reply = await builder.agents.chat(agent.id, 'call get_account {"account_id": "CHQ-2219"}');
-assert.equal(reply.text, 'Here is what I found.');
-assert.deepEqual(reply.toolCalls.map((call: { name: string }) => call.name), ['get_account']);
+const chat = (await builder.chat.start(agent.id)).id;
+await builder.chat.say(chat, 'call get_account {"account_id": "CHQ-2219"}');
+const answered = (await builder.chat.get(chat)).messages.filter((m: { role: string }) => m.role === 'assistant').at(-1);
+assert.equal(answered.content, 'Here is what I found.');
+assert.deepEqual(answered.toolCalls.map((call: { name: string }) => call.name), ['get_account']);
 ```
 
 ```bash tab="CLI"
-AGENT=$(opsai agents --json list | jq -r '.[] | select(.name == "Branch Concierge") | .id')
-opsai agents --json chat "$AGENT" --message 'call get_account {"account_id": "CHQ-2219"}' \
-  | jq -e '.text == "Here is what I found." and ([.toolCalls[].name] == ["get_account"])'
+opsai chat say --agent "$AGENT" -m 'call get_account {"account_id": "CHQ-2219"}'
+CHAT=$(opsai chat --json threads | jq -r '.[0].id')
+opsai chat --json show "$CHAT" | jq -e '[.messages[] | select(.role == "assistant")] | last | .content == "Here is what I found." and ([.toolCalls[].name] == ["get_account"])'
 ```
 
 Expected: "Here is what I found."; one call by the agent in the log.
@@ -224,18 +247,20 @@ Expected: "Here is what I found."; one call by the agent in the log.
 ### 9. Ask for a write: it is held
 
 ```python tab="Python" tab-group="language"
-held = builder.agents.chat(agent["id"], 'call place_hold {"account_id": "CHQ-2219", "amount": 25}')
-task = next(t for t in approver.tasks.list(view="open") if t.get("status") == "open")
+list(builder.chat.say(chat, 'call place_hold {"account_id": "CHQ-2219", "amount": 25, "reason": "suspected fraud"}'))
+held = [m for m in builder.chat.get(chat)["messages"] if m["role"] == "assistant"][-1]
+assert any(w["state"] == "pending" for w in held["widgets"]), held
 ```
 
 ```ts tab="TypeScript"
-const held = await builder.agents.chat(agent.id, 'call place_hold {"account_id": "CHQ-2219", "amount": 25}');
-const task = (await Array.fromAsync(approver.tasks.list({ view: 'open' }))).find((t: { status: string }) => t.status === 'open');
+await builder.chat.say(chat, 'call place_hold {"account_id": "CHQ-2219", "amount": 25, "reason": "suspected fraud"}');
+const held = (await builder.chat.get(chat)).messages.filter((m: { role: string }) => m.role === 'assistant').at(-1);
+assert.ok(held.widgets.some((w: { state: string }) => w.state === 'pending'));
 ```
 
 ```bash tab="CLI"
-opsai agents chat "$AGENT" --message 'call place_hold {"account_id": "CHQ-2219", "amount": 25}'
-TASK=$(opsai tasks --profile approver --json list --view open | jq -r '.[0].id')
+opsai chat say --thread "$CHAT" -m 'call place_hold {"account_id": "CHQ-2219", "amount": 25, "reason": "suspected fraud"}'
+opsai chat --json show "$CHAT" | jq -e '[.messages[] | select(.role == "assistant")] | last | .widgets | any(.state == "pending")'
 ```
 
 Expected: an approval card; no call logged and no new hold at the bank.
@@ -243,15 +268,15 @@ Expected: an approval card; no call logged and no new hold at the bank.
 ### 10. The approver approves it
 
 ```python tab="Python" tab-group="language"
-approver.tasks.approve(task["id"], password="northfield-demo")
+approver.tasks.approve(chat, password="northfield-demo")
 ```
 
 ```ts tab="TypeScript"
-await approver.tasks.approve(task.id, { password: 'northfield-demo' });
+await approver.tasks.approve(chat, { password: 'northfield-demo' });
 ```
 
 ```bash tab="CLI"
-opsai tasks --profile approver approve "$TASK" --password northfield-demo
+opsai tasks --profile approver approve "$CHAT" --password northfield-demo
 ```
 
 Expected: one call runs and the bank holds exactly one new hold of 25.
@@ -260,13 +285,13 @@ Expected: one call runs and the bank holds exactly one new hold of 25.
 
 ```python tab="Python" tab-group="language"
 calls = approver.usage.list(tool="place_hold")
-assert len(calls) == 1 and calls[0]["outcome"] == "ok"
+assert len(calls) == 1 and calls[0]["outcome"] == "ok", calls
 ```
 
 ```ts tab="TypeScript"
 const calls = await approver.usage.list({ tool: 'place_hold' });
 assert.equal(calls.length, 1);
-assert.equal(calls[0].outcome, 'ok');
+assert.equal(calls[0].outcome, 'ok', JSON.stringify(calls));
 ```
 
 ```bash tab="CLI"
@@ -277,15 +302,25 @@ Expected: one row naming the agent, the approver and the outcome.
 
 ### 12. No key on any page
 
-Expected: the console script checks it; there is no SDK or CLI step.
+```python tab="Python" tab-group="language"
+assert "dev-bank-key" not in json.dumps(builder.secrets.list())
+```
+
+```ts tab="TypeScript"
+assert.ok(!JSON.stringify(await builder.secrets.list()).includes('dev-bank-key'));
+```
+
+```bash tab="CLI"
+opsai secrets --json list | jq -e 'tostring | contains("dev-bank-key") | not'
+```
+
+Expected: no secret's listing carries its value. The console script checks the pages.
 
 ## Gaps
 
-This page does not pass while a row here is open. Each open gap is a product change tracked on the board; no test helper stands in for it. Creating the module still uses the generated `tool_modules_create_blank_module` call.
+A row here is a product change tracked on the board; no test helper stands in for it, and the page does not pass while one is open. 
 
-| Product fix | Step | Tab | What is missing | Where |
-|---|---|---|---|---|
-| A bank on the page stack | All | All | `page_stack.py` starts no core-banking fake, so no step can reach the bank | `docs/usecases/lib/page_stack.py:259-302` |
+No gaps are open.
 
 ## What proves it
 
