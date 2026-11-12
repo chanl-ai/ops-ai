@@ -16,6 +16,10 @@ export type ToolType = 'http' | 'code' | 'mcp' | 'workflow';
 /** How a workflow behaves when it is called as a tool, from its approval rules. */
 export type WorkflowToolApproval = 'pauses_on_writes' | 'pauses_always' | 'runs_without_pause';
 
+/** Which skills the chat's / menu offers with an agent: every published team skill it has the tools for, its attached
+ *  skills only, or none. */
+export type SkillMenu = 'team' | 'attached' | 'off';
+
 export interface Agent {
   /** What the caller may do with this record, from the same check its write routes run; on the detail response only. */
   canEdit?: boolean;
@@ -67,6 +71,8 @@ export interface Agent {
   /** Whether the model may compose layouts, and how many widgets one answer may show. */
   widgets?: WidgetSettings;
   memory?: MemorySettings;
+  /** Which skills a person may pick with / in a chat with it (`team` when absent). */
+  skillMenu?: SkillMenu;
   controls: AgentControls;
 }
 
@@ -180,6 +186,8 @@ export type AgentPatch = Partial<AgentInput> & {
   widgetPins?: { widgetId: string; version?: number }[];
   widgets?: WidgetSettings;
   memory?: MemorySettings;
+  /** Which skills a person may pick with / in a chat with it (`team` when absent). */
+  skillMenu?: SkillMenu;
   note?: string;
 };
 
