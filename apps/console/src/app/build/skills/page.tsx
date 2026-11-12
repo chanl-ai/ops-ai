@@ -35,6 +35,7 @@ import { useTeam } from '@/hooks/use-team';
 import { pct, plural, relativeTime } from '@/lib/format';
 import type { Skill, SkillFilters, SkillOrigin, SkillStatus, SkillView } from '@/lib/types/skills';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
 type Row = Skill & { onRowClick: (s: Skill) => void; href: string; rowTestId: string };
 
@@ -244,6 +245,7 @@ export default function SkillsPage() {
       actions={
         canBuild && (
         <>
+          <TemplatesGallery kind="skill" href="/build/skills" />
           <Button variant="outline" onClick={() => setImportOpen(true)} data-testid="import-skill-button">
             <Upload className="size-4" /> Import
           </Button>
