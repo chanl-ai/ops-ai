@@ -7,7 +7,7 @@ import { AlertTriangle, CheckCircle2, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useCan } from '@/hooks/me-queries';
-import { BY_REVIEWER, useTeamWritesWait, useToolAnswer, type ToolAnswer } from '@/hooks/policy-queries';
+import { BY_REVIEWER, useToolAnswer, type ToolAnswer } from '@/hooks/policy-queries';
 import { DetailSheet, type DetailSheetNavigation } from '@/components/shared/detail-sheet';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -27,7 +27,7 @@ import { BINDING_LABEL } from './module-meta';
 import { SupervisionText } from './operations-table';
 
 const SOURCES = Object.keys(BINDING_LABEL) as BindingSource[];
-type Draft = { description: string; bound: boolean; binding: SubjectBinding; rate: string; requiresApproval: boolean | null; amountMax: string; approvers: 1 | 2; stepUp: boolean; access: ToolAccess; input: FieldDraft[]; http: HttpOperationInput; transform: string; timeout: string };
+type Draft = { description: string; bound: boolean; binding: SubjectBinding; rate: string; amountMax: string; approvers: 1 | 2; stepUp: boolean; access: ToolAccess; input: FieldDraft[]; http: HttpOperationInput; transform: string; timeout: string };
 
 const baseOf = (endpoint: string) => endpoint.replace(/\/+$/, '');
 
@@ -37,12 +37,17 @@ export function unusedInputs(op: ModuleOperation, http: HttpOperationInput): str
   return op.input.map((f) => f.name).filter((n) => ![`{${n}}`, `{{${n}}}`, `{{ ${n} }}`].some((p) => text.includes(p)));
 }
 
+/** The service's answer for a write, in words: who is asked and which level said so. */
+const answerText = (o: ModuleOperation) =>
+  !o.answer
+    ? 'it follows the app’s setting'
+    : `${o.waits ? (o.answer === 'person' ? 'asks the person' : 'asks a reviewer') : 'runs without asking'} (from the ${o.answerSource === 'test-account' ? 'test account' : (o.answerSource ?? 'team')} setting)`;
+
 const draftOf = (o: ModuleOperation, appBase: string): Draft => ({
   description: o.description,
   bound: !!o.binding,
   binding: o.binding ?? { arg: o.input[0]?.name ?? '', bindTo: 'case.account', mode: 'equals', required: true },
   rate: String(o.rateLimitPerMin),
-  requiresApproval: o.requiresApproval,
   amountMax: o.amountMax ? String(o.amountMax) : '',
   approvers: o.approvers,
   stepUp: !!o.stepUp,
@@ -83,7 +88,6 @@ export function OperationSheet({
     setD(op ? draftOf(op, appBase) : null);
     setInputErrors({});
   }, [op, appBase]);
-  const teamWaits = useTeamWritesWait();
   const mine = useToolAnswer(op?.name ?? '');
   const mayAnswer = useCan('settings', 'manage') === true;
   if (!op || !d) return <DetailSheet open={false} onOpenChange={onOpenChange} title="">{null}</DetailSheet>;
@@ -96,7 +100,6 @@ export function OperationSheet({
   const nextBinding = d.bound ? d.binding : null;
   if (JSON.stringify(nextBinding) !== JSON.stringify(op.binding)) patch.binding = nextBinding;
   if (Number(d.rate) !== op.rateLimitPerMin) patch.rateLimitPerMin = Number(d.rate);
-  if (d.requiresApproval !== op.requiresApproval) patch.requiresApproval = d.requiresApproval;
   if (write && d.amountMax.trim() && Number(d.amountMax) !== (op.amountMax ?? 0)) patch.amountMax = Number(d.amountMax);
   if (write && d.approvers !== op.approvers) patch.approvers = d.approvers;
   if (write && d.stepUp !== !!op.stepUp) patch.stepUp = d.stepUp;
@@ -320,22 +323,11 @@ export function OperationSheet({
             )}
           </div>
           {write && (
-            <div className="mt-3 flex items-start justify-between gap-4 rounded-md border p-3">
-              <div>
-                <p className="text-sm font-medium">Every call waits for an approval</p>
-                <p className="text-xs text-muted-foreground">
-                  {twoApprovers ? 'Two different people approve every call, as the operation’s approval policy requires.' : d.requiresApproval === null ? `Team default (${teamWaits ? 'waits' : 'runs'}): follows the team’s approval settings until you switch it.` : 'Off: only a gate policy’s approval token lets the call run. Turning it off is a major version.'}
-                </p>
-              </div>
-              <Switch checked={d.requiresApproval !== false || twoApprovers} disabled={twoApprovers} onCheckedChange={(v) => set({ requiresApproval: v })} aria-label="Every call waits for an approval" />
-            </div>
-          )}
-          {write && (
             <div className="mt-3" data-testid="op-tool-answer">
-              <FormField id="op-tool-answer" label="When an agent calls this tool" hint="Your team’s answer for this tool alone. It wins over the app’s and the team’s, and a team admin changes it. A plugin’s tools are set here too.">
+              <FormField id="op-tool-answer" label="When an agent calls this tool" hint={`${twoApprovers ? 'Two different people approve every call, as the operation’s approval policy requires. ' : ''}Your team’s answer for this tool alone. It wins over the app’s and the team’s, and a team admin changes it. A plugin’s tools are set here too. Right now: ${answerText(op)}.`}>
                 <Select
-                  value={mine.entry?.answer ?? 'app'}
-                  disabled={!mayAnswer || mine.pending}
+                  value={mine.entry?.answer ?? (op.answerSource === 'tool' && op.answer ? op.answer : 'app')}
+                  disabled={!mayAnswer || mine.pending || twoApprovers}
                   onValueChange={(v) =>
                     mine
                       .save(v === 'app' ? null : { answer: v as ToolAnswer['answer'], reviewerRole: v === BY_REVIEWER ? (mine.entry?.reviewerRole ?? mine.teamRole) : undefined })
@@ -359,7 +351,7 @@ export function OperationSheet({
           {write && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="op-approval-controls">
               <FormField id="op-approvers" label="Approvals per call" hint="Fewer approvals is a major version that Security reviews.">
-                <Select value={String(d.approvers)} onValueChange={(v) => set(v === '2' ? { approvers: 2, requiresApproval: true } : { approvers: 1 })}>
+                <Select value={String(d.approvers)} onValueChange={(v) => set({ approvers: v === '2' ? 2 : 1 })}>
                   <SelectTrigger id="op-approvers" className="w-full">
                     <SelectValue />
                   </SelectTrigger>

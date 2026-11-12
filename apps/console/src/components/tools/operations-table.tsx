@@ -7,16 +7,14 @@ import { RowOpen } from '@/components/shared/row-open';
 import { AccessBadge } from '@/components/status-badges';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useTeamWritesWait } from '@/hooks/policy-queries';
 import { count } from '@/lib/format';
 import type { ModuleOperation } from '@/lib/types/tool-modules';
 import { cn } from '@/lib/utils';
 
 import { BindingText, errorTone, pctText } from './module-meta';
 
-/** How a call to this operation is supervised, in one line. */
-export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | 'requiresApproval' | 'approvers'> }) {
-  const teamWaits = useTeamWritesWait();
+/** How a call to this operation is supervised, in one line: the service's answer for the team in view. */
+export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | 'approvers' | 'answer' | 'answerSource' | 'waits'> }) {
   if (op.access === 'write' && op.approvers === 2)
     return (
       <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-warning-text">
@@ -24,18 +22,12 @@ export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | '
       </span>
     );
   if (op.access === 'read') return <span className="text-xs text-muted-foreground">None</span>;
-  if (op.requiresApproval === null)
-    return (
-      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground">
-        <UserCheck className="size-3.5" /> Team default ({teamWaits ? 'waits' : 'runs'})
-      </span>
-    );
-  return op.requiresApproval ? (
+  if (!op.answer) return <span className="text-xs whitespace-nowrap text-muted-foreground">Follows the app</span>;
+  if (!op.waits) return <span className="text-xs whitespace-nowrap text-muted-foreground">Runs without asking</span>;
+  return (
     <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-warning-text">
-      <UserCheck className="size-3.5" /> Every call
+      <UserCheck className="size-3.5" /> {op.answer === 'person' ? 'Asks the person' : 'Asks a reviewer'}
     </span>
-  ) : (
-    <span className="text-xs whitespace-nowrap text-muted-foreground">Gate policy only</span>
   );
 }
 

@@ -22,6 +22,7 @@ import type { ModuleOperation, ModuleTestInput, ModuleTestResult, RunContextOpti
 
 import { BINDING_LABEL } from './module-meta';
 import { useCan } from '@/hooks/me-queries';
+import { BY_REVIEWER } from '@/hooks/policy-queries';
 
 const NO_CONTEXT = 'owner';
 
@@ -211,7 +212,9 @@ export function TestConsole({
     onRun({ operation: op.name, contextId: ctx ? ctx.id : NO_CONTEXT, target, input, simulateApproval: simulateApproval || undefined, confirmed: confirmed || undefined });
   }
   // A Real run as the owner (no workflow's approval involved) that the gateway holds for the person's yes.
-  const asksPerson = target === 'sandbox' && (ctx ? ctx.id : NO_CONTEXT) === NO_CONTEXT && result?.denyReason === 'approval_token_missing';
+  // A tool the team gave to a reviewer is held for one: the person's yes would only be refused again.
+  const heldForReviewer = result?.denyReason === 'approval_token_missing' && op?.answer === BY_REVIEWER;
+  const asksPerson = target === 'sandbox' && (ctx ? ctx.id : NO_CONTEXT) === NO_CONTEXT && result?.denyReason === 'approval_token_missing' && !heldForReviewer;
 
 
   return (
@@ -288,6 +291,13 @@ export function TestConsole({
           <>
             {asksPerson && op && (
               <AskBeforeRun key={result.callId} op={op} input={sent.current} running={running} onYes={() => onRun({ operation: op.name, contextId: NO_CONTEXT, target, input: sent.current, confirmed: true })} />
+            )}
+            {heldForReviewer && (
+              <Alert>
+                <UserCheck className="size-4" />
+                <AlertTitle>A reviewer answers this tool</AlertTitle>
+                <AlertDescription>Your team asks a reviewer before this tool changes anything, so the run is held. Nothing was sent.</AlertDescription>
+              </Alert>
             )}
             {!asksPerson && <ResultBody result={result} op={op} running={running} onSimulate={() => run(true)} />}
           </>
