@@ -271,7 +271,9 @@ class PluginAccounts:
                 "first.",
                 code="host_app_missing",
             )
-        if package:
+        # A pack (templates only, no endpoint) reaches no system, so turning it on makes no account.
+        accountless = package or not m.endpoint
+        if accountless:
             # A package app has no account of its own: each call signs in with the chosen account of the app it
             # runs on (PluginHost.for_call).
             connection_id = None
@@ -296,7 +298,7 @@ class PluginAccounts:
             await self._first_binding(who, plugin)
         elif self.host.versions and not before.get("version"):
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
-        if body.enabled and not package and not before.get("connection_id") and body.credential_id is None:
+        if body.enabled and not accountless and not before.get("connection_id") and body.credential_id is None:
             await self._fix_first_place(who, plugin, own)
 
     async def _fix_first_place(self, who: Caller, plugin: Plugin, own: dict[str, Any]) -> None:
