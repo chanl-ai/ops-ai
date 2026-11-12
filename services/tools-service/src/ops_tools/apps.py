@@ -1892,7 +1892,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 actions += ["delete"] + (["move"] if configs > 1 else [])
         if may and not is_default and not a.get("sandbox") and card["kind"] == "plugin":
             actions.append("make_team_default")
-        if pick is not None and aid not in sandboxes and str(pick["connection_id"]) != aid and own is not None:
+        # Offered on any of the caller's own sign-ins that is not already their saved default, including before
+        # they have saved one: that is the moment a call asks which account to use.
+        if aid not in sandboxes and (pick is None or str(pick["connection_id"]) != aid) and own is not None:
             actions.append("make_default")
         # A person signs in with their own account only where the account lets each person do so beside the team's.
         if sign_in == "person_or_team" and own is None:

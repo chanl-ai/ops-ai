@@ -725,7 +725,7 @@ try {
           );
         }, page);
 
-        await step('13 James connects his own EU desk account; his chat then reads with his newest, and Make my default puts it back on Person desk', async () => {
+        await step('13 James connects his own EU desk account; his chat asks which, his pick becomes his default and the next call does not ask, and Make my default puts it back on Person desk', async () => {
           // A second account of his own is added from the card's menu on My connectors, under a name he picks.
           await james.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId(`connector-menu-${APP}`).click();
@@ -739,28 +739,40 @@ try {
           await james.getByTestId('account-action-Make my default-Person desk').waitFor({ timeout: 60_000 });
           await shoot(james, 'app-make-my-default');
           await james.keyboard.press('Escape');
-          const ask = async () => {
+          const ask = async (choose) => {
             await james.goto(`${consoleUrl}/chat?agent=${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
             const box = james.getByLabel('Message');
             await box.waitFor({ timeout: 120_000 });
             const before = (await fakeState()).calls.length;
             await box.fill('Read record rec-1042.');
             await james.getByRole('button', { name: 'Send' }).click();
+            // With two accounts of his own and none saved as his default, the call asks which; picking one saves it.
+            const card = james.getByTestId('account-choice-card');
+            if (choose) {
+              await card.waitFor({ timeout: 90_000 });
+              await card.getByRole('button', { name: new RegExp(choose) }).click();
+              // The pick saves his default; the fake model has no answer to the reply that follows, so the proof is the next ask.
+              await card.getByText(/now uses/).waitFor({ timeout: 60_000 });
+              return { as: [], asked: true };
+            }
             await james.getByText(/Person desk answered to james\./).last().waitFor({ timeout: 90_000 });
-            return (await fakeState()).calls.slice(before).filter((c) => c.method === 'person' && c.accepted).map((c) => c.as);
+            const asked = (await card.count()) > 0;
+            const as = (await fakeState()).calls.slice(before).filter((c) => c.method === 'person' && c.accepted).map((c) => c.as);
+            return { as, asked };
           };
-          const newest = await ask();
+          await ask('james\\.eu');
+          const again = await ask();
           await james.goto(`${consoleUrl}/data/connectors/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('account-menu-Person desk').click();
           // The chat read after it is the proof; the pin's answer is waited for so the read does not race it.
           const pin = james.waitForResponse((r) => r.request().method() !== 'GET' && /\/v1\/apps\/[^?]+\/accounts\//.test(r.url()), { timeout: 60_000 }).catch(() => null);
           await james.getByTestId('account-action-Make my default-Person desk').click();
           await pin;
-          const pinned = await ask();
+          const pinned = (await ask()).as;
           check(
-            '13 James connects his own EU desk account; his chat then reads with his newest, and Make my default puts it back on Person desk',
-            newest.length >= 1 && newest.every((w) => w === 'james.eu') && pinned.length >= 1 && pinned.every((w) => w === 'james.person'),
-            { newest, pinned },
+            '13 James connects his own EU desk account; his chat asks which, his pick becomes his default and the next call does not ask, and Make my default puts it back on Person desk',
+            again.asked === false && again.as.length >= 1 && again.as.every((w) => w === 'james.eu') && pinned.length >= 1 && pinned.every((w) => w === 'james.person'),
+            { again, pinned },
           );
         }, james);
 
