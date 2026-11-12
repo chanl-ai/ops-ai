@@ -126,6 +126,43 @@ def test_chat_say_streams_the_reply_and_prints_the_connect_card(
     assert "agent > Please connect." in out
 
 
+def test_chat_say_sends_a_picked_skill_part_with_its_inputs_on_the_first_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--skill names a published skill by name or slug and a part after the slash; only the first message carries it."""
+    skills = {"data": [{"id": "sk_1", "name": "Salesforce", "slug": "salesforce"}, {"id": "sk_2", "name": "Other"}]}
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/messages"):
+            return httpx.Response(
+                200, content=_sse({"type": "text", "delta": "ok"}), headers={"content-type": "text/event-stream"}
+            )
+        if r.url.path.endswith("/v1/skills"):
+            return _ok(skills)
+        if r.url.path.endswith("/v1/executions"):
+            return _ok({"data": []})
+        return _ok({"id": "th_1"}, 201)
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "chat", _client(seen, answer))
+    argv = [
+        "chat",
+        "say",
+        "--skill",
+        "Salesforce/client-brief",
+        "--input",
+        "client=Okafor",
+        "-m",
+        "Brief me",
+        "-m",
+        "More",
+    ]
+    assert main(argv) == 0
+    sends = [json.loads(r.content) for r in seen if r.url.path.endswith("/messages")]
+    pick = {"skillId": "sk_1", "part": "client-brief", "inputs": {"client": "Okafor"}}
+    assert sends == [{"content": "Brief me", "skill": pick}, {"content": "More"}]
+
+
 def test_chat_approve_acts_on_the_newest_open_widget(monkeypatch: pytest.MonkeyPatch) -> None:
     thread = {
         "id": "th_1",

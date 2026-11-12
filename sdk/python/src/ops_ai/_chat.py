@@ -75,6 +75,14 @@ def thread_body(
     return body
 
 
+def send_body(
+    text: str, *, skill: str | None = None, part: str | None = None, inputs: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """A message, with the skill (and one of its parts) picked for this reply and its inputs, as the / menu sends it."""
+    pick = {"skillId": skill, **({"part": part} if part else {}), **({"inputs": inputs} if inputs else {})}
+    return {"content": text, **({"skill": pick} if skill else {})}
+
+
 def action_body(action: str, *, reason: str | None = None, values: dict[str, str] | None = None) -> dict[str, Any]:
     """A widget's action as its buttons send it: approve, reject with a reason, or submit the form's values."""
     if action == "approve":
@@ -136,9 +144,19 @@ class Chat:
         """The conversation as the chat reads it: its messages, each with its tool calls and widgets."""
         return cast(dict[str, Any], self._call("get", {"thread_id": thread}))
 
-    def say(self, thread: str, text: str) -> Iterator[dict[str, Any]]:
-        """Sends a message and yields the reply's events as they stream."""
-        return _data(self._call("send", {"thread_id": thread}, {"content": text}))
+    def say(
+        self,
+        thread: str,
+        text: str,
+        *,
+        skill: str | None = None,
+        part: str | None = None,
+        inputs: dict[str, str] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Sends a message and yields the reply's events as they stream. `skill` (a published skill's id), `part` and
+        `inputs` pick a skill for this reply only."""
+        body = send_body(text, skill=skill, part=part, inputs=inputs)
+        return _data(self._call("send", {"thread_id": thread}, body))
 
     def act(self, thread: str, message: str, widget: str, action: dict[str, Any]) -> dict[str, Any]:
         """A widget's action (`action_body`); answers the widget in its new state."""
@@ -187,8 +205,17 @@ class AsyncChat:
     async def get(self, thread: str) -> dict[str, Any]:
         return cast(dict[str, Any], await self._call("get", {"thread_id": thread}))
 
-    async def say(self, thread: str, text: str) -> AsyncIterator[dict[str, Any]]:
-        async for e in await self._call("send", {"thread_id": thread}, {"content": text}):
+    async def say(
+        self,
+        thread: str,
+        text: str,
+        *,
+        skill: str | None = None,
+        part: str | None = None,
+        inputs: dict[str, str] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        body = send_body(text, skill=skill, part=part, inputs=inputs)
+        async for e in await self._call("send", {"thread_id": thread}, body):
             if isinstance(e.get("data"), dict):
                 yield cast(dict[str, Any], e["data"])
 
