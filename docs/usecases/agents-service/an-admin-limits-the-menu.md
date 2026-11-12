@@ -36,4 +36,4 @@ Checks 2 and 3 fail while the setting is not enforced.
 
 | | |
 |---|---|
-| Services the run starts | agents stack: platform-service, tools-service with the starters pack and the team MCP address, agents-service |
+| Services the run starts | agents stack: platform-service, tools-service with the starters pack, the Salesforce plugin and the team MCP address, a fake Salesforce signed in for the team, agents-service |

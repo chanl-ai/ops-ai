@@ -106,4 +106,4 @@ Step 2 fails while the list includes a draft or a retired skill; step 3 fails wh
 
 | | |
 |---|---|
-| Services the run starts | agents stack: platform-service, tools-service with the starters pack and the team MCP address, agents-service (MCP) |
+| Services the run starts | agents stack: platform-service, tools-service with the starters pack, the Salesforce plugin and the team MCP address, a fake Salesforce signed in for the team, agents-service (MCP) |

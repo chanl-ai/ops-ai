@@ -36,4 +36,4 @@ Check 2 fails while a pick can pass the cap.
 
 | | |
 |---|---|
-| Services the run starts | agents stack: platform-service, tools-service with the starters pack and the team MCP address, agents-service |
+| Services the run starts | agents stack: platform-service, tools-service with the starters pack, the Salesforce plugin and the team MCP address, a fake Salesforce signed in for the team, agents-service |

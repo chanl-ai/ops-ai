@@ -4,13 +4,14 @@ agents-service on the scripted model, with the dev seed's roles signing in as th
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from usecase_harness import as_role, data, people_stack, sse
+from usecase_harness import AGENTS_PORT, agents, as_role, bearer, data, platform, signed_in, sse, tools
 
 PREPARE = {
     "slug": "prepare-meeting",
@@ -49,6 +50,7 @@ class Stack:
     api: httpx.Client
     admin: dict[str, str]
     viewer: dict[str, str]
+    chat_user: dict[str, str]
 
     def make_skill(self, body: dict[str, Any], *, publish: bool = True) -> dict[str, Any]:
         """A skill of the admin's team; with `publish` it is sent for review and live on return (the dev stack
@@ -125,5 +127,29 @@ def stream_error_code(res: httpx.Response) -> str:
 
 @contextmanager
 def skills_stack() -> Generator[Stack]:
-    with people_stack() as (platform_api, api):
-        yield Stack(api, as_role(platform_api, "admin"), as_role(platform_api, "viewer"))
+    """platform-service signing people in, tools-service with the Salesforce plugin signed in to a fake Salesforce
+    for the team (so a skill may name its tools), and agents-service reading it, on the scripted model."""
+    from fake_salesforce import salesforce
+    from templates_stack import AUTH, PUBLIC, SALESFORCE_PLUGIN, salesforce_on
+
+    with ExitStack() as stack:
+        sf = stack.enter_context(salesforce())
+        platform_api, _ = stack.enter_context(platform(env=PUBLIC))
+        plugins = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE_PLUGIN)])}
+        gw = stack.enter_context(
+            tools(
+                {
+                    **AUTH,
+                    **PUBLIC,
+                    **plugins,
+                    **sf["settings"],
+                    "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",
+                    "OPS_CONSOLE_URL": "https://console.kestrel.test",
+                }
+            )
+        )
+        api = stack.enter_context(agents(gateway_url=str(gw.base_url).rstrip("/"), env={**AUTH, **PUBLIC}))
+        salesforce_on(gw, platform_api, bearer(signed_in(platform_api, "p.shah@harborpine.example"), "team_ops"), sf)
+        # Lena Brandt holds the Chat user role: chat:run and her own threads, no skills:view. The viewer reads skills.
+        lena = bearer(signed_in(platform_api, "l.brandt@harborpine.example"), "team_ops")
+        yield Stack(api, as_role(platform_api, "admin"), as_role(platform_api, "viewer"), lena)

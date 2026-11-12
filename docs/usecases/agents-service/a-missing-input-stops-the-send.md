@@ -2,7 +2,7 @@
 
 Status: draft. Service: `agents-service`. Layers: api, mcp, ui.
 
-In this example we will ask an assistant for the "Update an opportunity" part with no Client and be refused with the input named. Design case sk-chat-5; it fails today because the prompt is served with `{{client}}` left in the text.
+In this example we will ask an assistant for the "Read a client" part with no Client and be refused with the input named. Design case sk-chat-5; it fails today because the prompt is served with `{{client}}` left in the text.
 
 | Use case | |
 |---|---|
@@ -61,31 +61,22 @@ def get_prompt(name, args):
 
 ## Steps
 
-### 1. Publish the Salesforce skill with two parts
+### 1. The team's Salesforce skill has three parts
 
 ```python tab="MCP"
-PARTS = [
-    {"slug": "prepare-meeting", "name": "Prepare a client meeting", "useWhen": "Use to brief the adviser before a client meeting.",
-     "instructions": "Read the client's account and write a one-page brief.",
-     "inputs": [{"name": "client", "description": "The client's name", "required": True}]},
-    {"slug": "update-opportunity", "name": "Update an opportunity", "useWhen": "Use to change an opportunity after a client call.",
-     "instructions": "Read the change back and ask for a confirmation before saving.",
-     "inputs": [{"name": "client", "description": "The client's name", "required": True}]},
-]
-made = priya.raw.agents.agents_create_skill({"name": "Salesforce", "ownerTeam": "team_ops", "useWhen": "Use for a client's Salesforce record.",
-                                              "instructions": "Work only from Salesforce.", "parts": PARTS})
-skill = priya.raw.agents.agents_request_skill_publish(made["id"], {"note": "page"})
+rows = priya.raw.agents.agents_list_skills()
+made = next(s for s in (rows["data"] if isinstance(rows, dict) else rows) if s["name"] == "Salesforce")
 parts = [p["slug"] for p in (priya.raw.agents.agents_get_skill(made["id"]).get("parts") or [])]
-assert parts == ["prepare-meeting", "update-opportunity"], parts
+assert parts == ["prepare-meeting", "client-brief", "update-opportunity"], parts
 ```
 
-Expected: published.
+Expected: the team's Salesforce skill, installed from the Salesforce plugin, lists its three parts.
 
 ### 2. The prompt is refused without its required input
 
 ```python tab="MCP"
 try:
-    text = " ".join(getattr(m.content, "text", "") for m in get_prompt("salesforce-update-opportunity", {}).messages)
+    text = " ".join(getattr(m.content, "text", "") for m in get_prompt("salesforce-client-brief", {}).messages)
 except Exception as exc:
     assert "client" in str(exc).lower(), exc
 else:
@@ -102,4 +93,4 @@ Step 2 fails while a missing required input leaves `{{client}}` in the served te
 
 | | |
 |---|---|
-| Services the run starts | agents stack: platform-service, tools-service with the starters pack and the team MCP address, agents-service (MCP) |
+| Services the run starts | agents stack: platform-service, tools-service with the starters pack, the Salesforce plugin and the team MCP address, a fake Salesforce signed in for the team, agents-service (MCP) |

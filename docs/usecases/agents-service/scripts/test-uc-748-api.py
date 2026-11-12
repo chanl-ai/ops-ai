@@ -13,7 +13,7 @@ with skills_stack() as s:
     over = s.make_skill({**SALESFORCE, "name": "Heavy", "parts": [BIG]}, publish=False)
     sent = s.api.post(f"/v1/skills/{over['id']}/publish-requests", json={"note": "use case"}, headers=s.admin)
     check(
-        "1 publishing a part over 6,000 tokens is refused", sent.status_code == 422, (sent.status_code, sent.text[:200])
+        "1 publishing a part over 6,000 tokens is refused", sent.status_code == 400, (sent.status_code, sent.text[:200])
     )
     ok = s.make_skill({**SALESFORCE, "name": "Briefing", "parts": [PREPARE, UPDATE]})
     for part in ("prepare-meeting", "update-opportunity"):

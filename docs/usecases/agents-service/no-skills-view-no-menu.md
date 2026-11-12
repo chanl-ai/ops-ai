@@ -17,6 +17,7 @@ In this example we will see that a person who may chat but not view skills gets 
 | Person | Role | Signs in as |
 |---|---|---|
 | Priya, the team's admin | Admin | the `priya` profile |
+| Dana, who may chat but not read skills | Chat user | the `dana` profile |
 
 ## Before you start
 
@@ -61,25 +62,16 @@ def get_prompt(name, args):
 
 ## Steps
 
-### 1. Publish the Salesforce skill with two parts
+### 1. The team's Salesforce skill has three parts
 
 ```python tab="MCP"
-PARTS = [
-    {"slug": "prepare-meeting", "name": "Prepare a client meeting", "useWhen": "Use to brief the adviser before a client meeting.",
-     "instructions": "Read the client's account and write a one-page brief.",
-     "inputs": [{"name": "client", "description": "The client's name", "required": True}]},
-    {"slug": "update-opportunity", "name": "Update an opportunity", "useWhen": "Use to change an opportunity after a client call.",
-     "instructions": "Read the change back and ask for a confirmation before saving.",
-     "inputs": [{"name": "client", "description": "The client's name", "required": True}]},
-]
-made = priya.raw.agents.agents_create_skill({"name": "Salesforce", "ownerTeam": "team_ops", "useWhen": "Use for a client's Salesforce record.",
-                                              "instructions": "Work only from Salesforce.", "parts": PARTS})
-skill = priya.raw.agents.agents_request_skill_publish(made["id"], {"note": "page"})
+rows = priya.raw.agents.agents_list_skills()
+made = next(s for s in (rows["data"] if isinstance(rows, dict) else rows) if s["name"] == "Salesforce")
 parts = [p["slug"] for p in (priya.raw.agents.agents_get_skill(made["id"]).get("parts") or [])]
-assert parts == ["prepare-meeting", "update-opportunity"], parts
+assert parts == ["prepare-meeting", "client-brief", "update-opportunity"], parts
 ```
 
-Expected: published.
+Expected: the team's Salesforce skill, installed from the Salesforce plugin, lists its three parts.
 
 ### 2. Dana's assistant lists no skill prompts
 
@@ -100,14 +92,8 @@ Expected: no Salesforce prompt.
 
 Step 2 fails while a person without Skills: view is offered a skill prompt.
 
-## Gaps
-
-| Product fix | Step | What is missing |
-|---|---|---|
-| Open | 2 | The page stack signs in Priya, James and Wanjiru only: no profile holds the Chat role with an MCP token. The api script uses the seeded viewer. Needs a `dana` profile in `agents_stack.py` |
-
 ## Details
 
 | | |
 |---|---|
-| Services the run starts | agents stack: platform-service, tools-service with the starters pack and the team MCP address, agents-service (MCP) |
+| Services the run starts | agents stack: platform-service, tools-service with the starters pack, the Salesforce plugin and the team MCP address, a fake Salesforce signed in for the team, agents-service (MCP) |
