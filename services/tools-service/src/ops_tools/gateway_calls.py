@@ -481,6 +481,8 @@ class GatewayCalls:
                 ),
                 test_account=on_test_account,
                 tool=req.tool,
+                # Only a route-owned operation says it makes a draft (mcp_tools.py install_template).
+                draft=bool(own is not None and resolved is not None and (resolved.operation or {}).get("draft")),
             )
             needs = bool(answer["waits"])
             confirmed_by_asker = answer["answer"] == "person"

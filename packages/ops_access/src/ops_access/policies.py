@@ -406,7 +406,8 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
     """Whether a call waits, and who answers, for one tool: the single rule every service reads.
 
     The most specific level wins: the tool's `approvalMode`, then the app's entry of `appChangesByApp`, then the team's
-    `appChanges`. A read never waits; a write over MCP always does (nobody is in the chat); a tool with two approvers
+    `appChanges`. A read never waits; a write over MCP always does (nobody is in the chat), except one that only makes a
+    draft (`draft`), which still needs its own publish review before it does anything; a tool with two approvers
     always asks a reviewer. A test run (channel "test") of a write on a live account asks the person while `testRunsAsk`
     is on. A team's checkbox `testAccountsNeverAsk` (on unless saved off) lets a test account through.
     "Ask the person" with nobody in the chat (a workflow) goes to the reviewer role. An unreadable team policy (None)
@@ -421,6 +422,8 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
     team_role = None
     if team is None:
         return {"waits": True, "answer": "reviewer", "reviewerRole": None, "source": "team"}
+    if channel == "mcp" and tool.get("draft"):
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": "draft"}
     if channel == "mcp":
         return {"waits": True, "answer": "reviewer", "reviewerRole": tool.get("reviewerRole"), "source": "mcp"}
     if tool.get("approvers") == 2:

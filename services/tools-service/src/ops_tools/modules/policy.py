@@ -77,6 +77,7 @@ class WriteApprovals:
         test_account: bool = False,
         levels: tuple[Any, dict[str, Any]] | None = None,
         tool: str | None = None,
+        draft: bool = False,
     ) -> dict[str, Any]:
         """The one answer to "does this call wait, and who answers": the tool's own setting, its app's entry and the
         team's, through `effective_answer`. Everything that shows or enforces a wait calls here.
@@ -99,6 +100,7 @@ class WriteApprovals:
             "approvalMode": mode,
             "reviewerRole": reviewer_role,
             "approvers": approvers,
+            "draft": draft,
         }
         return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account)
 

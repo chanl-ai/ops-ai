@@ -53,6 +53,8 @@ class Operation:
     cells: tuple[str, ...] = ()
     # The gateway's rate window for the operation, per tenant and minute.
     rate_limit_per_min: int = 60
+    # A write that only makes a draft, which still needs its publish review: it does not wait as other MCP writes do.
+    draft: bool = False
 
 
 def _templates(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -109,6 +111,7 @@ OPERATIONS: tuple[Operation, ...] = (
         route=_install,
         read_only=False,
         cells=CREATE,
+        draft=True,
     ),
 )
 
@@ -191,7 +194,9 @@ class PlatformTools:
         o = BY_NAME.get(name) or PROMPTS[name]
         access = "read" if o.read_only else "write"
         return Resolved(
-            access, PLATFORM, operation={"name": o.name, "access": access, "rate_limit_per_min": o.rate_limit_per_min}
+            access,
+            PLATFORM,
+            operation={"name": o.name, "access": access, "rate_limit_per_min": o.rate_limit_per_min, "draft": o.draft},
         )
 
     async def run(self, name: str, args: dict[str, Any], *, who: Principal, team: str) -> ToolOutcome:

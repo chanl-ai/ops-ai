@@ -242,18 +242,20 @@ async def test_tools_run_without_the_create_right_cannot_install_a_template(stac
     assert stack.agents.made == []
 
 
-async def test_template_calls_are_gateway_calls_and_an_install_waits_like_any_mcp_write(stack: Stack) -> None:
+async def test_template_calls_are_gateway_calls_and_an_install_is_not_held(stack: Stack) -> None:
+    """An install only makes a draft that still needs its publish review, so it runs for a person who may create skills
+    without being their own approver; it keeps its call log row. Every other MCP write still waits
+    (test_mcp_server.py test_a_write_over_mcp_waits_for_a_person_even_when_declared_to_run_at_once)."""
     async with stack.app.router.lifespan_context(stack.app), stack.session("maker") as c:
         listed = await c.call_tool("list_templates", {"kind": "skill"})
-        held = await c.call_tool("install_template", {"resource": "plugin:opsai.starters:doc-coauthoring"})
+        made = await c.call_tool("install_template", {"resource": "plugin:opsai.starters:doc-coauthoring"})
     assert not listed.is_error and (listed.structured_content or {}).get("templates"), listed
     [row] = await stack.rows("list_templates")
     assert (row["channel"], row["outcome"], row["sub"]) == ("mcp", "ok", "maker@bank.test")
-    # The maker may create skills but is not their own approver, and an MCP write waits for a person.
-    assert held.is_error and "approval" in str(held.content), held
-    assert stack.agents.made == []
-    [refused] = await stack.rows("install_template")
-    assert (refused["channel"], refused["outcome"]) == ("mcp", "refused")
+    assert not made.is_error, made
+    assert stack.agents.made == ["plugin:opsai.starters:doc-coauthoring"]
+    [installed] = await stack.rows("install_template")
+    assert (installed["channel"], installed["outcome"]) == ("mcp", "ok")
 
 
 async def test_prompts_page_through_every_skill_and_a_person_who_cannot_read_skills_gets_none(many: Stack) -> None:
