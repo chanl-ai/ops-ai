@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -73,7 +74,7 @@ def _backfill() -> None:
     bind = op.get_bind()
     rows = bind.execute(sa.text("SELECT tenant_id, id, config, created_at FROM signin_providers WHERE kind = 'saml'"))
     for tenant_id, provider_id, stored, created_at in rows.all():
-        config = json.loads(stored) if isinstance(stored, str) else (stored or {})
+        config = _json(stored)
         pem = config.get("certificate")
         try:
             cert = x509.load_pem_x509_certificate(str(pem).encode())
@@ -107,7 +108,7 @@ def _backfill_groups() -> None:
     for tenant_id, provider_id, stored, created_at in providers:
         config = _json(stored)
         groups = _json(config.get("groups"))
-        mapped = groups.pop("map", None) or []
+        mapped = cast(list[dict[str, object]], groups.pop("map", None) or [])
         for n, rule in enumerate(mapped):  # type: ignore[arg-type]
             team = str(rule["team"])  # type: ignore[index]
             if (
