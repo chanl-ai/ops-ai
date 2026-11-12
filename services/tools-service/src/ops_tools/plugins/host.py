@@ -790,13 +790,25 @@ class PluginHost:
             return None
         return await self.bindings.get(tenant_id, str(conn["team_id"]), pid)
 
-    async def account_named(self, tenant_id: str, team_id: str, plugin: Plugin, name: str) -> dict[str, Any] | None:
-        """The team's account of the app with this name, within the team only; None when there is none."""
+    async def account_named(
+        self, tenant_id: str, team_id: str, plugin: Plugin, name: str, *, person: str | None = None
+    ) -> dict[str, Any] | None:
+        """The team's account of the app with this name, within the team only; None when there is none. A name is
+        unique within its owner, so the team's account and a person's own may share it: the caller's own account of
+        that name (`person`, their sign-in key) comes first, then the team's, then another person's own, which the
+        call is refused for (`_named`)."""
         if self.connections is None:
             return None
         wanted = name_key(name)
         found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
-        return next((a for a in found if wanted and name_key(a.get("account_name")) == wanted), None)
+        same = [a for a in found if wanted and name_key(a.get("account_name")) == wanted]
+        if person:
+            signed = await self.connections.own_sign_ins(tenant_id, person, [str(a["id"]) for a in same])
+            ids = {str(t["connection_id"]) for t in signed}
+            theirs = next((a for a in same if a.get("origin") == PERSON_ORIGIN and str(a["id"]) in ids), None)
+            if theirs is not None:
+                return theirs
+        return next((a for a in same if a.get("origin") != PERSON_ORIGIN), same[0] if same else None)
 
     async def person_default(self, tenant_id: str, team_id: str, plugin: Plugin, person: str) -> str | None:
         """A person's default live account of the app: their pinned sign-in, else their newest one the system
@@ -843,7 +855,7 @@ class PluginHost:
         A test run never acts in a named live account: it takes the app's test account (records.account_for), and is
         refused when the team has none."""
         title = plugin.manifest.title
-        named = await self.account_named(tenant_id, team_id, plugin, name)
+        named = await self.account_named(tenant_id, team_id, plugin, name, person=person)
         if named is None or self.connections is None:
             return {"refused": {"account_missing": f"{title} has no account named {name} in this team."}}
         if named.get("origin") == PERSON_ORIGIN:

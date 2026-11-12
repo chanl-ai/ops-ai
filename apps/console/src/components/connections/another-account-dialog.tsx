@@ -40,7 +40,8 @@ export function AnotherAccountDialog({
   const [name, setName] = React.useState('');
   const [values, setValues] = React.useState<Record<string, string>>({});
   const next = name.trim();
-  const taken = c.accounts.some((a) => a.name.trim().toLowerCase() === next.toLowerCase());
+  // Names are unique among a person's own accounts; the team's accounts, connected or not, may share one.
+  const taken = c.accounts.some((a) => a.own && a.name.trim().toLowerCase() === next.toLowerCase());
   return (
     <DialogShell
       open
@@ -65,7 +66,7 @@ export function AnotherAccountDialog({
         </>
       }
     >
-      <FormField id="another-account-name" label="Account name" hint="Steps and chats pick an account by this name." error={taken ? 'You already have an account with this name.' : undefined}>
+      <FormField id="another-account-name" label="Account name" hint="Steps and chats pick an account by this name." error={taken ? 'You already have an account of your own with this name.' : undefined}>
         <Input id="another-account-name" value={name} placeholder="Office" onChange={(e) => setName(e.target.value)} data-testid="another-account-name" />
       </FormField>
       {page.isLoading ? (

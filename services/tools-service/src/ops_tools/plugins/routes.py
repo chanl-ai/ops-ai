@@ -25,6 +25,7 @@ from ops_service_kit.http import Envelope, ok
 
 from ..auth.kinds import Kind, kind_of
 from ..callers import caller_in
+from ..connections.records import PERSON_ORIGIN
 from ..connections.schemas import CREDENTIAL_MAX, AccountIn
 from ..connections.service import ConnectionService, connection_rights
 from ..held_hosts import HostHeld
@@ -350,7 +351,8 @@ class PluginAccounts:
         name = body.name.strip()
         if not name:
             raise ValidationFailed("Name the account.", details={"field": "name"})
-        if await self.host.account_named(who.tenant_id, who.team.id, plugin, name) is not None:
+        held = await self.host.account_named(who.tenant_id, who.team.id, plugin, name)
+        if held is not None and held.get("origin") != PERSON_ORIGIN:
             raise AccountNameTaken(name)
         first = b.get("connection_id") if b else None
         if first is None or await self.connections.store.get(who.tenant_id, str(first)) is None:

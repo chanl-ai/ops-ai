@@ -52,6 +52,7 @@ from ..store.connections import (
     ConnectionStore,
     StaleConnection,
     name_key,
+    owner_key,
     plugin_app,
     plugin_of,
     verifier_context,
@@ -1387,8 +1388,9 @@ class ConnectionService:
         name = str((given or {}).get("name") or "").strip() or f"{who.name}'s other account"
         own_settings: dict[str, Any] | None = None
         if given is not None:
+            # Names are unique within an owner: the team may hold a name this person's own account also takes.
             others = await self.store.accounts(who.tenant_id, who.team.id, str(src["app_id"]))
-            taken = {name_key(a.get("account_name")) for a in others}
+            taken = {name_key(a.get("account_name")) for a in others if owner_key(a) == who.name.strip().casefold()}
             if name_key(name) in taken:
                 raise AccountNameTaken(name)
         if self.own_place is not None and plugin_of(src) is not None:
