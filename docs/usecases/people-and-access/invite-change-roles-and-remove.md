@@ -169,5 +169,5 @@ Expected: 401 at once; the removed person's API keys are refused the same way.
 | | |
 |---|---|
 | Services the run starts | platform service with its dev seed; no model is called |
-| Console script | `docs/usecases/platform-service/scripts/test-uc-023-ui.mjs` |
+| Console script | `docs/usecases/people-and-access/scripts/test-uc-023-ui.mjs`, moved here from `platform-service` when this page converts |
 | Replaces | `test-uc-023-api.py`, deleted when this page passes |

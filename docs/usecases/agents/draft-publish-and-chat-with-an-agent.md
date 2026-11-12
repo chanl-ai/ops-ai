@@ -41,6 +41,7 @@ const colleague = new OpsAI({ profile: 'member' });
 
 ```bash tab="CLI"
 set -euo pipefail
+export OPS_PROFILE=builder
 cat > laptop-helper.yaml <<'YAML'
 name: Laptop helper
 role: Answers questions about a person's laptop
@@ -193,5 +194,5 @@ Expected: the reply comes after `lookup_device` returns.
 | | |
 |---|---|
 | Services the run starts | platform, agents and models services on the scripted model |
-| Console script | `docs/usecases/agents-service/scripts/test-uc-018-ui.mjs` |
+| Console script | `docs/usecases/agents/scripts/test-uc-018-ui.mjs`, moved here from `agents-service` when this page converts |
 | Replaces | `test-uc-018-api.py`, deleted when this page passes |

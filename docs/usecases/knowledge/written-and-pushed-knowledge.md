@@ -205,5 +205,5 @@ The console steps run in their own script, since a browser cannot run the code a
 | | |
 |---|---|
 | Services the run starts | knowledge, files and documents services; no model is called (search uses the scripted embedding) |
-| Console script | `docs/usecases/kb-service/scripts/test-uc-676-ui.mjs` |
+| Console script | `docs/usecases/knowledge/scripts/test-uc-676-ui.mjs`, moved here from `kb-service` when this page converts |
 | Replaces | `test-uc-676-api.py` and `test-uc-676-sdk.py`, deleted when this page passes |
