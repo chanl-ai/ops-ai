@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from usecase_harness import (
     agents,
     assistant_sign_in,
     bearer,
+    kb,
     platform,
     signed_in,
     tools,
@@ -65,7 +67,9 @@ class Stack:
 
 
 @contextmanager
-def templates_stack() -> Generator[Stack]:
+def templates_stack(*, documents: bool = False) -> Generator[Stack]:
+    """`documents` also starts documents-service (beside kb-service and files-service) reading templates from
+    tools-service, which `opsai resources` and the app's Resources tab join to the apps' copies."""
     plugins = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(STARTERS)] if STARTERS.exists() else [])}
     with (
         platform(env=PUBLIC) as (accounts, _),
@@ -78,8 +82,23 @@ def templates_stack() -> Generator[Stack]:
                 "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",
             }
         ) as gw,
-        agents(gateway_url=str(gw.base_url).rstrip("/"), env={**AUTH, **PUBLIC}) as api,
+        ExitStack() as extra,
     ):
+        tools_url = str(gw.base_url).rstrip("/")
+        knowledge = (
+            extra.enter_context(
+                kb(Path(tempfile.mkdtemp(prefix="usecase-agents-")), documents_env={**AUTH, "OPS_TOOLS_URL": tools_url})
+            )
+            if documents
+            else None
+        )
+        api = extra.enter_context(
+            agents(
+                gateway_url=tools_url,
+                kb_url=str(knowledge.base_url).rstrip("/") if knowledge else None,
+                env={**AUTH, **PUBLIC},
+            )
+        )
         priya = bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops")
         gw.put(f"/v1/apps/{SOURCE}/team", json={"enabled": True}, headers=priya)
         yield Stack(accounts, gw, api, priya)

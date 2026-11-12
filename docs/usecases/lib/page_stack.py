@@ -246,6 +246,14 @@ def main() -> None:
             store = stack.enter_context(kb(Path(tmp) / "files", env=env))
             services["kb"] = str(store.base_url).rstrip("/")
             services["files"] = store.files_url.rstrip("/")
+        if "starters pack" in ns.services:
+            from agents_stack import agents_stack
+
+            profiles = agents_stack(stack, ns.profiles.split(","), "MCP" in ns.services)
+            Path(ns.config).write_text(json.dumps({"profiles": profiles, "current": next(iter(profiles))}))
+            print("READY", flush=True)
+            sys.stdin.read()
+            return
         if "Salesforce" in ns.services:
             profiles = _tools_stack(stack, ns.profiles.split(","))
             Path(ns.config).write_text(json.dumps({"profiles": profiles, "current": next(iter(profiles))}))
