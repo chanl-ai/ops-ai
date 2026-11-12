@@ -8,7 +8,7 @@ In this example we will make a knowledge base for branch procedures, add a file 
 |---|---|
 | Id | `uc-096` |
 | Area | Knowledge |
-| Runs | Python, TypeScript; console steps in their own script |
+| Runs | Python, TypeScript, CLI; console steps in their own script |
 | Run it | `make usecase-test UC=uc-096` |
 
 ## Who is in it
@@ -34,6 +34,12 @@ import { OpsAI } from '@chanl-ai/ops-ai';
 const ops = new OpsAI({ profile: 'builder' });
 ```
 
+```bash tab="CLI"
+set -euo pipefail
+export OPS_PROFILE=builder
+WORK=$(mktemp -d)
+```
+
 ## Steps
 
 ### 1. Make the base
@@ -46,6 +52,11 @@ assert branch["name"] == "Branch procedures"
 ```ts tab="TypeScript"
 const branch = await ops.knowledge.addBase('Branch procedures', { owner: 'branch.ops@harborpine.example' });
 assert.equal(branch.name, 'Branch procedures');
+```
+
+```bash tab="CLI"
+BRANCH=$(opsai kb create "Branch procedures" --owner branch.ops@harborpine.example --json | jq -r .id)
+opsai kb show "$BRANCH" --json | jq -e '.name == "Branch procedures"'
 ```
 
 Expected: a base with no documents.
@@ -77,6 +88,13 @@ const listed = (await ops.raw.kb.knowledge_bases_list_documents({ path: { kb_id:
 assert.deepEqual(listed.data.map((d: any) => d.status), ['indexed']);
 ```
 
+```bash tab="CLI"
+printf '# Branch operations\n\n## ATM limits\n\nThe daily ATM withdrawal limit is 500 dollars.\n' > "$WORK/branch-operations-manual.md"
+FILE=$(opsai files upload "$WORK/branch-operations-manual.md" --purpose knowledge_source --json | jq -er '.id // .fileId')
+opsai kb add-file "$BRANCH" --file-id "$FILE" --json > /dev/null
+opsai kb documents "$BRANCH" --json | jq -e 'map(.status) == ["indexed"]'
+```
+
 Expected: one document, indexed.
 
 ### 3. Write a page
@@ -91,6 +109,11 @@ const page = await ops.knowledge.addPage(branch.id, 'Night deposit', 'A night de
 assert.equal(page.status, 'indexed');
 ```
 
+```bash tab="CLI"
+opsai kb add-text "$BRANCH" --title "Night deposit" --text "A night deposit bag is opened by two tellers before 9 am." --json \
+  | jq -e '.status == "indexed"'
+```
+
 Expected: the page is indexed at once.
 
 ### 4. Ask a question
@@ -103,6 +126,10 @@ assert "500 dollars" in found["passages"][0]["text"]
 ```ts tab="TypeScript"
 const found = (await ops.knowledge.search({ kbIds: [branch.id], question: 'What is the daily ATM withdrawal limit?' })) as any;
 assert.match(found.passages[0].text, /500 dollars/);
+```
+
+```bash tab="CLI"
+opsai kb search "$BRANCH" "What is the daily ATM withdrawal limit?" --json | jq -e '.passages[0].text | contains("500 dollars")'
 ```
 
 Expected: the first passage is from the manual and quotes the limit.
@@ -120,13 +147,12 @@ await ops.raw.kb.knowledge_bases_remove_knowledge_base({ path: { kb_id: branch.i
 await assert.rejects(ops.raw.kb.knowledge_bases_get_knowledge_base({ path: { kb_id: branch.id } }));
 ```
 
+```bash tab="CLI"
+opsai kb delete "$BRANCH" --json | jq -e '.deleted == true'
+if opsai kb show "$BRANCH" --json 2> /dev/null; then exit 1; fi
+```
+
 Expected: the base is gone.
-
-## Gaps
-
-| Product fix | Step | The page expects | The product does |
-|---|---|---|---|
-| Knowledge on the command line, end to end | 2, 5 | `opsai kb` adds a file already in Files and retires a base | `opsai kb` has no verb that deletes a base (`sdk/python/src/ops_ai/_cli/kb.py:20`) and none that adds a file by id |
 
 ## What stays outside this page
 

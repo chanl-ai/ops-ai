@@ -8,7 +8,7 @@ In this example we will pick a SharePoint site and its libraries and a Confluenc
 |---|---|
 | Id | `uc-678` |
 | Area | Knowledge |
-| Runs | Python, TypeScript; the CLI cannot pick or make these sources yet (see Gaps); console steps in their own script |
+| Runs | Python, TypeScript, CLI; console steps in their own script |
 | Run it | `make usecase-test UC=uc-678` |
 
 ## Who is in it
@@ -41,6 +41,13 @@ const SHAREPOINT = { plugin: 'opsai.sharepoint', source: 'files' };
 const CONFLUENCE = { plugin: 'opsai.confluence', source: 'spaces' };
 ```
 
+```bash tab="CLI"
+set -euo pipefail
+export OPS_PROFILE=builder
+SHAREPOINT=(--plugin opsai.sharepoint --source files)
+CONFLUENCE=(--plugin opsai.confluence --source spaces)
+```
+
 ## Steps
 
 ### 1. Search for a site, then list its libraries
@@ -67,6 +74,12 @@ assert.equal(libraries.scopes.length, 2);
 assert.ok(libraries.scopes.every((s: any) => s.kind === 'library' && s.parent === site));
 ```
 
+```bash tab="CLI"
+SITE=$(opsai kb scopes "${SHAREPOINT[@]}" --query human --json | jq -er 'if map(.title) == ["Human Resources"] then .[0].id else error("sites") end')
+LIBRARIES=$(opsai kb scopes "${SHAREPOINT[@]}" --parent "$SITE" --json)
+echo "$LIBRARIES" | jq -e --arg site "$SITE" 'length == 2 and all(.[]; .kind == "library" and .parent == $site)'
+```
+
 Expected: one site, then its two libraries, each under the site.
 
 ### 2. A search that finds nothing, and one SharePoint refuses
@@ -90,6 +103,12 @@ await assert.rejects(ops.raw.kb.sources_source_scopes({ body: { ...SHAREPOINT, q
   assert.match(String(e.message), /503/);
   return true;
 });
+```
+
+```bash tab="CLI"
+opsai kb scopes "${SHAREPOINT[@]}" --query zebra --json | jq -e '. == []'
+if opsai kb scopes "${SHAREPOINT[@]}" --query outage --json 2> down.txt; then exit 1; fi
+grep -q scopes_failed down.txt && grep -q 503 down.txt
 ```
 
 Expected: an empty list; then `scopes_failed` naming SharePoint's 503.
@@ -132,6 +151,17 @@ const found = (await ops.knowledge.search({ kbIds: [policies.id], question: 'lea
 assert.ok(found.passages.some((p: any) => p.text.includes('Twenty days') && String(p.url ?? p.title).includes('leave.md')));
 ```
 
+```bash tab="CLI"
+POLICIES=$(opsai kb create "Policies and runbooks" --owner maya@harborpine.example --json | jq -r .id)
+PICKED=$(echo "$LIBRARIES" | jq -r 'map(.id) | join(",")')
+FILES=$(opsai kb add-source "HR libraries" --kb "$POLICIES" "${SHAREPOINT[@]}" --value "sites=$SITE" --value "libraries=$PICKED" --json | jq -r .id)
+opsai kb sync "$FILES" --json | jq -e '.status == "success"'
+
+opsai kb items "$FILES" --json | jq -e 'map({(.title): .status}) | add | .["leave.md"] == "indexed" and .["expenses.txt"] == "indexed"'
+opsai kb search "$POLICIES" "leave days a year" --json \
+  | jq -e 'any(.passages[]; (.text | contains("Twenty days")) and ((.url // .title) | contains("leave.md")))'
+```
+
 Expected: the sync succeeds; `leave.md` and `expenses.txt` are indexed; the passage quotes the file and cites its address.
 
 ### 4. Pick a Confluence space and search its pages
@@ -158,13 +188,14 @@ const deploy = (await ops.knowledge.search({ kbIds: [policies.id], question: 'de
 assert.ok(deploy.passages.some((p: any) => p.text.includes('pipeline') && p.title));
 ```
 
+```bash tab="CLI"
+opsai kb scopes "${CONFLUENCE[@]}" --query eng --json | jq -e 'map([.id, .title]) == [["ENG", "Engineering"]]'
+WIKI=$(opsai kb add-source "Engineering space" --kb "$POLICIES" "${CONFLUENCE[@]}" --value spaces=ENG --json | jq -r .id)
+opsai kb sync "$WIKI" --json | jq -e '.status == "success"'
+opsai kb search "$POLICIES" "deploy pipeline" --json | jq -e 'any(.passages[]; (.text | contains("pipeline")) and .title)'
+```
+
 Expected: Engineering alone is offered; its pages are indexed; the passage names its page.
-
-## Gaps
-
-| Product fix | Step | The page expects | The product does |
-|---|---|---|---|
-| Pickers and plugin sources on the command line | 1-4 | `opsai kb` searches a site, library or space picker and makes a source on what was picked | `opsai kb add-source` takes a name, a base and a `--type` only, with no plugin or picked values (`sdk/python/src/ops_ai/_cli/kb.py:36`), and no verb calls the pickers |
 
 ## What stays outside this page
 

@@ -15,10 +15,10 @@ console step is only written once the same step exists through the SDK.
 | uc-399 | Read knowledge usage and refs | A person with the cell reads their team's usage, refs and search; a service with the scope reads tenant-wide | api | api ok |
 | uc-675 | Website source | A website source keeps a base current and answers cite it | api, sdk | ok |
 | uc-676 | Typed text and pushed items | Typed pages and pushed items are indexed, versioned and cited; the same push changes nothing | api, sdk, ui | ok |
-| uc-677 | Turn on rerank and rewrite | An owner turns them on and a hard question gets a better passage | api, sdk, ui | sdk and ui pass; CLI cannot set retrieval |
-| uc-678 | Take in SharePoint and Confluence | A team takes in libraries and spaces, kept current and cited | api, sdk, ui | sdk and ui pass; CLI cannot pick or make plugin sources |
-| uc-129 | Add files from Files | A builder adds files already in Files to a base | sdk, ui | sdk and ui pass; CLI cannot add a file by id |
-| uc-096 | Make, fill, ask and retire a base | A person creates a base, adds files and a page, tests a question and retires it | sdk, ui | sdk and ui pass; CLI cannot retire a base or add a file by id |
+| uc-677 | Turn on rerank and rewrite | An owner turns them on and a hard question gets a better passage | api, sdk, cli, ui | sdk, cli and ui pass |
+| uc-678 | Take in SharePoint and Confluence | A team takes in libraries and spaces, kept current and cited | api, sdk, cli, ui | sdk, cli and ui pass |
+| uc-129 | Add files from Files | A builder adds files already in Files to a base | sdk, cli, ui | sdk, cli and ui pass |
+| uc-096 | Make, fill, ask and retire a base | A person creates a base, adds files and a page, tests a question and retires it | sdk, cli, ui | sdk, cli and ui pass |
 | uc-113 | Pick a base past the first hundred | The agent page's picker searches on the server | ui | ui ok |
 | uc-138 | Knowledge pages follow what the caller may do | Edit and delete controls follow the record's own flags | ui | ui ok |
 | uc-093 | Store a file once | A file is stored once, downloaded, held and deleted | api | not run |

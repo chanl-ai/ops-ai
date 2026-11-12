@@ -8,7 +8,7 @@ In this example we will turn on rerank for a payments knowledge base, then query
 |---|---|
 | Id | `uc-677` |
 | Area | Knowledge |
-| Runs | Python, TypeScript; the CLI cannot set retrieval yet (see Gaps); console steps in their own script |
+| Runs | Python, TypeScript, CLI; console steps in their own script |
 | Run it | `make usecase-test UC=uc-677` |
 
 ## Who is in it
@@ -102,6 +102,12 @@ assert.deepEqual([ranked.passages[0].title, ranked.passages[0].reranked], ['Wire
 assert.equal(ranked.passages.at(-1).reranked, 0);
 ```
 
+```bash tab="CLI"
+opsai kb set "$PAYMENTS" --rerank on --query-model default --json > /dev/null
+opsai kb search "$PAYMENTS" "domestic wire" --json \
+  | jq -e '.rerank.ran == true and .passages[0].title == "Wire fees" and .passages[0].reranked == 9 and .passages[-1].reranked == 0'
+```
+
 Expected: `rerank.ran`; Wire fees first, scored 9; the other page scored 0.
 
 ### 3. Turn rewrite on
@@ -135,6 +141,12 @@ assert.equal(asked.rewrite.rewritten, 'domestic wire cutoff');
 assert.equal(asked.passages[0].title, 'Wire cutoff');
 ```
 
+```bash tab="CLI"
+opsai kb set "$PAYMENTS" --rerank off --rewrite rewrite --rewrite-instructions "Use the bank's payment terms." --json > /dev/null
+opsai kb search "$PAYMENTS" "how late can money leave" --json \
+  | jq -e '.rewrite.asked == "how late can money leave" and .rewrite.rewritten == "domestic wire cutoff" and .passages[0].title == "Wire cutoff"'
+```
+
 Expected: the question as asked and as searched, and the cutoff page first.
 
 ### 4. A rewrite mode that is not built is refused
@@ -152,13 +164,12 @@ await assert.rejects(
 );
 ```
 
+```bash tab="CLI"
+if opsai kb set "$PAYMENTS" --rewrite expand --json 2> refused.txt; then exit 1; fi
+grep -q invalid_retrieval refused.txt
+```
+
 Expected: refused with `invalid_retrieval`.
-
-## Gaps
-
-| Product fix | Step | The page expects | The product does |
-|---|---|---|---|
-| A retrieval setting on the command line | 2, 3, 4 | `opsai kb` turns rerank and rewrite on, as the Retrieval tab does | `opsai kb` has no verb that changes a base's retrieval settings (`sdk/python/src/ops_ai/_cli/kb.py:19`); the SDKs reach it only through `ops.raw.kb` |
 
 ## What proves it
 

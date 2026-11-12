@@ -8,7 +8,7 @@ In this example we will add a file that is already in Files and a file we have j
 |---|---|
 | Id | `uc-129` |
 | Area | Knowledge |
-| Runs | Python, TypeScript; the CLI cannot add a file already in Files (see Gaps); console steps in their own script |
+| Runs | Python, TypeScript, CLI; console steps in their own script |
 | Run it | `make usecase-test UC=uc-129` |
 
 ## Who is in it
@@ -33,6 +33,12 @@ const ops = new OpsAI({ profile: 'builder' });
 const text = (s: string) => new TextEncoder().encode(s) as Uint8Array<ArrayBuffer>;
 ```
 
+```bash tab="CLI"
+set -euo pipefail
+export OPS_PROFILE=builder
+WORK=$(mktemp -d)
+```
+
 ## Steps
 
 ### 1. Put a file in Files
@@ -54,6 +60,11 @@ const sheet = (await ops.files.upload('retail-product-sheet.md', text('# Retail 
 })) as Record<string, any>;
 const sheetId: string = sheet.id ?? sheet.fileId;
 assert.ok(sheetId);
+```
+
+```bash tab="CLI"
+printf '# Retail product sheet\n\nThe everyday account has no monthly fee.\n' > "$WORK/retail-product-sheet.md"
+SHEET=$(opsai files upload "$WORK/retail-product-sheet.md" --purpose knowledge_source --json | jq -er '.id // .fileId')
 ```
 
 Expected: a file in Files with an id.
@@ -88,6 +99,14 @@ const added = (await ops.raw.kb.knowledge_bases_add_documents({
 assert.equal(added.run.counts.upserted, 2);
 ```
 
+```bash tab="CLI"
+BRANCH=$(opsai kb create "Branch documents" --owner branch.ops@harborpine.example --json | jq -r .id)
+printf '# Branch operations\n\nTwo tellers open every night deposit bag.\n' > "$WORK/branch-operations-manual.md"
+MANUAL=$(opsai files upload "$WORK/branch-operations-manual.md" --purpose knowledge_source --json | jq -er '.id // .fileId')
+ADDED=$(opsai kb add-file "$BRANCH" --file-id "$SHEET" --file-id "$MANUAL" --json)
+echo "$ADDED" | jq -e '.run.counts.upserted == 2'
+```
+
 Expected: one call; two documents indexed.
 
 ### 3. The base keeps a documents source with both
@@ -100,6 +119,11 @@ assert source["status"] == "active" and source["itemsIndexed"] == 2 and source["
 ```ts tab="TypeScript"
 const source = (await ops.raw.kb.sources_get_source({ path: { source_id: added.sourceId } })) as any;
 assert.ok(source.status === 'active' && source.itemsIndexed === 2 && source.itemCount === 2);
+```
+
+```bash tab="CLI"
+opsai kb source "$(echo "$ADDED" | jq -r .sourceId)" --json \
+  | jq -e '.status == "active" and .itemsIndexed == 2 and .itemCount == 2'
 ```
 
 Expected: an active source counting two items, not their pieces.
@@ -119,13 +143,13 @@ for (const fileId of [sheetId, manualId]) {
 }
 ```
 
+```bash tab="CLI"
+for FILE in "$SHEET" "$MANUAL"; do
+  opsai files show "$FILE" --json | jq -e --arg src "$(echo "$ADDED" | jq -r .sourceId)" 'any(.references[]?; .type == "source" and .id == $src)'
+done
+```
+
 Expected: each file is referenced by the source, so Files will not delete it from under the base.
-
-## Gaps
-
-| Product fix | Step | The page expects | The product does |
-|---|---|---|---|
-| Add a file already in Files from the command line | 2 | `opsai kb` adds files by their ids, as Pick from Files does | `opsai kb add-file` takes paths on disk and uploads each (`sdk/python/src/ops_ai/_cli/kb.py:117`); no flag takes a file id |
 
 ## What proves it
 

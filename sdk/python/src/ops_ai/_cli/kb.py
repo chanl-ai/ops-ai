@@ -36,7 +36,25 @@ def main(argv: list[str]) -> int:
     add_source = sub.add_parser("add-source", parents=common, help="a source feeding knowledge bases")
     add_source.add_argument("name")
     add_source.add_argument("--kb", action="append", required=True, help="a knowledge base id; repeat for several")
-    add_source.add_argument("--type", default="push", help="the source type; push takes items from `opsai kb push`")
+    add_source.add_argument("--type", help="the source type; push (the default) takes items from `opsai kb push`")
+    add_source.add_argument("--plugin", help="a plugin's source, e.g. opsai.sharepoint; the type is then tool")
+    add_source.add_argument("--source", help="which of the plugin's sources, e.g. files")
+    add_source.add_argument(
+        "--value", action="append", default=[], metavar="NAME=ID[,ID]", help="what was picked for a picker; repeat"
+    )
+    scopes = sub.add_parser("scopes", parents=common, help="what a plugin source's picker lists, as Add source shows")
+    scopes.add_argument("--plugin", required=True)
+    scopes.add_argument("--source", required=True)
+    scopes.add_argument("--query", help="the text typed into the picker")
+    scopes.add_argument("--parent", help="list what this picked value holds, e.g. a site's libraries")
+    delete = sub.add_parser("delete", parents=common, help="retire a knowledge base")
+    delete.add_argument("kb")
+    set_ = sub.add_parser("set", parents=common, help="a base's retrieval settings, as its Retrieval tab sets them")
+    set_.add_argument("kb")
+    set_.add_argument("--rerank", choices=["on", "off"])
+    set_.add_argument("--query-model", help="the model alias rerank and rewrite call")
+    set_.add_argument("--rewrite", help="the query rewrite mode, e.g. rewrite; none turns it off")
+    set_.add_argument("--rewrite-instructions")
     push = sub.add_parser("push", parents=common, help="put one item into a push source; the same item is unchanged")
     push.add_argument("source")
     push.add_argument("--name", required=True, help="the item's name in the source, e.g. fees/overdraft")
@@ -44,7 +62,8 @@ def main(argv: list[str]) -> int:
     push.add_argument("--text", required=True, help="the item's text, or @file to read it from a file")
     add_file = sub.add_parser("add-file", parents=common, help="upload files into a knowledge base and sync them")
     add_file.add_argument("kb")
-    add_file.add_argument("paths", nargs="+")
+    add_file.add_argument("paths", nargs="*", help="files on disk, each uploaded first")
+    add_file.add_argument("--file-id", action="append", default=[], help="a file already in Files; repeat")
     add_text = sub.add_parser("add-text", parents=common, help="a written page; the same title saves a new version")
     add_text.add_argument("kb")
     add_text.add_argument("--title", required=True)
@@ -90,12 +109,23 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "create":
         return emit(ns, ops.knowledge.add_base(ns.name, owner=ns.owner))
     if ns.verb == "add-source":
-        return emit(ns, ops.knowledge.add_source(ns.name, ns.kb, type=ns.type))
+        return emit(ns, _add_source(ops, ns))
+    if ns.verb == "scopes":
+        asked = {"plugin": ns.plugin, "source": ns.source, "query": ns.query, "parent": ns.parent}
+        found = kb.sources_source_scopes({k: v for k, v in asked.items() if v})
+        return table(ns, _rows_of(found, "scopes"), "id", "title", "kind", "parent")
+    if ns.verb == "delete":
+        kb.knowledge_bases_remove_knowledge_base(ns.kb)
+        return emit(ns, {"id": ns.kb, "deleted": True})
+    if ns.verb == "set":
+        return emit(ns, kb.knowledge_bases_update_knowledge_base(ns.kb, {"retrieval": _retrieval(ns)}))
     if ns.verb == "push":
         text = Path(ns.text[1:]).read_text() if ns.text.startswith("@") else ns.text
         return emit(ns, ops.knowledge.push(ns.source, ns.name, title=ns.title, text=text))
     if ns.verb == "add-file":
-        return emit(ns, add_files(ops, ns.kb, [Path(p) for p in ns.paths], ns))
+        if not ns.paths and not ns.file_id:
+            return refuse(ValueError("name files on disk, or --file-id for a file already in Files"))
+        return emit(ns, add_files(ops, ns.kb, [Path(p) for p in ns.paths], ns, ns.file_id))
     if ns.verb == "add-text":
         text = Path(ns.text[1:]).read_text() if ns.text.startswith("@") else ns.text
         return emit(ns, ops.knowledge.add_page(ns.kb, marked(ns, ns.title), text))
@@ -114,10 +144,41 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     return 2
 
 
-def add_files(ops: OpsAI, kb: str, paths: list[Path], ns: argparse.Namespace | None = None) -> Any:
-    """The knowledge base's Add files: each file uploaded to Files for knowledge, then added to the base's documents
-    source, which syncs them."""
-    ids = []
+def _rows_of(found: Any, key: str) -> list[Any]:
+    return list(found.get(key) or []) if isinstance(found, dict) else []
+
+
+def _add_source(ops: OpsAI, ns: argparse.Namespace) -> Any:
+    fields: dict[str, Any] = {}
+    if ns.plugin:
+        values = {}
+        for pair in ns.value:
+            name, _, ids = pair.partition("=")
+            values[name] = [i for i in ids.split(",") if i]
+        fields["config"] = {"plugin": ns.plugin, "source": ns.source, "values": values}
+    return ops.knowledge.add_source(ns.name, ns.kb, type=ns.type or ("tool" if ns.plugin else "push"), **fields)
+
+
+def _retrieval(ns: argparse.Namespace) -> dict[str, Any]:
+    """Only what was named, so the base's other retrieval settings stay as they are."""
+    out: dict[str, Any] = {}
+    if ns.rerank:
+        out["rerank"] = ns.rerank == "on"
+    if ns.query_model:
+        out["queryModel"] = ns.query_model
+    if ns.rewrite:
+        out["rewrite"] = ns.rewrite
+    if ns.rewrite_instructions is not None:
+        out["rewriteInstructions"] = ns.rewrite_instructions
+    return out
+
+
+def add_files(
+    ops: OpsAI, kb: str, paths: list[Path], ns: argparse.Namespace | None = None, file_ids: list[str] | None = None
+) -> Any:
+    """The knowledge base's Add files: each file uploaded to Files for knowledge, or named by its id when it is already
+    there, then added to the base's documents source, which syncs them."""
+    ids = list(file_ids or [])
     for path in paths:
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         name = marked(ns, path.name) if ns is not None else path.name
