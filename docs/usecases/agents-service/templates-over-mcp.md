@@ -129,4 +129,3 @@ Step 3 fails if install runs as the service and not as the signed-in person.
 | | |
 |---|---|
 | Services the run starts | agents stack: platform-service, tools-service with the starters pack and the team MCP address, agents-service |
-| Older script | `docs/usecases/agents-service/scripts/test-uc-741-mcp.py` |

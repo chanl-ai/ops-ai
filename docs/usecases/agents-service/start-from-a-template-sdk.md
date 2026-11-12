@@ -128,4 +128,3 @@ makes no copy. Step 3 fails if the copy exists but is not among the team's skill
 |---|---|
 | Services the run starts | agents stack: platform-service, tools-service with the starters pack, agents-service |
 | Pack | the starters pack is read from `ops-ai-plugins` beside this repo, or from `OPS_USECASE_STARTERS_PACK` |
-| Older script | `docs/usecases/agents-service/scripts/test-uc-740-sdk.py` is superseded by this page and can go once the page has run green three times |

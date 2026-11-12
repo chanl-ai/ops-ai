@@ -91,4 +91,3 @@ Step 2 fails while a skill keeps no inputs; step 3 fails if the arguments are no
 | | |
 |---|---|
 | Services the run starts | agents stack: platform-service, tools-service with the starters pack and the team MCP address, agents-service |
-| Older script | `docs/usecases/agents-service/scripts/test-uc-742-mcp.py` |
