@@ -4,6 +4,7 @@ cancel, retry), and Human Tasks as the Human Tasks queue shows them (list, open 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import Any
 
@@ -94,6 +95,12 @@ def tasks_main(argv: list[str]) -> int:
     decide.add_argument("decision", help="the action, e.g. approve or reject")
     decide.add_argument("--reason")
     decide.add_argument("--fields", help="the task's form fields: k=v,k=v, JSON, a file, or -")
+    approve = sub.add_parser("approve", parents=common, help="approve a task, such as a write a chat held")
+    approve.add_argument("task")
+    approve.add_argument("--reason")
+    approve.add_argument(
+        "--password", help="the approver's password for the step-up a write asks for (or OPS_PASSWORD)"
+    )
     ns = ap.parse_args(argv)
     try:
         return _tasks(ns, client(ns))
@@ -111,4 +118,7 @@ def _tasks(ns: argparse.Namespace, ops: OpsAI) -> int:
         fields = payload(ns.fields) if ns.fields else {}
         inputs = {"inputs": fields} if fields else {}
         return emit(ns, ops.tasks.decide(ns.task, ns.decision, reason=ns.reason, **inputs))
+    if ns.verb == "approve":
+        password = ns.password or os.environ.get("OPS_PASSWORD")
+        return emit(ns, ops.tasks.approve(ns.task, password=password, reason=ns.reason))
     return 2
