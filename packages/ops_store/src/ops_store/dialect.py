@@ -342,8 +342,13 @@ class json_fragment(FunctionElement[str]):  # noqa: N801
         super().__init__(column, _checked_key(key))
 
 
+def _literal_text(literal: Any) -> str:
+    """The field name inside a `_checked_key` literal."""
+    return str(literal.name).strip("'")
+
+
 def _key_of(e: FunctionElement[Any]) -> str:
-    return str(e.clauses.clauses[1].name).strip("'")  # pyright: ignore[reportAttributeAccessIssue]
+    return _literal_text(e.clauses.clauses[1])
 
 
 @compiles(json_text, "postgresql")
@@ -384,29 +389,29 @@ class json_array_has(ColumnElement[bool]):  # noqa: N801
     inherit_cache = True
     # Not Boolean: SQL Server has no boolean type, so a Boolean-typed element in a WHERE is rendered `<it> = 1`,
     # which is invalid when `<it>` is an EXISTS condition.
-    type = sa.types.NullType()
+    type: sa.types.TypeEngine[Any] = sa.types.NullType()
 
     def __init__(self, column: sa.ColumnElement[Any], key: str, value: str) -> None:
-        self.column, self.key = column, _checked_key(key)
+        self.column, self.field = column, _checked_key(key)
         self.value = sa.bindparam(None, value, type_=sa.String())
 
 
 @compiles(json_array_has, "postgresql")
 def _has_pg(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
-    col, key, val = c.process(e.column, **kw), c.process(e.key, **kw), c.process(e.value, **kw)
+    col, key, val = c.process(e.column, **kw), c.process(e.field, **kw), c.process(e.value, **kw)
     return f"jsonb_exists((CAST({col} AS JSONB) -> {key}), {val})"
 
 
 @compiles(json_array_has, "mssql")
 def _has_mssql(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
-    key = str(e.key.name).strip("'")  # pyright: ignore[reportAttributeAccessIssue]
+    key = _literal_text(e.field)
     col, val = c.process(e.column, **kw), c.process(e.value, **kw)
     return f"EXISTS (SELECT 1 FROM OPENJSON({col}, '$.{key}') WHERE value = {val})"
 
 
 @compiles(json_array_has)
 def _has_other(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
-    key = str(e.key.name).strip("'")  # pyright: ignore[reportAttributeAccessIssue]
+    key = _literal_text(e.field)
     col, val = c.process(e.column, **kw), c.process(e.value, **kw)
     return f"EXISTS (SELECT 1 FROM json_each({col}, '$.{key}') WHERE value = {val})"
 
