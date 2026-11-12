@@ -62,13 +62,17 @@ def get_prompt(name, args):
 
 ```python tab="Python" tab-group="language"
 from ops_ai import OpsAI
+from steps import publish_agent
 
 priya = OpsAI(profile="priya")
+SALESFORCE_TOOLS = ["salesforce_search", "salesforce_query", "salesforce_get_record", "salesforce_field_values", "salesforce_save_records"]
 ```
 ```ts tab="TypeScript" tab-group="language"
 import assert from 'node:assert/strict';
 import { OpsAI } from '@chanl-ai/ops-ai';
+import { publishAgent } from '@ops-ai/usecase-runner/steps';
 
+const SALESFORCE_TOOLS = ['salesforce_search', 'salesforce_query', 'salesforce_get_record', 'salesforce_field_values', 'salesforce_save_records'];
 const priya = new OpsAI({ profile: 'priya' });
 ```
 
@@ -85,7 +89,7 @@ assert parts == ["prepare-meeting", "client-brief", "update-opportunity"], parts
 ```ts tab="TypeScript" tab-group="language"
 const rows = (await priya.raw.agents.agents_list_skills()) as any;
 const made = (Array.isArray(rows) ? rows : rows.data).find((s: any) => s.name === 'Salesforce');
-const got = (await priya.raw.agents.agents_get_skill({ skill_id: made.id } as any)) as any;
+const got = (await priya.raw.agents.agents_get_skill({ path: { skill_id: made.id } } as any)) as any;
 assert.deepEqual((got.parts ?? []).map((p: any) => p.slug), ['prepare-meeting', 'client-brief', 'update-opportunity']);
 ```
 ```python tab="MCP"
@@ -100,9 +104,8 @@ Expected: three parts listed.
 ### 2. Use both parts in one chat
 
 ```python tab="Python" tab-group="language"
-agent = priya.agents.create({"name": "Desk", "role": "Answers the team", "model": next(iter(priya.raw.agents.agents_list_model_aliases()))["name"]})
-priya.agents.publish(agent["id"], note="page", version=agent.get("draftVersion") or 1)
-thread = priya.chat.start(agent["id"])["id"]
+agent_id, _ = publish_agent(priya, "Desk", role="Answers the team", tool_ids=SALESFORCE_TOOLS)
+thread = priya.chat.start(agent_id)["id"]
 list(priya.chat.say(thread, "Prepare my meeting", skill=made["id"], part="client-brief", inputs={"client": "Okafor Family Trust"}))
 list(priya.chat.say(thread, "They agreed to $75,000, move it forward a stage", skill=made["id"], part="update-opportunity", inputs={"client": "Okafor Family Trust"}))
 reply = [m for m in priya.chat.get(thread)["messages"] if m["role"] == "assistant"][-1]
@@ -110,8 +113,8 @@ how = {s["part"]: s["how"] for s in reply["skills"]}
 assert how == {"update-opportunity": "picked", "client-brief": "carried"}, how
 ```
 ```ts tab="TypeScript" tab-group="language"
-const agent = (await priya.agents.create({ name: 'Desk', role: 'Answers the team' } as any)) as any;
-const thread = ((await (priya as any).chat.start(agent.id)) as any).id;
+const { agentId } = await publishAgent(priya, { name: 'Desk', role: 'Answers the team', toolIds: SALESFORCE_TOOLS });
+const thread = ((await (priya as any).chat.start(agentId)) as any).id;
 await (priya as any).chat.say(thread, 'Prepare my meeting', { skill: made.id, part: 'client-brief', inputs: { client: 'Okafor Family Trust' } });
 await (priya as any).chat.say(thread, 'They agreed to $75,000', { skill: made.id, part: 'update-opportunity', inputs: { client: 'Okafor Family Trust' } });
 const last = ((await (priya as any).chat.get(thread)) as any).messages.filter((m: any) => m.role === 'assistant').at(-1);
@@ -127,6 +130,14 @@ Expected: the second part is picked, the first is carried. Over MCP the same par
 
 ### 3. The assistant gets the second part as its own prompt
 
+```python tab="Python" tab-group="language"
+part = next(p for p in priya.raw.agents.agents_get_skill(made["id"])["parts"] if p["slug"] == "update-opportunity")
+assert [i["name"] for i in part["inputs"]] == ["client", "note"], part["inputs"]
+```
+```ts tab="TypeScript" tab-group="language"
+const update = (got.parts as any[]).find((p) => p.slug === 'update-opportunity');
+assert.deepEqual(update.inputs.map((i: any) => i.name), ['client', 'note']);
+```
 ```python tab="MCP"
 found = prompts()["salesforce-update-opportunity"]
 assert [a.name for a in found.arguments] == ["client", "note"], found.arguments
