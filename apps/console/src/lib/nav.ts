@@ -28,6 +28,8 @@ export interface NavItem {
   children?: NavChild[];
   /** Label of the parent's own tab in the section strip when it differs from the sidebar name (Brain's first tab is the knowledge bases list). */
   tabTitle?: string;
+  /** The sub-rows start folded, so an area reads as its top rows; a viewer who opens the parent keeps it open. */
+  foldedAtStart?: boolean;
   /** The icon of the parent's own sub-row, when the parent shows one beside a lone child. */
   tabIcon?: Icon;
   /** No sidebar row: the entry gives its routes an area, a trail and a place in search (My connectors is in the user menu). */
@@ -128,14 +130,14 @@ export const NAV: NavGroup[] = [
     label: 'Govern',
     items: [
       // The one Activity list; tool calls keep their own page until they are an Activity kind.
-      { title: 'Activity', tabTitle: 'Everything', url: '/activity', needs: ACTIVITY, icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', needs: TOOL_CALL_LOG, icon: IconTool }, { title: 'Audit log', url: '/logs/audit', needs: AUDIT_LOG, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', needs: BACKGROUND, icon: IconHeartbeat }] },
+      { foldedAtStart: true, title: 'Activity', tabTitle: 'Everything', url: '/activity', needs: ACTIVITY, icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', needs: TOOL_CALL_LOG, icon: IconTool }, { title: 'Audit log', url: '/logs/audit', needs: AUDIT_LOG, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', needs: BACKGROUND, icon: IconHeartbeat }] },
       // Every review of every team, past and present; Human Tasks under Work is the queue waiting for the person.
       { title: 'Reviews', url: '/reviews/all', icon: IconChecklist, needs: cell('reviews', 'view'), also: ['/reviews/policies'] },
-      { title: 'Access', tabTitle: 'Members', url: '/access', needs: cell('access', 'view'), icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/access/tool-access', icon: IconKey }] },
+      { foldedAtStart: true, title: 'Access', tabTitle: 'Members', url: '/access', needs: cell('access', 'view'), icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/access/tool-access', icon: IconKey }] },
       // Any member reads the policies; the row is for who sets up the workspace, as Settings is.
       { title: 'Policies', url: '/policies', icon: IconGavel, needs: SETTINGS_VIEW, or: [cell('access', 'manage')] },
       // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
-      { title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, tabIcon: IconChecklist, needs: cell('agents', 'decide'), children: [{ title: 'Model inventory', url: '/model-risk', icon: IconCpu }] },
+      { foldedAtStart: true, title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, tabIcon: IconChecklist, needs: cell('agents', 'decide'), children: [{ title: 'Model inventory', url: '/model-risk', icon: IconCpu }] },
       // A team admin who lacks settings: view still reaches the team's settings through access: manage.
       { title: 'Settings', url: '/settings', icon: IconSettings, needs: SETTINGS_VIEW, or: [cell('access', 'manage')], also: ['/account'] },
     ],
@@ -215,7 +217,7 @@ export interface Crumb {
 }
 
 /**
- * Breadcrumb trail for the header. Settings pages follow the settings sidebar (Settings, its group and section, the
+ * Breadcrumb trail for the header. Pages under /settings follow the settings sidebar (Settings, its group and section, the
  * page); other pages follow the app sidebar (section label, the item, then the tab when a child route matched).
  */
 export function crumbsFor(pathname: string): Crumb[] {
@@ -223,7 +225,8 @@ export function crumbsFor(pathname: string): Crumb[] {
   const personal = PERSONAL_SETTINGS.find((p) => p.href === pathname);
   if (personal) return [link('Settings', '/settings'), { label: personal.label }];
   const setting = [...SETTINGS_NAV].sort((a, b) => b.href.length - a.href.length).find((e) => pathname === e.href || pathname.startsWith(`${e.href}/`));
-  if (setting) return [link('Settings', '/settings'), { label: setting.group }, ...(setting.section ? [{ label: setting.section }] : []), link(setting.title, setting.href)];
+  // A settings entry whose page lives outside /settings (Policies, in Govern) takes the app sidebar's trail.
+  if (setting?.href.startsWith('/settings')) return [link('Settings', '/settings'), { label: setting.group }, ...(setting.section ? [{ label: setting.section }] : []), link(setting.title, setting.href)];
   const best = navMatch(pathname);
   if (!best) return [];
   // Work's pages are the everyday ones, so their trail names no area.
