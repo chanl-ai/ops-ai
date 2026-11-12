@@ -579,6 +579,39 @@ def platform(
         yield public, inner
 
 
+PROXY_PORT = int(os.environ.get("OPS_USECASE_PROXY_PORT", "8890"))
+CADDY_IMAGE = "caddy:2.11.9"
+
+
+@contextmanager
+def proxy() -> Generator[str]:
+    """The install's one public origin, as compose, k8s and Fly serve it: the real deploy/fly/Caddyfile in Caddy's
+    image on the use-case proxy port, routing /api/platform/ and /api/tools/ to this run's services. Yields the
+    origin; a service's public URL is `<origin>/api/<service>`, so a script sets those before starting the services
+    (Caddy waits for an upstream that is not up yet). Needs docker."""
+    from ops_service_kit import harness_containers
+
+    if not _port_free(PROXY_PORT):
+        raise SystemExit(f"FAIL port {PROXY_PORT} is already in use; stop that process or set OPS_USECASE_PROXY_PORT")
+    host = "host.docker.internal"
+    started = harness_containers.run(
+        [
+            *("-p", f"127.0.0.1:{PROXY_PORT}:8080", "--add-host", f"{host}:host-gateway"),
+            *("-v", f"{ROOT / 'deploy' / 'fly' / 'Caddyfile'}:/etc/caddy/Caddyfile:ro"),
+            *("-e", f"OPS_UPSTREAM_PLATFORM={host}:{PLATFORM_PORT}", "-e", f"OPS_UPSTREAM_TOOLS={host}:{TOOLS_PORT}"),
+            *("-e", f"OPS_UPSTREAM_CONSOLE={host}:{CONSOLE_PORT}", CADDY_IMAGE),
+            *("caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"),
+        ]
+    )
+    if started.returncode != 0:
+        raise SystemExit(f"FAIL the proxy did not start: {started.stderr.strip()[:300]}")
+    cid = started.stdout.strip()
+    try:
+        yield f"http://127.0.0.1:{PROXY_PORT}"
+    finally:
+        subprocess.run(["docker", "rm", "-f", cid], capture_output=True, check=False)
+
+
 @contextmanager
 def fake_idp() -> Generator[str]:
     """The local OIDC and SAML identity provider (`packages/ops_signin`, `python -m ops_signin.fake_idp`) on the

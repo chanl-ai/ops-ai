@@ -259,6 +259,11 @@ class Settings(BaseSettings):
     # files-service's public base, path included (e.g. https://ops.example/api/files), when a proxy serves it under a
     # path it strips: every upload and download URL the service hands out is built on it. Unset, the request's base.
     files_public_url: str | None = None
+    # tools-service's public base, path included (e.g. https://ops.example/api/tools). A team's MCP address is
+    # `<tools_public_url>/mcp/<team>`: an assistant's token is issued for that address only, so platform-service (which
+    # checks the resource it is asked for) and tools-service (which checks the token's audience) both read it. Unset,
+    # only API keys open an MCP address.
+    tools_public_url: str | None = None
     files_dir: Path = _REPO_ROOT / ".data" / "files"
     files_scanning: Literal["off", "eicar", "hook"] = "hook"
     # This process's own key at models-service: agents-service's turns, files-service's extractions. With
@@ -461,9 +466,10 @@ class Settings(BaseSettings):
     # The embed app's own origins (apps/embed), such as https://ops.bank.example. A widget request from one of
     # them speaks for the bank page its session names; nothing in the request (Host, X-Forwarded-Host) can add one.
     embed_origins: list[str] = Field(default_factory=list[str])
-    # The proxies a hosted form's submission may pass through on its way here, as CIDRs: the client address is
-    # the right-most X-Forwarded-For entry outside them, so everyone behind the embed app is not counted as one address.
-    # Set per deploy: the compose network the embed app reaches agents from, or Caddy and the embed app on Fly.
+    # The proxies a request may pass through on its way here, as CIDRs (ops_service_kit.client_address): the caller is
+    # the right-most X-Forwarded-For entry outside them, so everyone behind Caddy or the embed app is not counted as one
+    # address. Read by every limit counted per address: hosted form submissions (agents-service) and assistant
+    # registrations and sign-in starts (platform-service). Set per deploy: the compose network, or Fly's private one.
     forms_trusted_proxies: list[str] = Field(default_factory=lambda: ["127.0.0.1/32"])
     gateway_sub: str = "runtime:local"
     opa_url: str = "http://127.0.0.1:8181"

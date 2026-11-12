@@ -287,6 +287,7 @@ fails the commit until it is classified.
 | `requesterMayDecide` | off | no (row E51) | The person who asked for, saved or started a decision may take it; off: 403 `own_request`. Set on Settings › Approvals, shown once review is on | `settings.manage` (Security team) | no (row E29) |
 | `stepUp` | off | yes | Every approver steps up, besides operations that ask for it | `settings.manage` | no |
 | `companySignInRequired` | off | yes | People on the workspace's verified company domains sign in only through its provider; the named break-glass Security admins (at most three) keep a password. Cannot turn on with nobody on the list (409 `break_glass_none`) | `settings.manage` | no |
+| `mcpConnectionHours` | `8` hours, at most 720 (30 days) | yes | How long an assistant stays connected to a team's MCP address before the person signs in again; read when the person presses Allow, so a change reaches new connections | `settings.manage` | no |
 | `chatThreadsOwnerOnly` | on | no (row E02) | A chat thread is read only by whoever started it, admins included | `settings.manage` | no |
 | `publishReview` | `{}`: every area `major` | no (row E01) | Per team and area: `always`, `major` or `never` | `reviews.manage` | yes |
 | `toolWritesNeedApproval` | Derived from `appChanges` for one release: on when the team asks a reviewer. A write to it lands in `appChanges` | yes | Read only; the decision comes from `appChanges` | `settings.manage`, because the write lands in `appChanges` | yes |

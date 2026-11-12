@@ -41,6 +41,8 @@ NOT_YET_MARKED = {
     "role_assignments",
     # sign-in group mappings: read by provider for the workspace; the team is the grant's target, not its owner
     "signin_group_rules",
+    # an assistant's grant names its one team; read by its owner through platform's own routes
+    "sessions",
 }
 
 

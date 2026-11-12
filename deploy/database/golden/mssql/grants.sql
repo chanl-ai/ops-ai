@@ -151,6 +151,7 @@ IF USER_ID(N'ops_platform_runtime') IS NULL CREATE USER ops_platform_runtime FOR
 GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tenants TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_email_failures TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.oauth_clients TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.platform_outbox TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.teams TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.users TO ops_platform_runtime;

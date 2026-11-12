@@ -385,6 +385,7 @@ class GatewayCalls:
             "connection_id": resolved.module.get("connection_id") if resolved and resolved.module else None,
             "channel": channel,
             "client_name": client_name,
+            "client_id": caller.client_id,
             "acting_for": req.acting_for.email if req.acting_for else None,
         }
 

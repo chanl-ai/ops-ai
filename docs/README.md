@@ -397,6 +397,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/platform-service/saml-group-grants-and-removal.md` | uc-711: leaving a provider group ends only the membership that group gave |
 | `usecases/platform-service/company-sign-in-required-and-break-glass.md` | uc-712: company sign-in required, with a break-glass Security admin |
 | `usecases/platform-service/saml-test-sign-in.md` | uc-713: an admin tests a company provider before anyone signs in through it |
+| `usecases/platform-service/mcp-company-sign-in.md` | uc-733: a person connects an assistant to a team's MCP address with their company sign-in; a console token, another address and a person who left the team are refused |
 | `usecases/platform-service/wrong-sign-in-provider-refused.md` | uc-163: a password in an SSO-only workspace, another provider's answer and a reused code are refused |
 | `usecases/platform-service/workspace-admins-manage-teams.md` | uc-164: workspace admins create, rename, archive and restore teams; an archived team leaves tokens |
 | `usecases/platform-service/workspace-security-default-teams-and-groups.md` | uc-212: a workspace sets its security and default teams; SSO groups map new people to teams |

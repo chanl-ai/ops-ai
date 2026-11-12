@@ -343,6 +343,42 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "oauth_oauth_consent": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/oauth/consent",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "oauth_oauth_decide": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/oauth/consent",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "oauth_oauth_disconnect": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/oauth/grants/{grant_id}",
+        "pathParams": ["grant_id"],
+        "query": [],
+        "stream": False,
+    },
+    "oauth_oauth_grants": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/oauth/grants",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "people_give_role": {
         "body": "json",
         "headers": [],
@@ -945,6 +981,22 @@ class Operations:
         "Why Not"
         return self._t.call(SERVICE, OPERATIONS["me_why_not"], {}, {"area": area, "action": action}, {}, None)  # type: ignore[no-any-return]
 
+    def oauth_oauth_consent(self) -> ConsentOut:
+        "Oauth Consent"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_consent"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def oauth_oauth_decide(self, body: ConsentIn) -> ConsentDecided:
+        "Oauth Decide"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_decide"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def oauth_oauth_grants(self) -> list[GrantOut]:
+        "Oauth Grants"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_grants"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def oauth_oauth_disconnect(self, grant_id: str) -> Any:
+        "Oauth Disconnect"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def people_people_names(self) -> list[PersonName]:
         "People Names"
         return self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1376,6 +1428,22 @@ class AsyncOperations:
     async def me_why_not(self, *, area: str | None = None, action: str | None = None) -> WhyOut:
         "Why Not"
         return await self._t.call(SERVICE, OPERATIONS["me_why_not"], {}, {"area": area, "action": action}, {}, None)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_consent(self) -> ConsentOut:
+        "Oauth Consent"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_consent"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_decide(self, body: ConsentIn) -> ConsentDecided:
+        "Oauth Decide"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_decide"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_grants(self) -> list[GrantOut]:
+        "Oauth Grants"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_grants"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_disconnect(self, grant_id: str) -> Any:
+        "Oauth Disconnect"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def people_people_names(self) -> list[PersonName]:
         "People Names"

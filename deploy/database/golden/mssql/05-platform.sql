@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0033_agent_changes_approvals
+-- platform-service, stamped at 0034_mcp_sign_in
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -21,6 +21,16 @@ CREATE TABLE signin_email_failures (
 	first_failed_at VARCHAR(40) NOT NULL, 
 	locked_until VARCHAR(40) NULL, 
 	CONSTRAINT signin_email_failures_pkey PRIMARY KEY (email_hash)
+);
+GO
+CREATE TABLE oauth_clients (
+	id VARCHAR(64) NOT NULL, 
+	name VARCHAR(100) NOT NULL, 
+	redirect_uris NVARCHAR(max) NOT NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	consented_at VARCHAR(40) NULL, 
+	tenant_id VARCHAR(64) NULL, 
+	CONSTRAINT oauth_clients_pkey PRIMARY KEY (id)
 );
 GO
 CREATE TABLE platform_outbox (
@@ -173,6 +183,15 @@ CREATE TABLE sessions (
 	revoked_at VARCHAR(40) NULL, 
 	last_seen_at VARCHAR(40) NOT NULL, 
 	created_at VARCHAR(40) NOT NULL, 
+	kind VARCHAR(8) NOT NULL DEFAULT 'console', 
+	client_id VARCHAR(64) NULL, 
+	team_id VARCHAR(64) NULL, 
+	resource VARCHAR(500) NULL, 
+	code_hash VARCHAR(64) NULL, 
+	code_challenge VARCHAR(64) NULL, 
+	redirect_uri VARCHAR(500) NULL, 
+	code_expires_at VARCHAR(40) NULL, 
+	code_used_at VARCHAR(40) NULL, 
 	CONSTRAINT sessions_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_sessions_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id), 
 	CONSTRAINT sessions_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
@@ -480,5 +499,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0033_agent_changes_approvals');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0034_mcp_sign_in');
 GO

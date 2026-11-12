@@ -10,7 +10,7 @@ import { createFirebaseProvider } from '@/lib/auth/providers/firebase';
 import { createOidcProvider } from '@/lib/auth/providers/oidc';
 import { createPlatformProvider } from '@/lib/auth/providers/platform';
 import { createPlatformAccessHttp } from './platform-access-http';
-import { createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
+import { createPlatformOAuthHttp, createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
 import { createDocumentsHttp, createExtractionsHttp, createLayoutsHttp } from './documents-http';
 import { createFilesServiceHttp } from './files-service-http';
 import { createModelsHttp } from './models-http';
@@ -73,7 +73,7 @@ function createApi(): OpsApi {
   if (!baseUrl && onRealService) api = { ...api, notifications: createNoNotifications() };
   // Signed in through platform-service, the team switcher lists the person's own teams from it.
   if (onPlatform) {
-    api = { ...api, teams: createPlatformTeamsHttp(platformUrl!), workspacePolicies: createPlatformPoliciesHttp(platformUrl!), workspaceTeams: createPlatformWorkspaceTeamsHttp(platformUrl!), signInProviders: createPlatformSignInProvidersHttp(platformUrl!) };
+    api = { ...api, teams: createPlatformTeamsHttp(platformUrl!), workspacePolicies: createPlatformPoliciesHttp(platformUrl!), workspaceTeams: createPlatformWorkspaceTeamsHttp(platformUrl!), signInProviders: createPlatformSignInProvidersHttp(platformUrl!), oauth: createPlatformOAuthHttp(platformUrl!) };
     // Members, invitations and the audit log are platform-service's; accepting signs the person in there.
     const access = createPlatformAccessHttp(
       platformUrl!,

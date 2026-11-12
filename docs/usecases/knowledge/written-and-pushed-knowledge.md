@@ -49,17 +49,17 @@ export OPS_PROFILE=builder
 The knowledge owner makes an empty base for the handbook.
 
 ```python tab="Python" tab-group="language"
-handbook = ops.knowledge.create({"name": "Claims handbook"})
+handbook = ops.knowledge.add_base("Claims handbook")
 assert handbook["name"] == "Claims handbook"
 ```
 
 ```ts tab="TypeScript"
-const handbook = await ops.knowledge.create({ name: 'Claims handbook' });
+const handbook = await ops.knowledge.addBase('Claims handbook');
 assert.equal(handbook.name, 'Claims handbook');
 ```
 
 ```bash tab="CLI"
-HANDBOOK=$(opsai kb --json create "Claims handbook" | jq -r .id)
+HANDBOOK=$(opsai kb create "Claims handbook" --json | jq -r .id)
 ```
 
 Expected: a knowledge base with no sources and no pages.
@@ -69,7 +69,7 @@ Expected: a knowledge base with no sources and no pages.
 The owner writes the water damage rule as a page. A search that does not use the page's words still finds it.
 
 ```python tab="Python" tab-group="language"
-page = ops.knowledge.add_page(handbook["id"], title="Water damage", text="Report a burst pipe within 14 days.")
+page = ops.knowledge.add_page(handbook["id"], "Water damage", "Report a burst pipe within 14 days.")
 assert page["outcome"] == "created"
 
 found = ops.knowledge.search({"kbIds": [handbook["id"]], "question": "How long do I have to claim for a leak?"})
@@ -78,7 +78,7 @@ assert found["passages"][0]["version"] == 1
 ```
 
 ```ts tab="TypeScript"
-const page = await ops.knowledge.addPage(handbook.id, { title: 'Water damage', text: 'Report a burst pipe within 14 days.' });
+const page = await ops.knowledge.addPage(handbook.id, 'Water damage', 'Report a burst pipe within 14 days.');
 assert.equal(page.outcome, 'created');
 
 const found = await ops.knowledge.search({ kbIds: [handbook.id], question: 'How long do I have to claim for a leak?' });
@@ -87,9 +87,9 @@ assert.equal(found.passages[0].version, 1);
 ```
 
 ```bash tab="CLI"
-opsai kb --json add-text "$HANDBOOK" --title "Water damage" --text "Report a burst pipe within 14 days." \
+opsai kb add-text "$HANDBOOK" --title "Water damage" --text "Report a burst pipe within 14 days." --json \
   | jq -e '.outcome == "created"'
-opsai kb --json search "$HANDBOOK" "How long do I have to claim for a leak?" \
+opsai kb search "$HANDBOOK" "How long do I have to claim for a leak?" --json \
   | jq -e '.passages[0].title == "Water damage" and .passages[0].version == 1'
 ```
 
@@ -101,27 +101,27 @@ A push source takes items by name. Sending an item it already holds changes noth
 on every run without making duplicates.
 
 ```python tab="Python" tab-group="language"
-feed = ops.knowledge.add_source({"type": "push", "name": "Policy system", "kbIds": [handbook["id"]]})
-sheet = {"name": "home-cover.md", "text": "Home cover pays for sudden leaks, not gradual seepage."}
+feed = ops.knowledge.add_source("Policy system", [handbook["id"]])
+sheet = {"title": "Home cover", "text": "Home cover pays for sudden leaks, not gradual seepage."}
 
-assert ops.knowledge.push(feed["id"], sheet)["outcome"] == "created"
-assert ops.knowledge.push(feed["id"], sheet)["outcome"] == "unchanged"
+assert ops.knowledge.push(feed["id"], "home-cover.md", **sheet)["outcome"] == "created"
+assert ops.knowledge.push(feed["id"], "home-cover.md", **sheet)["outcome"] == "unchanged"
 ```
 
 ```ts tab="TypeScript"
-const feed = await ops.knowledge.addSource({ type: 'push', name: 'Policy system', kbIds: [handbook.id] });
-const sheet = { name: 'home-cover.md', text: 'Home cover pays for sudden leaks, not gradual seepage.' };
+const feed = await ops.knowledge.addSource('Policy system', [handbook.id]);
+const sheet = { title: 'Home cover', text: 'Home cover pays for sudden leaks, not gradual seepage.' };
 
-assert.equal((await ops.knowledge.push(feed.id, sheet)).outcome, 'created');
-assert.equal((await ops.knowledge.push(feed.id, sheet)).outcome, 'unchanged');
+assert.equal((await ops.knowledge.push(feed.id, 'home-cover.md', sheet)).outcome, 'created');
+assert.equal((await ops.knowledge.push(feed.id, 'home-cover.md', sheet)).outcome, 'unchanged');
 ```
 
 ```bash tab="CLI"
-FEED=$(opsai kb --json add-source "$HANDBOOK" --type push --name "Policy system" | jq -r .id)
-echo "Home cover pays for sudden leaks, not gradual seepage." > home-cover.md
+FEED=$(opsai kb add-source "Policy system" --kb "$HANDBOOK" --json | jq -r .id)
+SHEET="Home cover pays for sudden leaks, not gradual seepage."
 
-opsai kb --json push "$FEED" home-cover.md | jq -e '.outcome == "created"'
-opsai kb --json push "$FEED" home-cover.md | jq -e '.outcome == "unchanged"'
+opsai kb push "$FEED" --name home-cover.md --title "Home cover" --text "$SHEET" --json | jq -e '.outcome == "created"'
+opsai kb push "$FEED" --name home-cover.md --title "Home cover" --text "$SHEET" --json | jq -e '.outcome == "unchanged"'
 ```
 
 Expected: `created`, then `unchanged`; no second sync runs.
@@ -130,7 +130,7 @@ Expected: `created`, then `unchanged`; no second sync runs.
 
 ```python tab="Python" tab-group="language"
 sheet["text"] = "Home cover pays for sudden leaks and for tracing the leak."
-assert ops.knowledge.push(feed["id"], sheet)["outcome"] == "updated"
+assert ops.knowledge.push(feed["id"], "home-cover.md", **sheet)["outcome"] == "updated"
 
 found = ops.knowledge.search({"kbIds": [handbook["id"]], "question": "Does home cover pay to trace a leak?"})
 assert "tracing the leak" in found["passages"][0]["text"]
@@ -139,7 +139,7 @@ assert found["passages"][0]["version"] == 2
 
 ```ts tab="TypeScript"
 sheet.text = 'Home cover pays for sudden leaks and for tracing the leak.';
-assert.equal((await ops.knowledge.push(feed.id, sheet)).outcome, 'updated');
+assert.equal((await ops.knowledge.push(feed.id, 'home-cover.md', sheet)).outcome, 'updated');
 
 const again = await ops.knowledge.search({ kbIds: [handbook.id], question: 'Does home cover pay to trace a leak?' });
 assert.match(again.passages[0].text, /tracing the leak/);
@@ -147,9 +147,9 @@ assert.equal(again.passages[0].version, 2);
 ```
 
 ```bash tab="CLI"
-echo "Home cover pays for sudden leaks and for tracing the leak." > home-cover.md
-opsai kb --json push "$FEED" home-cover.md | jq -e '.outcome == "updated"'
-opsai kb --json search "$HANDBOOK" "Does home cover pay to trace a leak?" \
+SHEET="Home cover pays for sudden leaks and for tracing the leak."
+opsai kb push "$FEED" --name home-cover.md --title "Home cover" --text "$SHEET" --json | jq -e '.outcome == "updated"'
+opsai kb search "$HANDBOOK" "Does home cover pay to trace a leak?" --json \
   | jq -e '(.passages[0].text | contains("tracing the leak")) and .passages[0].version == 2'
 ```
 
@@ -160,26 +160,25 @@ Expected: `updated`; the passage quotes the new text, at version 2, and the old 
 A file source is filled by uploads, so a pushed item is refused instead of mixing two ways in.
 
 ```python tab="Python" tab-group="language"
-uploads = ops.knowledge.add_source({"type": "file", "name": "Uploads", "kbIds": [handbook["id"]]})
+uploads = ops.knowledge.add_source("Uploads", [handbook["id"]], type="file")
 
 with pytest.raises(BadRequest) as refused:
-    ops.knowledge.push(uploads["id"], {"name": "stray.md", "text": "Should not land."})
+    ops.knowledge.push(uploads["id"], "stray.md", title="Stray", text="Should not land.")
 assert refused.value.code == "source_not_written"
 ```
 
 ```ts tab="TypeScript"
-const uploads = await ops.knowledge.addSource({ type: 'file', name: 'Uploads', kbIds: [handbook.id] });
+const uploads = await ops.knowledge.addSource('Uploads', [handbook.id], { type: 'file' });
 
-await assert.rejects(ops.knowledge.push(uploads.id, { name: 'stray.md', text: 'Should not land.' }), {
+await assert.rejects(ops.knowledge.push(uploads.id, 'stray.md', { title: 'Stray', text: 'Should not land.' }), {
   code: 'source_not_written',
 });
 ```
 
 ```bash tab="CLI"
-UPLOADS=$(opsai kb --json add-source "$HANDBOOK" --type file --name Uploads | jq -r .id)
-echo "Should not land." > stray.md
+UPLOADS=$(opsai kb add-source Uploads --kb "$HANDBOOK" --type file --json | jq -r .id)
 
-if refused=$(opsai kb push "$UPLOADS" stray.md 2>&1); then exit 1; fi
+if refused=$(opsai kb push "$UPLOADS" --name stray.md --title Stray --text "Should not land." 2>&1); then exit 1; fi
 grep -q '^source_not_written:' <<<"$refused"
 ```
 
@@ -187,15 +186,9 @@ Expected: refused with `source_not_written`; the base still holds two items.
 
 ## Gaps
 
-This page does not pass while a row here is open. Each open gap is a product change tracked on its own; no test helper stands in for it.
-
-| Product fix | Step | Tab | What is missing | Where |
-|---|---|---|---|---|
-| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` |
-| Knowledge verbs in both SDKs and the CLI | 1 | CLI | `opsai kb create` | `sdk/python/src/ops_ai/_cli/kb.py:36-45` |
-| Knowledge verbs in both SDKs and the CLI | 2 | Python, TypeScript | `knowledge.add_page` / `addPage` | `sdk/python/src/ops_ai/_client.py:282-284`, `sdk/typescript/src/client.ts:226-231` |
-| Knowledge verbs in both SDKs and the CLI | 3-5 | Python, TypeScript | `knowledge.add_source`, `knowledge.push` | as above |
-| Knowledge verbs in both SDKs and the CLI | 3-5 | CLI | `opsai kb add-source`, `opsai kb push` | `sdk/python/src/ops_ai/_cli/kb.py:36-45` |
+No product gap is open for this page's steps: the named knowledge calls, `opsai kb create`, `add-source` and `push`, and the
+TypeScript SDK's saved profile are in the SDKs. What still blocks the page as the test is the runner: nothing yet
+extracts these tabs and runs them (`make usecase-extract`), so the registry keeps running the scripts named under Details.
 
 ## What proves it
 
@@ -210,13 +203,24 @@ The console steps run in their own script, since a browser cannot run the code a
 | # | Step | Expected |
 |---|---|---|
 | 1 | Knowledge, Claims handbook, Add source, Typed text | Step 2 shows a title and a text field; Review shows no schedule |
-| 2 | Create and sync | The item is indexed |
-| 3 | Search the base for the typed text | The passage holds it |
+| 2 | Create and sync | The source is created and the page is written into it, indexed |
+| 3 | Sources tab | The typed source is listed with one item |
+| 4 | Search the base for the typed text | The passage holds it |
+
+![The Add source dialog on a typed page, 1440 wide](media/uc-676-add-typed-text-1440.png)
+![The same dialog, 390 wide](media/uc-676-add-typed-text-390.png)
+![The Sources tab after the sync, 1440 wide](media/uc-676-base-after-sync-1440.png)
+![The same tab, 390 wide](media/uc-676-base-after-sync-390.png)
+![Adding a typed page and syncing it](media/uc-676-typed-text.gif)
+
+The pictures and the clip are made by the console script: `OPS_USECASE_MEDIA=1 make usecase-test UC=uc-676 LAYER=ui`
+writes them here, and a normal run keeps them in the evidence folder. The script checks that the clip is under 15 s
+and 2 MB.
 
 ## Details
 
 | | |
 |---|---|
 | Services the run starts | knowledge, files and documents services; no model is called (search uses the scripted embedding) |
-| Console script | `docs/usecases/knowledge/scripts/test-uc-676-ui.mjs`, moved here from `kb-service` when this page converts |
+| Console script | `docs/usecases/kb-service/scripts/test-uc-676-ui.mjs`; it moves to `docs/usecases/knowledge/scripts/` when this page converts |
 | Replaces | `test-uc-676-api.py` and `test-uc-676-sdk.py`, deleted when this page passes |

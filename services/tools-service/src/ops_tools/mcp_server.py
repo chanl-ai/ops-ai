@@ -65,7 +65,14 @@ class McpAdapter:
         directory: Directory,
         auth: Auth,
         platform: PlatformTools | None = None,
+        public_url: str | None = None,
+        issuer_url: str | None = None,
     ) -> None:
+        # This service's public base (OPS_TOOLS_PUBLIC_URL): an assistant's token is for `<public_url>/mcp/<team>` and
+        # nothing else. platform-service at its own public base (OPS_PLATFORM_PUBLIC_URL) is the authorization server.
+        # Behind a proxy the two differ (/api/tools, /api/platform). Without both, only API keys open an MCP address.
+        self.public_url = public_url.rstrip("/") if public_url and issuer_url else None
+        self.issuer_url = issuer_url.rstrip("/") if public_url and issuer_url else None
         self.calls = calls
         self.platform = platform or PlatformTools({"agents": Settings().agents_url or ""})
         self.registry = registry
@@ -101,11 +108,20 @@ class McpAdapter:
                 raise NotFound("No MCP server answers at this URL; use /mcp/{team}.")
             team_id = found["team"]
             headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+            authorization = headers.get("authorization")
+            if self.public_url is None and not (authorization or "").startswith("Bearer ok_"):
+                raise ServiceUnavailable(
+                    "This install names no public address for its MCP service or its sign-in issuer "
+                    "(OPS_TOOLS_PUBLIC_URL, OPS_PLATFORM_PUBLIC_URL), so assistants cannot sign in. "
+                    "API keys still work."
+                )
             # 401 without a credential, 403 team_forbidden when the key or token belongs to another team. Any member
             # opens a session and lists; each call checks its own right and a refusal is a tool error.
-            principal = await self.auth.identity.bearer(headers.get("authorization"), team_id)
+            principal = await self.auth.identity.bearer(
+                authorization, team_id, resource=f"{self.public_url}/mcp/{team_id}" if self.public_url else None
+            )
         except ApiError as e:
-            await _refuse(send, e)
+            await _refuse(send, e, self._metadata_url(scope))
             return
         # An id the seed does not know is nobody's team, so it sees no module (never the all-scope fallback).
         team = self.directory.team_by_id(team_id) or Team(team_id, team_id, (), "owned")
@@ -119,6 +135,12 @@ class McpAdapter:
             await _refuse(send, ServiceUnavailable("The MCP server is starting or stopping."))
             return
         await self.manager.handle_request(scope, receive, send)
+
+    def _metadata_url(self, scope: Scope) -> str | None:
+        found = _PATH.match(scope["path"])
+        if self.public_url is None or found is None:
+            return None
+        return f"{self.public_url}/.well-known/oauth-protected-resource/mcp/{found['team']}"
 
     def _sees(self, team: Team) -> Any:
         def sees(module: Aggregate) -> bool:
@@ -179,7 +201,12 @@ class McpAdapter:
             run_context={"environment": TEST},
         )
         outcome = await self.calls.call(
-            who.principal, request, channel=MCP, client_name=_client_name(ctx), sees=self._sees(who.team)
+            who.principal,
+            request,
+            channel=MCP,
+            # A signed-in assistant is named by its client id; what it says about itself is not kept beside it.
+            client_name=None if who.principal.client_id else _client_name(ctx),
+            sees=self._sees(who.team),
         )
         if isinstance(outcome, Allowed):
             return types.CallToolResult(
@@ -215,10 +242,11 @@ def _structured(output: Any) -> dict[str, Any]:
     return dict(cast(dict[str, Any], output)) if isinstance(output, dict) else {"result": output}
 
 
-async def _refuse(send: Send, e: ApiError) -> None:
+async def _refuse(send: Send, e: ApiError, metadata_url: str | None = None) -> None:
     body = error_body(e.status, e.code, e.message)
     headers = [(b"content-type", b"application/json")]
     if e.status == 401:
-        headers.append((b"www-authenticate", b'Bearer realm="ops-ai-tools"'))
+        challenge = 'Bearer realm="ops-ai-tools"' + (f', resource_metadata="{metadata_url}"' if metadata_url else "")
+        headers.append((b"www-authenticate", challenge.encode()))
     await send({"type": "http.response.start", "status": e.status, "headers": headers})
     await send({"type": "http.response.body", "body": json.dumps(body).encode()})

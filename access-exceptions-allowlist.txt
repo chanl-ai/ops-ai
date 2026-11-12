@@ -59,6 +59,7 @@ packages/ops_access/src/ops_access/policies.py policy-default companySignInRequi
 packages/ops_access/src/ops_access/policies.py policy-default egressNewHosts="ask_security" 1 E48
 packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.8 1 open
 packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open
+packages/ops_access/src/ops_access/policies.py policy-default mcpConnectionHours=8 1 open
 packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default publishReview={} 1 E01
 packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=false 1 E49

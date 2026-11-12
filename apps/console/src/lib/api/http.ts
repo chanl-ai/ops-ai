@@ -17,6 +17,7 @@ import { createExecutionsHttp, createGovernanceHttp } from './governance-http';
 import { createSettingsHttp } from './settings-http';
 import { createSignInPolicyHttp } from './sign-in-http';
 import { createInvitesHttp } from './invites-http';
+import { createOAuthHttp } from './oauth-http';
 import { createAccountHttp } from './account-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
 import { createProviderConnectionsHttp } from './provider-connections-http';
@@ -65,7 +66,11 @@ export function createTransport(baseUrl: string) {
       headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> | undefined) },
     });
     const body = res.status === 204 ? null : await res.json().catch(() => null);
-    if (!res.ok) throw new ApiError(body?.error?.message ?? res.statusText, res.status, body?.error?.team, body?.error?.code, body?.error?.details);
+    if (!res.ok) {
+      // The consent routes refuse in RFC 6749's shape ({ error, error_description }), the others in the envelope.
+      if (typeof body?.error === 'string') throw new ApiError(body.error_description ?? res.statusText, res.status, undefined, body.error);
+      throw new ApiError(body?.error?.message ?? res.statusText, res.status, body?.error?.team, body?.error?.code, body?.error?.details);
+    }
     return body?.data as T;
   }
   const get = <T>(p: string) => call<T>(p);
@@ -298,6 +303,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     signInPolicy: createSignInPolicyHttp(get, send),
     invites: createInvitesHttp(get, send),
     account: createAccountHttp(get, send, qs),
+    oauth: createOAuthHttp(get, send),
     workspacePolicies: createWorkspacePoliciesHttp(get, send),
     workspaceTeams: createWorkspaceTeamsHttp(get, send),
     signInProviders: createSignInProvidersHttp(get, send),

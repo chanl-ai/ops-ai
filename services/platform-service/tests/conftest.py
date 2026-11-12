@@ -28,7 +28,15 @@ from ops_platform.keys import dev_signer
 from ops_platform.signin_options import SignInOptions
 from ops_platform.store.identity import IdentityStore
 from ops_platform.store.roles import ensure_builtin_roles, mirror_membership
-from ops_platform.store.tables import api_keys, members, role_assignments, teams, tenants, users
+from ops_platform.store.tables import (
+    api_keys,
+    members,
+    oauth_address_counts,
+    role_assignments,
+    teams,
+    tenants,
+    users,
+)
 from ops_policy import Ed25519Signer
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id, now_iso
@@ -214,6 +222,8 @@ async def platform(engine: AsyncEngine, database_url: str) -> AsyncIterator[Plat
 IDP = "http://idp.test"
 CONSOLE = "http://console.test"
 PUBLIC_URL = "http://platform"
+# tools-service's public base, as a proxy serves both services under one origin on different paths.
+MCP_URL = "http://ops.test/api/tools"
 OIDC_SECRET = "bank-oidc"
 # The address the rig's resolver gives the fake identity provider's host: public, so provider fetches pass the guard
 # the way a real provider's would. A test swaps the resolver's answer to show the guard refusing.
@@ -419,6 +429,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         reset_ttl_s=3600,
         public_url=PUBLIC_URL,
         console_url=CONSOLE,
+        mcp_url=MCP_URL,
         mail=mail,
         transport=httpx.ASGITransport(app=create_idp(IDP, fake_dns)),
         dns=TxtResolver([f"127.0.0.1:{dns_port}"], timeout_s=2),
@@ -436,6 +447,9 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
     now = now_iso()
     admin_email = f"{new_id('sec')}@bank.test"
     async with engine.begin() as c:
+        # Registrations and sign-in starts are counted per caller in the database, which the session's tests share;
+        # each rig starts with no caller counted, so one test's requests never use up another's minute.
+        await c.execute(oauth_address_counts.delete())
         await c.execute(
             tenants.insert().values(
                 id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now, security_team_id=security

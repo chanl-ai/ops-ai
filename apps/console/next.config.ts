@@ -61,6 +61,20 @@ const nextConfig: NextConfig = {
       { source: '/account/security', destination: '/settings/account/security', permanent: false },
     ];
   },
+  // The consent page is where a person lets an assistant use their team's tools; if another site could frame it, a
+  // lookalike could click Allow for them. X-Frame-Options covers browsers that ignore CSP.
+  async headers() {
+    return [
+      {
+        source: '/oauth/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+    ];
+  },
   experimental: {
     // Dev and build default to one worker per core and take several GB between them. Two workers compile the console
     // as fast as the dev loop needs, and worker threads stay off so a crash takes one process, not the server.

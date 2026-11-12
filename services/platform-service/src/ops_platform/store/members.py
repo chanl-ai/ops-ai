@@ -21,7 +21,7 @@ from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 
-from .audit import record
+from .audit import record, record_grants_ending
 from .roles import mirror_membership
 from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
 from .tenancy import INVITE_LOOKUP, TenantDb
@@ -292,7 +292,12 @@ class TeamStore:
                 await end_membership(c, actor, member_id, str(user_id) if user_id is not None else None, at=at)
                 admins.discard(member_id)
                 if user_id is not None:
-                    # I10: their sessions end now, and keys they made for this team stop working.
+                    # I10: their sessions end now, and keys they made for this team stop working. An assistant they
+                    # connected is a session too; each one that ends is audited in its own team.
+                    await record_grants_ending(
+                        c, tenant_id=actor.tenant_id, user_id=str(user_id), actor=actor.user_id, by="admin",
+                        request_id=actor.request_id,
+                    )  # fmt: skip
                     await c.execute(
                         sessions.update()
                         .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))

@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "securityTeamAddsSecrets": False,
     "memoryRetentionDays": None,
     "reviewSlaHours": 8,
+    "mcpConnectionHours": 8,
     "toolWritesNeedApproval": {},
     # Approvals are off by default: no team lists an app whose writes wait.
     "appWritesNeedApproval": {},

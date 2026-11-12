@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
+from dataclasses import replace
 from typing import Annotated, Any, cast
 
 from fastapi import Header, Request
@@ -112,11 +113,15 @@ class Identity:
             return self._dev(x_dev_user, x_team_id)
         raise _refused()
 
-    async def bearer(self, authorization: str | None, team: str | None = None) -> Principal:
+    async def bearer(
+        self, authorization: str | None, team: str | None = None, *, resource: str | None = None
+    ) -> Principal:
         """The caller behind `Authorization: Bearer` on a route FastAPI does not resolve (tools-service's MCP adapter):
         an API key or a person's token, acting in `team` (403 `team_forbidden` when the key or token is not in
         it). No HTTP-method read gate: every MCP request is a POST, and that route keeps a key to what it may run. A
-        service token, the dev caller and a missing credential are refused."""
+        service token, the dev caller and a missing credential are refused. With `resource`, a person's token must name
+        that address as its audience (an assistant's token); a console token, whose audience is the services, is
+        refused."""
         scheme, _, given = (authorization or "").partition(" ")
         token = given if scheme.lower() == "bearer" and given else None
         if token is None:
@@ -125,7 +130,7 @@ class Identity:
             return await self._from_key(token, team)
         if self.services is not None and self.services.signs(token):
             raise _refused()
-        return await self._from_token(token, team)
+        return await self._from_token(token, team, resource=resource)
 
     async def acting_for(self, token: str, caller: Principal) -> ActingForPerson:
         """The person `caller` (a service) says its call acts for, from the acting-for token platform-service signed:
@@ -158,12 +163,15 @@ class Identity:
             raise Forbidden("The service token is bound to another team.", code="team_forbidden")
         return p
 
-    async def _from_token(self, token: str, team: str | None) -> Principal:
+    async def _from_token(self, token: str, team: str | None, *, resource: str | None = None) -> Principal:
         try:
             kid = str(header_of(token).get("kid", ""))
             verifier = await self.keys.verifier(kid)
             if verifier is None:
                 raise _refused()
+            if resource is not None:
+                # The same key, bound to the address in place of this service's name.
+                verifier = replace(verifier, audience=resource)
             claims = verify(token, verifier)
         except TokenError as e:
             raise _refused() from e
@@ -193,6 +201,7 @@ class Identity:
             permission_version=int(version) if isinstance(version, int) else None,
             policies={str(k): v for k, v in policies.items()},
             security_team=str(claims["security_team"]) if claims.get("security_team") else None,
+            client_id=str(claims["client_id"]) if claims.get("client_id") else None,
         )
 
     async def _require_current(self, tenant_id: str, version: int | None) -> None:

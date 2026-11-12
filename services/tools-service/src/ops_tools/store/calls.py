@@ -66,6 +66,9 @@ gateway_calls = sa.Table(
     # shown as one; null on rows older than the columns.
     sa.Column("channel", sa.String(16)),
     sa.Column("client_name", sa.String(120)),
+    # The assistant an MCP token was issued to (platform-service's client id), which a person allowed by name;
+    # client_name above stays what the assistant says about itself.
+    sa.Column("client_id", sa.String(64)),
     sa.Index("ix_gateway_calls_module_created", "module_id", "created_at"),
     sa.Index("ix_gateway_calls_thread_id", "thread_id"),
     # An approved write acts once per effect scope (tools migration 0017).

@@ -38,6 +38,8 @@ class Policy:
     choices: tuple[tuple[str, str, str], ...] = ()
     # A fact no value of the policy changes, said under it on the Policies page.
     note: str = ""
+    # An "hours" policy's largest value; None takes the general limit of a year.
+    maximum: int | None = None
 
 
 KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app")
@@ -257,6 +259,14 @@ POLICIES: tuple[Policy, ...] = (
         "private range, and only https is called.",
     ),
     Policy(
+        "mcpConnectionHours",
+        8,
+        "How long an assistant stays connected to a team's MCP address before the person signs in again.",
+        kind="hours",
+        title="Assistant connection length",
+        maximum=30 * 24,
+    ),
+    Policy(
         "securityTeamAddsSecrets",
         False,
         "Only the security team adds secrets. Off: builders add and use their own team's secrets.",
@@ -282,7 +292,7 @@ def check_value(key: str, value: Any) -> Any:
         return value
     if policy.kind == "days" and (value is None or (type(value) is int and 1 <= value <= 36500)):
         return value
-    if policy.kind == "hours" and type(value) is int and 1 <= value <= 8760:
+    if policy.kind == "hours" and type(value) is int and 1 <= value <= (policy.maximum or 8760):
         return value
     if (
         policy.kind == "names"
@@ -329,7 +339,7 @@ def check_value(key: str, value: Any) -> Any:
         "bool": "true or false",
         "floor": "a number from 0 to 1, or null",
         "days": "a whole number of days, or null",
-        "hours": "a whole number of hours from 1 to 8760",
+        "hours": f"a whole number of hours from 1 to {policy.maximum or 8760}",
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
