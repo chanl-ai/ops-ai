@@ -48,7 +48,7 @@ from ...store.skills import LABELS as SKILL_LABELS
 from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team
 from ..agent_registry import GUARDRAILS, registry
-from ..auth import Principal, caller, require_builder
+from ..auth import Principal, caller, reader_of, require_builder
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -361,7 +361,7 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
 @router.get("", response_model=Envelope[list[TemplateView]])
 async def list_templates(
     rt: Rt,
-    me: Me,
+    me: Annotated[Principal, Depends(reader_of("agents"))],
     kind: Annotated[Kind | None, Query()] = None,
     source: Annotated[str | None, Query(max_length=200)] = None,
 ) -> JSONResponse:

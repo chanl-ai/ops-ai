@@ -38,7 +38,7 @@ from ..agent_registry import (
     version_state,
 )
 from ..agent_test import one_test_turn
-from ..auth import Principal, caller, caller_in, caller_of, principal, require_builder
+from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -73,6 +73,7 @@ router = APIRouter(prefix="/v1/agents", dependencies=[Depends(caller_in("agents"
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 Cl: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("agents"))]  # noqa: UP040
 
 Channel = Literal["voice", "chat", "email", "api"]
 
@@ -353,6 +354,7 @@ async def list_agents(
     *,
     request: Request,
     rt: Rt,
+    _: Reader,
     page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
@@ -426,7 +428,7 @@ async def create_agent(rt: Rt, me: Cl, body: AgentInput) -> JSONResponse:
 
 
 @router.get("/{agent_id}", response_model=Envelope[Agent])
-async def get_agent(rt: Rt, me: Cl, agent_id: str) -> JSONResponse:
+async def get_agent(rt: Rt, me: Reader, agent_id: str) -> JSONResponse:
     view = await _view(rt, agent_id)
     rights_of = await rights(lambda action: changeable(rt, me, agent_id, action))
     return ok({**view, **await team_name(rt, view.get("teamId")), **rights_of})
@@ -575,7 +577,7 @@ async def delete_agent(rt: Rt, me: Cl, agent_id: str) -> Response:
 
 
 @router.get("/{agent_id}/versions", response_model=Envelope[list[AgentVersion]])
-async def list_versions(rt: Rt, agent_id: str) -> JSONResponse:
+async def list_versions(rt: Rt, _: Reader, agent_id: str) -> JSONResponse:
     reg = registry(rt)
     row = await reg.row(agent_id)
     requests = await reg.requests("agent", agent_id)
@@ -610,7 +612,7 @@ def _meta(thread: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/{agent_id}/runs", response_model=Envelope[list[AgentRun]])
-async def recent_runs(rt: Rt, agent_id: str, limit: Annotated[int, Query(ge=1, le=50)] = 10) -> JSONResponse:
+async def recent_runs(rt: Rt, _: Reader, agent_id: str, limit: Annotated[int, Query(ge=1, le=50)] = 10) -> JSONResponse:
     """The agent's newest threads in the selected team: chats with it and runs of its own `agent:<id>` graph."""
     await registry(rt).row(agent_id)
     assert rt.graph_store is not None

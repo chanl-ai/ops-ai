@@ -54,6 +54,7 @@ from .policies import (
     team_writes_need_approval,
     tool_waits,
 )
+from .reads import reader_of
 
 __all__ = [
     "ACTIONS",
@@ -93,6 +94,7 @@ __all__ = [
     "granted_by",
     "policy",
     "publish_mode",
+    "reader_of",
     "require_provisioner",
     "scope_in",
     "team_names",

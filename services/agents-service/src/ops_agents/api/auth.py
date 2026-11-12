@@ -12,7 +12,10 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from fastapi import Depends
+
 from ops_access import Scope, can, policy
+from ops_access import reader_of as shared_reader_of
 from ops_access.check import DEFAULT as ACCESS
 from ops_identity import CurrentCaller, CurrentPrincipal, CurrentService
 from ops_identity import Principal as Caller
@@ -71,13 +74,12 @@ def caller_in(area: str) -> Callable[..., Awaitable[Principal]]:
 
 
 def reader_of(area: str) -> Callable[..., Awaitable[Principal]]:
-    """`caller` for a router's reads: a person needs `<area>.view` in the team the request acts in (403 `forbidden`),
-    a service token `<area>:view`. An API key keeps its own path: it holds no view cell and reads only what its
-    routes give it, the runs it starts."""
+    """`caller` for a router's reads, checked by `ops_access.reader_of` (the view cell), adapted to this service's
+    Principal."""
+    read = shared_reader_of(area)
 
-    async def dependency(p: CurrentCaller) -> Principal:
-        if p.kind != "api_key":
-            can(p, area, "view", team=p.team_id or None, what=f"the team's {area}", code="forbidden")
+    # A default, not Annotated: annotations are strings here and `read` is local, so FastAPI could not resolve it.
+    async def dependency(p: Caller = Depends(read)) -> Principal:  # noqa: B008
         return _principal(p)
 
     return dependency

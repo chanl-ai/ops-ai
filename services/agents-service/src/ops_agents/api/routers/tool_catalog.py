@@ -14,7 +14,7 @@ from ops_service_kit.http import Envelope, options_page, options_window, page_wi
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...store.tenancy import current_team
-from ..auth import Principal, principal
+from ..auth import Principal, principal, reader_of
 from ..child_runs import (
     EMAIL_SCHEMA,
     engine_input_schema,
@@ -176,7 +176,7 @@ def _facet(row: dict[str, Any], column: str) -> str | None:
 async def list_tools(
     rt: Rt,
     request: Request,
-    p: Annotated[Principal, Depends(principal)],
+    p: Annotated[Principal, Depends(reader_of("tools"))],
     *,
     page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
@@ -230,7 +230,7 @@ async def not_added(rt: Runtime, team: str | None, search: str) -> list[dict[str
     ]
 
 
-@router.get("/options", response_model=Envelope[ToolOptionsPage])
+@router.get("/options", response_model=Envelope[ToolOptionsPage], dependencies=[Depends(reader_of("tools"))])
 async def tool_options(
     rt: Rt,
     search: str = "",
@@ -272,7 +272,7 @@ async def tool_options(
 
 
 @router.get("/{tool_id}", response_model=Envelope[ToolRow])
-async def get_tool(rt: Rt, tool_id: str, p: Annotated[Principal, Depends(principal)]) -> JSONResponse:
+async def get_tool(rt: Rt, tool_id: str, p: Annotated[Principal, Depends(reader_of("tools"))]) -> JSONResponse:
     """One tool as its row on the Tools page reads; declared after /options so that path is not read as a tool."""
     row = next((r for r in await tool_rows(rt, _person(p), p.team_id) if r["id"] == tool_id), None)
     if row is None:

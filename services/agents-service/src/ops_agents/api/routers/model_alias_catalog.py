@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from ops_service_kit.http import Envelope
 
-from ..auth import principal
+from ..auth import Principal, principal, reader_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..schemas import ModelAlias
@@ -20,6 +20,6 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 
 
 @router.get("", response_model=Envelope[list[ModelAlias]])
-async def list_model_aliases(rt: Rt) -> JSONResponse:
+async def list_model_aliases(rt: Rt, _: Annotated[Principal, Depends(reader_of("agents"))]) -> JSONResponse:
     assert rt.model_aliases is not None
     return ok(await rt.model_aliases.chat_models())
