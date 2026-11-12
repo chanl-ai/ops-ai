@@ -26,7 +26,7 @@ def answer(**given: Any) -> Mapping[str, Any]:
     """The resolver's answer {waits, answer, reviewerRole, source}, with every level not given left unset."""
     levels: dict[str, Any] = {"tool": WRITE, "app": None, "team": {}, "channel": "chat", "test_account": False}
     result = ops_access.effective_answer(**{**levels, **given})
-    return result if isinstance(result, Mapping) else vars(result)
+    return result
 
 
 def test_a_new_team_asks_nobody_before_a_write() -> None:
