@@ -17,6 +17,7 @@ from typing import Any, cast
 
 from langgraph.types import Command
 
+from ops_access import can
 from ops_agents.graphs.definition import option_declarations, option_name
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
@@ -141,7 +142,7 @@ async def _decisions(rt: Runtime, thread_ids: list[str] | None = None) -> dict[s
 def requester_of(row: dict[str, Any], payload: dict[str, Any]) -> str:
     """Who asked for the paused step: the person recorded on the interrupt when there is one, else the workflow
     itself (the process principal), which no person can be."""
-    return str(payload.get("requested_by") or f"workflow:{row['graph']}")
+    return str(payload.get("requested_by") or f"workflow:{row.get('graph')}")
 
 
 CHAT_GRAPH = "agent_wrapper"
@@ -900,14 +901,17 @@ async def check_thread_decider(
         # requesterMayDecide says. Nobody else may answer for them.
         require_asker(approver, requester_of(row, payload), what="this")
         return
-    who = caller_of(approver)
-    require_reviews_decide(
-        review_teams(approver),
-        team,
-        "this review",
-        role=payload.get("reviewer_role"),
-        held=who.access.get(team) or [who.roles.get(team)],
-    )
+    require_reviews_decide(review_teams(approver), team, "this review")
+    if payload.get("reviewer_role"):
+        can(
+            caller_of(approver),
+            "reviews",
+            "decide",
+            team=team,
+            from_any_team=True,
+            role=str(payload["reviewer_role"]),
+            what="this review",
+        )
     require_not_own(approver, [requester_of(row, payload)], team=team, what="this")
 
 

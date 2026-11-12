@@ -129,16 +129,14 @@ MAX_STUB_BYTES = 64_000
 
 @dataclass(frozen=True)
 class Caller:
-    """Who is asking and in which team, from ops_identity's principal. `roles` maps team id to role; `verified` is
-    False only for the dev-header principal, which carries no roles, so role rules apply to anyone with a token."""
+    """Who is asking and in which team, from ops_identity's principal; what they may do is `can` on `principal`.
+    `verified` is False only for the dev-header principal, which carries no roles, so role rules apply to anyone with
+    a token."""
 
     tenant_id: str
     name: str
     team: Team
-    roles: dict[str, str] = field(default_factory=dict[str, str])
     verified: bool = False
-    # The caller's role in the team the request acts in (the token's team, before any fallback to an all-scope team).
-    team_role: str | None = None
     # The verified principal, which `ops_access.can` decides on; None for a caller made in code (the seed).
     principal: Principal | None = None
     # The identity headers the caller sent, lower-cased, passed through when tools-service asks agents-service on their

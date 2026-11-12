@@ -48,6 +48,8 @@ from .policies import policy
 
 BUILTIN_GRIDS: dict[str, tuple[Grant, ...]] = {r.id: r.grants for r in BUILTIN_ROLES}
 BUILTIN_NAMES = {r.id: r.name for r in BUILTIN_ROLES}
+# The role that stands in for a built-in role a decision names: its grid holds every team cell.
+ADMIN_ROLE = "admin"
 _CELLS = frozenset((a, x) for a in AREAS for x in ACTIONS)
 
 # An API key is a bank system acting for one team: it starts live runs and cancels the runs it
@@ -151,6 +153,7 @@ class Access:
         code: str = "role_required",
         protection: str | None = None,
         speaking_of: str | None = None,
+        role: str | None = None,
     ) -> Scope:
         """Returns the scope the caller holds, or raises 403. `team` is the team that owns the record (None: the team
         the request acts in, for a create); `owner` is the record's owner or creator (email), for `own` scope.
@@ -160,7 +163,10 @@ class Access:
         deleting a `system` record also needs `<area>.manage`, which the grid gives admins and not builders; the
         provisioning service needs only its scopes, and its next run puts back the fields the template owns.
         `speaking_of` names the person when someone else asks on their behalf (an admin's Check access): a refusal then
-        says "Maya asked for this" instead of "You asked for this"."""
+        says "Maya asked for this" instead of "You asked for this". `role` is a role id the caller must also hold in
+        the team (a review that names its reviewer): a membership name maps to it as `roles_in` reads it, an `*`
+        assignment counts in every team, and an Admin stands in for a built-in role, whose cells the Admin grid holds.
+        A custom role names a group of people (a compliance team), so only its holders pass."""
         you, your, own = (speaking_of, f"{speaking_of}'s", "their") if speaking_of else ("You", "Your", "your")
         if (area, action) not in _CELLS:
             raise ValueError(f"{area}.{action} is not in the catalogue")
@@ -211,6 +217,15 @@ class Access:
                 code="role_required",
                 details={"teamId": held_in, "area": area, "action": action, "scope": "own"},
             )
+        if role is not None:
+            held = self.roles_in(p, held_in)
+            if role not in held and not (role in BUILTIN_NAMES and ADMIN_ROLE in held):
+                named = BUILTIN_NAMES.get(role, role)
+                raise Forbidden(
+                    f"{what} waits for a {named} of {held_in}; {your.lower()} roles there do not include it.",
+                    code="role_required",
+                    details={"teamId": held_in, "area": area, "action": action, "role": role, "roles": held},
+                )
         return scope
 
     def _workspace_grids(self, p: Principal) -> dict[str, tuple[Grant, ...]]:
@@ -309,6 +324,7 @@ def can(
     from_any_team: bool = False,
     code: str = "role_required",
     protection: str | None = None,
+    role: str | None = None,
 ) -> Scope:
     """`Access.can` with built-in grids and the Security team the token names."""
     return DEFAULT.can(
@@ -323,6 +339,7 @@ def can(
         from_any_team=from_any_team,
         code=code,
         protection=protection,
+        role=role,
     )
 
 
