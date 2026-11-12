@@ -45,7 +45,10 @@ from ops_ingest.text import TokenCounter, approx_tokens
 
 MIN_SIZE, MAX_SIZE = 100, 2_000
 
+# `documents` comes first: it and `email_templates` split the same way, and the first match names a source's preset, so
+# files, text and apps read as Documents.
 PRESETS: dict[str, list[IngestStrategy]] = {
+    "documents": ["structure", "context_headers"],
     "policy_manual": ["structure", "context_headers", "parent_child"],
     "help_centre": ["clean", "structure", "context_headers"],
     "rate_table": ["table_rows"],
