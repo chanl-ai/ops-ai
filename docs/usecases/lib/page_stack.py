@@ -11,8 +11,10 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +70,39 @@ def _worker(auth: dict[str, str], gateway: str) -> Generator[None]:
             proc.wait(timeout=15)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+@contextmanager
+def _browser(sf: dict[str, Any]) -> Generator[str]:
+    """A stand-in for the person's browser, so a page can finish a sign-in without one. POST /sign-in {url, as} opens the
+    sign-in address at the fake Salesforce as that account and answers with the state and code the browser would come
+    back with; GET /editors lists who the fake Salesforce has recorded as having edited the case."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, body: Any) -> None:
+            raw = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self) -> None:
+            self._send([e["by"] for e in sf["fake"].state()["edits"]])
+
+        def do_POST(self) -> None:
+            asked = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
+            self._send(sf["sign_in"](asked.get("url", ""), asked.get("as", "")))
+
+        def log_message(self, *_: Any) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
 
 
 def _tools_stack(stack: ExitStack, names: list[str]) -> dict[str, dict[str, Any]]:
@@ -141,7 +176,7 @@ def _tools_stack(stack: ExitStack, names: list[str]) -> dict[str, dict[str, Any]
         "tokenUrl": sf["token_url"],
         "revokeUrl": sf["revoke_url"],
         "clientId": "ops-ai-kestrel",
-        "scopes": "openid api refresh_token",
+        "scopes": f"openid api refresh_token {WRITE_SCOPE}",
         "testPath": "/services/oauth2/userinfo",
     }
     conn = need(
@@ -202,6 +237,7 @@ def _tools_stack(stack: ExitStack, names: list[str]) -> dict[str, dict[str, Any]
         "tools": gateway,
         "agents": f"http://127.0.0.1:{AGENTS_PORT}",
         "platform": f"http://127.0.0.1:{PLATFORM_PORT}",
+        "browser": stack.enter_context(_browser(sf)),
     }
     return {
         n: {

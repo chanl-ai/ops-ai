@@ -28,22 +28,45 @@ tool and the `case_update` workflow are already live. Nobody has connected.
 ## Before you start
 
 ```python tab="Python" tab-group="language"
+import json
+import os
+import time
+
+import httpx
 from ops_ai import OpsAI
 
 james = OpsAI(profile="james")
 wanjiru = OpsAI(profile="wanjiru")
+
+# The run's stand-in for a person's browser: it opens a sign-in address at the fake Salesforce as an account, and
+# answers with the state and code the browser would come back with.
+browser = json.load(open(os.environ["OPS_CONFIG"]))["profiles"]["james"]["services"]["browser"]
+
+
+def sign_in_at(url, account):
+    return httpx.post(f"{browser}/sign-in", json={"url": url, "as": account}, timeout=30).json()
 ```
 
 ```ts tab="TypeScript"
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { OpsAI } from '@chanl-ai/ops-ai';
 
 const james = new OpsAI({ profile: 'james' });
 const wanjiru = new OpsAI({ profile: 'wanjiru' });
+
+// The run's stand-in for a person's browser: it opens a sign-in address at the fake Salesforce as an account, and
+// answers with the state and code the browser would come back with.
+const browser = JSON.parse(readFileSync(process.env.OPS_CONFIG!, 'utf8')).profiles.james.services.browser as string;
+const signInAt = async (url: string, account: string) =>
+  (await (await fetch(`${browser}/sign-in`, { method: 'POST', body: JSON.stringify({ url, as: account }) })).json()) as Record<string, string>;
 ```
 
 ```bash tab="CLI"
 set -euo pipefail
+# The run's stand-in for a person's browser: POST /sign-in opens a sign-in address at the fake Salesforce as an account
+# and answers with the state and code the browser would come back with; GET /editors lists who edited the case.
+BROWSER=$(jq -r .profiles.james.services.browser "$OPS_CONFIG")
 ```
 
 ## Steps
@@ -68,7 +91,8 @@ assert.equal(waiting.waiting.payload.event, 'app_account.connected');
 ```
 
 ```bash tab="CLI"
-OPS_PROFILE=james opsai runs start case_update --input status="Awaiting documents" --live --wait --json | jq -e '.status == "waiting" and .waiting.payload.event == "app_account.connected"'
+JAMES_RUN=$(OPS_PROFILE=james opsai runs start case_update --input status="Awaiting documents" --live --wait --json)
+jq -e '.status == "waiting" and .waiting.payload.event == "app_account.connected"' <<<"$JAMES_RUN"
 ```
 
 Expected: the run is waiting on `app_account.connected`, and nothing has reached Salesforce.
@@ -99,11 +123,78 @@ OPS_PROFILE=wanjiru opsai connectors list --json | jq -e 'map(select(.name == "S
 
 Expected: both runs wait; Wanjiru's card has no connected account.
 
+### 3. James connects his own account
+
+James asks for the address to sign in at, signs in to Salesforce as himself and finishes the sign-in. His own accounts
+then list the Salesforce sign-in.
+
+```python tab="Python" tab-group="language"
+url = james.me.connectors.connect("Salesforce claims")["authorizeUrl"]
+back = sign_in_at(url, "handler@kestrel.example")
+james.me.connectors.finish(back["state"], back["code"])
+mine = james.me.connectors.accounts()
+assert len(mine) == 1 and mine[0]["connected"]
+```
+
+```ts tab="TypeScript"
+const url = ((await james.me.connectors.connect('Salesforce claims')) as Record<string, string>).authorizeUrl!;
+const back = await signInAt(url, 'handler@kestrel.example');
+await james.me.connectors.finish(back.state!, back.code);
+const mine = await james.me.connectors.accounts();
+assert.equal(mine.length, 1);
+assert.equal(mine[0]?.connected, true);
+```
+
+```bash tab="CLI"
+URL=$(OPS_PROFILE=james opsai connectors connect "Salesforce claims" --json | jq -r .authorizeUrl)
+BACK=$(curl -sf -X POST "$BROWSER/sign-in" -d "$(jq -n --arg url "$URL" '{url: $url, as: "handler@kestrel.example"}')")
+OPS_PROFILE=james opsai connectors finish --state "$(jq -r .state <<<"$BACK")" --code "$(jq -r .code <<<"$BACK")" --json >/dev/null
+OPS_PROFILE=james opsai connectors accounts --json | jq -e 'length == 1 and .[0].connected'
+```
+
+Expected: James has one connected account.
+
+### 4. His waiting run goes on as him
+
+Connecting ends James's wait: the run updates the case with his token, and Salesforce records him as the editor.
+
+```python tab="Python" tab-group="language"
+for _ in range(60):
+    done = james.runs.wait(started["runId"], timeout=60)
+    if done["status"] != "waiting":
+        break
+    time.sleep(1)
+assert done["status"] == "succeeded" and done["outcome"] == "updated"
+assert httpx.get(f"{browser}/editors").json() == ["handler@kestrel.example"]
+```
+
+```ts tab="TypeScript"
+let done = (await james.runs.wait(started.runId, { timeoutMs: 60_000 })) as Record<string, any>;
+for (let i = 0; i < 60 && done.status === 'waiting'; i++) {
+  await new Promise((r) => setTimeout(r, 1000));
+  done = (await james.runs.wait(started.runId, { timeoutMs: 60_000 })) as Record<string, any>;
+}
+assert.equal(done.status, 'succeeded');
+assert.equal(done.outcome, 'updated');
+assert.deepEqual(await (await fetch(`${browser}/editors`)).json(), ['handler@kestrel.example']);
+```
+
+```bash tab="CLI"
+for _ in $(seq 60); do
+  STATUS=$(OPS_PROFILE=james opsai runs show "$(jq -r .id <<<"$JAMES_RUN")" --json | jq -r .status)
+  case "$STATUS" in succeeded | failed) break ;; esac
+  sleep 1
+done
+test "$STATUS" = succeeded
+curl -sf "$BROWSER/editors" | jq -e '. == ["handler@kestrel.example"]'
+```
+
+Expected: James's run succeeded as `updated`, and the only editor Salesforce recorded is `handler@kestrel.example`.
+
 ## Gaps
 
-| Product fix | Step | What the SDKs and the command line cannot do |
-|---|---|---|
-| A `connect` call in `ops.me.connectors` and `opsai connectors connect`, taking the account's link, returning the sign-in address and finishing the sign-in | Connect | James cannot open his connect link, sign in to Salesforce and finish the sign-in: `ops.raw.tools` has no call for a connect link or `sign-ins/complete`, and `opsai connectors` has only `list` and `disconnect`. The steps after it (his waiting run goes on as him, Salesforce records him as the editor, his sign-in is listed, Disconnect makes his next run wait) cannot be written on this page |
+The SDKs and the command line have no gap for connecting. Disconnect and a sign-in that lacks a scope are walked in the api
+script only.
 
 A call that acts for a person is made by agents-service with a token platform-service signs, never by a person, so "a
 request body cannot choose whose" (api step 7) stays in the api script.
@@ -111,7 +202,7 @@ request body cannot choose whose" (api step 7) stays in the api script.
 ## What proves it
 
 Step 1 fails if a run for someone who has not connected goes on as the team or as another person: the status would not be
-`waiting`. Step 2 fails if Wanjiru's run is answered by James's connecting.
+`waiting`. Step 2 fails if Wanjiru's run is answered by James's connecting. Step 3 fails if James's finished sign-in is not listed as his own account. Step 4 fails if his waiting run does not go on, or Salesforce records anyone but him.
 
 ## Details
 

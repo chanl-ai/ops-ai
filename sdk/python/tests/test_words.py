@@ -167,3 +167,27 @@ def test_a_connector_is_disconnected_on_its_primary_account_not_the_apps_first()
     assert (seen[-1].method, seen[-1].url.path) == ("DELETE", "/api/tools/v1/me/accounts/con_second")
     with pytest.raises(ValueError, match="not one of your connectors"):
         ops.me.connectors.disconnect("plugin:hubspot")
+
+
+def test_a_connector_signs_in_from_a_connect_link_or_itself_and_finishes_with_the_browsers_answer() -> None:
+    rows = [{"appId": "con_sf", "name": "Salesforce claims", "primaryAccountId": None, "accountCount": 0}]
+    seen: list[httpx.Request] = []
+    out = {"authorizeUrl": "https://login.example/authorize?state=s1"}
+    ops = client(
+        {
+            ("GET", "me/connections"): rows,
+            ("POST", "connect-links/sign-in"): out,
+            ("POST", "apps/con_sf/accounts/con_sf/sign-in"): out,
+            ("POST", "sign-ins/complete"): {"connected": True},
+            ("GET", "me/accounts"): [{"appId": "con_sf"}],
+        },
+        seen,
+    )
+    assert ops.me.connectors.connect(link="tok")["authorizeUrl"] == out["authorizeUrl"]
+    assert json.loads(seen[-1].content) == {"link": "tok"}
+    ops.me.connectors.connect("Salesforce claims")
+    assert seen[-1].url.path == "/api/tools/v1/apps/con_sf/accounts/con_sf/sign-in"
+    assert json.loads(seen[-1].content) == {"account": "self"}
+    ops.me.connectors.finish("s1", "c1")
+    assert json.loads(seen[-1].content) == {"state": "s1", "code": "c1"}
+    assert ops.me.connectors.accounts() == [{"appId": "con_sf"}]

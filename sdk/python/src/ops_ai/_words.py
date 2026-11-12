@@ -258,6 +258,29 @@ class Connectors:
             raise ValueError(f"{connector['name']} has no account of yours to disconnect")
         self._raw.tools.apps_disconnect(target)
 
+    def connect(
+        self, app: str | None = None, *, link: str | None = None, account: str | None = None, team: bool = False
+    ) -> dict[str, Any]:
+        """Starts a sign-in and returns where to send the browser (`authorizeUrl`). Pass `link`, the connect link a
+        call for the caller was answered with, or `app` to sign in from the connector itself."""
+        if link:
+            return cast(dict[str, Any], self._raw.tools.apps_open_connect_link({"link": link}))
+        if not app:
+            raise ValueError("connect needs an app or a connect link")
+        connector = self.get(app)
+        target = account or connector.get("primaryAccountId") or connector["appId"]
+        body = {"account": "team" if team else "self"}
+        return cast(dict[str, Any], self._raw.tools.apps_start_sign_in(connector["appId"], target, body))
+
+    def finish(self, state: str, code: str | None = None, *, error: str | None = None) -> dict[str, Any]:
+        """Finishes the sign-in the browser came back from, with the `state` and `code` of its return address."""
+        body = {k: v for k, v in {"state": state, "code": code, "error": error}.items() if v is not None}
+        return cast(dict[str, Any], self._raw.tools.apps_finish_sign_in(body))
+
+    def accounts(self) -> list[dict[str, Any]]:
+        """The caller's own accounts on every app."""
+        return cast(list[dict[str, Any]], self._raw.tools.apps_my_accounts())
+
 
 class Me:
     """What belongs to the caller themselves."""
@@ -493,6 +516,29 @@ class AsyncConnectors:
         if not target:
             raise ValueError(f"{connector['name']} has no account of yours to disconnect")
         await self._raw.tools.apps_disconnect(target)
+
+    async def connect(
+        self, app: str | None = None, *, link: str | None = None, account: str | None = None, team: bool = False
+    ) -> dict[str, Any]:
+        """Starts a sign-in and returns where to send the browser (`authorizeUrl`). Pass `link`, the connect link a
+        call for the caller was answered with, or `app` to sign in from the connector itself."""
+        if link:
+            return cast(dict[str, Any], await self._raw.tools.apps_open_connect_link({"link": link}))
+        if not app:
+            raise ValueError("connect needs an app or a connect link")
+        connector = await self.get(app)
+        target = account or connector.get("primaryAccountId") or connector["appId"]
+        body = {"account": "team" if team else "self"}
+        return cast(dict[str, Any], await self._raw.tools.apps_start_sign_in(connector["appId"], target, body))
+
+    async def finish(self, state: str, code: str | None = None, *, error: str | None = None) -> dict[str, Any]:
+        """Finishes the sign-in the browser came back from, with the `state` and `code` of its return address."""
+        body = {k: v for k, v in {"state": state, "code": code, "error": error}.items() if v is not None}
+        return cast(dict[str, Any], await self._raw.tools.apps_finish_sign_in(body))
+
+    async def accounts(self) -> list[dict[str, Any]]:
+        """The caller's own accounts on every app."""
+        return cast(list[dict[str, Any]], await self._raw.tools.apps_my_accounts())
 
 
 class AsyncMe:

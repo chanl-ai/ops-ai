@@ -128,3 +128,27 @@ test('a connector is disconnected on its primary account, not the app\'s first',
   assert.equal(seen.at(-1).url.pathname, '/api/tools/v1/me/accounts/con_second');
   await assert.rejects(ops.me.connectors.disconnect('plugin:hubspot'), /not one of your connectors/);
 });
+
+test('a connector signs in from a connect link or itself and finishes with the browser\'s answer', async () => {
+  const rows = [{ appId: 'con_sf', name: 'Salesforce claims', primaryAccountId: null, accountCount: 0 }];
+  const out = { authorizeUrl: 'https://login.example/authorize?state=s1' };
+  const seen = [];
+  const ops = client(
+    {
+      'GET me/connections': rows,
+      'POST connect-links/sign-in': out,
+      'POST apps/con_sf/accounts/con_sf/sign-in': out,
+      'POST sign-ins/complete': { connected: true },
+      'GET me/accounts': [{ appId: 'con_sf' }],
+    },
+    seen,
+  );
+  assert.equal((await ops.me.connectors.connect(undefined, { link: 'tok' })).authorizeUrl, out.authorizeUrl);
+  assert.deepEqual(seen.at(-1).body, { link: 'tok' });
+  await ops.me.connectors.connect('Salesforce claims');
+  assert.equal(seen.at(-1).url.pathname, '/api/tools/v1/apps/con_sf/accounts/con_sf/sign-in');
+  assert.deepEqual(seen.at(-1).body, { account: 'self' });
+  await ops.me.connectors.finish('s1', 'c1');
+  assert.deepEqual(seen.at(-1).body, { state: 's1', code: 'c1' });
+  assert.deepEqual(await ops.me.connectors.accounts(), [{ appId: 'con_sf' }]);
+});
