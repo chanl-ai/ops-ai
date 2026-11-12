@@ -32,6 +32,8 @@ from . import engine_reviews, publish_reviews
 from .agent_registry import registry
 from .auth import (
     Principal,
+    caller_of,
+    require_asker,
     require_not_own,
     require_reviews_decide,
     require_step_up,
@@ -517,7 +519,7 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
         "error": payload.get("error") or None,
         "consequence": (described["consequence"] or described["sentence"]) if described else None,
         "actionFields": described["fields"] if described else [],
-        # Who decides it, as _check_thread_decider checks: a write's approving team, else the thread's team.
+        # Who decides it, as check_thread_decider checks: a write's approving team, else the thread's team.
         "decidingTeam": await deciding_team(rt, row.get("team_id")),
     }
 
@@ -777,8 +779,11 @@ async def decide(
     step_up_token: str | None,
     amount: float | None = None,
     inputs: dict[str, Any] | None = None,
+    for_chat: bool = False,
 ) -> dict[str, Any]:
-    """Decides as `approver`, from the teams where they hold reviews.decide (any team for dev). Records the decision,
+    """Decides as `approver`, from the teams where they hold reviews.decide (any team for dev); a write whose app
+    asks before changes is decided by the person who asked instead, and `for_chat` (their "Allow for this chat")
+    stops later writes of that app in the chat from asking. Records the decision,
     then resumes the thread with it. See the module docstring for the retry contract. A publish request's id is decided
     under the publish rules instead (publish_reviews.decide).
 
@@ -837,7 +842,7 @@ async def decide(
     call = option_call(chosen, inputs, amount) if chosen else (payload.get("call") if decision == "approved" else None)
     recorded_as = "approved" if option else decision
     # An approval is checked against the call it sends; a rejection against every write the step holds.
-    await _check_thread_decider(rt, approver, row, payload, [call] if call else held_calls(payload))
+    await check_thread_decider(rt, approver, row, payload, [call] if call else held_calls(payload))
     # Recorded on the decision only once verified: a token sent where none was needed proves nothing.
     verified_step_up: str | None = None
     # The chosen call's policy decides the step-up, not the step's other options (a flag's note asks for none).
@@ -851,6 +856,8 @@ async def decide(
         resume["reason"] = reason
     if step_up_token:
         resume["step_up_token"] = step_up_token
+    if for_chat and recorded_as == "approved" and payload.get("ask_first"):
+        resume["for_chat"] = True
     if call and option:
         resume["call"] = call
     if call and rt.gateway:
@@ -881,14 +888,26 @@ async def decide(
     return await get_review(rt, thread_id)
 
 
-async def _check_thread_decider(
+async def check_thread_decider(
     rt: Runtime, approver: Principal, row: dict[str, Any], payload: dict[str, Any], calls: list[dict[str, Any]]
 ) -> None:
     """Who may decide a paused thread step: a reviewer or admin of the thread's team, whatever the writes it decides
     (`calls`) are, and not who asked for it while requesterMayDecide is off."""
     del calls
     team = str(row["team_id"])
-    require_reviews_decide(review_teams(approver), team, "this review")
+    if payload.get("ask_first"):
+        # "Ask the person" is a confirmation: the asker alone answers it, whatever roles they hold and whatever
+        # requesterMayDecide says. Nobody else may answer for them.
+        require_asker(approver, requester_of(row, payload), what="this")
+        return
+    who = caller_of(approver)
+    require_reviews_decide(
+        review_teams(approver),
+        team,
+        "this review",
+        role=payload.get("reviewer_role"),
+        held=who.access.get(team) or [who.roles.get(team)],
+    )
     require_not_own(approver, [requester_of(row, payload)], team=team, what="this")
 
 
@@ -909,7 +928,7 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         if not waiting:
             return False
         payload = cast(dict[str, Any], waiting[0]["payload"])
-        await _check_thread_decider(rt, approver, row, payload, held_calls(payload))
+        await check_thread_decider(rt, approver, row, payload, held_calls(payload))
     except ApiError:
         return False
     return True

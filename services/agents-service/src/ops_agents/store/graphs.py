@@ -82,7 +82,7 @@ graph_runs = sa.Table(
 )
 
 
-def _mine(table: sa.Table) -> sa.ColumnElement[bool]:
+def mine(table: sa.Table) -> sa.ColumnElement[bool]:
     """The tenant filter in the query itself, for SQLite; on PostgreSQL RLS applies it as well."""
     return table.c.tenant_id == current_tenant()
 
@@ -133,7 +133,7 @@ class GraphStore:
     async def thread_by_key(self, external_key: str) -> dict[str, Any] | None:
         async with tenant_tx(self.engine) as c:
             q = graph_threads.select().where(
-                graph_threads.c.external_key == external_key, _mine(graph_threads), team_visible(graph_threads)
+                graph_threads.c.external_key == external_key, mine(graph_threads), team_visible(graph_threads)
             )
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
@@ -177,7 +177,7 @@ class GraphStore:
                     await c.execute(
                         graph_threads.select().where(
                             graph_threads.c.external_key == external_key,
-                            _mine(graph_threads),
+                            mine(graph_threads),
                             team_visible(graph_threads),
                         )
                     )
@@ -235,7 +235,7 @@ class GraphStore:
                 (
                     await c.execute(
                         graph_threads.select().where(
-                            graph_threads.c.id == thread_id, _mine(graph_threads), team_visible(graph_threads)
+                            graph_threads.c.id == thread_id, mine(graph_threads), team_visible(graph_threads)
                         )
                     )
                 )
@@ -247,7 +247,7 @@ class GraphStore:
     async def threads(self, graph: str | None) -> list[dict[str, Any]]:
         q = (
             graph_threads.select()
-            .where(_mine(graph_threads), team_visible(graph_threads))
+            .where(mine(graph_threads), team_visible(graph_threads))
             .order_by(graph_threads.c.updated_at.desc())
         )
         if graph:
@@ -269,9 +269,7 @@ class GraphStore:
             row = (
                 (
                     await c.execute(
-                        graph_runs.select().where(
-                            graph_runs.c.id == run_id, _mine(graph_runs), team_visible(graph_runs)
-                        )
+                        graph_runs.select().where(graph_runs.c.id == run_id, mine(graph_runs), team_visible(graph_runs))
                     )
                 )
                 .mappings()
@@ -282,7 +280,7 @@ class GraphStore:
     async def runs(self, thread_id: str) -> list[dict[str, Any]]:
         q = (
             graph_runs.select()
-            .where(graph_runs.c.thread_id == thread_id, _mine(graph_runs), team_visible(graph_runs))
+            .where(graph_runs.c.thread_id == thread_id, mine(graph_runs), team_visible(graph_runs))
             .order_by(graph_runs.c.created_at)
         )
         async with tenant_tx(self.engine) as c:
@@ -398,7 +396,7 @@ class GraphStore:
         async with tenant_tx(self.engine) as c:
             await c.execute(
                 graph_threads.update()
-                .where(graph_threads.c.id == thread_id, _mine(graph_threads))
+                .where(graph_threads.c.id == thread_id, mine(graph_threads))
                 .values(overrides=overrides, updated_at=updated_at)
             )
 
@@ -446,7 +444,7 @@ class GraphStore:
             graph_threads.c.graph == graph,
             graph_threads.c.version == version,
             graph_threads.c.status.in_(statuses),
-            _mine(graph_threads),
+            mine(graph_threads),
             team_visible(graph_threads),
         )
         async with tenant_tx(self.engine) as c:
@@ -468,7 +466,7 @@ class GraphStore:
                 graph_runs.c.input,
                 graph_runs.c.finished_at,
             )
-            .where(_mine(graph_runs), team_visible(graph_runs))
+            .where(mine(graph_runs), team_visible(graph_runs))
             .order_by(graph_runs.c.created_at)
         )
         if only is not None:
@@ -484,7 +482,7 @@ class GraphStore:
         q = sa.select(graph_threads.c.graph, graph_threads.c.meta).where(
             sa.or_(graph_threads.c.graph == "agent_wrapper", graph_threads.c.graph.like("agent:%")),
             graph_threads.c.created_at >= since,
-            _mine(graph_threads),
+            mine(graph_threads),
             team_visible(graph_threads),
         )
         async with tenant_tx(self.engine) as c:
@@ -493,7 +491,7 @@ class GraphStore:
     async def thread_stats(self) -> list[tuple[str, str, str]]:
         """(graph, status, created at) of every thread."""
         q = sa.select(graph_threads.c.graph, graph_threads.c.status, graph_threads.c.created_at).where(
-            _mine(graph_threads), team_visible(graph_threads)
+            mine(graph_threads), team_visible(graph_threads)
         )
         async with tenant_tx(self.engine) as c:
             return [(str(g), str(s), str(t)) for g, s, t in await c.execute(q)]

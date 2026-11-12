@@ -2,7 +2,7 @@
 on the account only, so the auth config shows nothing and the next account must type it again, or is kept fixed, so a
 second org can never sign in at its own address; whose account tools use is
 left to the server's default (the team account only) instead of each person's own with the team account for runs
-nobody started; and the app's read tools are not added, so the window's "N read tools added" is false. Rig:
+nobody started; and the app's tools are not all added, so a developer who connects it cannot write at once. Rig:
 test_config_modes."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from .test_config_place import ACME
 from .test_sign_in_place import admin
 
 
-async def test_turning_on_offers_the_place_as_a_default_on_ops_ais_config_and_adds_the_read_tools(
+async def test_turning_on_offers_the_place_as_a_default_on_ops_ais_config_and_adds_every_tool(
     client: httpx.AsyncClient,  # noqa: F811
     tenant: str,
 ) -> None:
@@ -31,5 +31,4 @@ async def test_turning_on_offers_the_place_as_a_default_on_ops_ais_config_and_ad
     assert (field["value"], field["mode"]) == (ACME, "default"), field
     detail = (await client.get(f"/v1/apps/{APP}/accounts/{account}", headers=admin(tenant))).json()["data"]
     assert (detail["signIn"], detail["teamBackup"]) == ("person_or_team", True), detail
-    reads = [t for t in page["tools"] if t.get("access") == "read"]
-    assert card["toolsAdded"] == len(reads) > 0, (card["toolsAdded"], reads)
+    assert card["toolsAdded"] == len(page["tools"]) > 0 and all(t["added"] for t in page["tools"]), page["tools"]

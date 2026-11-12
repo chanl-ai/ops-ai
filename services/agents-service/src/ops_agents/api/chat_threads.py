@@ -53,6 +53,7 @@ from ops_contracts.chat import (
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.ids import now_iso
 
+from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
 from ..store.events import EventLog
 from ..store.reviews import ReviewStore
@@ -174,11 +175,14 @@ class AssistantBuilder:
             risk=tpl.risk if tpl else "high",
             consequence=tpl.consequence if tpl else None,
             step_up=bool(p.get("step_up")) or None,
+            ask_first=bool(p.get("ask_first")),
             state=state,
             decided_by=decision["decided_by"] if decision else None,
             reason=decision["reason"] if decision else None,
             waiting_on=None
             if decision
+            else "your answer"
+            if p.get("ask_first")
             else "a second approver"
             if state == "awaiting_second"
             else str(p.get("reviewers") or (tpl.reviewers if tpl else "") or "a reviewer"),
@@ -317,7 +321,13 @@ class AssistantBuilder:
                 widget = self._approval(_d(data))
                 m.widgets = [*(m.widgets or []), widget]
                 out = [WidgetEvent(widget=widget)]
-                if not m.content.strip():
+                if widget.ask_first:
+                    # The person answers it on the card; no reviewer's gate is named on the held call.
+                    m.tool_calls = [c.model_copy(update={"gated": None}) for c in m.tool_calls or []]
+                    if not m.content.strip():
+                        m.content = f"Before I change anything: {widget.action}. Allow it on the card below."
+                        out.append(TextEvent(delta=m.content))
+                elif not m.content.strip():
                     # The model went straight to the gated call; say what is waiting and for whom.
                     reviewers = str(_d(_d(data).get("payload")).get("reviewers") or "a reviewer")
                     m.content = f"I drafted this for review: {widget.action}. It runs once {reviewers} approve it."
@@ -589,6 +599,17 @@ async def store_summary(rt: Runtime, thread_id: str) -> None:
     await update_meta(rt, thread_id, **summary(messages))
     if (row := await graph_store(rt).thread(thread_id)) is not None:
         await index_chat(rt, row, messages)
+
+
+BACKFILL_BATCH = 100
+
+
+async def with_stored_summaries(rt: Runtime, owner_email: str, owner_name: str) -> None:
+    """`with_summaries` for the caller's own threads that need it, found in SQL a batch at a time, so a list reads no
+    other person's thread and a long history fills in over a few lists."""
+    q = ChatListQuery(graph=CHAT_GRAPH, owner_email=owner_email, owner_name=owner_name)
+    rows = await unsummarised_rows(graph_store(rt).engine, q, limit=BACKFILL_BATCH)
+    await with_summaries(rt, rows)
 
 
 async def with_summaries(rt: Runtime, rows: list[dict[str, Any]]) -> None:

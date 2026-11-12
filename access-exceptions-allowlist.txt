@@ -13,6 +13,7 @@ packages/ops_access/src/ops_access/check.py lock protection-system 1 E05
 packages/ops_store/src/ops_store/isolation.py lock dev-caller 1 E09
 services/agents-service/src/ops_agents/api/auth.py lock dev-caller 1 E09
 services/agents-service/src/ops_agents/api/auth.py refusal role_required 1 E13
+services/agents-service/src/ops_agents/api/auth.py refusal not_the_asker 1 E50
 services/agents-service/src/ops_agents/api/chat_budget.py refusal admin_only 1 E14
 services/agents-service/src/ops_agents/api/chat_budget.py refusal not_owner 3 E14
 services/agents-service/src/ops_agents/api/engine_reviews.py refusal forbidden 1 E10
@@ -58,13 +59,16 @@ packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.
 packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open
 packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default publishReview={} 1 E01
-packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=true 1 open
+packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=false 1 E49
 packages/ops_access/src/ops_access/policies.py policy-default reviewSlaHours=8 1 open
 packages/ops_access/src/ops_access/policies.py policy-default securityTeamAddsSecrets=false 1 open
 packages/ops_access/src/ops_access/policies.py policy-default stepUp=false 1 open
 packages/ops_access/src/ops_access/policies.py policy-default taskAssist={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedApproval={} 1 open
 packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedApproval={} 1 E23
+packages/ops_access/src/ops_access/policies.py policy-default appsChangeWithoutAsking={} 1 E49
+packages/ops_access/src/ops_access/policies.py policy-default appChanges={} 1 open
+packages/ops_access/src/ops_access/policies.py policy-default appChangesByApp={} 1 open
 # 409 codes, each classified once (`* conflict <code> 0 state`): the record is in the wrong state, so the refusal is not
 # an access decision. A 409 that decides by who made a record gets a path line and a register row instead. A new code
 # fails until it is classified here; a code no 409 carries any more is stale. An access-deciding 409 carries its own code.

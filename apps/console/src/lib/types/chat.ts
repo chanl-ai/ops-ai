@@ -84,6 +84,10 @@ export interface ApprovalWidget extends WidgetBase {
   waitingOn?: string;
   /** Whether the reader may decide it now, by the decision route's checks (agents-service); absent from the mock. */
   canDecide?: boolean;
+  /** The app asks before changes: the person who asked answers it, with Allow, Deny and Allow for this chat. */
+  askFirst?: boolean;
+  /** An ask-first card offers "Allow for this chat" unless this is false (a test run has no chat to allow). */
+  allowForChat?: boolean;
   reason?: string;
 }
 
@@ -116,7 +120,7 @@ export type ChatWidget = TableWidget | ChartWidget | RecordWidget | ApprovalWidg
 export type WidgetKind = ChatWidget['kind'];
 
 /** `stepUpToken`: approving a call that needs a step-up needs a re-authentication from the last 5 minutes. */
-export type WidgetAction = { type: 'approve'; stepUpToken?: string } | { type: 'reject'; reason: string } | { type: 'submit'; values: Record<string, string> };
+export type WidgetAction = { type: 'approve'; stepUpToken?: string; forChat?: boolean } | { type: 'reject'; reason: string } | { type: 'submit'; values: Record<string, string> };
 
 // ── Messages ──
 
@@ -266,7 +270,11 @@ export type ChatThreadState = 'active' | 'pinned' | 'archived';
 export type ChatFilters = { agentId?: string[]; kbIds?: string[]; state?: string[] };
 
 /** `cursor` reads the rows after the one it names, in the list's order; the conversations table pages by `page`. */
-export type ChatThreadListParams = ListParams<ChatFilters> & { cursor?: string };
+export type ChatThreadListParams = ListParams<ChatFilters> & {
+  cursor?: string;
+  /** The sidebar's slice: the pinned chats (up to `pageSize`), then this many of the newest others, in one response with no `nextCursor`. */
+  recent?: number;
+};
 
 export interface ChatThreadList extends ListResult<ChatThreadRow> {
   /** Set while more rows follow; pass it back as `cursor`. */

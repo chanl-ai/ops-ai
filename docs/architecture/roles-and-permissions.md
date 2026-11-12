@@ -1,6 +1,6 @@
 # Roles and permissions
 
-Status: current, 2026-11-05. This is the one page for who may do what in Ops AI. Before asking an access
+Status: current, 2026-11-11. This is the one page for who may do what in Ops AI, approvals included ([Approvals](#approvals)). Before asking an access
 question, look it up in [Decided questions](#decided-questions); before writing a refusal, a role check, a lock or a
 closed default, look it up in the [Exceptions register](#exceptions-register). Code is cited at commit `c96319da`.
 The grid below is generated from `packages/ops_access` and checked by `make python-verify`; the register is checked by
@@ -24,12 +24,22 @@ The rules for both (CLAUDE.md "No hard coding"):
 
 | Rule | Consequence |
 |---|---|
-| Defaults are open | A new workspace meets no control until an admin sets one. A stricter rule is an opt-in setting |
+| Every permission and approval is a grid cell or a setting | Each one is a cell an admin ticks in the roles grid or a policy an admin changes. A rule that is neither is a defect, or a register row that says why |
+| Defaults are open, except the safe defaults the owner chose | A new workspace meets no control until an admin sets one, except the rows listed below. Each is still a setting a team can loosen |
 | Admins can do everything | The built-in Admin role holds every cell in its team (migration `0016_admin_every_cell`). The exceptions are rows E02, E26 and E27 |
 | A refusal behind neither the grid nor a policy is a defect | Unless the [Exceptions register](#exceptions-register) records a decision for it |
 | Definitions are database records | Built-in workflows, roles and task types are seeded and editable through `can()`, never locked in code |
 | Security sits in the step that acts | Separation of duties is a step setting (`notDecidedBy`) and a team policy (`requesterMayDecide`), never a lock on a definition |
-| AI features are off by default | The documented exception to open defaults (rows E03, E36) |
+
+The safe default for approvals:
+
+| Row | Safe default | Setting that loosens it |
+|---|---|---|
+| E51 | The person who asked for, saved or started a decision does not take it | `requesterMayDecide`, turned on |
+
+The other defaults that start closed are AI features off (E03, E36), publish review on major changes (E01), chat
+threads read only by whoever started them (E02), personal data masked in AI steps (E34) and new addresses asking
+Security (E48). Every policy whose `Open?` column says no in [Policies](#policies) cites its row.
 
 ### The always-on baseline
 
@@ -274,12 +284,15 @@ fails the commit until it is classified.
 
 | Key | Default | Open? | What on means | Changed by | Per team |
 |---|---|---|---|---|---|
-| `requesterMayDecide` | on | yes | The person who asked for, saved or started a decision may take it; off: 403 `own_request` | `settings.manage` (Security team) | no (row E29) |
+| `requesterMayDecide` | off | no (row E51) | The person who asked for, saved or started a decision may take it; off: 403 `own_request`. Set on Settings › Approvals, shown once review is on | `settings.manage` (Security team) | no (row E29) |
 | `stepUp` | off | yes | Every approver steps up, besides operations that ask for it | `settings.manage` | no |
 | `chatThreadsOwnerOnly` | on | no (row E02) | A chat thread is read only by whoever started it, admins included | `settings.manage` | no |
 | `publishReview` | `{}`: every area `major` | no (row E01) | Per team and area: `always`, `major` or `never` | `reviews.manage` | yes |
-| `toolWritesNeedApproval` | `{}`: off | yes | Every tool write of the team waits for a person, including those an operation lets run at once | `reviews.manage` | yes |
-| `appWritesNeedApproval` | `{}`: no app listed | yes | Writes of the apps the team lists wait for a person; a reviews.decide holder is not asked | `reviews.manage` | yes |
+| `toolWritesNeedApproval` | Derived from `appChanges` for one release: on when the team asks a reviewer. A write to it lands in `appChanges` | yes | Read only; the decision comes from `appChanges` | `settings.manage`, because the write lands in `appChanges` | yes |
+| `appWritesNeedApproval` | Derived from `appChangesByApp` for one release: the apps whose answer is a reviewer. A write lands in `appChangesByApp` | yes | Read only; the decision comes from `appChangesByApp` | `settings.manage` | yes |
+| `appsChangeWithoutAsking` | Derived from `appChangesByApp` for one release: the apps whose answer is "none". A write lands in `appChangesByApp` | yes | Read only; the decision comes from `appChangesByApp` | `settings.manage` | yes |
+| `appChanges` | `{}`: no team asks, so agents change apps without asking | yes | The team's one switch, "Ask before an agent changes anything in an app": off, ask the person (a confirmation only the asker answers), or ask a reviewer (a role that can decide reviews); `testAccountsNeverAsk` (on); `testRunsAsk` (on) | `settings.manage` | yes |
+| `appChangesByApp` | `{}`: every app follows the team | yes | Per app: use the team setting, change without asking, ask the person, or ask a reviewer | `settings.manage` | yes |
 | `aiSteps` | `{}`: off | no (row E03) | The team's workflows may use Classify, Summarise, Extract from text and Draft steps | `workflows.manage` | yes |
 | `taskAssist` | `{}`: off | no (row E03) | A typed task opens with AI help | `workflows.manage` | yes |
 | `checkBeforeSend` | `{}`: off | no (row E03) | Every write is checked against the team's sending policy first | `workflows.manage` | yes |
@@ -290,6 +303,28 @@ fails the commit until it is classified.
 | `memoryRetentionDays` | none | yes | How long agents keep what they remember about a person | `chat.manage` | no |
 | `reviewSlaHours` | 8 | n/a | When a waiting publish review shows as overdue | `reviews.manage` | no |
 | `extractionFloor` | 0.8 | n/a | The lowest confidence an extraction step accepts; a quality threshold, not an access rule | `settings.manage` | no |
+
+## Approvals
+
+Every approval behaviour is one of the settings below or the approve cell in the roles grid. The gateway's `needs`
+expression (`services/tools-service/src/ops_tools/gateway_calls.py:448`) is the only place that decides whether a
+write waits for a person; every setting in the table feeds it. Policies are changed in Settings › Policies or with
+`PUT /v1/policies/{key}` (`services/platform-service/src/ops_platform/api/app.py:821`), and each change is audited.
+
+| Setting | What it does | Default | Who changes it (cell) | Where | Code owner |
+|---|---|---|---|---|---|
+| The tool's own answer (`approvalMode`, `reviewerRole`) | Not set, don't ask, ask the person, or ask a reviewer (the role that reviews). Not set follows the app, then the team. A stored `requires_approval` is not read as an answer. A read never waits | Not set, so the app and team decide (the team default runs the write) | Whoever may edit the tool (`tools.edit`); loosening it is a major change, so a publish review applies (row E01) | Tools › the tool › operation › Access and approval; `PATCH /v1/tool-modules/{id}/operations/{op}` (`services/tools-service/src/ops_tools/modules/routes.py:196`) | `effective_answer`, `packages/ops_access/src/ops_access/policies.py`; the tool's part is read by `tool_mode`, `services/tools-service/src/ops_tools/modules/policy.py` |
+| The team's answer for one tool (`appChangesByApp`, key `tool:<tool name>`) | Use the app's setting, don't ask, ask the person, or ask a reviewer. It replaces the tool's own answer above, so a plugin tool whose manifest asks first (its module row has no editor) can still be loosened | Not set, so the tool's own answer, then the app and team decide | A team admin (`settings.manage`), the same cell as the app and team answers | Tools › the tool › operation › "When an agent calls this tool"; `PUT /v1/policies/appChangesByApp` | `WriteApprovals.answer`, `services/tools-service/src/ops_tools/modules/policy.py`, then `effective_answer` |
+| A test run's yes (`confirmed` on `POST /v1/tool-modules/{id}/test`) | The person who pressed Run answers a Real test run of a write on a live account, on the console's approval card. Honoured only on the console channel, only while the answer is "ask the person", and never for a reviewer's answer | Asked while "Test runs on live accounts ask first" is on | The person running it; the checkbox is the team admin's | Tools › the tool › Test panel | `GatewayCalls.call`, `services/tools-service/src/ops_tools/gateway_calls.py` |
+| Ask before an agent changes anything in an app (`appChanges`, `appChangesByApp`) | Off: writes run. On: the person in the chat confirms (only the asker answers, row E50) or a reviewer chosen by role approves; nobody approves their own request unless `requesterMayDecide` is on. The most specific level wins: tool, then app, then team | Off, so writes run | A team admin (`settings.manage`) | Settings › Approvals | `packages/ops_access/src/ops_access/policies.py` (`effective_answer`, the one rule); `services/tools-service/src/ops_tools/gateway_calls.py` (`needs`) |
+| Requester may decide (`requesterMayDecide`) | The person who asked for, saved or started a decision may also take it. Off: 403 `own_request` | Off (row E51) | A team admin (`settings.manage`) | Settings › Approvals, shown once review is on | `packages/ops_access/src/ops_access/policies.py:56`; applied in `can()`, `packages/ops_access/src/ops_access/check.py:171`; checked again when a write is sent, `asker_refusal` in `services/tools-service/src/ops_tools/modules/policy.py:88` |
+| Tool writes need approval (`toolWritesNeedApproval`) | Derived from `appChanges`; read only. A write to it needs `settings.manage` (the code checks nothing else), and lands in `appChanges` | Off | `settings.manage` | Settings › Approvals | `services/platform-service/src/ops_platform/store/policies.py` |
+| Apps whose writes need approval (`appWritesNeedApproval`) | Derived from `appChangesByApp`; read only | No app listed | Via `appChangesByApp` | Settings › Approvals | `services/platform-service/src/ops_platform/store/policies.py` |
+| Approve cell (`reviews.decide`) | Who may decide a review at all. Without it a person cannot approve, whatever the policies say. A holder is not asked for their own write when approval is on | Held by the built-in Admin and Reviewer roles | An admin (`access.manage`) | Access › Roles; `PUT /v1/roles/{id}/permissions` (`services/platform-service/src/ops_platform/api/app.py:848`) | `packages/ops_access/src/ops_access/catalogue.py:94`; `approves_own_writes`, `services/tools-service/src/ops_tools/modules/policy.py:81` |
+| Test accounts never ask (`testAccountsNeverAsk`, inside `appChanges`) | A write on an app's test account does not wait or ask, because it changes no live data | On | A team admin (`settings.manage`) | Settings › Approvals; the app's Accounts tab chooses the account | `effective_answer` (source `test-account`); `on_test_account`, `services/tools-service/src/ops_tools/gateway_calls.py` |
+| Test runs ask first (`testRunsAsk`, inside `appChanges`) | A test run in the tool page of a write on a live account pauses for the person's yes. Chats and workflows keep their own answer; a test account never asks | On | A team admin (`settings.manage`) | `PUT /v1/policies/appChanges` (Settings › Approvals has the control) | `effective_answer` (channel `test`, source `test-run`); the test console, `ModuleService.test` in `services/tools-service/src/ops_tools/modules/service.py` |
+
+One owner decides whether a write waits: `effective_answer`, called through the gateway's `needs()` in `gateway_calls.py`, the tool list, the test console and the chat. The person who asked is checked again live when the write is sent (`asker_refusal`, `modules/policy.py`), and every route that records an approval (`record_approval`, `services/agents-service/src/ops_agents/api/routers/reviews.py`) runs the same decider check. One rule is not a setting: every write over MCP waits for a person.
 
 ## Team and workspace scope
 
@@ -348,7 +383,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E20 | The Access table styles the admin badge by role name | `apps/console/src/components/access/members-panel.tsx:53` | Presentation only; decides nothing | | consistent |
 | E21 | `GET /v1/api-key-summaries` refused every person, workspace admins included | `services/platform-service/src/ops_platform/api/app.py` | Resolved 2026-10-19: a person with `can('access', 'manage')` in every team reads it; a service still needs `settings:view` (test_workspace_admin) | | **resolved** |
 | E22 | The console maps team roles to a session role `admin`, `member` or `viewer` | `apps/console/src/lib/auth/providers/platform.ts:70` | None. Sign-in Q6 is open (O06) | | **no decision** |
-| E23 | A tool write runs without approval unless the team turns approval on: every write (`toolWritesNeedApproval`), the apps it lists (`appWritesNeedApproval`) or one tool (its operation's switch); when on, a person holding reviews.decide in the team is not asked | `services/tools-service/src/ops_tools/gateway_calls.py` (`self_approved`); `modules/policy.py` `approves_own_writes` | Owner, 2026-11-01: approvals are off by default and role-based when on; superseded the 2026-10-17 default where every write waited | 2026-11-01 | decided |
+| E23 | A tool write runs without approval unless the team turns approval on: every write (`toolWritesNeedApproval`), the apps it lists (`appWritesNeedApproval`) or one tool (its operation's switch); when on, a person holding reviews.decide in the team is not asked | `services/tools-service/src/ops_tools/gateway_calls.py` (`self_approved`); `modules/policy.py` `approves_own_writes` | Owner, 2026-11-01: approvals are off by default and role-based when on; superseded the 2026-10-17 default where every write waited. Superseded 2026-11-10 by E49 | 2026-11-01 | superseded |
 | E24 | Models-service admin routes take a service token only; no person reaches them | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | to fix |
 | E25 | Writes before a first publish: a draft test uses the draft, a live run needs the live version | `services/agents-service/src/ops_agents/api/auth.py:256-262` | A test run is a draft activity (`workflows.edit`); a live run is `workflows.run` | 2026-10-17 | decided |
 | E26 | A team admin outside the Security team does not change egress, another team's secrets, storage settings or security reviews | `SECURITY_TEAM_ACTIONS` `catalogue.py:55` | These decide what every team may reach, so they are held in the Security team | 2026-10-17 | decided |
@@ -374,6 +409,9 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E46 | The `plugins` policy (the install switch) | — | Superseded 2026-11-03: the policy is gone; an installed plugin is available to every team, which turns it on for itself, and settings fixed for every team come from the install config (`OPS_PLUGIN_LOCKED`) | 2026-11-03 | superseded |
 | E47 | A members-only hosted form refuses anyone signed in outside the team that shares it, and answers the same for a form that does not exist (403 `form_members_only`) | `services/agents-service/src/ops_agents/api/routers/forms.py` (`_member_form`) | The form is the team's own start form shared with its members; reading it in another team would cross the team boundary, so a person outside it learns nothing about it | 2026-10-30 | prototype |
 | E48 | `egressNewHosts` defaults to `ask_security`: a host the account has not listed waits for the Security team, unless the policy says builders, any public host or block; an unreadable policy counts as `ask_security` | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/egress.py` (`NewHosts`) | Reaching a new outside address is a security decision, so the default asks Security; private, loopback, link-local and metadata addresses are refused under every value | 2026-11-03 | prototype |
+| E49 | `appsChangeWithoutAsking` defaults to no app listed, so a write in a chat runs without asking. When a team turns asking on, the person in the chat answers Allow, Deny or Allow for this chat; a write on a test account never asks, and a workflow or an agent run with nobody in it is not asked | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/gateway_calls.py` (`needs`, loosened by `app_changes_quietly`); `services/tools-service/src/ops_tools/app.py` (grantable operations carry the same answer in `requiresApproval`); `services/agents-service/src/ops_agents/graphs/agent_wrapper.py` | Writes run by default; asking is one team switch, designed and not yet built (the code keeps the separate fields). An unreadable list counts as off | 2026-11-10 | decided |
+| E50 | A write whose app asks before changes is answered (Allow, Deny, Allow for this chat) only by the person who asked in the chat, whatever their role; an admin or reviewer cannot answer it for them, and a write any reviewer approval holds is decided as before | `services/agents-service/src/ops_agents/api/auth.py` (`require_asker`); `api/hitl_facade.py` (`_check_thread_decider`); `api/routers/reviews.py` (`record_approval`) | The answer is the person's consent to their own change, not an approval, so no grid cell grants it to anyone else | 2026-11-10 | decided |
+| E51 | `requesterMayDecide` is off by default, so the person who asked for, saved or started a decision does not take it (403 `own_request`); a team loosens it by turning `requesterMayDecide` on | `packages/ops_access/src/ops_access/policies.py` (`requesterMayDecide`); `asker_refusal` in `services/tools-service/src/ops_tools/modules/policy.py`, through `can()`: an approval the asker gave themselves is checked against today's policy when the write is sent | Once review is on, nobody approves their own request, because a self-approval defeats the review | 2026-11-10 | decided |
 
 ## Decided questions
 
@@ -401,7 +439,7 @@ when a question comes up again.
 | D17 | Is a refusal outside the grid and policies allowed? | No. It is a defect unless this page records a decision for it | 2026-10-18 |
 | D18 | Are definitions code or records? | Database records seeded from files; built-in workflows, roles and task types are editable through `can()`, never locked | 2026-10-18 |
 | D19 | Where does security for a definition live? | In the step that acts (`notDecidedBy`, `requesterMayDecide`), never in a lock on the definition | 2026-10-18 |
-| D20 | Is `requesterMayDecide` a rule or a setting? | A team policy, on by default | 2026-10-18 |
+| D20 | Is `requesterMayDecide` a rule or a setting? | A team policy, off by default (row E51) | 2026-11-10 |
 | D21 | Is separation of duties part of `can()`? | Yes, as `not_by` and `requested_by`; two-approver counting stays where approvals are counted | 2026-10-17 |
 | D22 | How are roles shown to admins? | As a roles × permissions checkbox matrix; admins edit built-in roles' cells there | 2026-10-18 |
 | D23 | Is there a chat-only role? | Yes, Chat user: chats with the team's published agents, sees only its own threads | 2026-10-17 |

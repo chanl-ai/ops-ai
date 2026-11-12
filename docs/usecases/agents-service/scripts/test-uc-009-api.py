@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-# requesterMayDecide is open by default; this use case runs a workspace that switched it off. The dev identity
-# carries the policy as a platform token would.
+# requesterMayDecide is off by default; this use case sets it off explicitly so it holds whatever the default is. The
+# dev identity carries the policy as a platform token would.
 os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
 from usecase_harness import agents, check, data, finish, sse

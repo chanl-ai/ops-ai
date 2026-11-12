@@ -5424,6 +5424,16 @@
             "title": "Access",
             "type": "string"
           },
+          "added": {
+            "default": true,
+            "title": "Added",
+            "type": "boolean"
+          },
+          "answer": {
+            "default": "none",
+            "title": "Answer",
+            "type": "string"
+          },
           "approvers": {
             "title": "Approvers",
             "type": "integer"
@@ -5471,9 +5481,30 @@
             "title": "Requiresapproval",
             "type": "boolean"
           },
+          "reviewerRole": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewerrole"
+          },
+          "source": {
+            "default": "team",
+            "title": "Source",
+            "type": "string"
+          },
           "stepUp": {
             "default": false,
             "title": "Stepup",
+            "type": "boolean"
+          },
+          "testAccount": {
+            "default": false,
+            "title": "Testaccount",
             "type": "boolean"
           },
           "title": {
@@ -7006,6 +7037,60 @@
             ],
             "title": "Amountmax"
           },
+          "answer": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "person",
+                  "reviewer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "answerRole": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answerrole"
+          },
+          "answerSource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answersource"
+          },
+          "approvalMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "person",
+                  "reviewer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvalmode"
+          },
           "approvedWorkflows": {
             "title": "Approvedworkflows",
             "type": "integer"
@@ -7176,8 +7261,15 @@
             "type": "integer"
           },
           "requiresApproval": {
-            "title": "Requiresapproval",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requiresapproval"
           },
           "responseTransform": {
             "anyOf": [
@@ -7189,6 +7281,17 @@
               }
             ],
             "title": "Responsetransform"
+          },
+          "reviewerRole": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewerrole"
           },
           "scopes": {
             "items": {
@@ -7236,6 +7339,17 @@
           "toolId": {
             "title": "Toolid",
             "type": "string"
+          },
+          "waits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waits"
           }
         },
         "required": [
@@ -7250,7 +7364,6 @@
           "maskedOutput",
           "binding",
           "rateLimitPerMin",
-          "requiresApproval",
           "approvers",
           "approverTeam",
           "stepUp",
@@ -7398,6 +7511,11 @@
       "ModuleTestIn": {
         "additionalProperties": false,
         "properties": {
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
           "contextId": {
             "title": "Contextid",
             "type": "string"
@@ -8441,6 +8559,22 @@
             ],
             "title": "Amountmax"
           },
+          "approvalMode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "person",
+                  "reviewer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvalmode"
+          },
           "approverTeam": {
             "anyOf": [
               {
@@ -8620,6 +8754,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Requiresapproval"
           },
           "responseTransform": {
@@ -8632,6 +8767,18 @@
               }
             ],
             "title": "Responsetransform"
+          },
+          "reviewerRole": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewerrole"
           },
           "scopes": {
             "anyOf": [
@@ -12657,6 +12804,11 @@
         "additionalProperties": false,
         "description": "One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway\ncall, with every check, in the environment picked.",
         "properties": {
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
           "environment": {
             "anyOf": [
               {

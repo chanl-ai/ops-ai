@@ -13,10 +13,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from ops_access import BY_KEY, Access
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson, Principal
 from ops_policy import input_hash
-from ops_service_kit.errors import ApiError
+from ops_service_kit.errors import ApiError, Forbidden
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
@@ -24,6 +25,7 @@ from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
+from .modules.policy import WriteApprovals, asker_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
 from .registry import Resolved, ToolRegistry
@@ -55,6 +57,9 @@ class CallRequest:
     approval_token: str | None = None
     # The person the call acts for, from a verified acting-for token; never from `run_context`.
     acting_for: ActingForPerson | None = None
+    # The person's own yes to a test run that asks them first, from the console's approval card. Honoured only on the
+    # console channel, only for the answer "ask the person", and only for the person the call acts for.
+    confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -115,6 +120,8 @@ def _approvers(token: str | None) -> list[str]:
 
 
 WRITES = {"write"}
+# Decides whether an approval the asker gave themselves still counts (asker_refusal).
+ACCESS = Access()
 
 
 def _text(value: object) -> str | None:
@@ -146,7 +153,10 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         title = str(cast(dict[str, Any], module.get("tool_titles") or {}).get(op["name"]) or op["name"])
         who = "someone who manages the team's apps"
         said = f"{app}'s {title} is not added to this team; {who} adds it from {app}'s Tools tab."
-        return 403, "TOOL_NOT_ADDED", said, {}
+        # What the chat's card offers in place: Turn on <tool> on the app's Tools tab, or Ask an admin.
+        template = str(module.get("template_id") or "")
+        app_id = template if template.startswith("plugin:") else f"module:{module['id']}"
+        return 403, "TOOL_NOT_ADDED", said, {"app": app, "appId": app_id, "tool": op["name"], "toolTitle": title}
     if module.get("sign_in_needed"):
         # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
@@ -227,20 +237,21 @@ class GatewayCalls:
         executor: Executor,
         counters: RateWindows,
         send_check: SendCheck | None,
-        all_writes_wait: Callable[[str, str | None], Awaitable[bool]],
         clock: Callable[[], float] = time.time,
-        app_writes_wait: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
+        approvals: WriteApprovals | None = None,
         approver: Callable[[Principal], bool] | None = None,
+        requester_may_decide: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         self.registry = registry
+        # The tenant's requesterMayDecide, read live at each call; without it the policy's default (off) holds.
+        self.requester_may_decide = requester_may_decide
         self.log = log
         self.opa = opa
         self.executor = executor
         self.counters = counters
         self.send_check = send_check
-        self.all_writes_wait = all_writes_wait
-        # Whether the team listed the module's app in appWritesNeedApproval; none listed without it.
-        self.app_writes_wait = app_writes_wait
+        # The team's and apps' approval settings; without them only the tool's own setting and MCP decide.
+        self.approvals = approvals or WriteApprovals()
         # Whether the caller holds the approver role in the team (can() over the roles grid); nobody without it.
         self.approver = approver
         self.clock = clock
@@ -265,6 +276,7 @@ class GatewayCalls:
         act: str,
         trial: Trial,
         secret_values: dict[str, str] | None,
+        confirmed: bool = False,
     ) -> dict[str, Any]:
         """A tool page's Real run as one gateway call, so it meets every rule an agent's call meets: approvals,
         limits, the egress policy, the team's account and the call log. The answer is plain data, so the module
@@ -282,11 +294,33 @@ class GatewayCalls:
             key=new_id("console"),
             run_context={"environment": environment, "act": act},
             acting_for=person,
+            confirmed=confirmed,
         )
         out = await self.call(caller, req, channel=CONSOLE, trial=trial, secret_values=secret_values)
         if isinstance(out, Refused):
             return {"callId": out.call_id, "status": out.status, "code": out.code, "reasons": out.reasons}
         return {"callId": out.call_id, "ok": out.ok, "output": out.output}
+
+    async def _with_live_policy(self, caller: Principal) -> Principal:
+        """`caller` carrying the tenant's requesterMayDecide as read at this call, in place of the token's copy."""
+        if self.requester_may_decide is None:
+            return caller
+        may_decide = await self.requester_may_decide(caller.tenant_id)
+        return caller.model_copy(update={"policies": {**caller.policies, "requesterMayDecide": may_decide}})
+
+    async def _asker_refusal(self, tenant_id: str, req: CallRequest) -> Forbidden | None:
+        """`can`'s own_request refusal when the call's approval names the person it acts for and the tenant's
+        requesterMayDecide, read now, does not let an asker decide; the token alone cannot say, since the policy may
+        have changed after it was minted."""
+        if req.acting_for is None:
+            return None
+        may_decide = (
+            await self.requester_may_decide(tenant_id)
+            if self.requester_may_decide is not None
+            else BY_KEY["requesterMayDecide"].default is True
+        )
+        approvers = _approvers(req.approval_token)
+        return asker_refusal(ACCESS, req.acting_for, tenant_id, approvers, may_decide=may_decide)
 
     async def call(
         self,
@@ -405,37 +439,58 @@ class GatewayCalls:
             )
             return Refused(call_id, status, code, [reason], details)
         policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
-        # From the registry and the team's policies, never the caller: whether this write needs an approval token.
-        # Approvals are off by default: a write waits only when its tool's switch is on, the team
-        # has every write wait, or the team listed its app.
+        # From the registry and the team's settings, never the caller: whether this write needs an approval token.
+        # `effective_answer` is the one rule: the tool's own setting, then its app's, then the team's; MCP always waits.
         module = resolved.module if resolved else None
-        # A test run on an app with no sandbox account signs in with its live one (connections.records account_for);
-        # its write then waits for a person's approval, so testing never changes live data unseen. The person running
-        # the test is not that approval, whatever their role: trying a tool is not deciding to change live data.
-        live_test_write = (
-            access in WRITES
-            and run == TEST
-            and bool((module or {}).get("connection_id"))
-            and not (module or {}).get("sandbox")
-        )
-        needs = live_test_write or (
-            access in WRITES
-            and (
-                # Over MCP every write waits for a person, whatever the operation declares.
-                channel == MCP
-                or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
-                or await self.all_writes_wait(caller.tenant_id, caller.team_id)
-                or (
-                    self.app_writes_wait is not None
-                    and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
-                )
+        # A write signed in with the app's test account changes nothing real; the team's checkbox decides if it asks.
+        on_test_account = bool((module or {}).get("sandbox"))
+        needs = False
+        # An answer of "person" is the asker's own confirmation in chat, so the four-eyes check below does not apply.
+        confirmed_by_asker = False
+        if access in WRITES:
+            setting, setting_role = await self.registry.approval_setting(req.tool, caller.tenant_id, caller.team_id)
+            answer = await self.approvals.answer(
+                caller.tenant_id,
+                caller.team_id,
+                module,
+                access=access,
+                setting=setting,
+                reviewer_role=setting_role,
+                approvers=(policy or {}).get("approvers") or 1,
+                channel=(
+                    "mcp"
+                    if channel == MCP
+                    else "test"
+                    if channel == CONSOLE and run == TEST
+                    # Nobody in a chat to confirm (a workflow, a schedule): "ask the person" goes to the reviewer role.
+                    else "workflow"
+                    if req.acting_for is None
+                    else "chat"
+                ),
+                test_account=on_test_account,
+                tool=req.tool,
             )
-        )
+            needs = bool(answer["waits"])
+            confirmed_by_asker = answer["answer"] == "person"
         # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.
+        # requesterMayDecide is read now: the token's copy dates from when it was minted and may since be off.
         self_approved = bool(
-            needs and not live_test_write and req.approval_token is None and self.approver and self.approver(caller)
+            needs
+            and req.approval_token is None
+            and self.approver
+            and self.approver(await self._with_live_policy(caller))
         )
+        if (
+            needs
+            and confirmed_by_asker
+            and req.confirmed
+            and channel == CONSOLE
+            and req.acting_for is not None
+            and req.approval_token is None
+        ):
+            # A test run that asks the person: their yes on the console's card is the whole approval.
+            self_approved = True
         if self_approved:
             row["approvers"] = [caller.email]
         approval_required = access not in WRITES or (needs and not self_approved)
@@ -469,6 +524,15 @@ class GatewayCalls:
             error = {"code": "gateway_refused", "message": "; ".join(decision.reasons)}
             await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 403, "gateway_refused", decision.reasons)
+        asked_again = needs and not confirmed_by_asker and req.approval_token
+        if asked_again and (own := await self._asker_refusal(caller.tenant_id, req)) is not None:
+            # The token was valid when minted, but the person the call acts for approved it themselves and today's
+            # policy no longer lets an asker decide (it changed mid-turn, or the write now needs a reviewer).
+            row.update(decision="deny", reasons=[own.message])
+            await self.log.record(
+                **row, outcome="refused", latency_ms=elapsed(), error={"code": own.code, "message": own.message}
+            )
+            return Refused(call_id, own.status, own.code, [own.message])
         if req.tool in SYSTEM_TOOLS and not system_call(req.approval_token, SYSTEM_TOOLS[req.tool]):
             # The token is verified by now; it must have been minted for the one system workflow this tool serves.
             reason = f"{req.tool} is applied only by the {SYSTEM_TOOLS[req.tool]} system workflow"

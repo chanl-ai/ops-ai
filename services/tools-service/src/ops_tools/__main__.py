@@ -250,6 +250,10 @@ def main() -> None:
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),
         write_approvals=write_approvals,
+        requester_policy=RequesterMayDecide(
+            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
+            dev=settings.dev_policies,
+        ),
         # Check before sending: the team's checkBeforeSend read live, its sending policy here, and the judge on
         # this service's own model key; with no models-service, a team with the setting on has every write wait.
         send_check=SendCheck(
@@ -269,7 +273,7 @@ def main() -> None:
         background=(
             lambda: keep_handing_over(ReviewHandoffs(engine), client("agents", agents_url, ["tools:publish"])),
             # Tool access requests and module reviews start their system workflows through these events.
-            lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit"])),
+            lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit", "agents:create"])),
             # Once at start: every team behind this release's defaults version is brought up to date.
             lambda: catch_up_at_start(store, TeamDefaults(engine)),
             # Once at start: a tool's sign-in header saved before they were refused moves to its connection.

@@ -17,6 +17,13 @@ from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignor
 BASE = f"/v1/tool-modules/{MODULE}"
 
 
+@pytest.fixture(autouse=True)
+def requester_may_decide(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests are about console and test-account runs, not the four-eyes rule: the workspace lets an approver
+    approve their own write (requesterMayDecide on), as a team that loosened the default does."""
+    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": true}')
+
+
 @pytest.fixture
 async def g(gateway: Gateway) -> Gateway:  # noqa: F811
     return gateway

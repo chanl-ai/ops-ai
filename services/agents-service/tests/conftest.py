@@ -290,6 +290,13 @@ class FakeGraphModels:
         return [m.groupdict() for m in block.finditer(text)]
 
 
+@pytest.fixture
+def requester_may_decide(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A workspace that turned requesterMayDecide on, for a test whose subject is not the four-eyes rule: the dev
+    caller carries it through OPS_DEV_POLICIES, read by every Settings built after this fixture."""
+    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": true}')
+
+
 @pytest.fixture(autouse=True)
 def _release_apps() -> Iterator[None]:
     yield from released_apps()

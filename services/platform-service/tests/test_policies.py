@@ -17,14 +17,14 @@ from ops_access.policies import BY_KEY, KINDS
 from ops_identity import dev_service_signer, mint_service_token
 from ops_platform.store.policies import PolicyStore
 from ops_platform.store.roles import RoleStore
-from ops_platform.store.tables import audit_entries, tenants
+from ops_platform.store.tables import audit_entries, members, tenants
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import DEMO_PASSWORD, SignInRig
 
 DEFAULTS: dict[str, Any] = {
-    "requesterMayDecide": True,
+    "requesterMayDecide": False,
     "extractionFloor": 0.8,
     "stepUp": False,
     "publishReview": {},
@@ -36,6 +36,11 @@ DEFAULTS: dict[str, Any] = {
     "toolWritesNeedApproval": {},
     # Approvals are off by default: no team lists an app whose writes wait.
     "appWritesNeedApproval": {},
+    # Derived from appChanges and appChangesByApp for one release: an app is listed when its answer is "none".
+    "appsChangeWithoutAsking": {},
+    # The new switch and its per-app answers: no team asks until an admin turns it on (derived old keys above).
+    "appChanges": {},
+    "appChangesByApp": {},
     # No team set: off for every team until one turns it on.
     "aiSteps": {},
     "taskAssist": {},
@@ -79,13 +84,13 @@ async def test_a_new_workspace_has_every_policy_open_but_the_ai_uses_which_start
 async def test_a_change_is_audited_with_before_and_after_and_moves_the_permission_version(engine: AsyncEngine) -> None:
     db, t = TenantDb(engine), await tenant(engine)
     store, version = PolicyStore(db), await RoleStore(db).version(t)
-    assert await store.set(t, "requesterMayDecide", False, by=ADA, request_id="r1") == (True, False)
+    assert await store.set(t, "requesterMayDecide", True, by=ADA, request_id="r1") == (False, True)
     assert await store.set(t, "extractionFloor", 0.9, by=ADA, request_id="r2") == (0.8, 0.9)
     assert await store.set(t, "extractionFloor", None, by=ADA, request_id="r3") == (0.9, None)
-    assert await store.values(t) == {**DEFAULTS, "requesterMayDecide": False, "extractionFloor": None}
+    assert await store.values(t) == {**DEFAULTS, "requesterMayDecide": True, "extractionFloor": None}
     assert await RoleStore(db).version(t) == version + 3
     assert await audit(engine, t) == [
-        ("policy.set", "requesterMayDecide", {"before": True, "after": False}),
+        ("policy.set", "requesterMayDecide", {"before": False, "after": True}),
         ("policy.set", "extractionFloor", {"before": 0.8, "after": 0.9}),
         ("policy.set", "extractionFloor", {"before": 0.9, "after": None}),
     ]
@@ -103,6 +108,7 @@ async def test_a_change_is_audited_with_before_and_after_and_moves_the_permissio
         ("reviewSlaHours", None),
         ("appWritesNeedApproval", "plugin:opsai.salesforce"),
         ("appWritesNeedApproval", [""]),
+        ("appsChangeWithoutAsking", "plugin:opsai.salesforce"),
         ("noSuchPolicy", True),
     ],
 )
@@ -271,3 +277,20 @@ async def test_a_team_lists_the_apps_whose_writes_wait_through_the_route(signin:
     assert put.json()["data"]["kind"] == "names"
     value = put.json()["data"]["value"]
     assert list(value.values()) == [["plugin:opsai.salesforce"]], value
+
+
+async def test_a_team_admin_switches_an_apps_ask_before_changes_off_and_a_builder_cannot(signin: SignInRig) -> None:
+    """appsChangeWithoutAsking is a team admin's (settings.manage): a builder manages apps but does not decide whether
+    their writes stop asking the person in chat."""
+    body = {"value": ["plugin:opsai.salesforce"]}
+    put = await signin.public.put("/v1/policies/appsChangeWithoutAsking", json=body, headers=signin.admin)
+    assert put.status_code == 200 and put.json()["data"]["kind"] == "names", put.text
+    assert list(put.json()["data"]["value"].values()) == [["plugin:opsai.salesforce"]], put.text
+    email = f"b.lane@{signin.zone}"
+    user = await signin.person(email, role="builder")
+    async with signin.engine.connect() as c:
+        team = (await c.execute(sa.select(members.c.team_id).where(members.c.user_id == user))).scalar_one()
+    token = (await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})).json()
+    builder = {"Authorization": f"Bearer {token['data']['token']}", "X-Team-Id": team}
+    refused = await signin.public.put("/v1/policies/appsChangeWithoutAsking", json={"value": []}, headers=builder)
+    assert refused.status_code == 403, refused.text

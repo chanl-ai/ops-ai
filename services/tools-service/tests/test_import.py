@@ -80,8 +80,9 @@ async def test_import_takes_the_document_not_the_caller_and_runs_through_the_gat
     assert (ops["get_account"]["method"], ops["get_account"]["path"]) == ("GET", "/accounts/{accountId}")
     assert [f["name"] for f in ops["get_account"]["input"]] == ["accountId"]
     assert ops["get_account"]["access"] == "read", "the owner confirmed this one as a read"
-    # Approvals are off by default: an imported write runs until its switch or a policy is on.
-    assert ops["place_hold"]["requiresApproval"] is False
+    # An imported write stores "not set": it follows the team's default, which waits, until its switch says otherwise.
+    assert ops["place_hold"]["requiresApproval"] is None
+    assert ops["get_account"]["requiresApproval"] is not True, "a read never waits"
     unknown: dict[str, Any] = {**body, "operations": [{**forged, "name": "drop_tables"}]}
     r = await bank_api.call("POST", "/mod_document_service/operations/import", json=unknown)
     assert r.status_code == 400, "an operation the document does not describe is refused"

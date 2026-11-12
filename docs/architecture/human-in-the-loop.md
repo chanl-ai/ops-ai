@@ -27,7 +27,7 @@ code are in [identity-and-tenancy.md](identity-and-tenancy.md).
 | Decide is the only door for a policy-owned interrupt; `runs` answers 409 for it | Partial. `POST /reviews/{threadId}/decision` records the decision keyed by the interrupt id, then resumes; a repeat with the same decision resumes at most once (uc-008). `POST /v1/threads/{id}/runs/stream` still accepts a resume |
 | One signed approval token per action, bound to one call's input hash | In code ([token facts](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
 | Any edit to the input after approval invalidates every approval of it | In code: only approvals with the current hash count |
-| The requester cannot decide | Being changed: no hard-coded rule; the team's `requesterMayDecide` policy decides, and a step's `notDecidedBy` carries the people it excludes. Today, in code for workflow reviews: `POST /reviews/{id}/decision` refuses the person recorded on the interrupt, or the workflow's process principal, with 403. Chat honours `allow_self_approval_in_chat` (default true; uc-009 runs it false). `POST /v1/threads/{id}/approvals` has no requester check |
+| The requester cannot decide | Being changed: no hard-coded rule; the team's `requesterMayDecide` policy decides (off by default, so the asker does not decide), and a step's `notDecidedBy` carries the people it excludes. Today, in code for workflow reviews: `POST /reviews/{id}/decision` refuses the person recorded on the interrupt, or the workflow's process principal, with 403. In chat, the person who asked answers a write whose app asks before changes (`appsChangeWithoutAsking`, a team setting; default: every app asks). `POST /v1/threads/{id}/approvals` has no requester check |
 | Step-up authenticates the approver and approves nothing by itself | In code: verified for signature, subject and five-minute age on every money decision ([token facts](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
 | Money needs two distinct approvers; the API collects both, then resumes once | In code: the approvals route returns a token only at two approvers and refuses the same approver twice (403); OPA refuses one |
 | Parallel interrupts resume as one map `{interrupt id: decision}` collected by the API | Designed |
@@ -128,5 +128,4 @@ Proof: `services/agents-service/tests/engine/test_review_deadline.py`, `test_wai
 | MCP | A result with status pending and a review id only; the case stays in the console | Reviews page |
 | Schedule, webhook | A review task | Reviews page |
 
-Every one of these sends the same decide call. Which risk tiers let a chat user approve their own drafted write is an
-open decision ([delivery.md](delivery.md)).
+Every one of these sends the same decide call. Whether a chat user may approve their own drafted write is a team setting, not a fixed rule: `requesterMayDecide` (default off) and, for a write in a chat, the app's "Ask before changes" switch (`appsChangeWithoutAsking`, default on). See [Approval settings](../guide/security-and-governance.md#approval-settings).
