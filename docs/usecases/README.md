@@ -15,7 +15,10 @@ integration tests (pytest in the Python services); use cases only drive what a c
 | One layer | `make usecase-test UC=uc-002 LAYER=ui` |
 | All of them | `make usecase-test` |
 | Registry, one entry, coverage | `make usecase-list`, `make usecase-show UC=uc-002`, `make usecase-coverage SERVICE=agents-service` |
-| Register a new one | `make usecase-new SERVICE=<service> TITLE="<title>"` |
+| Register a new one | `make usecase-add AREA=<area> TITLE="<short title>" [LAYERS=api,sdk,cli]` (`usecase-new` is the older form) |
+| Every use case with its last run | `make usecase-list [AREA=<area>]`; the generated copy is `docs/usecases/index.md` (`make usecase-index`) |
+| What changed since the last green run | `make usecase-update UC=<id>` |
+| One use case, each step in plain words | `make usecase-run UC=<id> [LAYER=<layer>]`; full output in `.run/usecases/<id>-<layer>.log` |
 
 Run make under your secrets manager as for the rest of the stack. The scripts do not need model keys and the runner
 removes them.

@@ -213,6 +213,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/mailbox-demo.md` | Runbook: `make up`, `make sample-team` then `make demo-walk`, and the console pages to show the emailed levy notice on |
 | `console/demo-script.md` | The demo, scenario by scenario: where to go, what to type and what the viewer sees, each proven by `make demo-walk` |
 | `usecases/README.md` | Use case registry: how to run, rules (scripted model only, PASS needs evidence), layout, exit codes |
+| `usecases/index.md` | Generated index of every use case: id, area, short title, layers, doc (`make usecase-index`) |
 | `usecases/agents-service/chat-turn-with-citation.md` | uc-001: chat turn with citation |
 | `usecases/agents-service/test-an-agent-on-a-real-thread.md` | uc-247: A builder tests an agent on a real chat thread the server marks test |
 | `usecases/agents-service/test-an-agent-in-its-page-panel.md` | uc-253: A builder tests an agent in the right panel of its page, with the chat page's components |

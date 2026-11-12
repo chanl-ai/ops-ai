@@ -124,6 +124,8 @@ export interface SavedRun {
   at: string;
   exit: number | null;
   checks: Checks;
+  /** The commit the run started from, so `update` can say what changed since a green run. */
+  commit?: string;
 }
 
 export const RUNS_DIR = '.run/usecases';
@@ -132,6 +134,46 @@ export function saveRun(root: string, run: SavedRun): void {
   const dir = join(root, RUNS_DIR);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${run.id}-${run.layer}.json`), `${JSON.stringify(run, null, 2)}\n`);
+}
+
+/** The run that last passed, kept apart from the latest run, which a later failure overwrites. */
+export function saveGreen(root: string, run: SavedRun): void {
+  writeFileSync(join(root, RUNS_DIR, `${run.id}-${run.layer}.green.json`), `${JSON.stringify(run, null, 2)}\n`);
+}
+
+export function loadGreen(root: string, id: string, layer: Layer): SavedRun | undefined {
+  const path = join(root, RUNS_DIR, `${id}-${layer}.green.json`);
+  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as SavedRun) : undefined;
+}
+
+/** The script's full output for the latest run, written so a failure can be read after the terminal is gone. */
+export function logPath(id: string, layer: Layer): string {
+  return `${RUNS_DIR}/${id}-${layer}.log`;
+}
+
+export function saveLog(root: string, id: string, layer: Layer, output: string): void {
+  mkdirSync(join(root, RUNS_DIR), { recursive: true });
+  writeFileSync(join(root, logPath(id, layer)), output);
+}
+
+export interface Step {
+  n: number;
+  step: string;
+  expected: string;
+}
+
+/** The numbered rows of the doc's steps table (columns # | Step | Expected, or Do / Expect). */
+export function parseSteps(markdown: string): Step[] {
+  const lines = markdown.split('\n');
+  const header = lines.findIndex((l) => /^\|\s*#\s*\|\s*(step|do)\s*\|/i.test(l));
+  if (header < 0) return [];
+  const out: Step[] = [];
+  for (const line of lines.slice(header + 2)) {
+    if (!line.trim().startsWith('|')) break;
+    const [n = '', step = '', expected = ''] = cells(line);
+    if (/^\d+$/.test(n)) out.push({ n: Number(n), step, expected });
+  }
+  return out;
 }
 
 export function loadRun(root: string, id: string, layer: Layer): SavedRun | undefined {
@@ -159,4 +201,21 @@ export function formatStories(uc: UseCase, stories: Story[], runs: Partial<Recor
     }
   }
   return [...lines, ...extra].join('\n');
+}
+
+/** Each doc step in plain words: passed, failed with the check's detail, or not reached; an Open step is shown as open. */
+export function formatSteps(steps: Step[], checks: Checks): string {
+  // A script whose checks carry no step number cannot be matched to the table, so its checks are shown as they are.
+  if (![...checks.passed, ...checks.failed].some((c) => stepOf(c) !== undefined)) {
+    return [...checks.passed.map((c) => `  passed  ${c}`), ...checks.failed.map((c) => `  FAILED  ${c}`)].join('\n');
+  }
+  return steps
+    .map((s) => {
+      const open = /\*\*open\*\*/i.test(s.step);
+      const failed = checks.failed.find((c) => stepOf(c) === s.n);
+      const passed = checks.passed.some((c) => stepOf(c) === s.n);
+      const state = open ? 'open' : failed ? 'FAILED' : passed ? 'passed' : 'not run';
+      return `  step ${String(s.n).padEnd(3)} ${state.padEnd(7)} ${s.step}${failed ? `\n${' '.repeat(18)}${failed}` : ''}`;
+    })
+    .join('\n');
 }

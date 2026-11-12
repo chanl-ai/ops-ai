@@ -2,7 +2,7 @@
 # tests; these targets only call scripts/usecase.mjs, which runs one script per use case and layer. Scripts start the
 # agents service on the scripted model on their own ports, so no target here makes a real model call unless
 # APPROVED_REAL_CALLS=<n> is set.
-.PHONY: usecase-test usecase-report usecase-list usecase-show usecase-coverage usecase-new usecase-runner-test usecase-reset
+.PHONY: usecase-add usecase-update usecase-run usecase-index usecase-test usecase-report usecase-list usecase-show usecase-coverage usecase-new usecase-runner-test usecase-reset
 
 # Each run picks free ports and creates its own database (ops_usecase_r<pid>_<hex>), dropped when it ends, so runs
 # from different sessions never collide. OPS_USECASE_{AGENTS,TOOLS,MODELS,CONSOLE}_PORT and OPS_USECASE_DB set in the
@@ -21,8 +21,8 @@ usecase-test: ## Run use cases: make usecase-test UC=<id> LAYER=api|sdk|cli|ui (
 usecase-report: ## Each use case's stories, works or broken, from its latest runs: make usecase-report UC=<id> (all with stories when unset)
 	@$(USECASE) report $(if $(UC),--uc $(UC))
 
-usecase-list: ## List the use case registry
-	@$(USECASE) list
+usecase-list: ## Every use case with title, area, layers and last run: make usecase-list [AREA=agents]
+	@$(USECASE) list $(AREA)
 
 usecase-show: ## One use case and its script per layer: make usecase-show UC=<id>
 	@$(USECASE) show $(UC)
@@ -50,3 +50,15 @@ uc-impacted: ## The core UI use cases plus the ones the change since BASE touche
 	    OPS_PLUGINS_REPO="$${OPS_PLUGINS_REPO:-$(abspath $(STACK_HOME)/../ops-ai-plugins)}" OPS_EVIDENCE_DIR="$$out/evidence" USECASE_SLOTS=$$((n + 2)) QA_RUNNER=1 VERIFY_RUN="python3 scripts/uc_shard.py $$out $$ids" scripts/verify-head.sh > "$$out/worker$$k.log" 2>&1 & pids="$$pids $$!"; k=$$((k + 1)); done; \
 	  rc=0; for p in $$pids; do wait $$p || rc=1; done; \
 	  python3 scripts/uc_impacted.py --summary "$$out" $(if $(VERBOSE),--verbose); r=$$?; [ $$rc -eq 0 ] && [ $$r -eq 0 ]
+
+usecase-add: ## Add a use case: make usecase-add AREA=agents TITLE="Chat with an agent" [LAYERS=api,sdk,cli]
+	@$(USECASE) add "$(AREA)" "$(TITLE)" $(if $(LAYERS),--layers $(LAYERS))
+
+usecase-update: ## Where a use case's doc and scripts are, and the steps changed since its last green run: make usecase-update UC=<id>
+	@$(USECASE) update $(UC)
+
+usecase-run: ## Run one use case with each step in plain words: make usecase-run UC=<id> [LAYER=api|sdk|cli|ui]
+	@$(usecase-test-run) run $(UC) $(LAYER)
+
+usecase-index: ## Rebuild docs/usecases/index.md from the registry and docs
+	@$(USECASE) index
