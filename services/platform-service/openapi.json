@@ -3360,7 +3360,9 @@
               "hours",
               "publish_modes",
               "names",
-              "choice"
+              "choice",
+              "app_changes",
+              "app_changes_by_app"
             ],
             "title": "Kind",
             "type": "string"

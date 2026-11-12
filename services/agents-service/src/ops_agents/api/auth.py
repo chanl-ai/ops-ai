@@ -201,11 +201,14 @@ def _held(who: Caller, area: str, action: str, team: str) -> Scope | None:
         return None
 
 
-def require_reviews_decide(approver_teams: list[str], team_id: str, what: str) -> None:
+def require_reviews_decide(
+    approver_teams: list[str], team_id: str, what: str, *, role: str | None = None, held: Iterable[str | None] = ()
+) -> None:
     """reviews.decide in the team that reviews it: `approver_teams` is `review_teams`, the teams where `can` grants it,
-    from whatever team the request acts in. Separation of duties and step-up are checked where the decision is
+    from whatever team the request acts in. When the review names a `role` (a reviewer answer), the caller must hold
+    that role in the team too (`held`). Separation of duties and step-up are checked where the decision is
     recorded."""
-    if team_id in approver_teams:
+    if team_id in approver_teams and (role is None or role in held):
         return
     raise Forbidden(
         f"Only a reviewer or admin of {team_id} decides {what}.",
@@ -239,6 +242,13 @@ def require_not_own(me: Principal, requested_by: Iterable[str | None], *, team: 
         requested_by=asked,
         what=what,
     )
+
+
+def require_asker(me: Principal, asked_by: str, *, what: str) -> None:
+    """A person's own answer before their app changes something (an app that asks before changes): only the person
+    who asked in the chat gives it, so an admin or a reviewer cannot answer it for them."""
+    if not me.email or me.email != asked_by:
+        raise Forbidden(f"Only the person who asked can answer {what}.", code="not_the_asker")
 
 
 # Route wording to catalogue action: a definition is created, published or deleted; every other change (a save, a

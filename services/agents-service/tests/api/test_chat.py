@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 
 from tests.conftest import sse_events, step_up
@@ -68,6 +69,7 @@ async def test_reply_streams_console_frames_and_is_stored(client: AsyncClient) -
     assert stored["title"].startswith("What is the daily wire limit")
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_a_two_approver_approval_needs_step_up_then_continues(client: AsyncClient) -> None:
     thread = await new_thread(client)
     _, events = await send(client, thread["id"], {"content": "Place a 24-hour hold on wire W-88213"})

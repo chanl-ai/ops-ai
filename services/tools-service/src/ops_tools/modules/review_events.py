@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ops_access.platform_events import POLICY_CHANGED
+
 ACCESS_REQUESTED = "tool_access.requested"
 # The platform tool the access request's system workflow applies its decision with, run in this gateway (tools.py).
 APPLY_ACCESS = "apply_tool_access"
@@ -41,4 +43,18 @@ def access_event(m: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
             # The review step refuses this person as its decider (notDecidedBy), as the apply step does.
             "requestedByEmail": a.get("requested_by_email"),
         },
+    }
+
+
+def policy_changed_event(m: dict[str, Any], o: dict[str, Any], team_id: str, actor: str | None) -> dict[str, Any]:
+    """A tool's own approval answer changed, for the team that edited it. agents-service keeps each team's tool list
+    for up to 30 s and the list carries every write's answer, so it drops the list when it hears this, as it does for
+    a team's appChanges (platform-service sends that one). The key repeats for a retry of the same save only."""
+    return {
+        "tenant_id": m["tenant_id"],
+        "team_id": team_id,
+        "name": POLICY_CHANGED,
+        "key": f"tool:{o['name']}:{m['id']}:{m['revision']}",
+        "actor": actor,
+        "payload": {"key": f"tool:{o['name']}"},
     }

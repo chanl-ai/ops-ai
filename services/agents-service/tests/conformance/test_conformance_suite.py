@@ -332,12 +332,15 @@ async def wire_waiting(a: Adapter) -> str:
     return tid
 
 
+# Neither approver started the run: the run acts for the dev caller, and the gateway refuses an approval the person a
+# call acts for gave themselves while requesterMayDecide is off, its default.
+FIRST = "kim@harborpine.example"
 SECOND = "lee@harborpine.example"
 
 
 async def first_approval(a: Adapter, tid: str) -> None:
     """The first of a money step's two approvers; the thread stays paused for the second."""
-    assert (await a.decide(tid, step_up=await a.step_up()))["status"] == "in_review"
+    assert (await a.decide(tid, step_up=await a.step_up(FIRST), as_user=FIRST))["status"] == "in_review"
 
 
 async def second_approval(a: Adapter, tid: str) -> dict[str, Any]:

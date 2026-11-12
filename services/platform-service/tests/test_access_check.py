@@ -51,7 +51,11 @@ async def test_a_policy_refusal_is_reported_as_the_policy_not_the_grid(signin: S
     team = await _team_of(signin, approver)
     h = await _headers(signin, await _admin_email(signin), team)
     asked = {"personId": approver, "area": "reviews", "action": "decide", "requestedBy": approver_email}
-    assert (await _check(signin, h, **asked))["allowed"] is True, "the workspace lets a requester decide by default"
+    on = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": True}, headers=signin.admin)
+    assert on.status_code == 200, on.text
+    assert (await _check(signin, h, **asked))["allowed"] is True, (
+        "a workspace that turned it on lets a requester decide"
+    )
     off = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=signin.admin)
     assert off.status_code == 200, off.text
     refused = await _check(signin, h, **asked)

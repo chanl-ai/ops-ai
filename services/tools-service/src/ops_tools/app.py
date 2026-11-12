@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 from fastapi import APIRouter, FastAPI, Header
@@ -23,6 +23,7 @@ from ops_service_kit.errors import Unprocessable
 from ops_service_kit.flags import Flags
 from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, operation_id
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
@@ -36,7 +37,7 @@ from .held_hosts import install_held_hosts
 from .mcp_server import McpAdapter
 from .mocks import MockAnswers
 from .modules.directory import Directory
-from .modules.policy import WriteApprovals, app_ids, approves_own_writes
+from .modules.policy import RequesterMayDecide, WriteApprovals, approves_own_writes
 from .modules.service import ModuleService
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash, registered_identities
 from .plugins.executor import PluginExecutor
@@ -45,6 +46,7 @@ from .registry import Resolved, ToolRegistry
 from .secrets import SecretResolver
 from .send_check import SendCheck
 from .store import CallLog
+from .store.connections import ConnectionStore, plugin_app
 from .store.mocks import MockStore
 from .store.modules import Aggregate
 from .store.rate_windows import RateWindows
@@ -123,6 +125,11 @@ class GrantableOperation(Out):
     access: str
     input_schema: dict[str, Any]
     requires_approval: bool
+    # Who answers a call that waits, from the one resolver (`effective_answer`): "none", "person" (the asker confirms)
+    # or "reviewer" (someone else with `reviewer_role`), and the level it came from.
+    answer: str = "none"
+    reviewer_role: str | None = None
+    source: str = "team"
     approvers: int
     # Approving asks for a step-up: set on the operation, or two approvers.
     step_up: bool = False
@@ -130,6 +137,12 @@ class GrantableOperation(Out):
     output_shape: str | None = None
     module_id: str | None
     module_name: str
+    # The caller's team has a test account of the app: a test run's write signs in there and changes nothing real, so
+    # it never asks (gateway_calls holds no write on a test account either).
+    test_account: bool = False
+    # False for a tool the team turned off in its app's catalog: listed so a run can call it and be refused with the
+    # fix (Turn on <tool>, or Ask an admin), never offered to agents to pick.
+    added: bool = True
 
 
 class CallResult(Out):
@@ -187,6 +200,7 @@ def create_gateway_app(
     cors_origins: tuple[str, ...] = (),
     background: tuple[Callable[[], Coroutine[Any, Any, None]], ...] = (),
     write_approvals: WriteApprovals | None = None,
+    requester_policy: RequesterMayDecide | None = None,
     send_check: SendCheck | None = None,
     authenticator: Authenticator | None = None,
     directory: Directory | None = None,
@@ -205,7 +219,10 @@ def create_gateway_app(
     is refused. `cors_origins` are the browser origins (the console) allowed to call these routes. `auth` resolves
     callers (ops_identity's shared dependency); by default it is built from Settings for audience "tools". `background`
     runs beside the server from start-up and is cancelled at shutdown (the copy of reviews into Reviews).
-    `write_approvals` reads each team's toolWritesNeedApproval live; without it each write follows its registry flag.
+    `write_approvals` reads each team's appChanges and appChangesByApp live; without it only a tool's own setting
+    decides.
+    `requester_policy` reads the tenant's requesterMayDecide live, so an approval the asker gave themselves is checked
+    again at the call; without it the dev policies decide.
     `authenticator` signs a module's calls in through its connection; without it a connection adds nothing.
     `directory` holds the teams the MCP adapter scopes each assistant's tools to; without it no /mcp.
     `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
@@ -224,15 +241,25 @@ def create_gateway_app(
     expected = policy_hash(rules)
     counters = rates or RateWindows(log.engine)
 
-    async def all_writes_wait(tenant_id: str, team_id: str | None) -> bool:
-        return write_approvals is not None and await write_approvals.all_writes(tenant_id, team_id)
-
-    async def app_writes_wait(tenant_id: str, team_id: str | None, module: Aggregate | None) -> bool:
-        """Whether the team listed this module's app in appWritesNeedApproval; an unreadable list counts as listed."""
-        if write_approvals is None or module is None:
-            return False
-        listed = await write_approvals.apps(tenant_id, team_id)
-        return listed is None or bool(app_ids(module) & set(listed))
+    async def with_test_account(
+        tenant_id: str, team_id: str | None, mods: dict[str, Any], rows: list[dict[str, Any]]
+    ) -> set[str]:
+        """The ids of the written-to modules whose app has a test account in `team_id`, as records.account_for
+        chooses one for a test run: a plugin's app by its plugin, any other by its connection's app."""
+        if not team_id:
+            return set()
+        store = ConnectionStore(log.engine)
+        found: set[str] = set()
+        with isolation.scope(tenant_id, team_id):
+            for mid in {str(r.get("module_id") or "") for r in rows if r["access"] in WRITES} & set(mods):
+                m = mods[mid]
+                template = str(m.get("template_id") or "")
+                conn = await store.get(tenant_id, str(m["connection_id"])) if m.get("connection_id") else None
+                app = plugin_app(template.removeprefix("plugin:")) if template.startswith("plugin:") else None
+                app = app or (str(conn["app_id"]) if conn else None)
+                if app and any(a.get("sandbox") for a in await store.accounts(tenant_id, team_id, app)):
+                    found.add(mid)
+        return found
 
     access_check = Access()
 
@@ -246,14 +273,16 @@ def create_gateway_app(
         executor=executor,
         counters=counters,
         send_check=send_check,
-        all_writes_wait=all_writes_wait,
         clock=clock,
-        app_writes_wait=app_writes_wait,
+        approvals=write_approvals,
         approver=approver,
+        # An approval the asker gave themselves counts only while today's policy lets an asker decide.
+        requester_may_decide=(requester_policy or RequesterMayDecide(None, dev=Settings().dev_policies)).allowed,
     )
     if modules is not None:
         # A tool page's Real run is this gateway's call, never a path of the registry's own.
         modules.real_runs = calls.console_run
+        modules.approvals = calls.approvals
 
     resolved_auth = auth or Auth.from_settings(Settings(), audience="tools")
     mcp = (
@@ -330,27 +359,57 @@ def create_gateway_app(
         can(caller, "tools", "view", what="the grantable operations")
         rows = await registry.grantable(caller.tenant_id, team_view(caller))
         if plugins is not None and caller.team_id:
-            # A tool the team has not added from its app's catalog is not offered to its agents.
+            # A tool the team has not added from its app's catalog is listed as not added: agents are not offered it,
+            # and a run that calls it is refused with the fix.
             off = await plugins.tools_off(caller.tenant_id, caller.team_id)
-            rows = [r for r in rows if str(r["name"]) not in off]
-        if await all_writes_wait(caller.tenant_id, caller.team_id):
-            # The caller's team has every write wait, so the agents that list these pause before each one.
-            rows = [r | {"requires_approval": True} if r["access"] in WRITES else r for r in rows]
-        elif write_approvals is not None and any(r["access"] in WRITES for r in rows):
-            # The apps the team listed in appWritesNeedApproval: their writes pause too.
-            listed = await write_approvals.apps(caller.tenant_id, caller.team_id)
-            mods = (
-                {str(m["id"]): m for m in await registry.modules.all_teams(caller.tenant_id)}
-                if registry.modules
-                else {}
-            )
+            rows = [r | {"added": False} if str(r["name"]) in off else r for r in rows]
+        mods = (
+            {str(m["id"]): m for m in await registry.modules.all_teams(caller.tenant_id)}
+            if registry.modules and write_approvals is not None and any(r["access"] in WRITES for r in rows)
+            else {}
+        )
 
-            def held(r: dict[str, Any]) -> bool:
+        if write_approvals is not None:
+            # The one rule behind the gateway's wait: each write's answer from its own setting, its app and the team.
+            tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
+            levels = await write_approvals.levels(caller.tenant_id, caller.team_id)
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                if r["access"] not in WRITES:
+                    out.append(r)
+                    continue
                 m = mods.get(str(r.get("module_id") or ""))
-                return listed is None or (m is not None and bool(app_ids(m) & set(listed)))
-
-            rows = [r | {"requires_approval": True} if r["access"] in WRITES and held(r) else r for r in rows]
-        data = [GrantableOperation.model_validate(r).model_dump(by_alias=True) for r in rows]
+                ans = await write_approvals.answer(
+                    caller.tenant_id,
+                    caller.team_id,
+                    m,
+                    access=r["access"],
+                    setting=r.get("setting"),
+                    reviewer_role=cast(str | None, r.get("setting_role")),
+                    approvers=r["approvers"],
+                    levels=levels,
+                    test_account=str(r.get("module_id") or "") in tested,
+                    tool=str(r["name"]),
+                )
+                out.append(
+                    r
+                    | {
+                        "requires_approval": ans["waits"],
+                        "answer": ans["answer"],
+                        "reviewer_role": ans["reviewerRole"],
+                        "source": ans["source"],
+                    }
+                )
+            rows = out
+        if write_approvals is not None:
+            tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
+            rows = [r | {"test_account": str(r.get("module_id") or "") in tested} for r in rows]
+        data = [
+            GrantableOperation.model_validate(
+                {k: v for k, v in r.items() if k not in ("setting", "setting_role")}
+            ).model_dump(by_alias=True)
+            for r in rows
+        ]
         return JSONResponse({"success": True, "data": data})
 
     @app.get("/v1/tools/{name}", tags=["gateway"], responses=error_responses())

@@ -839,7 +839,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           );
           t.enabled = patch.enabled;
         }
-        if (patch.requiresApproval !== undefined && patch.requiresApproval !== o.requiresApproval) {
+        if (patch.requiresApproval != null && patch.requiresApproval !== o.requiresApproval) {
           changes.push({ operation: o.name, kind: 'settings', detail: patch.requiresApproval ? 'Every call waits for an approval' : 'Calls no longer wait for a person', major: !patch.requiresApproval });
           o.requiresApproval = patch.requiresApproval;
           t.requiresReview = patch.requiresApproval;

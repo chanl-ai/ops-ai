@@ -17,6 +17,8 @@ export function SettingsPageLayout({ section, description, actions, sample, chil
       icon={Settings}
       title={section ?? 'Settings'}
       description={description ?? 'Members, notifications, integrations and usage for the current team'}
+      // A page that says whether its data is sample overrides the area's guess, so live data carries no Preview badge.
+      preview={sample === undefined ? undefined : sample}
       actions={actions && sample ? <SampleDataGate>{actions}</SampleDataGate> : actions}
     >
       <div className="flex min-w-0 flex-col gap-4">

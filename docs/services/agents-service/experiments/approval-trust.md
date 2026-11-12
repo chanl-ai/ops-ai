@@ -17,7 +17,7 @@ input hash agrees with RFC 8785, and a money review cannot be approved twice by 
 | HMAC today, KMS later | `HmacSigner` implements `Signer`; a KMS adapter replaces it without callers changing. Approval tokens stay JWTs because OPA verifies them |
 | Step-up key derived per purpose | HMAC of the review key with `"step-up"`: an approval token never verifies as a step-up |
 | Dev step-up | `POST /v1/auth/step-up` checks the demo password and mints for the caller; the console's mock sign-in calls it when chat or cases point at the agents service |
-| Self-approval | Workflow reviews refuse the requester (the process principal); two-approver money refuses a repeated approver. Chat self-approval is `allow_self_approval_in_chat`, default on: an owner decision is pending, and uc-002 keeps the asker approving |
+| Self-approval | Workflow reviews refuse the requester (the process principal); two-approver money refuses a repeated approver. Chat self-approval follows `requesterMayDecide`, off by default: the asker does not approve their own write unless a team admin turns it on |
 
 ## Tests, each watched to fail
 

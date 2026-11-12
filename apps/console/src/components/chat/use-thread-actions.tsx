@@ -37,6 +37,14 @@ export function useThreadActions(threadId: string | undefined, thread: ReturnTyp
     try {
       const target = thread.data?.messages.find((m) => m.id === messageId)?.widgets?.find((x) => x.id === widgetId);
       const money = action.type === 'approve' && target?.kind === 'approval' && !!target.stepUp;
+      if (target?.kind === 'approval' && target.askFirst && action.type !== 'submit') {
+        // The person's own answer before their app changes something: the chat's widget route, which remembers
+        // Allow for this chat; the resumed reply comes back with the thread.
+        await widgetAction.mutateAsync({ threadId, messageId, widgetId, action });
+        await thread.refetch();
+        toast.success(action.type === 'reject' ? 'Denied. Nothing was changed.' : action.forChat ? 'Allowed for the rest of this chat' : 'Allowed');
+        return;
+      }
       if (target?.kind === 'approval' && action.type !== 'submit') {
         // The decision goes to Reviews' route; the card's new state comes back with the thread.
         await stepUp.withStepUp(

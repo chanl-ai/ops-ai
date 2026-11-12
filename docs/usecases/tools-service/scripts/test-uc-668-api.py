@@ -89,7 +89,7 @@ with ExitStack() as stack:
     done = gw.post(
         "/v1/sign-ins/complete", json={"state": back.get("state", ""), "code": back.get("code", "")}, headers=priya
     )
-    # A new app hands agents its read tools only; the team admin adds the write, as from the app's Tools tab.
+    # A new app has every tool on; adding the write again is how an admin restores one turned off.
     added = gw.post(f"/v1/apps/plugin:{PLUGIN}/tools", json={"tools": ["salesforce_save_records"]}, headers=priya)
     check(
         "setup: Salesforce is on for the team, signed in as Dana, with Save records together added",

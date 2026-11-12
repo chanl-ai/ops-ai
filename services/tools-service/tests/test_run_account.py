@@ -12,6 +12,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_identity import dev_service_signer, mint_service_token
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id
 from ops_store import isolation
@@ -24,6 +25,7 @@ from ops_tools.store.modules import ModuleStore
 from .conftest import build_app, opa_client, service_headers
 from .fake_upstream import ENDPOINT, HOST, SlowAware, fake_bank
 from .test_calls import bank_module
+from .test_write_approval_gateway import TeamAsksReviewer
 
 ACCOUNT = {"accountId": "CHQ-2219"}
 HOLD = {"accountId": "CHQ-2219", "hours": 24}
@@ -63,7 +65,7 @@ Call = Any
 
 @pytest.fixture
 def gateway_on(engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]):
-    async def made(accounts: tuple[str, ...]) -> AsyncIterator[Call]:
+    async def made(accounts: tuple[str, ...], approvals: Any = None) -> AsyncIterator[Call]:
         await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
         suffix = new_id("x")[2:8].lower()
         await EgressStore(engine).add(tenant, "host", HOST, actor="test", note="", at=datetime.now(UTC))
@@ -73,7 +75,7 @@ def gateway_on(engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_t
             opa_client() as opa,
             httpx.AsyncClient(transport=SlowAware(httpx.ASGITransport(app=bank))) as upstream,
         ):
-            app = build_app(engine, seed, tenant, opa=opa, upstream=upstream)
+            app = build_app(engine, seed, tenant, opa=opa, upstream=upstream, write_approvals=approvals)
             hooks = {"response": [response_checker(app)]}
             async with (
                 app.router.lifespan_context(app),
@@ -102,13 +104,22 @@ async def test_a_test_run_on_an_app_with_only_its_live_account_reads_with_that_a
         assert r.status_code == 200 and r.json()["data"]["ok"] is True, r.text
 
 
-async def test_a_test_runs_write_on_the_live_account_waits_for_a_person(gateway_on: Any) -> None:
+async def test_a_test_runs_write_on_the_live_account_follows_the_rules_a_live_one_does(gateway_on: Any) -> None:
+    # The app's "Ask before changes" asks the person in chat; the gateway adds no hold of its own for a test run.
     async for call in gateway_on(("live",)):
-        held = await call("place_hold", HOLD, "test", "w1")
-        assert held.status_code == 403, held.text
-        assert held.json()["error"]["details"]["reasons"] == ["write needs an approval token"], held.text
+        tested = await call("place_hold", HOLD, "test", "w1")
+        assert tested.status_code == 200 and tested.json()["data"]["ok"] is True, tested.text
         live = await call("place_hold", HOLD, "live", "w2")
         assert live.status_code == 200 and live.json()["data"]["ok"] is True, live.text
+
+
+async def test_a_write_on_the_test_account_never_waits_whatever_the_team_holds(gateway_on: Any) -> None:
+    # A test account changes nothing real: a team that has every write wait still lets it run, and a live one waits.
+    async for call in gateway_on(("live", "sandbox"), TeamAsksReviewer()):
+        r = await call("place_hold", HOLD, "test", "w4")
+        assert r.status_code == 200 and r.json()["data"]["ok"] is True, r.text
+        live = await call("place_hold", HOLD, "live", "w5")
+        assert live.status_code == 403, live.text
 
 
 async def test_a_test_runs_write_on_the_sandbox_account_runs(gateway_on: Any) -> None:
@@ -122,3 +133,35 @@ async def test_a_live_run_never_signs_in_with_a_sandbox_account(gateway_on: Any)
         r = await call("get_account", ACCOUNT, "live", "r2")
         out = r.json()["data"]
         assert out["ok"] is False and out["output"]["error"]["code"] == "CONNECTION_NOT_SET", r.text
+
+
+@pytest.mark.parametrize(("accounts", "told"), [(("live", "sandbox"), True), (("live",), False)])
+async def test_agents_are_told_which_apps_write_to_a_test_account_so_chat_never_asks_there(  # noqa: PLR0917
+    engine: AsyncEngine,
+    seed: dict[str, Any],
+    tenant: str,
+    catalog_tools: list[dict[str, Any]],
+    accounts: tuple[str, ...],
+    told: bool,
+) -> None:
+    # The grantable operations say whether the app has a test account for the team: a test run's write there changes
+    # nothing real, so agents-service does not ask the person first; an app with only its live account still asks.
+    await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
+    suffix = new_id("x")[2:8].lower()
+    await EgressStore(engine).add(tenant, "host", HOST, actor="test", note="", at=datetime.now(UTC))
+    await _module_on(engine, tenant, suffix, accounts)
+    async with opa_client() as opa:
+        app = build_app(engine, seed, tenant, opa=opa, write_approvals=TeamAsksReviewer())
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as c,
+        ):
+            team = bank_module(tenant, suffix)["team_id"]
+            token = mint_service_token(
+                dev_service_signer(), service="agents", audience="tools", tenant_id=tenant, team_id=team,
+                scopes=["tools:view"],
+            )  # fmt: skip
+            r = await c.get("/v1/grantable-operations", headers={"Authorization": f"Bearer {token}"})
+            assert r.status_code == 200, r.text
+            row = next(o for o in r.json()["data"] if o["name"] == f"place_hold_{suffix}")
+    assert row["testAccount"] is told, row

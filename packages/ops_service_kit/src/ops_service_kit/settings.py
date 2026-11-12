@@ -477,7 +477,7 @@ class Settings(BaseSettings):
     dev_user_name: str = "James Richardson"
     dev_user_email: str = "j.richardson@harborpine.example"
     # Dev only: the access policies the dev caller's identity carries, as a platform token would, e.g.
-    # OPS_DEV_POLICIES='{"requesterMayDecide": false}'. Empty: every policy at its open default.
+    # OPS_DEV_POLICIES='{"requesterMayDecide": true}'. Empty: every policy at its default.
     dev_policies: dict[str, Any] = Field(default_factory=dict[str, Any])
 
     @field_validator("embedding_width")
