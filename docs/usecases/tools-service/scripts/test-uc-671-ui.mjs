@@ -4,6 +4,7 @@
 // only one test chat's connectors. Screenshots at 1280 light and 390 dark go to
 // evidenceDir('671', 'uc'). SAM_THREAD names a chat of Sam's that the salesforce-off-for-team script left, for its card.
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -50,13 +51,14 @@ async function stopFake(fake) {
   clearTimeout(timer);
 }
 
-/** A person's browser through the fake's sign-in page: reached by address with the sign-in host named in Host, as the fake's own sign_in does. */
+/** A person's browser through the fake's sign-in page: reached by address with the sign-in host named in Host and in SNI, trusting the fake's own certificate (`sf.ca`), whose names include the sign-in host. */
 function fakeSignIn(sf, authorizeUrl, username) {
   const url = new URL(authorizeUrl);
   const at = new URL(sf.control);
+  const ca = readFileSync(sf.ca);
   const send = (method, body) =>
     new Promise((resolve, reject) => {
-      const req = httpsRequest({ host: at.hostname, port: at.port, path: url.pathname + url.search, method, rejectUnauthorized: false, headers: { Host: url.hostname, ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } : {}) } }, (res) => {
+      const req = httpsRequest({ host: at.hostname, port: at.port, path: url.pathname + url.search, method, ca, servername: url.hostname, headers: { Host: url.hostname, ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } : {}) } }, (res) => {
         res.resume();
         res.on('end', () => resolve(res));
       });

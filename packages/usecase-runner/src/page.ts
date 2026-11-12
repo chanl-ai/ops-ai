@@ -90,11 +90,16 @@ export function parsePage(text: string, path: string): Page {
   return page;
 }
 
+/** `text` matched literally inside a regular expression: an id comes from the command line. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** The page whose use case table names `id` (`| Id | \`uc-676\` |`), searched one folder deep under docs/usecases. */
 export function findPage(root: string, id: string): string | undefined {
   const base = join(root, 'docs/usecases');
   if (!existsSync(base)) return undefined;
-  const mark = new RegExp(`^\\| Id \\| \`${id}\` \\|`, 'm');
+  const mark = new RegExp(`^\\| Id \\| \`${escapeRegExp(id)}\` \\|`, 'm');
   for (const area of readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
     for (const name of readdirSync(join(base, area)).filter((n) => n.endsWith('.md')).sort()) {
       const path = join('docs/usecases', area, name);

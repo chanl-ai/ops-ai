@@ -64,7 +64,13 @@ export function savedOptions(name?: string): Partial<Config> {
         refreshToken: p.refreshToken,
         onRenew: (accessToken, refreshToken) => {
           const fresh = JSON.parse(n.m.fs.readFileSync(file, 'utf8')) as SavedFile;
-          Object.assign((fresh.profiles ??= {})[chosen] ?? {}, { accessToken, refreshToken });
+          // Only a profile the file already holds as its own key: a name such as __proto__ never reaches Object.prototype.
+          const profiles = fresh.profiles ?? {};
+          if (!Object.prototype.hasOwnProperty.call(profiles, chosen)) return;
+          const held = profiles[chosen];
+          if (!held) return;
+          held.accessToken = accessToken;
+          held.refreshToken = refreshToken;
           n.m.fs.writeFileSync(file, JSON.stringify(fresh, null, 2), { mode: 0o600 });
         },
       };
