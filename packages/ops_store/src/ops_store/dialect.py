@@ -15,6 +15,7 @@ portability check refuses it outside this package.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
@@ -305,6 +306,109 @@ class _Contains(ColumnElement[bool]):
 @compiles(_Contains)
 def _contains(e: _Contains, c: SQLCompiler, **kw: Any) -> str:
     return f"CONTAINS({c.process(e.column, **kw)}, {c.process(e.words, **kw)})"
+
+
+# JSON fields --------------------------------------------------------------------------------------------------------
+
+_JSON_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _checked_key(key: str) -> sa.ColumnElement[Any]:
+    """The key as a SQL literal; it names a field in code, never a request value, and is refused if it is not a
+    plain identifier."""
+    if not _JSON_KEY.fullmatch(key):
+        raise ValueError(f"ops_store.dialect: {key!r} is not a plain JSON field name")
+    return sa.literal_column(f"'{key}'")
+
+
+class json_text(FunctionElement[str]):  # noqa: N801
+    """A top-level scalar field of a JSON column as text, NULL when absent: `->>` on PostgreSQL, JSON_VALUE on SQL
+    Server. A boolean reads 'true' on both and '1' on SQLite, so test it with `IN ('true', '1')`."""
+
+    type = sa.String()
+    inherit_cache = True
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str) -> None:
+        super().__init__(column, _checked_key(key))
+
+
+class json_fragment(FunctionElement[str]):  # noqa: N801
+    """A top-level array or object field of a JSON column as JSON text, NULL when absent."""
+
+    type = sa.String()
+    inherit_cache = True
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str) -> None:
+        super().__init__(column, _checked_key(key))
+
+
+def _key_of(e: FunctionElement[Any]) -> str:
+    return str(e.clauses.clauses[1].name).strip("'")  # pyright: ignore[reportAttributeAccessIssue]
+
+
+@compiles(json_text, "postgresql")
+def _json_text_pg(e: json_text, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    return f"({c.process(col, **kw)} ->> {c.process(key, **kw)})"
+
+
+@compiles(json_text, "mssql")
+def _json_text_mssql(e: json_text, c: SQLCompiler, **kw: Any) -> str:
+    return f"JSON_VALUE({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}')"
+
+
+@compiles(json_text)
+def _json_text_other(e: json_text, c: SQLCompiler, **kw: Any) -> str:
+    return f"CAST(json_extract({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}') AS TEXT)"
+
+
+@compiles(json_fragment, "postgresql")
+def _json_fragment_pg(e: json_fragment, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    return f"CAST(({c.process(col, **kw)} -> {c.process(key, **kw)}) AS TEXT)"
+
+
+@compiles(json_fragment, "mssql")
+def _json_fragment_mssql(e: json_fragment, c: SQLCompiler, **kw: Any) -> str:
+    return f"JSON_QUERY({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}')"
+
+
+@compiles(json_fragment)
+def _json_fragment_other(e: json_fragment, c: SQLCompiler, **kw: Any) -> str:
+    return f"json_extract({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}')"
+
+
+class json_array_has(ColumnElement[bool]):  # noqa: N801
+    """Rows whose JSON array field `key` holds the string `value`."""
+
+    inherit_cache = True
+    # Not Boolean: SQL Server has no boolean type, so a Boolean-typed element in a WHERE is rendered `<it> = 1`,
+    # which is invalid when `<it>` is an EXISTS condition.
+    type = sa.types.NullType()
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str, value: str) -> None:
+        self.column, self.key = column, _checked_key(key)
+        self.value = sa.bindparam(None, value, type_=sa.String())
+
+
+@compiles(json_array_has, "postgresql")
+def _has_pg(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
+    col, key, val = c.process(e.column, **kw), c.process(e.key, **kw), c.process(e.value, **kw)
+    return f"jsonb_exists((CAST({col} AS JSONB) -> {key}), {val})"
+
+
+@compiles(json_array_has, "mssql")
+def _has_mssql(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
+    key = str(e.key.name).strip("'")  # pyright: ignore[reportAttributeAccessIssue]
+    col, val = c.process(e.column, **kw), c.process(e.value, **kw)
+    return f"EXISTS (SELECT 1 FROM OPENJSON({col}, '$.{key}') WHERE value = {val})"
+
+
+@compiles(json_array_has)
+def _has_other(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
+    key = str(e.key.name).strip("'")  # pyright: ignore[reportAttributeAccessIssue]
+    col, val = c.process(e.column, **kw), c.process(e.value, **kw)
+    return f"EXISTS (SELECT 1 FROM json_each({col}, '$.{key}') WHERE value = {val})"
 
 
 # Vectors ----------------------------------------------------------------------------------------------------------

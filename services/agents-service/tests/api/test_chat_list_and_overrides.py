@@ -6,14 +6,19 @@ from __future__ import annotations
 
 import base64
 import json
+import re
+from dataclasses import replace
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.dialects import mssql, mysql, postgresql, sqlite
 
 from ops_agents.api.deps import Runtime
 from ops_agents.api.runs import graph_store
+from ops_agents.store.chat_list import ChatListQuery, facet_queries, page_queries
 from ops_agents.store.chat_search import matching_query
+from ops_agents.store.graphs import GraphStore
 from ops_agents.store.tenancy import tenant_scope
 from tests.api.test_chat import new_thread, send
 from tests.api.test_chat_attachments import Rig
@@ -107,6 +112,55 @@ async def test_a_pinned_chat_leads_the_list_however_many_newer_chats_there_are(
     assert sorted(seen) == sorted(made) and len(seen) == len(set(seen))
 
 
+async def test_a_page_read_does_not_load_every_thread(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = stack
+    made = [(await new_thread(client))["id"] for _ in range(12)]
+
+    async def every_thread(*_a: Any, **_k: Any) -> list[dict[str, Any]]:
+        raise AssertionError("the list read every thread to serve one page")
+
+    monkeypatch.setattr(GraphStore, "threads", every_thread)
+    page = (await client.get("/chat/threads", params={"pageSize": 5})).json()["data"]
+    assert [t["id"] for t in page["data"]] == made[:6:-1]
+    assert page["pagination"]["total"] == 12 and page["nextCursor"]
+
+
+async def test_chats_pinned_or_answered_while_paging_are_neither_skipped_nor_repeated(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    client, _ = stack
+    made = [(await new_thread(client))["id"] for _ in range(36)]
+    first = (await client.get("/chat/threads", params={"pageSize": 10})).json()["data"]
+    seen = [t["id"] for t in first["data"]]
+    cursor = first["nextCursor"]
+    # Two chats already on the screen change: one is pinned, one is answered. Both move to the top.
+    assert (await client.patch(f"/chat/threads/{seen[3]}", json={"pinned": True})).status_code == 200
+    await send(client, seen[6], {"content": QUESTION})
+    created = (await new_thread(client))["id"]
+    while cursor:
+        page = (await client.get("/chat/threads", params={"pageSize": 10, "cursor": cursor})).json()["data"]
+        seen += [t["id"] for t in page["data"]]
+        cursor = page.get("nextCursor")
+    assert len(seen) == len(set(seen))
+    assert set(seen) == set(made) and created not in seen
+
+
+async def test_the_sidebar_slice_keeps_recent_chats_beside_more_than_thirty_pinned(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    client, _ = stack
+    made = [(await new_thread(client))["id"] for _ in range(36)]
+    for tid in made[:31]:
+        assert (await client.patch(f"/chat/threads/{tid}", json={"pinned": True})).status_code == 200
+    res = await client.get("/chat/threads", params={"pageSize": 30, "recent": 5, "state": ["active", "pinned"]})
+    rows = res.json()["data"]["data"]
+    assert [t["pinned"] for t in rows] == [True] * 30 + [False] * 5
+    assert [t["id"] for t in rows[30:]] == made[:30:-1]  # the five newest unpinned chats
+
+
 async def test_sorting_by_last_message_is_the_plain_sort_with_no_pinned_first(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
 ) -> None:
@@ -180,3 +234,28 @@ def test_search_reads_plain_columns_on_every_dialect() -> None:
             sql = str(matching_query("wire").compile(dialect=dialect)).lower()
         assert "json" not in sql and "->" not in sql and "#>>" not in sql, (dialect.name, sql)
         assert "chat_search.questions" in sql
+
+
+def test_every_chat_list_statement_is_valid_transact_sql() -> None:
+    """Azure SQL refuses a condition compared with 0 or 1, and a GROUP BY on an expression holding bound parameters
+    (error 8120). Compiled whole, for each list shape, as the server would receive them."""
+    q = ChatListQuery(
+        graph="chat",
+        owner_email="a@b.c",
+        owner_name="A",
+        states=["pinned"],
+        agents=["x"],
+        kbs=["k1", "k2"],
+        search="wire",
+    )
+    with tenant_scope("acme"):
+        statements: list[Any] = []
+        for variant in (q, replace(q, pinned=True), replace(q, pinned=False), replace(q, test=True)):
+            statements += [s for s in page_queries(variant, limit=10, after=([1, "t"], "id")) if s is not None]
+            statements += list(facet_queries(variant).values())
+        sqls = [str(s.compile(dialect=mssql.dialect())) for s in statements]
+    for sql in sqls:
+        assert ") = 0" not in sql and ") = 1" not in sql, sql
+    for sql in sqls:
+        for part in sql.split("GROUP BY")[1:]:
+            assert re.fullmatch(r"\s*anon_\d+\.\w+\s*", part), part
