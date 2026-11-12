@@ -20,7 +20,7 @@ import type { SearchHit } from '@/lib/types/search';
 /** Sub-pages that are not in the sidebar but are worth jumping to; one with a `flag` shows only while the install turns it on. */
 const EXTRA_PAGES: (PalettePage & { flag?: FlagName; needs?: NavNeed })[] = [
   // Connecting an assistant is the MCP channel of Deployments, so the page entry opens that tab.
-  { title: 'Connect your assistant', href: '/channels/mcp', area: 'Build', section: 'Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway', needs: { area: 'deployments', action: 'view' } },
+  { title: 'Connect your assistant', href: '/build/channels/mcp', area: 'Build', section: 'Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway', needs: { area: 'deployments', action: 'view' } },
   { title: 'Gate policies', href: '/settings/policies/gates', area: 'Govern', section: 'Policies', icon: IconShieldCheck, needs: SETTINGS_VIEW },
 ];
 
@@ -93,12 +93,12 @@ export function HeaderSearch() {
         }
       },
     },
-    { id: 'new-workflow', label: 'New workflow', icon: Route, keywords: 'create add', run: () => go('/workflows?create=1') },
-    { id: 'new-agent', label: 'New agent', icon: Bot, keywords: 'create add', run: () => go('/agents?create=1') },
-    { id: 'generate-skill', label: 'Generate skill', icon: Sparkles, keywords: 'create add skill procedure sop draft ai', run: () => go('/skills?create=generate') },
-    { id: 'new-skill', label: 'New skill', icon: Sparkles, keywords: 'create add blank skill procedure', run: () => go('/skills?create=1') },
-    { id: 'connect-system', label: 'Connect a system', icon: Cable, keywords: 'integration connection oauth sharepoint servicenow salesforce credential', run: () => go('/integrations?tab=catalog') },
-    { id: 'connect-mailbox', label: 'Connect mailbox', icon: Mail, keywords: 'email inbox deployment outlook', run: () => go('/channels/email/connect') },
+    { id: 'new-workflow', label: 'New workflow', icon: Route, keywords: 'create add', run: () => go('/build/workflows?create=1') },
+    { id: 'new-agent', label: 'New agent', icon: Bot, keywords: 'create add', run: () => go('/build/agents?create=1') },
+    { id: 'generate-skill', label: 'Generate skill', icon: Sparkles, keywords: 'create add skill procedure sop draft ai', run: () => go('/build/skills?create=generate') },
+    { id: 'new-skill', label: 'New skill', icon: Sparkles, keywords: 'create add blank skill procedure', run: () => go('/build/skills?create=1') },
+    { id: 'connect-system', label: 'Connect a system', icon: Cable, keywords: 'integration connection oauth sharepoint servicenow salesforce credential', run: () => go('/data/connectors?tab=catalog') },
+    { id: 'connect-mailbox', label: 'Connect mailbox', icon: Mail, keywords: 'email inbox deployment outlook', run: () => go('/build/channels/email/connect') },
     ...(pathname.startsWith('/chat') ? [] : [newChat]),
     { id: 'switch-team', label: 'Switch team', icon: Users, keywords: 'team change', opens: 'teams' },
   ];

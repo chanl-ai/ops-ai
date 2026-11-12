@@ -71,7 +71,7 @@ export function UserMessage({ message, onEdit, disabled }: { message: ChatMessag
   return (
     <div className="flex flex-col items-end gap-1">
       {message.attachments?.map((a) => (
-        <Link key={a.fileId} href={`/files/${encodeURIComponent(a.fileId)}`} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground underline-offset-2 hover:underline" data-testid="chat-message-attachment">
+        <Link key={a.fileId} href={`/data/files/${encodeURIComponent(a.fileId)}`} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground underline-offset-2 hover:underline" data-testid="chat-message-attachment">
           <Paperclip className="size-3" /> {a.name} · {bytes(a.size)}
         </Link>
       ))}

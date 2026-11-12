@@ -57,7 +57,7 @@ export const caseRecordColumns: ColumnDef<CaseRecord>[] = [
     filterFn: wordsFilterFn<CaseRecord>(['subject', 'customerName', 'customerId']),
     header: ({ column }) => <DataTableColumnHeader column={column} title="Case" />,
     cell: ({ row }) => (
-      <Link href={`/cases/${row.original.id}`} className="block min-w-52 hover:underline" data-testid="case-row-link">
+      <Link href={`/work/cases/${row.original.id}`} className="block min-w-52 hover:underline" data-testid="case-row-link">
         <span className="font-medium">{row.original.subject}</span>
         <span className="block font-mono text-xs text-muted-foreground">{row.original.id}</span>
       </Link>

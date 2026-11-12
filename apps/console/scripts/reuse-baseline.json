@@ -1,12 +1,12 @@
 {
   "rawTable": [
-    "src/app/document-types/[id]/page.tsx",
-    "src/app/model-risk/[id]/page.tsx",
+    "src/app/data/document-types/[id]/page.tsx",
+    "src/app/govern/models/[id]/page.tsx",
     "src/app/settings/team/notifications/page.tsx",
     "src/app/settings/workspace/storage/page.tsx",
-    "src/app/skills/[id]/_parts/activity-tab.tsx",
-    "src/app/skills/[id]/_parts/tests-tab.tsx",
-    "src/app/skills/[id]/_parts/used-by-tab.tsx",
+    "src/app/build/skills/[id]/_parts/activity-tab.tsx",
+    "src/app/build/skills/[id]/_parts/tests-tab.tsx",
+    "src/app/build/skills/[id]/_parts/used-by-tab.tsx",
     "src/components/agents/agent-publish-review-body.tsx",
     "src/components/agents/agent-tools-table.tsx",
     "src/components/agents/template-review-body.tsx",
@@ -56,7 +56,7 @@
   "dialogColumns": [
     "src/app/settings/account/security/page.tsx",
     "src/app/settings/workspace/storage/page.tsx",
-    "src/app/workflows/runs/[runId]/page.tsx",
+    "src/app/build/runs/[runId]/page.tsx",
     "src/components/chat/widgets.tsx",
     "src/components/deployments/deployment-sheet.tsx",
     "src/components/deployments/mcp/endpoint-panel.tsx",

@@ -11,7 +11,7 @@ export function StartedBy({ run, testId }: { run: Pick<EngineRun, 'createdBy' | 
   const s = run.startedBy;
   if (s?.kind === 'run' && s.runId)
     return (
-      <Link href={`/workflows/runs/${encodeURIComponent(s.runId)}`} className="underline-offset-4 hover:underline" title={s.name} data-testid={testId} onClick={(e) => e.stopPropagation()}>
+      <Link href={`/build/runs/${encodeURIComponent(s.runId)}`} className="underline-offset-4 hover:underline" title={s.name} data-testid={testId} onClick={(e) => e.stopPropagation()}>
         {s.name}
       </Link>
     );
@@ -27,7 +27,7 @@ export function StartedBy({ run, testId }: { run: Pick<EngineRun, 'createdBy' | 
   if (raw.startsWith('run:')) {
     const runId = raw.slice(4);
     return (
-      <Link href={`/workflows/runs/${encodeURIComponent(runId)}`} className="underline-offset-4 hover:underline" data-testid={testId} onClick={(e) => e.stopPropagation()}>
+      <Link href={`/build/runs/${encodeURIComponent(runId)}`} className="underline-offset-4 hover:underline" data-testid={testId} onClick={(e) => e.stopPropagation()}>
         Another workflow's run
       </Link>
     );

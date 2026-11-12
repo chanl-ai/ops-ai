@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "Every page's address names its area",
+  "description": "Pages now live under their area: /work, /build, /data and /govern, so /agents is /build/agents and Tools sits in Data at /data/tools. Old links and bookmarks still work: they send you to the new address.",
+  "tag": "improved"
+}

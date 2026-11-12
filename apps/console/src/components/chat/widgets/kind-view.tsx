@@ -572,7 +572,7 @@ function EmailKind({ node }: { node: Extract<KindNode, { type: 'email' }> }) {
       html={node.html}
       attachments={node.attachments?.map((a) => ({
         name: a.name,
-        href: a.fileId ? `/files/${encodeURIComponent(a.fileId)}` : undefined,
+        href: a.fileId ? `/data/files/${encodeURIComponent(a.fileId)}` : undefined,
         type: a.type,
         size: a.size,
       }))}

@@ -83,7 +83,7 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
       if (run.status === 'failed' || run.status === 'cancelled') return setError(`The read stopped (${run.status}). Open run ${run.runId} for the step that failed.`);
       const said = READ_OUTCOME[run.status === 'waiting' || run.status === 'reading' ? run.status : (run.outcome ?? '')] ?? `Finished with outcome ${run.outcome ?? 'none'}`;
       // Top centre: the default corner sits over the fields the read just filled.
-      toast.success(`Read ${fileName}`, { position: 'top-center', description: said, action: { label: 'Open run', onClick: () => router.push(`/workflows/runs/${encodeURIComponent(run.runId)}`) } });
+      toast.success(`Read ${fileName}`, { position: 'top-center', description: said, action: { label: 'Open run', onClick: () => router.push(`/build/runs/${encodeURIComponent(run.runId)}`) } });
       onOpenChange(false);
       onDone(run);
     } catch (e) {

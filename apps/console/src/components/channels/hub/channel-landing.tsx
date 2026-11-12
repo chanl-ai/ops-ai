@@ -22,7 +22,7 @@ export function ChannelLanding({ type, summary, week, sources, action }: { type:
   const built = summary?.built ?? false;
   const state = !built ? 'Coming soon' : HEALTH_WORD[summary?.health ?? 'idle'];
   const variant = !built || state === 'Not set up' ? 'outline' : summary?.health === 'warn' || summary?.health === 'error' ? 'destructive' : 'secondary';
-  const activityHref = `/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', k.title]])}`;
+  const activityHref = `/govern/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', k.title]])}`;
   return (
     <Card className="gap-4" data-testid={`channel-landing-${type}`}>
       <CardHeader className="flex flex-row items-start gap-3">

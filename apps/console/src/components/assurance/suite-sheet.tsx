@@ -47,7 +47,7 @@ export function SuiteSheet({ suite, open, onOpenChange, navigation }: { suite: A
                     </div>
                     <p className="mt-1 text-muted-foreground">{d.input}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      From <Link className="underline underline-offset-2" href={`/reviews?review=${d.reviewId}`}>{d.reviewId}</Link> by {d.createdBy} · {relativeTime(d.createdAt)}
+                      From <Link className="underline underline-offset-2" href={`/work/tasks?review=${d.reviewId}`}>{d.reviewId}</Link> by {d.createdBy} · {relativeTime(d.createdAt)}
                       {d.reason ? ` · “${d.reason}”` : ''}
                     </p>
                   </li>

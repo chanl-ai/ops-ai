@@ -138,7 +138,7 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
   const router = useRouter();
   // A person who has joined opens their own page: what they can do and which role grants it.
   const rows = React.useMemo(
-    () => (query.data?.data ?? []).map((m) => ({ ...m, onRowClick: m.userId ? () => router.push(`/access/people/${encodeURIComponent(m.userId!)}`) : undefined })),
+    () => (query.data?.data ?? []).map((m) => ({ ...m, onRowClick: m.userId ? () => router.push(`/govern/access/people/${encodeURIComponent(m.userId!)}`) : undefined })),
     [query.data, router],
   );
   const cols = React.useMemo(() => columns(canManage, showTeam, (m) => setAction({ kind: 'role', rows: [m] }), (m) => setAction({ kind: 'remove', rows: [m] })), [canManage, showTeam]);

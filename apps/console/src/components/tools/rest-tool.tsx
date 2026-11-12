@@ -175,7 +175,7 @@ export function RestTool(p: RestToolProps) {
           {p.stagedCall && <span className="text-xs text-warning-text">Saved; Real runs the published call until you publish.</span>}
         </span>
       }
-      backHref={`/tools/${p.moduleId}`}
+      backHref={`/data/tools/${p.moduleId}`}
       tabs={p.tabs}
       badge={<AccessBadge access={op.access} />}
       actions={

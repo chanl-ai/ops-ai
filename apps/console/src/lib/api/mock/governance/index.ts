@@ -187,7 +187,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
             reason: input.reason.trim() || undefined,
           };
           grants.unshift(g);
-          log({ owner: w.owner, action: 'granted', target: { type: 'access_grant', name: `${w.name} → ${input.resource}`, href: '/access?tab=grants' }, summary: `Granted ${scopeLabel(input.scope).toLowerCase()} access`, diff: [{ field: 'Scope', after: scopeLabel(input.scope) }, { field: 'Expires', after: `In ${input.expiresInDays} days` }], reason: g.reason });
+          log({ owner: w.owner, action: 'granted', target: { type: 'access_grant', name: `${w.name} → ${input.resource}`, href: '/govern/access?tab=grants' }, summary: `Granted ${scopeLabel(input.scope).toLowerCase()} access`, diff: [{ field: 'Scope', after: scopeLabel(input.scope) }, { field: 'Expires', after: `In ${input.expiresInDays} days` }], reason: g.reason });
           return { ...strip(g), status: statusOf(g) };
         }),
       revoke: (ids, reason) =>
@@ -197,7 +197,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
             if (i < 0) return 'Not found';
             if (!inTeam(grants[i].owner)) return 'Belongs to another team';
             const [g] = grants.splice(i, 1);
-            log({ owner: g.owner, action: 'revoked', target: { type: 'access_grant', name: `${g.workflowName} → ${g.resource}`, href: '/access?tab=grants' }, summary: `Revoked ${scopeLabel(g.scope).toLowerCase()} access`, diff: [{ field: 'Status', before: 'Active', after: 'Revoked' }], reason });
+            log({ owner: g.owner, action: 'revoked', target: { type: 'access_grant', name: `${g.workflowName} → ${g.resource}`, href: '/govern/access?tab=grants' }, summary: `Revoked ${scopeLabel(g.scope).toLowerCase()} access`, diff: [{ field: 'Status', before: 'Active', after: 'Revoked' }], reason });
           }),
         ),
       extend: (ids, days) =>
@@ -211,7 +211,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
             log({
               owner: g.owner,
               action: 'edited',
-              target: { type: 'access_grant', name: `${g.workflowName} → ${g.resource}`, href: '/access?tab=grants' },
+              target: { type: 'access_grant', name: `${g.workflowName} → ${g.resource}`, href: '/govern/access?tab=grants' },
               summary: wasExpired ? `Reactivated access for ${days} days` : `Extended access by ${days} days`,
               diff: [
                 ...(wasExpired ? [{ field: 'Status', before: 'Expired', after: 'Active' }] : []),
@@ -231,7 +231,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
           const r: RoleAssignment = { id: id('role'), principal: input.principal, principalKind: input.principalKind, members: input.principalKind === 'group' ? 3 + (input.principal.length % 9) : 1, teamId, team: teamName(teamId), capabilities: input.capabilities, addedBy: me, addedAt: new Date().toISOString() };
           roles.unshift(r);
           const owner = teamDirectory.all().find((t) => t.id === teamId)?.ownerGroups[0];
-          log({ owner, action: 'granted', target: { type: 'role', name: `${r.principal} · ${r.team}`, href: '/access?tab=roles' }, summary: `Can ${r.capabilities.join(', ')} in ${r.team}`, diff: [{ field: 'Capabilities', after: r.capabilities.join(', ') }] });
+          log({ owner, action: 'granted', target: { type: 'role', name: `${r.principal} · ${r.team}`, href: '/govern/access?tab=roles' }, summary: `Can ${r.capabilities.join(', ')} in ${r.team}`, diff: [{ field: 'Capabilities', after: r.capabilities.join(', ') }] });
           return r;
         }),
       removeRoles: (ids) =>
@@ -243,7 +243,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
             if (r.capabilities.includes('publish') && !roles.some((x) => x.id !== r.id && !ids.includes(x.id) && x.teamId === r.teamId && x.capabilities.includes('publish'))) return `Last publisher in ${r.team}`;
             roles.splice(i, 1);
             const owner = teamDirectory.all().find((t) => t.id === r.teamId)?.ownerGroups[0];
-            log({ owner, action: 'revoked', target: { type: 'role', name: `${r.principal} · ${r.team}`, href: '/access?tab=roles' }, summary: `Removed ${r.capabilities.join(', ')}`, diff: [{ field: 'Capabilities', before: r.capabilities.join(', '), after: 'None' }] });
+            log({ owner, action: 'revoked', target: { type: 'role', name: `${r.principal} · ${r.team}`, href: '/govern/access?tab=roles' }, summary: `Removed ${r.capabilities.join(', ')}`, diff: [{ field: 'Capabilities', before: r.capabilities.join(', '), after: 'None' }] });
           }),
         ),
       options: () =>

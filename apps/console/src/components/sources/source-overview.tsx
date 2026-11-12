@@ -79,13 +79,13 @@ export function SourceOverview({
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 text-sm text-muted-foreground">
               <span>No knowledge base reads this source yet.</span>
               <Button asChild size="sm" variant="outline">
-                <Link href="/knowledge">Open knowledge bases</Link>
+                <Link href="/data/knowledge">Open knowledge bases</Link>
               </Button>
             </div>
           ) : (
             <Rows>
               {s.readers.map((k) => (
-                <Row key={k.id} href={`/knowledge/${k.id}`} leading={<KbDot color={k.color} />} title={k.name} description={<span className="font-mono">{k.slug}</span>} trailing={<KbHealthBadge health={k.health} />} />
+                <Row key={k.id} href={`/data/knowledge/${k.id}`} leading={<KbDot color={k.color} />} title={k.name} description={<span className="font-mono">{k.slug}</span>} trailing={<KbHealthBadge health={k.health} />} />
               ))}
             </Rows>
           )}

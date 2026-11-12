@@ -20,7 +20,7 @@ export function useListParams<F extends Record<string, string[] | undefined>>(
   const [pagination, setPagination] = React.useState<PaginationState>({ page: 1, pageSize });
   const [search, setSearch] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
-  // A page linked with its filters in the URL (`/activity?kind=email`) asks for them on its first read; pass the same
+  // A page linked with its filters in the URL (`/govern/activity?kind=email`) asks for them on its first read; pass the same
   // filters to the table as `initialColumnFilters` so its facets show them chosen.
   const [filters, setFilters] = React.useState<F>(initialFilters ?? ({} as F));
 

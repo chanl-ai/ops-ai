@@ -60,9 +60,9 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
   if (file.isPending) return <RecordSkeleton />;
   if (file.isError)
     return (
-      <PageLayout icon={FileSearch} title="File" backHref="/files">
+      <PageLayout icon={FileSearch} title="File" backHref="/data/files">
         {(file.error as { status?: number }).status === 404 ? (
-          <EmptyState icon={SearchX} title="File not found" description="It may have been deleted, or it belongs to another team." action={{ label: 'Back to files', href: '/files' }} />
+          <EmptyState icon={SearchX} title="File not found" description="It may have been deleted, or it belongs to another team." action={{ label: 'Back to files', href: '/data/files' }} />
         ) : (
           <QueryError what="this file" onRetry={() => file.refetch()} retrying={file.isFetching} error={file.error} />
         )}
@@ -72,13 +72,13 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
   const f = file.data;
   const rows = extractions.data?.data ?? [];
   const latest = rows.find((r) => r.status === 'done' || r.status === 'unreadable') ?? null;
-  const base = `/files/${encodeURIComponent(f.id)}`;
+  const base = `/data/files/${encodeURIComponent(f.id)}`;
   const blocked = f.scan.status === 'clean' ? undefined : f.scan.status === 'pending' ? 'Still being scanned' : 'Not cleared by the scan';
   const fieldCount = latest?.schema?.length ?? 0;
   return (
     <PageLayout
       icon={fileIcon(f.name)}
-      backHref="/files"
+      backHref="/data/files"
       title={f.name}
       badge={readBadge(f.data, latest, textRead.data) ? <span className="text-xs text-muted-foreground" data-testid="read-as">{readBadge(f.data, latest, textRead.data)}</span> : <ReadAs data={f.data} compact />}
       tabs={
@@ -107,7 +107,7 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
         <Alert className="mb-4" data-testid="file-last-run">
           <AlertDescription className="block">
             Read by{' '}
-            <Link href={`/workflows/runs/${encodeURIComponent(lastRun)}`} className="font-medium underline underline-offset-2" data-testid="file-last-run-link">
+            <Link href={`/build/runs/${encodeURIComponent(lastRun)}`} className="font-medium underline underline-offset-2" data-testid="file-last-run-link">
               run {lastRun}
             </Link>
             {lastRunNote({ waiting, reading, why: waitReason(latest), done: !!latest })}

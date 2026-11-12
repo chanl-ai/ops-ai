@@ -339,7 +339,7 @@ export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; se
                   <div key={x.id} className="flex items-start gap-3 rounded-lg border bg-card p-3" data-testid="guardrail-pin">
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
                       <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                        <Link href={`/guardrails/${x.id}`} className="underline-offset-2 hover:underline" data-testid="guardrail-pin-link">
+                        <Link href={`/build/guardrails/${x.id}`} className="underline-offset-2 hover:underline" data-testid="guardrail-pin-link">
                           {x.name}
                         </Link>
                         {version !== undefined && published(x).length > 1 ? (
@@ -575,7 +575,7 @@ export function UsedInCard({ agent }: { agent: Agent }) {
           <ul className="flex flex-col gap-2">
             {agent.usedIn.map((u) => (
               <li key={u.workflowId}>
-                <Link href={`/workflows/${u.workflowId}`} className="group flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm hover:bg-muted/40">
+                <Link href={`/build/workflows/${u.workflowId}`} className="group flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm hover:bg-muted/40">
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{u.workflowName}</span>
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">

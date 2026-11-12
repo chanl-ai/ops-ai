@@ -10,7 +10,7 @@ import { RecordSkeleton } from '@/components/shared/record-skeleton';
 export default function OldSecretsPage() {
   const router = useRouter();
   React.useEffect(() => {
-    router.replace('/integrations/credentials?tab=secrets');
+    router.replace('/data/secrets?tab=secrets');
   }, [router]);
   return (
     <PageLayout title="Opening Credentials">

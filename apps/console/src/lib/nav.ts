@@ -65,8 +65,8 @@ export const CONNECTORS = 'Connectors';
 /** Mine's one name, on the sidebar row, its page title and the avatar menu. */
 export const MY_CONNECTORS = 'My connectors';
 export const CONNECTOR_VIEWS: NavChild[] = [
-  { title: 'Mine', url: '/integrations/my-accounts', icon: IconUserCheck },
-  { title: 'Team setup', url: '/integrations', icon: IconPlugConnected },
+  { title: 'Mine', url: '/settings/account/connectors', icon: IconUserCheck },
+  { title: 'Team setup', url: '/data/connectors', icon: IconPlugConnected },
 ];
 
 /** The four areas the sidebar shows one at a time, in the order the header offers them and ⌘1 to ⌘4 reach them. */
@@ -90,11 +90,11 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Overview', url: '/', icon: IconHome, needs: OVERVIEW_NEEDS[0], or: OVERVIEW_NEEDS.slice(1) },
       // The team's customer issues, with their deadlines and timelines; workflow runs are under Workflows.
-      { title: 'Cases', url: '/cases', icon: IconMail, needs: cell('cases', 'view') },
+      { title: 'Cases', url: '/work/cases', icon: IconMail, needs: cell('cases', 'view') },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
-      { title: 'Human Tasks', url: '/reviews', icon: IconUserCheck, needs: cell('reviews', 'view') },
+      { title: 'Human Tasks', url: '/work/tasks', icon: IconUserCheck, needs: cell('reviews', 'view') },
       // Connectors, Mine: a person's own sign-ins. Its row is in the user menu; the entry stays so the page has an area.
-      { title: MY_CONNECTORS, url: '/integrations/my-accounts', icon: IconUserCheck, hidden: true, views: CONNECTOR_VIEWS },
+      { title: MY_CONNECTORS, url: '/settings/account/connectors', icon: IconUserCheck, hidden: true, views: CONNECTOR_VIEWS },
       // The sidebar draws this as New chat and the Chats group; All chats lists every conversation the person has had.
       { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, hidden: true, needs: cell('chat', 'run'), children: [{ title: 'All chats', url: '/chat/conversations', icon: IconHistory }] },
     ],
@@ -102,27 +102,28 @@ export const NAV: NavGroup[] = [
   {
     label: 'Build',
     items: [
-      { title: 'Agents', url: '/agents', icon: IconRobot, needs: cell('agents', 'view'), also: ['/prompt-blocks'] },
-      { title: 'Workflows', tabTitle: 'All workflows', url: '/workflows', icon: IconRoute, tabIcon: IconList, needs: cell('workflows', 'view'), children: [{ title: 'Runs', url: '/workflows/runs', icon: IconPlayerPlay }] },
+      { title: 'Agents', url: '/build/agents', icon: IconRobot, needs: cell('agents', 'view'), also: ['/prompt-blocks'] },
+      { title: 'Workflows', tabTitle: 'All workflows', url: '/build/workflows', icon: IconRoute, tabIcon: IconList, needs: cell('workflows', 'view'), children: [{ title: 'Runs', url: '/build/runs', icon: IconPlayerPlay }] },
       // Where workflows hear from outside: the mailboxes an Email received trigger watches.
-      { title: 'Channels', url: '/channels', icon: IconInbox, needs: cell('deployments', 'view'), also: ['/deployments'] },
-      { title: 'Skills', url: '/skills', icon: IconSparkles, needs: cell('skills', 'view') },
-      { title: 'Guardrails', url: '/guardrails', icon: IconShield, needs: cell('guardrails', 'view') },
-      { title: 'Widgets', url: '/widgets', icon: IconLayoutDashboard, needs: cell('widgets', 'view') },
-      { title: 'Tools', url: '/tools', icon: IconTool, needs: cell('tools', 'view') },
+      { title: 'Channels', url: '/build/channels', icon: IconInbox, needs: cell('deployments', 'view'), also: ['/deployments'] },
+      { title: 'Skills', url: '/build/skills', icon: IconSparkles, needs: cell('skills', 'view') },
+      { title: 'Guardrails', url: '/build/guardrails', icon: IconShield, needs: cell('guardrails', 'view') },
+      { title: 'Widgets', url: '/build/widgets', icon: IconLayoutDashboard, needs: cell('widgets', 'view') },
     ],
   },
   {
     label: 'Data',
     items: [
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
-      { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase, needs: cell('knowledge', 'view'), also: ['/sources', '/wiki'] },
+      { title: 'Knowledge bases', url: '/data/knowledge', icon: IconDatabase, needs: cell('knowledge', 'view'), also: ['/sources', '/data/wiki'] },
       // Connectors, Team setup (the catalog); an app's auth configs are on its own page.
-      { title: CONNECTORS, url: '/integrations', icon: IconPlugConnected, needs: cell('connections', 'view'), views: CONNECTOR_VIEWS, also: ['/tools/connections'] },
-      { title: 'Secrets', url: '/integrations/credentials', icon: IconKey, needs: cell('secrets_egress', 'view') },
+      { title: CONNECTORS, url: '/data/connectors', icon: IconPlugConnected, needs: cell('connections', 'view'), views: CONNECTOR_VIEWS, also: ['/data/tools/connections'] },
+      // Every tool the team can use (owner, 12 November: tools sit with the data and apps they reach).
+      { title: 'Tools', url: '/data/tools', icon: IconTool, needs: cell('tools', 'view') },
+      { title: 'Secrets', url: '/data/secrets', icon: IconKey, needs: cell('secrets_egress', 'view') },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports).
-      { title: 'Files', url: '/files', icon: IconFolder, needs: cell('files', 'view') },
-      { title: 'Document types', url: '/document-types', icon: IconFileText, needs: cell('documents', 'view') },
+      { title: 'Files', url: '/data/files', icon: IconFolder, needs: cell('files', 'view') },
+      { title: 'Document types', url: '/data/document-types', icon: IconFileText, needs: cell('documents', 'view') },
     ],
   },
   // Oversight is its own job (risk, audit, platform admins), separate from building agents or curating data.
@@ -130,14 +131,14 @@ export const NAV: NavGroup[] = [
     label: 'Govern',
     items: [
       // The one Activity list; tool calls keep their own page until they are an Activity kind.
-      { foldedAtStart: true, title: 'Activity', tabTitle: 'Everything', url: '/activity', needs: ACTIVITY, icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', needs: TOOL_CALL_LOG, icon: IconTool }, { title: 'Audit log', url: '/logs/audit', needs: AUDIT_LOG, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', needs: BACKGROUND, icon: IconHeartbeat }] },
+      { foldedAtStart: true, title: 'Activity', tabTitle: 'Everything', url: '/govern/activity', needs: ACTIVITY, icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/govern/activity/tool-calls', needs: TOOL_CALL_LOG, icon: IconTool }, { title: 'Audit log', url: '/govern/activity/audit', needs: AUDIT_LOG, icon: IconFileSearch }, { title: 'Background', url: '/govern/activity/background', needs: BACKGROUND, icon: IconHeartbeat }] },
       // Every review of every team, past and present; Human Tasks under Work is the queue waiting for the person.
-      { title: 'Reviews', url: '/reviews/all', icon: IconChecklist, needs: cell('reviews', 'view'), also: ['/reviews/policies'] },
-      { foldedAtStart: true, title: 'Access', tabTitle: 'Members', url: '/access', needs: cell('access', 'view'), icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/access/tool-access', icon: IconKey }] },
+      { title: 'Reviews', url: '/govern/reviews', icon: IconChecklist, needs: cell('reviews', 'view'), also: ['/work/tasks/policies'] },
+      { foldedAtStart: true, title: 'Access', tabTitle: 'Members', url: '/govern/access', needs: cell('access', 'view'), icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/govern/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/govern/access/tool-access', icon: IconKey }] },
       // Any member reads the policies; the row is for who sets up the workspace, as Settings is.
-      { title: 'Policies', url: '/policies', icon: IconGavel, needs: SETTINGS_VIEW, or: [cell('access', 'manage')] },
+      { title: 'Policies', url: '/govern/policies', icon: IconGavel, needs: SETTINGS_VIEW, or: [cell('access', 'manage')] },
       // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
-      { foldedAtStart: true, title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, tabIcon: IconChecklist, needs: cell('agents', 'decide'), children: [{ title: 'Model inventory', url: '/model-risk', icon: IconCpu }] },
+      { foldedAtStart: true, title: 'Evals', tabTitle: 'Suites', url: '/govern/evals', icon: IconShieldCheck, tabIcon: IconChecklist, needs: cell('agents', 'decide'), children: [{ title: 'Model inventory', url: '/govern/models', icon: IconCpu }] },
       // A team admin who lacks settings: view still reaches the team's settings through access: manage.
       { title: 'Settings', url: '/settings', icon: IconSettings, needs: SETTINGS_VIEW, or: [cell('access', 'manage')], also: ['/account'] },
     ],

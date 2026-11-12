@@ -34,7 +34,7 @@ export function TemplateSubmissionBody({ review }: { review: Review }) {
           {ts.note && <p className="mt-2 text-sm">“{ts.note}”</p>}
           <p className="mt-2 text-xs text-muted-foreground">
             {ts.category} · from{' '}
-            <Link href={`/agents/${ts.sourceAgentId}`} className="underline underline-offset-2">
+            <Link href={`/build/agents/${ts.sourceAgentId}`} className="underline underline-offset-2">
               {ts.sourceAgentName} v{ts.sourceVersion}
             </Link>{' '}
             · {ts.submittedTeam} · submitted by {ts.submittedBy}

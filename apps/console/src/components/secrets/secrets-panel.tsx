@@ -66,7 +66,7 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
             <div className="flex min-w-48 flex-wrap gap-1" data-testid={`secret-users-${row.original.name}`}>
               {row.original.usedBy.slice(0, USED_BY_SHOWN).map((u) => (
                 <Badge key={`${u.moduleId}:${u.operation}`} variant="outline" asChild className="font-mono font-normal">
-                  <Link href={`/tools/${u.moduleId}/operations/${encodeURIComponent(u.operation)}`} title={`${u.moduleName}${u.staged ? ', staged edit' : ''}`}>
+                  <Link href={`/data/tools/${u.moduleId}/operations/${encodeURIComponent(u.operation)}`} title={`${u.moduleName}${u.staged ? ', staged edit' : ''}`}>
                     {u.operation}
                     {u.staged && <span className="font-sans text-warning-text">staged</span>}
                   </Link>
@@ -88,7 +88,7 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
           // Held by its auth config, which signs in with it: changed there, never here.
           <StopRowClick align="start">
             <Badge variant="outline" asChild className="font-normal" data-testid={`secret-auth-config-${row.original.name}`}>
-              <Link href={`/integrations/credentials/${encodeURIComponent(row.original.authConfig.id)}`} title="Change it on this auth config">
+              <Link href={`/data/secrets/${encodeURIComponent(row.original.authConfig.id)}`} title="Change it on this auth config">
                 Auth config · {row.original.authConfig.name}
               </Link>
             </Badge>

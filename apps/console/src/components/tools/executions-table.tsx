@@ -20,7 +20,7 @@ const link = 'underline-offset-4 hover:underline';
 
 /** Where a call's run is shown: its workflow's runs, or, for a call an agent made in chat, the chat thread. */
 function runHref(c: ToolCallRow): string | undefined {
-  if (c.workflowId) return `/workflows/${c.workflowId}?tab=runs`;
+  if (c.workflowId) return `/build/workflows/${c.workflowId}?tab=runs`;
   if (c.runId.startsWith('th_')) return `/chat/${c.runId}`;
   return undefined;
 }

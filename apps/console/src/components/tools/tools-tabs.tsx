@@ -7,10 +7,10 @@ export function ToolsTabs() {
   return (
     <RouteTabs
       tabs={[
-        { href: '/tools', label: 'All tools', testId: 'tools-tab-all' },
-        { href: '/tools?kind=app', label: 'App tools', testId: 'tools-tab-app' },
-        { href: '/tools?kind=custom', label: 'Custom tools', testId: 'tools-tab-custom' },
-        { href: '/tools/calls', label: 'Logs', testId: 'tools-tab-logs' },
+        { href: '/data/tools', label: 'All tools', testId: 'tools-tab-all' },
+        { href: '/data/tools?kind=app', label: 'App tools', testId: 'tools-tab-app' },
+        { href: '/data/tools?kind=custom', label: 'Custom tools', testId: 'tools-tab-custom' },
+        { href: '/govern/activity/tool-calls', label: 'Logs', testId: 'tools-tab-logs' },
       ]}
     />
   );

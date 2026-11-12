@@ -93,7 +93,7 @@ export function ThreadMessages({
               readOnly={readOnly || isLive}
               noAnswerHint={
                 kbIds[0] && (
-                  <Link href={`/knowledge/${kbIds[0]}?tab=playground`} className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+                  <Link href={`/data/knowledge/${kbIds[0]}?tab=playground`} className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
                     See what retrieval found in the playground
                   </Link>
                 )

@@ -16,18 +16,18 @@ export function createGovernanceHttp(get: Get, send: Send, qs: (p: ListParams & 
       get: (id) => get(`/logs/tool-calls/${id}`),
     },
     audit: {
-      list: (p) => get(`/logs/audit?${qs(p)}`),
+      list: (p) => get(`/govern/activity/audit?${qs(p)}`),
     },
     access: {
-      identities: (p) => get(`/access/identities?${qs(p)}`),
-      grants: (p) => get(`/access/grants?${qs(p)}`),
-      grant: (i) => send('POST', '/access/grants', i),
-      revoke: (ids, reason) => send('POST', '/access/grants/revoke', { ids, reason }),
-      extend: (ids, days) => send('POST', '/access/grants/extend', { ids, days }),
-      roles: (p) => get(`/access/roles?${qs(p)}`),
-      assignRole: (i) => send('POST', '/access/roles', i),
-      removeRoles: (ids) => send('POST', '/access/roles/delete', { ids }),
-      options: () => get('/access/options'),
+      identities: (p) => get(`/govern/access/identities?${qs(p)}`),
+      grants: (p) => get(`/govern/access/grants?${qs(p)}`),
+      grant: (i) => send('POST', '/govern/access/grants', i),
+      revoke: (ids, reason) => send('POST', '/govern/access/grants/revoke', { ids, reason }),
+      extend: (ids, days) => send('POST', '/govern/access/grants/extend', { ids, days }),
+      roles: (p) => get(`/govern/access/roles?${qs(p)}`),
+      assignRole: (i) => send('POST', '/govern/access/roles', i),
+      removeRoles: (ids) => send('POST', '/govern/access/roles/delete', { ids }),
+      options: () => get('/govern/access/options'),
     },
   };
 }

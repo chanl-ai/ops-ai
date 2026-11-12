@@ -10,7 +10,7 @@ export function createActivityHttp(get: Get): ActivityApi {
       for (const k of kind ?? []) q.append('kind', k);
       for (const s of status ?? []) q.append('status', s);
       for (const s of source ?? []) q.append('source', s);
-      return get(`/activity?${q}`);
+      return get(`/govern/activity?${q}`);
     },
     background: () => get('/background'),
   };

@@ -64,7 +64,7 @@ export function ReviewPanel({ major, versions, drift, onRequest, canRequest }: {
               {drift && <p className="text-sm text-warning-text">The MCP server now lists tools that are not in the reviewed snapshot. The gateway refuses them until a re-review.</p>}
               {current.status === 'in_review' && (
                 <Button asChild size="sm" variant="outline" className="self-start">
-                  <Link href={`/reviews?review=${current.reviewId}`}>Open in Human Tasks</Link>
+                  <Link href={`/work/tasks?review=${current.reviewId}`}>Open in Human Tasks</Link>
                 </Button>
               )}
               {current.finding && (
@@ -102,7 +102,7 @@ export function ReviewPanel({ major, versions, drift, onRequest, canRequest }: {
                   leading={<x.icon className={`size-4 ${x.cls}`} />}
                   title={`Major ${v.major} · v${v.version}`}
                   description={`${x.label}${v.reviewer ? ` by ${v.reviewer}` : ''}${v.requestedAt ? ` · ${shortDate(v.requestedAt)}` : ''}`}
-                  href={`/reviews?review=${v.reviewId}`}
+                  href={`/work/tasks?review=${v.reviewId}`}
                 />
               );
             })}

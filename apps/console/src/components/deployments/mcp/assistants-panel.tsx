@@ -60,10 +60,10 @@ export function AssistantsPanel({ assistants, total }: { assistants: ConnectedAs
         )}
       </CardContent>
       <CardFooter className="justify-between gap-2 text-sm">
-        <Link href="/access" className="underline underline-offset-2">
+        <Link href="/govern/access" className="underline underline-offset-2">
           Who may run what →
         </Link>
-        <Link href="/tools/calls" className="text-muted-foreground underline underline-offset-2">
+        <Link href="/govern/activity/tool-calls" className="text-muted-foreground underline underline-offset-2">
           Tool calls →
         </Link>
       </CardFooter>

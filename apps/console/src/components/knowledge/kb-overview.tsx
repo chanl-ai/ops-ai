@@ -80,7 +80,7 @@ export function KbOverview({
             {kb.attached.map((l) => (
               <Row
                 key={l.sourceId}
-                href={`/integrations/sources/${l.sourceId}`}
+                href={`/data/sources/${l.sourceId}`}
                 leading={<SourceKindIcon kind={l.source.kind} />}
                 title={l.source.name}
                 description={`${plural(l.itemsContributed, 'item')}${l.rules.length ? ` · ${plural(l.rules.length, 'rule')}` : ''} · synced ${relativeTime(l.source.lastSyncAt)}`}

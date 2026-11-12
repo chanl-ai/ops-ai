@@ -62,7 +62,7 @@ function slaTurn(sla: QueueSla[]): TurnPlan {
             tool: 'sla_report',
             toolLabel: toolLabel('sla_report'),
             asOf,
-            href: '/cases',
+            href: '/work/cases',
             columns: [
               { key: 'queue', label: 'Queue' },
               { key: 'open', label: 'Open', align: 'right' },
@@ -123,7 +123,7 @@ function disputeTurn(reviewers: string): TurnPlan {
             tool: 'get_transactions',
             toolLabel: toolLabel('get_transactions'),
             asOf,
-            href: '/reviews?review=REV-3020',
+            href: '/work/tasks?review=REV-3020',
             fields: [
               { label: 'Merchant', value: 'Northline Electronics' },
               { label: 'Charges', value: '2 × $1,240.18, 41 seconds apart' },

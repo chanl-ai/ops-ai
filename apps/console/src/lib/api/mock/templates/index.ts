@@ -206,7 +206,7 @@ export function createTemplatesMock(deps: TemplatesDeps) {
       evidence: [],
       templateSubmission: req,
     });
-    auditSink.log({ action: 'created', target: { type: 'template', name: t.name, href: '/agents?tab=templates' }, summary: `Submitted ${a.name} v${a.version} as a template`, owner: sentBy });
+    auditSink.log({ action: 'created', target: { type: 'template', name: t.name, href: '/build/agents?tab=templates' }, summary: `Submitted ${a.name} v${a.version} as a template`, owner: sentBy });
     return t;
   }
 
@@ -241,12 +241,12 @@ export function createTemplatesMock(deps: TemplatesDeps) {
       if (ts.submittedBy === deps.me) throw new ApiError('You submitted this template. Someone else on the platform team must approve it.', 409);
       Object.assign(t, { status: 'published', ownerTeam: 'Platform', updatedAt: now, versions: [{ ...t.versions[0], publishedAt: now, publishedBy: deps.me }] });
       Object.assign(r, { status: 'approved', decidedAt: now, decisionReason: input.reason, assignee: deps.me, approvals: [deps.me] });
-      auditSink.log({ action: 'published', target: { type: 'template', name: t.name, href: '/agents?tab=templates' }, summary: `Published template ${t.name} v1`, owner: ts.submittedTeam, reason: input.reason });
+      auditSink.log({ action: 'published', target: { type: 'template', name: t.name, href: '/build/agents?tab=templates' }, summary: `Published template ${t.name} v1`, owner: ts.submittedTeam, reason: input.reason });
       return fresh(r);
     }
     t.status = 'rejected';
     Object.assign(r, { status: input.decision, decidedAt: now, decisionReason: input.reason, assignee: r.assignee ?? deps.me });
-    auditSink.log({ action: 'rejected', target: { type: 'template', name: t.name, href: '/agents?tab=templates' }, summary: `${input.decision === 'rejected' ? 'Rejected' : 'Returned'} template ${t.name}`, owner: ts.submittedTeam, reason: input.reason });
+    auditSink.log({ action: 'rejected', target: { type: 'template', name: t.name, href: '/build/agents?tab=templates' }, summary: `${input.decision === 'rejected' ? 'Rejected' : 'Returned'} template ${t.name}`, owner: ts.submittedTeam, reason: input.reason });
     return fresh(r);
   }
 

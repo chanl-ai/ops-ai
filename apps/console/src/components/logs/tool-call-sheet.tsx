@@ -67,10 +67,10 @@ export function ToolCallSheet({
                 ...(c.runAs?.kind === 'person' || c.runAs?.kind === 'team'
                   ? ([['As', c.runAs.kind === 'person' ? (c.runAs.email ?? 'A person’s own account') : 'Team account']] as [string, ReactNode][])
                   : []),
-                ['Workflow', <Link key="w" href={`/workflows/${c.workflowId}`} className="underline-offset-4 hover:underline">{c.workflowName}</Link>],
+                ['Workflow', <Link key="w" href={`/build/workflows/${c.workflowId}`} className="underline-offset-4 hover:underline">{c.workflowName}</Link>],
                 ['Agent', c.agentName],
-                ['Run', <Link key="r" href={`/workflows/${c.workflowId}?tab=runs`} className="font-mono text-xs underline-offset-4 hover:underline">{c.runId}</Link>],
-                ...(c.caseId ? ([['Case', <Link key="c" href={`/cases/${c.caseId}`} className="font-mono text-xs underline-offset-4 hover:underline">{c.caseId}</Link>]] as [string, ReactNode][]) : []),
+                ['Run', <Link key="r" href={`/build/workflows/${c.workflowId}?tab=runs`} className="font-mono text-xs underline-offset-4 hover:underline">{c.runId}</Link>],
+                ...(c.caseId ? ([['Case', <Link key="c" href={`/work/cases/${c.caseId}`} className="font-mono text-xs underline-offset-4 hover:underline">{c.caseId}</Link>]] as [string, ReactNode][]) : []),
                 ...(call?.identity ? ([['Identity', <code key="i" className="font-mono text-xs">{call.identity}</code>]] as [string, ReactNode][]) : []),
                 ...(c.step ? ([['Step', <code key="s" className="font-mono text-xs">{c.step}</code>]] as [string, ReactNode][]) : []),
                 ...(c.status === 'error' ? ([['Failed', failureWords(c.errorCode, c.errorMessage)], ...(c.errorCode ? [['Error code', <code key="e" className="font-mono text-xs">{c.errorCode}</code>]] : [])] as [string, ReactNode][]) : []),
@@ -87,7 +87,7 @@ export function ToolCallSheet({
                 ['Approval', <ApprovalCell key="a" approval={c.approval} />],
                 ...(c.approval.tokenId ? ([['Token', <code key="t" className="font-mono text-xs">{c.approval.tokenId}</code>]] as [string, ReactNode][]) : []),
                 ...(c.approval.at ? ([['Approved at', dateTime(c.approval.at)]] as [string, ReactNode][]) : []),
-                ...(c.approval.reviewId ? ([['Review', <Link key="rv" href={`/reviews?review=${c.approval.reviewId}`} className="underline-offset-4 hover:underline">{c.approval.reviewId}</Link>]] as [string, ReactNode][]) : []),
+                ...(c.approval.reviewId ? ([['Review', <Link key="rv" href={`/work/tasks?review=${c.approval.reviewId}`} className="underline-offset-4 hover:underline">{c.approval.reviewId}</Link>]] as [string, ReactNode][]) : []),
                 [
                   'Policy',
                   call?.policy ? (

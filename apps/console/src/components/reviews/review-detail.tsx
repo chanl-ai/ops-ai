@@ -67,11 +67,11 @@ function PublishRequestBody({ review }: { review: Review }) {
       )}
       <p className="text-xs text-muted-foreground">
         Approving publishes v{p.toVersion}. Deployments keep serving the version they are on until moved.{' '}
-        <Link href={`/workflows/definitions/${encodeURIComponent(review.workflowId)}`} className="underline underline-offset-2">
+        <Link href={`/build/workflows/definitions/${encodeURIComponent(review.workflowId)}`} className="underline underline-offset-2">
           Open the workflow
         </Link>
         {' · '}
-        <Link href="/assurance?tab=gates" className="underline underline-offset-2" data-testid="open-gate-in-assurance">
+        <Link href="/govern/evals?tab=gates" className="underline underline-offset-2" data-testid="open-gate-in-assurance">
           Open gate in Assurance
         </Link>
       </p>
@@ -104,7 +104,7 @@ function ToolModuleReviewBody({ review }: { review: Review }) {
     <div className="flex flex-col gap-6" data-testid="tool-module-review">
       <Section title="Tool module">
         <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
-          <Link href={`/tools/${t.moduleId}`} className="text-sm font-medium underline underline-offset-2" data-testid="review-module-link">
+          <Link href={`/data/tools/${t.moduleId}`} className="text-sm font-medium underline underline-offset-2" data-testid="review-module-link">
             {review.workflowName}
           </Link>
           <p className="mt-2 text-xs text-muted-foreground">
@@ -192,13 +192,13 @@ function WorkflowStepBody({ review, edits, onEdit, checks }: { review: Review; e
       )}
       <p className="text-xs text-muted-foreground">
         Paused by{' '}
-        <Link href={`/workflows/${review.workflowId}`} className="underline underline-offset-2">
+        <Link href={`/build/workflows/${review.workflowId}`} className="underline underline-offset-2">
           {review.workflowName}
         </Link>
         {review.caseId && (
           <>
             {' '}on case{' '}
-            <Link href={`/cases/${review.caseId}`} className="underline underline-offset-2" data-testid="review-case-link">
+            <Link href={`/work/cases/${review.caseId}`} className="underline underline-offset-2" data-testid="review-case-link">
               {review.caseId}
             </Link>
           </>
@@ -324,8 +324,8 @@ export function ReviewDetailBody({
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Paused by the <Link href="/policies" className="underline underline-offset-2" data-testid="review-gate-link">{policy.name}</Link> gate in{' '}
-          <Link href={`/workflows/${review.workflowId}`} className="underline underline-offset-2">
+          Paused by the <Link href="/govern/policies" className="underline underline-offset-2" data-testid="review-gate-link">{policy.name}</Link> gate in{' '}
+          <Link href={`/build/workflows/${review.workflowId}`} className="underline underline-offset-2">
             {review.workflowName}
           </Link>
           .

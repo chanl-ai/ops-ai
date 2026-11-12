@@ -123,9 +123,9 @@ test('SSO completes only in the tab that started it, with that tab’s flow key,
   // A code that reaches a tab which never started a round trip is refused before any call.
   await assert.rejects(provider.completeSso('leaked-code'), (e: unknown) => e instanceof AuthError && e.code === 'invalid_token');
   assert.equal(calls.length, 0);
-  const { redirectUrl } = await provider.startSso({ email: 'a@bank.test', next: '/reviews' });
+  const { redirectUrl } = await provider.startSso({ email: 'a@bank.test', next: '/work/tasks' });
   assert.equal(redirectUrl, 'http://idp/sso?x=1');
-  assert.deepEqual(calls[0], { path: '/v1/auth/sso/start', body: { email: 'a@bank.test', next: '/reviews' } });
+  assert.deepEqual(calls[0], { path: '/v1/auth/sso/start', body: { email: 'a@bank.test', next: '/work/tasks' } });
   const result = await provider.completeSso('code-1');
   assert.deepEqual(calls[1], { path: '/v1/auth/sso/complete', body: { code: 'code-1', flowKey: 'flow-key-1' } });
   assert.equal(result.status === 'signed_in' && result.session.authMethod, 'sso');

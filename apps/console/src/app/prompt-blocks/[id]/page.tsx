@@ -13,5 +13,5 @@ const SKILL_FOR_BLOCK: Record<string, string> = {
 export default async function PromptBlockPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const skill = SKILL_FOR_BLOCK[id];
-  redirect(skill ? `/skills/${skill}` : '/skills?view=always');
+  redirect(skill ? `/build/skills/${skill}` : '/build/skills?view=always');
 }

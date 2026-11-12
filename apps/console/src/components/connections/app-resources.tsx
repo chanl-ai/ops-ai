@@ -40,15 +40,15 @@ import { useModelAliases } from '@/hooks/queries';
 import { plural } from '@/lib/format';
 
 const COPY_HREF: Record<ResourceKind, string> = {
-  agent: '/agents',
-  skill: '/skills',
-  workflow: '/workflows',
-  document_type: '/document-types',
-  knowledge_source: '/knowledge/sources',
-  guardrail: '/guardrails',
+  agent: '/build/agents',
+  skill: '/build/skills',
+  workflow: '/build/workflows',
+  document_type: '/data/document-types',
+  knowledge_source: '/data/knowledge/sources',
+  guardrail: '/build/guardrails',
   // Case and task types have no page of their own; the cases page is where a team meets them.
-  case_type: '/cases',
-  task_type: '/cases',
+  case_type: '/work/cases',
+  task_type: '/work/cases',
 };
 const ICON: Record<ResourceKind, typeof Bot> = { agent: Bot, skill: Sparkles, workflow: Workflow, document_type: FileText, knowledge_source: Library, guardrail: ShieldCheck, case_type: Scale, task_type: ListChecks };
 const KIND: Record<ResourceKind, string> = {
@@ -61,7 +61,7 @@ const KIND: Record<ResourceKind, string> = {
   case_type: 'case type',
   task_type: 'task type',
 };
-const USER_HREF: Record<string, string> = { workflow: '/workflows', agent: '/agents' };
+const USER_HREF: Record<string, string> = { workflow: '/build/workflows', agent: '/build/agents' };
 
 const resourceOf = (r: { source: string; id: string }) => `${r.source}:${r.id}`;
 const hrefOf = (kind: ResourceKind, recordId: string) => `${COPY_HREF[kind]}/${recordId}`;

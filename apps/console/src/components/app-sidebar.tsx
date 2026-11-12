@@ -144,7 +144,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
   const allows = useNavAllows();
   const { current: area, ready: cellsReady, failed: cellsFailed, retry: retryCells } = useAreas();
-  const badges: Record<string, number | undefined> = { '/reviews': waiting };
+  const badges: Record<string, number | undefined> = { '/work/tasks': waiting };
 
   // One console page as a sidebar row, with its child pages as sub-rows under a fold.
   const navRow = (item: NavItem) => {

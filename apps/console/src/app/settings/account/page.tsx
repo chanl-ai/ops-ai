@@ -87,7 +87,7 @@ export default function AccountPage() {
             description={
               <>
                 Changed by a team admin in{' '}
-                <Link href="/access" className="underline underline-offset-4">
+                <Link href="/govern/access" className="underline underline-offset-4">
                   Access
                 </Link>
                 .

@@ -264,7 +264,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
     return { kind: 'none', reason: `No preview for ${e.toUpperCase()} files. Download it to open.` };
   };
 
-  const href = (f: Stored) => `/files?file=${f.id}`;
+  const href = (f: Stored) => `/data/files?file=${f.id}`;
   function auditLog(f: Stored, action: AuditEntry['action'], summary: string, diff: AuditEntry['diff'] = [], reason?: string) {
     auditSink.log({ action, target: { type: 'file', name: f.name, href: href(f) }, summary, diff, reason, owner: f.team === 'Platform' ? undefined : f.team });
   }
@@ -581,7 +581,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
           key = `${input.entryId}@${v}`;
           name = `evidence-${slug(e.name)}-v${v}.zip`;
           owner = e.owner;
-          ref = { type: 'evidence', id: input.entryId, name: `${e.name} v${v}`, href: `/model-risk/${input.entryId}` };
+          ref = { type: 'evidence', id: input.entryId, name: `${e.name} v${v}`, href: `/govern/models/${input.entryId}` };
         } else {
           const r = deps.review(input.reviewId) ?? notFound('Publish request');
           if (r.kind !== 'publish_request' && r.kind !== 'model_validation') throw new ApiError('Only publish requests and validations have evidence bundles.', 400);
@@ -589,7 +589,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
           const v = r.toVersion;
           name = `evidence-${slug(r.workflowName)}${v ? `-v${v}` : ''}-${r.id}.zip`;
           owner = r.owner;
-          ref = { type: 'evidence', id: r.id, name: `${r.workflowName}${v ? ` v${v}` : ''} · ${r.kind === 'publish_request' ? 'publish request' : 'validation'}`, href: `/reviews?review=${r.id}` };
+          ref = { type: 'evidence', id: r.id, name: `${r.workflowName}${v ? ` v${v}` : ''} · ${r.kind === 'publish_request' ? 'publish request' : 'validation'}`, href: `/work/tasks?review=${r.id}` };
         }
         guardTeam(owner, 'model');
         const existing = files.find((f) => f.sealKey === key);
