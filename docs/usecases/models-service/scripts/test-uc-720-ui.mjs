@@ -1,6 +1,6 @@
 // uc-720 A refused model call in chat says what went wrong with the provider and what to do, ui layer:
 // docs/usecases/models-service/a-refused-model-call-says-what-to-do.md. The run's demo stack: platform sign-in,
-// agents-service, models-service and the fake OpenAI, which refuses any credential but FAKE_OPENAI_KEY. Priya is an admin
+// agents-service, models-service and the fake OpenAI, which refuses any credential but FAKE_OPENAI_KEY. Wanjiru is an admin
 // who manages settings; Ravi is a viewer of Operations. Screenshots go to evidenceDir('720', 'uc-720').
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,7 +10,8 @@ import { AGENTS_PORT, MODELS_PORT, PLATFORM_PORT, check, chromium, consoleSignIn
 const models = `http://127.0.0.1:${MODELS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
-const PRIYA = 'p.shah@harborpine.example';
+// Wanjiru holds Admin and Security admin in every team and manages Settings > Model providers; Priya Shah is admin of Operations only.
+const WANJIRU = 'w.kamau@harborpine.example';
 const RAVI = 'r.menon@harborpine.example';
 const KEY = 'OPENAI';
 const WRONG = 'sk-not-the-fakes-key-7731';
@@ -18,9 +19,9 @@ const SHOTS = evidenceDir('720', 'uc-720');
 mkdirSync(SHOTS, { recursive: true });
 const signIn = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data;
 
-/** A new chat of the person's own with the first agent they may chat with, made through agents-service's API. */
+/** A new chat of the person's own (Wanjiru's console opens on Platform, so hers is made there) with the first agent they may chat with, made through agents-service's API. */
 async function thread(email) {
-  const H = { Authorization: `Bearer ${(await signIn(email)).token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+  const H = { Authorization: `Bearer ${(await signIn(email)).token}`, 'X-Team-Id': email === WANJIRU ? 'team_platform' : 'team_ops', 'Content-Type': 'application/json' };
   const listed = await (await fetch(`${agents}/chat/agents`, { headers: H })).json();
   const agent = listed.data?.[0];
   if (!agent) throw new Error(`${email} may chat with no agent: ${JSON.stringify(listed).slice(0, 300)}`);
@@ -58,8 +59,8 @@ async function shots(page, name) {
 
 await withUiStack(
   async (consoleUrl) => {
-    const priya = await signIn(PRIYA);
-    const N = { Authorization: `Bearer ${priya.token}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
+    const wanjiru = await signIn(WANJIRU);
+    const N = { Authorization: `Bearer ${wanjiru.token}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
     // The agents' default alias runs on openai-local; it now signs in with a key the fake refuses.
     const saved = await fetch(`${models}/v1/provider-keys/${KEY}`, { method: 'PUT', headers: N, body: JSON.stringify({ value: WRONG }) });
     const local = (await (await fetch(`${models}/v1/models/providers`, { headers: N })).json()).data.find((p) => p.id === 'openai-local');
@@ -69,8 +70,8 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
-      const admin = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
-      const said = await ask(admin, consoleUrl, PRIYA);
+      const admin = await consoleSignIn(browser, consoleUrl, WANJIRU, PASSWORD, errors);
+      const said = await ask(admin, consoleUrl, WANJIRU);
       const link = admin.getByRole('link', { name: 'Open Model providers' }).last();
       const href = await link.getAttribute('href', { timeout: 10_000 }).catch(() => null);
       check(

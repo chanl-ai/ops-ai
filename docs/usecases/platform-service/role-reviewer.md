@@ -17,7 +17,7 @@ password. No model is called.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya invites a builder and a reviewer (stored `approver`) | Both join team_ops |
+| 1 | Priya invites a builder and a reviewer (stored `approver`); the builder signs in again after the second accept | Both join team_ops; the second accept raises the permission version (D62), so the builder's first token is refused |
 | 2 | The builder asks to publish an agent | The request waits |
 | 3 | The reviewer approves it (ui: from Reviews) | Approved |
 | 4 | The reviewer creates or edits an agent (ui: opens it) | 403 each; the page says View only |

@@ -22,7 +22,7 @@ The script saves a wrong value for model provider key `OPENAI` as the account ad
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya, an admin who manages settings, asks the default agent a question in chat | The reply stops with "The model provider refused the account's key. Check or replace the key on Settings > Model providers." and an Open Model providers link; the wrong key's value is nowhere on the page |
+| 1 | Wanjiru, an admin who manages settings, asks the default agent a question in chat | The reply stops with "The model provider refused the account's key. Check or replace the key on Settings > Model providers." and an Open Model providers link; the wrong key's value is nowhere on the page |
 | 2 | She reloads the conversation | The same sentence and link |
 | 3 | Ravi, a viewer of Operations, asks the same in his own chat | "… Ask an admin to check the key on Settings > Model providers." and no link |
 | 4 | Both at 1440 and 390 wide | The same text; the page does not scroll sideways |

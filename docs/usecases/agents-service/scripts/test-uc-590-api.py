@@ -97,13 +97,15 @@ def main() -> None:
         # tools-service; kb() passes on what the environment holds when it starts.
         os.environ.update({**plugins(desk), "OPS_TOOLS_URL": tools_url})
         # documents-service reads the team's document type templates from this tools-service.
-        knowledge = stack.enter_context(kb(tmp / "kb", documents_env={**AUTH, "OPS_TOOLS_URL": tools_url}))
+        knowledge = stack.enter_context(kb(tmp / "kb", documents_env={**AUTH, "OPS_TOOLS_URL": tools_url}, env=AUTH))
         docs = stack.enter_context(httpx.Client(base_url=knowledge.documents_url, timeout=30))
         api = stack.enter_context(agents(gateway_url=tools_url, kb_url=str(knowledge.base_url).rstrip("/"), env=AUTH))
         OPS.update(bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops"))
         OTHER.update(bearer(signed_in(accounts, "w.kamau@harborpine.example"), "team_platform"))
         # 1. Priya turns the plugin on for team_ops; team_platform leaves it off.
         on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=OPS)
+        # A new app hands agents its read tools only; the team admin adds the write the agent template grants.
+        gw.post(f"/v1/apps/plugin:{PLUGIN}/tools", json={"tools": ["templates_close_case"]}, headers=OPS)
         check("1 the plugin is on for team_ops", on.status_code == 200, {"team": said(on)})
 
         # 2. team_ops sees the four templates, none installed; team_platform sees none.
@@ -323,12 +325,14 @@ def resource_stories(
     close-ticket skill, triage workflow whose agent step runs the ticket helper, ticket form, and help articles."""
     builder = bearer(signed_in(accounts, "j.richardson@harborpine.example"), "team_ops")
     viewer = bearer(signed_in(accounts, "r.menon@harborpine.example"), "team_ops")
-    # kb-service runs with dev sign-in: the team a call acts in is its X-Team-Id.
-    kb_ops, kb_other = {"X-Team-Id": "team_ops"}, {"X-Team-Id": "team_platform"}
+    # kb-service signs people in through platform-service, as tools-service asks it to for a source's host.
+    kb_ops, kb_other = OPS, OTHER
     made: list[tuple[httpx.Client, str]] = []
 
     # 40. Priya turns the desk on for team_ops; a viewer and a builder each see its four resources, none added.
     on = gw.put(f"/v1/apps/{DESK}/team", json={"enabled": True}, headers=OPS)
+    # The ticket helper is granted a write; the team admin adds it, as from the app's Tools tab.
+    gw.post(f"/v1/apps/{DESK}/tools", json={"tools": ["resources_close_ticket"]}, headers=OPS)
     seen = {who: rows(api, h) + rows(docs, h) for who, h in (("viewer", viewer), ("builder", builder))}
     check(
         "40 a viewer and a builder of the team each see the app's agent, skill, workflow and document type, none added",
@@ -344,10 +348,9 @@ def resource_stories(
     # 41. Each resource says its state in one word and whether the caller may add it: the viewer may not add the
     # agent, skill or workflow, and may add the document type, since every member keeps the team's document types.
     check(
-        "41 each resource reads available, and says the viewer may add only the document type while the builder may "
-        "add each",
+        "41 each resource reads available, and says the viewer may add none while the builder may add each",
         all(t.get("state") == "available" for s in seen.values() for t in s)
-        and all(t.get("canAdd") is (t.get("kind") == "document_type") for t in seen["viewer"])
+        and all(t.get("canAdd") is False for t in seen["viewer"])
         and all(t.get("canAdd") is True for t in seen["builder"]),
         {k: [{x: t.get(x) for x in ("id", "state", "canAdd")} for t in v] for k, v in seen.items()},
     )

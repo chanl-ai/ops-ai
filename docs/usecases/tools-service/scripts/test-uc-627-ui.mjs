@@ -139,6 +139,8 @@ try {
           const shown = ((await win.getByTestId('connect-window-config-place').innerText({ timeout: 30_000 })) ?? '').replace(/\s+/g, ' ');
           const asked = await win.getByTestId('connect-window-place-login_url').count();
           await shot(page, '3-connect-window', 1280);
+          // The window offers who signs in and defaults to each person; this use case connects the team's own login.
+          await win.locator('#who-shared').click();
           // Turn on saves the team's setting with the config; signing in is the saved state's Connect.
           const popup = await openSignIn(page);
           await popup.locator('input[name=username]').waitFor({ timeout: 60_000 });

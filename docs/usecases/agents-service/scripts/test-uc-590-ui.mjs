@@ -59,6 +59,8 @@ await withUiStack(
   async (consoleUrl) => {
     const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
     const team = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, priya, { enabled: true });
+    // A new app hands agents its read tools only; the team admin adds the write the agent template grants.
+    await call(tools, 'POST', `/v1/apps/${encodeURIComponent(APP)}/tools`, priya, { tools: ['templates_close_case'] });
     check('0 set-up: the templates desk is on for Operations', team.status === 200, { team: team.text });
 
     const browser = await chromium.launch();
@@ -110,6 +112,8 @@ await withUiStack(
       // Steps 70 to 76: the service desk.
       consoleUrlOf.url = consoleUrl;
       const desk = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(DESK)}/team`, priya, { enabled: true });
+      // A new app hands agents its read tools only; the team admin adds the write the agent template grants.
+      await call(tools, 'POST', `/v1/apps/${encodeURIComponent(DESK)}/tools`, priya, { tools: ['resources_close_ticket'] });
       check('69 set-up: the service desk is on for Operations', desk.status === 200, { desk: desk.text });
 
       const ravi = await signIn(browser, 'r.menon@harborpine.example');

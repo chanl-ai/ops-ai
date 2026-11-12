@@ -21,7 +21,7 @@ below its confidence floor. A team's AI steps are off until someone who may mana
 | uc-258 | With AI steps off, list step types and save a Classify workflow | Classify unavailable with the reason; the save is 422 `ai_steps_off` |
 | uc-258 | Priya turns AI steps on; run a fraud message and an unsure one | fraud leaves by `fraud` with confidence and reason; the unsure one by `otherwise` |
 | uc-258 | Save a wire from a category the step does not have | 422 `definition_checks` |
-| uc-259 | Summarise a note; summarise text the model answers outside the schema | the summary; the second leaves by `error` with `schema_error` after one call |
+| uc-259 | Summarise a note; summarise text the model answers outside the schema | the summary keeps the name and date and shows the account number masked (`account ••••`); with the team's `aiStepsMaskPersonalData` off the same run shows `account 4471`; the second leaves by `error` with `schema_error` after one call |
 | uc-260 | Extract from text with fields of the step's own | each field's value, null for one the text does not state |
 | uc-261 | Draft a reply | subject and body; the run sends nothing |
 | uc-262 | One workflow: Classify, then Summarise, Extract from text and Draft | each step's output on the run, ending on the category's branch |

@@ -7,7 +7,7 @@ Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api.
 | Needs | How |
 |---|---|
 | PostgreSQL | `make db-up` |
-| platform-service with its dev seed (James Richardson builder and Priya Shah admin of `team_ops`) | started by the script (`platform()`) |
+| platform-service with its dev seed (James Richardson builder, Priya Shah admin and Ravi Menon viewer of `team_ops`) | started by the script (`platform()`) |
 | files-service on its own chain, local backend, platform tokens, scanning `hook` | started by the script (`files(dir)`) |
 
 ## Steps and expected results
@@ -21,7 +21,7 @@ Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api.
 | 5 | A scanner posts `clean` to the scan hook with its service token | the file is `clean` |
 | 6 | He asks again and downloads | the same bytes, as an attachment |
 | 7 | He lists his own uploads | the file is there |
-| 8 | He places a legal hold | 403 |
+| 8 | Ravi, a viewer, places a legal hold (a builder holds `files.manage` since D59, so James would be allowed) | 403 |
 | 9 | Priya places it; James deletes | the hold is placed; delete answers 409 |
 | 10 | Priya releases it; James deletes and gets it | 204, then 404 |
 

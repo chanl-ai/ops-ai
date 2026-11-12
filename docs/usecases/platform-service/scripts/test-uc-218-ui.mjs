@@ -7,8 +7,9 @@ const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 
 await withUiStack(
   async (consoleUrl) => {
-    const builder = await invitePerson('p.shah@harborpine.example', `builder.${TAG}@harborpine.example`, 'builder');
+    // The builder is invited last: each accept raises the permission version (D62), and a token older than it is refused.
     await invitePerson('p.shah@harborpine.example', `reviewer.${TAG}@harborpine.example`, 'approver');
+    const builder = await invitePerson('p.shah@harborpine.example', `builder.${TAG}@harborpine.example`, 'builder');
     const H = { Authorization: `Bearer ${builder}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const agent = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: H, body: JSON.stringify({ name: `Desk ${TAG}`, role: 'Answers' }) })).json()).data;
     const request = (await (await fetch(`${agents}/v1/agents/${agent.id}/publish-requests`, { method: 'POST', headers: H, body: JSON.stringify({ version: agent.version }) })).json()).data;
@@ -17,9 +18,9 @@ await withUiStack(
     try {
       const page = await consoleSignIn(browser, consoleUrl, `reviewer.${TAG}@harborpine.example`, INVITED_PASSWORD, errors);
       await page.goto(`${consoleUrl}/reviews?review=${request.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const dialog = page.getByRole('dialog').first();
-      await dialog.waitFor({ timeout: 120_000 });
-      const approve = dialog.getByRole('button', { name: /^Approve/ });
+      // Human Tasks opens the task beside the queue, not in a dialog.
+      await page.getByTestId('decision-panel').waitFor({ timeout: 120_000 });
+      const approve = page.getByRole('button', { name: /^Approve/ });
       const offered = await approve.first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
       check('the reviewer gets the decision form on the pending request', offered);
       if (offered) await approve.first().click();

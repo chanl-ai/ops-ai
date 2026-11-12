@@ -9,7 +9,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 import { allowBank, openSignIn } from '../../lib/connection_ui.mjs';
 
@@ -178,7 +178,7 @@ try {
         card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
         if (!card?.plugin?.platformApp) await new Promise((r) => setTimeout(r, 500));
       }
-      const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' })).data ?? {};
+      const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' }), 'create the agent');
       check('0 set-up: Person desk is listed with Ops AI’s own app, and the fake’s hosts are allowed', Boolean(card?.plugin?.platformApp) && Boolean(agent.id), {
         card,
       });

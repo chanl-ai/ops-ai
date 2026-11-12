@@ -257,13 +257,12 @@ with apps_stack() as w:
     given.write_text(json.dumps({"id": "rec-1042"}))
     listed_code, listed = ops_cli("builder", "tools", "list", "--app", app)
     sent = len(w.m["fake"].state()["calls"])
-    mock_code, mocked = ops_cli(
-        "builder", "tools", "run", app, "header_key_get_record", "--mock", "--input", str(given)
-    )
+    # `tools run` is a Mock run unless --real is given.
+    mock_code, mocked = ops_cli("builder", "tools", "run", app, "header_key_get_record", "--input", str(given))
     after_mock = len(w.m["fake"].state()["calls"])
     real_code, real = ops_cli("builder", "tools", "run", app, "header_key_get_record", "--real", "--input", str(given))
     check(
-        "44 `opsai tools list --app` lists the tool, `opsai tools run --mock` reaches nothing, and `--real` reads the "
+        "44 `opsai tools list --app` lists the tool, `opsai tools run` (Mock by default) reaches nothing, and `--real` reads the "
         "record with the team's account",
         account != "con_missing"
         and listed_code == 0
