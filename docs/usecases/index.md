@@ -66,7 +66,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-095 | console | An agent fills a pinned widget and lays out its own in chat | ui | `console/agent-fills-widgets.md` |
 | uc-093 | files-service | A member stores a file once and it is downloaded, held and deleted under its rules | api | `files-service/file-lifecycle.md` |
 | uc-094 | files-service | Another team's file is missing on every files-service route | api, ui | `files-service/file-team-boundary.md` |
-| uc-096 | console | Knowledge bases work end to end from the console: create, add files and a page, watch ingestion, test a question, retire | ui | `console/knowledge-bases-end-to-end.md` |
+| uc-096 | console | Knowledge bases work end to end from the console: create, add files and a page, watch ingestion, test a question, retire | ui | `knowledge/knowledge-base-end-to-end.md` |
 | uc-097 | console | A builder saves create dialogs and account settings with Enter, and Cancel never saves | ui | `console/forms-save-on-enter.md` |
 | uc-098 | console | A builder pages and searches a growing list on the server | ui | `console/lists-page-on-the-server.md` |
 | uc-099 | console | A viewer sees the team's records read-only | api, ui | `console/viewer-sees-read-only-pages.md` |
