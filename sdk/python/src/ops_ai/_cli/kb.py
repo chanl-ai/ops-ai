@@ -30,6 +30,18 @@ def main(argv: list[str]) -> int:
     items = sub.add_parser("items", parents=common, help="a source's items")
     items.add_argument("source")
     items.add_argument("--search")
+    create = sub.add_parser("create", parents=common, help="a knowledge base")
+    create.add_argument("name")
+    create.add_argument("--owner", help="the person who answers for it")
+    add_source = sub.add_parser("add-source", parents=common, help="a source feeding knowledge bases")
+    add_source.add_argument("name")
+    add_source.add_argument("--kb", action="append", required=True, help="a knowledge base id; repeat for several")
+    add_source.add_argument("--type", default="push", help="the source type; push takes items from `opsai kb push`")
+    push = sub.add_parser("push", parents=common, help="put one item into a push source; the same item is unchanged")
+    push.add_argument("source")
+    push.add_argument("--name", required=True, help="the item's name in the source, e.g. fees/overdraft")
+    push.add_argument("--title", required=True)
+    push.add_argument("--text", required=True, help="the item's text, or @file to read it from a file")
     add_file = sub.add_parser("add-file", parents=common, help="upload files into a knowledge base and sync them")
     add_file.add_argument("kb")
     add_file.add_argument("paths", nargs="+")
@@ -75,11 +87,18 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "items":
         rows = _rows(kb.sources_list_items(ns.source, page_size=50, search=ns.search))
         return table(ns, rows, "id", "title", "status", "mime")
+    if ns.verb == "create":
+        return emit(ns, ops.knowledge.add_base(ns.name, owner=ns.owner))
+    if ns.verb == "add-source":
+        return emit(ns, ops.knowledge.add_source(ns.name, ns.kb, type=ns.type))
+    if ns.verb == "push":
+        text = Path(ns.text[1:]).read_text() if ns.text.startswith("@") else ns.text
+        return emit(ns, ops.knowledge.push(ns.source, ns.name, title=ns.title, text=text))
     if ns.verb == "add-file":
         return emit(ns, add_files(ops, ns.kb, [Path(p) for p in ns.paths], ns))
     if ns.verb == "add-text":
         text = Path(ns.text[1:]).read_text() if ns.text.startswith("@") else ns.text
-        return emit(ns, kb.knowledge_bases_add_page(ns.kb, {"title": marked(ns, ns.title), "text": text}))
+        return emit(ns, ops.knowledge.add_page(ns.kb, marked(ns, ns.title), text))
     if ns.verb == "sync":
         if ns.target.startswith("src_"):
             return emit(ns, kb.sources_sync_source(ns.target, {"full": ns.full}))

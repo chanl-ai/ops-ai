@@ -280,14 +280,49 @@ class AsyncFiles(AsyncResource):
         return done.get("file") or done
 
 
+def _without_none(body: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in body.items() if v is not None}
+
+
 class Knowledge(Resource):
     def search(self, body: dict[str, Any]) -> Any:
         return self._raw.kb.knowledge_bases_search_knowledge(body)
+
+    def add_base(self, name: str, *, owner: str | None = None, **fields: Any) -> Any:
+        """A knowledge base, as Knowledge > New knowledge base makes one."""
+        body = _without_none({"name": name, "owner": owner, **fields})
+        return self._raw.kb.knowledge_bases_create_knowledge_base(body)
+
+    def add_source(self, name: str, kb_ids: list[str], *, type: str = "push", **fields: Any) -> Any:
+        """A source feeding the given knowledge bases. A `push` source takes items through `push`."""
+        return self._raw.kb.sources_create_source({"type": type, "name": name, "kbIds": kb_ids, **fields})
+
+    def add_page(self, kb_id: str, title: str, text: str) -> Any:
+        """A written page; the same title saves a new version."""
+        return self._raw.kb.knowledge_bases_add_page(kb_id, {"title": title, "text": text})
+
+    def push(self, source_id: str, name: str, *, title: str, text: str, **fields: Any) -> Any:
+        """Puts one item into a push source. The same name and text again answers `unchanged`."""
+        return self._raw.kb.sources_put_item(source_id, {"name": name, "title": title, "text": text, **fields})
 
 
 class AsyncKnowledge(AsyncResource):
     async def search(self, body: dict[str, Any]) -> Any:
         return await self._raw.kb.knowledge_bases_search_knowledge(body)
+
+    async def add_base(self, name: str, *, owner: str | None = None, **fields: Any) -> Any:
+        return await self._raw.kb.knowledge_bases_create_knowledge_base(
+            _without_none({"name": name, "owner": owner, **fields})
+        )
+
+    async def add_source(self, name: str, kb_ids: list[str], *, type: str = "push", **fields: Any) -> Any:
+        return await self._raw.kb.sources_create_source({"type": type, "name": name, "kbIds": kb_ids, **fields})
+
+    async def add_page(self, kb_id: str, title: str, text: str) -> Any:
+        return await self._raw.kb.knowledge_bases_add_page(kb_id, {"title": title, "text": text})
+
+    async def push(self, source_id: str, name: str, *, title: str, text: str, **fields: Any) -> Any:
+        return await self._raw.kb.sources_put_item(source_id, {"name": name, "title": title, "text": text, **fields})
 
 
 class OpsAI:

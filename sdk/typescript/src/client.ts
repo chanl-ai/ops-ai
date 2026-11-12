@@ -22,6 +22,7 @@ import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
 import { type CallArgs, type Config, type Operation, pageItems, result, type Service, Transport } from './transport.js';
 import { Agents } from './agents.js';
+import { savedOptions } from './profile.js';
 import { Templates } from './templates.js';
 import { Workflows } from './workflows.js';
 import { Accounts, Apps, Credentials, Me, Resources, Tools, Usage } from './words.js';
@@ -232,6 +233,26 @@ export class Knowledge extends Resource {
   search(body: ArgsOf<KbOps['knowledge_bases_search_knowledge']>['body']) {
     return this.raw.kb.knowledge_bases_search_knowledge({ body });
   }
+
+  /** A knowledge base, as Knowledge > New knowledge base makes one. */
+  addBase(name: string, fields: Omit<ArgsOf<KbOps['knowledge_bases_create_knowledge_base']>['body'], 'name'> = {}) {
+    return this.raw.kb.knowledge_bases_create_knowledge_base({ body: { ...fields, name } as never });
+  }
+
+  /** A source feeding the given knowledge bases. A `push` source (the default) takes items through `push`. */
+  addSource(name: string, kbIds: string[], fields: { type?: string } & Record<string, unknown> = {}) {
+    return this.raw.kb.sources_create_source({ body: { type: 'push', ...fields, name, kbIds } as never });
+  }
+
+  /** A written page; the same title saves a new version. */
+  addPage(kbId: string, title: string, text: string) {
+    return this.raw.kb.knowledge_bases_add_page({ path: { kb_id: kbId }, body: { title, text } as never });
+  }
+
+  /** Puts one item into a push source. The same name and text again answers `unchanged`. */
+  push(sourceId: string, name: string, item: { title: string; text: string } & Record<string, unknown>) {
+    return this.raw.kb.sources_put_item({ path: { source_id: sourceId }, body: { ...item, name } as never });
+  }
 }
 
 export class OpsAI {
@@ -256,13 +277,27 @@ export class OpsAI {
   readonly usage: Usage;
   readonly me: Me;
 
-  /** Options win over OPS_BASE_URL, OPS_API_KEY and OPS_TEAM. */
-  constructor(options: Partial<Config> = {}) {
+  /** Options win over OPS_BASE_URL, OPS_API_KEY and OPS_TEAM, which win over the saved sign-in `opsai login` keeps (`profile` names another). */
+  constructor(options: Partial<Config> & { profile?: string } = {}) {
     // Node's environment when there is one; a browser has none.
     const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
-    const baseUrl = options.baseUrl ?? env.OPS_BASE_URL;
-    if (!baseUrl) throw new TypeError('No Ops AI address: pass baseUrl or set OPS_BASE_URL');
-    this.config = { ...options, baseUrl, apiKey: options.apiKey ?? env.OPS_API_KEY, team: options.team ?? env.OPS_TEAM };
+    const { profile, ...given } = options;
+    const saved = savedOptions(profile);
+    // A caller who names its own credential is not given the saved person's.
+    if (given.accessToken !== undefined || given.session) {
+      delete saved.accessToken;
+      delete saved.session;
+    }
+    const baseUrl = given.baseUrl ?? env.OPS_BASE_URL ?? saved.baseUrl;
+    if (!baseUrl) throw new TypeError('No Ops AI address: pass baseUrl, set OPS_BASE_URL or save a sign-in with opsai');
+    this.config = {
+      ...saved,
+      ...given,
+      baseUrl,
+      apiKey: given.apiKey ?? env.OPS_API_KEY ?? saved.apiKey,
+      team: given.team ?? env.OPS_TEAM ?? saved.team,
+      services: { ...saved.services, ...given.services },
+    };
     const t = new Transport(this.config);
     this.raw = new Raw(t);
     this.teams = new Resource(t, NOUNS.teams);
