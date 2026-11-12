@@ -50,7 +50,7 @@ export function createCasesMock(deps: {
           name: a.name,
           size: a.size,
           team: deps.workflowOwner(c.workflowId) ?? 'Platform',
-          ref: { type: 'case', id: c.id, name: `${c.id} · ${c.subject}`, href: `/work/cases/${c.id}` },
+          ref: { type: 'case', id: c.id, name: `${c.id} · ${c.subject}`, href: `/cases/${c.id}` },
           infected: a.scan === 'infected',
           hold: a.name === 'termination-letter.pdf' && !held && (held = true) ? { by: 'Legal (Employment)', reason: 'LH-2026-021: wrongful dismissal claim, preserve the borrower file' } : undefined,
         });

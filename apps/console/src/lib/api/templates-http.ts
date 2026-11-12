@@ -10,7 +10,7 @@ export function createTemplatesHttp(get: Get, send: Send, qs: (p: ListParams) =>
   return {
     list: (p) => get(`/agent-templates?${qs(p)}`),
     get: (id) => get(`/agent-templates/${id}`),
-    createAgent: (i) => send('POST', '/build/agents/from-template', i),
+    createAgent: (i) => send('POST', '/agents/from-template', i),
     submit: (i) => send('POST', '/agent-templates/submissions', i),
   };
 }

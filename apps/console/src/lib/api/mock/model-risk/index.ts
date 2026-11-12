@@ -124,7 +124,7 @@ export function createModelRiskMock(deps: ModelRiskDeps) {
       name: nameOf(e),
       type: e.type,
       refId: e.refId,
-      href: e.type === 'agent' ? `/build/agents/${e.refId}` : `/build/workflows/${e.refId}`,
+      href: e.type === 'agent' ? `/agents/${e.refId}` : `/workflows/${e.refId}`,
       owner: ownerOf(e),
       ownerTeam: teamDirectory.ofOwner(ownerOf(e)).name,
       model,
@@ -190,7 +190,7 @@ export function createModelRiskMock(deps: ModelRiskDeps) {
   };
 
   const audit = (e: StoredEntry, action: 'edited' | 'approved' | 'rejected' | 'created', summary: string, extra: { diff?: { field: string; before?: string; after?: string }[]; reason?: string } = {}) =>
-    auditSink.log({ action, target: { type: 'model', name: nameOf(e), href: `/govern/models/${e.id}` }, summary, owner: ownerOf(e), ...extra });
+    auditSink.log({ action, target: { type: 'model', name: nameOf(e), href: `/model-risk/${e.id}` }, summary, owner: ownerOf(e), ...extra });
 
   // ── Second-line reviews ──
   let seq = 2000;

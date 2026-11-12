@@ -11,13 +11,13 @@ type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 /** REST routes for cases; `get`, `send` and `qs` come from the main HTTP client so auth and envelopes match. */
 export function createCasesHttp(get: Get, send: Send, qs: (p: ListParams & { view?: string }) => string): CasesApi {
   return {
-    list: (p) => get(`/work/cases?${qs(p)}`),
-    get: (id) => get(`/work/cases/${id}`),
-    setField: (id, key, value) => send('PATCH', `/work/cases/${id}/fields/${encodeURIComponent(key)}`, { value }),
-    assign: (ids, assignee) => send('POST', '/work/cases/assign', { ids, assignee }),
-    close: (ids, reason) => send('POST', '/work/cases/close', { ids, reason }),
-    decideAction: (caseId, actionId, input) => send('POST', `/work/cases/${caseId}/actions/${actionId}/decision`, input),
-    editAction: (caseId, actionId, input) => send('PATCH', `/work/cases/${caseId}/actions/${actionId}`, { input }),
+    list: (p) => get(`/cases?${qs(p)}`),
+    get: (id) => get(`/cases/${id}`),
+    setField: (id, key, value) => send('PATCH', `/cases/${id}/fields/${encodeURIComponent(key)}`, { value }),
+    assign: (ids, assignee) => send('POST', '/cases/assign', { ids, assignee }),
+    close: (ids, reason) => send('POST', '/cases/close', { ids, reason }),
+    decideAction: (caseId, actionId, input) => send('POST', `/cases/${caseId}/actions/${actionId}/decision`, input),
+    editAction: (caseId, actionId, input) => send('PATCH', `/cases/${caseId}/actions/${actionId}`, { input }),
     testSampleMail: (config, input) => send('POST', '/email-workflows/test', { config, input }),
     runs: (p) => get(`/runs?${qs(p)}`),
     run: (id) => get(`/runs/${encodeURIComponent(id)}`),
@@ -36,6 +36,6 @@ export function createCasesHttp(get: Get, send: Send, qs: (p: ListParams & { vie
     },
     startable: () => get('/v1/graphs'),
     assignRuns: (ids, assignee) => send('POST', '/runs/assign', { ids, assignee }),
-    queues: () => get('/work/cases/queues'),
+    queues: () => get('/cases/queues'),
   };
 }

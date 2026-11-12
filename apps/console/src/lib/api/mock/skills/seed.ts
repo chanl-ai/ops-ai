@@ -179,7 +179,7 @@ export const SKILL_SEEDS: SkillSeed[] = [
     origin: 'generated',
     provenance: 'Generated from 20 resolved hardship cases in the lending servicing inbox',
     citations: [
-      { kind: 'case', label: '20 resolved payment deferral cases', detail: 'Lending servicing inbox, July to September', section: 'steps', href: '/work/cases?q=deferral' },
+      { kind: 'case', label: '20 resolved payment deferral cases', detail: 'Lending servicing inbox, July to September', section: 'steps', href: '/cases?q=deferral' },
       { kind: 'document', label: 'Hardship and payment deferral policy §3.1', detail: 'Lending policy', section: 'rules' },
     ],
     useWhen: 'Use when a borrower says they cannot make a loan payment, asks to defer, skip or reduce payments, or describes job loss, illness or another financial hardship.',

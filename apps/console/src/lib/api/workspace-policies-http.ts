@@ -12,8 +12,8 @@ interface TeamPermissions {
 
 export function createWorkspacePoliciesHttp(get: Get, send: Send): WorkspacePoliciesApi {
   return {
-    list: () => get('/govern/policies'),
-    set: (key, value) => send('PUT', `/govern/policies/${encodeURIComponent(key)}`, { value }),
+    list: () => get('/policies'),
+    set: (key, value) => send('PUT', `/policies/${encodeURIComponent(key)}`, { value }),
     editor: async (teamId): Promise<PolicyEditor> => {
       const me = await get<{ teams: TeamPermissions[] }>('/me/permissions');
       const cells: PolicyEditor['cells'] = {};

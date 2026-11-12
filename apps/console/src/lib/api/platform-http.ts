@@ -30,11 +30,11 @@ export function createPlatformTeamsHttp(baseUrl: string): OpsApi['teams'] {
     takeRole: (person, grant) => send<void>('DELETE', `/people/${encodeURIComponent(person)}/role-grants/${encodeURIComponent(grant)}`),
     personPermissions: (id) => get<PersonPermissions>(`/people/${encodeURIComponent(id)}/permissions`),
     why: (area, action) => get<WhyNot>(`/me/why?area=${encodeURIComponent(area)}&action=${encodeURIComponent(action)}`),
-    checkAccess: (input) => send<AccessCheck>('POST', '/govern/access/check', input),
+    checkAccess: (input) => send<AccessCheck>('POST', '/access/check', input),
     renameWorkspace: (name) => send<{ id: string; name: string }>('PATCH', '/settings/workspace', { name }),
     permissions: () => get<MyPermissions>('/me/permissions'),
     holders: (area, action, team) =>
-      get<Holders>(`/govern/access/holders?area=${encodeURIComponent(area)}&action=${encodeURIComponent(action)}${team ? `&team=${encodeURIComponent(team)}` : ''}`),
+      get<Holders>(`/access/holders?area=${encodeURIComponent(area)}&action=${encodeURIComponent(action)}${team ? `&team=${encodeURIComponent(team)}` : ''}`),
   };
 }
 

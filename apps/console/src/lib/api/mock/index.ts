@@ -484,7 +484,7 @@ export function createMockApi(): OpsApi {
       type: 'source',
       id: src.id,
       name: src.name,
-      href: `/data/sources/${src.id}`,
+      href: `/integrations/sources/${src.id}`,
       owner: src.owner,
       status: SOURCE_STATUS[src.status][0],
       tone: src.status === 'active' && src.lastRunStatus === 'failed' ? 'bad' : SOURCE_STATUS[src.status][1],
@@ -494,7 +494,7 @@ export function createMockApi(): OpsApi {
       type: 'tool_module',
       id: m.id,
       name: m.displayName,
-      href: `/data/tools/${m.id}`,
+      href: `/tools/${m.id}`,
       owner: m.ownerTeam,
       status: !m.reachable ? 'Unreachable' : m.status === 'published' ? `v${m.version} · ${m.operationCount} operations` : m.status === 'draft' ? 'Draft' : 'In security review',
       tone: !m.reachable ? 'bad' : m.status === 'published' ? 'ok' : 'muted',
@@ -520,7 +520,7 @@ export function createMockApi(): OpsApi {
   const activity = (cid: string): ConnectionActivity[] =>
     [
       ...knowledge.sourcesUsing(cid).flatMap((src): ConnectionActivity[] =>
-        src.lastSyncAt ? [{ id: `${src.id}_last`, at: src.lastSyncAt, kind: 'sync', label: `Sync · ${src.name}`, detail: src.lastRunStatus === 'failed' ? 'Failed' : src.lastRunStatus === 'partial' ? 'Finished with failed items' : 'Finished', ok: src.lastRunStatus !== 'failed', href: `/data/sources/${src.id}?tab=history` }] : [],
+        src.lastSyncAt ? [{ id: `${src.id}_last`, at: src.lastSyncAt, kind: 'sync', label: `Sync · ${src.name}`, detail: src.lastRunStatus === 'failed' ? 'Failed' : src.lastRunStatus === 'partial' ? 'Finished with failed items' : 'Finished', ok: src.lastRunStatus !== 'failed', href: `/integrations/sources/${src.id}?tab=history` }] : [],
       ),
       ...toolModules.using(cid).flatMap((m) =>
         toolModules.recentCalls(m.id, 5).map((c): ConnectionActivity => ({ id: c.id, at: c.at, kind: 'call', label: c.target, detail: `${c.workflowName} · ${c.status === 'ok' ? 'OK' : c.status === 'awaiting_approval' ? 'Waiting for approval' : c.status === 'denied' ? 'Denied' : 'Failed'} · ${c.latencyMs} ms`, ok: c.status === 'ok' || c.status === 'awaiting_approval', href: `/logs/tool-calls?q=${encodeURIComponent(c.target)}` })),
@@ -724,7 +724,7 @@ export function createMockApi(): OpsApi {
         }),
       importRows: (wid, rows, fileId) =>
         respond(() => {
-          if (fileId) files.links.link(fileId, { type: 'test_set', id: wid, name: `${wfName(wid)} tests`, href: `/build/workflows/${wid}?tab=tests` }, ['test_import']);
+          if (fileId) files.links.link(fileId, { type: 'test_set', id: wid, name: `${wfName(wid)} tests`, href: `/workflows/${wid}?tab=tests` }, ['test_import']);
           return bulk(
             rows.map((_, i) => String(i)),
             (i) => {
@@ -773,7 +773,7 @@ export function createMockApi(): OpsApi {
           agents.unshift(a);
           versions[a.id] = [{ version: 1, publishedAt: new Date().toISOString(), publishedBy: me, note: 'Created', changes: ['Created'], current: true }];
           snapAgent(a);
-          auditSink.log({ action: 'created', target: { type: 'agent', name: a.name, href: `/build/agents/${a.id}` }, summary: `Created ${a.name} as a draft`, owner: a.owner });
+          auditSink.log({ action: 'created', target: { type: 'agent', name: a.name, href: `/agents/${a.id}` }, summary: `Created ${a.name} as a draft`, owner: a.owner });
           return agentRow(a);
         }),
       update: (aid, patch) =>
@@ -1061,7 +1061,7 @@ export function createMockApi(): OpsApi {
           }
           // A call that needs two approvers needs a step-up from the last 5 minutes, in every channel; the audit records it.
           if (input.decision === 'approved' && needsStepUp(r)) requireStepUp(input.stepUpToken);
-          if (input.decision === 'approved' && needsStepUp(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/work/tasks?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}); step-up verified`, owner: wfOwner(r.workflowId) });
+          if (input.decision === 'approved' && needsStepUp(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}); step-up verified`, owner: wfOwner(r.workflowId) });
           if (input.decision === 'approved' && r.policy.fourEyes && !r.approvals.length) {
             Object.assign(r, { approvals: [me], assignee: me, status: 'in_review' });
             return r;
@@ -1093,7 +1093,7 @@ export function createMockApi(): OpsApi {
             if (decision === 'approved' && (r.risk === 'critical' || r.risk === 'high')) return `${r.risk} risk needs an individual decision`;
             if (decision === 'approved' && r.policy.fourEyes) return 'Needs two approvers';
             Object.assign(r, { status: decision, decidedAt: new Date().toISOString(), decisionReason: reason, assignee: r.assignee ?? me });
-            if (decision === 'approved' && needsStepUp(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/work/tasks?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}) in bulk; step-up verified`, owner: wfOwner(r.workflowId) });
+            if (decision === 'approved' && needsStepUp(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}) in bulk; step-up verified`, owner: wfOwner(r.workflowId) });
             resumeStartedRun(r);
           });
         }),
