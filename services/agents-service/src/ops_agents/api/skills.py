@@ -707,6 +707,19 @@ async def usable(
     return out
 
 
+PICKED = "Picked from the / menu"
+
+
+def _picked(entry: dict[str, Any]) -> bool:
+    """A skill the person chose from the / menu on this or an earlier reply (a carried entry keeps its `matched`)."""
+    return entry.get("matched") == PICKED or bool(entry.get("inputs"))
+
+
+def _offered(menu: str, skill_id: str, pinned: list[str]) -> bool:
+    """Whether an agent's skill menu setting offers the skill in its / menu."""
+    return menu == "team" or (menu == "attached" and skill_id in pinned)
+
+
 def _key(entry: dict[str, Any]) -> tuple[str, str]:
     return str(entry.get("skillId")), str(entry.get("part") or "")
 
@@ -725,12 +738,19 @@ async def _rendered(rt: Runtime, team: str, skill_id: str, part: str | None, giv
 
 
 async def skill_turn(
-    rt: Runtime, agent: AgentDefinition, pick: SkillPick | None, earlier: list[dict[str, Any]], *, team: str
+    rt: Runtime,
+    agent: AgentDefinition,
+    pick: SkillPick | None,
+    earlier: list[dict[str, Any]],
+    *,
+    team: str,
+    may_pick: bool = True,
 ) -> dict[str, Any] | None:
     """The skills one chat reply runs with beyond the agent's pins: the team's published skills its menu setting
     allows (offered to load on a match), the skills the reply before carried, and the part the person picked, filled
     with its inputs. `team` is the conversation's: no skill of another team is offered or loaded. None when there are
-    none, so a reply without skills runs as before.
+    none, so a reply without skills runs as before. A part picked earlier is carried only while `may_pick` (the
+    person still holds skills: view) and the agent's menu still offers it.
 
     Raises:
         Unprocessable: `skill_menu_limit` when the agent's setting does not offer the pick, `skill_needs_scope` when
@@ -747,8 +767,11 @@ async def skill_turn(
             extra.extend(kernel_skills(r["id"], int(v["version"]), str(r["slug"]), v["content"], int(v["tokens"])))
     # The reply before's on-match skills stay loaded; always-on ones load again from the pins.
     carried = [{**e, "how": "carried"} for e in earlier if e.get("how") != "always" and e.get("matched") != "Always on"]
+    carried = [
+        e for e in carried if not _picked(e) or (may_pick and _offered(agent.skill_menu, str(e.get("skillId")), pinned))
+    ]
     if pick is not None:
-        if agent.skill_menu == "off" or (agent.skill_menu == "attached" and pick.skill_id not in pinned):
+        if not _offered(agent.skill_menu, pick.skill_id, pinned):
             raise Unprocessable(
                 f"{agent.name} does not offer that skill in chat; ask an admin to change its skill menu setting.",
                 code="skill_menu_limit",
@@ -783,7 +806,7 @@ async def skill_turn(
                 "skillId": picked.skill_id,
                 "version": picked.version,
                 **({"part": picked.part} if picked.part else {}),
-                "matched": "Picked from the / menu",
+                "matched": PICKED,
                 "how": "picked",
                 **({"inputs": pick.inputs} if pick.inputs else {}),
             }
@@ -797,7 +820,8 @@ async def skill_turn(
                 )
             except (NotFound, Unprocessable):
                 continue
-    if not extra and not carried:
+    # With an earlier reply, the turn's carried list replaces the history's, so a dropped pick does not come back.
+    if not extra and not carried and not earlier:
         return None
     seen: set[tuple[str, str]] = set()
     unique = [s for s in extra if (s.skill_id, s.part) not in seen and not seen.add((s.skill_id, s.part))]

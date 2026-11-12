@@ -221,7 +221,11 @@ async def skill_options(rt: Rt) -> JSONResponse:
 
 
 @router.get("/v1/skills/{skill_id}", response_model=Envelope[SkillDetail])
-async def get_skill(rt: Rt, skill_id: str) -> JSONResponse:
+async def get_skill(rt: Rt, skill_id: str, caller: Annotated[Principal, Depends(caller_in("skills"))]) -> JSONResponse:
+    """The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
+    right render asks for, so a person who may only chat never reads a skill's text."""
+    row = await skills(rt).row(skill_id)
+    can(caller_of(caller), "skills", "view", team=str(row["team_id"]), what=row["slug"], code="forbidden")
     return ok(await detail(rt, skill_id))
 
 
