@@ -1,63 +1,66 @@
 ---
 name: usecase
-description: List, show, write, run and report end-to-end use cases (docs/usecases) as plain user stories at the api, sdk, cli or ui layer. Use when someone asks to prove a change end to end, run or add a use case, says which stories work, or types /usecase list|show|new|test|report.
+description: List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use when someone asks to prove a change end to end, says which stories work, or types /usecase list|add|update|run.
 allowed-tools: Bash(make *) Bash(uv run *) Bash(python3 *) Read Grep Glob
 ---
 
-# usecase: prove a change with the stories a person can do
+# usecase: list, add, update and run the stories a person can do
 
 <!-- Generated from `docs/guide/skills/usecase.md` by `scripts/agent_skills.py`; change the page, not this file. -->
 
-Make targets: make usecase-list, make usecase-show, make usecase-new, make usecase-test, make usecase-report, make usecase-coverage.
+Make targets: make usecase-list, make usecase-add, make usecase-update, make usecase-run, make usecase-index.
 
 ## What a use case is
 
-Four or five plain stories that work, such as "A team admin connects Salesforce and runs Test connection". Each story
-has one layer (ui is the console in a browser, sdk is the Python or TypeScript SDK, cli is a command a person runs, api
-is the HTTP routes), the steps it takes and the one step whose check proves it. A run reports each story as works or
-broken, with the step that failed; the detailed checks stay underneath as the evidence. The registry and rules are in
-`docs/usecases/README.md`.
+A use case is a few plain stories that work, such as "A team admin connects Salesforce and runs Test connection".
+Each story has a layer (sdk is the Python or TypeScript SDK, cli is a command a person types, api is the HTTP routes,
+ui is the console), numbered steps, and the one step whose check proves it. The registry and rules are in
+`docs/usecases/README.md`; the generated index is `docs/usecases/index.md`.
 
-## Verbs
+## The four routes
 
-| Verb | Run | Then |
+Each route is one command. Run it, then say what it printed in a few plain lines.
+
+| Route | Run | What you get |
 |---|---|---|
-| `list` | `make usecase-list` | The registry as printed |
-| `show <id>` | `make usecase-show UC=<id>` | Open its doc; say its stories and which layers have scripts |
-| `new <service> "<title>"` | `make usecase-new SERVICE=<service> TITLE="<title>"` | Write the Stories table first, then the steps that make them up, then the script |
-| `test <id> [layer]` | `make usecase-test UC=<id> LAYER=<layer>` (needs `make db-up`) | Paste the Stories block and the summary line; a broken story is reported with its step, never explained away |
-| `report [<id>]` | `make usecase-report UC=<id>` | The stories from each layer's latest run, without running anything; "not run" names the command to run |
-| `coverage <service>` | `make usecase-coverage SERVICE=<service>` | Missing scripts per layer |
+| `/usecase list [area]` | `make usecase-list AREA=<area>` | Every use case: id, short title, area, the layers that have a script, and each layer's last recorded run (`api ok`, `ui FAILED`, or `not run`). Area is a service name, with or without `-service` (`agents`). |
+| `/usecase add <area> "<short title>"` | `make usecase-add AREA=<area> TITLE="<short title>"` | The next id, the page, one script stub per layer, the registry row and a rebuilt index. Add `LAYERS=api,sdk,cli` for more than api. |
+| `/usecase update <id>` | `make usecase-update UC=<id>` | The page and script paths, and which steps were added, reworded or removed since each layer's last green run. |
+| `/usecase run <id> [layer]` | `make usecase-run UC=<id> LAYER=<layer>` | Each step as passed, FAILED or not run, then the path of the full output. Needs `make db-up`. |
 
-## Writing one
+After `add`, open the page and fill it in, in this order:
 
-1. The doc's `## Stories` table has the columns `# | Story | Layer | Steps | Proved by`: `S1`, the story in a person's
-   words (who, what they do, what they see), one layer, its rows of the steps table (`1-3, 5`), and the step that
-   proves it. Four or five stories; a sixth means a second use case.
-2. The script names each check by its step: `check("3 the module is published", ...)`. A check with no number, such
-   as "no page errors", belongs to no story and is shown only when it fails.
-3. Scripts live at `docs/usecases/<service>/scripts/test-<id>-<layer>.{py,mjs}`: api scripts start services with
-   `docs/usecases/lib/usecase_harness.py`; ui scripts drive the console through `withUiStack` from
-   `@ops-ai/usecase-runner/harness`; sdk scripts call `sdk/python`; cli scripts run the command as a person would.
-4. Drive only what a client can drive; never reach into a database. Assert values (the id, the amount, the status),
-   not that a field exists.
+1. The story: who is the person, what do they want, what do they see.
+2. The people table, and the line "In this example we will do X. It assumes Y and Z."
+3. The Stories table, then the numbered steps with what each one expects.
+4. The script for each layer, one check per step, named by its number: `check("3 the module is published", ...)`.
+
+Scripts start services with `docs/usecases/lib/usecase_harness.py` (api, sdk, cli) and read the SDK in `sdk/python`;
+`packages/usecase-runner` runs them and reads the PASS and FAIL lines. Use what is there before writing anything new.
+Then run the new use case once with `/usecase run`; the stub fails until its steps are written.
+
+## Reading a run
+
+- `passed` is a step whose check passed. `FAILED` shows the check name and its detail. `not run` means the script
+  stopped before that step. `open` marks a step the product cannot do yet.
+- A failure's full output is in `.run/usecases/<id>-<layer>.log`. Read it before guessing at a cause.
+- A story works only when its proving step passed and none of its steps failed.
 
 ## Rules
 
-1. Scripted model only: the runner removes model keys, and a real model call needs an approved count in
+1. Steps run only through the public SDK, the CLI or the console. A step that cannot is a product gap: keep it in
+   the table as **Open**, file a card for it, and never add a helper, a database write or a private route to get past it.
+2. No new console (ui) tests for now. `add` refuses the ui layer; existing ui scripts still run.
+3. Scripted model only: the runner removes model keys, and a real model call needs an approved count in
    `APPROVED_REAL_CALLS=<n>`.
-2. A story works only when its proving step passed and none of its steps failed. A script that stops early leaves the
-   rest broken at the step that never ran.
-3. Watch it fail once: break the behaviour (or point the script at a case that must fail), see the story go broken at
-   the right step, restore it, and say what was broken.
-4. The registry's status column is not evidence; only a run in this session is.
-5. Never kill a process you did not start; a use case picks free ports itself, so a busy stack port is a leftover of yours to stop or another program's to leave.
+4. Watch a new check fail once: break the behaviour, see the story go broken at the right step, restore it.
+5. The registry's status column is not evidence; only a run in this session is.
+6. Never kill a process you did not start. A run picks free ports itself, so a busy port is not yours to free.
 
 ## Proof
 
 ```bash proof
-make usecase-list
-make usecase-show UC=uc-531
-make usecase-test UC=uc-531 LAYER=api
-make usecase-report UC=uc-531
+make usecase-list AREA=tools
+make usecase-update UC=uc-007
+make usecase-run UC=uc-007 LAYER=api
 ```

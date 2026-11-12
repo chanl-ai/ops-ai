@@ -20,10 +20,31 @@ export function slug(title: string): string {
     .join('-');
 }
 
-export function docTemplate(id: string, service: string, title: string): string {
+/** Layers `add` writes a stub for. The console has no new use case scripts for now, so ui is not offered. */
+export const ADDABLE_LAYERS = ['api', 'sdk', 'cli'] as const;
+
+export function docTemplate(id: string, service: string, title: string, layers: readonly string[] = ['api']): string {
+  const stories = layers.map((l, i) => `| S${i + 1} | A <person> <does something> and <sees the result> | ${l} | 1 | 1 |`).join('\n');
+  const scripts = layers.map((l) => `| ${l} | \`${service}/scripts/test-${id}-${l}.py\` | not written |`).join('\n');
   return `# ${title}
 
-Status: draft. Id: \`${id}\`. Service: \`${service}\`. Layers: api.
+Status: draft. Id: \`${id}\`. Service: \`${service}\`. Layers: ${layers.join(', ')}.
+
+Short title: ${title}
+
+## Story
+
+As a <person>, I want to <task> so that <result>.
+
+## People
+
+| Person | Role | Does what |
+|---|---|---|
+| <name> | <builder, member or admin> | <what they do here> |
+
+## In this example
+
+In this example we will <do X>. It assumes <Y> and <Z>.
 
 ## Stories
 
@@ -33,7 +54,7 @@ table below, and "Proved by" is the one step whose check shows the story works. 
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | A <person> <does something> and <sees the result> | api | 1 | 1 |
+${stories}
 
 ## Preconditions
 
@@ -43,6 +64,9 @@ table below, and "Proved by" is the one step whose check shows the story works. 
 
 ## Steps and expected results
 
+Each step is something a person does through the public SDK, the CLI or the console. A step the product cannot do yet
+stays in the table as **Open**, and a card is filed for it; the script never reaches around the product with a helper.
+
 | # | Step | Expected |
 |---|---|---|
 | 1 | | |
@@ -51,7 +75,7 @@ table below, and "Proved by" is the one step whose check shows the story works. 
 
 | Layer | Script | State |
 |---|---|---|
-| api | \`${service}/scripts/test-${id}-api.py\` | not written |
+${scripts}
 
 ## Non-vacuous check
 
@@ -59,33 +83,57 @@ Name the check that fails if the behaviour is broken, and how it was seen failin
 `;
 }
 
-const SCRIPT_STUB = (id: string) => `"""${id}, api layer. Replace this body with the steps from the use case doc."""
+const HEAD = (id: string, layer: string) => `"""${id}, ${layer} layer. Replace this body with the steps from the use case doc. Name each check by its step, such as
+"1 the list opens". Steps go through the public ${layer === 'sdk' ? 'SDK' : layer === 'cli' ? 'CLI' : 'HTTP routes'} only; a step that cannot is an Open step in the doc, never a helper here."""
 
 from __future__ import annotations
+`;
+
+const STUBS: Record<string, (id: string) => string> = {
+  api: (id) => `${HEAD(id, 'api')}
+from usecase_harness import check, finish
+
+check("1 script written", False, "${id} has no steps yet")
+finish()
+`,
+  sdk: (id) => `${HEAD(id, 'sdk')}
+import sys
+from pathlib import Path
+
+from usecase_harness import check, finish
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "sdk" / "python" / "src"))
+from ops_ai import OpsAI  # noqa: E402,F401  (see test-uc-092-sdk.py for connecting to this run's services)
+
+check("1 script written", False, "${id} has no steps yet")
+finish()
+`,
+  cli: (id) => `${HEAD(id, 'cli')}
+import subprocess  # noqa: F401  (run the command a person types, as test-uc-568-cli.py does)
 
 from usecase_harness import check, finish
 
 check("1 script written", False, "${id} has no steps yet")
 finish()
-`;
+`,
+};
 
-export function scaffold(root: string, registry: UseCase[], service: string, title: string): { id: string; files: string[] } {
+export function scaffold(root: string, registry: UseCase[], service: string, title: string, layers: readonly string[] = ['api']): { id: string; files: string[] } {
+  const bad = layers.filter((l) => !(ADDABLE_LAYERS as readonly string[]).includes(l));
+  if (bad.length || !layers.length) throw new Error(`layers for a new use case are some of ${ADDABLE_LAYERS.join(', ')}; got "${layers.join(',')}" (no new console tests for now)`);
   if (!existsSync(join(root, 'services', service))) throw new Error(`no services/${service}; a use case belongs to a service folder`);
   const id = nextId(registry);
   const doc = join(USECASE_DIR, service, `${slug(title)}.md`);
   if (existsSync(join(root, doc))) throw new Error(`${doc} already exists; pick a title naming a different topic`);
-  const script = join(USECASE_DIR, service, 'scripts', `test-${id}-api.py`);
-  for (const [path, body] of [
-    [doc, docTemplate(id, service, title)],
-    [script, SCRIPT_STUB(id)],
-  ] as const) {
+  const scripts = layers.map((l) => [join(USECASE_DIR, service, 'scripts', `test-${id}-${l}.py`), STUBS[l]!(id)] as const);
+  for (const [path, body] of [[doc, docTemplate(id, service, title, layers)] as const, ...scripts]) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), body);
   }
   const readme = join(root, USECASE_DIR, 'README.md');
   const lines = readFileSync(readme, 'utf8').split('\n');
   const last = lines.findLastIndex((l) => /^\| `?uc-\d{3}/.test(l));
-  lines.splice(last + 1, 0, `| ${id} | ${service} | ${title} | api | draft |`);
+  lines.splice(last + 1, 0, `| ${id} | ${service} | ${title} | ${layers.join(', ')} | draft |`);
   writeFileSync(readme, lines.join('\n'));
   const index = join(root, 'docs/README.md');
   const idx = readFileSync(index, 'utf8').split('\n');
@@ -95,5 +143,5 @@ export function scaffold(root: string, registry: UseCase[], service: string, tit
     idx.splice(at + 1, 0, `| \`${rel}\` | ${id}: ${title} |`);
     writeFileSync(index, idx.join('\n'));
   }
-  return { id, files: [doc, script, `${USECASE_DIR}/README.md`, ...(at >= 0 ? ['docs/README.md'] : [])] };
+  return { id, files: [doc, ...scripts.map(([p]) => p), `${USECASE_DIR}/README.md`, ...(at >= 0 ? ['docs/README.md'] : [])] };
 }

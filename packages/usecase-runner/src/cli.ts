@@ -1,6 +1,6 @@
-// Entry for scripts/usecase.mjs: list | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
+// Entry for scripts/usecase.mjs: list [area] | index | add <area> "<title>" | update <id> | run <id> [layer] | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
 // coverage <service> | new <service> "<title>". Exit codes are in report.ts (EXIT).
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { coverage, formatCoverage } from './coverage.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
@@ -10,7 +10,10 @@ import { DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFi
 import { resolveScript, USECASE_DIR } from './resolve.ts';
 import { childEnv, commandFor, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
-import { formatStories, loadRun, saveRun, storiesOf, StoryError, type SavedRun } from './stories.ts';
+import { execFileSync } from 'node:child_process';
+import { buildIndex, formatList, inArea, writeIndex } from './usecase-index.ts';
+import { updateReport } from './update.ts';
+import { findDoc, formatSteps, formatStories, loadRun, logPath, parseSteps, saveGreen, saveLog, saveRun, storiesOf, StoryError, type SavedRun } from './stories.ts';
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -98,8 +101,14 @@ async function runAll(
         await databaseFor(async (env) => {
           const { code, output } = await runScript(commandFor(root, r.path, r.runtime), env, root);
           const checks = parseChecks(output);
-          saveRun(root, { id: uc.id, layer, at: new Date().toISOString(), exit: code, checks });
           const v = verdict(code, checks);
+          const saved: SavedRun = { id: uc.id, layer, at: new Date().toISOString(), exit: code, checks, commit: headCommit(root) };
+          saveRun(root, saved);
+          if (v.pass) saveGreen(root, saved);
+          saveLog(root, uc.id, layer, output);
+          const doc = findDoc(root, uc);
+          const steps = doc ? parseSteps(readFileSync(join(root, doc), 'utf8')) : [];
+          console.log(`\n${uc.id} ${layer}, step by step${steps.length ? `\n${formatSteps(steps, checks)}` : ': this doc has no steps table'}\n  ${v.pass ? 'all checks passed' : `failed; full output in ${logPath(uc.id, layer)}`}`);
           return {
             id: uc.id,
             layer,
@@ -131,9 +140,35 @@ export function report(root: string, targets: UseCase[], layer?: Layer): string 
     .join('\n\n');
 }
 
+function headCommit(root: string): string | undefined {
+  try {
+    return execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/** An area is a service folder; "agents" means agents-service. */
+function resolveArea(root: string, area: string): string {
+  for (const name of [area, `${area}-service`]) if (existsSync(join(root, 'services', name))) return name;
+  throw new Error(`no area ${area}; areas are ${readdirSync(join(root, 'services'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).join(', ')}`);
+}
+
 export async function main(argv: string[], root: string): Promise<number> {
   const [cmd = 'list', ...rest] = argv;
   try {
+    if (cmd === 'add') {
+      const [area, title] = rest;
+      if (!area || !title) {
+        console.error('usage: add <area> "<short title>" [--layers api,sdk,cli]');
+        return EXIT.usage;
+      }
+      const registry = loadRegistry(root);
+      const made = scaffold(root, registry, resolveArea(root, area), title, (flag(rest, 'layers') ?? 'api').split(','));
+      const path = writeIndex(root, buildIndex(root, loadRegistry(root)));
+      console.log(`created ${made.id}, registered it and rebuilt ${path}:\n  ${made.files.join('\n  ')}\nnext: write the steps in the doc, then make usecase-run UC=${made.id}`);
+      return EXIT.ok;
+    }
     if (cmd === 'new') {
       const [service, title] = rest;
       if (!service || !title) {
@@ -146,8 +181,23 @@ export async function main(argv: string[], root: string): Promise<number> {
     }
     const registry = loadRegistry(root);
     if (cmd === 'list') {
-      console.log(registry.map((u) => `${u.id}  ${u.service.padEnd(16)} ${u.layers.join(',').padEnd(8)} ${u.status.padEnd(8)} ${u.title}`).join('\n'));
+      console.log(formatList(root, buildIndex(root, registry).filter((r) => inArea(r, rest[0]))));
       return EXIT.ok;
+    }
+    if (cmd === 'index') {
+      console.log(`wrote ${writeIndex(root, buildIndex(root, registry))}`);
+      return EXIT.ok;
+    }
+    if (cmd === 'update') {
+      console.log(updateReport(root, findUseCase(registry, rest[0] ?? '')));
+      return EXIT.ok;
+    }
+    if (cmd === 'run') {
+      if (!rest[0]) {
+        console.error('usage: run <id> [layer]');
+        return EXIT.usage;
+      }
+      return await test(root, registry, rest[0], rest[1]);
     }
     if (cmd === 'show') {
       const uc = findUseCase(registry, rest[0] ?? '');
@@ -171,7 +221,7 @@ export async function main(argv: string[], root: string): Promise<number> {
       console.log(targets.length ? report(root, targets) : 'no use case has a Stories table yet');
       return EXIT.ok;
     }
-    console.error(`unknown command ${cmd}; one of list, show, test, report, coverage, new`);
+    console.error(`unknown command ${cmd}; one of list, index, add, update, run, show, test, report, coverage, new`);
     return EXIT.usage;
   } catch (e) {
     if (e instanceof RegistryError || e instanceof StoryError) {
