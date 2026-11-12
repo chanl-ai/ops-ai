@@ -142,6 +142,9 @@ export function useRemoveCopy(app: string) {
       if (kind === 'skill') return sdk((ops) => ops.raw.agents.agents_delete_skill({ path: { skill_id: recordId } }));
       if (kind === 'workflow') return sdk((ops) => ops.raw.agents.workflows_delete_definition({ path: { workflow_id: recordId } }));
       if (kind === 'knowledge_source') return sdk((ops) => ops.raw.kb.sources_remove_source({ path: { source_id: recordId } }));
+      if (kind === 'guardrail') return sdk((ops) => ops.raw.agents.agents_delete_guardrail({ path: { guardrail_id: recordId } }));
+      // The service has no delete route for case and task types yet; refuse here instead of calling the document-type one.
+      if (kind === 'case_type' || kind === 'task_type') return Promise.reject(new Error(`A ${kind.replace('_', ' ')} copy cannot be removed here yet.`));
       return sdk((ops) => ops.raw.documents.document_types_delete_type({ path: { type_id: recordId } }));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key(app) }),

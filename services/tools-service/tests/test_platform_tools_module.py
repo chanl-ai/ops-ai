@@ -66,8 +66,8 @@ async def test_the_acknowledgement_runs_at_once_and_the_reply_still_waits(
     ack = await registry.resolve("send_acknowledgement", tenant_id=tenant)
     assert ack is not None and ack.module is not None and ack.operation is not None, ack
     assert (ack.module["id"], ack.executor, ack.access) == (PLATFORM_MODULE, "local", "write")
-    assert await registry.requires_approval("send_acknowledgement", tenant) is False
-    assert await registry.requires_approval("send_reply", tenant) is True
+    assert await registry.approval_setting("send_acknowledgement", tenant) == ("none", None)
+    assert await registry.approval_setting("send_reply", tenant) == ("person", None)
 
 
 async def test_a_team_without_the_mail_module_still_replies_after_another_team_looked_first(

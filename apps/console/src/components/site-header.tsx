@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { AreaSwitcher } from '@/components/shared/area-switcher';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useWorkspaceIdentity } from '@/hooks/me-queries';
@@ -38,6 +39,7 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
           ))}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <AreaSwitcher />
           {identity && (
             <span className="hidden text-sm text-muted-foreground xl:inline" data-testid="header-workspace">
               {/* The workspace's own name when it has one, then the team, which says where the person is. */}

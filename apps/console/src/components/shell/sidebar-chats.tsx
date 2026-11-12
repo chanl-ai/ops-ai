@@ -15,6 +15,8 @@ import { useSticky } from '@/hooks/use-sticky';
 import type { ChatThreadPatch, ChatThreadRow } from '@/lib/types/chat';
 
 const PAGE = 30;
+/** Chats shown under the pinned ones; the rest are on All chats, which searches them. */
+const RECENT = 5;
 export const CHAT_GROUPS = ['Pinned', 'Today', 'Yesterday', 'Previous 7 days', 'Older'] as const;
 export type ChatGroup = (typeof CHAT_GROUPS)[number];
 
@@ -30,9 +32,9 @@ export function chatGroupOf(t: Pick<ChatThreadRow, 'pinned' | 'lastMessageAt'>, 
 }
 
 /**
- * The person's chats inside the app sidebar, grouped by day with pinned first, each with rename, pin, archive
- * and delete, and an All chats row to the Conversations page. Pages by cursor, so a long history loads on demand and
- * the console's pages below stay in reach. Hidden while the sidebar is folded to icons.
+ * The person's chats inside the Work sidebar: pinned chats first, then the five most recent, each with rename, pin,
+ * archive and delete, and an All chats row to the page that lists and searches the rest. Hidden while the sidebar is
+ * folded to icons.
  */
 export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -50,7 +52,9 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
 
   const groups = React.useMemo(() => {
     const out = Object.fromEntries(CHAT_GROUPS.map((g) => [g, [] as ChatThreadRow[]])) as Record<ChatGroup, ChatThreadRow[]>;
-    threads.forEach((t) => out[chatGroupOf(t)].push(t));
+    // Pinned chats first, then the most recent few; the list arrives newest first.
+    const shown = [...threads.filter((t) => t.pinned), ...threads.filter((t) => !t.pinned).slice(0, RECENT)];
+    shown.forEach((t) => out[chatGroupOf(t)].push(t));
     return out;
   }, [threads]);
 
@@ -153,13 +157,6 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
         )
       )}
       <SidebarMenu>
-        {pages.hasNextPage && (
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => void pages.fetchNextPage()} disabled={pages.isFetchingNextPage} className="text-muted-foreground">
-              <span>{pages.isFetchingNextPage ? 'Loading…' : 'Show more chats'}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        )}
         <SidebarMenuItem>
           <SidebarMenuButton asChild isActive={pathname === '/chat/conversations'} className="text-muted-foreground">
             <Link href="/chat/conversations" onClick={onNavigate} data-testid="sidebar-all-chats">

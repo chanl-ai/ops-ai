@@ -141,6 +141,7 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/connections', served: Boolean(toolsUrl) },
   { prefix: '/settings/members', served: onPlatform },
   { prefix: '/settings/policies', served: onPlatform },
+  { prefix: '/policies', served: onPlatform },
   { prefix: '/settings/security/sign-in', served: onPlatform },
   // The home page's counts are agents-service's /v1/overview; matched exactly, so it marks no other page.
   { prefix: '/', served: Boolean(registryUrl) },

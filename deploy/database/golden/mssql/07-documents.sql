@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- documents-service, stamped at documents_0017
+-- documents-service, stamped at documents_0018
 CREATE TABLE document_types (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -213,13 +213,16 @@ CREATE TABLE documents_template_copies (
 	version INTEGER NOT NULL, 
 	digest VARCHAR(64) NULL, 
 	record_version INTEGER NULL, 
+	base NVARCHAR(max) NULL, 
 	installed_by VARCHAR(320) NOT NULL, 
 	installed_at VARCHAR(32) NOT NULL, 
 	removed_at VARCHAR(32) NULL, 
+	detached_at VARCHAR(32) NULL, 
+	detached_by VARCHAR(320) NULL, 
 	CONSTRAINT documents_template_copies_pkey PRIMARY KEY (id)
 );
 GO
-CREATE UNIQUE INDEX uq_documents_template_copies_live ON documents_template_copies (tenant_id, team, source, template_id, version) WHERE removed_at IS NULL;
+CREATE UNIQUE INDEX uq_documents_template_copies_live ON documents_template_copies (tenant_id, team, source, template_id) WHERE removed_at IS NULL AND detached_at IS NULL;
 GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
@@ -316,5 +319,5 @@ CREATE TABLE alembic_version_documents (
     CONSTRAINT alembic_version_documents_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0017');
+INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0018');
 GO

@@ -419,6 +419,9 @@ def _local_op(module_id: str, n: int, name: str) -> dict[str, Any]:
         "binding": None,
         "rate_limit_per_min": 60,
         "requires_approval": approval,
+        # Spelled out so the tool's own answer holds whatever the team's default: the acknowledgement always leaves at
+        # once and a reply always waits for a person.
+        **({"approval_mode": "person" if approval else "none"} if name in SENDS else {}),
         "approvers": 1,
         "amount_max": None,
         "stub": {"ok": True},

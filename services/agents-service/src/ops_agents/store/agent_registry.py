@@ -153,6 +153,20 @@ async def _name_tenant(c: AsyncConnection) -> None:
         await c.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": current_tenant()})
 
 
+async def publish_requested(c: AsyncConnection, kind: str, subject_id: str, version: int) -> bool:
+    """Whether a publish request names this version, decided or not. A saver that finds one opens the next version
+    instead of rewriting the draft a reviewer saw. The request table is read under RLS, so the tenant is named for
+    its policy in this transaction (the registry tables are not per tenant yet, phase B)."""
+    await _name_tenant(c)
+    q = sa.select(publish_requests.c.id).where(
+        _mine(),
+        publish_requests.c.kind == kind,
+        publish_requests.c.subject_id == subject_id,
+        publish_requests.c.version == version,
+    )
+    return (await c.execute(q)).first() is not None
+
+
 class AgentRegistry:
     # A slug and a version number are unique keys (CAS); a save writes its version row and moves the agent in one
     # transaction, as does a publish (TRANSACTION). Only one publish request per subject may be pending (CAS).
@@ -348,9 +362,6 @@ class AgentRegistry:
         at = now_iso()
         v = registry_agent_versions
         async with self.engine.begin() as c:
-            # The publish-request check below reads a table under RLS: name the tenant for its policy in this
-            # transaction, which runs as the owner because the agent tables are not per tenant yet (phase B).
-            await _name_tenant(c)
             # Locked so two saves at once (two tabs, or autosave racing a slow save) take turns: unlocked, both read the
             # same newest version, both open the next one, and the second fails on the version key.
             row = await self.row(agent_id, c, lock=True)
@@ -360,17 +371,8 @@ class AgentRegistry:
                 .mappings()
                 .one()
             )
-            asked = (
-                await c.execute(
-                    sa.select(publish_requests.c.id).where(
-                        _mine(),
-                        publish_requests.c.kind == "agent",
-                        publish_requests.c.subject_id == agent_id,
-                        publish_requests.c.version == n,
-                    )
-                )
-            ).first()
-            if newest["published_at"] is None and asked is None:
+            asked = await publish_requested(c, "agent", agent_id, n)
+            if newest["published_at"] is None and not asked:
                 # The draft keeps every change made to it, so its history entry reads as one change set.
                 changes = list(dict.fromkeys([*newest["changes"], *changes_between(newest["spec"], spec)]))
                 await c.execute(
