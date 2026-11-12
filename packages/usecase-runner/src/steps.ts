@@ -125,3 +125,48 @@ export async function runWorkflow(ops: OpsAI, workflowId: string, input: Record<
   const started = (await ops.runs.start(workflowId, { input })) as { runId: string };
   return ops.runs.wait(started.runId, options);
 }
+
+/** The auth headers of a seeded person's session, for the few requests a script still sends by hand (wrap them in `required`). */
+export async function authHeaders(email: string, { team = 'team_ops' }: { team?: string | null } = {}): Promise<Record<string, string>> {
+  const ops = await signInAs(email, { team });
+  return { Authorization: `Bearer ${ops.config.session?.accessToken ?? ops.config.accessToken}`, ...(team ? { 'X-Team-Id': team } : {}), 'Content-Type': 'application/json' };
+}
+
+/** The Security team's admin allows the fake bank's host and the private range it serves on. */
+export async function allowBank(security: OpsAI, bank: { host: string; range: string }, note: string): Promise<void> {
+  await security.raw.tools.egress_add_host({ body: { value: bank.host, note } as never });
+  await security.raw.tools.egress_add_range({ body: { value: bank.range, note } as never });
+}
+
+/**
+ * Sam, the dev seed's Security admin, made an admin of `team` too (its admin invites him, he accepts as himself), because
+ * team-wide policies such as the approvals switch are changed by a Security admin and apply to the team they act in.
+ * Returns his client acting in `team`.
+ */
+export async function securityAdminOn(teamAdmin: OpsAI, team = 'team_ops'): Promise<OpsAI> {
+  const sam = await signInAs(PEOPLE.sam, { team: 'team_security' });
+  const sent = (await teamAdmin.raw.platform.members_invite_members({ body: { emails: [PEOPLE.sam], role: 'admin' } })) as { invites?: { token: string }[] };
+  const token = sent.invites?.[0]?.token;
+  if (!token) throw new Error('inviting the Security admin returned no invitation');
+  await sam.raw.platform.invites_accept_invite({ path: { token }, body: { name: 'Sam Adeyemi' } as never });
+  return signInAs(PEOPLE.sam, { team });
+}
+
+/**
+ * Turns "ask before an agent changes anything in an app" on (a reviewer answers) or off for the team `admin` acts in,
+ * as a Security admin does in Settings (`securityAdminOn`). The setting is per team: `admin` must act in the team under test.
+ */
+export async function setWriteApprovals(admin: OpsAI, on: boolean): Promise<void> {
+  await admin.raw.platform.policies_set_policy({ path: { key: 'toolWritesNeedApproval' }, body: { value: on } as never });
+}
+
+/**
+ * Lets the owner run a write from the workbench without a confirmation: the team asks no one before an agent changes an
+ * app and its test runs of a live write do not ask the person either (`testRunsAsk` off). `admin` acts in the team.
+ */
+export async function setTestRunsDoNotAsk(admin: OpsAI): Promise<void> {
+  await admin.raw.platform.policies_set_policy({
+    path: { key: 'appChanges' },
+    body: { value: { ask: false, answer: 'none', reviewerRole: null, testAccountsNeverAsk: true, testRunsAsk: false } } as never,
+  });
+}

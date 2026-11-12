@@ -4,6 +4,7 @@
 // after is clicked on the REST tool page (the API-client layout; functions keep the Function workbench). Each step is
 // checked on its own.
 import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PEOPLE, allowBank, authHeaders, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -13,8 +14,7 @@ const ACCOUNT = 'CHQ-2219';
 const BANK_KEY = 'dev-bank-key';
 const JAMES = 'j.richardson@harborpine.example';
 const RAVI = 'r.menon@harborpine.example';
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-const as = async (email, team) => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
+const as = (email, team = 'team_ops') => authHeaders(email, { team });
 const json = async (r) => {
   const body = await r.json();
   if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);

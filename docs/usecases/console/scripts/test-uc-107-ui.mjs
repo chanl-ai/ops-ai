@@ -3,6 +3,7 @@
 // the fake core bank's query-key route is set up through the API; Operations' secret starts with a wrong value, so a
 // live run fails until the rotation. Each step is checked on its own.
 import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PEOPLE, allowBank, authHeaders, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -15,8 +16,7 @@ const ACCOUNT = 'CHQ-2219';
 const BANK_KEY = 'dev-bank-key';
 const JAMES = 'j.richardson@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-const as = async (email, team) => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
+const as = (email, team = 'team_ops') => authHeaders(email, { team });
 const json = async (r) => {
   const body = await r.json();
   if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
@@ -50,8 +50,7 @@ await withUiStack(
     const S = await as(SAM, 'team_security');
     const J = await as(JAMES, 'team_ops');
     const N = await as('n.petrov@harborpine.example', 'team_security');
-    await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.host, note: 'uc-107' }) });
-    await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.range, note: 'uc-107' }) });
+    await allowBank(await signInAs(SAM, { team: 'team_security' }), stack.bank, 'uc-107');
     // Operations' own secret: James, a builder there, adds it in the team his module belongs to.
     await json(await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: KEY, value: 'not-the-key' }) }));
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc107-stmt-${TAG}`, type: 'http' }) }))).id;
@@ -110,7 +109,7 @@ await withUiStack(
         const all = [...OPS, ...MORE];
         check(
           '1 the secret lists three operations and counts the rest',
-          links.length === 3 && links.every((h) => all.some((op) => h === `/tools/${id}/operations/${op}`)) && (await more.innerText()) === 'and 2 more' && all.filter((op) => !links.some((h) => h.endsWith(`/${op}`))).every((op) => rest.includes(op)) && (await row.count()) === 1,
+          links.length === 3 && links.every((h) => all.some((op) => h === `/data/tools/${id}/operations/${op}`)) && (await more.innerText()) === 'and 2 more' && all.filter((op) => !links.some((h) => h.endsWith(`/${op}`))).every((op) => rest.includes(op)) && (await row.count()) === 1,
           { links, rest },
         );
       });
@@ -121,7 +120,7 @@ await withUiStack(
           await new Promise((r) => setTimeout(r, 4000));
           await route.fallback();
         });
-        await sam.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await sam.goto(`${consoleUrl}/settings/workspace/storage`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const skeleton = await sam.getByTestId('storage-credentials-loading').waitFor({ timeout: 30_000 }).then(() => true, () => false);
         const text = await sam.getByText('Loading…', { exact: true }).count();
         await sam.unroute('**/settings/storage/credentials');

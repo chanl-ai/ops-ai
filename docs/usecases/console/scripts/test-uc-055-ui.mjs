@@ -3,7 +3,8 @@
 // service (scripted model, no provider) takes its tools from tools-service. Each step is checked on its own, so one
 // failing step still lets the later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
-import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
+import { PEOPLE, allowBank, authHeaders, securityAdminOn, setTestRunsDoNotAsk, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
+import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -15,8 +16,7 @@ const MAYA = 'm.okafor@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-const headers = async (email, team = 'team_ops') => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
+const headers = (email, team = 'team_ops') => authHeaders(email, { team });
 
 /** Runs one step; a throw fails that step's check with the error and leaves the next steps to run. */
 async function step(name, body) {
@@ -57,15 +57,18 @@ async function chat(page, consoleUrl, text) {
 await withUiStack(
   async (consoleUrl, stack) => {
     const browser = await chromium.launch();
+    // Team-wide policies are changed by a Security admin who acts in the team (Priya invites Sam to team_ops).
+    const samInOps = await securityAdminOn(await signInAs(PEOPLE.priya));
     const errors = [];
     let moduleId;
     try {
       // 1. The Security admin allows the bank's host and the private range it serves on.
       await step('1 Sam allows the bank host and range', async () => {
-        const P = await headers(SAM, 'team_security');
-        const host = await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.host, note: 'uc-055' }) });
-        const range = await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.range, note: 'uc-055' }) });
-        check('1 Sam allows the bank host and range', host.status === 201 && range.status === 201, { host: host.status, range: range.status });
+        const security = await signInAs(SAM, { team: 'team_security' });
+        await allowBank(security, stack.bank, 'uc-055');
+        // A test run of a live write asks the person unless the team turns testRunsAsk off (the approvals page); step 5 is the owner's own run of the write, so they are off until step 6.
+        await setTestRunsDoNotAsk(samInOps);
+        check('1 Sam allows the bank host and range', true);
       });
 
       const james = await signIn(browser, consoleUrl, JAMES, errors);
@@ -144,7 +147,7 @@ await withUiStack(
       await step('6 James grants both operations to Branch Concierge and publishes it', async () => {
         // Approvals are off by default (2026-11-01): steps 8 and 9 prove a held chat write, so the team turns tool
         // write approvals on here, after step 5's owner run of the write.
-        await writeApprovalsOn();
+        await setWriteApprovals(samInOps, true);
         await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
         const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
@@ -207,7 +210,7 @@ await withUiStack(
         await james.getByRole('tab', { name: /^Activity/ }).click({ timeout: 60_000 });
         const res = await loaded;
         const body = res ? (await res.json()).data : undefined;
-        const shown = await james.getByText('get_account').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+        const shown = await james.getByText(/get[_ ]account/i).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
         check("10 the module's Activity tab lists the get_account call", res?.status() === 200 && shown && (body?.recent ?? []).some((c) => c.target === 'get_account' && c.status === 'ok'), { status: res?.status(), shown });
       });
 

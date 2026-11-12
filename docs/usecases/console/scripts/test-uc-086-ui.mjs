@@ -4,7 +4,8 @@
 // provider) takes its tools from tools-service. Each step is checked on its own, so one failing step still lets the
 // later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, required, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
-import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
+import { PEOPLE, allowBank, authHeaders, securityAdminOn, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
+import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -19,8 +20,7 @@ const MAYA = 'm.okafor@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-const headers = async (email, team = 'team_ops') => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
+const headers = (email, team = 'team_ops') => authHeaders(email, { team });
 const get = async (path, email = JAMES) => (await (await fetch(`${tools}${path}`, { headers: await headers(email) })).json()).data;
 
 /** Runs one step; a throw fails that step's check with the error and leaves the next steps to run. */
@@ -83,6 +83,8 @@ async function holdsOn(moduleId, contextId) {
 await withUiStack(
   async (consoleUrl, stack) => {
     const browser = await chromium.launch();
+    // Team-wide policies are changed by a Security admin who acts in the team (Priya invites Sam to team_ops).
+    const samInOps = await securityAdminOn(await signInAs(PEOPLE.priya));
     const errors = [];
     let moduleId;
     let ownerContext;
@@ -90,10 +92,8 @@ await withUiStack(
 
     // 1. The Security admin allows the bank's host and the private range it serves on.
     await step('1 Sam allows the bank host and range', async () => {
-      const P = await headers(SAM, 'team_security');
-      const host = await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.host, note: 'uc-086' }) });
-      const range = await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.range, note: 'uc-086' }) });
-      check('1 Sam allows the bank host and range', host.status === 201 && range.status === 201, { host: host.status, range: range.status });
+      await allowBank(await signInAs(SAM, { team: 'team_security' }), stack.bank, 'uc-086');
+      check('1 Sam allows the bank host and range', true);
     });
 
     const james = await signIn(browser, consoleUrl, JAMES, errors);
@@ -167,7 +167,7 @@ await withUiStack(
       const link = await panel.getByTestId('review-module-link').getAttribute('href').catch(() => null);
       check(
         '4a the review lists its operations and new host and links to the module',
-        /Added/.test(operations) && hosts.includes(stack.bank.host) && link === `/tools/${moduleId}`,
+        /Added/.test(operations) && hosts.includes(stack.bank.host) && link === `/data/tools/${moduleId}`,
         { operations: operations.slice(0, 300), hosts, link },
       );
       const decided = armed(nadia.waitForResponse((r) => r.request().method() === 'POST' && /\/reviews\/[^/]+\/decision$/.test(r.url()), { timeout: 60_000 }));
@@ -246,7 +246,7 @@ await withUiStack(
     await step('7 James grants the operations to Branch Concierge and publishes it', async () => {
       // Approvals are off by default (2026-11-01): steps 9-11 prove a held chat write, so the team turns tool write
       // approvals on before the agent is granted the write.
-      await writeApprovalsOn();
+      await setWriteApprovals(samInOps, true);
       await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
       const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'get_statement', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));

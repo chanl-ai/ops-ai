@@ -49,4 +49,4 @@ ran twice or not at all fails it.
 
 ## Setup state
 
-The test-run responses go through `required()`. On 2026-11-12 steps 7 to 11 fail (the publish response never arrives, and the chat steps follow from it).
+On 2026-11-12 steps 7 to 11 still fail: the agent page's PATCH never carries all three granted tools (step 7), and the chat steps follow. Open. Step 4a now expects the module link under /data/tools.

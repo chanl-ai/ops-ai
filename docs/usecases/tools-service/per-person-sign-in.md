@@ -70,4 +70,4 @@ the team's or another person's token fails it. Step 7 fails if tools-service rea
 
 ## Setup state
 
-The account read goes through `required()`. On 2026-11-12 steps 14 to 18 fail on the console pages for Your connections and the app's page.
+On 2026-11-12 steps 14 to 18 still fail: the redirect targets are now /settings/account/connectors and /data/connectors/, but the checks' element ids on those pages are not yet re-read.

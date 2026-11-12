@@ -205,7 +205,7 @@ try {
         await step('14 Your connections, from the person menu, lists his Salesforce account', async () => {
           await page.getByTestId('nav-user').click();
           await page.getByTestId('nav-connections').click();
-          await page.waitForURL(/\/integrations\/my-accounts$/, { timeout: 60_000 });
+          await page.waitForURL(/\/settings\/account\/connectors$/, { timeout: 60_000 });
           const row = page.getByTestId('my-connections');
           await row.waitFor({ timeout: 60_000 });
           const text = (await row.textContent()) ?? '';
@@ -246,7 +246,7 @@ try {
         await step('17 Priya reads Everyone signs in on the app’s Settings, turns it off to the team account and back on', async () => {
           // Who signs in sits on the app page's Settings in the final Apps frames; the old address opens the page.
           await admin.goto(`${consoleUrl}/tools/connections/${conn.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await admin.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          await admin.waitForURL((u) => u.pathname.startsWith('/data/connectors/'), { timeout: 60_000 });
           await admin.getByTestId('app-tab-settings').click();
           const everyone = admin.getByTestId('app-everyone');
           await everyone.waitFor({ timeout: 90_000 });
@@ -266,7 +266,7 @@ try {
 
         await step('18 she connects her own account on the app’s page, which the old connection address opens', async () => {
           await admin.goto(`${consoleUrl}/tools/connections/${conn.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await admin.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          await admin.waitForURL((u) => u.pathname.startsWith('/data/connectors/'), { timeout: 60_000 });
           const button = admin.getByTestId('app-connect-me');
           await button.waitFor({ timeout: 90_000 }).catch(async (e) => {
             // What the page shows instead, so a red run says why.

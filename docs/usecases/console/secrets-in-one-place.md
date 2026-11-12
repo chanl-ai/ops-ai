@@ -37,4 +37,4 @@ before the 64-character rule.
 
 ## Setup state
 
-The live-run response goes through `required()`. On 2026-11-12 step 1b (storage credentials load as skeleton rows) fails, with and without this change.
+Passing on 2026-11-12. Storage credentials are drawn on Settings > Workspace > Storage (step 1b), and the Used-by links point at /data/tools.
