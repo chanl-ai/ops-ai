@@ -23396,7 +23396,7 @@
     },
     "/v1/me/accounts/{account_id}/another": {
       "post": {
-        "description": "Add another account of the caller's own on this account's app, through the same auth config: where to\nsend the browser. The body names it and says where it signs in (409 account_name_taken for a name another\naccount of the app holds); with no body it is \"<name>'s other account\" and signs in where this account does.\nSigning in as an identity the caller already linked updates that account instead.",
+        "description": "Add another account of the caller's own on this account's app, through the same auth config: where to\nsend the browser. The body names it and says where it signs in (409 account_name_taken for a name another\naccount of the caller's own holds; the team's accounts may share it); with no body it is \"<name>'s other\naccount\" and signs in where this account does.\nSigning in as an identity the caller already linked updates that account instead.",
         "operationId": "apps_add_own_account",
         "parameters": [
           {

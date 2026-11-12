@@ -21,7 +21,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp_types import Implementation
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_access.catalogue import encode_grid
+from ops_access.catalogue import Grant, encode_grid
 from ops_identity import Auth, Identity, Principal, service_signer
 from ops_service_kit.settings import Settings
 from ops_tools import mcp_server
@@ -35,9 +35,9 @@ from .fake_mcp import tools as fake_tools
 from .fake_upstream import ENDPOINT, HOST, fake_bank
 
 TEAM = "team_lending"
-RUN = [("tools", "run", "all"), ("tools", "view", "all")]
+RUN: list[Grant] = [("tools", "run", "all"), ("tools", "view", "all")]
 # Each person's grid in the team: who may run tools, read skills, create skills and decide reviews.
-GRIDS: dict[str, list[tuple[str, str, str]]] = {
+GRIDS: dict[str, list[Grant]] = {
     "viewer": [("tools", "view", "all"), ("skills", "view", "all")],
     # Their own approver, so an install passes the gateway and reaches agents-service.
     "runner": [*RUN, ("skills", "view", "all"), ("reviews", "decide", "all")],
@@ -63,6 +63,11 @@ def _person(who: str, tenant: str) -> Principal:
         grids={who: encode_grid(GRIDS[who])},
         policies={"requesterMayDecide": True},
     )
+
+
+def _content(result: Any) -> dict[str, Any]:
+    content: dict[str, Any] = result.structured_content or {}
+    return content
 
 
 class AskerMayDecide:
@@ -102,8 +107,10 @@ class Agents:
         self.app = FastAPI()
         self.made: list[str] = []
         self.list_calls = 0
-        rows = [{"id": f"sk_{n}", "slug": f"skill-{n}", "name": f"Skill {n}", "useWhen": "", "inputs": []}
-                for n in range(skills)]  # fmt: skip
+        rows: list[dict[str, Any]] = [
+            {"id": f"sk_{n}", "slug": f"skill-{n}", "name": f"Skill {n}", "useWhen": "", "inputs": []}
+            for n in range(skills)
+        ]
 
         @self.app.get("/v1/templates")
         async def templates(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -170,7 +177,11 @@ async def _stack(
     )
     to_agents = httpx.AsyncClient(transport=httpx.ASGITransport(app=agents.app))
     platform = PlatformTools({"agents": "http://agents"}, service_signer(settings), to_agents)
-    monkeypatch.setattr(mcp_server, "_platform_tools", lambda _s: platform)
+
+    def platform_tools(_s: Settings) -> PlatformTools:
+        return platform
+
+    monkeypatch.setattr(mcp_server, "_platform_tools", platform_tools)
     async with opa_client() as opa, httpx.AsyncClient(transport=httpx.ASGITransport(app=fake)) as upstream:
         app = build_app(
             engine,
@@ -185,7 +196,9 @@ async def _stack(
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as rest:
             api = Api(rest, tenant)
             await rest.post("/v1/egress/hosts", json={"value": HOST})
-            ops = [{"name": "lookup_case", "description": "Find a case", "access": "read", "group": "t", "input": []}]
+            ops: list[dict[str, Any]] = [
+                {"name": "lookup_case", "description": "Find a case", "access": "read", "group": "t", "input": []}
+            ]
             source = {"kind": "mcp", "url": f"{ENDPOINT}/mcp"}
             r = await api.call(
                 "POST", "/mod_document_service/operations/import", json={"source": source, "operations": ops}
@@ -229,8 +242,8 @@ async def test_a_member_without_tools_run_runs_neither_a_team_tool_nor_a_platfor
         team = await c.call_tool("lookup_case", {})
         platform = await c.call_tool("list_templates", {})
     assert team.is_error and platform.is_error, (team, platform)
-    assert (team.structured_content or {}).get("code") == "role_required", team
-    assert (platform.structured_content or {}).get("code") == "role_required", platform
+    assert _content(team).get("code") == "role_required", team
+    assert _content(platform).get("code") == "role_required", platform
 
 
 async def test_tools_run_without_the_create_right_cannot_install_a_template(stack: Stack) -> None:
@@ -238,7 +251,8 @@ async def test_tools_run_without_the_create_right_cannot_install_a_template(stac
     tools:run and no skills:create is refused there, and nothing is made."""
     async with stack.app.router.lifespan_context(stack.app), stack.session("runner") as c:
         out = await c.call_tool("install_template", {"resource": "plugin:opsai.starters:doc-coauthoring"})
-    assert (out.structured_content or {}).get("error", {}).get("code") == "role_required", out
+    error: dict[str, Any] = _content(out).get("error") or {}
+    assert error.get("code") == "role_required", out
     assert stack.agents.made == []
 
 
@@ -249,7 +263,7 @@ async def test_template_calls_are_gateway_calls_and_an_install_is_not_held(stack
     async with stack.app.router.lifespan_context(stack.app), stack.session("maker") as c:
         listed = await c.call_tool("list_templates", {"kind": "skill"})
         made = await c.call_tool("install_template", {"resource": "plugin:opsai.starters:doc-coauthoring"})
-    assert not listed.is_error and (listed.structured_content or {}).get("templates"), listed
+    assert not listed.is_error and _content(listed).get("templates"), listed
     [row] = await stack.rows("list_templates")
     assert (row["channel"], row["outcome"], row["sub"]) == ("mcp", "ok", "maker@bank.test")
     assert not made.is_error, made
