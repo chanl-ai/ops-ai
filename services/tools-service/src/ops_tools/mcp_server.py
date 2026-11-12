@@ -22,13 +22,14 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, cast
 
+import httpx
 import mcp_types as types
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
 from ops_access import can
-from ops_identity import Auth, Principal, service_signer
+from ops_identity import ActingForTokens, Auth, Principal, ServiceClient, service_signer
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable
 from ops_service_kit.http import error_body
 from ops_service_kit.ids import new_id
@@ -224,7 +225,21 @@ def _platform_tools(settings: Settings) -> PlatformTools:
         signer = service_signer(settings)
     except ValueError:
         signer = None
-    return PlatformTools({"agents": settings.agents_url or ""}, signer)
+    return PlatformTools({"agents": settings.agents_url or ""}, signer, people=_acting_for(settings, signer))
+
+
+def _acting_for(settings: Settings, signer: Any) -> ActingForTokens | None:
+    """Whom an operation that makes a record acts for, as agents-service's tool calls name theirs
+    (ops_agents.api.acting_for): minted by platform-service on a platform stack, self-signed in dev."""
+    if signer is None:
+        return None
+    if settings.auth_mode != "platform":
+        return ActingForTokens.for_dev(signer, service="tools", audience="agents")
+    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+    platform = httpx.AsyncClient(base_url=internal, timeout=10)
+    return ActingForTokens.from_platform(
+        ServiceClient.for_settings(settings, platform, service="tools", audience="platform")
+    )
 
 
 def _caller(ctx: Any) -> McpCaller:

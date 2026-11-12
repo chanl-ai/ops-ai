@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import copy as deep
 import json
+from dataclasses import replace
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
@@ -28,6 +29,7 @@ from pydantic import Field, ValidationError
 from ops_contracts.chat import WireModel
 from ops_documents_client import DocumentsClient, DocumentsRefused
 from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_identity.fastapi import ActingPerson
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -68,6 +70,18 @@ router = APIRouter(prefix="/v1/templates", tags=["templates"])
 resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
+
+
+async def maker(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
+    """The caller, named as the person a service's call acts for (X-Acting-For, verified by ops_identity), so a copy
+    tools-service makes over MCP records that person as its maker. The rights checked stay the service token's, which
+    carries only the cells the person holds."""
+    if acting is None or me.identity is None or me.identity.kind != "service":
+        return me
+    return replace(me, email=acting.email, name=acting.name or acting.email, sub=acting.sub)
+
+
+Maker: TypeAlias = Annotated[Principal, Depends(maker)]  # noqa: UP040
 
 Kind = Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
 KINDS: tuple[Kind, ...] = ("agent", "skill", "workflow", "guardrail", "case_type", "task_type")
@@ -679,7 +693,7 @@ def _template(offered: dict[str, dict[str, Any]], source: str, template_id: str)
     status_code=201,
     responses={200: {"model": Envelope[Installation], "description": "The team already holds a copy of this version"}},
 )
-async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JSONResponse:
+async def copy_resource(rt: Rt, me: Maker, resource: str, body: InstallInput) -> JSONResponse:
     """Add to team: makes the team's own copy of the resource, 201 with it, or 200 with the copy the team already holds
     of this version. 404 `template_not_found` when the team's apps bring no such resource (its app off for the team),
     `template_version_not_found` for a version they do not ship; 409 `name_taken` when the team already has a record

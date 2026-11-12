@@ -3,6 +3,8 @@
 Each entry maps one operation of a service's public API to an MCP tool: its name, what it does, its input schema and
 the route it calls. The call goes to the owning service as any call between services does: a service token of this
 service, naming the team. The assistant's own token is never sent on, since its audience is this MCP address alone.
+An operation that makes a record also sends an acting-for token for the person (X-Acting-For), so the record names
+them as its maker.
 
 The token carries the person by its scopes: of the cells an operation needs, only those the person holds in the team.
 The owning service then decides with its own `can`, so a person without the create right of a template's kind is
@@ -22,7 +24,7 @@ import httpx
 import mcp_types as types
 
 from ops_access import Access
-from ops_identity import Principal, ServiceClient
+from ops_identity import ACTING_FOR_HEADER, ActingForTokens, Principal, ServiceClient
 from ops_policy import Ed25519Signer
 
 TIMEOUT = 15.0
@@ -109,8 +111,14 @@ class PlatformTools:
     key for service tokens."""
 
     def __init__(
-        self, bases: dict[str, str], signer: Ed25519Signer | None, http: httpx.AsyncClient | None = None
+        self,
+        bases: dict[str, str],
+        signer: Ed25519Signer | None,
+        http: httpx.AsyncClient | None = None,
+        *,
+        people: ActingForTokens | None = None,
     ) -> None:
+        self.people = people
         self.bases = {k: v.rstrip("/") for k, v in bases.items() if v} if signer is not None else {}
         self.http = http
         # Mints the token only; the call itself goes out on `http` so a refusal's body reaches the assistant.
@@ -126,6 +134,14 @@ class PlatformTools:
         held = [c for c in cells if ACCESS.may(who, *c.split(":", 1), team=team)]
         signed = replace(self.client, audience=service, scopes=held)
         return {**signed.headers(team=team, tenant=who.tenant_id), "Accept": "application/json"}
+
+    async def _acting_for(self, who: Principal, team: str) -> dict[str, str]:
+        """The person a write acts for, as a token platform-service signs, so the record it makes names them as its
+        maker rather than this service; none for a caller who is not a person."""
+        if self.people is None or who.kind != "person" or not who.email:
+            return {}
+        token = await self.people.token(tenant_id=who.tenant_id, email=who.email, team_id=team)
+        return {ACTING_FOR_HEADER: token}
 
     def tools(self) -> list[types.Tool]:
         return [
@@ -147,6 +163,8 @@ class PlatformTools:
         o = BY_NAME[name]
         path, rest = o.route(args)
         headers = self._headers(who, team, o.service, o.cells)
+        if not o.read_only:
+            headers.update(await self._acting_for(who, team))
         url = f"{self.bases[o.service]}{path}"
         get = o.method == "GET"
         async with _Client(self.http) as http:

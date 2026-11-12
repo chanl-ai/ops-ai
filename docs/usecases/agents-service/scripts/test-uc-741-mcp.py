@@ -63,6 +63,11 @@ with templates_stack() as s:
             made.is_error is False and bool(record) and record in skill_ids(s),
             made,
         )
+
+        # 5. The copy names Priya as its maker, not the tools service that called agents-service for her.
+        row = next((x for x in list_skills(sign_in_as(PRIYA)) if str(x.get("id")) == record), {})
+        maker = row.get("updatedBy")
+        check("5 the installed skill records Priya as its maker", maker == PRIYA, repr(maker))
     else:
         for n in ("2 list_templates returns the starter skill", "3 install is refused without the create right",
                   "4 install_template makes the team's copy"):  # fmt: skip
