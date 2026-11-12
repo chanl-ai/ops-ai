@@ -559,7 +559,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/callers-from-before-several-accounts-keep-working.md` | uc-705: Callers from before several accounts keep working |
 | `usecases/tools-service/add-account-lives-on-the-accounts-tab.md` | uc-703: Add account is on the Accounts tab for whoever manages apps, and never for a member |
 | `usecases/kb-service/typed-text-and-pushed-items.md` | uc-676: Typed text and pushed items become cited knowledge |
-| `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
+| `usecases/knowledge/rerank-and-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
 | `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
 | `usecases/agents-service/guardrail-names-per-team.md` | uc-731: Two teams keep a guardrail of the same name and one team cannot hold two |
 | `usecases/agents-service/start-from-a-template-sdk.md` | uc-740: A team lists templates of each kind and installs a starter skill through the SDK |

@@ -15,7 +15,7 @@ console step is only written once the same step exists through the SDK.
 | uc-399 | Read knowledge usage and refs | A person with the cell reads their team's usage, refs and search; a service with the scope reads tenant-wide | api | api ok |
 | uc-675 | Website source | A website source keeps a base current and answers cite it | api, sdk | ok |
 | uc-676 | Typed text and pushed items | Typed pages and pushed items are indexed, versioned and cited; the same push changes nothing | api, sdk, ui | ok |
-| uc-677 | Rerank and query rewrite | An owner turns them on and a hard question gets a better passage | api, sdk, ui | ok |
+| uc-677 | Turn on rerank and rewrite | An owner turns them on and a hard question gets a better passage | api, sdk, ui | sdk and ui pass; CLI cannot set retrieval |
 | uc-678 | SharePoint and Confluence sources | A team takes in libraries and spaces, kept current and cited | api, sdk, ui | ok |
 | uc-129 | Add documents from Files | A builder adds files already in Files to a base | ui | ui ok |
 | uc-096 | Knowledge base end to end | A person creates a base, adds files and a page, tests a question and retires it | ui | ui ok |

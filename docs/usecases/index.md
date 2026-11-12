@@ -249,7 +249,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | `tools-service/app-page-one-state.md` |
 | uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | `kb-service/a-website-source-keeps-a-knowledge.md` |
 | uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, cli, ui | `kb-service/typed-text-and-pushed-items.md` |
-| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | `kb-service/rerank-and-query-rewrite.md` |
+| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | `knowledge/rerank-and-rewrite.md` |
 | uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | `kb-service/sharepoint-and-confluence-sources.md` |
 | uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | `tools-service/a-second-org-signs-in-at-its-own-address.md` |
 | uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | `tools-service/a-second-server-signs-in-at-its-own-address.md` |

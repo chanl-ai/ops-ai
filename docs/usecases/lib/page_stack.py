@@ -12,7 +12,9 @@ import tempfile
 from contextlib import ExitStack
 from pathlib import Path
 
-from usecase_harness import kb
+from usecase_harness import ROOT, fake_openai, kb, models
+
+RERANK_RULES = ROOT / "services/kb-service/tests/fixtures/rerank-and-rewrite-fake-openai"
 
 
 def main() -> None:
@@ -25,7 +27,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="usecase-page-") as tmp, ExitStack() as stack:
         # Pages say which services in words; knowledge brings its files and documents services with it.
         if "knowledge" in ns.services:
-            services["kb"] = str(stack.enter_context(kb(Path(tmp) / "files")).base_url).rstrip("/")
+            env = None
+            if "scripted chat model" in ns.services:
+                # Rerank and rewrite call a chat model; the fake answers their prompts from the fixture, so no provider is called.
+                fake = stack.enter_context(fake_openai(RERANK_RULES))
+                models_url = stack.enter_context(models({"OPS_MODELS_FAKE_OPENAI_URL": fake}))
+                env = {"OPS_MODELS_URL": models_url, "OPS_MODELS_KEY": "mk_dev_kb"}
+            services["kb"] = str(stack.enter_context(kb(Path(tmp) / "files", env=env)).base_url).rstrip("/")
         if not services:
             raise SystemExit(f"page_stack starts the knowledge services only; the page asks for: {ns.services!r}")
         profile = {"baseUrl": "http://127.0.0.1", "team": "team_ops", "services": services}
