@@ -36,6 +36,19 @@ export class Agents {
     return this.raw.agents.agents_create_agent({ body: body as never });
   }
 
+  /** The operations an agent may be granted: published ones, as the agent page's picker lists them. */
+  async toolOptions(search?: string): Promise<any[]> {
+    const found = await this.raw.agents.agents_tool_options({ query: { search, limit: 100 } });
+    return Array.isArray(found) ? found : (found?.data ?? found?.items ?? []);
+  }
+
+  /** Adds tools (their ids from `toolOptions`) to the agent's draft, keeping the ones it holds. Publish it for the grant to take effect. */
+  async grantTools(id: string, tools: string[]) {
+    const held: string[] = (await this.get(id)).toolIds ?? [];
+    const wanted = [...held, ...tools.filter((t) => !held.includes(t))];
+    return this.raw.agents.agents_update_agent({ path: { agent_id: id }, body: { toolIds: wanted } as never });
+  }
+
   validate(definition: Record<string, unknown>) {
     const missing = (['name', 'role'] as const).filter((key) => !definition[key]);
     return {

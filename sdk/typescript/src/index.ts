@@ -8,4 +8,4 @@ export {
   BadRequest, Conflict, Forbidden, NotFound, OpsError, RateLimited, ServerError, Unauthorized,
 } from './errors.js';
 export type { Config, Service, ServerEvent } from './transport.js';
-export { Accounts, Apps, Connectors, Credentials, Me, Resources, Tools, Usage } from './words.js';
+export { Accounts, Apps, Connectors, Credentials, Egress, Me, Resources, Secrets, Tools, Usage } from './words.js';

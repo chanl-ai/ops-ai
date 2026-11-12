@@ -83,6 +83,76 @@ def _keys(
     }
 
 
+def _picked(found: dict[str, Any], names: list[str] | None) -> list[dict[str, Any]]:
+    """The discovered operations to import: the named ones, or all; a name the document lacks is refused rather than
+    skipped, because a typo would import less than the builder ticked."""
+    ops = list(found.get("operations") or [])
+    if names is None:
+        return ops
+    missing = [n for n in names if not any(o.get("name") == n for o in ops)]
+    if missing:
+        raise ValueError(f"the document has no operation named {', '.join(missing)}")
+    return [o for o in ops if o.get("name") in names]
+
+
+def _waiting_review(module: dict[str, Any]) -> str:
+    """The id of the security review a module's version waits on."""
+    for v in module.get("versions") or []:
+        if v.get("status") == "in_review" and v.get("reviewId"):
+            return str(v["reviewId"])
+    raise ValueError("this tool module has no version waiting on a security review; request one first")
+
+
+def _source(spec_url: str, connection_id: str | None) -> dict[str, Any]:
+    return {"kind": "openapi", "specUrl": spec_url, **({"connectionId": connection_id} if connection_id else {})}
+
+
+class Secrets:
+    """The team's secrets (Settings > Secrets). A value goes in and is never read back: no answer carries it."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    def list(self) -> list[dict[str, Any]]:
+        return _rows(self._raw.tools.secrets_list_secrets())
+
+    def create(self, name: str, value: str, *, teams: list[str] | None = None) -> dict[str, Any]:
+        """Stores a secret as the team's; `teams` also shares it with other teams of the caller."""
+        body: dict[str, Any] = {"name": name, "value": value, **({"teams": teams} if teams else {})}
+        return cast(dict[str, Any], self._raw.tools.secrets_create_secret(body))
+
+    def rotate(self, name: str, value: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.secrets_rotate_secret(name, {"value": value}))
+
+    def rename(self, name: str, new_name: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.secrets_rename_secret(name, {"name": new_name}))
+
+    def delete(self, name: str) -> Any:
+        return self._raw.tools.secrets_delete_secret(name)
+
+
+class Egress:
+    """The hosts and address ranges tools may reach (Settings > Egress); only a Security admin changes them."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    def list(self) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.egress_allow_list())
+
+    def allow_host(self, host: str, note: str = "") -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.egress_add_host({"value": host, "note": note}))
+
+    def allow_range(self, cidr: str, note: str = "") -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.egress_add_range({"value": cidr, "note": note}))
+
+    def remove_host(self, host: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.egress_remove_host({"value": host}))
+
+    def remove_range(self, cidr: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.egress_remove_range({"value": cidr}))
+
+
 class Apps:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
@@ -319,6 +389,50 @@ class Tools:
         body: dict[str, Any] = {"mode": "real" if real else "mock", "input": input or {}}
         if environment is not None:
             # Left out, a Real run is a test run: the app's sandbox account when it has one.
+            body["environment"] = environment
+        return cast(dict[str, Any], self._raw.tools.tool_modules_run_tool(module, tool, body))
+
+    def discover(self, spec_url: str, *, connection_id: str | None = None) -> dict[str, Any]:
+        """Reads an OpenAPI document and lists the operations it would bring, each with the access the method gives
+        it (GET is read, the rest write). Nothing is saved."""
+        return cast(dict[str, Any], self._raw.tools.tool_modules_discover(_source(spec_url, connection_id)))
+
+    def import_openapi(
+        self, module: str, spec_url: str, operations: list[str] | None = None, *, connection_id: str | None = None
+    ) -> dict[str, Any]:
+        """Imports the ticked operations (all when `operations` is left out) of an OpenAPI document into a module's
+        draft; it is published by a security review and `publish_version`."""
+        source = _source(spec_url, connection_id)
+        found = cast(dict[str, Any], self._raw.tools.tool_modules_discover(source))
+        body = {"source": source, "operations": _picked(found, operations)}
+        return cast(dict[str, Any], self._raw.tools.tool_modules_import_operations(module, body))
+
+    def request_review(self, module: str, note: str = "") -> dict[str, Any]:
+        """Asks the Security team to review the module's draft."""
+        return cast(dict[str, Any], self._raw.tools.tool_modules_request_review(module, {"note": note}))
+
+    def decide_review(self, module: str, decision: str = "approved", *, reason: str | None = None) -> dict[str, Any]:
+        """The Security team's answer to the review the module waits on; `approved` publishes it."""
+        review = _waiting_review(cast(dict[str, Any], self._raw.tools.tool_modules_get_module(module)))
+        body = {"decision": decision, **({"reason": reason} if reason else {})}
+        self._raw.agents.reviews_decide_publish_request(review, body)
+        return cast(dict[str, Any], self._raw.tools.tool_modules_get_module(module))
+
+    def publish_version(self, module: str, note: str = "") -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.tool_modules_publish_version(module, {"note": note}))
+
+    def run_module(
+        self,
+        module: str,
+        tool: str,
+        input: dict[str, Any] | None = None,
+        *,
+        real: bool = False,
+        environment: str | None = None,
+    ) -> dict[str, Any]:
+        """`run` for a module that is not an app: the test panel's call on the module itself."""
+        body: dict[str, Any] = {"mode": "real" if real else "mock", "input": input or {}}
+        if environment is not None:
             body["environment"] = environment
         return cast(dict[str, Any], self._raw.tools.tool_modules_run_tool(module, tool, body))
 
@@ -578,6 +692,52 @@ class AsyncTools:
             body["environment"] = environment
         return cast(dict[str, Any], await self._raw.tools.tool_modules_run_tool(module, tool, body))
 
+    async def discover(self, spec_url: str, *, connection_id: str | None = None) -> dict[str, Any]:
+        """Reads an OpenAPI document and lists the operations it would bring, each with the access the method gives
+        it (GET is read, the rest write). Nothing is saved."""
+        return cast(dict[str, Any], await self._raw.tools.tool_modules_discover(_source(spec_url, connection_id)))
+
+    async def import_openapi(
+        self, module: str, spec_url: str, operations: list[str] | None = None, *, connection_id: str | None = None
+    ) -> dict[str, Any]:
+        """Imports the ticked operations (all when `operations` is left out) of an OpenAPI document into a module's
+        draft; it is published by a security review and `publish_version`."""
+        source = _source(spec_url, connection_id)
+        found = cast(dict[str, Any], await self._raw.tools.tool_modules_discover(source))
+        body = {"source": source, "operations": _picked(found, operations)}
+        return cast(dict[str, Any], await self._raw.tools.tool_modules_import_operations(module, body))
+
+    async def request_review(self, module: str, note: str = "") -> dict[str, Any]:
+        """Asks the Security team to review the module's draft."""
+        return cast(dict[str, Any], await self._raw.tools.tool_modules_request_review(module, {"note": note}))
+
+    async def decide_review(
+        self, module: str, decision: str = "approved", *, reason: str | None = None
+    ) -> dict[str, Any]:
+        """The Security team's answer to the review the module waits on; `approved` publishes it."""
+        review = _waiting_review(cast(dict[str, Any], await self._raw.tools.tool_modules_get_module(module)))
+        body = {"decision": decision, **({"reason": reason} if reason else {})}
+        await self._raw.agents.reviews_decide_publish_request(review, body)
+        return cast(dict[str, Any], await self._raw.tools.tool_modules_get_module(module))
+
+    async def publish_version(self, module: str, note: str = "") -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.tool_modules_publish_version(module, {"note": note}))
+
+    async def run_module(
+        self,
+        module: str,
+        tool: str,
+        input: dict[str, Any] | None = None,
+        *,
+        real: bool = False,
+        environment: str | None = None,
+    ) -> dict[str, Any]:
+        """`run` for a module that is not an app: the test panel's call on the module itself."""
+        body: dict[str, Any] = {"mode": "real" if real else "mock", "input": input or {}}
+        if environment is not None:
+            body["environment"] = environment
+        return cast(dict[str, Any], await self._raw.tools.tool_modules_run_tool(module, tool, body))
+
 
 class AsyncResources:
     def __init__(self, raw: Any) -> None:
@@ -612,3 +772,49 @@ class AsyncUsage:
 
     async def list(self, **query: Any) -> list[dict[str, Any]]:
         return _rows(await self._raw.tools.executions_list_executions(**query))
+
+
+class AsyncSecrets:
+    """The team's secrets (Settings > Secrets). A value goes in and is never read back: no answer carries it."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    async def list(self) -> list[dict[str, Any]]:
+        return _rows(await self._raw.tools.secrets_list_secrets())
+
+    async def create(self, name: str, value: str, *, teams: list[str] | None = None) -> dict[str, Any]:
+        """Stores a secret as the team's; `teams` also shares it with other teams of the caller."""
+        body: dict[str, Any] = {"name": name, "value": value, **({"teams": teams} if teams else {})}
+        return cast(dict[str, Any], await self._raw.tools.secrets_create_secret(body))
+
+    async def rotate(self, name: str, value: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.secrets_rotate_secret(name, {"value": value}))
+
+    async def rename(self, name: str, new_name: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.secrets_rename_secret(name, {"name": new_name}))
+
+    async def delete(self, name: str) -> Any:
+        return await self._raw.tools.secrets_delete_secret(name)
+
+
+class AsyncEgress:
+    """The hosts and address ranges tools may reach (Settings > Egress); only a Security admin changes them."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    async def list(self) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.egress_allow_list())
+
+    async def allow_host(self, host: str, note: str = "") -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.egress_add_host({"value": host, "note": note}))
+
+    async def allow_range(self, cidr: str, note: str = "") -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.egress_add_range({"value": cidr, "note": note}))
+
+    async def remove_host(self, host: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.egress_remove_host({"value": host}))
+
+    async def remove_range(self, cidr: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.egress_remove_range({"value": cidr}))

@@ -46,17 +46,22 @@ from ._words import (
     AsyncAccounts,
     AsyncApps,
     AsyncCredentials,
+    AsyncEgress,
     AsyncMe,
     AsyncResources,
+    AsyncSecrets,
     AsyncTools,
     AsyncUsage,
     Credentials,
+    Egress,
     Me,
     Resources,
+    Secrets,
     Tools,
     Usage,
 )
 from ._workflows import AsyncWorkflows, Workflows
+from .errors import OpsError
 from .templates import AsyncTemplates, Templates
 
 # A run is over in these states; `waiting` means it stopped at a step that waits on a person or another system.
@@ -245,11 +250,31 @@ class Tasks(Resource):
         body = {"decision": decision, **({"reason": reason} if reason else {}), **fields}
         return self._raw.agents.reviews_decide(task_id, body)
 
+    def approve(self, task_id: str, *, password: str | None = None, reason: str | None = None) -> Any:
+        """Approves a task, such as a write an agent's chat held. A write asks the approver to confirm it is them
+        first; given the approver's `password`, the step-up is made and the approval retried."""
+        try:
+            return self.decide(task_id, "approve", reason=reason)
+        except OpsError as exc:
+            if exc.code != "step_up_required" or password is None:
+                raise
+        minted = self._raw.platform.auth_step_up({"password": password})
+        return self.decide(task_id, "approve", reason=reason, stepUpToken=str(minted.get("token") or ""))
+
 
 class AsyncTasks(AsyncResource):
     async def decide(self, task_id: str, decision: str, *, reason: str | None = None, **fields: Any) -> Any:
         body = {"decision": decision, **({"reason": reason} if reason else {}), **fields}
         return await self._raw.agents.reviews_decide(task_id, body)
+
+    async def approve(self, task_id: str, *, password: str | None = None, reason: str | None = None) -> Any:
+        try:
+            return await self.decide(task_id, "approve", reason=reason)
+        except OpsError as exc:
+            if exc.code != "step_up_required" or password is None:
+                raise
+        minted = await self._raw.platform.auth_step_up({"password": password})
+        return await self.decide(task_id, "approve", reason=reason, stepUpToken=str(minted.get("token") or ""))
 
 
 class Files(Resource):
@@ -344,6 +369,8 @@ class OpsAI:
         self.credentials = Credentials(self.raw, self.apps)
         self.accounts = Accounts(self.raw, self.apps)
         self.tools = Tools(self.raw, self.apps, Resource(self.raw, NOUNS["tools"]))
+        self.secrets = Secrets(self.raw)
+        self.egress = Egress(self.raw)
         self.resources = Resources(self.raw)
         self.templates = Templates(self.raw)
         self.usage = Usage(self.raw)
@@ -409,6 +436,8 @@ class AsyncOpsAI:
         self.credentials = AsyncCredentials(self.raw, self.apps)
         self.accounts = AsyncAccounts(self.raw, self.apps)
         self.tools = AsyncTools(self.raw, self.apps, AsyncResource(self.raw, NOUNS["tools"]))
+        self.secrets = AsyncSecrets(self.raw)
+        self.egress = AsyncEgress(self.raw)
         self.resources = AsyncResources(self.raw)
         self.templates = AsyncTemplates(self.raw)
         self.usage = AsyncUsage(self.raw)
