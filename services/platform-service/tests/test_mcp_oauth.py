@@ -1,0 +1,340 @@
+"""platform-service as the authorization server for a team's MCP address, by failure mode: a client that cannot find
+where to sign in, abuse of open registration, a code replayed or swapped, a token tied to nothing, a stolen renewal, a
+person who left the team, a connection that never ends, and a lookalike client.
+
+Paths: /.well-known/oauth-authorization-server, POST /oauth/register, GET /oauth/authorize, POST /oauth/token, and
+the person's own side of the browser step as JSON, GET and POST /v1/oauth/consent (what the console's consent
+page calls with the person's sign-in), GET /v1/oauth/grants. The MCP address of a team is
+<platform public URL>/mcp/<team>."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import secrets
+from datetime import UTC, datetime
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
+
+import httpx
+import sqlalchemy as sa
+
+from ops_platform.store.tables import audit_entries, members
+from ops_service_kit.ids import new_id
+
+from .conftest import DEMO_PASSWORD, PUBLIC_URL, SignInRig
+
+REDIRECT = "https://claude.example/callback"
+
+
+def challenge_of(verifier: str) -> str:
+    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+
+
+def claims_of(token: str) -> dict[str, Any]:
+    body = token.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+
+
+def audiences(claims: dict[str, Any]) -> list[str]:
+    aud = claims["aud"]
+    return [aud] if isinstance(aud, str) else list(aud)
+
+
+class Assistant:
+    """A scripted OAuth client such as Claude or Cursor, and the person who signs in for it."""
+
+    def __init__(self, rig: SignInRig) -> None:
+        self.rig = rig
+        self.api: httpx.AsyncClient = rig.public
+        self.verifier = secrets.token_urlsafe(48)
+
+    async def register(self, *, name: str = "Claude", redirect: str = REDIRECT) -> httpx.Response:
+        return await self.api.post(
+            "/oauth/register",
+            json={
+                "client_name": name,
+                "redirect_uris": [redirect],
+                "token_endpoint_auth_method": "none",
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+            },
+        )
+
+    async def client(self, **kw: str) -> str:
+        r = await self.register(**kw)
+        assert r.status_code == 201, r.text
+        return r.json()["client_id"]
+
+    def params(self, client_id: str, team: str, **over: str) -> dict[str, str]:
+        return {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": REDIRECT,
+            "code_challenge": challenge_of(self.verifier),
+            "code_challenge_method": "S256",
+            "resource": f"{PUBLIC_URL}/mcp/{team}",
+            "state": "st-1",
+            **over,
+        }
+
+    async def person(self, role: str = "builder") -> tuple[dict[str, str], str]:
+        """A password sign-in of a new person who is a member of a team of their own: the console's headers and the
+        team's id."""
+        email = f"{new_id('usr')}@bank.test"
+        user = await self.rig.person(email, role=role)
+        async with self.rig.engine.connect() as c:
+            team = (await c.execute(sa.select(members.c.team_id).where(members.c.user_id == user))).scalar_one()
+        r = await self.api.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
+        return {"Authorization": f"Bearer {r.json()['data']['token']}"}, team
+
+    async def allow(self, who: dict[str, str], params: dict[str, str]) -> httpx.Response:
+        """The person presses Allow on the consent page."""
+        body = {k: v for k, v in params.items() if k != "response_type"}
+        return await self.api.post("/v1/oauth/consent", json={**body, "decision": "allow"}, headers=who)
+
+    async def code(self, who: dict[str, str], params: dict[str, str]) -> str:
+        r = await self.allow(who, params)
+        assert r.status_code == 200, r.text
+        query = parse_qs(urlsplit(r.json()["data"]["redirectTo"]).query)
+        assert query["state"] == [params["state"]]
+        return query["code"][0]
+
+    async def exchange(self, code: str, params: dict[str, str], **over: str) -> httpx.Response:
+        form = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": params["client_id"],
+            "redirect_uri": params["redirect_uri"],
+            "code_verifier": self.verifier,
+            "resource": params["resource"],
+            **over,
+        }
+        return await self.api.post("/oauth/token", data=form)
+
+    async def connect(self, who: dict[str, str], params: dict[str, str]) -> dict[str, Any]:
+        r = await self.exchange(await self.code(who, params), params)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    async def renew(self, refresh_token: str, client_id: str) -> httpx.Response:
+        return await self.api.post(
+            "/oauth/token", data={"grant_type": "refresh_token", "refresh_token": refresh_token, "client_id": client_id}
+        )
+
+
+# uc-mcp-1
+async def test_the_server_metadata_tells_a_client_how_to_register_and_which_challenge_to_use(signin: SignInRig) -> None:
+    r = await signin.public.get("/.well-known/oauth-authorization-server")
+    assert r.status_code == 200, r.text
+    meta = r.json()
+    assert meta["issuer"] == PUBLIC_URL
+    assert meta["code_challenge_methods_supported"] == ["S256"]
+    assert meta["client_id_metadata_document_supported"] is True
+    assert meta["registration_endpoint"].startswith(PUBLIC_URL)
+    assert meta["token_endpoint"].startswith(PUBLIC_URL) and meta["authorization_endpoint"].startswith(PUBLIC_URL)
+
+
+# uc-mcp-7
+async def test_open_registration_is_rate_limited_and_refuses_redirects_a_browser_could_be_sent_to_by_anyone(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    for bad in ("http://claude.example/callback", "javascript:alert(1)", "https://claude.example/cb#frag"):
+        r = await a.register(redirect=bad)
+        assert r.status_code == 400, (bad, r.status_code, r.text)
+    for ok in ("http://127.0.0.1:33418/callback", "cursor://anysphere.cursor-mcp/oauth/callback"):
+        assert (await a.register(redirect=ok)).status_code == 201, ok
+    limited: httpx.Response | None = None
+    for _ in range(300):
+        r = await a.register()
+        if r.status_code == 429:
+            limited = r
+            break
+    assert limited is not None, "300 registrations from one address were never limited"
+    assert int(limited.headers["retry-after"]) > 0
+
+
+# uc-mcp-6, uc-mcp-15
+async def test_authorize_refuses_a_missing_or_plain_challenge_and_never_redirects_to_an_unregistered_address(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    team = signin.ops_team
+    ok = a.params(client, team)
+    for label, params in {
+        "no challenge": {k: v for k, v in ok.items() if k != "code_challenge"},
+        "plain": {**ok, "code_challenge_method": "plain"},
+        "resource of no team here": {**ok, "resource": f"{PUBLIC_URL}/mcp/{new_id('team')}"},
+        "resource on another host": {**ok, "resource": f"https://evil.example/mcp/{team}"},
+    }.items():
+        r = await signin.public.get("/oauth/authorize", params=params, follow_redirects=False)
+        assert r.status_code == 400, (label, r.status_code, r.text)
+        assert "location" not in r.headers, label
+    # An address the client did not register: an error page, never a redirect carrying anything to it.
+    r = await signin.public.get(
+        "/oauth/authorize", params={**ok, "redirect_uri": "https://evil.example/callback"}, follow_redirects=False
+    )
+    assert r.status_code == 400 and "location" not in r.headers
+    who, _ = await a.person()
+    r = await a.allow(who, {**ok, "redirect_uri": "https://evil.example/callback"})
+    assert r.status_code == 400 and "code" not in r.text
+
+
+# uc-mcp-15, uc-mcp-16
+async def test_the_consent_names_the_host_the_browser_returns_to_marks_the_name_self_reported_and_needs_the_team(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client(name="Official Microsoft Copilot")
+    who, team = await a.person()
+    params = a.params(client, team)
+    shown = await signin.public.get("/v1/oauth/consent", params=params, headers=who)
+    assert shown.status_code == 200, shown.text
+    data = shown.json()["data"]
+    assert data["redirectHost"] == "claude.example"
+    assert data["client"]["name"] == "Official Microsoft Copilot"
+    assert data["client"]["nameIsSelfReported"] is True
+    assert data["team"]["id"] == team
+    assert "teams" not in data, "the address names the team; there is no picker"
+    # A person who is not in the address's team is told so and given no code.
+    outsider, _ = await a.person()
+    refused = await a.allow(outsider, params)
+    assert refused.status_code == 403 and refused.json()["error"]["code"] == "team_forbidden", refused.text
+    assert "code=" not in refused.text
+
+
+# uc-mcp-6
+async def test_a_code_used_twice_revokes_what_it_issued_and_a_code_is_bound_to_its_verifier_redirect_and_resource(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    who, team = await a.person()
+    params = a.params(client, team)
+    first = await a.exchange(await a.code(who, params), params)
+    assert first.status_code == 200, first.text
+    code = await a.code(who, params)
+    assert (await a.exchange(code, params, code_verifier="x" * 50)).status_code == 400
+    assert (await a.exchange(code, params, redirect_uri="https://claude.example/other")).status_code == 400
+    r = await a.exchange(code, params, resource=f"{PUBLIC_URL}/mcp/{new_id('team')}")
+    assert r.json()["error"] == "invalid_target", r.text
+    fresh = await a.code(who, params)
+    used = await a.exchange(fresh, params)
+    assert used.status_code == 200
+    again = await a.exchange(fresh, params)
+    assert (again.status_code, again.json()["error"]) == (400, "invalid_grant")
+    renewed = await a.renew(used.json()["refresh_token"], client)
+    assert renewed.status_code == 400, "the replay revoked the grant the code had issued"
+
+
+# uc-mcp-2, uc-mcp-3
+async def test_the_token_is_for_the_one_address_and_team_for_15_minutes_and_no_rest_route_takes_it(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    who, team = await a.person()
+    params = a.params(client, team)
+    got = await a.connect(who, params)
+    claims = claims_of(got["access_token"])
+    assert audiences(claims) == [params["resource"]], "the address and nothing else, no service names"
+    assert claims["team_ids"] == [team]
+    assert got["expires_in"] == 900 and claims["exp"] - claims["iat"] == 900
+    r = await signin.public.get("/v1/auth/session", headers={"Authorization": f"Bearer {got['access_token']}"})
+    assert r.status_code == 401
+    r = await signin.public.get("/v1/me/permissions", headers={"Authorization": f"Bearer {got['access_token']}"})
+    assert r.status_code == 401
+
+
+# uc-mcp-4
+async def test_a_renewal_used_twice_ends_the_grant_and_no_renewal_works_at_the_other_endpoint(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    other = await a.client(name="Cursor")
+    who, team = await a.person()
+    got = await a.connect(who, a.params(client, team))
+    # Another client presenting it, and each kind of renewal at the other endpoint.
+    wrong = await a.renew(got["refresh_token"], other)
+    assert (wrong.status_code, wrong.json()["error"]) == (400, "invalid_grant")
+    at_console = await signin.public.post("/v1/auth/refresh", json={"refreshToken": got["refresh_token"]})
+    assert at_console.status_code == 401
+    email = f"{new_id('usr')}@bank.test"
+    await signin.person(email)
+    console = (await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})).json()
+    refused = await a.renew(console["data"]["refreshToken"], client)
+    assert (refused.status_code, refused.json()["error"]) == (400, "invalid_grant")
+    # Reuse: the first renewal works once; the old one then ends the whole grant, new one included.
+    first = await a.renew(got["refresh_token"], client)
+    assert first.status_code == 200, first.text
+    reused = await a.renew(got["refresh_token"], client)
+    assert (reused.status_code, reused.json()["error"]) == (400, "invalid_grant")
+    assert (await a.renew(first.json()["refresh_token"], client)).status_code == 400
+    async with signin.engine.connect() as c:
+        actions = (await c.execute(sa.select(audit_entries.c.action).where(audit_entries.c.team_id == team))).scalars()
+        assert "auth.refresh_reuse" in list(actions)
+
+
+# uc-mcp-5
+async def test_a_person_removed_from_the_team_cannot_renew_and_the_grant_ends(signin: SignInRig) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    who, team = await a.person()
+    got = await a.connect(who, a.params(client, team))
+    async with signin.engine.connect() as c:
+        member = (await c.execute(sa.select(members.c.id).where(members.c.team_id == team))).scalar_one()
+    admin = {**signin.admin, "X-Team-Id": team}
+    removed = await signin.public.post("/v1/settings/members/delete", json={"ids": [member]}, headers=admin)
+    assert removed.status_code == 200, removed.text
+    renewed = await a.renew(got["refresh_token"], client)
+    assert (renewed.status_code, renewed.json()["error"]) == (400, "invalid_grant"), "never a token with fewer teams"
+
+
+# uc-mcp-5
+async def test_a_connection_lasts_the_workspace_setting_8_hours_unless_an_admin_changes_it(signin: SignInRig) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    who, team = await a.person()
+
+    async def hours_left() -> float:
+        await a.connect(who, a.params(client, team))
+        grants = (await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"]
+        newest = max(grants, key=lambda g: g["createdAt"])
+        left = datetime.fromisoformat(newest["expiresAt"]) - datetime.now(UTC)
+        return left.total_seconds() / 3600
+
+    assert 7.9 < await hours_left() <= 8.0
+    put = await signin.public.put("/v1/policies/mcpConnectionHours", json={"value": 2}, headers=signin.admin)
+    assert put.status_code == 200, put.text
+    assert 1.9 < await hours_left() <= 2.0
+    too_long = await signin.public.put("/v1/policies/mcpConnectionHours", json={"value": 31 * 24}, headers=signin.admin)
+    assert too_long.status_code == 422, "at most 30 days"
+
+
+# uc-mcp-17
+async def test_a_grant_allowed_and_a_grant_ended_each_write_an_audit_row_with_tenant_and_team(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    who, team = await a.person()
+    got = await a.connect(who, a.params(client, team))
+    grants = (await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"]
+    ended = await signin.public.delete(f"/v1/oauth/grants/{grants[0]['id']}", headers=who)
+    assert ended.status_code == 204
+    assert (await a.renew(got["refresh_token"], client)).status_code == 400
+    async with signin.engine.connect() as c:
+        rows = (
+            (await c.execute(sa.select(audit_entries).where(audit_entries.c.tenant_id == signin.tenant)))
+            .mappings()
+            .all()
+        )
+    seen = {r["action"]: r for r in rows}
+    for action in ("oauth.grant_allowed", "oauth.grant_ended"):
+        assert action in seen, (action, sorted(seen))
+    assert seen["oauth.grant_allowed"]["team_id"] == team
+    assert seen["oauth.grant_ended"]["detail"]["by"] == "person"
