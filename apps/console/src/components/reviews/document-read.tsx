@@ -354,7 +354,7 @@ export function DocumentReadSection({
   return (
     <div className="flex flex-col gap-3" data-testid="document-read">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <Link href={`/data/files?file=${read.fileId}`} className="flex items-center gap-1.5 font-medium underline-offset-2 hover:underline" data-testid="read-file-link">
+        <Link href={`/data/files?file=${encodeURIComponent(read.fileId)}`} className="flex items-center gap-1.5 font-medium underline-offset-2 hover:underline" data-testid="read-file-link">
           <FileText className="size-4 text-muted-foreground" /> {read.fileName ?? read.fileId}
         </Link>
         <span className="text-xs text-muted-foreground">
@@ -400,7 +400,7 @@ export function ReplySection({ reply }: { reply: ReplyPreview }) {
               description={<span className="font-mono text-xs">{c.runId}</span>}
               trailing={
                 c.caseId ? (
-                  <Link href={`/work/cases/${c.caseId}`} className="text-xs underline underline-offset-2" data-testid={`reply-case-${c.runId}`}>
+                  <Link href={`/work/cases/${encodeURIComponent(c.caseId)}`} className="text-xs underline underline-offset-2" data-testid={`reply-case-${c.runId}`}>
                     {c.caseId}
                   </Link>
                 ) : (
