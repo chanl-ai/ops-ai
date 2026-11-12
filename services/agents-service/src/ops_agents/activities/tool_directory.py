@@ -156,7 +156,11 @@ class ToolsOperations:
 
     def forget(self) -> None:
         """Drops the current tenant and team's kept list, so the next read asks again (a tool offered moments ago)."""
-        self._cache.pop((current_tenant(), current_team()), None)
+        self.forget_for(current_tenant(), current_team())
+
+    def forget_for(self, tenant: str, team: str | None) -> None:
+        """Drops one team's kept list, for a change heard from platform-service (the team's approval answers)."""
+        self._cache.pop((tenant, team), None)
 
 
 class CatalogTools:

@@ -9,12 +9,14 @@ from typing import Any, ClassVar, cast
 import sqlalchemy as sa
 
 from ops_access import BY_KEY, POLICIES, check_value
+from ops_access.platform_events import POLICY_CHANGED
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.outbox import add as add_event
 
 from .audit import record
 from .roles import bump_version
-from .tables import policies
+from .tables import platform_outbox, policies
 from .tenancy import TenantDb
 
 OLD_KEYS = ("toolWritesNeedApproval", "appWritesNeedApproval", "appsChangeWithoutAsking")
@@ -73,6 +75,12 @@ class PolicyStore:
                 )
             if key in ("appChanges", "appChangesByApp"):
                 await self._derive_old_keys(c, tenant_id, str(team_id), by, at)
+                # Agents-service keeps each team's tool list, which carries every write's answer, for up to 30 s: it
+                # drops that list when it hears this, so the change applies at once.
+                await add_event(
+                    c, platform_outbox, tenant_id=tenant_id, team_id=str(team_id), name=POLICY_CHANGED,
+                    key=f"{key}:{request_id}:{at}", payload={"key": key}, actor=by,
+                )  # fmt: skip
             await bump_version(c, tenant_id)
             await record(
                 c,

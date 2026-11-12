@@ -10,8 +10,10 @@ import asyncio
 import json
 from typing import Any
 
+import sqlalchemy as sa
 from alembic import command
 
+from ops_platform.store.tables import platform_outbox
 from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import SignInRig, alembic_config
@@ -41,6 +43,16 @@ async def test_a_new_team_asks_nobody_and_a_saved_switch_keeps_who_answers_and_i
         team: {"ask": True, "answer": "person", "reviewerRole": None, "testAccountsNeverAsk": True, "testRunsAsk": True}
     }
     assert [a for a in await audit(signin.engine, signin.tenant) if a[:2] == ("policy.set", "appChanges")], "no audit"
+
+
+async def test_saving_an_approval_answer_reports_it_to_agents_in_the_same_transaction(signin: SignInRig) -> None:
+    # Agents-service keeps each team's tool list, with every write's answer, for 30 s; it drops the list on this event.
+    team, admin = signin.admin["X-Team-Id"], signin.admin
+    assert (await put(signin, "appChanges", {"ask": True, "answer": "person"}, admin)).status_code == 200
+    assert (await put(signin, "requesterMayDecide", True, admin)).status_code == 200
+    async with signin.engine.connect() as c:
+        rows = (await c.execute(sa.select(platform_outbox).where(platform_outbox.c.tenant_id == signin.tenant))).all()
+    assert [(r.name, r.team_id, r.payload) for r in rows] == [("policy.changed", team, {"key": "appChanges"})], rows
 
 
 async def test_a_reviewer_answer_needs_a_role_that_can_approve(signin: SignInRig) -> None:

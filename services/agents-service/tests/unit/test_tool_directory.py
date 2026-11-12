@@ -7,14 +7,18 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import httpx
 import pytest
 
+from ops_access.platform_events import POLICY_CHANGED
 from ops_agents.activities.tool_directory import ToolsOperations, ToolsUnavailable, grants_for
+from ops_agents.api.ops_tools import team_created_handlers
 from ops_agents.store.tenancy import current_tenant, tenant_scope
 from ops_identity import ServiceClient, dev_service_signer
+from ops_store import isolation
 
 
 def op(name: str, access: str = "read") -> dict[str, Any]:
@@ -83,6 +87,20 @@ async def test_the_list_is_asked_again_after_its_time() -> None:
         clock.now = 31
         assert [o.name for o in await d.operations()] == ["get_account", "update_address"]
     assert tools.requests == ["acme", "acme"]
+
+
+async def test_a_policy_change_heard_from_platform_drops_that_teams_list_only() -> None:
+    tools = Tools({"acme": [op("update_address", "write")]})
+    d = directory(tools, Clock())
+    handler = team_created_handlers(lambda: cast(Any, SimpleNamespace(directory=lambda: d)))[POLICY_CHANGED]
+    for team in ("team_ops", "team_cx"):
+        with isolation.scope("acme", team):
+            await d.operations()
+    assert await handler.act("acme", "team_ops", {"key": "appChanges"}) == 1
+    for team in ("team_ops", "team_cx"):
+        with isolation.scope("acme", team):
+            await d.operations()
+    assert tools.requests == ["acme"] * 3, "the changed team asked again once; the other team kept its list"
 
 
 async def test_tools_service_down_is_refused_not_guessed() -> None:
