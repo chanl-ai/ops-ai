@@ -65,6 +65,19 @@ a request.
 | Calling service | An internal call's caller is its Ed25519 service token's subject (`service:<name>`), bound to that service's key; tools-service logs and decides on it and no body field names the caller |
 | Trust facts stay out of model-visible text | Tenant, tier and identity come from the run context, never from the chat message |
 
+## Assistants at a team's MCP address
+
+platform-service is the one authorization server for assistants (Claude, Cursor, VS Code, ChatGPT). The team's MCP
+address (`<public URL>/mcp/<team>`) names the team, so there is no team to choose and a person outside it is told so
+on the consent page. A grant is a `sessions` row of kind `mcp` with `client_id`, `team_id` and `resource`; its access
+token has `aud` equal to the address only, `team_ids` equal to that team, and lives 15 minutes. A refresh rotates the
+token, re-reads the person's teams and role and ends the grant when the team or `tools.run` is gone; a token used twice
+ends the grant and writes `auth.refresh_reuse`. A console token is refused at `/mcp`, and an assistant's token is
+refused at every REST route. tools-service verifies assistant tokens only through `ops_identity` `bearer(resource=…)`
+and the expected audience comes from the configured public URL, never the request's Host header. Client records are
+install-wide (registration happens before anyone signs in); codes and grants are tenant-scoped. A person sees and ends
+their own connections in My security › Connected assistants.
+
 ## What each outbound call carries
 
 | Call | Carries | Checked by |
