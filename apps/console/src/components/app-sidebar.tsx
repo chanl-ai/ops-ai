@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { AlertCircle, ChevronRight, RotateCw, SquarePen } from 'lucide-react';
+import { AlertCircle, RotateCw, SquarePen } from 'lucide-react';
 
 import { NavUser } from '@/components/nav-user';
 import { SidebarChats } from '@/components/shell/sidebar-chats';
@@ -13,7 +13,6 @@ import { sidebarFoldHeld } from '@/components/shared/collapsed-sidebar';
 import { PreviewBadge } from '@/components/shared/preview-badge';
 import { TeamSwitcher } from '@/components/team-switcher';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Sidebar,
   SidebarContent,
@@ -32,7 +31,6 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
 import { useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useBrand, useLookups, useOverview } from '@/hooks/queries';
 import { usePreviewCheck } from '@/hooks/use-preview';
@@ -41,38 +39,6 @@ import { type NavItem, childrenOffered, itemOffered, navMatch, rowsOfArea } from
 import { useAreas } from '@/components/shared/area-switcher';
 import { readOverview } from '@/lib/overview';
 
-// What a viewer chose for each parent, kept in this browser only: a parent starts open unless its entry says
-// `foldedAtStart`, and the sidebar works the same when storage is unavailable. The older key held only the closed ones.
-const SECTIONS_KEY = 'ops.sidebar.sections';
-const CLOSED_KEY = 'ops.sidebar.closed';
-
-function useSectionChoices(): [Record<string, boolean>, (url: string, open: boolean) => void] {
-  const [chosen, setChosen] = React.useState<Record<string, boolean>>({});
-  React.useEffect(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(SECTIONS_KEY) ?? 'null');
-      const closed = JSON.parse(window.localStorage.getItem(CLOSED_KEY) ?? '[]');
-      const next: Record<string, boolean> = {};
-      if (Array.isArray(closed)) for (const x of closed) if (typeof x === 'string') next[x] = false;
-      if (saved && typeof saved === 'object') for (const [k, v] of Object.entries(saved)) if (typeof v === 'boolean') next[k] = v;
-      setChosen(next);
-    } catch {
-      // No storage, or a value this version cannot read: every parent starts as its entry says.
-    }
-  }, []);
-  const toggle = React.useCallback((url: string, open: boolean) => {
-    setChosen((prev) => {
-      const next = { ...prev, [url]: open };
-      try {
-        window.localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
-      } catch {
-        // Not remembered; the change still applies on this page.
-      }
-      return next;
-    });
-  }, []);
-  return [chosen, toggle];
-}
 
 // Groups a viewer has opened or folded, kept in this browser only. Chats starts open, the rest folded.
 const GROUPS_KEY = 'ops.sidebar.groups';
@@ -103,32 +69,19 @@ function useGroupFolds(): [(label: string) => boolean, (label: string, open: boo
   return [isOpen, set];
 }
 
-/** A sidebar group whose label folds it. Folded to icons, every group shows its rows as icons. */
-function FoldingGroup({ label, open, onOpenChange, children }: { label: string; open: boolean; onOpenChange: (open: boolean) => void; children: React.ReactNode }) {
-  const { state } = useSidebar();
-  const shown = state === 'collapsed' || open;
+/** A sidebar section: a plain label over its links, always open (owner, 12 November: sections and links, no folding). */
+function FoldingGroup({ label, children }: { label: string; open?: boolean; onOpenChange?: (open: boolean) => void; children: React.ReactNode }) {
   return (
-    <Collapsible open={shown} onOpenChange={onOpenChange} asChild>
-      <SidebarGroup data-nav-group={label}>
-        <SidebarGroupLabel asChild>
-          {/* Folded to icons the label slides up over the row above it, invisible; it must not take that row's clicks. */}
-          <CollapsibleTrigger className="w-full justify-between group-data-[collapsible=icon]:pointer-events-none" aria-expanded={shown}>
-            {label}
-            <ChevronRight className={`size-3.5 transition-transform ${shown ? 'rotate-90' : ''}`} />
-          </CollapsibleTrigger>
-        </SidebarGroupLabel>
-        <CollapsibleContent>
-          <SidebarGroupContent>{children}</SidebarGroupContent>
-        </CollapsibleContent>
-      </SidebarGroup>
-    </Collapsible>
+    <SidebarGroup data-nav-group={label}>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <SidebarGroupContent>{children}</SidebarGroupContent>
+    </SidebarGroup>
   );
 }
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const isPreview = usePreviewCheck();
-  const [chosen, toggleSection] = useSectionChoices();
   const brand = useBrand();
   // One count in the sidebar: Human Tasks waiting for you, the same number as Assigned to me and Overview's first widget.
   const overview = useOverview().data;
@@ -175,34 +128,24 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       </SidebarMenuButton>
     );
     if (!item.children?.length) return <SidebarMenuItem key={item.url}>{row}</SidebarMenuItem>;
-    // The current page's section opens even if the viewer closed it, so the active row is always in view.
-    const open = (chosen[item.url] ?? !item.foldedAtStart) || (inSection && (!!hit?.child || parentSubRow));
+    // Owner, 12 November: sections and links, no folding. A row with pages under it always lists them.
     return (
-      <Collapsible key={item.url} asChild open={open} onOpenChange={(o) => toggleSection(item.url, o)}>
-        <SidebarMenuItem>
-          {row}
-          <CollapsibleTrigger asChild>
-            <SidebarRowAction className="data-[state=open]:rotate-90" aria-label={`${open ? 'Hide' : 'Show'} ${item.title} pages`}>
-              <ChevronRight />
-            </SidebarRowAction>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <SidebarMenuSub>
-              {subRows.map((child) => (
-                <SidebarMenuSubItem key={child.url}>
-                  {/* A long name ("Model inventory") wraps to a second line rather than being cut at the sidebar's width. */}
-                  <SidebarMenuSubButton asChild isActive={child.url === item.url ? onParentPage : hit?.child?.url === child.url} className="h-auto min-h-7 py-1 [&>span:last-child]:whitespace-normal! [&>span:last-child]:leading-snug">
-                    <Link href={child.url} onClick={closeOnPhone}>
-                      {child.icon && <child.icon />}
-                      <span>{child.title}</span>
-                    </Link>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              ))}
-            </SidebarMenuSub>
-          </CollapsibleContent>
-        </SidebarMenuItem>
-      </Collapsible>
+      <SidebarMenuItem key={item.url}>
+        {row}
+        <SidebarMenuSub>
+          {subRows.map((child) => (
+            <SidebarMenuSubItem key={child.url}>
+              {/* A long name ("Model inventory") wraps to a second line rather than being cut at the sidebar's width. */}
+              <SidebarMenuSubButton asChild isActive={child.url === item.url ? onParentPage : hit?.child?.url === child.url} className="h-auto min-h-7 py-1 [&>span:last-child]:whitespace-normal! [&>span:last-child]:leading-snug">
+                <Link href={child.url} onClick={closeOnPhone}>
+                  {child.icon && <child.icon />}
+                  <span>{child.title}</span>
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      </SidebarMenuItem>
     );
   };
 
