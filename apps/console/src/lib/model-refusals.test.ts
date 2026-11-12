@@ -20,7 +20,21 @@ test('a refused key tells an admin to fix it there and anyone else to ask an adm
   assert.equal(member!.fixAt, undefined, 'a member is not sent to a page they cannot change');
 });
 
-test('a code the console does not word is left to the service message', () => {
-  assert.equal(modelRefusal('something_new', true), undefined);
-  assert.equal(modelRefusal(undefined, false), undefined);
+const KEY_CODES = ['key_budget_exhausted', 'key_revoked', 'key_expired', 'key_not_registered', 'invalid_key'];
+
+test('every key refusal sends an admin to a page that exists, and never names a page the sidebar lacks', () => {
+  for (const c of KEY_CODES) {
+    const admin = modelRefusal(c, true)!;
+    const member = modelRefusal(c, false)!;
+    assert.equal(admin.fixAt, MODEL_PROVIDERS_HREF, `${c} offers no link`);
+    assert.doesNotMatch(admin.text + member.text, /\bin Models\b/, `${c} names a page called Models`);
+    assert.match(member.text, /ask an admin/i);
+  }
+});
+
+test('a code the console does not word is answered in plain words, never the service message', () => {
+  const r = modelRefusal('something_new', false)!;
+  assert.equal(r.text, 'The model could not answer. Retry in a moment; if it keeps happening, ask an admin.');
+  assert.equal(r.code, 'something_new');
+  assert.equal(modelRefusal(undefined, false), undefined, 'an error with no code is not a refusal');
 });
