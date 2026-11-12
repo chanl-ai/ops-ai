@@ -28,7 +28,7 @@ ops = OpsAI(api_key="ok_...", base_url="https://ops.example.com", team="team_cla
 | API key | `api_key` | `OPS_API_KEY` |
 | Team the calls act in | `team` | `OPS_TEAM` |
 
-Arguments win over the environment, which wins over the profile the `opsai` CLI saves. On a local stack with no proxy,
+Arguments win over the environment, which wins over the profile the `opsai` CLI saves (`OpsAI(profile="builder")` names another). On a local stack with no proxy,
 pass `services={"agents": "http://127.0.0.1:8700", ...}` to reach each service on its own port.
 
 ## Run a workflow and decide its task
@@ -70,6 +70,47 @@ custom app's connection id); an account is a connection id.
 | `tools` | `list(app)`, `run(app, tool, input, real=)` (Mock reaches nothing; Real is the gateway's call); with no app, `list` and `get` are the tool modules' |
 | `resources` | `list(app)`, `add(resource)` (a copy in the team) |
 | `usage` | `list(**filters)`: this team's tool calls |
+
+## Knowledge, templates and connectors
+
+| Attribute | Verbs |
+|---|---|
+| `knowledge` | `add_base(name, owner=)`, `add_source(name, kb_ids, type="push")`, `add_page(kb_id, title, text)` (the same title saves a new version), `push(source_id, name, title=, text=)` (the same name and text again answers `unchanged`) |
+| `templates` | `list(kind=, source=)`, `install(template, kind=, **fields)`: the team's own copy of a template |
+| `me.connectors` | `list()`, `connect(app, link=, account=, team=)` (returns `authorizeUrl`), `finish(state, code, error=)`, `accounts()`, `disconnect(app, account=)` |
+
+```python
+base = ops.knowledge.add_base("Branch procedures", owner="branch.ops@harborpine.example")
+source = ops.knowledge.add_source("Policies", [base["id"]])
+ops.knowledge.push(source["id"], "fees/overdraft", title="Overdraft fees", text="Fees are waived on the first day.")
+
+made = ops.templates.install("plugin:opsai.starters:doc-coauthoring")  # made["created"] is True the first time
+
+start = ops.me.connectors.connect("Person desk")  # open start["authorizeUrl"] in a browser
+ops.me.connectors.finish(state, code)             # the state and code in the address the browser returned to
+```
+
+## The command line
+
+`opsai` ships with the Python package and uses the same saved sign-in as `OpsAI(profile=...)`. Add `--json` after the
+verb for machine output.
+
+| Command | What it does |
+|---|---|
+| `opsai kb create NAME [--owner]`, `set KB [--rerank on\|off] [--query-model] [--rewrite]`, `delete KB` | Make, tune and retire a knowledge base |
+| `opsai kb add-source NAME --kb KB [--plugin P --source S --value NAME=ID]`, `scopes --plugin P --source S` | Add a source; list what its picker offers |
+| `opsai kb push SOURCE --name N --title T --text TEXT` | Put one item into a push source |
+| `opsai kb add-file KB [PATH...] [--file-id ID]` | Upload files, or take ones already in Files, and sync them |
+| `opsai templates list [--kind] [--source]`, `install REF [--kind] [--fields]` | See the offered templates; add one as the team's copy |
+| `opsai connectors list`, `connect APP [--link] [--account]`, `finish --state S --code C`, `accounts`, `disconnect APP` | Your own sign-ins on apps |
+
+```bash
+SOURCE=$(opsai kb add-source Policies --kb "$BRANCH" --json | jq -r .id)
+opsai kb push "$SOURCE" --name fees/overdraft --title "Overdraft fees" --text "Fees are waived on the first day."
+opsai kb add-file "$BRANCH" --file-id "$SHEET" --file-id "$MANUAL"
+opsai templates install plugin:opsai.starters:doc-coauthoring
+opsai connectors connect "Person desk"
+```
 
 ## Errors
 
