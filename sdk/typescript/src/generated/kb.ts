@@ -1342,6 +1342,8 @@ export interface components {
             fileId?: string | null;
             /** Folder */
             folder?: string | null;
+            /** Freshness */
+            freshness: string;
             /** Id */
             id: string;
             /** Metadata */
@@ -1415,6 +1417,8 @@ export interface components {
             fileId?: string | null;
             /** Folder */
             folder?: string | null;
+            /** Freshness */
+            freshness: string;
             /** Id */
             id: string;
             /** Metadata */
@@ -2511,6 +2515,15 @@ export interface components {
         };
         /** SourceKind */
         SourceKind: {
+            /**
+             * Cancreate
+             * @default true
+             */
+            canCreate: boolean;
+            /** Cannotcreatebecause */
+            cannotCreateBecause?: string | null;
+            /** Cannotcreatecode */
+            cannotCreateCode?: string | null;
             /**
              * Connected
              * @default false

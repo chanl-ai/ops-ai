@@ -29,6 +29,7 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..memory import person_of
 from ..runs import graph_store
+from .chat import thread_agent
 
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -40,7 +41,7 @@ async def _thread(rt: Runtime, me: Principal, thread_id: str) -> tuple[dict[str,
     if row is None:
         raise NotFound("Conversation")
     meta: dict[str, Any] = row["meta"] or {}
-    agent = rt.catalog.agent(str(meta.get("agentId")))
+    agent = await thread_agent(rt, me, meta)
     if agent is None:
         raise Unprocessable("This conversation's agent is no longer live.")
     return row, agent, limits_for(agent, rt.settings.model_alias)

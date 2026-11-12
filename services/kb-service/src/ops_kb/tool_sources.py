@@ -108,6 +108,21 @@ class ToolReader:
         return Answer(True, answer.get("output"))
 
 
+def refusal_of(found: dict[str, Any]) -> tuple[str, str] | None:
+    """Why a source declared for the team cannot be made, as (code, message), or None when it can. Create and the
+    Add source list both ask this, so a source is offered exactly when create accepts it."""
+    if not found.get("needsConnection", True):
+        return None
+    if not found.get("connectionId"):
+        return "connection_missing", f"{found['title']} needs the team's connection; sign in first."
+    if found.get("signIn") not in TEAM_SIGN_IN:
+        return (
+            "sign_in_not_team",
+            "This connection signs in each person. A knowledge source needs a team sign-in.",
+        )
+    return None
+
+
 async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name: str) -> dict[str, Any]:
     """The plugin's knowledge source as tools-service declares it for the team: refused unless the plugin is on,
     names the source, and its connection signs in with the team's account, since a sync has no person behind it."""
@@ -123,16 +138,8 @@ async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name
         raise ValidationFailed(
             f"{plugin or 'That plugin'} offers no source {name or '?'} to this team; turn it on first."
         )
-    if found.get("needsConnection", True):
-        if not found.get("connectionId"):
-            raise ValidationFailed(
-                f"{found['title']} needs the team's connection; sign in first.", code="connection_missing"
-            )
-        if found.get("signIn") not in TEAM_SIGN_IN:
-            raise ValidationFailed(
-                "This connection signs in each person. A knowledge source needs a team sign-in.",
-                code="sign_in_not_team",
-            )
+    if (refusal := refusal_of(found)) is not None:
+        raise ValidationFailed(refusal[1], code=refusal[0])
     return found
 
 

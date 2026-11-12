@@ -11,7 +11,7 @@
  */
 export type IngestStrategy = 'structure' | 'fixed' | 'topic' | 'faq' | 'faq_pairs' | 'context_headers' | 'parent_child' | 'table_rows' | 'clean';
 
-export type IngestPresetId = 'policy_manual' | 'help_centre' | 'rate_table' | 'email_templates' | 'custom';
+export type IngestPresetId = 'documents' | 'policy_manual' | 'help_centre' | 'rate_table' | 'email_templates' | 'custom';
 
 /** How a table column is used by `table_rows`: searched, kept as filterable metadata, or dropped. */
 export type ColumnRole = 'searchable' | 'metadata' | 'ignored';

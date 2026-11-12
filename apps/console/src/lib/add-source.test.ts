@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createInput, firstSyncCalls, strategiesWith } from './add-source.ts';
+import { createInput, firstSyncCalls, kindsToConnect, kindUnavailable, strategiesWith } from './add-source.ts';
 import type { SourceKindOption } from './types/knowledge.ts';
 
 const defaults = (strategies: string[]) =>
@@ -37,4 +37,21 @@ test('the first sync’s calls are a range per step turned on, and none when no 
   assert.equal(firstSyncCalls(141, { questions: false, drafts: false }), null);
   assert.deepEqual(firstSyncCalls(141, { questions: true, drafts: false }), { low: 141, high: 705 });
   assert.deepEqual(firstSyncCalls(10, { questions: true, drafts: true }), { low: 20, high: 100 });
+});
+
+const tool = { type: 'tool', kind: 'tool', group: 'apps', needsConnection: true, connected: false, plugin: 'salesforce' } as const;
+
+test('an app that is on but not connected keeps its connect link, though create refuses it', () => {
+  const missing = { ...tool, title: 'Salesforce', canCreate: false, cannotCreateCode: 'connection_missing' } as const;
+  assert.deepEqual(kindsToConnect([missing]), [missing]);
+});
+
+test('a connection that signs in each person gets no connect link', () => {
+  assert.deepEqual(kindsToConnect([{ ...tool, title: 'Gmail', canCreate: false, cannotCreateCode: 'sign_in_not_team' }]), []);
+});
+
+test('a kind is unavailable when it needs a connection it lacks or create would refuse it', () => {
+  assert.equal(kindUnavailable({ needsConnection: true, connected: false }), true);
+  assert.equal(kindUnavailable({ needsConnection: false, canCreate: false }), true);
+  assert.equal(kindUnavailable({ needsConnection: true, connected: true, canCreate: true }), false);
 });

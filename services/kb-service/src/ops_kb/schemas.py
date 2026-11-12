@@ -275,6 +275,8 @@ class Item(Out):
     version: str
     effective_date: str
     review_by: str
+    # fresh, stale (its source missed its schedule) or no_schedule (the source only syncs when asked).
+    freshness: str
     sensitivity: str
     collection: str
     verified: bool
@@ -288,7 +290,6 @@ class Item(Out):
 
 class DocumentRow(Item):
     source_name: str
-    freshness: str
 
 
 class ItemWithDetail(Item):
@@ -502,6 +503,12 @@ class SourceKind(Out):
     # It needs the team's connection, and whether the team has one that works.
     needs_connection: bool = False
     connected: bool = False
+    # Whether a source of this kind can be made for this team, from the check create applies, and why not when it
+    # cannot (a connection that signs in each person, no connection).
+    can_create: bool = True
+    cannot_create_because: str | None = None
+    # Why as a code (connection_missing, sign_in_not_team), so a screen can offer the fix that fits.
+    cannot_create_code: str | None = None
     previews: bool = False
     pickers: bool = False
     # What a source of this kind is set up with (start addresses, sites, spaces).

@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.ai import AiClient
 from ops_kb.files import KnowledgeFiles
-from ops_kb.store.knowledge import kb_changes
+from ops_kb.store.knowledge import kb_changes, kb_sources
+from ops_store import isolation
 
 from .conftest import kb_client
 from .pdfs import policy_pdf
@@ -204,3 +205,22 @@ async def test_the_queue_pages_in_the_database_and_reads_sources_once_per_page(
     assert len(many["data"]) == 5 and many["viewCounts"]["open"] == 42, many["viewCounts"]
     assert {d["id"] for d in few["data"]} <= {d["id"] for d in many["data"]}, "the newest come first"
     assert many_statements == few_statements, (few_statements, many_statements)
+
+
+async def test_the_queue_shows_the_sources_freshness_not_a_fixed_fresh(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    src, _ = await drafted(client)
+    assert {(d["freshness"], d["reviewBy"]) for d in await queue(client)} == {("no_schedule", "")}
+    slot = (datetime.now(UTC) - timedelta(hours=2)).strftime("%H:%M")
+    daily = {"kind": "daily", "time": slot, "tz": "UTC"}
+    data(await client.patch(f"/v1/sources/{src['id']}", json={"schedule": daily}))
+    with isolation.tenant_wide("test: age a source's last sync", tenant_id=tenant):
+        async with engine.begin() as c:
+            await c.execute(
+                sa.update(kb_sources)
+                .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == src["id"])
+                .values(last_good_sync_at=datetime.now(UTC) - timedelta(days=3))
+            )
+    seen = await queue(client)
+    assert {d["freshness"] for d in seen} == {"stale"} and all(d["reviewBy"] for d in seen), seen

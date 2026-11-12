@@ -105,7 +105,7 @@ export function DocumentSheet({
             <>
               <ItemStatusBadge status={item.status} />
               <SensitivityBadge level={item.sensitivity} />
-              <FreshnessBadge reviewBy={item.reviewBy} />
+              <FreshnessBadge reviewBy={item.reviewBy} freshness={item.freshness} />
               {item.verified && (
                 <Badge variant="outline" className="gap-1 font-normal">
                   <BadgeCheck className="size-3 text-success-text" /> Verified

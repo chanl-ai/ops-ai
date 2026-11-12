@@ -45,3 +45,13 @@ export function createInput(p: { kind: SourceKindOption; name: string; values: R
     ...(tool ? {} : { fileIds: p.fileIds }),
   };
 }
+
+/** Whether Add source shows the kind greyed out: an app with no working connection, or one create would refuse. */
+export const kindUnavailable = (k: Pick<SourceKindOption, 'needsConnection' | 'connected' | 'canCreate'>): boolean =>
+  (!!k.needsConnection && !k.connected) || k.canCreate === false;
+
+/** The kinds that get a "Connect it on its app page" link: an app that is on but has no working connection. A kind
+ *  refused because its connection signs in each person is not fixed by connecting, so it gets no link. */
+export function kindsToConnect<T extends Pick<SourceKindOption, 'needsConnection' | 'connected' | 'cannotCreateCode' | 'plugin'>>(options: T[]): T[] {
+  return options.filter((k) => k.needsConnection && !k.connected && k.cannotCreateCode !== 'sign_in_not_team' && !!k.plugin);
+}

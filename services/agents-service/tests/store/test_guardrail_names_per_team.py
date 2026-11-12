@@ -38,12 +38,27 @@ async def _insert(url: str, slug: str, team: str) -> None:
         await engine.dispose()
 
 
+async def _delete(url: str, slug: str) -> None:
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as c:
+            await c.execute(sa.text("SET LOCAL row_security = off"))
+            await c.execute(sa.text("DELETE FROM registry_guardrails WHERE slug = :slug"), {"slug": slug})
+    finally:
+        await engine.dispose()
+
+
 def test_the_slug_key_is_per_team_on_the_migrated_database(database_url: str) -> None:
     slug = f"same-rule-{new_id('s')[-8:]}"
-    asyncio.run(_insert(database_url, slug, "team_ops"))
-    asyncio.run(_insert(database_url, slug, "team_lending"))  # another team: allowed
-    with pytest.raises(IntegrityError):
-        asyncio.run(_insert(database_url, slug, "team_ops"))  # the same team: refused
+    try:
+        asyncio.run(_insert(database_url, slug, "team_ops"))
+        asyncio.run(_insert(database_url, slug, "team_lending"))  # another team: allowed
+        with pytest.raises(IntegrityError):
+            asyncio.run(_insert(database_url, slug, "team_ops"))  # the same team: refused
+    finally:
+        # Two teams sharing one slug make migration 0102's downgrade refuse, so a row left here fails every later
+        # downgrade test that shares this database.
+        asyncio.run(_delete(database_url, slug))
 
 
 SKILL = (

@@ -109,7 +109,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
       },
       { accessorKey: 'chunkCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Chunks" />, cell: ({ row }) => (row.original.status === 'held' ? <span className="text-muted-foreground">Not indexed</span> : <span className="tabular-nums">{count(row.original.chunkCount)}</span>) },
       { accessorKey: 'modifiedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Modified" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{shortDate(row.original.modifiedAt)}</span> },
-      { accessorKey: 'freshness', header: ({ column }) => <DataTableColumnHeader column={column} title="Freshness" />, cell: ({ row }) => <FreshnessBadge reviewBy={row.original.reviewBy} />, filterFn: facetFilterFn },
+      { accessorKey: 'freshness', header: ({ column }) => <DataTableColumnHeader column={column} title="Freshness" />, cell: ({ row }) => <FreshnessBadge reviewBy={row.original.reviewBy} freshness={row.original.freshness} />, filterFn: facetFilterFn },
       { accessorKey: 'sensitivity', header: ({ column }) => <DataTableColumnHeader column={column} title="Sensitivity" />, cell: ({ row }) => <SensitivityBadge level={row.original.sensitivity} />, filterFn: facetFilterFn },
       {
         id: 'tags',
@@ -155,7 +155,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
         filters={[
           { column: 'sourceId', title: 'Source', options: kb.attached.map((a) => ({ label: a.source.name, value: a.sourceId, count: facets.sourceId?.[a.sourceId] ?? 0 })) },
           { column: 'status', title: 'Status', options: (['indexed', 'pending', 'processing', 'failed', 'partial'] as ItemStatus[]).map((s) => ({ label: ITEM_STATUS_LABEL[s], value: s, count: facets.status?.[s] ?? 0 })) },
-          { column: 'freshness', title: 'Freshness', options: [{ label: 'Fresh', value: 'fresh', count: facets.freshness?.fresh ?? 0 }, { label: 'Stale', value: 'stale', count: facets.freshness?.stale ?? 0 }] },
+          { column: 'freshness', title: 'Freshness', options: [{ label: 'Fresh', value: 'fresh', count: facets.freshness?.fresh ?? 0 }, { label: 'Stale', value: 'stale', count: facets.freshness?.stale ?? 0 }, { label: 'No schedule', value: 'no_schedule', count: facets.freshness?.no_schedule ?? 0 }] },
           { column: 'sensitivity', title: 'Sensitivity', options: (['internal', 'confidential', 'restricted'] as Sensitivity[]).map((s) => ({ label: SENSITIVITY_LABEL[s], value: s, count: facets.sensitivity?.[s] ?? 0 })) },
           { column: 'tags', title: 'Tag', options: Object.keys(facets.tags ?? {}).sort().map((t) => ({ label: t, value: t, count: facets.tags?.[t] ?? 0 })) },
         ]}

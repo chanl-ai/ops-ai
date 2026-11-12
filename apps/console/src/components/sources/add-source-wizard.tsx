@@ -27,7 +27,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useApproveAiSteps, useCreateSource, usePutSourceItem, useSourceKinds, useSourcePreview } from '@/hooks/knowledge-queries';
-import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
+import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, kindsToConnect, kindUnavailable, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
 import { appPageHref } from '@/lib/app-links';
 import { count, plural } from '@/lib/format';
 import type { Schedule, Source, SourceKindOption, SourceKindPreview } from '@/lib/types/knowledge';
@@ -250,7 +250,7 @@ export function AddSourceWizard({
                     {groups.map((g) => (
                       <CommandGroup key={g.id} heading={g.label}>
                         {g.kinds.map((k) => {
-                          const notConnected = !!k.needsConnection && !k.connected;
+                          const notConnected = kindUnavailable(k);
                           return (
                             <CommandItem
                               key={kindKey(k)}
@@ -266,7 +266,7 @@ export function AddSourceWizard({
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-medium">{k.title}</span>
                                 <span className="block truncate text-xs text-muted-foreground">
-                                  {k.type !== 'tool' ? BUILT_IN_HINT[k.type] : k.site ? 'Pages of one website' : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
+                                  {k.type !== 'tool' ? BUILT_IN_HINT[k.type] : k.site ? 'Pages of one website' : k.canCreate === false ? (k.cannotCreateBecause ?? 'Cannot be added') : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
                                 </span>
                               </span>
                               {key === kindKey(k) && <Badge variant="secondary">Chosen</Badge>}
@@ -279,9 +279,7 @@ export function AddSourceWizard({
                 )}
               </CommandList>
             </Command>
-            {options
-              .filter((k) => k.needsConnection && !k.connected && k.plugin)
-              .map((k) => (
+            {kindsToConnect(options).map((k) => (
                 <p key={kindKey(k)} className="text-xs text-muted-foreground">
                   {k.title} needs a connection first.{' '}
                   <Link href={appPageHref(`plugin:${k.plugin}`)} className="inline-flex items-center gap-1 text-foreground underline underline-offset-4">
