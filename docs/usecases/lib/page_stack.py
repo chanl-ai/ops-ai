@@ -26,7 +26,19 @@ def main() -> None:
     services: dict[str, str] = {}
     with tempfile.TemporaryDirectory(prefix="usecase-page-") as tmp, ExitStack() as stack:
         # Pages say which services in words; knowledge brings its files and documents services with it.
-        if "knowledge" in ns.services:
+        if "SharePoint" in ns.services:
+            # A team that has signed SharePoint and Confluence in, as its admin does in Apps; the page starts from there.
+            from fake_sharepoint_confluence import connect
+            from fake_sharepoint_confluence import stack as document_stack
+
+            k, gw, systems = stack.enter_context(document_stack(Path(tmp)))
+            done = connect(
+                gw, systems, {"X-Team-Id": "team_ops"}, {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
+            )
+            if done["sharepoint"]["done"] != 200 or (done["confluence"]["health"] or {}).get("status") != "ok":
+                raise SystemExit(f"the apps did not connect: {done}")
+            services["kb"] = str(k.base_url).rstrip("/")
+        elif "knowledge" in ns.services:
             env = None
             if "scripted chat model" in ns.services:
                 # Rerank and rewrite call a chat model; the fake answers their prompts from the fixture, so no provider is called.
