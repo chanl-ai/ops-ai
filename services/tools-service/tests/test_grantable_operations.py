@@ -62,6 +62,8 @@ async def test_each_operation_carries_a_json_schema_for_its_input(api: Api) -> N
         "required": ["customerId"],
         "additionalProperties": False,
     }
+    # A write waits by its own answer, else its app's and the team's (effective_answer); the seed gives a declared wait
+    # the answer "reviewer".
     assert by_name["send_reply"]["requiresApproval"] is True
 
 

@@ -175,11 +175,14 @@ class AssistantBuilder:
             risk=tpl.risk if tpl else "high",
             consequence=tpl.consequence if tpl else None,
             step_up=bool(p.get("step_up")) or None,
+            ask_first=bool(p.get("ask_first")),
             state=state,
             decided_by=decision["decided_by"] if decision else None,
             reason=decision["reason"] if decision else None,
             waiting_on=None
             if decision
+            else "your answer"
+            if p.get("ask_first")
             else "a second approver"
             if state == "awaiting_second"
             else str(p.get("reviewers") or (tpl.reviewers if tpl else "") or "a reviewer"),
@@ -318,7 +321,13 @@ class AssistantBuilder:
                 widget = self._approval(_d(data))
                 m.widgets = [*(m.widgets or []), widget]
                 out = [WidgetEvent(widget=widget)]
-                if not m.content.strip():
+                if widget.ask_first:
+                    # The person answers it on the card; no reviewer's gate is named on the held call.
+                    m.tool_calls = [c.model_copy(update={"gated": None}) for c in m.tool_calls or []]
+                    if not m.content.strip():
+                        m.content = f"Before I change anything: {widget.action}. Allow it on the card below."
+                        out.append(TextEvent(delta=m.content))
+                elif not m.content.strip():
                     # The model went straight to the gated call; say what is waiting and for whom.
                     reviewers = str(_d(_d(data).get("payload")).get("reviewers") or "a reviewer")
                     m.content = f"I drafted this for review: {widget.action}. It runs once {reviewers} approve it."

@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 from ops_store import isolation
 from ops_tools.auth.tokens import Tokens
-from ops_tools.connectors import _policy, _reviewed, can_do  # pyright: ignore[reportPrivateUsage]
+from ops_tools.connectors import _reviewed, can_do  # pyright: ignore[reportPrivateUsage]
 from ops_tools.store.calls import gateway_calls
 from ops_tools.store.connections import ConnectionStore
 
@@ -101,26 +101,28 @@ async def test_the_line_names_only_switched_on_tools(
     first = await _sites_on(c, tenant)
     await _signed_in(store, tenant, first, "priya@live.example")
     row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
-    # A new app starts with its reads on; the write waits in the catalog until someone adds it.
+    # A new app starts with every tool on; a tool switched off leaves the line.
+    # No team policy reader in this rig: only a tool's own setting marks a write reviewed (the next test covers that).
+    assert row["canDo"] == "Reads: Read a record · Writes: Change a record", row["canDo"]
+    removed = await c.delete(f"/v1/apps/{SITES}/tools/fields_sites_update_record", headers=admin(tenant))
+    assert removed.status_code == 200, removed.text
+    row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
     assert [t["title"] for t in row["tools"]] == ["Read a record"], row["tools"]
     assert row["canDo"] == "Reads: Read a record", row["canDo"]
-    added = await c.post(
-        f"/v1/apps/{SITES}/tools", json={"tools": ["fields_sites_update_record"]}, headers=admin(tenant)
-    )
-    assert added.status_code == 200, added.text
-    row = next(r for r in await _mine(c, admin(tenant)) if r["appId"] == SITES)
-    assert row["canDo"] == "Reads: Read a record · Writes: Change a record", row["canDo"]
 
 
 async def test_a_write_the_teams_policy_holds_is_marked_reviewed() -> None:
     module = {"id": "mod_plugin_sites", "template_id": "plugin:test.fields-sites"}
 
     class Listed:
-        async def all_writes(self, tenant_id: str, team_id: str | None) -> bool:
-            return False
+        async def levels(self, tenant_id: str, team_id: str | None) -> dict[str, Any]:
+            return {}
 
-        async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
-            return [SITES]
+        async def answer(
+            self, tenant_id: str, team_id: str | None, mod: dict[str, Any] | None, **kw: Any
+        ) -> dict[str, Any]:
+            # The gateway's rule is held by tools-service; here the team's policy holds this app's writes.
+            return {"waits": kw["access"] != "read" and mod is not None}
 
     class Modules:
         async def get(self, tenant_id: str, module_id: str) -> dict[str, Any]:
@@ -132,11 +134,11 @@ async def test_a_write_the_teams_policy_holds_is_marked_reviewed() -> None:
         {"name": "r", "title": "Read a record", "access": "read", "waits": False, "moduleId": module["id"]},
         {"name": "w", "title": "Change a record", "access": "write", "waits": False, "moduleId": module["id"]},
     ]
-    marked = await _reviewed(apps, who, tools, await _policy(apps, who))
+    marked = await _reviewed(apps, who, tools)
     assert [t["reviewed"] for t in marked] == [False, True], marked
     assert can_do(marked) == "Reads: Read a record · Writes, reviewed first: Change a record"
     apps.write_approvals = None
-    assert [t["reviewed"] for t in await _reviewed(apps, who, tools, await _policy(apps, who))] == [False, False]
+    assert [t["reviewed"] for t in await _reviewed(apps, who, tools)] == [False, False]
 
 
 async def test_the_call_count_is_the_callers_own_this_week(

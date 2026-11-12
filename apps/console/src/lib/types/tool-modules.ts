@@ -137,7 +137,16 @@ export interface ModuleOperation {
   binding: SubjectBinding | null;
   rateLimitPerMin: number;
   /** Each call waits for an approval token bound to the exact input. */
-  requiresApproval: boolean;
+  /** null: not set, so the team default decides (a write waits unless the team lets its app change without asking). */
+  requiresApproval: boolean | null;
+  /** The tool's own answer, set by a reviewed change (none, person or reviewer); null follows its app, then the team. */
+  approvalMode?: 'none' | 'person' | 'reviewer' | null;
+  /** What a call of this write does in a chat for the team in view, from the service's one resolver (never worked out here). */
+  answer?: 'none' | 'person' | 'reviewer' | null;
+  /** The level the answer came from: tool, app, team, mcp or test-account. */
+  answerSource?: string | null;
+  answerRole?: string | null;
+  waits?: boolean | null;
   /** A write's approval policy: how many distinct people of the run's team approve each call. */
   approvers: 1 | 2;
   /** Approving asks the approver to step up (implied by two approvers). */
@@ -281,6 +290,8 @@ export interface ModuleTestInput {
   input: Record<string, unknown>;
   /** Test only: the gateway issues a test approval token for this exact input instead of waiting for a person. */
   simulateApproval?: boolean;
+  /** The person's yes to a Real test run that asks them first (the approval card). */
+  confirmed?: boolean;
   /** The workbench's unsaved definition, tried without staging it; agents never see it. */
   /** `responseTransform: null` runs with no transform; left out, the operation's own. */
   draft?: { responseTransform?: string | null };

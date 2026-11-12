@@ -133,6 +133,9 @@ class ApprovalWidget(WidgetBase):
     waiting_on: str | None = None
     # Whether the person reading the thread may decide it now, by the decision route's checks.
     can_decide: bool | None = None
+    # The app asks before changes: the person who asked answers it themselves, with Allow, Deny and Allow for this
+    # chat, instead of a reviewer approving it.
+    ask_first: bool | None = None
 
 
 class FormWidgetField(WireModel):
@@ -175,6 +178,8 @@ ChatWidget = Annotated[
 class ApproveAction(WireModel):
     type: Literal["approve"]
     step_up_token: str | None = None
+    # "Allow for this chat" on an app that asks before changes: later writes of that app in this chat run unasked.
+    for_chat: bool | None = None
 
 
 class RejectAction(WireModel):

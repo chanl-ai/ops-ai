@@ -26,6 +26,9 @@ from .check import can
 TEAM_CREATED = "team.created"
 # A member removed from a team (platform-service store/members.py): their own accounts on its apps go.
 MEMBER_REMOVED = "member.removed"
+# A team's approval answers changed (appChanges, appChangesByApp): agents-service drops the tool list it kept for the
+# team, since the list carries each write's answer.
+POLICY_CHANGED = "policy.changed"
 
 
 @dataclass(frozen=True)

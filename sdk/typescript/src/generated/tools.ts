@@ -3335,6 +3335,16 @@ export interface components {
         GrantableOperation: {
             /** Access */
             access: string;
+            /**
+             * Added
+             * @default true
+             */
+            added: boolean;
+            /**
+             * Answer
+             * @default none
+             */
+            answer: string;
             /** Approvers */
             approvers: number;
             /** Description */
@@ -3353,11 +3363,23 @@ export interface components {
             outputShape?: string | null;
             /** Requiresapproval */
             requiresApproval: boolean;
+            /** Reviewerrole */
+            reviewerRole?: string | null;
+            /**
+             * Source
+             * @default team
+             */
+            source: string;
             /**
              * Stepup
              * @default false
              */
             stepUp: boolean;
+            /**
+             * Testaccount
+             * @default false
+             */
+            testAccount: boolean;
             /** Title */
             title?: string | null;
         };
@@ -3858,6 +3880,14 @@ export interface components {
             access: "read" | "write";
             /** Amountmax */
             amountMax?: number | null;
+            /** Answer */
+            answer?: ("none" | "person" | "reviewer") | null;
+            /** Answerrole */
+            answerRole?: string | null;
+            /** Answersource */
+            answerSource?: string | null;
+            /** Approvalmode */
+            approvalMode?: ("none" | "person" | "reviewer") | null;
             /** Approvedworkflows */
             approvedWorkflows: number;
             /** Approverteam */
@@ -3909,9 +3939,11 @@ export interface components {
             /** Ratelimitpermin */
             rateLimitPerMin: number;
             /** Requiresapproval */
-            requiresApproval: boolean;
+            requiresApproval?: boolean | null;
             /** Responsetransform */
             responseTransform?: string | null;
+            /** Reviewerrole */
+            reviewerRole?: string | null;
             /** Scopes */
             scopes?: string[];
             /** Secrets */
@@ -3926,6 +3958,8 @@ export interface components {
             timeoutMs?: number | null;
             /** Toolid */
             toolId: string;
+            /** Waits */
+            waits?: boolean | null;
         };
         /** ModuleRef */
         ModuleRef: {
@@ -3972,6 +4006,11 @@ export interface components {
         };
         /** ModuleTestIn */
         ModuleTestIn: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
             /** Contextid */
             contextId: string;
             draft?: components["schemas"]["TestDraftIn"] | null;
@@ -4292,6 +4331,8 @@ export interface components {
             access?: ("read" | "write") | null;
             /** Amountmax */
             amountMax?: number | null;
+            /** Approvalmode */
+            approvalMode?: ("none" | "person" | "reviewer") | null;
             /** Approverteam */
             approverTeam?: string | null;
             /** Approvers */
@@ -4318,10 +4359,15 @@ export interface components {
             path?: string | null;
             /** Ratelimitpermin */
             rateLimitPerMin?: number | null;
-            /** Requiresapproval */
+            /**
+             * Requiresapproval
+             * @deprecated
+             */
             requiresApproval?: boolean | null;
             /** Responsetransform */
             responseTransform?: string | null;
+            /** Reviewerrole */
+            reviewerRole?: string | null;
             /** Scopes */
             scopes?: string[] | null;
             /** Stepup */
@@ -5612,6 +5658,11 @@ export interface components {
          *     call, with every check, in the environment picked.
          */
         ToolRunIn: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed: boolean;
             /** Environment */
             environment?: ("test" | "live") | null;
             /** Input */

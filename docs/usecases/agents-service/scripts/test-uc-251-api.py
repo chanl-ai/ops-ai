@@ -126,9 +126,11 @@ with ExitStack() as stack:
     )
 
     review_id = tasks[0]["taskId"] if tasks else run_id
-    decided = api.post(
-        f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM
-    )
+    # The run's starter does not decide its own run's write (requesterMayDecide is off by default); Lee does.
+    own = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
+    check("3a the person who started the run cannot approve its write (403)", own.status_code == 403, own.text[:200])
+    lee = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
+    decided = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=lee)
     after = until(lambda: (c := case_of(api, run_id)) and not c.get("waiting") and c) or {}
     done = [a for a in after.get("actions") or [] if a["taskId"] == review_id]
     # The case tells its story as a feed of lines; the full list of one kind is the activity route below.

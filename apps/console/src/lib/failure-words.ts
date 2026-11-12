@@ -26,7 +26,7 @@ const CALL_FAILURE: Record<string, string> = {
   PLUGIN_DISABLED: 'The app is not installed here',
   APP_OFF_FOR_TEAM: 'The app is turned off for this team',
   ACCOUNT_CHOICE_NEEDED: 'Waited for the person to choose an account',
-  TOOL_NOT_ADDED: 'The tool is not added for this team',
+  TOOL_NOT_ADDED: 'The tool is turned off for this team',
   INVALID_ARGUMENTS: 'The tool was given input it does not take',
   WRITE_IN_PROGRESS: 'The same change was already under way',
   CALL_ABANDONED: 'The call was abandoned',

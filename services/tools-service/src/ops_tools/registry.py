@@ -11,12 +11,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from ops_access import tool_waits
 from ops_agents.activities.catalog import Catalog
 from ops_store.team_scope import acting_team
 
 from .connections.records import account_for
 from .defaults import ensure_defaults
 from .environments import LIVE
+from .modules.policy import tool_mode
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.connections import ConnectionStore
@@ -92,6 +94,12 @@ class Resolved:
     operation: dict[str, Any] | None = None
 
 
+def _declared(waits: bool | None) -> str | None:
+    """A catalogue or workflow declaration as the tool's own answer: a wait is a reviewer; run-at-once or nothing is not
+    set, so the app, then the team decide. Only an admin's explicit "none" means none."""
+    return "reviewer" if waits else None
+
+
 class ToolRegistry:
     def __init__(
         self,
@@ -147,8 +155,9 @@ class ToolRegistry:
                     "description": t.description,
                     "access": t.access,
                     "input_schema": t.input_schema,
-                    # Off unless the tool declares it (approvals are off by default).
-                    "requires_approval": t.access in WRITES and t.requires_approval is True,
+                    "requires_approval": tool_waits(t.access, t.approval_mode),
+                    "setting": t.requires_approval,
+                    "setting_role": None,
                     "approvers": t.approvers,
                     "step_up": t.approvers > 1,
                     "output_shape": None,
@@ -197,7 +206,10 @@ class ToolRegistry:
                         "description": op["description"],
                         "access": op["access"],
                         "input_schema": input_schema(op["input"]),
-                        "requires_approval": bool(op["requires_approval"]),
+                        "requires_approval": tool_waits(op["access"], tool_mode(op)),
+                        # The tool's own setting before the team's and app's answer is applied (app.py).
+                        "setting": tool_mode(op),
+                        "setting_role": op.get("reviewer_role"),
                         "approvers": approval_policy(module, op)["approvers"],
                         "step_up": approval_policy(module, op)["step_up"],
                         "output_shape": op.get("output_shape"),
@@ -244,17 +256,20 @@ class ToolRegistry:
         limit_ms = op.get("timeout_ms") or module.get("timeout_ms")
         return float(limit_ms) / 1000 + 5.0 if limit_ms else None
 
-    async def requires_approval(self, tool: str, tenant_id: str, team_id: str | None = None) -> bool:
-        """Whether a write to `tool` waits for a person's approval, from its registry entry alone: the operation's own
-        flag, else the workflow tool's or the agents catalogue's declaration. A write that declares nothing runs:
-        approvals are off by default and a team turns them on in its policies."""
+    async def approval_setting(
+        self, tool: str, tenant_id: str, team_id: str | None = None
+    ) -> tuple[str | bool | None, str | None]:
+        """The tool's own approval answer and reviewer role, from its registry entry alone: the operation's mode, else
+        the workflow tool's or the agents catalogue's declaration (True waits, False runs). None follows the app and
+        team (`effective_answer` decides what a write with none does)."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
-            return bool(resolved.operation["requires_approval"])
+            return tool_mode(resolved.operation), resolved.operation.get("reviewer_role")
+        # A catalogue or workflow declaration is the tool's own answer (not a stored flag): true waits for a reviewer.
         if tool in WORKFLOW_TOOLS:
-            return WORKFLOW_TOOLS[tool][1]
+            return _declared(WORKFLOW_TOOLS[tool][1]), None
         definition = self.catalog.tool(tool)
-        return definition is not None and definition.requires_approval is True
+        return _declared(definition.requires_approval if definition is not None else None), None
 
     async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's

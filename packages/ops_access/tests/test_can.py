@@ -105,9 +105,11 @@ async def test_the_requester_does_not_decide() -> None:
     refused("own_request", ACCESS.can, p, "reviews", "decide", team="team_a", not_by=[None, "a@bank.test"])
 
 
-async def test_the_requester_decides_unless_the_tenant_switched_requester_may_decide_off() -> None:
-    open_ = await person(access={"team_a": ["reviewer"]})
-    assert ACCESS.can(open_, "reviews", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
+async def test_the_requester_does_not_decide_unless_the_tenant_switched_requester_may_decide_on() -> None:
+    loosened = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": True})
+    assert ACCESS.can(loosened, "reviews", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
+    default = await person(access={"team_a": ["reviewer"]})
+    refused("own_request", ACCESS.can, default, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
     strict = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": False})
     assert ACCESS.can(strict, "reviews", "decide", team="team_a", requested_by=["b@bank.test"]) == "all"
     refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])

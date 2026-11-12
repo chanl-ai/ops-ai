@@ -90,6 +90,7 @@ async def test_feedback_survives_a_reload_and_can_be_cleared(stack: tuple[AsyncC
     assert (await stored(client, thread["id"]))["messages"][-1].get("feedback") is None
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_an_approval_is_decided_in_reviews_and_blocks_new_messages_until_then(
     stack: tuple[AsyncClient, Runtime],
 ) -> None:

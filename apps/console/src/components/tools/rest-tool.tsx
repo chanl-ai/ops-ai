@@ -14,7 +14,7 @@ import { ConnectionSelect, type ConnectionOption } from '@/components/tools/conn
 import { BodyEditor, hasBody, HeadersEditor, RequestLine } from '@/components/tools/http-operation-builder';
 import { InputSchemaEditor, schemaOf } from '@/components/tools/input-schema-editor';
 import { MockAnswers } from '@/components/tools/mock-answers';
-import { ResultBody, RunInputFields, useRunValues, type ResultTab } from '@/components/tools/test-console';
+import { AskBeforeRun, ResultBody, RunInputFields, useRunValues, type ResultTab } from '@/components/tools/test-console';
 import { ToolAppLink, urlProblem, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -113,9 +113,12 @@ export function RestTool(p: RestToolProps) {
     if (p.result?.decision === 'invalid' && p.result.invalid) run.setErrors(Object.fromEntries(p.result.invalid.map((x) => [x.field, x.message])));
   }, [p.result]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const go = () => {
-    const input = run.collect();
+  // What the last run sent: the person's yes on the approval card covers that request, not the fields as edited since.
+  const sent = React.useRef<Record<string, unknown>>({});
+  const go = (confirmed = false) => {
+    const input = confirmed ? sent.current : run.collect();
     if (!input) return;
+    sent.current = input;
     setRanIn(mode);
     const typed = Object.fromEntries(Object.entries(secretValues).filter(([, v]) => v !== ''));
     p.onRun({
@@ -125,6 +128,7 @@ export function RestTool(p: RestToolProps) {
       input,
       draft: { responseTransform: d.transform.trim() || null },
       secretValues: Object.keys(typed).length ? typed : undefined,
+      confirmed: confirmed || undefined,
     });
   };
   const host = p.base.replace(/^https?:\/\//, '').split('/')[0];
@@ -142,7 +146,7 @@ export function RestTool(p: RestToolProps) {
           Real
         </ToggleGroupItem>
       </ToggleGroup>
-      <LoadingButton isLoading={p.running} loadingText="Running…" onClick={go} disabled={cannotRun} title={cannotRun ? NO_RUN : undefined} data-testid="run">
+      <LoadingButton isLoading={p.running} loadingText="Running…" onClick={() => go()} disabled={cannotRun} title={cannotRun ? NO_RUN : undefined} data-testid="run">
         <Play className="size-4" /> Run
       </LoadingButton>
     </>
@@ -293,6 +297,10 @@ export function RestTool(p: RestToolProps) {
               Run to see the answer and the request that was sent.
             </p>
           ) : (
+            // A Real run of a write on a live account is held for the person who pressed Run: the card answers it.
+            ranIn === 'sandbox' && p.result.denyReason === 'approval_token_missing' ? (
+              <AskBeforeRun key={p.result.callId} op={op} input={sent.current} running={p.running} onYes={() => go(true)} />
+            ) : (
             <ResultBody
               result={p.result}
               op={op}
@@ -304,6 +312,7 @@ export function RestTool(p: RestToolProps) {
               tab={answerTab}
               onTab={setAnswerTab}
             />
+            )
           )}
         </Section>
         {(extra === 'transform' || p.result?.transformError) && (
