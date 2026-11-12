@@ -6,6 +6,9 @@ team is the caller's and that the caller holds `tools:run` there, and hands the 
 stateless server; tools/list reads the registry and tools/call is one gateway call. Nothing is decided or executed
 here: the registry, the schema, OPA, the rate window, the executor and the call log are the gateway's.
 
+Beside the team's tools it offers public API operations as tools (mcp_tools.py: list and install templates), each
+called on its service with the assistant's own credential.
+
 Slice 1 lists the team's read operations only. Every call is a test run, so it uses an app's sandbox account when the
 team has one, and a write called by name reaches the gateway, which refuses it without a person's approval.
 """
@@ -29,10 +32,12 @@ from ops_identity import Auth, Principal
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable
 from ops_service_kit.http import error_body
 from ops_service_kit.ids import new_id
+from ops_service_kit.settings import Settings
 from ops_store import isolation
 
 from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls
+from .mcp_tools import PlatformTools
 from .modules.directory import Directory, Team
 from .registry import ToolRegistry
 from .store.modules import Aggregate
@@ -47,11 +52,22 @@ class McpCaller:
 
     principal: Principal
     team: Team
+    # The request's own Authorization header, which a platform tool sends on so the service decides as for this person.
+    authorization: str
 
 
 class McpAdapter:
-    def __init__(self, *, calls: GatewayCalls, registry: ToolRegistry, directory: Directory, auth: Auth) -> None:
+    def __init__(
+        self,
+        *,
+        calls: GatewayCalls,
+        registry: ToolRegistry,
+        directory: Directory,
+        auth: Auth,
+        platform: PlatformTools | None = None,
+    ) -> None:
         self.calls = calls
+        self.platform = platform or PlatformTools({"agents": Settings().agents_url or ""})
         self.registry = registry
         self.directory = directory
         self.auth = auth
@@ -87,7 +103,8 @@ class McpAdapter:
             return
         # An id the seed does not know is nobody's team, so it sees no module (never the all-scope fallback).
         team = self.directory.team_by_id(team_id) or Team(team_id, team_id, (), "owned")
-        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team)
+        authorization = headers.get("authorization") or ""
+        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team, authorization)
         # The team scope an API route gets from its auth dependency. This adapter is an ASGI app, so nothing else enters
         # it, and the registry and connection store raise NoTenantError without it. The SDK starts each request's
         # handler task from this task's context, so the scope reaches tools/list and tools/call.
@@ -116,10 +133,14 @@ class McpAdapter:
             for r in rows
             if r["access"] not in WRITES
         ]
-        return types.ListToolsResult(tools=tools)
+        return types.ListToolsResult(tools=[*self.platform.tools(), *tools])
 
     async def _call_tool(self, ctx: Any, params: Any) -> types.CallToolResult:
         who = _caller(ctx)
+        if self.platform.offers(str(params.name)):
+            return await self.platform.call(
+                str(params.name), dict(params.arguments or {}), authorization=who.authorization, team=who.team.id
+            )
         request = CallRequest(
             tool=str(params.name),
             input=dict(params.arguments or {}),
