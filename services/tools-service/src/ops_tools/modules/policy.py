@@ -6,7 +6,7 @@ read counts as "always", so a failed read never lets a version go live unreviewe
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from ops_access import BY_KEY, Access, effective_answer, publish_mode, team_on
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
@@ -89,11 +89,18 @@ class WriteApprovals:
         # `setting` is the tool's own mode (see `tool_mode`). A bare True or False is a stored requires_approval, which
         # cannot be told from the old default, so it is no override: the app and the team decide.
         mode = setting if isinstance(setting, str) else None
-        mine = by_app.get(tool_key(tool)) if tool else None
-        if isinstance(mine, dict) and mine.get("answer") in ("none", "person", "reviewer"):
-            mode, reviewer_role = str(mine["answer"]), mine.get("reviewerRole") or reviewer_role
-        tool = {"access": access, "approvalMode": mode, "reviewerRole": reviewer_role, "approvers": approvers}
-        return effective_answer(tool=tool, app=app, team=team, channel=channel, test_account=test_account)
+        admin: Any = by_app.get(tool_key(tool)) if tool else None
+        if isinstance(admin, dict):
+            held = cast(dict[str, Any], admin)
+            if held.get("answer") in ("none", "person", "reviewer"):
+                mode, reviewer_role = str(held["answer"]), held.get("reviewerRole") or reviewer_role
+        own: dict[str, Any] = {
+            "access": access,
+            "approvalMode": mode,
+            "reviewerRole": reviewer_role,
+            "approvers": approvers,
+        }
+        return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account)
 
 
 def tool_key(tool: str) -> str:
