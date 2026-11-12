@@ -50,7 +50,7 @@ class Policies:
 
     async def _check_reviewer_roles(self, actor: Actor, key: str, value: Any) -> None:
         """A "reviewer" answer names a role, and the role must be able to decide reviews: otherwise nobody could ever
-        answer and every change would wait for good."""
+        answer and every change would wait for good. A role that does not exist is refused for the same reason."""
         entries: list[dict[str, Any]] = []
         if key == "appChanges" and isinstance(value, dict) and cast(dict[str, Any], value).get("ask"):
             entries = [cast(dict[str, Any], value)]
@@ -66,7 +66,11 @@ class Policies:
             if not role_id:
                 raise ValidationFailed("Choose the role that reviews.", code="reviewer_role_required")
             role = await roles.role(actor.tenant_id, str(role_id))
-            if role is not None and not any(g[:2] == ("reviews", "decide") for g in role["grants"]):
+            if role is None:
+                raise ValidationFailed(
+                    f"There is no role {role_id}. Choose a role that can approve.", code="reviewer_role_unknown"
+                )
+            if not any(g[:2] == ("reviews", "decide") for g in role["grants"]):
                 raise ValidationFailed(
                     f"{role['name']} cannot decide reviews. Choose a role that can approve.", code="role_cannot_approve"
                 )

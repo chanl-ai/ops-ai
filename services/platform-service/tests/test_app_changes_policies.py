@@ -47,10 +47,12 @@ async def test_a_reviewer_answer_needs_a_role_that_can_approve(signin: SignInRig
     admin = signin.admin
     none = await put(signin, "appChanges", {"ask": True, "answer": "reviewer", "reviewerRole": None}, admin)
     cannot = await put(signin, "appChanges", {"ask": True, "answer": "reviewer", "reviewerRole": "viewer"}, admin)
-    assert [(r.status_code, r.json()["error"]["code"]) for r in (none, cannot)] == [
+    nobody = await put(signin, "appChanges", {"ask": True, "answer": "reviewer", "reviewerRole": "no_such_role"}, admin)
+    assert [(r.status_code, r.json()["error"]["code"]) for r in (none, cannot, nobody)] == [
         (400, "reviewer_role_required"),
         (400, "role_cannot_approve"),
-    ], (none.text, cannot.text)
+        (400, "reviewer_role_unknown"),
+    ], (none.text, cannot.text, nobody.text)
 
 
 async def test_the_old_keys_read_what_the_new_ones_say_and_their_writes_land_in_the_new_ones(signin: SignInRig) -> None:
