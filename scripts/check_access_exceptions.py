@@ -14,6 +14,11 @@ way and compares them with `access-exceptions-allowlist.txt`, where each line na
   policy-default  each policy in packages/ops_access/src/ops_access/policies.py with its default. Every policy is
                   listed: `open` for an open default, a register row for one that holds something back. A new policy or
                   a changed default fails until it is listed.
+  open-read       a GET route (`@<router>.get(...)`) with no `reader_of(` in its signature, decorator or router and no
+                  `can` or `may` call in its body, keyed by the function's name: a read nobody's view cell decides.
+  grid-eval       `effective(` or `scope_in(` called outside packages/ops_access: a second evaluator of the roles grid.
+  raw-role        a role read off the token by hand (`.roles.get(`, `.access.get(`, `role in`) outside
+                  packages/ops_access, where `can(role=)` and `Access.roles_in` own it.
   conflict        a 409 by its error code. Most say a record is in the wrong state, but one can refuse by who made a
                   record (a seeded one, a system one). Each code is classified once: `* conflict <code> 0 state` for a
                   state conflict, or a path line with a register row for one that decides access.
@@ -103,6 +108,15 @@ LOCKS = [
     # The dev header caller, which holds no role, passing rules a person with a role would meet.
     ("dev-caller", re.compile(r"auth_method\s*(?:==|!=)\s*[\"']dev[\"']")),
 ]
+
+
+# The one home of grid evaluation and of reading a person's roles from their token.
+GRID_HOME = "packages/ops_access/"
+GRID_EVAL = ("effective", "scope_in")
+# Token fields whose `.get(team)` reads a person's roles by hand.
+RAW_ROLE_FIELDS = ("roles", "access")
+# A read decided by a view cell names one of these: the router dependency, or a call in the body.
+READ_CHECKS = ("reader_of", "can", "_can", "may")
 
 
 @dataclass(frozen=True)
@@ -258,6 +272,79 @@ def _refusals(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
     return out
 
 
+def _routers_with_reader(tree: ast.AST) -> set[str]:
+    """Names bound to a router made with a `reader_of` dependency (`APIRouter(dependencies=[...])`)."""
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and _mentions(node.value, ("reader_of",)):
+            out |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    return out
+
+
+def _mentions(node: ast.AST, names: tuple[str, ...]) -> bool:
+    """Whether `node` calls one of `names` anywhere inside it."""
+    return any(isinstance(n, ast.Call) and _name(n) in names for n in ast.walk(node))
+
+
+def _open_reads(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
+    """GET routes no view cell decides: no `reader_of` on the route or its router, no `can` or `may` in the body."""
+    checked = _routers_with_reader(tree)
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        gets = [
+            d
+            for d in node.decorator_list
+            if isinstance(d, ast.Call)
+            and isinstance(d.func, ast.Attribute)
+            and d.func.attr == "get"
+            and isinstance(d.func.value, ast.Name)
+        ]
+        if not gets:
+            continue
+        router = _router_of(gets[0])
+        if router in checked or _mentions(node, READ_CHECKS):
+            continue
+        out.append(Finding(rel, node.lineno, "open-read", node.name, lines[gets[0].lineno - 1].strip()))
+    return out
+
+
+def _router_of(decorator: ast.Call) -> str:
+    """The name the route decorator is called on: `router` in `@router.get(...)`."""
+    func = decorator.func
+    return func.value.id if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) else ""
+
+
+def _grid_evals(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
+    if rel.startswith(GRID_HOME):
+        return []
+    return [
+        Finding(rel, n.lineno, "grid-eval", _name(n), lines[n.lineno - 1].strip())
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and _name(n) in GRID_EVAL
+    ]
+
+
+def _raw_roles(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
+    """`x.roles.get(...)`, `x.access.get(...)` and `role in ...` in code, outside packages/ops_access."""
+    if rel.startswith(GRID_HOME):
+        return []
+    out: list[Finding] = []
+    for n in ast.walk(tree):
+        key = ""
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "get":
+            owner = n.func.value
+            if isinstance(owner, ast.Attribute) and owner.attr in RAW_ROLE_FIELDS:
+                key = f".{owner.attr}.get"
+        elif isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id == "role":
+            if any(isinstance(op, ast.In | ast.NotIn) for op in n.ops):
+                key = "role-in"
+        if key and isinstance(n, ast.expr):
+            out.append(Finding(rel, n.lineno, "raw-role", key, lines[n.lineno - 1].strip()))
+    return out
+
+
 def _name(call: ast.Call) -> str:
     return call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
 
@@ -267,7 +354,13 @@ def _python(path: Path) -> list[Finding]:
     source = path.read_text()
     lines = source.splitlines()
     tree = ast.parse(source)
-    found = [*_refusals(rel, tree, lines), *_conflicts(rel, tree, lines)]
+    found = [
+        *_refusals(rel, tree, lines),
+        *_conflicts(rel, tree, lines),
+        *_open_reads(rel, tree, lines),
+        *_grid_evals(rel, tree, lines),
+        *_raw_roles(rel, tree, lines),
+    ]
     for n, line in enumerate(lines, 1):
         code = line.split("#", 1)[0]
         for rx in PY_ROLE:
