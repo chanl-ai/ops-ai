@@ -94,6 +94,10 @@ class Resolved:
     operation: dict[str, Any] | None = None
 
 
+def _declared(waits: bool | None) -> str | None:
+    return None if waits is None else "reviewer" if waits else "none"
+
+
 class ToolRegistry:
     def __init__(
         self,
@@ -259,10 +263,11 @@ class ToolRegistry:
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
             return tool_mode(resolved.operation), resolved.operation.get("reviewer_role")
+        # A catalogue or workflow declaration is the tool's own answer (not a stored flag): true waits for a reviewer.
         if tool in WORKFLOW_TOOLS:
-            return WORKFLOW_TOOLS[tool][1], None
+            return _declared(WORKFLOW_TOOLS[tool][1]), None
         definition = self.catalog.tool(tool)
-        return (definition.requires_approval if definition is not None else None), None
+        return _declared(definition.requires_approval if definition is not None else None), None
 
     async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's

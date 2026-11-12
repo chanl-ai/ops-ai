@@ -461,7 +461,7 @@ class GatewayCalls:
                     "mcp"
                     if channel == MCP
                     else "test"
-                    if channel == CONSOLE
+                    if channel == CONSOLE and run == TEST
                     # Nobody in a chat to confirm (a workflow, a schedule): "ask the person" goes to the reviewer role.
                     else "workflow"
                     if req.acting_for is None

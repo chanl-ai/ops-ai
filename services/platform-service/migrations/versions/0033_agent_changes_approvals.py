@@ -60,10 +60,14 @@ def upgrade() -> None:
     for key, per_tenant in (("appChanges", changes), ("appChangesByApp", by_app)):
         for tenant, value in per_tenant.items():
             by, at = who[tenant]
+            if bind.execute(
+                sa.text("SELECT 1 FROM policies WHERE tenant_id = :t AND key = :k"), {"t": tenant, "k": key}
+            ).first():
+                continue
             bind.execute(
                 sa.text(
                     "INSERT INTO policies (tenant_id, key, value, updated_by, updated_at) "
-                    "VALUES (:t, :k, cast(:v as json), :by, :at) ON CONFLICT (tenant_id, key) DO NOTHING"
+                    "VALUES (:t, :k, cast(:v as json), :by, :at)"
                 ),
                 {"t": tenant, "k": key, "v": json.dumps(value), "by": by, "at": at},
             )
