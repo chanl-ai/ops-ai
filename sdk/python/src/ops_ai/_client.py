@@ -57,6 +57,7 @@ from ._words import (
     Usage,
 )
 from ._workflows import AsyncWorkflows, Workflows
+from .templates import AsyncTemplates, Templates
 
 # A run is over in these states; `waiting` means it stopped at a step that waits on a person or another system.
 TERMINAL = ("succeeded", "failed", "cancelled")
@@ -309,6 +310,7 @@ class OpsAI:
         self.accounts = Accounts(self.raw, self.apps)
         self.tools = Tools(self.raw, self.apps, Resource(self.raw, NOUNS["tools"]))
         self.resources = Resources(self.raw)
+        self.templates = Templates(self.raw)
         self.usage = Usage(self.raw)
         self.me = Me(self.raw)
         # The chat screen's routes and the model settings', which the generated layer does not hold.
@@ -373,6 +375,7 @@ class AsyncOpsAI:
         self.accounts = AsyncAccounts(self.raw, self.apps)
         self.tools = AsyncTools(self.raw, self.apps, AsyncResource(self.raw, NOUNS["tools"]))
         self.resources = AsyncResources(self.raw)
+        self.templates = AsyncTemplates(self.raw)
         self.usage = AsyncUsage(self.raw)
         self.me = AsyncMe(self.raw)
         self.chat = AsyncChat(self.raw)

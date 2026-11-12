@@ -22,6 +22,7 @@ import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
 import { type CallArgs, type Config, type Operation, pageItems, result, type Service, Transport } from './transport.js';
 import { Agents } from './agents.js';
+import { Templates } from './templates.js';
 import { Workflows } from './workflows.js';
 import { Accounts, Apps, Credentials, Me, Resources, Tools, Usage } from './words.js';
 
@@ -251,6 +252,7 @@ export class OpsAI {
   readonly credentials: Credentials;
   readonly accounts: Accounts;
   readonly resources: Resources;
+  readonly templates: Templates;
   readonly usage: Usage;
   readonly me: Me;
 
@@ -271,6 +273,7 @@ export class OpsAI {
     this.credentials = new Credentials(this.raw, this.apps);
     this.accounts = new Accounts(this.raw, this.apps);
     this.resources = new Resources(this.raw);
+    this.templates = new Templates(this.raw);
     this.usage = new Usage(this.raw);
     this.me = new Me(this.raw);
     this.knowledge = new Knowledge(t, this.raw);
