@@ -22,7 +22,8 @@ export function createChatHttp(get: Get, send: Send, qs: (p: ListParams) => stri
     settings: createChatSettingsHttp(get, send),
     memories: createMemoriesHttp(get, send),
     threads: {
-      list: ({ cursor, ...p }) => get(`/chat/threads?${qs(p)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+      list: ({ cursor, recent, ...p }) =>
+        get(`/chat/threads?${qs(p)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${recent === undefined ? '' : `&recent=${recent}`}`),
       // A teammate's conversation answers {id, readable: false}: read as a refusal with its own code, so the page says
       // whose it is without a failing request.
       get: async (id) => {

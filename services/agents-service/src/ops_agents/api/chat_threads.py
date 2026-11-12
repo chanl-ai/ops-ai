@@ -53,6 +53,7 @@ from ops_contracts.chat import (
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.ids import now_iso
 
+from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
 from ..store.events import EventLog
 from ..store.reviews import ReviewStore
@@ -589,6 +590,17 @@ async def store_summary(rt: Runtime, thread_id: str) -> None:
     await update_meta(rt, thread_id, **summary(messages))
     if (row := await graph_store(rt).thread(thread_id)) is not None:
         await index_chat(rt, row, messages)
+
+
+BACKFILL_BATCH = 100
+
+
+async def with_stored_summaries(rt: Runtime, owner_email: str, owner_name: str) -> None:
+    """`with_summaries` for the caller's own threads that need it, found in SQL a batch at a time, so a list reads no
+    other person's thread and a long history fills in over a few lists."""
+    q = ChatListQuery(graph=CHAT_GRAPH, owner_email=owner_email, owner_name=owner_name)
+    rows = await unsummarised_rows(graph_store(rt).engine, q, limit=BACKFILL_BATCH)
+    await with_summaries(rt, rows)
 
 
 async def with_summaries(rt: Runtime, rows: list[dict[str, Any]]) -> None:

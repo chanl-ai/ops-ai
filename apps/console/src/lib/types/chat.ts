@@ -266,7 +266,11 @@ export type ChatThreadState = 'active' | 'pinned' | 'archived';
 export type ChatFilters = { agentId?: string[]; kbIds?: string[]; state?: string[] };
 
 /** `cursor` reads the rows after the one it names, in the list's order; the conversations table pages by `page`. */
-export type ChatThreadListParams = ListParams<ChatFilters> & { cursor?: string };
+export type ChatThreadListParams = ListParams<ChatFilters> & {
+  cursor?: string;
+  /** The sidebar's slice: the pinned chats (up to `pageSize`), then this many of the newest others, in one response with no `nextCursor`. */
+  recent?: number;
+};
 
 export interface ChatThreadList extends ListResult<ChatThreadRow> {
   /** Set while more rows follow; pass it back as `cursor`. */

@@ -40,7 +40,7 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const activeId = pathname.startsWith('/chat/') && pathname !== '/chat/conversations' ? pathname.split('/')[2] : undefined;
-  const pages = useChatThreadPages({ pageSize: PAGE, filters: { state: ['active', 'pinned'] } });
+  const pages = useChatThreadPages({ pageSize: PAGE, recent: RECENT, filters: { state: ['active', 'pinned'] } });
   const threads = React.useMemo(() => pages.data?.pages.flatMap((p) => p.data) ?? [], [pages.data]);
   const streaming = useStreamingThreadIds();
   const update = useUpdateThread();
