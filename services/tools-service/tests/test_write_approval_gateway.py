@@ -80,13 +80,13 @@ def reasons(r: httpx.Response) -> list[str]:
     return list(r.json()["error"]["details"]["reasons"])
 
 
-async def test_a_write_with_no_approval_setting_runs_and_so_does_one_whose_stored_flag_is_true(gateway: Call) -> None:
+async def test_a_write_with_no_approval_setting_runs_and_one_that_declares_a_wait_still_waits(gateway: Call) -> None:
     opened = await gateway("open_case", CASE, "s1")
     # Allowed by the policy; with no agents-service behind this runner the case itself is not opened.
     assert opened.json()["data"]["decision"] == "allow", opened.text
-    # A stored requires_approval=true cannot be told from the old default, so it means "use the app's setting".
+    # The seed gives a write that declares a wait the answer "reviewer" (as migration 0074 does), whatever the team.
     flagged = await gateway("update_address", ADDRESS, "s2")
-    assert flagged.json()["data"]["decision"] == "allow", flagged.text
+    assert (flagged.status_code, reasons(flagged)) == (403, ["write needs an approval token"]), flagged.text
 
 
 async def test_a_team_that_asks_a_reviewer_holds_a_write_whose_stored_flag_is_true(strict: Call) -> None:

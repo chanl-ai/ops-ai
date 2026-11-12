@@ -58,7 +58,7 @@ from . import openapi
 from .directory import Directory, Team
 from .executions import call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, tool_mode
-from .review_events import ACCESS_REQUESTED, access_event
+from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
 from .seed import blank, kind_of, major_of, open_connection, tool_title
 from .tool_users import ToolUsers
@@ -1557,6 +1557,15 @@ class ModuleService:
         two = int(o.get("approvers") or 1) > 1 and patch.get("approvers") != 1
         if patch.get("requires_approval") is False and two:
             raise Unprocessable("An operation two people approve always needs a person's approval.")
+        if (
+            patch.get("requires_approval") is not None
+            and "approval_mode" not in fields
+            and (patch.get("access") or o["access"]) == "write"
+        ):
+            # The older flag still arrives from callers; the resolver reads only approval_mode, so it is stored as that:
+            # true asks a reviewer, false hands the answer back to the app and team.
+            patch = {**patch, "approval_mode": "reviewer" if patch["requires_approval"] else None}
+            fields = fields | {"approval_mode"}
         mode = patch.get("approval_mode") if "approval_mode" in fields else o.get("approval_mode")
         if mode is not None and (patch.get("access") or o["access"]) != "write":
             raise Unprocessable("Only a write has an approval mode; a read never waits.")
@@ -1596,6 +1605,7 @@ class ModuleService:
                 binding=binding if "binding" in fields else o["binding"],
             )
         access = patch.get("access")
+        answer_before = o.get("approval_mode")
         self._take_baseline(m)
         changes: list[dict[str, Any]] = self._shape_changes(o, shape)
         name = o["name"]
@@ -1632,11 +1642,9 @@ class ModuleService:
                 detail = "Hidden from workflows; no workflow is approved for it"
                 changes.append({"operation": name, "kind": "removed", "detail": detail, "major": False})
             o["enabled"] = patch["enabled"]
-        if patch.get("requires_approval") is not None and patch["requires_approval"] != o["requires_approval"]:
-            on = patch["requires_approval"]
-            detail = "Every call waits for an approval" if on else "Calls no longer wait for a person"
-            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": not on})
-            o["requires_approval"] = on
+        if patch.get("requires_approval") is not None:
+            # Kept as sent for older readers; the change above (approval_mode) is what is logged and enforced.
+            o["requires_approval"] = patch["requires_approval"]
         if "approval_mode" in fields and mode != o.get("approval_mode"):
             before_mode = o.get("approval_mode")
             # Asking less than the app and team do, or handing the answer back to them, widens what runs unattended:
@@ -1665,8 +1673,8 @@ class ModuleService:
             detail = f"Approvers {o.get('approvers') or 1} → {approvers}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
             o["approvers"] = approvers
-            if approvers > 1 and o["requires_approval"] is not True:
-                # Asking for two approvers turns the tool's approval on: a write two people approve always waits for
+            if approvers > 1 and o.get("approval_mode") != "reviewer":
+                # Asking for two approvers makes the tool ask a reviewer: a write two people approve always waits for
                 # them, even one switched to run at once.
                 changes.append(
                     {
@@ -1677,6 +1685,7 @@ class ModuleService:
                     }
                 )
                 o["requires_approval"] = True
+                o["approval_mode"] = "reviewer"
         if team is not None and team != o.get("approver_team"):
             detail = f"Approved by {team}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
@@ -1737,8 +1746,15 @@ class ModuleService:
             changes.extend(self._code_changes(o, _code_settings(patch["code"])))
         if not changes:
             raise ValidationFailed("Nothing changed.")
+        answer_changed = o.get("approval_mode") != answer_before
         self._stage(m, changes)
-        return await self._detail(await self._save(m), who.team, who)
+        # A tool's own answer reaches agents' kept tool lists only when told: one event with the save.
+        told = (
+            [policy_changed_event(m, o, who.team.id, who.principal.email if who.principal else None)]
+            if answer_changed
+            else []
+        )
+        return await self._detail(await self._save(m, events=told), who.team, who)
 
     @staticmethod
     def _code_changes(o: dict[str, Any], code: dict[str, Any]) -> list[dict[str, Any]]:

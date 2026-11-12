@@ -554,7 +554,8 @@ class OperationPatchIn(In):
     response_transform: str | None = None
     timeout_ms: int | None = None
     enabled: bool | None = None
-    requires_approval: bool | None = None
+    # Still accepted: true is stored as approvalMode "reviewer", false clears it. Send approvalMode instead.
+    requires_approval: Annotated[bool | None, Field(deprecated=True)] = None
     # none, person or reviewer; null clears it, back to the app's and team's answer. A loosening is a major change.
     approval_mode: Literal["none", "person", "reviewer"] | None = None
     reviewer_role: Annotated[str, Field(max_length=64)] | None = None

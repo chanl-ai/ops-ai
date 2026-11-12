@@ -75,10 +75,12 @@ async def test_a_write_that_declares_approval_waits_and_no_read_does(grantable: 
     assert all(o["requiresApproval"] is False for o in rows.values() if o["access"] == "read"), rows
 
 
-async def test_a_tool_that_declares_approval_follows_its_app_when_set_to_dont_ask(grantable: Rows) -> None:
+async def test_a_tool_that_declares_approval_keeps_its_own_answer_when_its_app_is_set_to_dont_ask(
+    grantable: Rows,
+) -> None:
     rows = await grantable(Quiet(lambda mods: [_module_of(mods, "update_address")]))
-    assert rows["update_address"]["requiresApproval"] is False, rows["update_address"]
-    assert rows["update_address"]["source"] == "app", rows["update_address"]
+    assert rows["update_address"]["requiresApproval"] is True, rows["update_address"]
+    assert rows["update_address"]["source"] == "tool", rows["update_address"]
 
 
 async def test_a_switch_that_cannot_be_read_keeps_the_write_waiting(grantable: Rows) -> None:

@@ -273,7 +273,7 @@ def main() -> None:
         background=(
             lambda: keep_handing_over(ReviewHandoffs(engine), client("agents", agents_url, ["tools:publish"])),
             # Tool access requests and module reviews start their system workflows through these events.
-            lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit"])),
+            lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit", "agents:create"])),
             # Once at start: every team behind this release's defaults version is brought up to date.
             lambda: catch_up_at_start(store, TeamDefaults(engine)),
             # Once at start: a tool's sign-in header saved before they were refused moves to its connection.

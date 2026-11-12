@@ -95,7 +95,9 @@ class Resolved:
 
 
 def _declared(waits: bool | None) -> str | None:
-    return None if waits is None else "reviewer" if waits else "none"
+    """A catalogue or workflow declaration as the tool's own answer: a wait is a reviewer; run-at-once or nothing is not
+    set, so the app, then the team decide. Only an admin's explicit "none" means none."""
+    return "reviewer" if waits else None
 
 
 class ToolRegistry:

@@ -207,10 +207,10 @@ async def test_asking_for_two_approvers_turns_the_tools_approval_on(api: Api) ->
 
 async def test_a_tool_page_reads_a_writes_answer_from_the_resolver_not_from_requires_approval(api: Api) -> None:
     write = await _op(api, "update_address")
-    assert (write["requiresApproval"], write["answer"], write["waits"]) == (True, "none", False), (
-        "a stored requires_approval is not an answer: nothing set, so the team default runs it"
+    assert (write["requiresApproval"], write["answer"], write["waits"]) == (True, "reviewer", True), (
+        "the seed gives a declared wait the answer reviewer"
     )
-    await _ok(await _patch(api, write, {"approvalMode": "reviewer"}))
+    await _ok(await _patch(api, write, {"approvalMode": "person"}))
     asks = await _op(api, "update_address")
-    assert (asks["answer"], asks["answerSource"], asks["waits"]) == ("reviewer", "tool", True), asks
+    assert (asks["answer"], asks["answerSource"], asks["waits"]) == ("person", "tool", True), asks
     assert (await _op(api, "get_customer_profile")).get("answer") is None, "a read has no answer"

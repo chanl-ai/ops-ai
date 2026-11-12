@@ -4359,7 +4359,10 @@ export interface components {
             path?: string | null;
             /** Ratelimitpermin */
             rateLimitPerMin?: number | null;
-            /** Requiresapproval */
+            /**
+             * Requiresapproval
+             * @deprecated
+             */
             requiresApproval?: boolean | null;
             /** Responsetransform */
             responseTransform?: string | null;

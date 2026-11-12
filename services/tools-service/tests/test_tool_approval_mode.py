@@ -11,13 +11,16 @@ from typing import Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.modules.policy import WriteApprovals
 from ops_tools.modules.seed import load
-from ops_tools.store.modules import ModuleStore
+from ops_tools.store.event_relay import sender
+from ops_tools.store.modules import ModuleStore, service_outbox
 
 from .conftest import Api, build_app, opa_client, response_checker, service_headers
+from .service_clients import fake_service
 
 MOD = "/mod_core_banking"
 ADDRESS = {
@@ -90,6 +93,7 @@ async def _publish_and_decide(api: Api) -> httpx.Response:
 
 
 async def test_a_loosening_is_staged_major_and_a_stricter_answer_minor(asking: Api) -> None:
+    await _set(asking, "update_address", {"approvalMode": None})  # the seed gives a declared wait "reviewer"
     strict = await _set(asking, "update_address", {"approvalMode": "reviewer"})
     assert [c["major"] for c in _changes(strict, "update_address")] == [False], strict["pendingChanges"]
     quiet = await _set(asking, "update_address", {"approvalMode": "none"})
@@ -136,8 +140,7 @@ async def test_an_admin_loosens_a_tool_whose_default_asks_first_and_the_write_ru
 ) -> None:
     """A plugin tool's manifest default is a stored reviewer mode on a row no route edits. The admin's answer for the
     tool, kept in the policy store, replaces it without touching the row."""
-    await _set(asking, "update_address", {"approvalMode": "reviewer"})
-    await _publish_and_decide(asking)
+    assert (await _op(asking, "update_address"))["approvalMode"] == "reviewer", "the seed gives a declared wait this"
     body = {"tool": "update_address", "input": ADDRESS, "runContext": {"act": "test"}}
 
     async def call(key: str) -> httpx.Response:
@@ -149,3 +152,38 @@ async def test_an_admin_loosens_a_tool_whose_default_asks_first_and_the_write_ru
     ran = await call("p1")
     assert ran.status_code == 200 and ran.json()["data"]["decision"] == "allow", ran.text
     assert (await _op(asking, "update_address"))["approvalMode"] == "reviewer", "the row is not edited"
+
+
+async def test_the_older_requires_approval_flag_is_stored_as_the_answer_the_log_describes(asking: Api) -> None:
+    """A caller that still sends requiresApproval must not get a "waits" log line the resolver never honours."""
+    await _set(asking, "update_address", {"approvalMode": None})
+    saved = await _set(asking, "update_address", {"requiresApproval": True})
+    assert (await _op(asking, "update_address"))["approvalMode"] == "reviewer"
+    assert [c["detail"] for c in _changes(saved, "update_address")] == ["Approval follows the app → asks a reviewer"]
+    await _set(asking, "update_address", {"requiresApproval": False})
+    assert (await _op(asking, "update_address"))["approvalMode"] is None
+
+
+async def test_changing_a_tools_answer_tells_agents_to_drop_its_kept_tool_list(
+    asking: Api, engine: AsyncEngine, tenant: str
+) -> None:
+    """Agents keep a team's tool list, which carries each write's answer, for up to 30 s; the edit writes policy.changed
+    with the save, and the relay sends it to the route agents-service handles it on."""
+    await _set(asking, "update_address", {"approvalMode": "none"})
+    async with engine.connect() as c:
+        q = sa.select(service_outbox).where(
+            service_outbox.c.tenant_id == tenant, service_outbox.c.name == "policy.changed"
+        )
+        [event] = [dict(r) for r in (await c.execute(q)).mappings()]
+    assert event["payload"] == {"key": "tool:update_address"}
+    got: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        got.append(request.url.path)
+        return httpx.Response(200, json={"success": True, "data": {"handled": True}})
+
+    agents = fake_service(handler, "agents", ["events:emit", "agents:create"])
+    await sender(agents)(
+        {"tenantId": tenant, "body": {"name": "policy.changed", "key": "k", "teamId": event["team_id"]}}
+    )
+    assert got == ["/v1/platform-events"]
