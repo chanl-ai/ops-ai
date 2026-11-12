@@ -153,10 +153,6 @@ async def _check_kbs(rt: Runtime, agent: AgentDefinition, kb_ids: list[str]) -> 
     return [names[k] for k in kb_ids]
 
 
-def _state(meta: dict[str, Any]) -> str:
-    return "archived" if meta.get("archived") else "pinned" if meta.get("pinned") else "active"
-
-
 # ── agents ──
 
 
@@ -265,7 +261,7 @@ async def list_threads(
     )
     # Reads a person's own chats only: an API key holds no chat.view, so it lists none.
     readable = may_read({"ownerEmail": me.email}, me)
-    facets = await chat_facets(engine, q) if readable else {k: {} for k in facet_keys}
+    facets: dict[str, dict[str, int]] = await chat_facets(engine, q) if readable else {k: {} for k in facet_keys}
     order = f"{sort_by or 'default'}:{'desc' if q.descending else 'asc'}"
 
     if recent is not None:

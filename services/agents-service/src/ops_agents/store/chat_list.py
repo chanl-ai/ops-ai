@@ -16,7 +16,7 @@ from ops_store.dialect import json_array_has, json_fragment, json_text
 from ops_store.team_scope import team_visible
 
 from .chat_search import chat_search, matching_query
-from .graphs import _mine, graph_threads
+from .graphs import graph_threads, mine
 from .tenancy import tenant_tx
 
 _T = graph_threads.c
@@ -49,9 +49,9 @@ class ChatListQuery:
     owner_email: str
     owner_name: str
     test: bool = False
-    states: list[str] = field(default_factory=list)
-    agents: list[str] = field(default_factory=list)
-    kbs: list[str] = field(default_factory=list)
+    states: list[str] = field(default_factory=list[str])
+    agents: list[str] = field(default_factory=list[str])
+    kbs: list[str] = field(default_factory=list[str])
     search: str | None = None
     # "default" (pinned first, then newest), "title", "createdAt", "messageCount" or "lastMessageAt".
     sort_by: str = "default"
@@ -60,11 +60,11 @@ class ChatListQuery:
 
 
 def _visible(q: ChatListQuery) -> list[sa.ColumnElement[bool]]:
-    """The caller's own chat threads of the right kind: the owner's email, or the name on threads that predate it."""
+    """The caller's own chat threads of the right kind: the owner's email, or the name on threads that predate it.
+    Callers add `team_visible(graph_threads)` where they select."""
     email = sa.func.coalesce(json_text(_T.meta, "ownerEmail"), "")
     return [
-        _mine(graph_threads),
-        team_visible(graph_threads),
+        mine(graph_threads),
         _T.graph == q.graph,
         _flag("chat"),
         ~_flag("hidden"),
@@ -129,9 +129,9 @@ def page_queries(
 ) -> tuple[sa.Select[Any], sa.Select[Any], sa.Select[Any] | None]:
     """The page (one row beyond `limit`), the count selected and, past a position, the count remaining."""
     keys = order_keys(q.sort_by)
-    where = _selected(q)
-    sign = (lambda c: c.desc()) if q.descending else (lambda c: c.asc())
-    page = graph_threads.select().where(*where).order_by(*(sign(c) for c in (*keys, _T.id))).limit(limit + 1)
+    where = [team_visible(graph_threads), *_selected(q)]
+    ordered = [c.desc() if q.descending else c.asc() for c in (*keys, _T.id)]
+    page = graph_threads.select().where(*where).order_by(*ordered).limit(limit + 1)
     remaining_q = None
     if after is not None:
         past = _after(keys, after, q.descending)
@@ -160,10 +160,10 @@ async def chat_page(
     return ChatPage(got[:limit], total, len(got) > limit, remaining)
 
 
-def facet_queries(q: ChatListQuery) -> dict[str, sa.Select[Any]]:
+def facet_queries(q: ChatListQuery) -> dict[str, Any]:
     """Per-agent and per-state counts, and the kb id arrays to tally. The grouping is a subquery's column: grouping
     by an expression with bound parameters fails on SQL Server (error 8120, the select list's parameters differ)."""
-    where = _visible(q)
+    where = [team_visible(graph_threads), *_visible(q)]
     base = sa.select(_agent().label("v")).where(*where).subquery()
     states = sa.select(state_of().label("v")).where(*where).subquery()
     return {
@@ -179,9 +179,11 @@ async def chat_facets(engine: AsyncEngine, q: ChatListQuery) -> dict[str, dict[s
     out: dict[str, dict[str, int]] = {"agentId": {}, "kbIds": {}, "state": {}}
     async with tenant_tx(engine) as c:
         for name in ("agentId", "state"):
-            out[name] = {str(v): int(n) for v, n in await c.execute(queries[name])}
-        for (raw,) in await c.execute(queries["kbIds"]):
-            for kb in json.loads(raw) if raw else []:
+            out[name] = {str(v): int(n) for v, n in (tuple(row) for row in await c.execute(queries[name]))}
+        for row in await c.execute(queries["kbIds"]):
+            raw = row[0]
+            kbs: list[Any] = json.loads(raw) if raw else []
+            for kb in kbs:
                 out["kbIds"][str(kb)] = out["kbIds"].get(str(kb), 0) + 1
     return out
 
@@ -192,7 +194,9 @@ async def unsummarised_rows(engine: AsyncEngine, q: ChatListQuery, *, limit: int
     indexed = sa.exists().where(chat_search.c.thread_id == _T.id)
     stmt = (
         graph_threads.select()
-        .where(*_visible(q), sa.or_(json_text(_T.meta, "messageCount").is_(None), ~indexed))
+        .where(
+            team_visible(graph_threads), *_visible(q), sa.or_(json_text(_T.meta, "messageCount").is_(None), ~indexed)
+        )
         .limit(limit)
     )
     async with tenant_tx(engine) as c:
