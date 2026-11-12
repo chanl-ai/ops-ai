@@ -45890,6 +45890,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
+        "description": "The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same\nright render asks for, so a person who may only chat never reads a skill's text.",
         "operationId": "agents_get_skill",
         "parameters": [
           {

@@ -2000,7 +2000,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Skill */
+        /**
+         * Get Skill
+         * @description The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
+         *     right render asks for, so a person who may only chat never reads a skill's text.
+         */
         get: operations["agents_get_skill"];
         put?: never;
         post?: never;
