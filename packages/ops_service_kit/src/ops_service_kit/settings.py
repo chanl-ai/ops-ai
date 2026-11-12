@@ -433,7 +433,9 @@ class Settings(BaseSettings):
             # caller's team through documents-service.
             # agents:view: an app's "who uses it" asks agents-service which of the team's agents and workflows use its
             # tools, before a team admin turns it off. knowledge:view: search_knowledge searches the calling
-            # team's knowledge bases through kb-service.
+            # team's knowledge bases through kb-service. skills:view and the create cells: the team MCP address
+            # offers the team's skills as prompts and lists and installs templates, each token holding only the
+            # cells the person it calls for holds (mcp_tools.py).
             "tools": [
                 "agents:view",
                 "knowledge:view",
@@ -447,6 +449,11 @@ class Settings(BaseSettings):
                 "files:view",
                 "documents:view",
                 "documents:run",
+                "skills:view",
+                "agents:create",
+                "skills:create",
+                "workflows:create",
+                "guardrails:create",
             ],
             # events:emit: it reports a deleted file as a service event, which purges what was derived from it.
             "files": ["events:emit"],

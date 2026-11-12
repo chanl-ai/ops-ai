@@ -18,7 +18,7 @@ from ops_service_kit.logging import get_logger
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
-from ..auth import Principal, principal, require_builder
+from ..auth import Principal, caller_in, principal, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..hitl_facade import page
@@ -42,7 +42,9 @@ from .agents import changeable as agent_changeable
 from .tool_catalog import known_tools
 
 log = get_logger("ops_agents.skills")
-router = APIRouter(dependencies=[Depends(principal)])
+# Reads take a service token holding skills:view (tools-service offers a team's skills as MCP prompts); every change
+# depends on `Me`, a person or key, which refuses service tokens.
+router = APIRouter(dependencies=[Depends(caller_in("skills"))])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 VIEWS = ("all", "published", "always", "drafts", "in_review", "deprecated", "unused")

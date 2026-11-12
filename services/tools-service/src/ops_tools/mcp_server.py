@@ -28,7 +28,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
 from ops_access import can
-from ops_identity import Auth, Principal
+from ops_identity import Auth, Principal, service_signer
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable
 from ops_service_kit.http import error_body
 from ops_service_kit.ids import new_id
@@ -52,8 +52,6 @@ class McpCaller:
 
     principal: Principal
     team: Team
-    # The request's own Authorization header, which a platform tool sends on so the service decides as for this person.
-    authorization: str
 
 
 class McpAdapter:
@@ -74,7 +72,7 @@ class McpAdapter:
         self.public_url = public_url.rstrip("/") if public_url and issuer_url else None
         self.issuer_url = issuer_url.rstrip("/") if public_url and issuer_url else None
         self.calls = calls
-        self.platform = platform or PlatformTools({"agents": Settings().agents_url or ""})
+        self.platform = platform or _platform_tools(Settings())
         self.registry = registry
         self.directory = directory
         self.auth = auth
@@ -125,8 +123,7 @@ class McpAdapter:
             return
         # An id the seed does not know is nobody's team, so it sees no module (never the all-scope fallback).
         team = self.directory.team_by_id(team_id) or Team(team_id, team_id, (), "owned")
-        authorization = headers.get("authorization") or ""
-        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team, authorization)
+        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team)
         # The team scope an API route gets from its auth dependency. This adapter is an ASGI app, so nothing else enters
         # it, and the registry and connection store raise NoTenantError without it. The SDK starts each request's
         # handler task from this task's context, so the scope reaches tools/list and tools/call.
@@ -166,24 +163,19 @@ class McpAdapter:
     async def _list_prompts(self, ctx: Any, _params: Any) -> types.ListPromptsResult:
         """The team's skills as prompts, read from agents-service as the caller, so a person sees what they may read."""
         who = _caller(ctx)
-        return types.ListPromptsResult(
-            prompts=await self.platform.prompts(authorization=who.authorization, team=who.team.id)
-        )
+        return types.ListPromptsResult(prompts=await self.platform.prompts(who=who.principal, team=who.team.id))
 
     async def _get_prompt(self, ctx: Any, params: Any) -> types.GetPromptResult:
         who = _caller(ctx)
         args = {str(k): str(v) for k, v in dict(params.arguments or {}).items()}
-        found = await self.platform.prompt(str(params.name), args, authorization=who.authorization, team=who.team.id)
+        found = await self.platform.prompt(str(params.name), args, who=who.principal, team=who.team.id)
         if found is None:
             raise ValueError(f"No skill named {params.name} in this team.")
         return found
 
     async def _call_tool(self, ctx: Any, params: Any) -> types.CallToolResult:
         who = _caller(ctx)
-        if self.platform.offers(str(params.name)):
-            return await self.platform.call(
-                str(params.name), dict(params.arguments or {}), authorization=who.authorization, team=who.team.id
-            )
+        # Any member opens a session and lists; running any tool, a platform one included, needs tools:run.
         try:
             can(who.principal, "tools", "run", team=who.team.id, what="this team's tools")
         except ApiError as e:
@@ -191,6 +183,10 @@ class McpAdapter:
                 content=[types.TextContent(type="text", text=f"{e.code}: {e.message}")],
                 structured_content={"code": e.code, "status": e.status, "message": e.message},
                 is_error=True,
+            )
+        if self.platform.offers(str(params.name)):
+            return await self.platform.call(
+                str(params.name), dict(params.arguments or {}), who=who.principal, team=who.team.id
             )
         request = CallRequest(
             tool=str(params.name),
@@ -220,6 +216,15 @@ class McpAdapter:
             structured_content={"callId": outcome.call_id, "code": outcome.code, "reasons": outcome.reasons},
             is_error=True,
         )
+
+
+def _platform_tools(settings: Settings) -> PlatformTools:
+    """The platform operations, signed with this service's key; with no key (outside dev, unset) none are offered."""
+    try:
+        signer = service_signer(settings)
+    except ValueError:
+        signer = None
+    return PlatformTools({"agents": settings.agents_url or ""}, signer)
 
 
 def _caller(ctx: Any) -> McpCaller:
