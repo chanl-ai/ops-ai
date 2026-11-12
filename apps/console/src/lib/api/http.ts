@@ -17,6 +17,7 @@ import { createExecutionsHttp, createGovernanceHttp } from './governance-http';
 import { createSettingsHttp } from './settings-http';
 import { createSignInPolicyHttp } from './sign-in-http';
 import { createInvitesHttp } from './invites-http';
+import { createOAuthHttp } from './oauth-http';
 import { createAccountHttp } from './account-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
 import { createProviderConnectionsHttp } from './provider-connections-http';
@@ -295,6 +296,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     signInPolicy: createSignInPolicyHttp(get, send),
     invites: createInvitesHttp(get, send),
     account: createAccountHttp(get, send, qs),
+    oauth: createOAuthHttp(get, send),
     workspacePolicies: createWorkspacePoliciesHttp(get, send),
     workspaceTeams: createWorkspaceTeamsHttp(get, send),
     signInProviders: createSignInProvidersHttp(get, send),
