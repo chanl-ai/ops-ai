@@ -15782,6 +15782,13 @@
             "title": "Id",
             "type": "string"
           },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SkillInputField"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
           "kbCount": {
             "title": "Kbcount",
             "type": "integer"
@@ -16136,6 +16143,13 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SkillInputField"
+            },
+            "title": "Inputs",
+            "type": "array"
           },
           "kbCount": {
             "title": "Kbcount",

@@ -1617,29 +1617,6 @@ class SettingsInput(TypedDict, closed=True):
     trigger: NotRequired[str | None]
 
 
-class Skill(TypedDict, closed=True):
-    draftVersion: int | None
-    id: str
-    kbCount: int
-    lastEvalPassRate: float | None
-    liveAgents: int
-    loading: Literal["on_match", "always"]
-    name: str
-    origin: Literal["blank", "generated", "imported", "duplicated"]
-    ownerTeam: str
-    pendingReviewId: NotRequired[str | None]
-    publishedVersion: int | None
-    slug: str
-    status: Literal["draft", "in_review", "published", "deprecated"]
-    tokens: int
-    toolCount: int
-    updatedAt: str
-    updatedBy: str
-    useWhen: str
-    usedBy: int
-    version: int
-
-
 class SkillInput(TypedDict, closed=True):
     description: NotRequired[str]
     name: str
@@ -1652,13 +1629,6 @@ class SkillInputField(TypedDict, closed=True):
     name: str
     required: NotRequired[bool]
     type: NotRequired[Literal["string"]]
-
-
-class SkillList(TypedDict, closed=True):
-    data: list[Skill]
-    facets: dict[str, dict[str, int]]
-    pagination: Pagination
-    viewCounts: dict[str, int]
 
 
 class SkillPublishCheck(TypedDict, closed=True):
@@ -2815,11 +2785,6 @@ class EnvelopeRunStarted(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeSkillList(TypedDict, closed=True):
-    data: SkillList
-    success: Literal[True]
-
-
 class EnvelopeStepUpToken(TypedDict, closed=True):
     data: StepUpToken
     success: Literal[True]
@@ -3204,6 +3169,30 @@ class RunRow(TypedDict, closed=True):
     workflowName: NotRequired[str | None]
 
 
+class Skill(TypedDict, closed=True):
+    draftVersion: int | None
+    id: str
+    inputs: NotRequired[list[SkillInputField]]
+    kbCount: int
+    lastEvalPassRate: float | None
+    liveAgents: int
+    loading: Literal["on_match", "always"]
+    name: str
+    origin: Literal["blank", "generated", "imported", "duplicated"]
+    ownerTeam: str
+    pendingReviewId: NotRequired[str | None]
+    publishedVersion: int | None
+    slug: str
+    status: Literal["draft", "in_review", "published", "deprecated"]
+    tokens: int
+    toolCount: int
+    updatedAt: str
+    updatedBy: str
+    useWhen: str
+    usedBy: int
+    version: int
+
+
 class SkillContent(TypedDict, closed=True):
     guardrails: list[str]
     inputs: NotRequired[list[SkillInputField]]
@@ -3247,6 +3236,13 @@ class SkillDraftPatch(TypedDict, closed=True):
     refusal: NotRequired[str | None]
     toolIds: NotRequired[list[str] | None]
     useWhen: NotRequired[str | None]
+
+
+class SkillList(TypedDict, closed=True):
+    data: list[Skill]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+    viewCounts: dict[str, int]
 
 
 class SkillOptions(TypedDict, closed=True):
@@ -3614,6 +3610,11 @@ class EnvelopeRunRow(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSkillList(TypedDict, closed=True):
+    data: SkillList
+    success: Literal[True]
+
+
 class EnvelopeSkillOptions(TypedDict, closed=True):
     data: SkillOptions
     success: Literal[True]
@@ -3719,6 +3720,7 @@ class SkillDetail(TypedDict, closed=True):
     content: SkillContent
     draftVersion: int | None
     id: str
+    inputs: NotRequired[list[SkillInputField]]
     kbCount: int
     lastEvalPassRate: float | None
     liveAgents: int

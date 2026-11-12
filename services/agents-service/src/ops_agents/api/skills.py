@@ -229,6 +229,7 @@ async def row_view(
         "updatedAt": row["updated_at"],
         "updatedBy": row["updated_by"],
         "origin": row["origin"],
+        "inputs": content.get("inputs") or [],
         **({"pendingReviewId": pending["id"]} if pending else {}),
     }
 

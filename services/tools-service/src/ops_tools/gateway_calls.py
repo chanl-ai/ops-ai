@@ -45,6 +45,8 @@ CONSOLE = "console"
 
 # Turns a call's input into what is sent, and names the values to scrub from its answer (code runs).
 Prepare = Callable[[Resolved | None, dict[str, Any]], Awaitable[tuple[dict[str, Any], list[str]]]]
+# Runs an operation its route owns (the MCP address's platform operations, mcp_tools.py) in place of the executor.
+Run = Callable[[dict[str, Any]], Awaitable[ToolOutcome]]
 
 
 @dataclass(frozen=True)
@@ -256,11 +258,13 @@ class GatewayCalls:
         self.approver = approver
         self.clock = clock
 
-    async def _run(self, resolved: Resolved, tool: str, args: dict[str, Any], **kw: Any) -> ToolOutcome:
+    async def _run(
+        self, resolved: Resolved, tool: str, args: dict[str, Any], own: Run | None = None, **kw: Any
+    ) -> ToolOutcome:
         """The executor's outcome, or a failed one when it raises. A write's row was claimed as running, and a row left
         running answers every retry "already running", so the run's step could neither finish nor fail."""
         try:
-            return await self.executor.run(resolved, tool, args, **kw)
+            return await own(args) if own is not None else await self.executor.run(resolved, tool, args, **kw)
         except Exception as e:
             # The exception's text can carry a filled request or a secret, so only its class is kept.
             log.exception("gateway_call_failed", tool=tool, error=type(e).__name__)
@@ -334,12 +338,14 @@ class GatewayCalls:
         sees: Callable[[Aggregate], bool] | None = None,
         trial: Trial | None = None,
         secret_values: dict[str, str] | None = None,
+        operation: tuple[Resolved, Run] | None = None,
     ) -> Outcome:
         """One call for `caller`, the verified principal of whichever route took it. `generation` is a run's lease
         generation (writes are fenced on it); `channel` and `client_name` say where the call came from, for the log.
         `sees` is the caller's team's view of the modules: an operation of a module outside it is refused. A tool page's
         Real run passes `trial`, which records the request as sent with its secrets hidden, and `secret_values`, values
-        typed for this one call in place of unset secrets (never stored or logged)."""
+        typed for this one call in place of unset secrets (never stored or logged). `operation` is an operation the
+        route owns and no registry module holds, with how it runs: it meets the same log, approval and rate checks."""
         call_id = new_id("gwc")
         shown = {"trial": trial, "secret_values": secret_values} if trial is not None else {}
         started = time.monotonic()
@@ -350,14 +356,19 @@ class GatewayCalls:
         # The run the call is made in, live (production) or test; the registry picks the account it signs in with
         # from it (connections.records.account_for).
         run = str(req.run_context.get("environment") or TEST)
-        resolved = await self.registry.resolve(
-            req.tool,
-            tenant_id=caller.tenant_id,
-            team_id=caller.team_id,
-            run=run,
-            account=_text(req.run_context.get("account")),
-            accounts=chosen_accounts(req.run_context.get("accounts")),
-            person=req.acting_for.sub if req.acting_for else None,
+        own = operation[1] if operation is not None else None
+        resolved = (
+            operation[0]
+            if operation is not None
+            else await self.registry.resolve(
+                req.tool,
+                tenant_id=caller.tenant_id,
+                team_id=caller.team_id,
+                run=run,
+                account=_text(req.run_context.get("account")),
+                accounts=chosen_accounts(req.run_context.get("accounts")),
+                person=req.acting_for.sub if req.acting_for else None,
+            )
         )
         access = resolved.access if resolved else "unknown"
         digest = input_hash(req.input)
@@ -553,6 +564,7 @@ class GatewayCalls:
                 resolved or Resolved(access, "local"),
                 req.tool,
                 args,
+                own,
                 key=req.key,
                 caller=ToolCaller.of(caller, acting_for=req.acting_for),
                 environment=ctx.get("environment"),
@@ -600,6 +612,7 @@ class GatewayCalls:
             resolved or Resolved(access, "local"),
             req.tool,
             req.input,
+            own,
             key=req.key,
             caller=ToolCaller.of(caller, approvers=approvers, acting_for=req.acting_for),
             environment=ctx.get("environment"),

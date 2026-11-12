@@ -8567,6 +8567,8 @@ export interface components {
             draftVersion: number | null;
             /** Id */
             id: string;
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInputField"][];
             /** Kbcount */
             kbCount: number;
             /** Lastevalpassrate */
@@ -8705,6 +8707,8 @@ export interface components {
             draftVersion: number | null;
             /** Id */
             id: string;
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInputField"][];
             /** Kbcount */
             kbCount: number;
             /** Lastevalpassrate */

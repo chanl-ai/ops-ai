@@ -14,7 +14,6 @@ Adding an operation is one entry in OPERATIONS."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, cast
@@ -24,10 +23,18 @@ import httpx
 import mcp_types as types
 
 from ops_access import Access
+from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, Principal, ServiceClient
 from ops_policy import Ed25519Signer
+from ops_service_kit.errors import ApiError
+
+from .registry import Resolved
 
 TIMEOUT = 15.0
+# How the gateway runs an operation of this file (GatewayCalls.call with `run`); no registry module holds them.
+PLATFORM = "platform"
+# Skills read for prompts, one list call per page; a team past MAX_PAGES * PAGE skills is cut there.
+PAGE, MAX_PAGES = 200, 20
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,8 @@ class Operation:
     wrap: str | None = None
     # The `area:action` cells the call may use, each sent only when the person holds it in the team.
     cells: tuple[str, ...] = ()
+    # The gateway's rate window for the operation, per tenant and minute.
+    rate_limit_per_min: int = 60
 
 
 def _templates(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -105,10 +114,27 @@ OPERATIONS: tuple[Operation, ...] = (
 
 BY_NAME = {o.name: o for o in OPERATIONS}
 
+# prompts/list and prompts/get as gateway calls: reads named by their MCP method, never offered as tools.
+PROMPTS = {
+    n: Operation(
+        name=n,
+        description=d,
+        input_schema={"type": "object"},
+        service="agents",
+        method="GET",
+        route=lambda _a: ("/v1/skills", {}),
+        read_only=True,
+        cells=SKILLS_VIEW,
+        rate_limit_per_min=120,
+    )
+    for n, d in (("prompts/list", "The team's skills as prompts."), ("prompts/get", "One skill as a prompt."))
+}
+
 
 class PlatformTools:
     """Calls an operation's service for the person; `bases` maps a service to its address, `signer` is this service's
-    key for service tokens."""
+    key for service tokens. Every call reaches here through GatewayCalls.call (mcp_server.py), which keeps its call log
+    row and rate window and decides whether a write waits for a person; `resolved` is what the gateway decides by."""
 
     def __init__(
         self,
@@ -159,37 +185,46 @@ class PlatformTools:
         o = BY_NAME.get(name)
         return o is not None and o.service in self.bases
 
-    async def call(self, name: str, args: dict[str, Any], *, who: Principal, team: str) -> types.CallToolResult:
+    def resolved(self, name: str) -> Resolved:
+        """The operation as the gateway decides it: its access class and a rate window of its own per tenant. It is no
+        module's operation, so no agent can be granted it and no module setting applies; the team's rule does."""
+        o = BY_NAME.get(name) or PROMPTS[name]
+        access = "read" if o.read_only else "write"
+        return Resolved(
+            access, PLATFORM, operation={"name": o.name, "access": access, "rate_limit_per_min": o.rate_limit_per_min}
+        )
+
+    async def run(self, name: str, args: dict[str, Any], *, who: Principal, team: str) -> ToolOutcome:
+        """One operation for the person: its answer, or {error: {code, message, status}} when the service refused it
+        or could not be reached."""
         o = BY_NAME[name]
         path, rest = o.route(args)
-        headers = self._headers(who, team, o.service, o.cells)
-        if not o.read_only:
-            headers.update(await self._acting_for(who, team))
-        url = f"{self.bases[o.service]}{path}"
         get = o.method == "GET"
-        async with _Client(self.http) as http:
-            r = await http.request(
-                o.method, url, headers=headers, params=rest if get else None, json=None if get else rest
-            )
+        try:
+            headers = self._headers(who, team, o.service, o.cells)
+            if not o.read_only:
+                headers.update(await self._acting_for(who, team))
+            async with _Client(self.http) as http:
+                r = await http.request(
+                    o.method,
+                    f"{self.bases[o.service]}{path}",
+                    headers=headers,
+                    params=rest if get else None,
+                    json=None if get else rest,
+                )
+        except (httpx.HTTPError, ApiError) as e:
+            # Minting the acting-for token or reaching the service failed: nothing was made.
+            return _failed("SERVICE_UNAVAILABLE", 503, f"{o.service}-service did not answer: {type(e).__name__}")
         raw: Any = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
         body = cast(dict[str, Any], raw) if isinstance(raw, dict) else {"data": raw}
         if r.is_success:
             out: Any = body.get("data", body)
-            structured: dict[str, Any] = (
-                {o.wrap: out} if o.wrap else (cast(dict[str, Any], out) if isinstance(out, dict) else {"result": out})
-            )
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=json.dumps(out, default=str))],
-                structured_content=structured,
-                is_error=False,
+            return ToolOutcome(
+                True,
+                {o.wrap: out} if o.wrap else (cast(dict[str, Any], out) if isinstance(out, dict) else {"result": out}),
             )
         err = cast(dict[str, Any], body.get("error") or {})
-        code, message = str(err.get("code") or r.status_code), str(err.get("message") or r.reason_phrase)
-        return types.CallToolResult(
-            content=[types.TextContent(type="text", text=f"{code}: {message}")],
-            structured_content={"code": code, "status": r.status_code, "message": message},
-            is_error=True,
-        )
+        return _failed(str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase))
 
     async def _get(self, path: str, *, who: Principal, team: str, params: dict[str, Any] | None = None) -> Any:
         headers = self._headers(who, team, "agents", SKILLS_VIEW)
@@ -199,59 +234,88 @@ class PlatformTools:
         body: Any = r.json()
         return cast(dict[str, Any], body).get("data") if isinstance(body, dict) else body
 
-    async def _skills(self, *, who: Principal, team: str) -> list[dict[str, Any]]:
-        """The team's skills the caller can read, each with its newest content (its inputs are on the version)."""
-        page: Any = await self._get("/v1/skills", who=who, team=team, params={"pageSize": 100})
-        rows = cast(
-            list[dict[str, Any]], cast(dict[str, Any], page).get("data") if isinstance(page, dict) else page or []
-        )
+    async def _skills(self, *, who: Principal, team: str, search: str | None = None) -> list[dict[str, Any]]:
+        """The team's skills the caller can read, one call per page; each row carries its newest inputs."""
         out: list[dict[str, Any]] = []
-        for row in rows:
-            found: Any = await self._get(f"/v1/skills/{row['id']}", who=who, team=team)
-            out.append(cast(dict[str, Any], found))
+        for n in range(1, MAX_PAGES + 1):
+            params: dict[str, Any] = {"page": n, "pageSize": PAGE}
+            if search:
+                params["search"] = search
+            page: Any = await self._get("/v1/skills", who=who, team=team, params=params)
+            body = cast(dict[str, Any], page) if isinstance(page, dict) else {}
+            rows = cast(list[dict[str, Any]], body.get("data") or [])
+            out.extend(rows)
+            total = body.get("total")
+            if len(rows) < PAGE or (isinstance(total, int) and len(out) >= total):
+                break
         return out
 
-    async def prompts(self, *, who: Principal, team: str) -> list[types.Prompt]:
-        """Each of the team's skills as an MCP prompt named by its slug, its inputs as the prompt's arguments."""
+    async def prompts(self, *, who: Principal, team: str) -> ToolOutcome:
+        """Each of the team's skills as an MCP prompt named by its slug, its inputs as the prompt's arguments; none
+        when the person may not read skills or agents-service does not answer."""
         if "agents" not in self.bases:
-            return []
-        return [
-            types.Prompt(
-                name=str(s["slug"]),
-                title=str(s.get("name") or s["slug"]),
-                description=str(_content(s).get("useWhen") or ""),
-                arguments=[
-                    types.PromptArgument(
-                        name=str(i["name"]),
-                        description=str(i.get("description") or ""),
-                        required=bool(i.get("required")),
-                    )
-                    for i in cast(list[dict[str, Any]], _content(s).get("inputs") or [])
-                ],
-            )
-            for s in await self._skills(who=who, team=team)
-        ]
+            return ToolOutcome(True, {"prompts": []})
+        try:
+            skills = await self._skills(who=who, team=team)
+        except (httpx.HTTPError, ApiError) as e:
+            return _failed("SKILLS_UNREADABLE", _status(e), f"The team's skills could not be read: {type(e).__name__}")
+        return ToolOutcome(
+            True,
+            {
+                "prompts": [
+                    types.Prompt(
+                        name=str(s["slug"]),
+                        title=str(s.get("name") or s["slug"]),
+                        description=str(s.get("useWhen") or ""),
+                        arguments=[
+                            types.PromptArgument(
+                                name=str(i["name"]),
+                                description=str(i.get("description") or ""),
+                                required=bool(i.get("required")),
+                            )
+                            for i in cast(list[dict[str, Any]], s.get("inputs") or [])
+                        ],
+                    ).model_dump(mode="json", by_alias=True, exclude_none=True)
+                    for s in skills
+                ]
+            },
+        )
 
-    async def prompt(
-        self, name: str, args: dict[str, str], *, who: Principal, team: str
-    ) -> types.GetPromptResult | None:
-        """The skill's instructions with the arguments given, or None when the team has no skill by that slug."""
+    async def prompt(self, name: str, args: dict[str, str], *, who: Principal, team: str) -> ToolOutcome:
+        """The skill's instructions with the arguments given: one list page found by its slug, then its own read.
+        A failed outcome when the team has no skill by that slug or it cannot be read."""
         if "agents" not in self.bases:
-            return None
-        skill = next((s for s in await self._skills(who=who, team=team) if s["slug"] == name), None)
-        if skill is None:
-            return None
-        content = cast(dict[str, Any], skill.get("content") or {})
+            return _failed("NOT_FOUND", 404, f"No skill named {name} in this team.")
+        try:
+            skill = next((s for s in await self._skills(who=who, team=team, search=name) if s["slug"] == name), None)
+            found: Any = await self._get(f"/v1/skills/{skill['id']}", who=who, team=team) if skill else None
+        except (httpx.HTTPError, ApiError) as e:
+            return _failed("SKILLS_UNREADABLE", _status(e), f"The team's skills could not be read: {type(e).__name__}")
+        if not isinstance(found, dict):
+            return _failed("NOT_FOUND", 404, f"No skill named {name} in this team.")
+        detail = cast(dict[str, Any], found)
+        content = _content(detail)
         text = str(content.get("instructions") or "")
         for k, v in args.items():
             text = text.replace("{{" + k + "}}", v)
         given = [f"- {k}: {v}" for k, v in args.items() if v]
         if given:
             text += "\n\nInputs:\n" + "\n".join(given)
-        return types.GetPromptResult(
-            description=str(skill.get("name") or name),
-            messages=[types.PromptMessage(role="user", content=types.TextContent(type="text", text=text))],
+        return ToolOutcome(
+            True,
+            types.GetPromptResult(
+                description=str(detail.get("name") or name),
+                messages=[types.PromptMessage(role="user", content=types.TextContent(type="text", text=text))],
+            ).model_dump(mode="json", by_alias=True, exclude_none=True),
         )
+
+
+def _failed(code: str, status: int, message: str) -> ToolOutcome:
+    return ToolOutcome(False, {"error": {"code": code, "status": status, "message": message}})
+
+
+def _status(e: Exception) -> int:
+    return e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 503
 
 
 def _content(skill: dict[str, Any]) -> dict[str, Any]:

@@ -6,8 +6,9 @@ team is the caller's, and hands the request to the official SDK's
 stateless server; tools/list reads the registry and tools/call is one gateway call. Nothing is decided or executed
 here: the registry, the schema, OPA, the rate window, the executor and the call log are the gateway's.
 
-Beside the team's tools it offers public API operations as tools (mcp_tools.py: list and install templates), each
-called on its service with the assistant's own credential.
+Beside the team's tools it offers public API operations as tools (mcp_tools.py: list and install templates) and the
+team's skills as prompts. Each is one gateway call too, so it has its call log row and rate window and a write waits
+as any MCP write does; the operation itself calls its service with a service token carrying the person's own rights.
 
 Slice 1 lists the team's read operations only. Every call is a test run, so it uses an app's sandbox account when the
 team has one, and a write called by name reaches the gateway, which refuses it without a person's approval.
@@ -29,6 +30,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
 from ops_access import can
+from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForTokens, Auth, Principal, ServiceClient, service_signer
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable
 from ops_service_kit.http import error_body
@@ -37,7 +39,7 @@ from ops_service_kit.settings import Settings
 from ops_store import isolation
 
 from .environments import TEST
-from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls
+from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls, Outcome, Run
 from .mcp_tools import PlatformTools
 from .modules.directory import Directory, Team
 from .registry import ToolRegistry
@@ -161,18 +163,44 @@ class McpAdapter:
         ]
         return types.ListToolsResult(tools=[*self.platform.tools(), *tools])
 
-    async def _list_prompts(self, ctx: Any, _params: Any) -> types.ListPromptsResult:
-        """The team's skills as prompts, read from agents-service as the caller, so a person sees what they may read."""
+    async def _platform_call(self, ctx: Any, name: str, args: dict[str, Any], run: Run) -> Outcome:
+        """One platform operation as a gateway call for the caller: logged on the MCP channel, rate limited, and a write
+        held as the team's rule for MCP writes says."""
         who = _caller(ctx)
-        return types.ListPromptsResult(prompts=await self.platform.prompts(who=who.principal, team=who.team.id))
+        request = CallRequest(tool=name, input=args, key=new_id("mcp"), run_context={"environment": TEST})
+        return await self.calls.call(
+            who.principal,
+            request,
+            channel=MCP,
+            client_name=None if who.principal.client_id else _client_name(ctx),
+            operation=(self.platform.resolved(name), run),
+        )
+
+    async def _list_prompts(self, ctx: Any, _params: Any) -> types.ListPromptsResult:
+        """The team's skills as prompts, read from agents-service as the caller, so a person sees what they may read;
+        none when they may read no skills."""
+        who = _caller(ctx)
+
+        async def run(_args: dict[str, Any]) -> ToolOutcome:
+            return await self.platform.prompts(who=who.principal, team=who.team.id)
+
+        out = await self._platform_call(ctx, "prompts/list", {}, run)
+        output: Any = out.output if isinstance(out, Allowed) and out.ok else {}
+        found = cast(list[Any], cast(dict[str, Any], output).get("prompts") or [])
+        return types.ListPromptsResult(prompts=[types.Prompt.model_validate(p) for p in found])
 
     async def _get_prompt(self, ctx: Any, params: Any) -> types.GetPromptResult:
         who = _caller(ctx)
         args = {str(k): str(v) for k, v in dict(params.arguments or {}).items()}
-        found = await self.platform.prompt(str(params.name), args, who=who.principal, team=who.team.id)
-        if found is None:
-            raise ValueError(f"No skill named {params.name} in this team.")
-        return found
+
+        async def run(_args: dict[str, Any]) -> ToolOutcome:
+            return await self.platform.prompt(str(params.name), args, who=who.principal, team=who.team.id)
+
+        out = await self._platform_call(ctx, "prompts/get", {"name": str(params.name), "arguments": args}, run)
+        if isinstance(out, Allowed) and out.ok:
+            return types.GetPromptResult.model_validate(out.output)
+        # The protocol has no error result for a prompt, so a refusal or a missing skill is its error message.
+        raise ValueError(_said(out))
 
     async def _call_tool(self, ctx: Any, params: Any) -> types.CallToolResult:
         who = _caller(ctx)
@@ -185,10 +213,13 @@ class McpAdapter:
                 structured_content={"code": e.code, "status": e.status, "message": e.message},
                 is_error=True,
             )
-        if self.platform.offers(str(params.name)):
-            return await self.platform.call(
-                str(params.name), dict(params.arguments or {}), who=who.principal, team=who.team.id
-            )
+        if self.platform.offers(name := str(params.name)):
+            args = dict(params.arguments or {})
+
+            async def run(given: dict[str, Any]) -> ToolOutcome:
+                return await self.platform.run(name, given, who=who.principal, team=who.team.id)
+
+            return _tool_result(await self._platform_call(ctx, name, args, run))
         request = CallRequest(
             tool=str(params.name),
             input=dict(params.arguments or {}),
@@ -205,18 +236,34 @@ class McpAdapter:
             client_name=None if who.principal.client_id else _client_name(ctx),
             sees=self._sees(who.team),
         )
-        if isinstance(outcome, Allowed):
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=json.dumps(outcome.output, default=str))],
-                structured_content=_structured(outcome.output) | {"callId": outcome.call_id},
-                is_error=not outcome.ok,
-            )
-        reason = "; ".join(outcome.reasons)
+        return _tool_result(outcome)
+
+
+def _said(outcome: Outcome) -> str:
+    """What a refused or failed call tells the assistant: its code and reason."""
+    if isinstance(outcome, Allowed):
+        output: Any = outcome.output
+        err: Any = cast(dict[str, Any], output).get("error") if isinstance(output, dict) else None
+        e = cast(dict[str, Any], err) if isinstance(err, dict) else {}
+        return f"{e.get('code') or 'error'}: {e.get('message') or 'the call failed'}"
+    return f"{outcome.code}: {'; '.join(outcome.reasons)}"
+
+
+def _tool_result(outcome: Outcome) -> types.CallToolResult:
+    """A gateway outcome as an MCP tool result: a refusal or a failure is a tool error, never a protocol error."""
+    if isinstance(outcome, Allowed):
+        text = json.dumps(outcome.output, default=str) if outcome.ok else _said(outcome)
         return types.CallToolResult(
-            content=[types.TextContent(type="text", text=f"{outcome.code}: {reason}")],
-            structured_content={"callId": outcome.call_id, "code": outcome.code, "reasons": outcome.reasons},
-            is_error=True,
+            content=[types.TextContent(type="text", text=text)],
+            structured_content=_structured(outcome.output) | {"callId": outcome.call_id},
+            is_error=not outcome.ok,
         )
+    reason = "; ".join(outcome.reasons)
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=f"{outcome.code}: {reason}")],
+        structured_content={"callId": outcome.call_id, "code": outcome.code, "reasons": outcome.reasons},
+        is_error=True,
+    )
 
 
 def _platform_tools(settings: Settings) -> PlatformTools:

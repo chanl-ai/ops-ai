@@ -1377,6 +1377,8 @@ class Skill(Out):
     updated_by: str
     origin: Literal["blank", "generated", "imported", "duplicated"]
     pending_review_id: str | None = None
+    # The newest version's inputs, so a list page carries what an MCP prompt asks for without a read per skill.
+    inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
 
 
 class SkillVersion(Out):
