@@ -239,13 +239,12 @@ class PlatformTools:
         body: Any = r.json()
         return cast(dict[str, Any], body).get("data") if isinstance(body, dict) else body
 
-    async def _skills(self, *, who: Principal, team: str, search: str | None = None) -> list[dict[str, Any]]:
-        """The team's skills the caller can read, one call per page; each row carries its newest inputs."""
+    async def _skills(self, *, who: Principal, team: str) -> list[dict[str, Any]]:
+        """The team's published skills the caller can read, one call per page; each row describes its published
+        version, with its inputs and parts, so no draft or retired skill is offered."""
         out: list[dict[str, Any]] = []
         for n in range(1, MAX_PAGES + 1):
-            params: dict[str, Any] = {"page": n, "pageSize": PAGE}
-            if search:
-                params["search"] = search
+            params: dict[str, Any] = {"page": n, "pageSize": PAGE, "view": "published"}
             page: Any = await self._get("/v1/skills", who=who, team=team, params=params)
             body = cast(dict[str, Any], page) if isinstance(page, dict) else {}
             rows = cast(list[dict[str, Any]], body.get("data") or [])
@@ -256,8 +255,9 @@ class PlatformTools:
         return out
 
     async def prompts(self, *, who: Principal, team: str) -> ToolOutcome:
-        """Each of the team's skills as an MCP prompt named by its slug, its inputs as the prompt's arguments; none
-        when the person may not read skills or agents-service does not answer."""
+        """Each published skill as an MCP prompt named by its slug, or one prompt per part named `<skill>-<part>`, its
+        inputs as the prompt's arguments; none when the person may not read skills or agents-service does not
+        answer."""
         if "agents" not in self.bases:
             return ToolOutcome(True, {"prompts": []})
         try:
@@ -269,50 +269,85 @@ class PlatformTools:
             {
                 "prompts": [
                     types.Prompt(
-                        name=str(s["slug"]),
-                        title=str(s.get("name") or s["slug"]),
-                        description=str(s.get("useWhen") or ""),
+                        name=name,
+                        title=title,
+                        description=use_when,
                         arguments=[
                             types.PromptArgument(
                                 name=str(i["name"]),
                                 description=str(i.get("description") or ""),
                                 required=bool(i.get("required")),
                             )
-                            for i in cast(list[dict[str, Any]], s.get("inputs") or [])
+                            for i in inputs
                         ],
                     ).model_dump(mode="json", by_alias=True, exclude_none=True)
-                    for s in skills
+                    for name, (_, _, title, use_when, inputs) in _prompt_names(skills).items()
                 ]
             },
         )
 
     async def prompt(self, name: str, args: dict[str, str], *, who: Principal, team: str) -> ToolOutcome:
-        """The skill's instructions with the arguments given: one list page found by its slug, then its own read.
-        A failed outcome when the team has no skill by that slug or it cannot be read."""
+        """The published skill's text, or one part's, with the arguments filled in by agents-service's render (the
+        one owner of that step). A failed outcome when the team has no published prompt by that name, or render
+        refuses it (a required argument missing, an argument the skill does not take)."""
         if "agents" not in self.bases:
             return _failed("NOT_FOUND", 404, f"No skill named {name} in this team.")
         try:
-            skill = next((s for s in await self._skills(who=who, team=team, search=name) if s["slug"] == name), None)
-            found: Any = await self._get(f"/v1/skills/{skill['id']}", who=who, team=team) if skill else None
+            found = _prompt_names(await self._skills(who=who, team=team)).get(name)
+            if found is None:
+                return _failed("NOT_FOUND", 404, f"No published skill named {name} in this team.")
+            skill_id, part, title, _, _ = found
+            headers = self._headers(who, team, "agents", SKILLS_VIEW)
+            async with _Client(self.http) as http:
+                r = await http.post(
+                    f"{self.bases['agents']}/v1/skills/{skill_id}/render",
+                    headers=headers,
+                    json={"part": part, "inputs": args},
+                )
         except (httpx.HTTPError, ApiError) as e:
             return _failed("SKILLS_UNREADABLE", _status(e), f"The team's skills could not be read: {type(e).__name__}")
-        if not isinstance(found, dict):
-            return _failed("NOT_FOUND", 404, f"No skill named {name} in this team.")
-        detail = cast(dict[str, Any], found)
-        content = _content(detail)
-        text = str(content.get("instructions") or "")
-        for k, v in args.items():
-            text = text.replace("{{" + k + "}}", v)
-        given = [f"- {k}: {v}" for k, v in args.items() if v]
-        if given:
-            text += "\n\nInputs:\n" + "\n".join(given)
+        raw: Any = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        body = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+        if not r.is_success:
+            err = cast(dict[str, Any], body.get("error") or {})
+            return _failed(
+                str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase)
+            )
+        rendered = cast(dict[str, Any], body.get("data") or {})
         return ToolOutcome(
             True,
             types.GetPromptResult(
-                description=str(detail.get("name") or name),
-                messages=[types.PromptMessage(role="user", content=types.TextContent(type="text", text=text))],
+                description=title,
+                messages=[
+                    types.PromptMessage(
+                        role="user", content=types.TextContent(type="text", text=str(rendered.get("text") or ""))
+                    )
+                ],
             ).model_dump(mode="json", by_alias=True, exclude_none=True),
         )
+
+
+def _prompt_names(
+    skills: list[dict[str, Any]],
+) -> dict[str, tuple[str, str | None, str, str, list[dict[str, Any]]]]:
+    """Prompt name -> (skill id, part slug, title, use-when, inputs): the skill's slug, or `<skill>-<part>` per part
+    (MCP clients accept letters, digits and hyphens; agents-service refuses a part name that is another skill's)."""
+    out: dict[str, tuple[str, str | None, str, str, list[dict[str, Any]]]] = {}
+    for s in skills:
+        slug, title = str(s["slug"]), str(s.get("name") or s["slug"])
+        parts = cast(list[dict[str, Any]], s.get("parts") or [])
+        if not parts:
+            inputs = cast(list[dict[str, Any]], s.get("inputs") or [])
+            out[slug] = (str(s["id"]), None, title, str(s.get("useWhen") or ""), inputs)
+        for p in parts:
+            out[f"{slug}-{p['slug']}"] = (
+                str(s["id"]),
+                str(p["slug"]),
+                f"{title} · {p['name']}",
+                str(p.get("useWhen") or ""),
+                cast(list[dict[str, Any]], p.get("inputs") or []),
+            )
+    return out
 
 
 def _failed(code: str, status: int, message: str) -> ToolOutcome:
@@ -321,10 +356,6 @@ def _failed(code: str, status: int, message: str) -> ToolOutcome:
 
 def _status(e: Exception) -> int:
     return e.response.status_code if isinstance(e, httpx.HTTPStatusError) else 503
-
-
-def _content(skill: dict[str, Any]) -> dict[str, Any]:
-    return cast(dict[str, Any], skill.get("content") or {})
 
 
 class _Client:
