@@ -4,7 +4,7 @@ text through render; a chat offering, or running, a skill another team owns."""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from httpx import AsyncClient
 
@@ -68,7 +68,7 @@ async def _used(c: AsyncClient, thread: str, text: str, headers: dict[str, str],
     )
     assert sent.status_code == 200, sent.text
     reply = _ok(await c.get(f"/chat/threads/{thread}", headers=headers))["messages"][-1]
-    return [str(s["skillId"]) for s in reply.get("skills") or []]
+    return [str(s["skillId"]) for s in cast(list[dict[str, Any]], reply.get("skills") or [])]
 
 
 async def test_a_picked_skill_stops_loading_once_the_menu_is_off_or_the_right_is_gone(

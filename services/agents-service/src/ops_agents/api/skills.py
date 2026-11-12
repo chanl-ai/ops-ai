@@ -695,16 +695,7 @@ async def usable(
     conversation's team counts, whatever team the request reads as (a dev caller reads every team)."""
     if menu == "off":
         return []
-    reg = skills(rt)
-    out: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for r in await reg.rows():
-        if r["team_id"] != team or r["published_version"] is None or r["deprecated_reason"]:
-            continue
-        if menu == "attached" and r["id"] not in pinned:
-            continue
-        if (v := await reg.version(r["id"], int(r["published_version"]))) is not None:
-            out.append((r, v))
-    return out
+    return await skills(rt).published_in(team, pinned if menu == "attached" else None)
 
 
 PICKED = "Picked from the / menu"

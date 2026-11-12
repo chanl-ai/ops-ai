@@ -180,6 +180,30 @@ class SkillRegistry:
         async with self.engine.connect() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
+    async def published_in(
+        self, team: str, ids: list[str] | None = None
+    ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        """(row, published version) of each published, live skill of `team`, or of those of `ids`: two queries
+        whatever the count, for a chat send that offers the team's skills."""
+        t, v = registry_skills.c, registry_skill_versions.c
+        live = sa.and_(
+            t.team_id == team,
+            t.published_version.is_not(None),
+            t.deprecated_reason.is_(None),
+            t.id.in_(ids) if ids is not None else sa.true(),
+            team_visible(registry_skills),
+        )
+        rows_q = sa.select(registry_skills).where(live).order_by(t.slug)
+        versions_q = (
+            sa.select(registry_skill_versions)
+            .join(registry_skills, sa.and_(t.id == v.skill_id, t.published_version == v.version))
+            .where(live, team_visible(registry_skill_versions))
+        )
+        async with self.engine.connect() as c:
+            rows = [dict(r) for r in (await c.execute(rows_q)).mappings()]
+            versions = {str(r["skill_id"]): dict(r) for r in (await c.execute(versions_q)).mappings()}
+        return [(r, versions[r["id"]]) for r in rows if r["id"] in versions]
+
     async def version(self, skill_id: str, version: int) -> dict[str, Any] | None:
         q = sa.select(registry_skill_versions).where(
             registry_skill_versions.c.skill_id == skill_id,
