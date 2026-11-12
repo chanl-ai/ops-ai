@@ -113,7 +113,7 @@ export function NavUser({
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/integrations/my-accounts" data-testid="nav-connections">
+                <Link href="/settings/account/connectors" data-testid="nav-connections">
                   <IconPlug />
                   {MY_CONNECTORS}
                 </Link>

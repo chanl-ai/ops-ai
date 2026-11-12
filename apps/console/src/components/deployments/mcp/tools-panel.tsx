@@ -87,7 +87,7 @@ export function ToolsPanel({ tools, workflowCount, exposedCount, pendingId, onTo
                 return (
                   <TableRow key={t.workflowId} data-testid={`tool-row-${t.workflowId}`}>
                     <TableCell className="pl-6">
-                      <Link href={`/workflows/${t.workflowId}`} className="font-medium hover:underline">
+                      <Link href={`/build/workflows/${t.workflowId}`} className="font-medium hover:underline">
                         {t.name}
                       </Link>
                       <div className="font-mono text-xs text-muted-foreground">{t.toolId}</div>
@@ -105,11 +105,11 @@ export function ToolsPanel({ tools, workflowCount, exposedCount, pendingId, onTo
             </TableBody>
           </Table>
         ) : (
-          <EmptyState icon={Route} title="No published workflows yet" description="Publish a workflow, then expose it here so assistants can call it." action={{ label: 'Open workflows', href: '/workflows' }} />
+          <EmptyState icon={Route} title="No published workflows yet" description="Publish a workflow, then expose it here so assistants can call it." action={{ label: 'Open workflows', href: '/build/workflows' }} />
         )}
       </CardContent>
       <CardFooter className="justify-between gap-2 text-sm">
-        <Link href="/workflows" className="underline underline-offset-2">
+        <Link href="/build/workflows" className="underline underline-offset-2">
           View all {workflowCount} workflows →
         </Link>
         <Link href="/deployments" className="text-muted-foreground underline underline-offset-2">

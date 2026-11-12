@@ -41,7 +41,7 @@ const levyRef = (sampleId: string): Omit<FileReference, "addedAt"> => ({
   type: "test_set",
   id: sampleId,
   name: "Levy notice",
-  href: `/document-types/${LEVY}?tab=samples`,
+  href: `/data/document-types/${LEVY}?tab=samples`,
 });
 
 /** Levy notices in Retail Banking's files: two are the seeded type's samples, the third is free to add as one. */
@@ -477,7 +477,7 @@ export function createDocumentTypesMock(
           type: "test_set",
           id: sample.id,
           name: t.name,
-          href: `/document-types/${t.id}?tab=samples`,
+          href: `/data/document-types/${t.id}?tab=samples`,
         });
         t.samples.push(sample);
         return sample;

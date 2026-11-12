@@ -112,7 +112,7 @@ export function AppPageView({ appId }: { appId: string }) {
       case 'own_sign_in':
         return (
           <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
-            <Link href="/integrations/my-accounts">Sign in from Mine</Link>
+            <Link href="/settings/account/connectors">Sign in from Mine</Link>
           </Button>
         );
       case 'connect':
@@ -159,8 +159,8 @@ export function AppPageView({ appId }: { appId: string }) {
       title={card.name}
       // The tools the page lists, so the header and the Tools tab count the same ones.
       description={`${plural(data.tools.length, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
-      breadcrumbs={[{ label: 'Connectors', href: '/integrations' }, { label: 'Team setup', href: '/integrations' }, { label: card.name }]}
-      backHref="/integrations"
+      breadcrumbs={[{ label: 'Connectors', href: '/data/connectors' }, { label: 'Team setup', href: '/data/connectors' }, { label: card.name }]}
+      backHref="/data/connectors"
       badge={<AppStateBadge card={card} whose={whoseState(card)} testId="app-status" />}
       actions={headerAction()}
       contentClassName="flex min-w-0 flex-col gap-4"
@@ -210,7 +210,7 @@ export function AppPageView({ appId }: { appId: string }) {
         </TabsContent>
         {card.mayManage && (
           <TabsContent value="settings">
-            <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onTurnOn={() => setConnecting(true)} onDeleted={() => router.push('/integrations')} />
+            <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onTurnOn={() => setConnecting(true)} onDeleted={() => router.push('/data/connectors')} />
           </TabsContent>
         )}
       </Tabs>

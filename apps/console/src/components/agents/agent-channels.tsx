@@ -22,7 +22,7 @@ export function AgentWorkflowChannels({ agent }: { agent: Agent }) {
           {callers.map((u) => (
             <Row
               key={u.workflowId}
-              href={`/workflows/${u.workflowId}`}
+              href={`/build/workflows/${u.workflowId}`}
               leading={<Route className="size-4 text-muted-foreground" />}
               title={u.workflowName}
               description={`Pins v${u.pinnedVersion}`}

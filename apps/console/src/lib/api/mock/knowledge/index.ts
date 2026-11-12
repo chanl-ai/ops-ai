@@ -404,7 +404,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           kbs.unshift(k);
           srcs.forEach((s) => s.usedByKbIds.push(k.id));
           regovern();
-          auditSink.log({ action: 'created', target: { type: 'knowledge_base', name: k.name, href: `/knowledge/${k.id}` }, summary: srcs.length ? `Created ${k.name} reading ${srcs.length} sources` : `Created ${k.name} with no sources yet` });
+          auditSink.log({ action: 'created', target: { type: 'knowledge_base', name: k.name, href: `/data/knowledge/${k.id}` }, summary: srcs.length ? `Created ${k.name} reading ${srcs.length} sources` : `Created ${k.name} with no sources yet` });
           return k;
         }),
       update: (kid, patch) =>
@@ -597,7 +597,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const { fileIds, ingest, ...rest } = input;
           const sid = id('src');
           // Linking first refuses a quarantined or still-scanning file before the source exists.
-          for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/integrations/sources/${sid}` }, ['knowledge_source']);
+          for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/data/sources/${sid}` }, ['knowledge_source']);
           const kind = input.type === 'file' ? 'file' : (input.config as { site?: boolean } | undefined)?.site ? 'web' : 'tool';
           const s: Source = {
             parsing: { ocr: 'auto', tables: true, vision: false },
@@ -638,7 +638,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             if (k) attach(k, s.id);
           });
           if (opts?.sync && s.status !== 'draft') startSync(s);
-          auditSink.log({ action: 'created', target: { type: 'source', name: s.name, href: `/integrations/sources/${s.id}` }, summary: s.status === 'draft' ? `Saved ${s.name} as a draft source` : `Created source ${s.name}` });
+          auditSink.log({ action: 'created', target: { type: 'source', name: s.name, href: `/data/sources/${s.id}` }, summary: s.status === 'draft' ? `Saved ${s.name} as a draft source` : `Created source ${s.name}` });
           return s;
         }),
       update: (sid, patch) =>

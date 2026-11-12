@@ -113,7 +113,7 @@ export function AgentSkillsSection({
                 wrap
                 title={
                   <span className="flex flex-wrap items-center gap-2">
-                    <Link href={`/skills/${p.skillId}`} className="underline-offset-2 hover:underline">
+                    <Link href={`/build/skills/${p.skillId}`} className="underline-offset-2 hover:underline">
                       {p.name}
                     </Link>
                     <span className="font-mono text-xs font-normal text-muted-foreground">v{p.pinnedVersion}</span>

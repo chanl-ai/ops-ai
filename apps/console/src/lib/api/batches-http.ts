@@ -9,8 +9,8 @@ type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 export function createBatchesHttp(get: Get, send: Send, baseUrl: string): BatchesApi {
   const at = (s: string) => encodeURIComponent(s);
   return {
-    dryRun: (workflowId, input) => send('POST', `/workflows/${at(workflowId)}/batches`, { ...input, dryRun: true }),
-    start: (workflowId, input) => send('POST', `/workflows/${at(workflowId)}/batches`, { ...input, dryRun: false }),
+    dryRun: (workflowId, input) => send('POST', `/build/workflows/${at(workflowId)}/batches`, { ...input, dryRun: true }),
+    start: (workflowId, input) => send('POST', `/build/workflows/${at(workflowId)}/batches`, { ...input, dryRun: false }),
     get: (batchId) => get(`/batches/${at(batchId)}`),
     retryFailed: (batchId) => send('POST', `/batches/${at(batchId)}/retry`),
     // The route needs the person's token, which a plain link cannot carry, so the bytes are fetched with it and

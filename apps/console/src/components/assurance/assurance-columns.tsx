@@ -93,7 +93,7 @@ export const runColumns: ColumnDef<AssuranceRun>[] = [
     header: 'Review',
     cell: ({ row }) =>
       row.original.reviewId ? (
-        <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/reviews?review=${row.original.reviewId}`}>
+        <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/work/tasks?review=${row.original.reviewId}`}>
           {row.original.reviewId}
         </Link>
       ) : (
@@ -130,7 +130,7 @@ export const gateColumns: ColumnDef<AssuranceGate>[] = [
     id: 'review',
     header: 'Review',
     cell: ({ row }) => (
-      <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/reviews?review=${row.original.reviewId}`}>
+      <Link className="text-xs whitespace-nowrap underline underline-offset-2" href={`/work/tasks?review=${row.original.reviewId}`}>
         {row.original.reviewId}
       </Link>
     ),

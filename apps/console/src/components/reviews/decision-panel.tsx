@@ -81,7 +81,7 @@ export function DecisionPanel({
           </span>
           {review.decidingTeam && <span data-testid="task-deciding-team">{review.decidingTeam.name ?? review.decidingTeam.id} decides</span>}
           {review.runId && review.stepName ? (
-            <Link href={`/workflows/runs/${review.runId}`} className="underline underline-offset-2" data-testid="review-run-link">
+            <Link href={`/build/runs/${review.runId}`} className="underline underline-offset-2" data-testid="review-run-link">
               {review.workflowName}
               {review.workflowVersion != null ? ` v${review.workflowVersion}` : ''} · {review.stepName}
             </Link>

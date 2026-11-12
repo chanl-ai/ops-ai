@@ -268,7 +268,7 @@ function ReviewerApprovalView({ widget, onAction }: WidgetProps<ApprovalWidget>)
           <s.icon className="size-3.5" /> <span data-testid="approval-waiting-on">{waiting}</span>
           {widget.decidedBy && widget.state !== 'pending' && <span className="font-normal text-muted-foreground">by {widget.decidedBy}</span>}
         </span>
-        <Link href={`/reviews?review=${widget.reviewId}`} className="font-mono text-xs text-muted-foreground underline-offset-4 hover:underline">
+        <Link href={`/work/tasks?review=${widget.reviewId}`} className="font-mono text-xs text-muted-foreground underline-offset-4 hover:underline">
           {widget.reviewId}
         </Link>
         {/* The server says whether the reader may decide; otherwise the line above names whom it waits on. */}

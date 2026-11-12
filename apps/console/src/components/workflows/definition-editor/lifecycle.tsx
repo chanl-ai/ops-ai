@@ -110,7 +110,7 @@ export function LifecycleActions({
       )}
       {review ? (
         <Button type="button" variant="outline" asChild data-testid="definition-review-link">
-          <Link href={`/reviews?review=${encodeURIComponent(review.id)}`}>Version {review.version} in review</Link>
+          <Link href={`/work/tasks?review=${encodeURIComponent(review.id)}`}>Version {review.version} in review</Link>
         </Button>
       ) : (
         stage === 'draft' &&

@@ -498,7 +498,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   }
 
   const audit = (m: Mod, action: 'created' | 'edited', summary: string, diff?: { field: string; before?: string; after?: string }[]) =>
-    auditSink.log({ action, target: { type: 'tool', name: m.displayName, href: `/tools/${m.id}` }, summary, diff, owner: m.ownerTeam });
+    auditSink.log({ action, target: { type: 'tool', name: m.displayName, href: `/data/tools/${m.id}` }, summary, diff, owner: m.ownerTeam });
 
   /** Appends operations as grantable tools. A draft takes them straight into its first version; a published module stages them. */
   function appendOps(m: Mod, opsIn: DiscoveredOperation[]) {

@@ -79,7 +79,7 @@ export function RunnerRuns() {
   const query = useEngineRuns({ workflowId: filters.workflowId?.[0], status: filters.status, page: list.params.page, pageSize: list.params.pageSize });
   const { data: workflows } = useWorkflows({ page: 1, pageSize: 100 });
   const rows: Row[] = React.useMemo(
-    () => (query.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EngineRun) => router.push(`/workflows/runs/${encodeURIComponent(x.id)}`), rowTestId: `runner-run-row-${r.id}` })),
+    () => (query.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EngineRun) => router.push(`/build/runs/${encodeURIComponent(x.id)}`), rowTestId: `runner-run-row-${r.id}` })),
     [query.data, router],
   );
   const counts = query.data?.facets?.status ?? {};
@@ -117,7 +117,7 @@ export function RunnerRuns() {
             noun="runs"
             filtered={list.isFiltered}
             createLabel="Go to workflows"
-            onCreate={() => router.push('/workflows')}
+            onCreate={() => router.push('/build/workflows')}
             description="A run appears here when a workflow built on the canvas starts, from Start run, an email, a schedule or an agent."
           />
         }

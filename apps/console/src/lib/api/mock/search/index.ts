@@ -43,18 +43,18 @@ export function createSearchMock(deps: Deps): SearchApi {
       const ag = empty ? [] : deps.agents().filter((a) => matches(q, a.name, a.role));
       const sk = deps.skills(q);
       const groups: { group: SearchGroup; hits: SearchHit[]; total: number }[] = [
-        { group: 'workflows', total: wf.length, hits: wf.slice(0, PER_GROUP).map((w) => ({ id: w.id, group: 'workflows', title: w.name, detail: `${w.owner} · ${w.status}`, href: `/workflows/${w.id}` })) },
-        { group: 'agents', total: ag.length, hits: ag.slice(0, PER_GROUP).map((a) => ({ id: a.id, group: 'agents', title: a.name, detail: a.role, href: `/agents/${a.id}` })) },
+        { group: 'workflows', total: wf.length, hits: wf.slice(0, PER_GROUP).map((w) => ({ id: w.id, group: 'workflows', title: w.name, detail: `${w.owner} · ${w.status}`, href: `/build/workflows/${w.id}` })) },
+        { group: 'agents', total: ag.length, hits: ag.slice(0, PER_GROUP).map((a) => ({ id: a.id, group: 'agents', title: a.name, detail: a.role, href: `/build/agents/${a.id}` })) },
         { group: 'skills', total: sk.length, hits: sk.slice(0, PER_GROUP) },
         {
           group: 'cases',
           total: cases.pagination.total,
-          hits: cases.data.map((c) => ({ id: c.id, group: 'cases', title: c.subject, detail: `${c.id} · ${c.requester} · ${c.intentName}`, href: `/cases/${c.id}` })),
+          hits: cases.data.map((c) => ({ id: c.id, group: 'cases', title: c.subject, detail: `${c.id} · ${c.requester} · ${c.intentName}`, href: `/work/cases/${c.id}` })),
         },
         {
           group: 'knowledge',
           total: kbs.pagination.total,
-          hits: kbs.data.map((k) => ({ id: k.id, group: 'knowledge', title: k.name, detail: k.description, href: `/knowledge/${k.id}` })),
+          hits: kbs.data.map((k) => ({ id: k.id, group: 'knowledge', title: k.name, detail: k.description, href: `/data/knowledge/${k.id}` })),
         },
         {
           group: 'chats',

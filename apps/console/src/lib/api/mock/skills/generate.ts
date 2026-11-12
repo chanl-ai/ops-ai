@@ -172,7 +172,7 @@ export function packFor(start: SkillStart, pastWork: PastWorkItem[]): { pack: Pa
     const citations: Omit<SkillCitation, 'id'>[] = [
       ...docs.map((d) => ({ kind: 'document' as const, label: d.title, detail: `${d.kb} · ${d.detail}`, section: 'steps' as const })),
       ...docs.map((d) => ({ kind: 'document' as const, label: `${d.title} · rules`, detail: d.kb, section: 'rules' as const })),
-      ...start.fileIds.map((f, i) => ({ kind: 'document' as const, label: `Uploaded SOP ${i + 1}`, detail: f, section: 'steps' as const, href: `/files?file=${f}` })),
+      ...start.fileIds.map((f, i) => ({ kind: 'document' as const, label: `Uploaded SOP ${i + 1}`, detail: f, section: 'steps' as const, href: `/data/files?file=${f}` })),
     ];
     return { pack, citations, status: `Reading ${docs.length + start.fileIds.length === 1 ? 'the document' : `${docs.length + start.fileIds.length} documents`}…` };
   }
@@ -180,7 +180,7 @@ export function packFor(start: SkillStart, pastWork: PastWorkItem[]): { pack: Pa
     const items = pastWork.filter((p) => start.itemIds.includes(p.id));
     const topic = topicOf(items.map((i) => `${i.title} ${i.group}`).join(' '));
     const pack = topic ? fromSeed(TOPIC[topic]) : described(items[0]?.title ?? 'Handle the request');
-    const citations: Omit<SkillCitation, 'id'>[] = items.slice(0, 6).map((i) => ({ kind: i.kind, label: i.title, detail: `${i.id} · ${i.detail}`, section: 'examples', href: i.kind === 'case' ? `/cases/${i.id}` : i.kind === 'chat' ? `/chat/${i.id}` : undefined }));
+    const citations: Omit<SkillCitation, 'id'>[] = items.slice(0, 6).map((i) => ({ kind: i.kind, label: i.title, detail: `${i.id} · ${i.detail}`, section: 'examples', href: i.kind === 'case' ? `/work/cases/${i.id}` : i.kind === 'chat' ? `/chat/${i.id}` : undefined }));
     if (items.length > 6) citations.push({ kind: items[0].kind, label: `${items.length - 6} more`, section: 'examples' });
     citations.push({ kind: 'description', label: `Common steps across ${items.length} ${items.length === 1 ? 'item' : 'items'}`, section: 'steps' });
     return { pack, citations, status: `Reading ${items.length} past ${items.length === 1 ? 'item' : 'items'}…` };

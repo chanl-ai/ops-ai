@@ -19,7 +19,7 @@ const columns: ColumnDef<Tool>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Workflow tool" />,
     cell: ({ row }) => (
       <div>
-        <Link href={`/workflows/${row.original.workflow?.workflowId}`} className="font-mono text-sm hover:underline">
+        <Link href={`/build/workflows/${row.original.workflow?.workflowId}`} className="font-mono text-sm hover:underline">
           {row.original.name}
         </Link>
         <div className="font-mono text-xs text-muted-foreground">{row.original.workflow?.workflowId}</div>
@@ -62,7 +62,7 @@ export function WorkflowToolsTable({ tools, total }: { tools: Tool[]; total: num
         {mcpOn && (
           <>
             {' '}
-            <Link href="/channels/mcp" className="underline underline-offset-2" data-testid="workflow-tools-manage">
+            <Link href="/build/channels/mcp" className="underline underline-offset-2" data-testid="workflow-tools-manage">
               Manage exposure on the MCP tab →
             </Link>
           </>

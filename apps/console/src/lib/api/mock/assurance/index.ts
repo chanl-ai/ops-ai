@@ -68,9 +68,9 @@ const TRIGGER: Record<EvalRunTrigger, AssuranceRunTrigger> = { manual: 'manual',
 export function createAssuranceMock(deps: AssuranceDeps) {
   const drafts: (SuiteDraftCase & { suiteId: string })[] = [];
 
-  const agentRef = (a: Agent): AssetRef => ({ kind: 'agent', id: a.id, name: a.name, href: `/agents/${a.id}` });
-  const workflowRef = (w: Workflow): AssetRef => ({ kind: 'workflow', id: w.id, name: w.name, href: `/workflows/${w.id}` });
-  const skillRef = (s: { id: string; name: string }): AssetRef => ({ kind: 'skill', id: s.id, name: s.name, href: `/skills/${s.id}` });
+  const agentRef = (a: Agent): AssetRef => ({ kind: 'agent', id: a.id, name: a.name, href: `/build/agents/${a.id}` });
+  const workflowRef = (w: Workflow): AssetRef => ({ kind: 'workflow', id: w.id, name: w.name, href: `/build/workflows/${w.id}` });
+  const skillRef = (s: { id: string; name: string }): AssetRef => ({ kind: 'skill', id: s.id, name: s.name, href: `/build/skills/${s.id}` });
   const liveAgentVersion = (a: Agent) => {
     const pinned = a.usedIn.filter((u) => u.status === 'live').map((u) => u.pinnedVersion);
     return pinned.length ? Math.max(...pinned) : null;
@@ -223,7 +223,7 @@ export function createAssuranceMock(deps: AssuranceDeps) {
     ];
     return {
       reviewId: r.id,
-      asset: w ? workflowRef(w) : { kind: 'workflow', id: r.workflowId, name: r.workflowName, href: `/workflows/${r.workflowId}` },
+      asset: w ? workflowRef(w) : { kind: 'workflow', id: r.workflowId, name: r.workflowName, href: `/build/workflows/${r.workflowId}` },
       fromVersion: p.fromVersion,
       toVersion: p.toVersion,
       tier,
@@ -251,7 +251,7 @@ export function createAssuranceMock(deps: AssuranceDeps) {
     ];
     return {
       reviewId: r.id,
-      asset: a ? agentRef(a) : { kind: 'agent', id: p.agentId, name: p.agentName, href: `/agents/${p.agentId}` },
+      asset: a ? agentRef(a) : { kind: 'agent', id: p.agentId, name: p.agentName, href: `/build/agents/${p.agentId}` },
       fromVersion: p.fromVersion,
       toVersion: p.version,
       tier: p.tier,
@@ -339,7 +339,7 @@ export function createAssuranceMock(deps: AssuranceDeps) {
         const owner = deps.workflows().find((w) => w.id === b.asset.id)?.owner ?? deps.agents().find((a) => a.id === b.asset.id)?.owner ?? 'Platform';
         const manifest = { bundle: b.id, digest: b.digest, asset: { kind: b.asset.kind, id: b.asset.id, name: b.asset.name }, version: b.version, approvers: b.approvers, sealedAt: b.sealedAt, exportedBy: deps.me, exportedAt: new Date().toISOString() };
         const text = JSON.stringify(manifest, null, 2);
-        return deps.files.writeExport({ name: `evidence-${b.asset.id}-v${b.version}.json`, size: text.length, team: owner, text, ref: { type: 'evidence', id: b.id, name: `${b.asset.name} v${b.version} evidence`, href: '/assurance?tab=evidence' } });
+        return deps.files.writeExport({ name: `evidence-${b.asset.id}-v${b.version}.json`, size: text.length, team: owner, text, ref: { type: 'evidence', id: b.id, name: `${b.asset.name} v${b.version} evidence`, href: '/govern/evals?tab=evidence' } });
       }),
   };
 

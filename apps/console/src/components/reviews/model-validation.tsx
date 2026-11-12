@@ -85,7 +85,7 @@ export function ModelValidationBody({ review }: { review: Review }) {
         </Section>
       )}
       <p className="text-xs text-muted-foreground">
-        <Link href={`/model-risk/${mv.entryId}`} className="underline underline-offset-2">
+        <Link href={`/govern/models/${mv.entryId}`} className="underline underline-offset-2">
           Open {mv.entryName} in the model inventory
         </Link>
       </p>
@@ -137,7 +137,7 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="w-full text-xs text-muted-foreground sm:w-40">
                   Agent evals ·{' '}
-                  <Link href={`/agents/${a.agentId}?tab=evals`} className="font-medium text-foreground underline-offset-2 hover:underline">
+                  <Link href={`/build/agents/${a.agentId}?tab=evals`} className="font-medium text-foreground underline-offset-2 hover:underline">
                     {a.agentName}
                   </Link>{' '}
                   v{a.version}
@@ -186,7 +186,7 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
               <AlertDescription>
                 <span>
                   Its model tier is {p.modelEntry.tier}. Model Risk has not validated it, so approving publishes a version no second line has reviewed.{' '}
-                  <Link href={`/model-risk/${p.modelEntry.entryId}`} className="underline underline-offset-2">
+                  <Link href={`/govern/models/${p.modelEntry.entryId}`} className="underline underline-offset-2">
                     Open its inventory entry
                   </Link>
                 </span>
@@ -195,7 +195,7 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
           ) : (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <ShieldCheck className="size-4" /> Model tier <RiskBadge risk={p.modelEntry.tier} /> {VALIDATION_STATUS_LABEL[p.modelEntry.validationStatus]}
-              <Link href={`/model-risk/${p.modelEntry.entryId}`} className="ml-auto text-xs underline underline-offset-2">
+              <Link href={`/govern/models/${p.modelEntry.entryId}`} className="ml-auto text-xs underline underline-offset-2">
                 Inventory entry
               </Link>
             </p>

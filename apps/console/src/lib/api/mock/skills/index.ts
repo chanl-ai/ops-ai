@@ -416,9 +416,9 @@ export function createSkillsMock(deps: SkillsDeps) {
   };
   const audit = (sk: Stored | { ownerTeam: string; id?: string; name: string }, action: 'created' | 'edited' | 'published' | 'approved' | 'rejected' | 'restored' | 'deleted', summary: string, extra: { diff?: { field: string; before?: string; after?: string }[]; reason?: string } = {}) => {
     const name = 'versions' in sk ? newest(sk).content.name : sk.name;
-    auditSink.log({ action, target: { type: 'skill', name, href: sk.id ? `/skills/${sk.id}` : undefined }, summary, owner: sk.ownerTeam, ...extra });
+    auditSink.log({ action, target: { type: 'skill', name, href: sk.id ? `/build/skills/${sk.id}` : undefined }, summary, owner: sk.ownerTeam, ...extra });
   };
-  const auditAgent = (a: MockAgent, summary: string, diff: { field: string; before?: string; after?: string }[]) => auditSink.log({ action: 'edited', target: { type: 'agent', name: a.name, href: `/agents/${a.id}` }, summary, owner: a.owner, diff });
+  const auditAgent = (a: MockAgent, summary: string, diff: { field: string; before?: string; after?: string }[]) => auditSink.log({ action: 'edited', target: { type: 'agent', name: a.name, href: `/build/agents/${a.id}` }, summary, owner: a.owner, diff });
 
   /** Tools and knowledge bases the content needs that the agent does not hold. */
   function missingFor(a: Pick<Agent, 'toolIds' | 'collections'>, c: Pick<StoredContent, 'toolIds' | 'knowledgeBases'>) {
@@ -776,7 +776,7 @@ export function createSkillsMock(deps: SkillsDeps) {
       ? []
       : visible()
           .filter((sk) => `${newest(sk).content.name} ${newest(sk).content.slug} ${newest(sk).content.useWhen}`.toLowerCase().includes(q))
-          .map((sk) => ({ id: sk.id, group: 'skills', title: newest(sk).content.name, detail: `${sk.ownerTeam} · ${statusOf(sk).replace('_', ' ')} · v${newest(sk).version}`, href: `/skills/${sk.id}` }));
+          .map((sk) => ({ id: sk.id, group: 'skills', title: newest(sk).content.name, detail: `${sk.ownerTeam} · ${statusOf(sk).replace('_', ' ')} · v${newest(sk).version}`, href: `/build/skills/${sk.id}` }));
 
   const VIEW: Record<Exclude<SkillView, 'all'>, (r: Skill) => boolean> = {
     published: (r) => r.status === 'published' || (r.status === 'in_review' && r.publishedVersion !== null),
@@ -978,7 +978,7 @@ export function createSkillsMock(deps: SkillsDeps) {
           size: parts.reduce((n, p) => n + p.text.length, 0) + 2200 * parts.length,
           team: one ? one.sk.ownerTeam : (teamOwner() ?? chosen[0].ownerTeam),
           text: parts.map((p) => p.text).join('\n\n'),
-          ref: one ? { type: 'skill', id: one.sk.id, name: `${one.ver.content.name} v${one.ver.version} export`, href: `/skills/${one.sk.id}` } : { type: 'skill', id: 'skills', name: `${plural(parts.length, 'skill')} export`, href: '/skills' },
+          ref: one ? { type: 'skill', id: one.sk.id, name: `${one.ver.content.name} v${one.ver.version} export`, href: `/build/skills/${one.sk.id}` } : { type: 'skill', id: 'skills', name: `${plural(parts.length, 'skill')} export`, href: '/build/skills' },
         });
         for (const p of parts) audit(p.sk, 'edited', `Exported v${p.ver.version} as SKILL.md`);
         return f;
@@ -1030,7 +1030,7 @@ export function createSkillsMock(deps: SkillsDeps) {
           if (n.state === 'in_review') throw new ApiError(`v${n.version} is waiting in Reviews.`, 409);
           const added: SkillResource[] = [];
           for (const fid of input.fileIds ?? []) {
-            const f = deps.files.link(fid, { type: 'skill', id: sk.id, name: n.content.name, href: `/skills/${sk.id}?tab=resources` }, ['skill_resource', 'knowledge_source']);
+            const f = deps.files.link(fid, { type: 'skill', id: sk.id, name: n.content.name, href: `/build/skills/${sk.id}?tab=resources` }, ['skill_resource', 'knowledge_source']);
             added.push({ id: id('res'), kind: 'file', name: f.name, fileId: f.id, size: f.size, addedAt: new Date().toISOString(), addedBy: me });
           }
           if (input.template) {
@@ -1171,7 +1171,7 @@ export function createSkillsMock(deps: SkillsDeps) {
           note: `Imported from ${p.fileName}`,
         });
         newest(sk).content.slug = uniqueSlug(p.slug, ownerTeam, sk.id);
-        deps.files.link(fileId, { type: 'skill', id: sk.id, name: p.name, href: `/skills/${sk.id}` }, ['skill_resource']);
+        deps.files.link(fileId, { type: 'skill', id: sk.id, name: p.name, href: `/build/skills/${sk.id}` }, ['skill_resource']);
         audit(sk, 'created', `Imported from ${p.fileName}`, { diff: p.tools.filter((t) => !t.toolId).map((t) => ({ field: 'Dropped tool', before: t.requested })) });
         return row(sk);
       }),

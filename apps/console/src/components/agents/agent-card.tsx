@@ -44,7 +44,7 @@ export function AgentCard({ agent }: { agent: Agent }) {
   ];
   return (
     <Link
-      href={`/agents/${agent.id}`}
+      href={`/build/agents/${agent.id}`}
       className={cn('flex h-full flex-col rounded-xl border bg-card p-5 transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none', draft && 'opacity-70')}
       data-testid={`agent-card-${agent.slug}`}
     >

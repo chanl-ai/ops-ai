@@ -130,11 +130,11 @@ export function AgentPublishBody({ review }: { review: Review }) {
       )}
       <p className="text-xs text-muted-foreground">
         Approving publishes v{p.version}. Workflows keep the version they pin until they are republished.{' '}
-        <Link href={`/agents/${p.agentId}?tab=evals`} className="underline underline-offset-2">
+        <Link href={`/build/agents/${p.agentId}?tab=evals`} className="underline underline-offset-2">
           Open the agent&apos;s evals
         </Link>
         {' · '}
-        <Link href="/assurance?tab=gates" className="underline underline-offset-2" data-testid="open-gate-in-assurance">
+        <Link href="/govern/evals?tab=gates" className="underline underline-offset-2" data-testid="open-gate-in-assurance">
           Open gate in Assurance
         </Link>
       </p>

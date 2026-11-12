@@ -49,7 +49,7 @@ export function MailboxWorkflows({ mailbox }: { mailbox: Mailbox }) {
       {mailbox.workflows.length ? (
         <Rows testId="mailbox-workflows">
           {mailbox.workflows.map((w) => (
-            <Row key={w.id} href={`/workflows/definitions/${encodeURIComponent(w.id)}`} leading={<Route className="size-4 text-muted-foreground" />} title={w.name} description={w.id} trailing={<Badge variant="secondary">Live v{w.version}</Badge>} />
+            <Row key={w.id} href={`/build/workflows/definitions/${encodeURIComponent(w.id)}`} leading={<Route className="size-4 text-muted-foreground" />} title={w.name} description={w.id} trailing={<Badge variant="secondary">Live v{w.version}</Badge>} />
           ))}
         </Rows>
       ) : (

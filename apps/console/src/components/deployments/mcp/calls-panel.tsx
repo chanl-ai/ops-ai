@@ -34,11 +34,11 @@ export function CallsPanel({ series, held, failed, rangeLabel }: { series: Conne
         </ChartContainer>
       </CardContent>
       <CardFooter className="gap-1 text-sm text-muted-foreground">
-        <Link href="/reviews" className="underline underline-offset-2">
+        <Link href="/work/tasks" className="underline underline-offset-2">
           {plural(held, 'call')} held for approval
         </Link>
         <span>·</span>
-        <Link href="/tools/calls" className="underline underline-offset-2">
+        <Link href="/govern/activity/tool-calls" className="underline underline-offset-2">
           {failed} failed
         </Link>
       </CardFooter>

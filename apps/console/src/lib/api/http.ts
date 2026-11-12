@@ -84,14 +84,14 @@ type Send = ReturnType<typeof createTransport>['send'];
 
 function createReviewsHttp(get: Get, send: Send): OpsApi['reviews'] {
   return {
-    list: (p) => get(`/reviews?${qs(p)}`),
+    list: (p) => get(`/work/tasks?${qs(p)}`),
     // Review ids hold colons (run:step:iteration); every path encodes them once, from the raw id.
-    get: (id) => get(`/reviews/${encodeURIComponent(id)}`),
-    byRunKey: (key) => get(`/reviews/by-run-key/${encodeURIComponent(key)}`),
-    place: (id, opts) => get(`/reviews/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
-    decide: (id, i) => send('POST', `/reviews/${encodeURIComponent(id)}/decision`, i),
-    assign: (ids, assignee) => send('POST', '/reviews/assign', { ids, assignee }),
-    bulkDecide: (ids, decision, reason, opts) => send('POST', '/reviews/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),
+    get: (id) => get(`/work/tasks/${encodeURIComponent(id)}`),
+    byRunKey: (key) => get(`/work/tasks/by-run-key/${encodeURIComponent(key)}`),
+    place: (id, opts) => get(`/work/tasks/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
+    decide: (id, i) => send('POST', `/work/tasks/${encodeURIComponent(id)}/decision`, i),
+    assign: (ids, assignee) => send('POST', '/work/tasks/assign', { ids, assignee }),
+    bulkDecide: (ids, decision, reason, opts) => send('POST', '/work/tasks/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),
   };
 }
 
@@ -130,7 +130,7 @@ export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'
   const { get } = createTransport(`${baseUrl}/v1`);
   return async (p) => {
     const wanted = [...(p.filters?.type?.includes('workflow') ? ['workflow'] : []), ...(p.filters?.access ?? [])];
-    const rows = await get<DirectoryTool[]>(`/tools${wanted.length ? `?${new URLSearchParams(wanted.map((a) => ['access', a]))}` : ''}`);
+    const rows = await get<DirectoryTool[]>(`/data/tools${wanted.length ? `?${new URLSearchParams(wanted.map((a) => ['access', a]))}` : ''}`);
     const data: Tool[] = rows.map((t) => ({
       id: t.id,
       name: t.name,
@@ -161,8 +161,8 @@ export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'
 export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tools'], 'directory' | 'one'> {
   const { get } = createTransport(`${baseUrl}/v1`);
   return {
-    directory: (p) => get(`/tools?${qs(p)}`),
-    one: (id) => get(`/tools/${encodeURIComponent(id)}`),
+    directory: (p) => get(`/data/tools?${qs(p)}`),
+    one: (id) => get(`/data/tools/${encodeURIComponent(id)}`),
   };
 }
 
@@ -235,45 +235,45 @@ export function createHttpApi(baseUrl: string): OpsApi {
   return {
     overview: { get: () => get('/overview') },
     agents: {
-      list: (p) => get(`/agents?${qs(p)}`),
-      get: (id) => get(`/agents/${id}`),
-      create: (i) => send('POST', '/agents', i),
-      update: (id, i) => send('PATCH', `/agents/${id}`, i),
-      remove: (id) => send('DELETE', `/agents/${id}`),
-      versions: (id) => get(`/agents/${id}/versions`),
-      runs: (id) => get(`/agents/${id}/runs`),
-      restore: (id, version) => send('POST', `/agents/${id}/versions/${version}/restore`),
-      requestPublish: (id, version, note) => send('POST', `/agents/${id}/publish-requests`, { version, note }),
-      publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
-      setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
+      list: (p) => get(`/build/agents?${qs(p)}`),
+      get: (id) => get(`/build/agents/${id}`),
+      create: (i) => send('POST', '/build/agents', i),
+      update: (id, i) => send('PATCH', `/build/agents/${id}`, i),
+      remove: (id) => send('DELETE', `/build/agents/${id}`),
+      versions: (id) => get(`/build/agents/${id}/versions`),
+      runs: (id) => get(`/build/agents/${id}/runs`),
+      restore: (id, version) => send('POST', `/build/agents/${id}/versions/${version}/restore`),
+      requestPublish: (id, version, note) => send('POST', `/build/agents/${id}/publish-requests`, { version, note }),
+      publishPreview: (id, version) => get(`/build/agents/${id}/publish-preview?version=${version}`),
+      setPaused: (id, paused) => send('POST', `/build/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
-      grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
-      toolOptions: (p) => get(`/tools/options?${optionsQs(p)}`),
+      grantableTools: () => get<{ data: GrantableTool[] }>('/data/tools?pageSize=200').then((r) => r.data),
+      toolOptions: (p) => get(`/data/tools/options?${optionsQs(p)}`),
       modelAliases: () => get('/model-aliases'),
-      test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
+      test: (id, message) => send('POST', `/build/agents/${id}/test`, { message }),
       knowledgeUsage: () => get('/knowledge-usage'),
-      bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),
-      bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
+      bulkUpdate: (ids, patch) => send('POST', '/build/agents/bulk-update', { ids, patch }),
+      bulkRemove: (ids) => send('POST', '/build/agents/bulk-delete', { ids }),
     },
     workflows: {
       // The current engine's workflows only: the console no longer shows the earlier engine's.
-      list: (p) => get(`/workflows?${qs(p)}&engine=current`),
-      get: (id) => get(`/workflows/${id}`),
-      create: (i) => send('POST', '/workflows', i),
-      validate: (id, graph, target) => send('POST', `/workflows/${id}/validate`, { graph, target }),
-      lastValidation: (id) => get(`/workflows/${id}/validations/latest`),
-      test: (id, input) => send('POST', `/workflows/${id}/test`, input),
-      routeFields: () => get('/workflows/route-fields'),
-      saveDraft: (id, graph) => (graph ? send('PUT', `/workflows/${id}/draft`, { graph }) : send('DELETE', `/workflows/${id}/draft`)),
-      requestPublish: (id, i) => send('POST', `/workflows/${id}/publish-requests`, i),
-      update: (id, i) => send('PATCH', `/workflows/${id}`, i),
-      setStatus: (id, status) => send('POST', `/workflows/${id}/status`, { status }),
-      remove: (id) => send('DELETE', `/workflows/${id}`),
-      runs: (id, p) => get(`/workflows/${id}/runs?${qs(p)}`),
-      versions: (id) => get(`/workflows/${id}/versions`),
-      restore: (id, version) => send('POST', `/workflows/${id}/versions/${version}/restore`),
-      bulkUpdate: (ids, patch) => send('POST', '/workflows/bulk-update', { ids, patch }),
+      list: (p) => get(`/build/workflows?${qs(p)}&engine=current`),
+      get: (id) => get(`/build/workflows/${id}`),
+      create: (i) => send('POST', '/build/workflows', i),
+      validate: (id, graph, target) => send('POST', `/build/workflows/${id}/validate`, { graph, target }),
+      lastValidation: (id) => get(`/build/workflows/${id}/validations/latest`),
+      test: (id, input) => send('POST', `/build/workflows/${id}/test`, input),
+      routeFields: () => get('/build/workflows/route-fields'),
+      saveDraft: (id, graph) => (graph ? send('PUT', `/build/workflows/${id}/draft`, { graph }) : send('DELETE', `/build/workflows/${id}/draft`)),
+      requestPublish: (id, i) => send('POST', `/build/workflows/${id}/publish-requests`, i),
+      update: (id, i) => send('PATCH', `/build/workflows/${id}`, i),
+      setStatus: (id, status) => send('POST', `/build/workflows/${id}/status`, { status }),
+      remove: (id) => send('DELETE', `/build/workflows/${id}`),
+      runs: (id, p) => get(`/build/workflows/${id}/runs?${qs(p)}`),
+      versions: (id) => get(`/build/workflows/${id}/versions`),
+      restore: (id, version) => send('POST', `/build/workflows/${id}/versions/${version}/restore`),
+      bulkUpdate: (ids, patch) => send('POST', '/build/workflows/bulk-update', { ids, patch }),
     },
     reviews: createReviewsHttp(get, send),
     policies: {
@@ -324,15 +324,15 @@ export function createHttpApi(baseUrl: string): OpsApi {
     connect: createConnectHttp(get, send),
     wiki: createWikiHttp(get, send, qs),
     tools: {
-      list: (p) => get(`/tools?${qs(p)}`),
-      create: (i) => send('POST', '/tools', i),
-      update: (id, i) => send('PATCH', `/tools/${id}`, i),
-      remove: (id) => send('DELETE', `/tools/${id}`),
-      test: (id, input) => send('POST', `/tools/${id}/test`, { input }),
-      bulkUpdate: (ids, patch) => send('POST', '/tools/bulk-update', { ids, patch }),
-      bulkRemove: (ids) => send('POST', '/tools/bulk-delete', { ids }),
-      directory: (p) => get(`/tools?${qs(p)}`),
-      one: (id) => get(`/tools/${encodeURIComponent(id)}`),
+      list: (p) => get(`/data/tools?${qs(p)}`),
+      create: (i) => send('POST', '/data/tools', i),
+      update: (id, i) => send('PATCH', `/data/tools/${id}`, i),
+      remove: (id) => send('DELETE', `/data/tools/${id}`),
+      test: (id, input) => send('POST', `/data/tools/${id}/test`, { input }),
+      bulkUpdate: (ids, patch) => send('POST', '/data/tools/bulk-update', { ids, patch }),
+      bulkRemove: (ids) => send('POST', '/data/tools/bulk-delete', { ids }),
+      directory: (p) => get(`/data/tools?${qs(p)}`),
+      one: (id) => get(`/data/tools/${encodeURIComponent(id)}`),
     },
     deployments: {
       list: (p) => get(`/deployments?${qs(p)}`),
@@ -345,9 +345,9 @@ export function createHttpApi(baseUrl: string): OpsApi {
       bulkRemove: (ids) => send('POST', '/deployments/bulk-delete', { ids }),
     },
     tests: {
-      list: (wid) => get(`/workflows/${wid}/tests`),
-      create: (wid, i) => send('POST', `/workflows/${wid}/tests`, i),
-      importRows: (wid, rows, fileId) => send('POST', `/workflows/${wid}/tests/import`, { rows, fileId }),
+      list: (wid) => get(`/build/workflows/${wid}/tests`),
+      create: (wid, i) => send('POST', `/build/workflows/${wid}/tests`, i),
+      importRows: (wid, rows, fileId) => send('POST', `/build/workflows/${wid}/tests/import`, { rows, fileId }),
       fromRun: (runId) => send('POST', `/runs/${runId}/test-case`),
       remove: (id) => send('DELETE', `/tests/${id}`),
     },

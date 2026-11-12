@@ -321,7 +321,7 @@ function ThreadView({
           )}
           {t && (
             <div className="mt-1 flex min-w-0 items-center gap-2 px-1">
-              <Link href={`/agents/${t.agentId}`} className="inline-flex max-w-[60%] shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+              <Link href={`/build/agents/${t.agentId}`} className="inline-flex max-w-[60%] shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
                 <Bot className="size-3.5 shrink-0" /> <span className="truncate">{t.agentName} · v{t.agentVersion}</span>
               </Link>
               {agent && agent.version !== t.agentVersion && <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">(v{agent.version} is live; new chats use it)</span>}

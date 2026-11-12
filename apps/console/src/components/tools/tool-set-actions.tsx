@@ -39,7 +39,7 @@ export function ToolSetActions() {
           const m = await create.mutateAsync(input);
           toast.success(`Saved ${m.displayName} as a draft`, { description: 'Rename it, add its credential header and request a security review on its page.' });
           setAdding(false);
-          router.push(`/tools/${m.id}`);
+          router.push(`/data/tools/${m.id}`);
         }}
       />
       <NewModuleDialog
@@ -50,7 +50,7 @@ export function ToolSetActions() {
           const m = await createBlank.mutateAsync(input);
           toast.success(`Saved ${m.displayName} as a draft`, { description: 'Add operations here.' });
           setCreatingBlank(false);
-          router.push(`/tools/${m.id}`);
+          router.push(`/data/tools/${m.id}`);
         }}
       />
     </>

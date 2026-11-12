@@ -90,7 +90,7 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
         channel: r.where.kind === 'workflow_step' ? 'Workflow step' : r.where.type ? kindInfo(r.where.type).title : 'Channel',
         versionKey: `v${r.version}`,
         healthWord: r.health === 'ok' ? 'Connected' : HEALTH_WORD[r.health],
-        href: r.where.kind === 'workflow_step' ? `/workflows/${encodeURIComponent(r.where.workflowId ?? r.where.id)}` : r.where.type === 'email' ? `/channels/email/${encodeURIComponent(r.where.id)}` : '/channels/chat',
+        href: r.where.kind === 'workflow_step' ? `/build/workflows/${encodeURIComponent(r.where.workflowId ?? r.where.id)}` : r.where.type === 'email' ? `/build/channels/email/${encodeURIComponent(r.where.id)}` : '/build/channels/chat',
         rowTestId: `live-${r.where.kind}-${r.where.id}`,
       })),
     [q.data],
@@ -111,7 +111,7 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
           {readsActivity && (
             <CardAction>
               <Button asChild variant="outline" size="sm">
-                <Link href={`/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
+                <Link href={`/govern/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
                   <Activity className="size-4" /> View activity{count.data != null ? ` · ${count.data.toLocaleString('en-CA')}` : ''}
                 </Link>
               </Button>

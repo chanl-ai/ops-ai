@@ -52,7 +52,7 @@ export function ConnectionSelect({
         </SelectContent>
       </Select>
       <Button variant="outline" size="sm" asChild>
-        <Link href="/integrations?new=1" data-testid="new-connection">
+        <Link href="/data/connectors?new=1" data-testid="new-connection">
           <Plus className="size-4" /> Add custom app
         </Link>
       </Button>

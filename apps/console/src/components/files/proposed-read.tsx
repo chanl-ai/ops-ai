@@ -110,7 +110,7 @@ export function ProposedRead({ read, proposal, fileName }: { read: Extraction; p
           <Alert data-testid="proposed-read-saved">
             <AlertDescription className="block">
               Saved as{' '}
-              <Link href={`/document-types/${encodeURIComponent(saved.id)}`} className="font-medium underline underline-offset-2">
+              <Link href={`/data/document-types/${encodeURIComponent(saved.id)}`} className="font-medium underline underline-offset-2">
                 {saved.name}
               </Link>
               , with this file as its first sample.

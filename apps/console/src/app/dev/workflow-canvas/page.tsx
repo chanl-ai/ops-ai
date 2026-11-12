@@ -30,7 +30,7 @@ export default function WorkflowLargeCanvasPage() {
       icon={Workflow}
       title={definition.name ?? definition.id}
       description={scene === 'empty' ? 'Not saved yet' : 'Version 3 · draft · live version 2'}
-      backHref="/workflows"
+      backHref="/build/workflows"
       actions={
         <>
           <Button type="button" variant="outline">

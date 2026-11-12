@@ -128,15 +128,15 @@ export function ConnectorSheet({
         <Separator />
         <Section title="Used by" testId="connector-used-by">
           <p className="flex flex-wrap gap-x-2 text-sm">
-            <Link className="underline-offset-4 hover:underline" href="/agents">
+            <Link className="underline-offset-4 hover:underline" href="/build/agents">
               {plural(c.used.agents, 'agent')}
             </Link>
             <span aria-hidden>·</span>
-            <Link className="underline-offset-4 hover:underline" href="/workflows">
+            <Link className="underline-offset-4 hover:underline" href="/build/workflows">
               {plural(c.used.workflows, 'workflow')}
             </Link>
             <span aria-hidden>·</span>
-            <Link className="underline-offset-4 hover:underline" href="/tools/calls">
+            <Link className="underline-offset-4 hover:underline" href="/govern/activity/tool-calls">
               {plural(c.used.callsThisWeek, 'tool call')} this week
             </Link>
           </p>

@@ -64,7 +64,7 @@ export function HostedForm({
             {done.runId && (
               <p className="text-sm text-muted-foreground">
                 Your run has started.{' '}
-                <Link className="font-medium text-foreground underline underline-offset-4" href={`/workflows/runs/${encodeURIComponent(done.runId)}`}>
+                <Link className="font-medium text-foreground underline underline-offset-4" href={`/build/runs/${encodeURIComponent(done.runId)}`}>
                   Open the run
                 </Link>
               </p>

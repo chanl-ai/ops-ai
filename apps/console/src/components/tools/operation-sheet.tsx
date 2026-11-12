@@ -226,7 +226,7 @@ export function OperationSheet({
                       <CheckCircle2 className="size-3.5" /> Set
                     </span>
                   ) : (
-                    <Link href="/integrations/credentials?tab=secrets" className="inline-flex items-center gap-1 text-xs text-warning-text underline-offset-4 hover:underline">
+                    <Link href="/data/secrets?tab=secrets" className="inline-flex items-center gap-1 text-xs text-warning-text underline-offset-4 hover:underline">
                       <AlertTriangle className="size-3.5" /> {sec.name} not set
                     </Link>
                   )}

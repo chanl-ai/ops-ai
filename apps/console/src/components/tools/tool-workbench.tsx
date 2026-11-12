@@ -188,7 +188,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
           {p.stagedCall && <span className="text-xs text-warning-text">Staged; calls run the published call until you publish.</span>}
         </span>
       }
-      backHref={`/tools/${p.moduleId}`}
+      backHref={`/data/tools/${p.moduleId}`}
       tabs={p.tabs}
       badge={<AccessBadge access={op.access} />}
       actions={
@@ -249,7 +249,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
                     title={<span className="font-mono text-xs">{s.name}</span>}
                     description={
                       !s.set ? (
-                        <Link href="/integrations/credentials?tab=secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-unset-${s.name}`}>
+                        <Link href="/data/secrets?tab=secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-unset-${s.name}`}>
                           Not set in this module&apos;s team; set it in Settings
                         </Link>
                       ) : (

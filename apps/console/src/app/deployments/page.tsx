@@ -7,5 +7,5 @@ import { redirect } from 'next/navigation';
 export default async function DeploymentsMoved({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const agent = (await searchParams).agent;
   const id = Array.isArray(agent) ? agent[0] : agent;
-  redirect(`/channels?from=deployments${id ? `&agent=${encodeURIComponent(id)}` : ''}`);
+  redirect(`/build/channels?from=deployments${id ? `&agent=${encodeURIComponent(id)}` : ''}`);
 }

@@ -7,8 +7,8 @@ type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 export function createFormsHttp(get: Get, send: Send): FormsApi {
   const at = (s: string) => encodeURIComponent(s);
   return {
-    list: (workflowId) => get(`/workflows/${at(workflowId)}/forms`),
-    create: (workflowId, input) => send('POST', `/workflows/${at(workflowId)}/forms`, input),
+    list: (workflowId) => get(`/build/workflows/${at(workflowId)}/forms`),
+    create: (workflowId, input) => send('POST', `/build/workflows/${at(workflowId)}/forms`, input),
     rotate: (formId) => send('POST', `/forms/${at(formId)}/rotate`),
     update: (formId, patch) => send('PATCH', `/forms/${at(formId)}`, patch),
     memberForm: (slug) => get(`/forms/${at(slug)}/members`),

@@ -22,7 +22,7 @@ export function ServesCell({ channel }: { channel: ChannelRow }) {
   if (!s) return <span className="text-muted-foreground">Nothing yet</span>;
   const label = (
     <span className="block truncate" onClick={(e) => e.stopPropagation()}>
-      <Link href={s.kind === 'agent' ? `/agents/${encodeURIComponent(s.id)}?tab=channels` : `/workflows/${encodeURIComponent(s.id)}`} className="underline-offset-4 hover:underline">
+      <Link href={s.kind === 'agent' ? `/build/agents/${encodeURIComponent(s.id)}?tab=channels` : `/build/workflows/${encodeURIComponent(s.id)}`} className="underline-offset-4 hover:underline">
         {s.name}
       </Link>
     </span>

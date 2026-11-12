@@ -13,10 +13,10 @@ export function createCaseRecordsHttp(get: Get, send: Send): CaseRecordsApi {
       if (search) q.set('search', search);
       if (assignee) q.set('assignee', assignee);
       if (overdue) q.set('overdue', 'true');
-      return get(`/cases?${q}`);
+      return get(`/work/cases?${q}`);
     },
-    get: (id) => get(`/cases/${encodeURIComponent(id)}`),
-    change: (id, patch) => send('PATCH', `/cases/${encodeURIComponent(id)}`, patch),
-    addNote: (id, text) => send('POST', `/cases/${encodeURIComponent(id)}/events`, { kind: 'note', text }),
+    get: (id) => get(`/work/cases/${encodeURIComponent(id)}`),
+    change: (id, patch) => send('PATCH', `/work/cases/${encodeURIComponent(id)}`, patch),
+    addNote: (id, text) => send('POST', `/work/cases/${encodeURIComponent(id)}/events`, { kind: 'note', text }),
   };
 }

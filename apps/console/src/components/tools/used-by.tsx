@@ -13,9 +13,9 @@ import type { ToolRow } from '@/lib/types/tool-directory';
 
 /** Where a tool's row opens: an app's or custom tool's own page, a workflow's, or an agent's. */
 export function toolHref(t: ToolRow): string | null {
-  if (t.moduleId) return `/tools/${encodeURIComponent(t.moduleId)}/operations/${encodeURIComponent(t.name)}`;
-  if (t.kind === 'workflow') return `/workflows/definitions/${encodeURIComponent(t.id.replace(/^workflow:/, ''))}`;
-  if (t.kind === 'agent') return `/agents/${encodeURIComponent(t.id.replace(/^agent:/, ''))}`;
+  if (t.moduleId) return `/data/tools/${encodeURIComponent(t.moduleId)}/operations/${encodeURIComponent(t.name)}`;
+  if (t.kind === 'workflow') return `/build/workflows/definitions/${encodeURIComponent(t.id.replace(/^workflow:/, ''))}`;
+  if (t.kind === 'agent') return `/build/agents/${encodeURIComponent(t.id.replace(/^agent:/, ''))}`;
   return null;
 }
 
@@ -25,14 +25,14 @@ export function UsedByList({ usedBy }: { usedBy: ToolRow['usedBy'] }) {
     <ul className="flex flex-col gap-1" data-testid="used-by-list">
       {usedBy.agents.map((a) => (
         <li key={`a-${a.id}`}>
-          <Link href={`/agents/${encodeURIComponent(a.id)}`} className="inline-flex items-center gap-1.5 text-sm underline-offset-4 hover:underline">
+          <Link href={`/build/agents/${encodeURIComponent(a.id)}`} className="inline-flex items-center gap-1.5 text-sm underline-offset-4 hover:underline">
             <Bot className="size-3.5 text-muted-foreground" /> {a.name}
           </Link>
         </li>
       ))}
       {usedBy.workflows.map((w) => (
         <li key={`w-${w.id}`}>
-          <Link href={`/workflows/definitions/${encodeURIComponent(w.id)}`} className="inline-flex items-center gap-1.5 text-sm underline-offset-4 hover:underline">
+          <Link href={`/build/workflows/definitions/${encodeURIComponent(w.id)}`} className="inline-flex items-center gap-1.5 text-sm underline-offset-4 hover:underline">
             <Route className="size-3.5 text-muted-foreground" /> {w.name}
           </Link>
         </li>
