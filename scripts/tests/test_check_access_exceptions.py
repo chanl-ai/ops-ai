@@ -155,3 +155,42 @@ def test_an_exception_line_added_without_the_trailer_fails_and_with_it_passes(
     allow.write_text(allow.read_text() + "c.py refusal z 1 E03\n")
     _git(tmp_path, "commit", "-qam", "undecided\n\nStandards-exception: E03, approved by a maintainer")
     assert [p.split()[0] for p in c.commit_problems()] == ["row"], "a row with no decision fails even when approved"
+
+
+PLANTED = {
+    "open-read": (
+        "services/x-service/src/x/api/routers/things.py",
+        'from fastapi import APIRouter\nrouter = APIRouter()\n\n@router.get("/things")\nasync def things(caller):\n'
+        "    return await rows()\n",
+    ),
+    "grid-eval": (
+        "services/x-service/src/x/store/roles.py",
+        "from ops_access import effective\n\ndef is_admin(p):\n    return effective(p.access, p.grids)\n",
+    ),
+    "raw-role": (
+        "services/x-service/src/x/api/hitl.py",
+        "def decider(who, team, role):\n    return role in (who.access.get(team) or [who.roles.get(team)])\n",
+    ),
+}
+CHECKED = (
+    "services/x-service/src/x/api/routers/things.py",
+    'from fastapi import APIRouter, Depends\nrouter = APIRouter()\n\n@router.get("/things")\n'
+    'async def things(caller=Depends(reader_of("things"))):\n    return await rows()\n',
+)
+
+
+def test_a_new_unchecked_read_grid_evaluation_or_raw_role_compare_is_found_where_it_lands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    c = checker()
+    monkeypatch.setattr(c, "ROOT", tmp_path)
+    found: dict[str, set[str]] = {}
+    for kind, (rel, text) in PLANTED.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        found[kind] = {f.kind for f in c._python(path)}  # pyright: ignore[reportPrivateUsage]
+    assert {k: kind in v for k, v in found.items() for kind in [k]} == dict.fromkeys(PLANTED, True), found
+    # A read behind reader_of is no finding: the check is not simply flagging every route.
+    (tmp_path / CHECKED[0]).write_text(CHECKED[1])
+    assert "open-read" not in {f.kind for f in c._python(tmp_path / CHECKED[0])}  # pyright: ignore[reportPrivateUsage]
