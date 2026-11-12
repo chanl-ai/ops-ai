@@ -4,12 +4,13 @@ tools the agent already holds; and a held write approved without the step-up it 
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
 import httpx
 import pytest
-from ops_ai import OpsAI
+from ops_ai import AsyncOpsAI, OpsAI
 from ops_ai.errors import BadRequest
 
 SPEC = {
@@ -90,3 +91,23 @@ def test_a_held_write_asks_for_the_step_up_and_is_retried_once_with_its_token() 
     assert json.loads(seen[-1].content)["stepUpToken"] == "su_1"
     with pytest.raises(BadRequest):
         ops.tasks.approve("thr_1")
+
+
+def test_the_async_client_makes_the_step_up_and_retries_the_held_write() -> None:
+    def handler(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/step-up"):
+            return httpx.Response(200, json={"success": True, "data": {"token": "su_1"}})
+        if "stepUpToken" in json.loads(r.content or b"{}"):
+            return httpx.Response(200, json={"success": True, "data": {"decided": "approve"}})
+        return httpx.Response(400, json={"success": False, "error": {"code": "step_up_required", "message": "confirm"}})
+
+    async def run() -> Any:
+        async with AsyncOpsAI(
+            api_key="ok_test",
+            base_url="https://ops.test",
+            team="team_a",
+            http=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        ) as ops:
+            return await ops.tasks.approve("thr_1", password="pw")
+
+    assert asyncio.run(run()) == {"decided": "approve"}

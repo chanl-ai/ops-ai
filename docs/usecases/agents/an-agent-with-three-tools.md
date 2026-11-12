@@ -276,7 +276,7 @@ await approver.tasks.approve(chat, { password: 'northfield-demo' });
 ```
 
 ```bash tab="CLI"
-opsai tasks --profile approver approve "$CHAT" --password northfield-demo
+echo northfield-demo | opsai tasks --profile approver approve "$CHAT" --password-stdin
 ```
 
 Expected: one call runs and the bank holds exactly one new hold of 25.
