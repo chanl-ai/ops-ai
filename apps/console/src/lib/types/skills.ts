@@ -126,6 +126,31 @@ export interface Skill {
   pendingReviewId?: string;
 }
 
+/** One input a skill or part asks for when picked from the chat's / menu. */
+export interface SkillInputField {
+  name: string;
+  type: 'string';
+  description: string;
+  required: boolean;
+}
+
+/** One part of a skill with parts, as the / menu offers it. */
+export interface SkillPartSummary {
+  slug: string;
+  name: string;
+  useWhen: string;
+  inputs: SkillInputField[];
+}
+
+/** A published skill the chat's / menu offers for one agent: its inputs or parts, and `locked` when the agent lacks
+ *  a tool or knowledge base it needs (named in `needs`). */
+export interface ChatMenuSkill extends Skill {
+  inputs?: SkillInputField[];
+  parts?: SkillPartSummary[];
+  locked?: boolean;
+  needs?: string[];
+}
+
 export interface SkillTestCase {
   id: string;
   name: string;

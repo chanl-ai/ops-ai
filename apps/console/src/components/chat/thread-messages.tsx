@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { Sparkles } from 'lucide-react';
 
 import { BudgetCard } from '@/components/chat/budget-card';
 import { SendFailedAlert } from '@/components/chat/send-failed';
@@ -19,6 +20,29 @@ export function phaseLabel(t: LiveTurn, kbNames: string[]) {
   if (t.phase === 'writing') return 'Writing…';
   if (t.phase === 'checking') return 'Checking the answer…';
   return 'Thinking…';
+}
+
+const HOW: Record<string, string> = { picked: 'picked by you', carried: 'carried from the reply before', loaded: 'loaded for this question', always: 'always on' };
+
+/** Which skills a reply used and how each came in; always-on skills are left to the reply's details. */
+export function UsedSkills({ skills }: { skills: NonNullable<ChatMessage['skills']> }) {
+  const shown = skills.filter((s) => s.how !== 'always' && s.matched !== 'Always on');
+  if (!shown.length) return null;
+  return (
+    <ul className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="used-skills">
+      {shown.map((s) => (
+        <li key={`${s.skillId}/${s.part ?? ''}`} className="flex min-w-0 items-center gap-1.5">
+          <Sparkles className="size-3 shrink-0" />
+          <span className="truncate">
+            Used skill <span className="font-medium text-foreground">{s.name}</span>
+            {s.part ? ` · ${s.part.replace(/-/g, ' ')}` : ''} v{s.version}
+            {s.how ? `, ${HOW[s.how]}` : ''}
+            {s.inputs && Object.keys(s.inputs).length ? ` · ${Object.entries(s.inputs).map(([k, v]) => `${k}: ${v}`).join(' · ')}` : ''}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /** Thread history with an in-flight turn spliced in: messages being replaced are hidden, the live ones appended. */
@@ -85,8 +109,9 @@ export function ThreadMessages({
           if (m.role === 'user')
             return <UserMessage key={m.id} message={m} disabled={streaming || readOnly} onEdit={readOnly ? undefined : (text) => onSend({ content: text, edit: m.id }, m.id)} />;
           return (
+            <React.Fragment key={m.id}>
+            {m.skills?.length ? <UsedSkills skills={m.skills} /> : null}
             <AssistantMessage
-              key={m.id}
               message={m}
               streaming={isLive && streaming && !!m.content}
               phaseLabel={isLive && streaming ? phaseLabel(live, kbNames) : undefined}
@@ -119,6 +144,7 @@ export function ThreadMessages({
                 )
               }
             />
+            </React.Fragment>
           );
         })}
         {live?.failed && <SendFailedAlert message={live.failed.message} onRetry={() => onSend(live.failed!.input, live.cutFrom)} onDismiss={onDismissFailed} />}

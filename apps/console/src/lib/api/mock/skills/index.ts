@@ -801,6 +801,8 @@ export function createSkillsMock(deps: SkillsDeps) {
           viewCounts: { all: src.length, published: src.filter(VIEW.published).length, always: src.filter(VIEW.always).length, drafts: src.filter(VIEW.drafts).length, in_review: src.filter(VIEW.in_review).length, deprecated: src.filter(VIEW.deprecated).length, unused: src.filter(VIEW.unused).length },
         };
       }),
+    // The mock has no agent settings or parts: every published skill, whole.
+    chatMenu: () => respond((m) => (m === 'empty' ? [] : visible().map((sk) => ({ ...row(sk), inputs: [], parts: [] })).filter(VIEW.published))),
     get: (sid) =>
       respond((m) => {
         if (m === 'empty') notFound('Skill');
