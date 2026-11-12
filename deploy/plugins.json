@@ -8,9 +8,9 @@
     },
     {
       "source": "https://github.com/chanl-ai/ops-ai-plugins",
-      "ref": "e825c9f77690a660e248ac8e08aef01cc9992f29",
+      "ref": "c647a0bb0c355dfb51fca4d5a1ad62d9ff9c1714",
       "path": "plugins/salesforce",
-      "sha256": "c934956aee474469ad35ecaa06043b56e75be33ef04c89fb77e6f0dcacc849ab"
+      "sha256": "1cfa01865fba3daae2c75ca2eaea1c83ff8af897d8be1223f43b30327bcdecad"
     },
     {
       "source": "https://github.com/chanl-ai/ops-ai-plugins",

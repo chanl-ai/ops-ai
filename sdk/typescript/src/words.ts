@@ -30,10 +30,87 @@ function accountOf(page: Obj): string {
   return String(page.connection.id);
 }
 
-const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb', id: string, args: Obj = {}): Promise<any> =>
+const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb' | 'platform', id: string, args: Obj = {}): Promise<any> =>
   (raw[service] as unknown as Record<string, (a: Obj) => Promise<any>>)[id]!(args);
 
 const at = (app: string, account: string) => ({ app_id: app, account_id: account });
+
+function picked(found: Obj, names?: string[]): Obj[] {
+  const ops = (found.operations ?? []) as Obj[];
+  if (!names) return ops;
+  const missing = names.filter((n) => !ops.some((o) => o.name === n));
+  // A typo would otherwise import less than the builder ticked.
+  if (missing.length) throw new TypeError(`the document has no operation named ${missing.join(', ')}`);
+  return ops.filter((o) => names.includes(o.name));
+}
+
+const sourceOf = (specUrl: string, connectionId?: string) => ({ kind: 'openapi', specUrl, ...(connectionId ? { connectionId } : {}) });
+
+const rowsOf = (found: any): Obj[] => (Array.isArray(found) ? found : (found?.data ?? []));
+
+/** The team's secrets (Settings > Secrets). A value goes in and is never read back: no answer carries it. */
+export class Secrets {
+  constructor(private readonly raw: Raw) {}
+
+  async list(): Promise<Obj[]> {
+    return rowsOf(await call(this.raw, 'tools', 'secrets_list_secrets'));
+  }
+
+  /** Stores a secret as the team's; `teams` also shares it with other teams of the caller. */
+  create(name: string, value: string, { teams }: { teams?: string[] } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'secrets_create_secret', { body: { name, value, ...(teams?.length ? { teams } : {}) } });
+  }
+
+  rotate(name: string, value: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'secrets_rotate_secret', { path: { name }, body: { value } });
+  }
+
+  rename(name: string, newName: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'secrets_rename_secret', { path: { name }, body: { name: newName } });
+  }
+
+  delete(name: string): Promise<unknown> {
+    return call(this.raw, 'tools', 'secrets_delete_secret', { path: { name } });
+  }
+}
+
+/** The hosts and address ranges tools may reach (Settings > Egress); only a Security admin changes them. */
+export class Egress {
+  constructor(private readonly raw: Raw) {}
+
+  list(): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_allow_list');
+  }
+
+  allowHost(host: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_add_host', { body: { value: host, note } });
+  }
+
+  allowRange(cidr: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_add_range', { body: { value: cidr, note } });
+  }
+
+  removeHost(host: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_remove_host', { body: { value: host } });
+  }
+
+  removeRange(cidr: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'egress_remove_range', { body: { value: cidr } });
+  }
+}
+
+/** The team's settings a Security admin changes (Settings > Policies), such as `toolWritesNeedApproval`. They belong to the team the client acts in. */
+export class Policies {
+  constructor(private readonly raw: Raw) {}
+
+  get(key: string): Promise<Obj> {
+    return call(this.raw, 'platform', 'policies_get_policy', { path: { key } });
+  }
+
+  set(key: string, value: unknown): Promise<Obj> {
+    return call(this.raw, 'platform', 'policies_set_policy', { path: { key }, body: { value } });
+  }
+}
 
 export class Apps {
   constructor(private readonly raw: Raw) {}
@@ -254,6 +331,50 @@ export class Tools {
     }
     if (!module) throw new TypeError(`no tool named ${tool} on ${app}`);
     // Left out, a Real run is a test run: the app's sandbox account when it has one.
+    const body: Obj = { mode: real ? 'real' : 'mock', input, ...(environment ? { environment } : {}) };
+    return call(this.raw, 'tools', 'tool_modules_run_tool', { path: { module_id: module, operation: tool }, body });
+  }
+
+  /** An empty tool module for the team's builders to import operations into. */
+  createModule(name: string, displayName: string, { type = 'openapi' }: { type?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_create_blank_module', { body: { name, displayName, type } });
+  }
+
+  /** Reads an OpenAPI document and lists the operations it would bring, each with the access its method gives it. Nothing is saved. */
+  discover(specUrl: string, { connectionId }: { connectionId?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_discover', { body: sourceOf(specUrl, connectionId) });
+  }
+
+  /** Imports the ticked operations (all when `operations` is left out) of an OpenAPI document into a module's draft. */
+  async importOpenapi(module: string, specUrl: string, operations?: string[], { connectionId }: { connectionId?: string } = {}): Promise<Obj> {
+    const source = sourceOf(specUrl, connectionId);
+    const found = await call(this.raw, 'tools', 'tool_modules_discover', { body: source });
+    return call(this.raw, 'tools', 'tool_modules_import_operations', { path: { module_id: module }, body: { source, operations: picked(found, operations) } });
+  }
+
+  /** Asks the Security team to review the module's draft. */
+  requestReview(module: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_request_review', { path: { module_id: module }, body: { note } });
+  }
+
+  /** The id of the security review a module detail (from `requestReview` or `get`) waits on. Security does not see the owner's module, so the owner passes this id on. */
+  reviewOf(module: Obj): string {
+    const waiting = ((module.versions ?? []) as Obj[]).find((v) => v.status === 'in_review' && v.reviewId);
+    if (!waiting) throw new TypeError('this tool module has no version waiting on a security review; request one first');
+    return String(waiting.reviewId);
+  }
+
+  /** The Security team's answer to a module's review; `approved` publishes the module. */
+  decideReview(review: string, decision = 'approved', { reason }: { reason?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'agents', 'reviews_decide_publish_request', { path: { request_id: review }, body: { decision, ...(reason ? { reason } : {}) } });
+  }
+
+  publishVersion(module: string, note = ''): Promise<Obj> {
+    return call(this.raw, 'tools', 'tool_modules_publish_version', { path: { module_id: module }, body: { note } });
+  }
+
+  /** `run` for a module that is not an app: the test panel's call on the module itself. */
+  runModule(module: string, tool: string, input: Obj = {}, { real = false, environment }: { real?: boolean; environment?: string } = {}): Promise<Obj> {
     const body: Obj = { mode: real ? 'real' : 'mock', input, ...(environment ? { environment } : {}) };
     return call(this.raw, 'tools', 'tool_modules_run_tool', { path: { module_id: module, operation: tool }, body });
   }

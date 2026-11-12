@@ -114,6 +114,18 @@ class Agents:
         pin = version if version is not None else agent.get("version")
         return self._raw.agents.agents_request_publish(id, {"note": note, "version": pin})
 
+    def tool_options(self, search: str | None = None) -> list[dict[str, Any]]:
+        """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
+        found = self._raw.agents.agents_tool_options(search=search, limit=100)
+        return list(found.get("data") or found.get("items") or []) if isinstance(found, dict) else list(found)
+
+    def grant_tools(self, id: str, tools: list[str]) -> Any:
+        """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
+        for the grant to take effect."""
+        held = list(self.get(id).get("toolIds") or [])
+        wanted = held + [t for t in tools if t not in held]
+        return self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
+
     def pause(self, id: str) -> Any:
         return self._raw.agents.agents_set_paused(id, {"paused": True})
 
@@ -250,6 +262,18 @@ class AsyncAgents:
         pin = version if version is not None else agent.get("version")
         return await self._raw.agents.agents_request_publish(id, {"note": note, "version": pin})
 
+    async def tool_options(self, search: str | None = None) -> list[dict[str, Any]]:
+        """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
+        found = await self._raw.agents.agents_tool_options(search=search, limit=100)
+        return list(found.get("data") or found.get("items") or []) if isinstance(found, dict) else list(found)
+
+    async def grant_tools(self, id: str, tools: list[str]) -> Any:
+        """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
+        for the grant to take effect."""
+        held = list((await self.get(id)).get("toolIds") or [])
+        wanted = held + [t for t in tools if t not in held]
+        return await self._raw.agents.agents_update_agent(id, {"toolIds": wanted})
+
     async def pause(self, id: str) -> Any:
         return await self._raw.agents.agents_set_paused(id, {"paused": True})
 
@@ -372,12 +396,13 @@ def _collect_chat(events: Any, thread_id: str) -> dict[str, Any]:
             and (kind in {"tool_call", "tool_start", "tool_end"} or call.get("name") or call.get("tool"))
         ):
             seen.add(name)
-            tool_calls.append(call)
+            tool_calls.append({**call, "name": name})
     if isinstance(events, dict) and not reply and not parts:
         reply = _reply_text(events)
     return {
         "threadId": thread_id,
         "reply": "".join(parts) or reply,
+        "text": "".join(parts) or reply,
         "events": items,
         "citations": citations,
         "toolCalls": tool_calls,

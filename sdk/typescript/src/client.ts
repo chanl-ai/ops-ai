@@ -26,7 +26,7 @@ import { Chat } from './chat.js';
 import { savedOptions } from './profile.js';
 import { Templates } from './templates.js';
 import { Workflows } from './workflows.js';
-import { Accounts, Apps, Credentials, Me, Resources, Tools, Usage } from './words.js';
+import { Accounts, Apps, Credentials, Egress, Me, Policies, Resources, Secrets, Tools, Usage } from './words.js';
 
 type PathOf<O> = O extends { parameters: { path: infer P } } ? P : never;
 type QueryOf<O> = O extends { parameters: { query?: infer Q } } ? Q : never;
@@ -198,6 +198,21 @@ export class Tasks extends Resource {
   decide(taskId: string, decision: string, fields: { reason?: string; [field: string]: unknown } = {}) {
     return this.raw.agents.reviews_decide({ path: { thread_id: taskId }, body: { decision, ...fields } as never });
   }
+
+  /**
+   * Approves a task, such as a write an agent's chat held (`decision` is the action the task offers; a task that
+   * declares none is approved with 'approved'). A write asks the approver to confirm it is them first;
+   * given the approver's `password`, the step-up is made and the approval retried.
+   */
+  async approve(taskId: string, { decision = 'approved', password, reason }: { decision?: string; password?: string; reason?: string } = {}) {
+    try {
+      return await this.decide(taskId, decision, { reason });
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'step_up_required' || password === undefined) throw error;
+    }
+    const minted = (await this.raw.platform.auth_step_up({ body: { password } as never })) as { token?: string };
+    return this.decide(taskId, decision, { reason, stepUpToken: String(minted.token ?? '') });
+  }
 }
 
 export class Files extends Resource {
@@ -266,6 +281,9 @@ export class OpsAI {
   readonly threads: Resource;
   readonly cases: Resource;
   readonly tools: Tools;
+  readonly secrets: Secrets;
+  readonly egress: Egress;
+  readonly policies: Policies;
   readonly knowledge: Knowledge;
   readonly files: Files;
   readonly runs: Runs;
@@ -307,6 +325,9 @@ export class OpsAI {
     this.cases = new Resource(t, NOUNS.cases);
     this.apps = new Apps(this.raw);
     this.tools = new Tools(this.raw, this.apps, new Resource(t, NOUNS.tools));
+    this.secrets = new Secrets(this.raw);
+    this.egress = new Egress(this.raw);
+    this.policies = new Policies(this.raw);
     this.credentials = new Credentials(this.raw, this.apps);
     this.accounts = new Accounts(this.raw, this.apps);
     this.resources = new Resources(this.raw);

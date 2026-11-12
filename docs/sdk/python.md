@@ -53,7 +53,7 @@ print(run["status"], run.get("outcome"))
 | `threads` | `list`, `get` (the thread's state), `create` |
 | `teams` | `list` |
 | `runs` | `list`, `get`, `start`, `wait`, `stream`, `cancel` |
-| `tasks` | `list`, `get`, `decide` |
+| `tasks` | `list`, `get`, `decide`, `approve(task, decision=, password=)` (a held chat write is the chat's thread id; it asks the approver to confirm first) |
 | `knowledge.search(body)`, `upload(name, content, mime=, purpose=)` | Search knowledge bases; upload a file |
 | `raw.<service>.<operation>()` | Every other public operation, by its name in the API reference |
 
@@ -68,6 +68,11 @@ custom app's connection id); an account is a connection id.
 | `credentials` | `set(app, client_id=, client_secret=)` (the team's own client), `test(app)` and `finish(app, state=, code=)` (Test with my account) |
 | `accounts` | `connect(account)`, `test(account)`, `make_default(account)`, `mine()`, `set_key(account, key)`, `remove(account)` |
 | `tools` | `list(app)`, `run(app, tool, input, real=)` (Mock reaches nothing; Real is the gateway's call); with no app, `list` and `get` are the tool modules' |
+| `tools` (modules) | `discover(spec_url)`, `import_openapi(module, spec_url, operations=)`, `request_review(module)`, `review_of(detail)` and `decide_review(review, decision)` (Security's answer; `approved` publishes), `create_module(name, display_name)`, `publish_version(module)`, `run_module(module, tool, input, real=)` |
+| `secrets` | `list()`, `create(name, value)`, `rotate(name, value)`, `rename(name, new_name)`, `delete(name)`; no answer carries a value |
+| `policies` | `get(key)`, `set(key, value)`: the team's policies a Security admin changes, such as `toolWritesNeedApproval` (use `with_team` to act in another team) |
+| `egress` | `list()`, `allow_host(host)`, `allow_range(cidr)`, `remove_host`, `remove_range`; Security admins only |
+| `agents` | `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds) |
 | `resources` | `list(app)`, `add(resource)` (a copy in the team) |
 | `usage` | `list(**filters)`: this team's tool calls |
 
@@ -102,6 +107,11 @@ verb for machine output.
 | `opsai kb push SOURCE --name N --title T --text TEXT` | Put one item into a push source |
 | `opsai kb add-file KB [PATH...] [--file-id ID]` | Upload files, or take ones already in Files, and sync them |
 | `opsai templates list [--kind] [--source]`, `install REF [--kind] [--fields]` | See the offered templates; add one as the team's copy |
+| `opsai secrets list\|create NAME\|rotate NAME\|rename NAME NEW\|delete NAME` | The team's secrets; the value comes from `--value` or standard input |
+| `opsai policies get\|set KEY [VALUE]` | The team's policies |
+| `opsai egress list\|allow-host H\|allow-range R\|remove-host H\|remove-range R` | Hosts and ranges tools may reach |
+| `opsai tools discover SPEC`, `import MODULE SPEC [--operation N]`, `request-review MODULE`, `create NAME --display-name N`, `decide-review REVIEW [--decision]`, `publish MODULE`, `run --module MODULE TOOL` | Take an OpenAPI document to a published module |
+| `opsai agents tool-options [--search]`, `grant-tools ID TOOL...`; `opsai tasks approve TASK [--password-stdin]` | Grant tools to an agent; approve a held write (asks for your password, without echo, when the write asks you to confirm it is you) |
 | `opsai connectors list`, `connect APP [--link] [--account]`, `finish --state S --code C`, `accounts`, `disconnect APP` | Your own sign-ins on apps |
 
 ```bash

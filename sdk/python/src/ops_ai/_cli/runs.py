@@ -4,10 +4,11 @@ cancel, retry), and Human Tasks as the Human Tasks queue shows them (list, open 
 from __future__ import annotations
 
 import argparse
+import getpass
 import sys
 from typing import Any
 
-from ops_ai import OpsAI
+from ops_ai import OpsAI, OpsError
 from ops_ai._transport import page_items
 
 from .common import client, emit, parser, payload, refuse, short, table, verb_options
@@ -94,6 +95,14 @@ def tasks_main(argv: list[str]) -> int:
     decide.add_argument("decision", help="the action, e.g. approve or reject")
     decide.add_argument("--reason")
     decide.add_argument("--fields", help="the task's form fields: k=v,k=v, JSON, a file, or -")
+    approve = sub.add_parser("approve", parents=common, help="approve a task, such as a write a chat held")
+    approve.add_argument("task")
+    approve.add_argument("--reason")
+    approve.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="read the approver's password once from standard input, instead of asking when the write asks for it",
+    )
     ns = ap.parse_args(argv)
     try:
         return _tasks(ns, client(ns))
@@ -111,4 +120,17 @@ def _tasks(ns: argparse.Namespace, ops: OpsAI) -> int:
         fields = payload(ns.fields) if ns.fields else {}
         inputs = {"inputs": fields} if fields else {}
         return emit(ns, ops.tasks.decide(ns.task, ns.decision, reason=ns.reason, **inputs))
+    if ns.verb == "approve":
+        # A password on the command line or in the environment would sit in shell history and process lists, and a
+        # standing one would confirm every step-up without the approver being asked: it is read from standard input
+        # on request, and otherwise asked for, without echo, each time the write asks to confirm it is them.
+        if ns.password_stdin:
+            return emit(ns, ops.tasks.approve(ns.task, password=sys.stdin.readline().rstrip("\n"), reason=ns.reason))
+        try:
+            return emit(ns, ops.tasks.approve(ns.task, reason=ns.reason))
+        except OpsError as exc:
+            if exc.code != "step_up_required":
+                raise
+        password = getpass.getpass("Confirm it is you. Password: ")
+        return emit(ns, ops.tasks.approve(ns.task, password=password, reason=ns.reason))
     return 2

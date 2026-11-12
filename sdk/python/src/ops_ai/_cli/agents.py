@@ -37,6 +37,12 @@ def main(argv: list[str]) -> int:
     test.add_argument("--message", required=True)
     trace = sub.add_parser("trace", help="recent runs")
     trace.add_argument("id")
+    sub.add_parser("list", help="the team's agents")
+    options = sub.add_parser("tool-options", help="the operations an agent may be granted")
+    options.add_argument("--search")
+    grant = sub.add_parser("grant-tools", help="add tools to an agent's draft, keeping the ones it holds")
+    grant.add_argument("id")
+    grant.add_argument("tools", nargs="+", help="tool ids from tool-options")
     ns = ap.parse_args(argv)
     try:
         return _dispatch(ns)
@@ -47,6 +53,8 @@ def main(argv: list[str]) -> int:
 def _dispatch(ns: argparse.Namespace) -> int:
     ops = client(ns)
     agents = ops.agents
+    if ns.verb == "list":
+        return emit(ns, list(agents.list()))
     if ns.verb == "validate":
         return emit(ns, agents.validate(agent_file(ns.definition)))
     if ns.verb == "apply":
@@ -65,4 +73,8 @@ def _dispatch(ns: argparse.Namespace) -> int:
         return emit(ns, agents.test(ns.id, ns.message))
     if ns.verb == "trace":
         return emit(ns, agents.trace(ns.id))
+    if ns.verb == "tool-options":
+        return emit(ns, agents.tool_options(ns.search))
+    if ns.verb == "grant-tools":
+        return emit(ns, agents.grant_tools(ns.id, ns.tools))
     return 2
