@@ -3,8 +3,8 @@
 // under Coming next (roadmap.json), and the gate that keeps them current.
 //
 //   --entries                 every entry and roadmap item is written for a person using the console (make verify)
-//   --commit <msgfile>        the commit-msg hook: a feat or fix that changes apps/ or services/ names its entry in a
-//                             `Changelog: <topic>` trailer, and changelog/<topic>.json is staged
+//   --commit <msgfile>        the commit-msg hook: a feat that changes apps/ or services/ names its entry in a
+//                             `Changelog: <topic>` trailer, and changelog/<topic>.json is staged; a fix may name one
 //   --shas <sha>...           the same rule over these commits, read against the changelog of the last one
 //   --range <a>..<b>          the same over a range, merges skipped, against the changelog at <b> (repo.sh snapshot)
 //   --repo <dir>              the repository to read (default: this one)
@@ -126,7 +126,9 @@ function checkEntries() {
 // ---------------------------------------------------------------------------------------------------------------------
 // The gate.
 
-const NEEDS_ENTRY = /^(feat|fix)(\([^)]*\))?!?:/;
+// What's new lists the changes a person notices (owner, 12 November: record only the major ones), so only a feat owes
+// an entry. A fix may still name one, and a named entry is checked the same way.
+const NEEDS_ENTRY = /^feat(\([^)]*\))?!?:/;
 const USER_PATHS = /^(apps|services)\//;
 // A commit names the entries it adds to or relies on: `Changelog: <topic>` for changelog/<topic>.json.
 const CHANGELOG_TRAILER = /^Changelog:\s*([a-z0-9-]+)\s*$/gm;
@@ -147,11 +149,12 @@ function checkCommit(msgFile) {
   const message = readFileSync(msgFile, 'utf8');
   const gitDir = git(['rev-parse', '--git-dir']).trim();
   if (existsSync(join(repo, gitDir, 'MERGE_HEAD'))) return [];
-  if (!NEEDS_ENTRY.test(subjectOf(message))) return [];
+  const subject = subjectOf(message);
+  if (!NEEDS_ENTRY.test(subject) && !(/^fix(\([^)]*\))?!?:/.test(subject) && trailerIds(message).length)) return [];
   const staged = git(['diff', '--cached', '--name-only']).split('\n').filter(Boolean);
   if (!staged.some((p) => USER_PATHS.test(p))) return [];
   const ids = trailerIds(message);
-  if (!ids.length) return ['a feat or fix that changes apps/ or services/ names its entry: add a Changelog: <topic> trailer'];
+  if (!ids.length) return ['a feat that changes apps/ or services/ names its entry: add a Changelog: <topic> trailer'];
   const has = topics(':');
   const bad = [];
   for (const id of ids) if (!has.has(id)) bad.push(`changelog/${id}.json is not staged: ${howToAdd(id)}`);
@@ -197,7 +200,7 @@ function checkShas(shas, at) {
     // since still counts, so its entry is still owed.
     if (tryGit(['diff', '--quiet', `${sha}^`, at, '--', ...paths.filter((p) => USER_PATHS.test(p))]) !== null) continue;
     const ids = trailerIds(message);
-    if (!ids.length && !covered.some((c) => String(c).length >= 7 && sha.startsWith(String(c)))) bad.push(`${sha.slice(0, 8)} ${subjectOf(message)}: a feat or fix that changes apps/ or services/ names no Changelog: entry`);
+    if (!ids.length && !covered.some((c) => String(c).length >= 7 && sha.startsWith(String(c)))) bad.push(`${sha.slice(0, 8)} ${subjectOf(message)}: a feat that changes apps/ or services/ names no Changelog: entry`);
     for (const id of ids) if (!has.has(id)) bad.push(`${sha.slice(0, 8)}: changelog/${id}.json does not exist; ${howToAdd(id)}`);
   }
   for (const { id, entry } of readChangelog(at)) for (const p of entry ? entryProblems(entry) : ['not valid JSON']) bad.push(`changelog/${id}: ${p}`);
@@ -261,6 +264,7 @@ function selfTest() {
     sh('git checkout -q -b plain');
     expect('refused: feat with no trailer at all', !commit('feat(x): a thing'));
     expect('passes: docs with no entry', commit('docs(x): a note'));
+    expect('passes: fix with no entry', commit('fix(x): a small fix'));
     expect('refused: a trailer naming an entry that is not staged', !commit('fix(x): more', 'Changelog: not-there'));
     mkdirSync(join(dir, 'changelog'));
     writeFileSync(join(dir, 'changelog/a-thing.json'), JSON.stringify(clean));
