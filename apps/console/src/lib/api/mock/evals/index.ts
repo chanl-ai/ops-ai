@@ -311,7 +311,7 @@ export function createEvalsMock(deps: EvalsDeps) {
     importCases: (aid, rows, fileId) =>
       respond(() => {
         const a = agentOr404(aid);
-        if (fileId) deps.files.link(fileId, { type: 'eval_set', id: aid, name: `${a.name} eval cases`, href: `/build/agents/${aid}?tab=evals` }, ['test_import']);
+        if (fileId) deps.files.link(fileId, { type: 'eval_set', id: aid, name: `${a.name} eval cases`, href: `/agents/${aid}?tab=evals` }, ['test_import']);
         const held = contentOf(a).toolNames;
         return bulk(rows.map((_, i) => String(i)), (i) => {
           const err = validateInput(rows[Number(i)]);

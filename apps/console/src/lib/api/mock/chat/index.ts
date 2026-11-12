@@ -497,7 +497,7 @@ export function createChatMock(deps: Deps): ChatApi {
               { label: 'Started by', value: (s.run.trigger ?? '').replace(/^Started by /, '') },
               ...(s.review ? [{ label: 'Waiting on', value: `${s.review.policy.reviewers} · SLA ${s.review.policy.sla}` }] : []),
             ],
-            href: `/build/runs?run=${encodeURIComponent(s.run.id)}`,
+            href: `/workflows/runs?run=${encodeURIComponent(s.run.id)}`,
           };
           msg.widgets = [...(msg.widgets ?? []), card];
           yield { type: 'widget', widget: structuredClone(card) };

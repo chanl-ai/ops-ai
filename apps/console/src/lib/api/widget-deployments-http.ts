@@ -10,7 +10,7 @@ export function createWidgetDeploymentsHttp(get: Get, send: Send, baseUrl: strin
     create: (input) => send('POST', '/widget-deployments', input),
     update: (id, patch) => {
       const { retired, ...change } = patch;
-      return retired ? send('POST', `/build/channels/${encodeURIComponent(id)}/retire`) : send('PATCH', `/build/channels/${encodeURIComponent(id)}`, change);
+      return retired ? send('POST', `/channels/${encodeURIComponent(id)}/retire`) : send('PATCH', `/channels/${encodeURIComponent(id)}`, change);
     },
     keys: (id) => get(`/widget-deployments/${id}/keys`),
     createKey: (id, name, expiresInDays) => send('POST', `/widget-deployments/${id}/keys`, { name, ...(expiresInDays ? { expiresInDays } : {}) }),

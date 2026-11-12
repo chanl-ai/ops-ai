@@ -97,62 +97,62 @@ export const api: OpsApi = createApi();
  * HTTP. A new page belongs in this table with the URL that serves it, or it reads as real.
  */
 const AREAS: { prefix: string; served: boolean }[] = [
-  { prefix: '/build/agents', served: Boolean(registryUrl) },
-  { prefix: '/build/workflows', served: Boolean(registryUrl) },
+  { prefix: '/agents', served: Boolean(registryUrl) },
+  { prefix: '/workflows', served: Boolean(registryUrl) },
   // A members-only hosted form reads agents-service's /v1/forms/{slug}/members.
   { prefix: '/forms', served: Boolean(registryUrl) },
   // The run list (moved from Cases) reads the runs service.
-  { prefix: '/build/runs', served: Boolean(casesUrl) },
+  { prefix: '/workflows/runs', served: Boolean(casesUrl) },
   // Cases are agents-service's /v1/cases.
-  { prefix: '/work/cases', served: Boolean(registryUrl) },
-  { prefix: '/build/channels', served: Boolean(registryUrl) },
-  { prefix: '/build/skills', served: Boolean(registryUrl) },
-  { prefix: '/build/guardrails', served: Boolean(registryUrl) },
-  { prefix: '/build/widgets', served: Boolean(registryUrl) },
+  { prefix: '/cases', served: Boolean(registryUrl) },
+  { prefix: '/channels', served: Boolean(registryUrl) },
+  { prefix: '/skills', served: Boolean(registryUrl) },
+  { prefix: '/guardrails', served: Boolean(registryUrl) },
+  { prefix: '/widgets', served: Boolean(registryUrl) },
   // Activity is agents-service's one list (/v1/activity).
-  { prefix: '/govern/activity', served: Boolean(registryUrl) },
+  { prefix: '/activity', served: Boolean(registryUrl) },
   // Background processes are agents-service's /v1/background.
-  { prefix: '/govern/activity/background', served: Boolean(registryUrl) },
-  { prefix: '/data/tools', served: Boolean(toolsUrl) },
+  { prefix: '/logs/background', served: Boolean(registryUrl) },
+  { prefix: '/tools', served: Boolean(toolsUrl) },
   { prefix: '/settings/egress', served: Boolean(toolsUrl) },
   { prefix: '/settings/security/egress', served: Boolean(toolsUrl) },
   { prefix: '/settings/secrets', served: Boolean(toolsUrl) },
-  { prefix: '/data/secrets', served: Boolean(toolsUrl) },
-  { prefix: '/data/knowledge', served: Boolean(knowledgeUrl) },
+  { prefix: '/integrations/credentials', served: Boolean(toolsUrl) },
+  { prefix: '/knowledge', served: Boolean(knowledgeUrl) },
   // A source's page sits under Connections but its data and settings are kb-service's.
-  { prefix: '/data/sources', served: Boolean(knowledgeUrl) },
+  { prefix: '/integrations/sources', served: Boolean(knowledgeUrl) },
   { prefix: '/chat', served: Boolean(chatUrl) },
-  { prefix: '/work/tasks', served: Boolean(casesUrl) },
+  { prefix: '/reviews', served: Boolean(casesUrl) },
   // Gate policies are not part of the cases service's routes: they stay on the mock while the queue is real.
   { prefix: '/settings/policies/gates', served: false },
   { prefix: '/settings/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/model-providers', served: Boolean(modelsUrl) },
-  { prefix: '/data/files', served: Boolean(filesUrl) },
-  { prefix: '/data/document-types', served: Boolean(documentsUrl) },
-  { prefix: '/govern/access', served: onPlatform },
+  { prefix: '/files', served: Boolean(filesUrl) },
+  { prefix: '/document-types', served: Boolean(documentsUrl) },
+  { prefix: '/access', served: onPlatform },
   // Tool access lists tools-service's grants.
-  { prefix: '/govern/access/tool-access', served: Boolean(toolsUrl) },
-  { prefix: '/govern/activity/audit', served: onPlatform },
+  { prefix: '/access/tool-access', served: Boolean(toolsUrl) },
+  { prefix: '/logs/audit', served: onPlatform },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
   // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's.
-  { prefix: '/settings/account/connectors', served: Boolean(toolsUrl) },
+  { prefix: '/integrations/my-accounts', served: Boolean(toolsUrl) },
   { prefix: '/connections', served: Boolean(toolsUrl) },
   { prefix: '/settings/members', served: onPlatform },
   { prefix: '/settings/policies', served: onPlatform },
-  { prefix: '/govern/policies', served: onPlatform },
+  { prefix: '/policies', served: onPlatform },
   { prefix: '/settings/security/sign-in', served: onPlatform },
   // The home page's counts are agents-service's /v1/overview; matched exactly, so it marks no other page.
   { prefix: '/', served: Boolean(registryUrl) },
   // No service owns these yet.
   { prefix: '/deployments', served: false },
-  { prefix: '/govern/evals', served: false },
-  { prefix: '/govern/models', served: false },
-  { prefix: '/data/connectors', served: false },
+  { prefix: '/assurance', served: false },
+  { prefix: '/model-risk', served: false },
+  { prefix: '/integrations', served: false },
   { prefix: '/sources', served: false },
   { prefix: '/connect', served: false },
-  { prefix: '/data/wiki', served: false },
+  { prefix: '/wiki', served: false },
   { prefix: '/prompt-blocks', served: false },
   { prefix: '/account', served: false },
   { prefix: '/settings', served: false },
@@ -182,7 +182,7 @@ export function isPreviewPath(pathname: string): boolean {
   if (baseUrl || !onRealService) return false;
   // The Connections catalog and each app's page read tools-service; a connection's older pages under it
   // stay sample data until they move.
-  if (pathname === '/data/connectors' || pathname.startsWith('/data/connectors/')) return false;
+  if (pathname === '/integrations' || pathname.startsWith('/integrations/apps/')) return false;
   const under = (prefix: string) => (prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`));
   const area = AREAS.filter((a) => under(a.prefix)).sort((x, y) => y.prefix.length - x.prefix.length)[0];
   return !!area && !area.served;

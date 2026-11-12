@@ -5,16 +5,16 @@ type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 
 /** `get` and `send` come from a client whose base URL ends in /v1 on agents-service. */
 export function createChannelsHttp(get: Get, send: Send): ChannelsApi {
-  const base = '/build/channels/mailboxes';
+  const base = '/channels/mailboxes';
   return {
     list: ({ page, pageSize, type, health, search }) => {
       const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       for (const t of type ?? []) q.append('type', t);
       for (const h of health ?? []) q.append('health', h);
       if (search) q.set('search', search);
-      return get(`/build/channels?${q}`);
+      return get(`/channels?${q}`);
     },
-    change: (id, patch) => send('PATCH', `/build/channels/${encodeURIComponent(id)}`, patch),
+    change: (id, patch) => send('PATCH', `/channels/${encodeURIComponent(id)}`, patch),
     live: (kind, id) => get(`/${kind === 'agent' ? 'agents' : 'workflows'}/${encodeURIComponent(id)}/live`),
     mailboxes: (search) => get(`${base}${search ? `?${new URLSearchParams({ search })}` : ''}`),
     mailbox: (id) => get(`${base}/${encodeURIComponent(id)}`),

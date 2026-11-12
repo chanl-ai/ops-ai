@@ -51,7 +51,7 @@ export function createNotificationsMock(deps: Deps): NotificationsApi {
   const href = (n: OpsNotification) => {
     if (n.kind !== 'publish_request') return n.href;
     const r = deps.reviews().find((x) => x.kind === 'publish_request' && x.workflowId === 'wf_dispute');
-    return r ? `/work/tasks?review=${r.id}` : n.href;
+    return r ? `/reviews?review=${r.id}` : n.href;
   };
 
   function push() {

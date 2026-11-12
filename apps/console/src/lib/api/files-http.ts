@@ -24,9 +24,9 @@ export function putToStorage(ticket: { uploadUrl: string; method: 'PUT'; headers
   });
 }
 
-/** `/data/document-types` on documents-service; `get` and `send` carry the transport's identity and envelope. */
+/** `/document-types` on documents-service; `get` and `send` carry the transport's identity and envelope. */
 export function createDocumentTypesHttp(get: Get, send: Send): FilesApi['documentTypes'] {
-  const base = '/data/document-types';
+  const base = '/document-types';
   const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
   return {
     list: () => get(base),
@@ -65,7 +65,7 @@ export function createLayoutsRoutes(get: Get, send: Send): FilesApi['layouts'] {
 
 /** REST routes for files; `get`, `send` and `qs` come from the main HTTP client so auth and envelopes match. */
 export function createFilesHttp(get: Get, send: Send, qs: (p: ListParams & { view?: string }) => string): FilesApi {
-  const base = '/data/files';
+  const base = '/files';
   return {
     createUpload: (i) => send('POST', `${base}/uploads`, i),
     transfer: (ticket, body, onProgress) => putToStorage(ticket, body, onProgress),
