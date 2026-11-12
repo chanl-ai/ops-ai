@@ -221,6 +221,12 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/embedding-the-chat.md` | How a bank embeds the chat: widget deployment, the bank's session endpoint, the script tag, events, errors, security properties and a local test (built and planned parts marked) |
 | `console/mailbox-demo.md` | Runbook: `make up`, `make sample-team` then `make demo-walk`, and the console pages to show the emailed levy notice on |
 | `console/demo-script.md` | The demo, scenario by scenario: where to go, what to type and what the viewer sees, each proven by `make demo-walk` |
+| `usecases/use-case-areas.md` | Use cases tab landing (draft): how to read a use case page, how to run one, the areas |
+| `usecases/knowledge/written-and-pushed-knowledge.md` | uc-676 as a page (draft): written pages and pushed items become cited knowledge |
+| `usecases/tools-and-apps/an-app-key-never-comes-back.md` | uc-013 as a page (draft): an app's key reaches the system it calls and never comes back |
+| `usecases/agents/draft-publish-and-chat-with-an-agent.md` | uc-018 as a page (draft): draft, test, publish and chat with an agent |
+| `usecases/workflows/validate-apply-and-test-run-a-workflow.md` | uc-623 as a page (draft): check, save and test-run a workflow from a file |
+| `usecases/people-and-access/invite-change-roles-and-remove.md` | uc-023 as a page (draft): invite people, change their roles, remove them |
 | `usecases/README.md` | Use case registry: how to run, rules (scripted model only, PASS needs evidence), layout, exit codes |
 | `usecases/index.md` | Generated index of every use case: id, area, short title, layers, doc (`make usecase-index`) |
 | `usecases/agents-service/chat-turn-with-citation.md` | uc-001: chat turn with citation |
