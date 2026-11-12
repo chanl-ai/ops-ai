@@ -162,6 +162,7 @@ class Item(TypedDict, closed=True):
     family: str
     fileId: NotRequired[str | None]
     folder: NotRequired[str | None]
+    freshness: str
     id: str
     metadata: dict[str, str]
     mimeType: str
@@ -198,6 +199,7 @@ class ItemWithDetail(TypedDict, closed=True):
     family: str
     fileId: NotRequired[str | None]
     folder: NotRequired[str | None]
+    freshness: str
     id: str
     metadata: dict[str, str]
     mimeType: str
@@ -471,6 +473,8 @@ class SourceIn(TypedDict):
 
 
 class SourceKind(TypedDict, closed=True):
+    canCreate: NotRequired[bool]
+    cannotCreateBecause: NotRequired[str | None]
     connected: NotRequired[bool]
     defaults: dict[str, Any]
     group: Literal["built_in", "apps"]

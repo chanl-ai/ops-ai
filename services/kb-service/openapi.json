@@ -584,6 +584,7 @@
           "version",
           "effectiveDate",
           "reviewBy",
+          "freshness",
           "sensitivity",
           "collection",
           "verified",
@@ -591,8 +592,7 @@
           "digest",
           "family",
           "versionStatus",
-          "sourceName",
-          "freshness"
+          "sourceName"
         ],
         "title": "DocumentRow",
         "type": "object"
@@ -1567,6 +1567,10 @@
             ],
             "title": "Folder"
           },
+          "freshness": {
+            "title": "Freshness",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1693,6 +1697,7 @@
           "version",
           "effectiveDate",
           "reviewBy",
+          "freshness",
           "sensitivity",
           "collection",
           "verified",
@@ -1797,6 +1802,10 @@
               }
             ],
             "title": "Folder"
+          },
+          "freshness": {
+            "title": "Freshness",
+            "type": "string"
           },
           "id": {
             "title": "Id",
@@ -1956,6 +1965,7 @@
           "version",
           "effectiveDate",
           "reviewBy",
+          "freshness",
           "sensitivity",
           "collection",
           "verified",
@@ -4884,6 +4894,22 @@
       "SourceKind": {
         "additionalProperties": false,
         "properties": {
+          "canCreate": {
+            "default": true,
+            "title": "Cancreate",
+            "type": "boolean"
+          },
+          "cannotCreateBecause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cannotcreatebecause"
+          },
           "connected": {
             "default": false,
             "title": "Connected",

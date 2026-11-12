@@ -203,6 +203,8 @@ export interface Item {
   effectiveDate: string;
   supersedes?: string;
   reviewBy: string;
+  /** From the source's last good sync against its schedule; absent on older payloads. */
+  freshness?: 'fresh' | 'stale' | 'no_schedule';
   sensitivity: Sensitivity;
   collection: string;
   verified: boolean;
@@ -227,7 +229,7 @@ export interface Item {
 /** A document as the knowledge base's Documents tab lists it. */
 export interface DocumentRow extends Item {
   sourceName: string;
-  freshness: 'fresh' | 'stale';
+  freshness: 'fresh' | 'stale' | 'no_schedule';
 }
 
 /** Heavy per-item content, fetched only when a document is opened. */
@@ -658,6 +660,9 @@ export interface SourceKindOption {
   site?: boolean;
   needsConnection?: boolean;
   connected?: boolean;
+  /** A source of this kind can be made for this team, by the check create applies; `cannotCreateBecause` says why not. */
+  canCreate?: boolean;
+  cannotCreateBecause?: string | null;
   /** `POST /v1/sources/preview` can say what a source of this kind would take in. */
   previews?: boolean;
   pickers?: boolean;

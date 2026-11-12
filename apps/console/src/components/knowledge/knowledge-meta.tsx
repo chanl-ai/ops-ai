@@ -123,7 +123,11 @@ export function SensitivityBadge({ level }: { level: Sensitivity }) {
   return <StatusBadge tone={tone} icon={icon} label={label} />;
 }
 
-export function FreshnessBadge({ reviewBy }: { reviewBy: string }) {
+export function FreshnessBadge({ reviewBy, freshness }: { reviewBy: string; freshness?: 'fresh' | 'stale' | 'no_schedule' }) {
+  // The service decides: stale when the source missed its schedule, and no schedule means nothing to be fresh against.
+  if (freshness === 'no_schedule') return <StatusBadge tone="neutral" icon={Clock} label="No schedule" />;
+  if (freshness === 'stale') return <StatusBadge tone="warn" icon={AlertTriangle} label="Stale" />;
+  if (freshness === 'fresh') return <StatusBadge tone="good" icon={CheckCircle2} label="Fresh" />;
   const days = Math.round((new Date(reviewBy).getTime() - Date.now()) / 86400_000);
   if (days < 0) return <StatusBadge tone="warn" icon={AlertTriangle} label={`Stale · ${-days} d`} />;
   if (days < 14) return <StatusBadge tone="warn" icon={Clock} label={`Review in ${days} d`} />;

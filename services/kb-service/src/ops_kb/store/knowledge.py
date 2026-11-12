@@ -1051,11 +1051,22 @@ class KnowledgeStore:
             return int((await c.execute(q)).rowcount or 0)
 
     async def runs(
-        self, tenant: str, *, source_id: str | None = None, run_id: str | None = None
+        self,
+        tenant: str,
+        *,
+        source_id: str | None = None,
+        source_ids: list[str] | None = None,
+        run_id: str | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
+        """Runs newest first: of one source, of any of `source_ids`, or one run; `limit` keeps the newest."""
         q = sa.select(kb_runs).where(kb_runs.c.tenant_id == tenant, team_visible(kb_runs))
         if source_id is not None:
             q = q.where(kb_runs.c.source_id == source_id)
+        if source_ids is not None:
+            q = q.where(kb_runs.c.source_id.in_(source_ids))
+        if limit is not None:
+            q = q.limit(limit)
         if run_id is not None:
             q = q.where(kb_runs.c.id == run_id)
         async with self._tx() as c:

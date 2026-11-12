@@ -34,7 +34,7 @@ from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Serv
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
-from ops_store.schedule import next_run
+from ops_store.schedule import last_slot, next_run
 
 from .agents import AgentDirectory, Usage
 from .ai import AiClients, ai_run, spent_on
@@ -60,7 +60,7 @@ from .source_settings import (
 )
 from .store import DECIDABLE, KnowledgeStore
 from .store.vectors import PgVectorStore
-from .tool_sources import ToolReader, declared_source, source_config, sync_tool_source
+from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
 # A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and the thresholds decide every search
 # of it (retrieval.py); rerank, rewrite and rewriteInstructions turn on the steps around it (query_steps.py), on the
@@ -206,11 +206,17 @@ def _used_by(using: dict[str, Usage] | None, kb_id: str) -> dict[str, Any]:
     return {"agentNames": u.names, "agentsElsewhere": u.elsewhere, "agentsKnown": True}
 
 
+def item_total(counts: dict[str, int]) -> int:
+    """Items in a source from its `item_counts`: the documents by status, which also carries `chunks` (their pieces,
+    not items), so it is left out of the sum."""
+    return sum(n for status, n in counts.items() if status != "chunks")
+
+
 def _item_counts(s: dict[str, Any]) -> dict[str, int]:
     """What the source's documents are, from their items; an uploaded file not yet synced has no item and is pending.
     A source row built in memory (just created) has no documents yet."""
     counts: dict[str, int] = s.get("item_counts") or {}
-    synced = sum(counts.values())
+    synced = item_total(counts)
     return {
         "itemsIndexed": counts.get("indexed", 0),
         "itemsFailed": counts.get("failed", 0),
@@ -219,6 +225,20 @@ def _item_counts(s: dict[str, Any]) -> dict[str, int]:
 
 
 logger = get_logger(__name__)
+
+# How far behind its schedule's latest slot a source may be and still be fresh: the beat that syncs it runs each minute.
+FRESH_GRACE = timedelta(hours=1)
+
+# The one precedence rule the index applies: a document a sync replaces keeps only its newest version in search.
+PRECEDENCE = [
+    {
+        "id": "newer_version",
+        "label": "A newer version of a document replaces the older one in search",
+        "kind": "newer",
+        "winner": "Newer version",
+        "loser": "Older version",
+    }
+]
 
 
 class Lease:
@@ -311,6 +331,17 @@ class KnowledgeService:
             return WEB_SCHEDULE
         return cast(dict[str, Any], cfg.get("schedule") or {"kind": "manual"})
 
+    def freshness_of(self, s: dict[str, Any], now: datetime) -> str:
+        """`fresh` when the source's last good sync is no more than one hour behind its schedule's latest slot (the
+        beat runs every minute), `stale` when it is older, `no_schedule` when the source only syncs when asked: with
+        no schedule there is nothing to be fresh against."""
+        schedule = self.schedule_of(s)
+        slot = last_slot(schedule, now)
+        if slot is None:
+            return "no_schedule"
+        good: datetime | None = s.get("last_good_sync_at") or s.get("last_sync_at")
+        return "fresh" if good is not None and good >= slot - FRESH_GRACE else "stale"
+
     def key_of(self, s: dict[str, Any]) -> str:
         """The digest an item built now under the source's settings records (`indexed_with`)."""
         return index_key(self.settings_of(s), repeats_of(s))
@@ -382,9 +413,35 @@ class KnowledgeService:
     async def _counts(self, tenant: str) -> dict[str, dict[str, Any]]:
         """Each source's documents by status and its indexed chunks, from its items, and when it last synced."""
         rows = await self.store.sources(tenant)
-        return {str(x["id"]): {**x["item_counts"], "synced": x.get("last_sync_at")} for x in rows}
+        now = datetime.now(UTC)
+        return {
+            str(x["id"]): {**x["item_counts"], "synced": x.get("last_sync_at"), "freshness": self.freshness_of(x, now)}
+            for x in rows
+        }
 
-    def _base(self, b: dict[str, Any], source_ids: list[str], counts: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    async def _jobs(self, tenant: str, source_ids: list[str]) -> list[dict[str, Any]]:
+        """A knowledge base's recent index jobs: the newest runs of the sources it reads, as the Overview lists them."""
+        runs = await self.store.runs(tenant, source_ids=source_ids, limit=10)
+        return [
+            {
+                "id": r["id"],
+                "startedAt": _iso(r["started_at"]),
+                "durationSec": r["duration_sec"],
+                "processed": int(r["counts"].get("upserted", 0)),
+                "failed": int(r["counts"].get("failed", 0)),
+                "status": r["status"],
+                "trigger": r["trigger"],
+            }
+            for r in runs
+        ]
+
+    def _base(
+        self,
+        b: dict[str, Any],
+        source_ids: list[str],
+        counts: dict[str, dict[str, Any]],
+        jobs: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         mine = [counts.get(sid, {}) for sid in source_ids]
         # When the base was last read: its newest source sync, the same time each source row shows. Content changing
         # (lastRefreshedAt) is a separate fact, and a sync that changes nothing does not move it.
@@ -411,7 +468,7 @@ class KnowledgeService:
                 for s in source_ids
             ],
             "collections": b["collections"],
-            "precedence": [],
+            "precedence": PRECEDENCE,
             "metadataProfile": {"required": []},
             "retrieval": b["retrieval"],
             "access": {
@@ -428,13 +485,12 @@ class KnowledgeService:
                 "documentPermissions": "workspace",
             },
             "automation": "suggest",
-            # Queries are not logged yet, so their counts are 0 and the console does not show them; staleness is not
-            # tracked (every document is fresh).
+            # Queries are not logged yet, so their counts are 0 and the console does not show them.
             "stats": {
                 "documents": documents,
                 "chunks": sum(c.get("chunks", 0) for c in mine),
                 "failures": failures,
-                "stale": 0,
+                "stale": sum(c.get("indexed", 0) for c in mine if c.get("freshness") == "stale"),
                 "queries7d": 0,
                 "queriesChange7d": 0,
                 "noAnswerRate": 0,
@@ -444,7 +500,7 @@ class KnowledgeService:
             "healthReasons": reasons,
             **({"lastRefreshedAt": _iso(b["last_refreshed_at"])} if b["last_refreshed_at"] else {}),
             **({"lastSyncAt": _iso(synced)} if synced else {}),
-            "jobs": [],
+            "jobs": jobs or [],
             "createdAt": _iso(b["created_at"]),
         }
 
@@ -502,7 +558,12 @@ class KnowledgeService:
         running = await self.store.running_sources(who.tenant_id)
         using = await self.agents.usage(who.tenant_id, who.team_id)
         return {
-            **self._base(b, by_kb.get(kb_id, []), await self._counts(who.tenant_id)),
+            **self._base(
+                b,
+                by_kb.get(kb_id, []),
+                await self._counts(who.tenant_id),
+                await self._jobs(who.tenant_id, by_kb.get(kb_id, [])),
+            ),
             "sourceNames": [s["name"] for s in attached],
             **_used_by(using, kb_id),
             "attached": [
@@ -710,7 +771,7 @@ class KnowledgeService:
             # The Last sync tile's "Took ..." hint; absent until a first run.
             **({"lastRunDurationSec": recent[0]["durationSec"]} if recent else {}),
             "errorGroups": [],
-            "itemCount": sum(s["item_counts"].values()),
+            "itemCount": item_total(s["item_counts"]),
             "reindexNeeded": any(self.built_under_other_settings(s, i) for i in items),
             "requiredMetadata": [],
             "governance": {
@@ -796,6 +857,7 @@ class KnowledgeService:
             return out
         for d in await self.tools.declared(who.tenant_id, str(who.team_id)):
             needs = bool(d.get("needsConnection", True))
+            refusal = refusal_of(d)
             out.append(
                 {
                     "type": "tool",
@@ -806,6 +868,8 @@ class KnowledgeService:
                     "site": bool(d.get("site")),
                     "needsConnection": needs,
                     "connected": not needs or (bool(d.get("connectionId")) and d.get("connectionStatus") == "healthy"),
+                    "canCreate": refusal is None,
+                    **({"cannotCreateBecause": refusal[1]} if refusal else {}),
                     "previews": bool(d.get("previewTool")),
                     "pickers": bool(d.get("scopesTool")),
                     "inputs": d.get("inputs") or {},
@@ -2085,7 +2149,12 @@ class KnowledgeService:
                     # Running now: that run brings it up to date.
                     continue
         fresh = await self.store.base(who.tenant_id, kb_id)
-        return self._base(fresh or b, by_kb.get(kb_id, []), await self._counts(who.tenant_id))
+        return self._base(
+            fresh or b,
+            by_kb.get(kb_id, []),
+            await self._counts(who.tenant_id),
+            await self._jobs(who.tenant_id, by_kb.get(kb_id, [])),
+        )
 
     # ── Item review and lookups ──────────────────────────────────────────
 
@@ -2249,6 +2318,7 @@ class KnowledgeService:
             "version": f"v{i['version']}",
             "effectiveDate": (i["processed_at"] or i["created_at"]).date().isoformat(),
             "reviewBy": "",
+            "freshness": self.freshness_of(s, datetime.now(UTC)),
             "sensitivity": s["sensitivity"],
             "collection": s["collection"],
             "verified": bool(i.get("verified")),
@@ -2373,7 +2443,6 @@ class KnowledgeService:
             {
                 **self._item(i, sources[i["source_id"]]),
                 "sourceName": sources[i["source_id"]]["name"],
-                "freshness": "fresh",
             }
             for i in await self.store.items(who.tenant_id, source_ids=list(sources))
             if _matches(search, i["title"], i["path"])

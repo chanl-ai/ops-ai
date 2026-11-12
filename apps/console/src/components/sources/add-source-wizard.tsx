@@ -250,7 +250,7 @@ export function AddSourceWizard({
                     {groups.map((g) => (
                       <CommandGroup key={g.id} heading={g.label}>
                         {g.kinds.map((k) => {
-                          const notConnected = !!k.needsConnection && !k.connected;
+                          const notConnected = (!!k.needsConnection && !k.connected) || k.canCreate === false;
                           return (
                             <CommandItem
                               key={kindKey(k)}
@@ -266,7 +266,7 @@ export function AddSourceWizard({
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-medium">{k.title}</span>
                                 <span className="block truncate text-xs text-muted-foreground">
-                                  {k.type !== 'tool' ? BUILT_IN_HINT[k.type] : k.site ? 'Pages of one website' : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
+                                  {k.type !== 'tool' ? BUILT_IN_HINT[k.type] : k.site ? 'Pages of one website' : k.canCreate === false ? (k.cannotCreateBecause ?? 'Cannot be added') : k.needsConnection ? (k.connected ? 'Connected' : 'Not connected') : 'From the app'}
                                 </span>
                               </span>
                               {key === kindKey(k) && <Badge variant="secondary">Chosen</Badge>}
@@ -280,7 +280,7 @@ export function AddSourceWizard({
               </CommandList>
             </Command>
             {options
-              .filter((k) => k.needsConnection && !k.connected && k.plugin)
+              .filter((k) => k.needsConnection && !k.connected && k.canCreate !== false && k.plugin)
               .map((k) => (
                 <p key={kindKey(k)} className="text-xs text-muted-foreground">
                   {k.title} needs a connection first.{' '}
