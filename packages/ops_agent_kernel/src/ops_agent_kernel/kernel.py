@@ -966,8 +966,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield finish("completed", "guardrail", guardrail=_fired(hit, "before"))
             return
     # A resumed turn journalled its loads before the pause.
-    for entry, how in [] if req.resume else zip(state.loads, state.hows, strict=True):
-        yield skillset.event(entry, how)
+    if not req.resume:
+        for entry, how in zip(state.loads, state.hows, strict=True):
+            yield skillset.event(entry, how)
     yield StatusChanged("thinking")
     try:
         if req.resume:

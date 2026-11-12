@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
@@ -80,7 +80,7 @@ class SkillPinRule(_Model):
 def kernel_skills(skill_id: str, version: int, slug: str, content: dict[str, Any], tokens: int = 0) -> list[Skill]:
     """A skill version as the kernel reads it: the whole skill, or one entry per part (`<skill>/<part>`) whose body is
     the shared instructions and then the part's. The one place a skill's parts become what a turn can load."""
-    guardrails = tuple(str(g) for g in content.get("guardrails") or [])
+    guardrails = tuple(str(g) for g in cast(list[Any], content.get("guardrails") or []))
     refusal = str(content.get("refusal") or "")
     loading = content.get("loading") or "on_match"
     shared = str(content.get("instructions") or "")

@@ -66,7 +66,10 @@ def _with_turn_skills(settings: AgentSettings, turn: dict[str, Any] | None) -> A
     which has no inputs filled."""
     if not turn:
         return settings
-    extra = [Skill(**{**d, "guardrails": tuple(d.get("guardrails") or ())}) for d in turn.get("skills") or []]
+    extra: list[Skill] = []
+    for d in cast(list[dict[str, Any]], turn.get("skills") or []):
+        fields: dict[str, Any] = {**d, "guardrails": tuple(cast(list[str], d.get("guardrails") or []))}
+        extra.append(Skill(**fields))
     keys = {(s.skill_id, s.part) for s in extra}
     kept = [s for s in settings.skills if (s.skill_id, s.part) not in keys]
     return replace(settings, skills=[*extra, *kept])
