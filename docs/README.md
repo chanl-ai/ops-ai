@@ -567,3 +567,11 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/start-from-a-template-sdk.md` | uc-740: A team lists templates of each kind and installs a starter skill through the SDK |
 | `usecases/agents-service/templates-over-mcp.md` | uc-741: An assistant on the team MCP address lists templates and installs one as the signed-in person |
 | `usecases/agents-service/skills-as-mcp-prompts.md` | uc-742: A team skill is offered as an MCP prompt with its inputs as arguments |
+| `usecases/agents-service/prepare-a-meeting-from-the-slash-menu.md` | uc-743: A part of a published skill is picked in chat and offered as an MCP prompt |
+| `usecases/agents-service/update-an-opportunity-from-the-same-skill.md` | uc-744: A second part of the same skill is used in the same chat; the first is carried |
+| `usecases/agents-service/no-skills-view-no-menu.md` | uc-745: A person without the Skills right is offered no skill and cannot name one |
+| `usecases/agents-service/only-published-skills-in-the-menu.md` | uc-746: Drafts and retired skills are neither listed nor served |
+| `usecases/agents-service/a-missing-input-stops-the-send.md` | uc-747: A required input left empty refuses the send or the prompt |
+| `usecases/agents-service/a-reply-over-the-skill-budget-is-refused.md` | uc-748: A pick past the reply's skill cap is refused before the model is called |
+| `usecases/agents-service/a-skill-needing-a-tool-the-agent-lacks.md` | uc-749: A part naming a tool the agent lacks is locked and refused |
+| `usecases/agents-service/an-admin-limits-the-menu.md` | uc-750: An agent's menu setting limits which skills a member can pick |

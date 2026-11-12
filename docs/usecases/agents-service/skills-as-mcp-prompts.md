@@ -51,12 +51,24 @@ async def assistant():
 ### 1. Install the starter skill
 
 ```python tab="MCP"
-assert priya.templates.install("plugin:opsai.starters:doc-coauthoring")["created"] is True
+made = priya.templates.install("plugin:opsai.starters:doc-coauthoring")
+assert made["created"] is True
+record = made["copy"]["recordId"]
 ```
 
-Expected: installed.
+Expected: installed, as a draft.
 
-### 2. The assistant finds it in the prompt list
+### 2. Publish the copy
+
+An assistant is offered published skills only, so the draft is sent for publish first.
+
+```python tab="MCP"
+priya.raw.agents.agents_request_skill_publish(record, {"note": "Published by the use case"})
+```
+
+Expected: the skill is published (the dev stack approves at once).
+
+### 3. The assistant finds it in the prompt list
 
 ```python tab="MCP"
 async def prompts():
@@ -69,7 +81,7 @@ assert sorted(a.name for a in found.arguments) == ["doc_type", "topic"]
 
 Expected: `doc-coauthoring` with arguments `topic` and `doc_type`.
 
-### 3. The prompt returns the skill with the arguments filled in
+### 4. The prompt returns the skill with the arguments filled in
 
 ```python tab="MCP"
 async def get():
@@ -84,7 +96,7 @@ Expected: the skill's instructions with the topic in them.
 
 ## What proves it
 
-Step 2 fails while a skill keeps no inputs; step 3 fails if the arguments are not substituted.
+Step 2 fails if the copy cannot be published; step 3 fails while a skill keeps no inputs; step 4 fails if the arguments are not substituted.
 
 ## Details
 
