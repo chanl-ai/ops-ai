@@ -29,7 +29,7 @@ await withUiStack(
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
     });
-    check('the client registers (201)', registered.status === 201, registered);
+    check('6 the client registers (201)', registered.status === 201, registered);
     const session = (await call('POST', '/v1/auth/sign-in', { email: 'j.richardson@harborpine.example', password: 'northfield-demo' })).body?.data;
     const verifier = randomBytes(32).toString('hex');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -59,15 +59,15 @@ await withUiStack(
         const text = (id) => page.getByTestId(id).innerText().catch(() => '');
         pageErrors = [...errors];
         if (width === 1440) {
-          check('the real redirect host is shown', (await text('consent-redirect-host')).includes('claude.example'), await text('consent-redirect-host'));
+          check('6 the real redirect host is shown', (await text('consent-redirect-host')).includes('claude.example'), await text('consent-redirect-host'));
           check(
-            'the client name is shown and marked as the name it gave itself',
+            '6 the client name is shown and marked as the name it gave itself',
             (await text('consent-client-name')).includes('Official Microsoft Copilot') && /itself|self|claims/i.test(await text('consent-name-source')),
             await text('consent-name-source'),
           );
-          check('the team comes from the address, with no team picker', (await text('consent-team')).includes('team_ops') && (await page.getByRole('combobox').count()) === 0, await text('consent-team'));
+          check('6 the team comes from the address, with no team picker', (await text('consent-team')).includes('team_ops') && (await page.getByRole('combobox').count()) === 0, await text('consent-team'));
           const csp = response?.headers()['content-security-policy'] ?? '';
-          check("the consent page cannot be framed (frame-ancestors 'none')", /frame-ancestors\s+'none'/.test(csp), csp);
+          check("7 the consent page cannot be framed (frame-ancestors 'none')", /frame-ancestors\s+'none'/.test(csp), csp);
           const framed = await page.evaluate(async (url) => {
             const f = document.createElement('iframe');
             f.src = url;
@@ -75,11 +75,11 @@ await withUiStack(
             await new Promise((r) => setTimeout(r, 3000));
             try { return f.contentDocument?.body?.innerText?.length ?? 0; } catch { return -1; }
           }, `${consoleUrl}/oauth/authorize?${query}`);
-          check('a framed copy does not render the page', framed <= 0, framed);
+          check('7 a framed copy does not render the page', framed <= 0, framed);
         }
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-        check(`nothing is clipped sideways at ${width}`, overflow <= 0, overflow);
-        check(`no page errors at ${width}`, pageErrors.length === 0, pageErrors);
+        check(`8 nothing is clipped sideways at ${width}`, overflow <= 0, overflow);
+        check(`8 no page errors at ${width}`, pageErrors.length === 0, pageErrors);
         await page.screenshot({ path: join(SHOTS, `uc-733-consent-${name}.png`) });
         if (width === 1440) {
           // A request the server refuses shows its reason, not the bare HTTP status.
@@ -88,7 +88,7 @@ await withUiStack(
           await page.goto(`${consoleUrl}/oauth/authorize?${bad}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
           await page.getByText(/return address/i).first().waitFor({ timeout: 15_000 }).catch(() => undefined);
           const body = await page.locator('body').innerText();
-          check('a refused request shows the reason the server gave', /return address/i.test(body) && !/Bad Request/.test(body), body.slice(0, 300));
+          check('6 a refused request shows the reason the server gave', /return address/i.test(body) && !/Bad Request/.test(body), body.slice(0, 300));
         }
         await context.close();
       }
@@ -97,7 +97,7 @@ await withUiStack(
       const code = new URL(allowed.body?.data?.redirectTo ?? 'https://x.invalid').searchParams.get('code') ?? '';
       const form = new URLSearchParams({ grant_type: 'authorization_code', code, client_id: registered.body?.client_id ?? '', redirect_uri: REDIRECT, code_verifier: verifier, resource: `${MCP_BASE}/mcp/team_ops` });
       const exchanged = await fetch(`${platform}/oauth/token`, { method: 'POST', body: form });
-      check('the assistant gets its token (200)', exchanged.status === 200, exchanged.status);
+      check('8 the assistant gets its token (200)', exchanged.status === 200, exchanged.status);
       const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
       await context.addInitScript((s) => localStorage.setItem('ops-platform-session', JSON.stringify(s)), session);
       const page = await context.newPage();
@@ -105,9 +105,9 @@ await withUiStack(
       const disconnect = page.locator('[data-testid^="disconnect-"]').first();
       await disconnect.waitFor({ timeout: 30_000 }).catch(() => undefined);
       const box = await disconnect.boundingBox();
-      check('Disconnect is on screen at 390 without scrolling sideways', !!box && box.x >= 0 && box.x + box.width <= 390, box);
+      check('8 Disconnect is on screen at 390 without scrolling sideways', !!box && box.x >= 0 && box.x + box.width <= 390, box);
       const row = await page.locator('tr', { has: disconnect }).innerText().catch(() => '');
-      check('last use reads Never before the assistant renews', /Never/.test(row), row);
+      check('8 last use reads Never before the assistant renews', /Never/.test(row), row);
       await page.screenshot({ path: join(SHOTS, 'uc-733-connected-phone.png') });
       await context.close();
     } finally {
