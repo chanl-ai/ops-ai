@@ -40,7 +40,7 @@ export default function WorkspaceGeneralPage() {
       <SettingCard
         id="name"
         title="Workspace name"
-        description="The name people see in the header and in emails."
+        description="The name people see in the sidebar and in emails."
         help="Use 80 characters at most."
         onSave={save}
         saving={rename.isPending}

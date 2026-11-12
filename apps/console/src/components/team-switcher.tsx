@@ -7,6 +7,7 @@ import { AlertCircle, ChevronsUpDown, CreditCard, RotateCw, HandCoins, Layers, P
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -20,7 +21,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
-import { plural } from '@/lib/format';
+import { Skeleton } from '@/components/ui/skeleton';
+import { initials, plural } from '@/lib/format';
 import type { Team, TeamIcon, TeamInput } from '@/lib/types/team';
 
 export const TEAM_ICONS: Record<TeamIcon, LucideIcon> = {
@@ -76,7 +78,6 @@ export function TeamSwitcher({
     return () => window.removeEventListener('keydown', onKey);
   }, [teams, onSelect]);
 
-  const Logo = TEAM_ICONS[activeTeam?.icon ?? 'platform'];
   const brand = useBrand();
 
   if (error && !activeTeam)
@@ -102,18 +103,24 @@ export function TeamSwitcher({
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground" aria-label={`Team: ${activeTeam?.name ?? 'loading'}. Switch team`}>
-              {brand.logo ? (
-                // eslint-disable-next-line @next/next/no-img-element -- a data: URL or local file from env, not an optimisable asset
-                <img src={brand.logo} alt="" className="aspect-square size-8 rounded-md" />
-              ) : (
-                <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                  <Logo className="size-4" />
-                </div>
-              )}
+            <SidebarMenuButton
+              size="lg"
+              // Collapsed, a tooltip at the square's right lands on the header's sidebar trigger; below the square it covers neither.
+              tooltip={activeTeam ? { children: activeTeam.name, side: 'bottom', align: 'start' } : undefined}
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              aria-label={`Team: ${activeTeam?.name ?? 'loading'}. Switch team`}
+            >
+              <Avatar className="size-8 rounded-md">
+                {brand.logo && <AvatarImage src={brand.logo} alt="" className="object-cover" />}
+                <AvatarFallback className="rounded-md bg-primary text-xs font-semibold text-primary-foreground">{activeTeam ? initials(activeTeam.name) : <Skeleton className="size-full rounded-md" />}</AvatarFallback>
+              </Avatar>
               <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate text-sm font-semibold">{activeTeam?.name ?? ' '}</span>
-                <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
+                <span className="truncate text-sm font-semibold" data-testid="sidebar-team">
+                  {activeTeam?.name ?? ' '}
+                </span>
+                <span className="truncate text-xs text-muted-foreground" data-testid="sidebar-workspace">
+                  {subtitle}
+                </span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
