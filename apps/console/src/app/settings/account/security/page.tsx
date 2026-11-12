@@ -133,6 +133,7 @@ export default function AccountSecurityPage() {
               </Button>
             </div>
           </SettingsSection>
+          </SampleData>
           <SettingsSection title="Connected assistants" description="Claude, Cursor, VS Code or ChatGPT, signed in as you at a team’s MCP address. Disconnect one and it stops working.">
             {assistants.isError && !assistants.data ? (
               <QueryError what="your connected assistants" onRetry={() => assistants.refetch()} error={assistants.error} retrying={assistants.isFetching} />
@@ -142,7 +143,6 @@ export default function AccountSecurityPage() {
               <ConnectedAssistantsTable assistants={assistants.data ?? []} onDisconnect={onDisconnect} busyId={assistantBusy} />
             )}
           </SettingsSection>
-          </SampleData>
         </div>
       )}
 
