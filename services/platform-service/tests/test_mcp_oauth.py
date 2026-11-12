@@ -20,8 +20,8 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import sqlalchemy as sa
 
-from ops_platform.store.tables import audit_entries, members
-from ops_service_kit.ids import new_id
+from ops_platform.store.tables import audit_entries, members, sessions, users
+from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import DEMO_PASSWORD, PUBLIC_URL, SignInRig
 
@@ -131,7 +131,8 @@ async def test_the_server_metadata_tells_a_client_how_to_register_and_which_chal
     meta = r.json()
     assert meta["issuer"] == PUBLIC_URL
     assert meta["code_challenge_methods_supported"] == ["S256"]
-    assert meta["client_id_metadata_document_supported"] is True
+    # URL client ids are refused until the public-address check ships; the server must not advertise what it refuses.
+    assert meta["client_id_metadata_document_supported"] is False
     assert meta["registration_endpoint"].startswith(PUBLIC_URL)
     assert meta["token_endpoint"].startswith(PUBLIC_URL) and meta["authorization_endpoint"].startswith(PUBLIC_URL)
 
@@ -307,11 +308,31 @@ async def test_a_person_removed_from_the_team_or_who_disconnects_cannot_renew_an
     client = await a.client()
     who, team = await a.person()
     got = await a.connect(who, a.params(client, team))
+    async with signin.engine.begin() as c:
+        found = sa.select(members.c.id, members.c.user_id, members.c.email).where(members.c.team_id == team)
+        member, user, email = (await c.execute(found)).one()
+        # The person stays in another team, so leaving this one is the only thing the renewal can refuse on.
+        now = now_iso()
+        await c.execute(
+            members.insert().values(
+                id=new_id("mem"), tenant_id=signin.tenant, team_id=signin.ops_team, user_id=user, email=email,
+                role="viewer", status="active", created_at=now, updated_at=now,
+            )
+        )  # fmt: skip
+    # Signed in after the team exists: a token carries the teams it was minted with, so the rig's admin token
+    # (minted before this team) would be refused with team_forbidden whatever the renewal does.
     async with signin.engine.connect() as c:
-        member = (await c.execute(sa.select(members.c.id).where(members.c.team_id == team))).scalar_one()
-    admin = {**signin.admin, "X-Team-Id": team}
+        admin_email = (
+            await c.execute(sa.select(users.c.email).where(users.c.tenant_id == signin.tenant, users.c.name == "Sam"))
+        ).scalar_one()
+    login = await signin.public.post("/v1/auth/sign-in", json={"email": admin_email, "password": DEMO_PASSWORD})
+    admin = {"Authorization": f"Bearer {login.json()['data']['token']}", "X-Team-Id": team}
     removed = await signin.public.post("/v1/settings/members/delete", json={"ids": [member]}, headers=admin)
     assert removed.status_code == 200, removed.text
+    # Removal already ends the person's sessions. Reopen this grant so the renewal's own team check is the only thing
+    # left that can refuse it.
+    async with signin.engine.begin() as c:
+        await c.execute(sessions.update().where(sessions.c.user_id == user).values(revoked_at=None))
     renewed = await a.renew(got["refresh_token"], client)
     assert (renewed.status_code, renewed.json()["error"]) == (400, "invalid_grant"), "never a token with fewer teams"
     # Disconnect by the person, on a second connection of the same person.
