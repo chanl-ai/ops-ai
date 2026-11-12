@@ -117,6 +117,19 @@ export const SITE = [
     ],
   },
   {
+    tab: 'Use cases',
+    icon: 'list-checks',
+    description: 'What people do with Ops AI, each step tested in code',
+    groups: [
+      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'usecases/use-case-areas.md', title: 'Use cases', icon: 'list-checks' }] },
+      { group: 'Agents', icon: 'bot', open: true, entries: [{ rest: 'usecases/agents' }] },
+      { group: 'Workflows', icon: 'git-branch', open: true, entries: [{ rest: 'usecases/workflows' }] },
+      { group: 'Knowledge', icon: 'library', open: true, entries: [{ rest: 'usecases/knowledge' }] },
+      { group: 'Tools and apps', icon: 'wrench', open: true, entries: [{ rest: 'usecases/tools-and-apps' }] },
+      { group: 'People and access', icon: 'shield', open: true, entries: [{ rest: 'usecases/people-and-access' }] },
+    ],
+  },
+  {
     tab: 'API reference',
     icon: 'code',
     description: 'Every route of every service',
