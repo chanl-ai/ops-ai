@@ -100,7 +100,7 @@ flowchart LR
 
 | Component | Lives in | Job | State |
 |---|---|---|---|
-| MCP adapter | tools-service | Parse the request, resolve the caller and scope, list tools, map `tools/call` to one `GatewayCalls.call` and its outcome back to an MCP result. Protocol rules only: Origin check, protocol version, scope parsing | Built for slice 1 |
+| MCP adapter | tools-service | Parse the request, resolve the caller and scope, list tools, map `tools/call` to one `GatewayCalls.call` and its outcome back to an MCP result. Protocol rules only: Origin check, protocol version, scope parsing | Built for slice 1, except the Origin and protocol version checks |
 | `GatewayCalls` | tools-service | The one call path, taking a verified principal and returning Allowed, Refused or Held. `POST /v1/calls` keeps its wire contract | Built (Allowed and Refused) |
 | Protected resource metadata | tools-service | Metadata per URL naming platform-service; the 401 challenge points at it | Planned |
 | Authorization server | platform-service | Metadata, authorize with consent, token with PKCE and resource, refresh, revoke, registered clients, client metadata documents | Planned |
