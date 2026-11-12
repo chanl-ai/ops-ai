@@ -8,11 +8,13 @@ consent page. After the person signs in (password or OIDC first; a SAML group on
 which is the only reason step 6's SAML variant waits) and presses Allow, the assistant holds a 15-minute token for that
 one address and a renewal that lasts the workspace's connection length (default 8 hours, at most 30 days).
 
-Contract the tests fix: `GET /.well-known/oauth-authorization-server`; `POST /oauth/register`; `GET /oauth/authorize`
+Contract the tests fix: `GET /.well-known/oauth-authorization-server`, which the proxy also serves at the origin's
+`/.well-known/oauth-authorization-server/api/platform` (RFC 8414 for an issuer with a path, the first URL an MCP client
+tries); `POST /oauth/register`; `GET /oauth/authorize`
 (redirects the browser to the console's `/oauth/authorize` page, or answers 400 with no redirect); `GET` and `POST
 /v1/oauth/consent` with the person's console sign-in; `POST /oauth/token`; `GET /v1/oauth/grants` and `DELETE
 /v1/oauth/grants/{id}`; policy `mcpConnectionHours`; token claims `aud` (the address only), `team_ids`, `client_id`; call log
-column `client_id`; table `oauth_clients` (`id`, `created_at`); registration limited to 10 a minute per source address, clients never consented to pruned after 24 hours by the next registration, at most 500 clients per tenant; the registration audit row has no tenant and gains tenant and team at the first consent. tools-service answers `/.well-known/oauth-protected-resource/mcp/<team>` and verifies only through
+column `client_id`; table `oauth_clients` (`id`, `created_at`); registration limited to 10 and sign-in starts to 30 a minute per caller address (read from `X-Forwarded-For` past `OPS_FORMS_TRUSTED_PROXIES`, counted in the database), clients never consented to pruned after 24 hours by the next registration, at most 500 clients per tenant; the registration audit row has no tenant and gains tenant and team at the first consent. tools-service answers `/.well-known/oauth-protected-resource/mcp/<team>` and verifies only through
 `ops_identity` with the address as the expected resource.
 
 ## Stories
@@ -30,13 +32,14 @@ column `client_id`; table `oauth_clients` (`id`, `created_at`); registration lim
 |---|---|
 | PostgreSQL and OPA | `make db-up` |
 | Free use-case ports | the runner picks them and its own database |
+| The install's one origin | `proxy()` runs the real `deploy/fly/Caddyfile` in Caddy's image (docker) on port 8890 (`OPS_USECASE_PROXY_PORT`); its upstreams are this run's services through `host.docker.internal` |
 | The install's public URLs | `OPS_TOOLS_PUBLIC_URL` (e.g. `<origin>/api/tools`), the base of the address the assistant pastes, and `OPS_PLATFORM_PUBLIC_URL` (`<origin>/api/platform`), the issuer; both services read both |
 
 ## Steps and expected results
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | No token at `/mcp/team_ops`; read the metadata it names; read the server metadata | 401 with `resource_metadata`; metadata names platform-service; `code_challenge_methods_supported` is `["S256"]` |
+| 1 | Through the proxy, no token at `/api/tools/mcp/team_ops`; then the MCP Python SDK's discovery steps from the 401 (resource metadata, then each server metadata URL it builds from the issuer) | 401 with `resource_metadata`; metadata names platform-service; the SDK finds the server metadata for that issuer; `code_challenge_methods_supported` is `["S256"]` |
 | 2 | A scripted client registers, James (builder) allows, the client exchanges the code with its PKCE verifier | 200, `aud` is the address only, `team_ids` is `["team_ops"]` |
 | 3 | `tools/list` at `/mcp/team_ops` with that token | 200 |
 | 4 | The same request with James's console token, and with the token at another team's address | 401, 401 |
@@ -56,6 +59,10 @@ Steps that wait: a SAML group giving the team (`uc-mcp-2` with SAML) and a compa
 password form (`uc-mcp-16`) need the company-sign-in change that is not merged yet.
 
 ## Non-vacuous check
+
+`the MCP SDK finds the server metadata through the proxy`: with the Caddyfile's
+`/.well-known/oauth-authorization-server/api/platform` route removed, the SDK's first URL reaches the console and the
+check fails.
 
 `a console token is refused at the MCP address`: with the audience check removed, step 4's console token lists tools and
 the check fails.
