@@ -1,8 +1,8 @@
-# A builder checks, saves and test-runs a three-step workflow from a file
+# Test-run a workflow from a file
 
-Status: draft for review. A software company's support team takes requests from its billing app and maps them onto
-its own fields. The builder keeps the workflow in a file, checks it, saves it as a draft and test-runs it, and a
-request with a missing field is refused with the field's name.
+Status: draft for review.
+
+In this example we will check a three-step workflow kept in a file, save it as a draft, test-run a support request from a software company's billing app, and see a request without an email refused by the field's name. It assumes a signed-in builder and the workflow file below.
 
 | Use case | |
 |---|---|
@@ -159,6 +159,15 @@ grep -q '^invalid_input: customerEmail:' <<<"$refused"
 ```
 
 Expected: refused with `invalid_input` at `customerEmail`; no run starts.
+
+## Gaps
+
+This page does not pass while a row here is open. Each open gap is a product change tracked on its own; no test helper stands in for it.
+
+| Product fix | Step | Tab | What is missing | Where |
+|---|---|---|---|---|
+| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` |
+| The TypeScript SDK reads workflow YAML | 1, 2 | TypeScript | `workflows.validate` and `apply` take JSON, not the YAML file | `sdk/typescript/src/workflows.ts:3` |
 
 ## What proves it
 

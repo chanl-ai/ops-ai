@@ -1,7 +1,8 @@
-# Pages people write and items another system pushes become cited knowledge
+# Push knowledge from another system
 
-Status: draft for review. A claims team at an insurer keeps its handbook in a knowledge base. People write pages in it,
-the policy system pushes its product sheets into it, and every search names the page and version a passage came from.
+Status: draft for review.
+
+In this example we will make a knowledge base for an insurer's claims handbook, write a page into it, have the policy system push its product sheets into it, and search it, so every passage names the page and version it came from. It assumes a signed-in builder in the team and nothing else: the knowledge base starts empty.
 
 | Use case | |
 |---|---|
@@ -183,6 +184,18 @@ grep -q '^source_not_written:' <<<"$refused"
 ```
 
 Expected: refused with `source_not_written`; the base still holds two items.
+
+## Gaps
+
+This page does not pass while a row here is open. Each open gap is a product change tracked on its own; no test helper stands in for it.
+
+| Product fix | Step | Tab | What is missing | Where |
+|---|---|---|---|---|
+| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` |
+| Knowledge verbs in both SDKs and the CLI | 1 | CLI | `opsai kb create` | `sdk/python/src/ops_ai/_cli/kb.py:36-45` |
+| Knowledge verbs in both SDKs and the CLI | 2 | Python, TypeScript | `knowledge.add_page` / `addPage` | `sdk/python/src/ops_ai/_client.py:282-284`, `sdk/typescript/src/client.ts:226-231` |
+| Knowledge verbs in both SDKs and the CLI | 3-5 | Python, TypeScript | `knowledge.add_source`, `knowledge.push` | as above |
+| Knowledge verbs in both SDKs and the CLI | 3-5 | CLI | `opsai kb add-source`, `opsai kb push` | `sdk/python/src/ops_ai/_cli/kb.py:36-45` |
 
 ## What proves it
 

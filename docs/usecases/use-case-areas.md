@@ -10,7 +10,9 @@ so a step on this site is a step that passed.
 |---|---|
 | Who is in it | The people in the story, their roles, and the profile each one signs in with |
 | Before you start | The few lines that connect to Ops AI; the same lines connect to your own deployment |
+| Title and opening | A short task name; then "In this example we will …" and what it assumes |
 | Steps | One heading per step, the code in three tabs, and the result expected in plain words |
+| Gaps | Each step the public SDK, command line or console cannot do yet, with the card that fixes it; a page with an open gap does not pass |
 | What proves it | The step that fails when the behaviour breaks |
 | In the console | The same story clicked through the screens, where there is one |
 

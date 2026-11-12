@@ -1,7 +1,8 @@
-# A builder drafts an agent, tests it with a tool, publishes it and people chat with it
+# Chat with an agent
 
-Status: draft for review. An IT help desk builds an agent that looks up a laptop before it answers. Nobody can chat
-with the agent while it is a draft; once it is published, a chat reaches it and its answer comes after the lookup.
+Status: draft for review.
+
+In this example we will draft an IT help desk agent, give it a laptop lookup tool, test it, publish it, and have a colleague chat with it. It assumes a signed-in builder and a signed-in member in the same team, and a model that calls the lookup when asked about a device.
 
 | Use case | |
 |---|---|
@@ -172,6 +173,15 @@ opsai agents --profile member --json chat "$AGENT" --message "Is laptop LT-2291 
 ```
 
 Expected: the reply comes after `lookup_device` returns.
+
+## Gaps
+
+This page does not pass while a row here is open. Each open gap is a product change tracked on its own; no test helper stands in for it.
+
+| Product fix | Step | Tab | What is missing | Where |
+|---|---|---|---|---|
+| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` |
+| `opsai agents` takes options after the verb | All | CLI | `--json` and `--profile` are accepted only before the verb | `sdk/python/src/ops_ai/_cli/agents.py:15-38` |
 
 ## What proves it
 
