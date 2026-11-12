@@ -84,6 +84,7 @@ await withUiStack(
       const row = await page.getByRole('row', { name: new RegExp(`${NAME} documents`) }).waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const src = (await (await fetch(`${kb}/v1/sources/${body?.sourceId}`, { headers: H })).json()).data;
       check('after a reload the documents source is listed, active, with two indexed items', row && src?.status === 'active' && src?.itemsIndexed === 2, { row, status: src?.status, itemsIndexed: src?.itemsIndexed });
+      check('the source counts its two items, not their pieces', src?.itemCount === 2, { itemCount: src?.itemCount });
 
       const refs = await Promise.all(sent.map(async (id) => (await (await fetch(`${files}/v1/files/${id}`, { headers: H })).json()).data?.references ?? []));
       check('Files keeps both files: each is referenced by the source', refs.every((r) => r.some((x) => x.type === "source" && x.id === body?.sourceId)), refs);
