@@ -423,8 +423,7 @@ async def test_a_person_removed_from_the_team_or_who_disconnects_cannot_renew_an
 
 
 # uc-mcp-5
-# uc-mcp-5
-async def test_a_person_who_stays_in_the_team_but_loses_the_right_to_run_its_tools_cannot_renew(
+async def test_a_person_who_stays_in_the_team_but_loses_the_right_to_run_its_tools_can_still_renew(
     signin: SignInRig,
 ) -> None:
     a = Assistant(signin)
@@ -433,15 +432,15 @@ async def test_a_person_who_stays_in_the_team_but_loses_the_right_to_run_its_too
     got = await a.connect(who, a.params(client, team))
     # Still a member of the address's team, now as a viewer, who may not run its tools. Set in the tables (the
     # membership and the role assignment the member routes keep equal to it) so nothing else, such as a role change
-    # ending sessions, can be what refuses the renewal.
+    # ending sessions, can be what decides the renewal. Running a tool is checked by tools-service on each call, where
+    # a refusal is a tool error; the connection itself outlives the role.
     async with signin.engine.begin() as c:
         await c.execute(members.update().where(members.c.team_id == team).values(role="viewer"))
         await c.execute(role_assignments.update().where(role_assignments.c.team_id == team).values(role_id="viewer"))
     renewed = await a.renew(got["refresh_token"], client)
-    assert (renewed.status_code, renewed.json()["error"]) == (400, "invalid_grant"), renewed.text
-    # The grant ended with it: a second renewal is refused too, and the person's list no longer shows it.
-    assert (await a.renew(got["refresh_token"], client)).status_code == 400
-    assert (await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"] == []
+    assert renewed.status_code == 200, renewed.text
+    assert renewed.json()["access_token"]
+    assert len((await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"]) == 1
 
 
 # uc-mcp-17
