@@ -56,7 +56,7 @@ export interface KnowledgeChange {
   before: string;
   after: string;
   trust: TrustState;
-  freshness: 'fresh' | 'stale';
+  freshness: 'fresh' | 'stale' | 'no_schedule';
   reviewBy: string;
   conflict?: ChangeConflict;
   citedBy: ChangeCitation[];

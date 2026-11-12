@@ -35,13 +35,15 @@ export function TrustChip({ state, className }: { state: TrustState; className?:
 }
 
 export function FreshnessChip({ change, className }: { change: Pick<KnowledgeChange, 'freshness' | 'reviewBy'>; className?: string }) {
-  return change.freshness === 'stale' ? (
-    <Badge variant="outline" className={cn('border-warning/40 bg-warning/10 text-warning-text', className)}>
-      Review overdue since {dateOnly(change.reviewBy)}
-    </Badge>
-  ) : (
+  if (change.freshness === 'stale')
+    return (
+      <Badge variant="outline" className={cn('border-warning/40 bg-warning/10 text-warning-text', className)}>
+        {change.reviewBy ? `Review overdue since ${dateOnly(change.reviewBy)}` : 'Review overdue'}
+      </Badge>
+    );
+  return (
     <Badge variant="outline" className={cn('font-normal text-muted-foreground', className)}>
-      Fresh · review by {dateOnly(change.reviewBy)}
+      {change.freshness === 'no_schedule' ? 'No schedule' : change.reviewBy ? `Fresh · review by ${dateOnly(change.reviewBy)}` : 'Fresh'}
     </Badge>
   );
 }

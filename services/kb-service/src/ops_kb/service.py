@@ -229,6 +229,19 @@ logger = get_logger(__name__)
 # How far behind its schedule's latest slot a source may be and still be fresh: the beat that syncs it runs each minute.
 FRESH_GRACE = timedelta(hours=1)
 
+
+def freshness(schedule: dict[str, Any], good: datetime | None, now: datetime, grace: timedelta | None = None) -> str:
+    """`no_schedule` when the source only syncs when asked. Otherwise `stale` once its latest slot is more than
+    `grace` past and no good sync has happened since the slot (a failed run does not count, and a source that never
+    synced well is stale); `fresh` before that, since the beat has until then to run the slot."""
+    slot = last_slot(schedule, now)
+    if slot is None:
+        return "no_schedule"
+    if good is not None and good >= slot:
+        return "fresh"
+    return "stale" if good is None or now > slot + (FRESH_GRACE if grace is None else grace) else "fresh"
+
+
 # The one precedence rule the index applies: a document a sync replaces keeps only its newest version in search.
 PRECEDENCE = [
     {
@@ -331,16 +344,21 @@ class KnowledgeService:
             return WEB_SCHEDULE
         return cast(dict[str, Any], cfg.get("schedule") or {"kind": "manual"})
 
-    def freshness_of(self, s: dict[str, Any], now: datetime) -> str:
-        """`fresh` when the source's last good sync is no more than one hour behind its schedule's latest slot (the
-        beat runs every minute), `stale` when it is older, `no_schedule` when the source only syncs when asked: with
-        no schedule there is nothing to be fresh against."""
+    def freshness_of(self, s: dict[str, Any], now: datetime | None = None) -> str:
+        """`fresh`, `stale` or `no_schedule` for the source (see `freshness`). The clock is the database's, read with
+        the source row, since the sync times it is compared with were written by that clock."""
+        return freshness(self.schedule_of(s), s.get("last_good_sync_at"), s.get("db_now") or now or datetime.now(UTC))
+
+    def review_state(self, s: dict[str, Any] | None) -> dict[str, str]:
+        """The Changes queue's freshness and review-by for a source's changes, from the same rule as its documents:
+        review-by is the next scheduled sync, or the slot it missed when stale; blank with no schedule."""
+        if s is None:
+            return {"freshness": "no_schedule", "reviewBy": ""}
+        now = s.get("db_now") or datetime.now(UTC)
+        state = self.freshness_of(s, now)
         schedule = self.schedule_of(s)
-        slot = last_slot(schedule, now)
-        if slot is None:
-            return "no_schedule"
-        good: datetime | None = s.get("last_good_sync_at") or s.get("last_sync_at")
-        return "fresh" if good is not None and good >= slot - FRESH_GRACE else "stale"
+        when = last_slot(schedule, now) if state == "stale" else next_run(schedule, s.get("last_good_sync_at"), now)
+        return {"freshness": state, "reviewBy": _iso(when) if when else ""}
 
     def key_of(self, s: dict[str, Any]) -> str:
         """The digest an item built now under the source's settings records (`indexed_with`)."""
@@ -413,9 +431,8 @@ class KnowledgeService:
     async def _counts(self, tenant: str) -> dict[str, dict[str, Any]]:
         """Each source's documents by status and its indexed chunks, from its items, and when it last synced."""
         rows = await self.store.sources(tenant)
-        now = datetime.now(UTC)
         return {
-            str(x["id"]): {**x["item_counts"], "synced": x.get("last_sync_at"), "freshness": self.freshness_of(x, now)}
+            str(x["id"]): {**x["item_counts"], "synced": x.get("last_sync_at"), "freshness": self.freshness_of(x)}
             for x in rows
         }
 
@@ -2221,7 +2238,8 @@ class KnowledgeService:
         if ch["origin"] == "faq":
             # Deciding a draft is changing the source, so it takes the right the decide route checks.
             allowed = s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"]
-            return {**_draft_out(ch, s, kbs), "canDecide": allowed and ch["status"] in DECIDABLE}
+            draft = _draft_out(ch, s, kbs)
+            return {**draft, **self.review_state(s), "canDecide": allowed and ch["status"] in DECIDABLE}
         return {
             "id": ch["id"],
             "summary": f"{ch['title']} changed from v{ch['from_version']} to v{ch['to_version']}",
@@ -2239,8 +2257,7 @@ class KnowledgeService:
             "before": ch["before"],
             "after": ch["after"],
             "trust": "changed",
-            "freshness": "fresh",
-            "reviewBy": "",
+            **self.review_state(s),
             "citedBy": [],
             "owner": s["owner"] if s else "",
             # A sync applies the change when it runs; there is nothing left to decide.
@@ -2318,7 +2335,7 @@ class KnowledgeService:
             "version": f"v{i['version']}",
             "effectiveDate": (i["processed_at"] or i["created_at"]).date().isoformat(),
             "reviewBy": "",
-            "freshness": self.freshness_of(s, datetime.now(UTC)),
+            "freshness": self.freshness_of(s),
             "sensitivity": s["sensitivity"],
             "collection": s["collection"],
             "verified": bool(i.get("verified")),
@@ -2872,8 +2889,6 @@ def _draft_out(ch: dict[str, Any], s: dict[str, Any] | None, kbs: list[dict[str,
         "before": str(detail.get("quote") or ""),
         "after": ch["after"],
         "trust": "source_changed" if ch["status"] == "source_changed" else "draft",
-        "freshness": "fresh",
-        "reviewBy": "",
         "citedBy": [],
         "owner": s["owner"] if s else "",
         "canDecide": ch["status"] in DECIDABLE,

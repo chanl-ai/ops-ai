@@ -534,7 +534,9 @@ class KnowledgeStore:
     async def sources(self, tenant: str, ids: list[str] | None = None) -> list[dict[str, Any]]:
         """Each source with `item_counts`, its documents by status (pending, indexed, failed), so what a source says
         about its documents is what its items are."""
-        q = sa.select(kb_sources).where(kb_sources.c.tenant_id == tenant, team_visible(kb_sources))
+        q = sa.select(kb_sources, db_now().label("db_now")).where(
+            kb_sources.c.tenant_id == tenant, team_visible(kb_sources)
+        )
         if ids is not None:
             q = q.where(kb_sources.c.id.in_(ids))
         counted = (
