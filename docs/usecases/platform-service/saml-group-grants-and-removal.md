@@ -25,8 +25,9 @@ is called.
 | 6 | Wanjiru reads the audit in team_platform for `oauth.grant_ended` | one row, ended "by group", for the team_platform connection only |
 
 A membership given by hand is never removed by a sign-in; the service tests cover it
-(`services/platform-service/tests/test_saml_groups.py`). A missing groups attribute and a present but empty one also
-remove nothing, since neither says which groups the person left.
+(`services/platform-service/tests/test_saml_groups.py`). A missing groups attribute and a present but empty one both
+mean no groups and end what groups gave, as when Keycloak drops the attribute for a person in no group; only Entra's
+overage claim leaves memberships as they are.
 
 ## Acceptance layers
 

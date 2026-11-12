@@ -1,7 +1,7 @@
 """Group rules at sign-in (decision D4): a group gives the membership it maps to, at the highest role any of the
 person's groups gives in that team; with removal on, signing in without a group ends only what groups gave. A
-membership given by hand or by a first sign-in stays, and a missing, empty or Entra overage groups claim removes
-nothing."""
+membership given by hand or by a first sign-in stays. A missing or empty groups attribute means no groups; only Entra's
+overage claim says the list is unknown and removes nothing."""
 
 from __future__ import annotations
 
@@ -99,16 +99,28 @@ async def test_leaving_a_group_ends_only_what_that_group_gave(signin: SignInRig)
     assert await _audited(signin, "member.group", email) == 2
 
 
-async def test_a_missing_empty_or_overage_groups_claim_removes_nothing(signin: SignInRig) -> None:
+async def test_an_overage_claim_removes_nothing(signin: SignInRig) -> None:
     tellers = await _team(signin, "Tellers")
     domain = f"over.{signin.zone}"
     await _provider(signin, domain, [{"group": "tellers", "team": tellers, "role": "viewer"}], onMissing="remove")
     email = f"bo@{domain}"
     assert tellers in await _sign_in(signin, email, "&groups=tellers")
-    for extra in ("", "&groups=", "&groups=tellers&overage=1"):
-        roles = await _sign_in(signin, email, extra)
-        assert roles.get(tellers) == "viewer", (extra, roles)
+    roles = await _sign_in(signin, email, "&groups=tellers&overage=1")
+    assert roles.get(tellers) == "viewer", roles
     assert await _audited(signin, "member.group_removed", email) == 0
+
+
+async def test_a_missing_or_empty_groups_attribute_ends_what_groups_gave(signin: SignInRig) -> None:
+    # A provider such as Keycloak sends no groups attribute at all once the person is in no group.
+    tellers = await _team(signin, "Tellers")
+    domain = f"none.{signin.zone}"
+    await _provider(signin, domain, [{"group": "tellers", "team": tellers, "role": "viewer"}], onMissing="remove")
+    for name, extra in (("missing", ""), ("empty", "&groups=")):
+        email = f"{name}@{domain}"
+        assert tellers in await _sign_in(signin, email, "&groups=tellers")
+        roles = await _sign_in(signin, email, extra)
+        assert roles == {signin.ops_team: "chat_user"}, (extra, roles)
+        assert await _audited(signin, "member.group_removed", email) == 1, extra
 
 
 async def test_removal_never_ends_a_first_sign_in_or_hand_given_membership(signin: SignInRig) -> None:

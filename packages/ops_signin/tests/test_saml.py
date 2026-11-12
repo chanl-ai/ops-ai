@@ -170,9 +170,9 @@ def test_groups_are_read_from_the_named_attribute_of_the_signed_assertion() -> N
     assert plain.complete(saml_response=carried, request_id=start.request_id).groups is None
 
 
-def test_a_missing_or_overage_groups_attribute_is_told_apart_from_an_empty_one() -> None:
-    """Group removal acts on what the provider said: an empty attribute says "in no groups"; a missing one, or Entra's
-    overage claim in place of the list, says nothing, and must not read as having left every group."""
+def test_only_an_overage_claim_reads_as_unknown_groups() -> None:
+    """Group removal acts on what the provider said: a missing or empty attribute says "in no groups" (Keycloak drops
+    it once the person is in none); Entra's overage claim in place of the list says nothing."""
     sp = SamlServiceProvider(SamlConfig(ISSUER, f"{ISSUER}/sso", BANK.cert_pem, SP, ACS, groups_attribute="groups"))
 
     def read(**extra: object) -> tuple[str, ...] | None:
@@ -184,7 +184,7 @@ def test_a_missing_or_overage_groups_attribute_is_told_apart_from_an_empty_one()
         return sp.complete(saml_response=signed, request_id=start.request_id).groups
 
     assert read(groups=[]) == ()
-    assert read() is None
+    assert read() == ()
     assert read(groups=["tellers"], overage=True) is None
 
 

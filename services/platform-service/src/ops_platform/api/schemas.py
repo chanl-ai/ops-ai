@@ -716,7 +716,8 @@ class GroupSettings(In):
     source: str | None = Field(default=None, max_length=255)
     map: list[GroupRule] = Field(min_length=1, max_length=100)
     # When a person signs in without a group that gave them a membership: `remove` ends it (the default for a new
-    # provider), `keep` leaves it. A missing, empty or overage groups claim removes nothing either way.
+    # provider), `keep` leaves it. A missing or empty SAML groups attribute counts as no groups; only Entra's overage
+    # claim (the list unknown) removes nothing.
     on_missing: Literal["keep", "remove"] | None = None
 
 
@@ -818,7 +819,7 @@ class SignInTestOut(Out):
     subject: str | None = None
     email: str | None = None
     name: str | None = None
-    # None: the provider sent no groups list (or Entra's overage claim), so group rules would change nothing.
+    # None: the groups are unknown (Entra's overage claim, or no rules to read them), so group rules change nothing.
     groups: list[str] | None = None
     reason: str | None = None
 

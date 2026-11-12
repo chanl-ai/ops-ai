@@ -865,9 +865,9 @@ class SignInStore:
     ) -> None:
         """Gives the person each membership their groups map to, at the highest role any matching rule gives in that
         team. A membership given by hand or by a first sign-in is left as it is. With `onMissing` remove, a membership
-        only groups gave, in a team none of their groups maps to now, ends. A missing groups list, an empty one or
-        Entra's overage claim changes nothing: none of them says the person left a group."""
-        if not groups:
+        only groups gave, in a team none of their groups maps to now, ends, so an empty list ends every one. An
+        unknown list (None, as from Entra's overage claim) changes nothing: it does not say the person left a group."""
+        if groups is None:
             return
         held = set(groups)
         wanted: dict[str, tuple[str, list[str]]] = {}

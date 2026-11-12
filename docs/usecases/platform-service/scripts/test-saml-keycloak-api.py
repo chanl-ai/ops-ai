@@ -134,11 +134,12 @@ with signin_stack() as (api, idp, _):
             f"/admin/realms/{REALM}/users", headers=kc.admin, params={"email": ana, "exact": "true"}
         ).json()
     )
-    kc.set_groups(uid, ("other",))
+    # In no group at all, Keycloak sends no groups attribute; that reads as no groups, not as unknown.
+    kc.set_groups(uid, ())
     _, session, query = sign_in(ana)
     roles = dict(session.get("principal", {}).get("roles", {})) if session else {}
     check(
-        "after Ana leaves both groups at Keycloak, her next sign-in ends team_platform and keeps team_ops",
+        "after Ana leaves every group at Keycloak, her next sign-in ends team_platform and keeps team_ops",
         roles == {"team_ops": "chat_user"},
         roles or query,
     )

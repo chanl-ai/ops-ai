@@ -16,7 +16,8 @@ class VerifiedIdentity:
     name: str
     auth_time: int | None = None
     # The groups the provider says the person is in, from the claim or attribute the caller names: () when the
-    # provider sent the list empty, None when it sent no list (or Entra's overage claim), which says nothing.
+    # provider sent none; None when the caller names no claim, or the list is unknown (Entra's overage claim, or an
+    # OIDC token without the claim).
     groups: tuple[str, ...] | None = None
 
 

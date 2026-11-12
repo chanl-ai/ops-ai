@@ -289,16 +289,15 @@ class SamlServiceProvider:
         return VerifiedIdentity(subject=subject, email=email, name=name or email, auth_time=auth_time, groups=groups)
 
     def _groups(self, a: Element) -> tuple[str, ...] | None:
-        """The values of the named groups attribute; () when it is there with none; None when it is missing, or when
-        Entra's overage claim stands in for it, since neither says which groups the person is in."""
+        """The values of the named groups attribute; () when it is missing or there with none, since providers such as
+        Keycloak drop it once the person is in no group; None only when Entra's overage claim stands in for it, which
+        says the list is too long to send, not that it is empty."""
         if not self.config.groups_attribute:
             return None
         named = list(a.findall("saml:AttributeStatement/saml:Attribute", NS))
         if any(x.get("Name") == GROUPS_OVERAGE for x in named):
             return None
         found = [x for x in named if x.get("Name") == self.config.groups_attribute]
-        if not found:
-            return None
         return tuple(_text(v) for x in found for v in x.findall("saml:AttributeValue", NS))
 
     def _window(self, not_before: str | None, not_on_or_after: str | None, now: datetime) -> None:
