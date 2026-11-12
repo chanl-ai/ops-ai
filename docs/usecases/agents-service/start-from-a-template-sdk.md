@@ -66,6 +66,13 @@ const starter = (lists.skill as any[]).find((t) => `${t.source}:${t.id}` === REF
 assert.ok(starter?.canAdd);
 ```
 
+```bash tab="CLI"
+for kind in agent skill workflow guardrail case_type task_type; do
+  opsai templates list --kind "$kind" --json | jq -e --arg k "$kind" 'all(.[]; .kind == $k)'
+done
+opsai templates list --kind skill --json | jq -e 'map(select(.source + ":" + .id == "plugin:opsai.starters:doc-coauthoring"))[0].canAdd'
+```
+
 Expected: six lists, each of one kind; Doc co-authoring is offered with `canAdd`.
 
 ### 2. Install the starter skill
@@ -85,7 +92,7 @@ const record = made.copy.recordId;
 ```
 
 ```bash tab="CLI"
-opsai resources add plugin:opsai.starters doc-coauthoring --json | jq -e '.created == true and (.copy.recordId | length > 0)'
+opsai templates install plugin:opsai.starters:doc-coauthoring --json | jq -e '.created == true and (.copy.recordId | length > 0)'
 ```
 
 Expected: `created` is true and the copy has a record id.
@@ -109,12 +116,6 @@ opsai resources list plugin:opsai.starters --json | jq -e 'map(select(.id == "do
 ```
 
 Expected: the copy is in the team's skills.
-
-## Gaps
-
-| Product fix | Step | What the command line cannot do |
-|---|---|---|
-| `opsai templates list --kind <kind>` over every pack and app, as `ops.templates.list` does | 1 | `opsai resources list <app>` lists one app's templates; no command lists the team's offers by kind, so the page's step 1 has no CLI block |
 
 ## What proves it
 
