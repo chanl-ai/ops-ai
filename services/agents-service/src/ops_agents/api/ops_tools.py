@@ -17,7 +17,7 @@ from typing import Any, cast
 from langgraph.config import get_config
 
 from ops_access import can
-from ops_access.platform_events import TEAM_CREATED, Handler
+from ops_access.platform_events import POLICY_CHANGED, TEAM_CREATED, Handler
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
 from ops_contracts.chat import ChatMessage
@@ -498,4 +498,15 @@ def team_created_handlers(runtime: Callable[[], Runtime]) -> dict[str, Handler]:
         await ensure_ops_assistant(rt, team_id)
         return 1
 
-    return {TEAM_CREATED: Handler("agents", "create", provision)}
+    async def policy_changed(tenant: str, team_id: str, _payload: dict[str, Any]) -> int:
+        # The tool list kept for the team carries each write's answer; drop it so the next turn reads the new ones.
+        forget = getattr(runtime().directory(), "forget_for", None)
+        if forget is None:
+            return 0
+        forget(tenant, team_id)
+        return 1
+
+    return {
+        TEAM_CREATED: Handler("agents", "create", provision),
+        POLICY_CHANGED: Handler("agents", "create", policy_changed),
+    }

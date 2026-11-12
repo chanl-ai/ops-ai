@@ -57,8 +57,8 @@ from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError
 from . import openapi
 from .directory import Directory, Team
 from .executions import call_row
-from .policy import PublishPolicy, RequesterMayDecide, ToolsMode
-from .review_events import ACCESS_REQUESTED, access_event
+from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, tool_mode
+from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
 from .seed import blank, kind_of, major_of, open_connection, tool_title
 from .tool_users import ToolUsers
@@ -262,6 +262,14 @@ def _reviewed(op: dict[str, Any], key: str) -> Any:
     )
 
 
+_MODE_WORDS: dict[str | None, str] = {
+    None: "follows the app",
+    "none": "runs without asking",
+    "person": "asks the person",
+    "reviewer": "asks a reviewer",
+}
+
+
 def _differs_from_published(m: Aggregate) -> bool:
     """Whether the operations about to go live differ from the published ones (the baseline) in anything Security
     reviews. Publish decides major from this, never from the edit history alone, so a change reaches calls without
@@ -327,6 +335,9 @@ class ModuleService:
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
     # checks, never a path of its own.
     real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
+    # The gateway's own reader of the team's approval settings, set by create_gateway_app: a test run waits exactly
+    # when the same call from chat would. Left as is, no team has saved a setting.
+    approvals: WriteApprovals = WriteApprovals()
 
     def __init__(
         self,
@@ -576,6 +587,8 @@ class ModuleService:
             "binding": o["binding"],
             "rateLimitPerMin": o["rate_limit_per_min"],
             "requiresApproval": o["requires_approval"],
+            "approvalMode": o.get("approval_mode"),
+            "reviewerRole": o.get("reviewer_role"),
             "approvers": policy["approvers"],
             "approverTeam": policy["approver_team"],
             "stepUp": policy["step_up"],
@@ -650,16 +663,55 @@ class ModuleService:
             "timeoutMs": m["timeout_ms"],
             "egressHosts": m["egress_hosts"],
             "dataClassification": m["data_classification"],
-            "operations": [
-                self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC), have)
-                for o in m["operations"]
-            ],
+            "operations": await self._with_answers(
+                m,
+                team,
+                [
+                    self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC), have)
+                    for o in m["operations"]
+                ],
+            ),
             "pendingChanges": m["pending"],
             "approvals": [self._approval_out(a) for a in ordered],
             "versions": [self._version_out(v) for v in reversed(m["versions"])],
             "runContexts": self._run_contexts(m, team),
             **(self._rights(who, m) if who is not None else {}),
         }
+
+    async def _with_answers(self, m: Aggregate, team: Team, shown: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Each write's answer for the team in view (waits, who answers, which level), from the resolver the gateway
+        runs, so the tool page and the operations table never apply the rule themselves."""
+        tenant = str(m["tenant_id"])
+        levels = await self.approvals.levels(tenant, team.id)
+        by_name = {str(o["name"]): o for o in m["operations"]}
+        out: list[dict[str, Any]] = []
+        for row in shown:
+            o = by_name[str(row["name"])]
+            if o["access"] not in WRITES:
+                out.append(row)
+                continue
+            ans = await self.approvals.answer(
+                tenant,
+                team.id,
+                m,
+                access=o["access"],
+                setting=tool_mode(o),
+                reviewer_role=o.get("reviewer_role"),
+                approvers=approval_policy(m, o)["approvers"],
+                levels=levels,
+                test_account=bool(m.get("sandbox")),
+                tool=str(o["name"]),
+            )
+            out.append(
+                row
+                | {
+                    "answer": ans["answer"],
+                    "answerSource": ans["source"],
+                    "answerRole": ans["reviewerRole"],
+                    "waits": ans["waits"],
+                }
+            )
+        return out
 
     @staticmethod
     def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
@@ -1124,9 +1176,8 @@ class ModuleService:
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # Approvals are off by default: a new write runs until its tool's switch or a team
-            # policy turns approval on.
-            "requires_approval": False,
+            # Not set unless someone sets it: the team default then decides, and a later change of it reaches the tool.
+            "requires_approval": o.get("requires_approval"),
             "amount_max": None,
             # The source's example response when it gives one, so a stubbed call answers like the system.
             "stub": o.get("stub") if o.get("stub") is not None else {"ok": True},
@@ -1506,6 +1557,20 @@ class ModuleService:
         two = int(o.get("approvers") or 1) > 1 and patch.get("approvers") != 1
         if patch.get("requires_approval") is False and two:
             raise Unprocessable("An operation two people approve always needs a person's approval.")
+        if (
+            patch.get("requires_approval") is not None
+            and "approval_mode" not in fields
+            and (patch.get("access") or o["access"]) == "write"
+        ):
+            # The older flag still arrives from callers; the resolver reads only approval_mode, so it is stored as that:
+            # true asks a reviewer, false hands the answer back to the app and team.
+            patch = {**patch, "approval_mode": "reviewer" if patch["requires_approval"] else None}
+            fields = fields | {"approval_mode"}
+        mode = patch.get("approval_mode") if "approval_mode" in fields else o.get("approval_mode")
+        if mode is not None and (patch.get("access") or o["access"]) != "write":
+            raise Unprocessable("Only a write has an approval mode; a read never waits.")
+        if mode in ("none", "person") and int(patch.get("approvers") or o.get("approvers") or 1) > 1:
+            raise Unprocessable("An operation two people approve always asks a reviewer.")
         rate = patch.get("rate_limit_per_min")
         if rate is not None and not 1 <= rate <= 10_000:
             raise ValidationFailed("Set a rate limit between 1 and 10,000 calls a minute.")
@@ -1540,6 +1605,7 @@ class ModuleService:
                 binding=binding if "binding" in fields else o["binding"],
             )
         access = patch.get("access")
+        answer_before = o.get("approval_mode")
         self._take_baseline(m)
         changes: list[dict[str, Any]] = self._shape_changes(o, shape)
         name = o["name"]
@@ -1552,9 +1618,9 @@ class ModuleService:
             detail = f"Access {o['access']} → {access}"
             changes.append({"operation": name, "kind": "access_widened", "detail": detail, "major": True})
             o["access"] = access
-            # A read never waits; a write keeps its own switch, off unless someone turned it on.
-            if access == "read":
-                o["requires_approval"] = False
+            # A read never waits; a read made a write has no approval setting of its own yet, so the team default
+            # decides. A requiresApproval in the same patch applies after this.
+            o["requires_approval"] = None if access == "write" else False
             if access == "read":
                 o["amount_max"] = None
         if patch.get("enabled") is not None and patch["enabled"] != o["enabled"]:
@@ -1576,11 +1642,30 @@ class ModuleService:
                 detail = "Hidden from workflows; no workflow is approved for it"
                 changes.append({"operation": name, "kind": "removed", "detail": detail, "major": False})
             o["enabled"] = patch["enabled"]
-        if patch.get("requires_approval") is not None and patch["requires_approval"] != o["requires_approval"]:
-            on = patch["requires_approval"]
-            detail = "Every call waits for an approval" if on else "Calls no longer wait for a person"
-            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": not on})
-            o["requires_approval"] = on
+        flag_changed = patch.get("requires_approval") is not None and patch["requires_approval"] != o.get(
+            "requires_approval"
+        )
+        if patch.get("requires_approval") is not None:
+            # Kept as sent for older readers; the approval_mode change below is what is logged and enforced.
+            o["requires_approval"] = patch["requires_approval"]
+        if "approval_mode" in fields and mode != o.get("approval_mode"):
+            before_mode = o.get("approval_mode")
+            # Asking less than the app and team do, or handing the answer back to them, widens what runs unattended:
+            # Security reviews it. Asking a reviewer is stricter and publishes as a minor change.
+            detail = f"Approval {_MODE_WORDS[before_mode]} → {_MODE_WORDS[mode]}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": mode != "reviewer"})
+            o["approval_mode"] = mode
+        elif flag_changed:
+            # The stored flag moved but the answer did not (a tool already following its app, told false): still an
+            # edit, so a script that re-sends it is not refused as "Nothing changed". No effect on calls, so minor.
+            detail = f"Approval {_MODE_WORDS[o.get('approval_mode')]}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
+        if "reviewer_role" in fields and patch.get("reviewer_role") != o.get("reviewer_role"):
+            role = patch.get("reviewer_role")
+            anyone = "anyone who can approve"
+            detail = f"Reviewer role {o.get('reviewer_role') or anyone} → {role or anyone}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": role is None})
+            o["reviewer_role"] = role
         if rate is not None and rate != o["rate_limit_per_min"]:
             detail = f"Rate limit {o['rate_limit_per_min']} → {rate} a minute"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
@@ -1596,9 +1681,9 @@ class ModuleService:
             detail = f"Approvers {o.get('approvers') or 1} → {approvers}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
             o["approvers"] = approvers
-            if approvers > 1 and not o["requires_approval"]:
-                # Asking for two approvers turns the tool's approval on: approvals are off by default,
-                # and a write two people approve always waits for them.
+            if approvers > 1 and o.get("approval_mode") != "reviewer":
+                # Asking for two approvers makes the tool ask a reviewer: a write two people approve always waits for
+                # them, even one switched to run at once.
                 changes.append(
                     {
                         "operation": name,
@@ -1608,6 +1693,7 @@ class ModuleService:
                     }
                 )
                 o["requires_approval"] = True
+                o["approval_mode"] = "reviewer"
         if team is not None and team != o.get("approver_team"):
             detail = f"Approved by {team}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
@@ -1668,8 +1754,15 @@ class ModuleService:
             changes.extend(self._code_changes(o, _code_settings(patch["code"])))
         if not changes:
             raise ValidationFailed("Nothing changed.")
+        answer_changed = o.get("approval_mode") != answer_before
         self._stage(m, changes)
-        return await self._detail(await self._save(m), who.team, who)
+        # A tool's own answer reaches agents' kept tool lists only when told: one event with the save.
+        told = (
+            [policy_changed_event(m, o, who.team.id, who.principal.email if who.principal else None)]
+            if answer_changed
+            else []
+        )
+        return await self._detail(await self._save(m, events=told), who.team, who)
 
     @staticmethod
     def _code_changes(o: dict[str, Any], code: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2279,7 +2372,22 @@ class ModuleService:
             }
         if amount_refusal(o, args) is not None:  # the gateway's own check (ops_tools.limits)
             return deny("constraint")
-        would_pause = o["access"] in WRITES and o["requires_approval"]
+        would_pause = o["access"] in WRITES and bool(
+            (
+                await self.approvals.answer(
+                    who.tenant_id,
+                    who.team.id,
+                    m,
+                    access=o["access"],
+                    setting=tool_mode(o),
+                    reviewer_role=o.get("reviewer_role"),
+                    approvers=approval_policy(m, o)["approvers"],
+                    test_account=bool(m.get("sandbox")),
+                    channel="test",
+                    tool=o["name"],
+                )
+            )["waits"]
+        )
         # A real write in a workflow's context needs a real approval; simulate_approval stands in for one on Mock only.
         if would_pause and sandbox and ctx is not None:
             return deny("approval_token_missing")
@@ -2321,6 +2429,7 @@ class ModuleService:
                     secret_values=i.get("secret_values"),
                     trial=trial,
                     environment=str(i.get("environment") or TEST),
+                    confirmed=bool(i.get("confirmed")),
                 )
             )
         elif answer is not None:
@@ -2360,6 +2469,7 @@ class ModuleService:
         secret_values: dict[str, str] | None,
         trial: Trial,
         environment: str,
+        confirmed: bool = False,
     ) -> dict[str, Any]:
         """The Real run, as one gateway call: the gateway decides it as it decides an agent's call (approval,
         limits, egress, the team's account) in the environment the person chose, and logs it under them. `trial` comes
@@ -2376,6 +2486,7 @@ class ModuleService:
             act=f"console:{who.name}",
             trial=trial,
             secret_values=secret_values,
+            confirmed=confirmed,
         )
         result: dict[str, Any] = {
             "callId": ran["callId"],
@@ -2385,9 +2496,13 @@ class ModuleService:
         }
         if "code" in ran:
             message = "; ".join(ran["reasons"])
+            code = ran["code"]
+            if code == "gateway_refused" and any("needs an approval token" in r for r in ran["reasons"]):
+                # A live-account test run waiting for the person's yes reads as a missing approval, like a workflow's.
+                code = "approval_token_missing"
             return result | {
                 "decision": "deny",
-                "denyReason": ran["code"],
+                "denyReason": code,
                 "denyMessage": message,
                 "status": ran["status"],
                 "output": {"error": ran["code"], "message": message},

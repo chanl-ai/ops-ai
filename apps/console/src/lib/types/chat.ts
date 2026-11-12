@@ -84,6 +84,10 @@ export interface ApprovalWidget extends WidgetBase {
   waitingOn?: string;
   /** Whether the reader may decide it now, by the decision route's checks (agents-service); absent from the mock. */
   canDecide?: boolean;
+  /** The app asks before changes: the person who asked answers it, with Allow, Deny and Allow for this chat. */
+  askFirst?: boolean;
+  /** An ask-first card offers "Allow for this chat" unless this is false (a test run has no chat to allow). */
+  allowForChat?: boolean;
   reason?: string;
 }
 
@@ -116,7 +120,7 @@ export type ChatWidget = TableWidget | ChartWidget | RecordWidget | ApprovalWidg
 export type WidgetKind = ChatWidget['kind'];
 
 /** `stepUpToken`: approving a call that needs a step-up needs a re-authentication from the last 5 minutes. */
-export type WidgetAction = { type: 'approve'; stepUpToken?: string } | { type: 'reject'; reason: string } | { type: 'submit'; values: Record<string, string> };
+export type WidgetAction = { type: 'approve'; stepUpToken?: string; forChat?: boolean } | { type: 'reject'; reason: string } | { type: 'submit'; values: Record<string, string> };
 
 // ── Messages ──
 

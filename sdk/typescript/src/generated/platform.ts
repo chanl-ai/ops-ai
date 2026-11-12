@@ -2550,7 +2550,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "names" | "choice" | "app_changes" | "app_changes_by_app";
             /** Note */
             note?: string | null;
             /** Title */

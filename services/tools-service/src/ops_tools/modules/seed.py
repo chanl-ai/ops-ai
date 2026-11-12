@@ -301,9 +301,9 @@ def runtime_module(
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # Declared on the tool; a write that declares nothing runs, as approvals are off by
-            # default.
-            "requires_approval": t["access"] != "read" and t.get("requires_approval") is True,
+            # A declared wait answers a reviewer; otherwise the app and team decide.
+            "requires_approval": t.get("requires_approval"),
+            **waits_mode(t.get("requires_approval"), t["access"]),
             "approvers": 1,
             "amount_max": None,
             "stub": {"ok": True},
@@ -394,6 +394,18 @@ def template_of(app: dict[str, Any]) -> str:
     return f"builtin:{app['id']}"
 
 
+def declared_mode(declared: bool | None) -> dict[str, str]:
+    """The operation's own approval answer for a seed that says whether the tool waits (true: a reviewer; false: runs
+    at once); nothing for a seed that says neither, so its app and team decide."""
+    return {} if declared is None else {"approval_mode": "reviewer" if declared else "none"}
+
+
+def waits_mode(declared: bool | None, access: str) -> dict[str, str]:
+    """A seeded write that declares a wait answers a reviewer, as migration 0074 gave a stored one; a write that
+    declares it runs at once, or nothing, is not set, so its app and team decide. A read has no answer."""
+    return {"approval_mode": "reviewer"} if access == "write" and declared is True else {}
+
+
 def _local_op(module_id: str, n: int, name: str) -> dict[str, Any]:
     """Operation `name` of the platform's tools, run in process (`local`), at position n of a module."""
     declared = {str(t["name"]): t for t in [*PLATFORM_TOOLS, *READ_TOOLS]}
@@ -420,6 +432,9 @@ def _local_op(module_id: str, n: int, name: str) -> dict[str, Any]:
         "binding": None,
         "rate_limit_per_min": 60,
         "requires_approval": approval,
+        # Spelled out so the tool's own answer holds whatever the team's default: the acknowledgement always leaves at
+        # once and a reply always waits for a reviewer.
+        **(declared_mode(approval) if name in SENDS else {}),
         "approvers": 1,
         "amount_max": None,
         "stub": {"ok": True},
@@ -579,8 +594,9 @@ def aggregates(
                     "masked_output": o.get("masked") or [],
                     "binding": o.get("binding"),
                     "rate_limit_per_min": o.get("rate") or 60,
-                    # Only a write the seed marks waits: approvals are off by default.
-                    "requires_approval": access == "write" and o.get("requiresApproval") is True,
+                    # A declared wait answers a reviewer; otherwise the app and team decide.
+                    "requires_approval": o.get("requiresApproval"),
+                    **waits_mode(o.get("requiresApproval"), access),
                     "approvers": int(base.get("approvers") or 1),
                     # Who approves a write when not the module's own team (Fraud Operations decides a wire hold).
                     **({"approver_team": base["approverTeam"]} if base.get("approverTeam") else {}),

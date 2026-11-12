@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_access.platform_events import TEAM_CREATED
+from ops_access.platform_events import POLICY_CHANGED, TEAM_CREATED
 from ops_identity import ServiceClient
 from ops_store import background
 from ops_store.outbox import Relay, Send
@@ -22,7 +22,11 @@ from .members import MEMBER_REMOVED
 from .tables import platform_outbox
 from .tenancy import ROLE
 
-SUBSCRIBERS: dict[str, tuple[str, ...]] = {MEMBER_REMOVED: ("tools",), TEAM_CREATED: ("tools", "agents")}
+SUBSCRIBERS: dict[str, tuple[str, ...]] = {
+    MEMBER_REMOVED: ("tools",),
+    TEAM_CREATED: ("tools", "agents"),
+    POLICY_CHANGED: ("agents",),
+}
 # The rights a subscriber checks before acting on each event; the relay's token for that service carries them.
 SCOPES: dict[str, list[str]] = {"tools": ["connections:delete", "tools:create"], "agents": ["agents:create"]}
 ROUTE = "/v1/platform-events"

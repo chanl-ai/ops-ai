@@ -189,14 +189,17 @@ export interface AppOff {
   appId: string;
   teamId?: string;
   message: string;
-  /** The app's state for the team, from the refusal's code: off, or on with its team account not signed in yet. */
-  appState: 'off' | 'needs_sign_in';
+  /** The app's state for the team, from the refusal's code: off, on with its team account not signed in yet, or on
+   * with the one tool the call needs turned off in its catalog. */
+  appState: 'off' | 'needs_sign_in' | 'tool_off';
+  /** The tool turned off, as the app's Tools tab names it (tool_off only). */
+  toolTitle?: string;
   /** The team account was signed in and its sign-in ended (expired, refused or revoked): it is signed in again. */
   again?: boolean;
 }
 
 // The refusals for an app the team sets up first, by the app state each means.
-const TEAM_FIRST: Record<string, AppOff['appState']> = { APP_OFF_FOR_TEAM: 'off', NOT_SIGNED_IN: 'needs_sign_in' };
+const TEAM_FIRST: Record<string, AppOff['appState']> = { APP_OFF_FOR_TEAM: 'off', NOT_SIGNED_IN: 'needs_sign_in', TOOL_NOT_ADDED: 'tool_off' };
 
 /** The app a call found off for the team, from the gateway's error (or the assistant's request_app), or null. */
 export function appOffForTeam(call: ToolCall): AppOff | null {
@@ -204,12 +207,12 @@ export function appOffForTeam(call: ToolCall): AppOff | null {
   let error = (call.output as { error?: unknown }).error;
   if (error && typeof error === 'object' && 'error' in error) error = (error as { error: unknown }).error;
   if (!error || typeof error !== 'object') return null;
-  const e = error as { code?: string; message?: string; details?: Partial<AppOff> & { account?: string; connectedEvent?: unknown } };
+  const e = error as { code?: string; message?: string; details?: Partial<AppOff> & { account?: string; connectedEvent?: unknown; toolTitle?: string } };
   // A team account whose sign-in ended names the event its next sign-in reports; any other AUTH_FAILED draws no card.
   const again = e.code === 'AUTH_FAILED' && e.details?.account === 'team' && Boolean(e.details.connectedEvent);
   const appState = again ? 'needs_sign_in' : TEAM_FIRST[e.code ?? ''];
   if (!appState || !e.details?.appId) return null;
-  return { app: e.details.app ?? 'This app', appId: e.details.appId, teamId: e.details.teamId, message: e.message ?? '', appState, again };
+  return { app: e.details.app ?? 'This app', appId: e.details.appId, teamId: e.details.teamId, message: e.message ?? '', appState, again, toolTitle: e.details.toolTitle };
 }
 
 /**
@@ -223,13 +226,21 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
   const [dismissed, setDismissed] = React.useState(false);
   const teamName = team?.name ?? 'this team';
   const signIn = off.appState === 'needs_sign_in';
-  const label = labelFor(off.appState, manages);
-  const title = off.again
+  const toolOff = off.appState === 'tool_off';
+  const tool = off.toolTitle ?? 'this tool';
+  const label = off.appState === 'tool_off' ? 'Tool off' : labelFor(off.appState, manages);
+  const title = toolOff
+    ? `${off.app}'s ${tool} is turned off for ${teamName}`
+    : off.again
     ? `${off.app} needs signing in again`
     : signIn
       ? `${off.app} is on for ${teamName}, but its team account is not signed in`
       : `${off.app} is off for ${teamName}`;
-  const said = off.again
+  const said = toolOff
+    ? manages
+      ? `Turn it on in ${off.app}'s tools; the AI then carries on with this.`
+      : 'Only a team admin can turn it on.'
+    : off.again
     ? manages
       ? 'Its sign-in ended. Sign it in again; this chat then carries on with it, never with another account.'
       : 'Its sign-in ended. Only a team admin can sign it in again.'
@@ -267,7 +278,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {manages ? (
                 <Button size="sm" asChild data-testid="app-off-turn-on">
-                  <Link href={appPageHref(off.appId)}>{off.again ? 'Sign in' : signIn ? 'Connect the team account' : `Turn on ${off.app}`}</Link>
+                  <Link href={toolOff ? appPageHref(off.appId, 'tools') : appPageHref(off.appId)}>{toolOff ? `Turn on ${tool}` : off.again ? 'Sign in' : signIn ? 'Connect the team account' : `Turn on ${off.app}`}</Link>
                 </Button>
               ) : (
                 <AskAnAdmin testId="app-off-ask" />

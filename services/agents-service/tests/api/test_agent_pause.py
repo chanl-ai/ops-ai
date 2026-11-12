@@ -3,6 +3,7 @@ new messages or conversations accepted, or refused without saying why."""
 
 from __future__ import annotations
 
+import pytest
 from httpx import AsyncClient
 
 from tests.api.test_chat import new_thread, send
@@ -30,6 +31,7 @@ async def test_a_paused_agent_refuses_new_messages_and_conversations_with_the_re
     assert events[-1]["type"] == "done"
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_a_turn_under_way_finishes_after_the_pause(client: AsyncClient) -> None:
     thread = await new_thread(client)
     _, events = await send(client, thread["id"], {"content": WIRE})

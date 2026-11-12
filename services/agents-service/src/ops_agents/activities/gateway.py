@@ -287,8 +287,14 @@ SIGN_IN_ENDED_LINE = (
     "Not run: {app}'s team sign-in has ended. Reply with one sentence saying a team admin signs it in again from the "
     "card above, then you carry on with this ask; do not use another account and offer no other steps or help."
 )
+# A tool the team turned off in its app's catalog: the card above offers Turn on <tool>, or Ask an admin.
+TOOL_OFF = "TOOL_NOT_ADDED"
+TOOL_OFF_LINE = (
+    "Not run: {app}'s {tool} is turned off for this team. Reply with one sentence saying a team admin can turn it on "
+    "from the card above, then you carry on with this ask; offer no other steps or help."
+)
 # The refusals the chat draws as a card (carded).
-CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN, SIGN_IN_ENDED)
+CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN, SIGN_IN_ENDED, TOOL_OFF)
 
 
 def _object(value: Any) -> dict[str, Any] | None:
@@ -316,6 +322,10 @@ def carded(output: Any) -> str | None:
         return APP_OFF_LINE.format(app=str(details.get("app") or "this app"))
     if error.get("code") == TEAM_SIGN_IN:
         return TEAM_SIGN_IN_LINE.format(app=str(details.get("app") or "this app"))
+    if error.get("code") == TOOL_OFF:
+        return TOOL_OFF_LINE.format(
+            app=str(details.get("app") or "this app"), tool=str(details.get("toolTitle") or "tool")
+        )
     line = CARD_LINES.get(str(details.get("reason") or "not_connected"), CARD_LINES["not_connected"])
     return line.format(app=str(details.get("app") or details.get("connection") or "this app"))
 

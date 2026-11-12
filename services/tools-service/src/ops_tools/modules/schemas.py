@@ -180,7 +180,17 @@ class ModuleOperation(Out):
     masked_output: list[str]
     binding: SubjectBinding | None
     rate_limit_per_min: int
-    requires_approval: bool
+    # None: the team default decides (a write waits unless the team lets its app change without asking).
+    requires_approval: bool | None = None
+    # The tool's own answer (none, person or reviewer); None follows its app, then the team.
+    approval_mode: Literal["none", "person", "reviewer"] | None = None
+    reviewer_role: str | None = None
+    # What a call of a write does in a chat for the team in view, from the one resolver (the tool's own answer, a team
+    # admin's answer for it, its app and the team): waits, who answers, and the level it came from. Null for a read.
+    answer: Literal["none", "person", "reviewer"] | None = None
+    answer_source: str | None = None
+    answer_role: str | None = None
+    waits: bool | None = None
     amount_max: float | None = None
     # The write approval policy: distinct approvers (1 or 2) and the team they come from. Whether the person who asked
     # may approve is the tenant's requesterMayDecide policy, not a per-operation setting.
@@ -544,7 +554,11 @@ class OperationPatchIn(In):
     response_transform: str | None = None
     timeout_ms: int | None = None
     enabled: bool | None = None
-    requires_approval: bool | None = None
+    # Still accepted: true is stored as approvalMode "reviewer", false clears it. Send approvalMode instead.
+    requires_approval: Annotated[bool | None, Field(deprecated=True)] = None
+    # none, person or reviewer; null clears it, back to the app's and team's answer. A loosening is a major change.
+    approval_mode: Literal["none", "person", "reviewer"] | None = None
+    reviewer_role: Annotated[str, Field(max_length=64)] | None = None
     rate_limit_per_min: int | None = None
     binding: SubjectBindingIn | None = None
     amount_max: float | None = None
@@ -600,6 +614,8 @@ class ModuleTestIn(In):
     target: Literal["stub", "sandbox"]
     input: dict[str, Any]
     simulate_approval: bool = False
+    # The person's yes to a Real test run that asks them first (the console's approval card).
+    confirmed: bool = False
     draft: TestDraftIn | None = None
     # Values for this one call, by secret name; never stored, logged or returned.
     secret_values: dict[str, str] | None = None
@@ -616,6 +632,8 @@ class ToolRunIn(In):
     # The kind of run a Real run is; left out, test: it uses the app's sandbox account when it has one, and a write on
     # a live account waits for a person.
     environment: RunKind | None = None
+    # The person's yes to a Real run that asks them first.
+    confirmed: bool = False
 
 
 class ToolRunResult(ModuleTestResult):

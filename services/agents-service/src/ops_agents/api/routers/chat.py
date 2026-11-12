@@ -857,7 +857,10 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
 
 async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: ChatMessage) -> None:
     """Approves the turn's waiting write as `me` when they may decide it and it asks for no step-up."""
-    waiting = [w for w in reply.widgets or [] if isinstance(w, ApprovalWidget) and w.state == "pending"]
+    # A write whose app asks before changes is the person's to answer on its card, whatever their role.
+    waiting = [
+        w for w in reply.widgets or [] if isinstance(w, ApprovalWidget) and w.state == "pending" and not w.ask_first
+    ]
     if not waiting or any(w.step_up for w in waiting) or not await hitl_facade.can_decide(rt, me, thread_id):
         return
     try:
@@ -904,7 +907,7 @@ async def widget_action(
         raise ValidationFailed("An approval is approved or rejected, not submitted.")
     if widget.state not in ("pending", "awaiting_second"):
         raise Conflict("This approval was already decided.")
-    if isinstance(action, RejectAction) and not action.reason.strip():
+    if isinstance(action, RejectAction) and not action.reason.strip() and not widget.ask_first:
         raise ValidationFailed("Give a reason for rejecting.")
     if rt.ports is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.")
@@ -913,8 +916,12 @@ async def widget_action(
         me,
         thread_id,
         decision="approved" if isinstance(action, ApproveAction) else "rejected",
-        reason=action.reason.strip() if isinstance(action, RejectAction) else None,
+        # A Deny on an app that asks before changes needs no reason; the agent is told the person said no.
+        reason=(action.reason.strip() or ("the person in the chat chose Deny" if widget.ask_first else ""))
+        if isinstance(action, RejectAction)
+        else None,
         step_up_token=action.step_up_token if isinstance(action, ApproveAction) else None,
+        for_chat=bool(action.for_chat) if isinstance(action, ApproveAction) else False,
     )
     await update_meta(rt, thread_id, lastMessageAt=now_iso())
     decided = next(

@@ -22,7 +22,6 @@ from ops_service_kit.http import Out
 from .app_states import AppGroup, AppState
 from .connections.records import PERSON_ORIGIN, connection_base
 from .connections.service import own_key
-from .modules.policy import app_ids
 from .plugins.host import account_identity, own_and_registration
 
 if TYPE_CHECKING:
@@ -134,28 +133,28 @@ def can_do(tools: list[dict[str, Any]]) -> str:
     return " · ".join(parts) or "No tools switched on yet"
 
 
-async def _policy(apps: Apps, who: Caller) -> tuple[bool, list[str] | None]:
-    """The team's write policies, read once per page: whether every write waits, and the apps whose writes do (None
-    when the list cannot be read, which counts as listed, as the gateway reads it)."""
-    policy = apps.write_approvals
-    if policy is None:
-        return False, []
-    every = await policy.all_writes(who.tenant_id, who.team.id)
-    return every, [] if every else await policy.apps(who.tenant_id, who.team.id)
-
-
-async def _reviewed(
-    apps: Apps, who: Caller, tools: list[dict[str, Any]], policy: tuple[bool, list[str] | None]
-) -> list[dict[str, Any]]:
-    """Each tool with whether its write waits: its own flag, or the team's policy (every write, or this app's)."""
-    every, listed_apps = policy
+async def _reviewed(apps: Apps, who: Caller, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each tool with whether its write waits, from the gateway's rule: its own setting, its app, the team."""
+    if apps.write_approvals is None:
+        return [{**t, "reviewed": t["access"] != "read" and bool(t["waits"])} for t in tools]
+    levels = await apps.write_approvals.levels(who.tenant_id, who.team.id)
     out: list[dict[str, Any]] = []
     for t in tools:
-        waits = bool(t["waits"]) or every
-        if not waits and t["access"] != "read" and apps.write_approvals is not None:
+        waits = False
+        if t["access"] != "read":
             module = await apps.modules.get(who.tenant_id, str(t["moduleId"]))
-            waits = listed_apps is None or (module is not None and bool(app_ids(module) & set(listed_apps)))
-        out.append({**t, "reviewed": t["access"] != "read" and waits})
+            answer = await apps.write_approvals.answer(
+                who.tenant_id,
+                who.team.id,
+                module,
+                access=str(t["access"]),
+                setting=t.get("setting"),
+                reviewer_role=t.get("settingRole"),
+                levels=levels,
+                tool=str(t["name"]),
+            )
+            waits = bool(answer["waits"])
+        out.append({**t, "reviewed": waits})
     return out
 
 
@@ -202,7 +201,6 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
         by_app.setdefault(str(m["appId"]), []).append(m)
     conns = await apps.connections.store.by_ids(who.tenant_id, [str(m["connectionId"]) for m in mine])
     may = apps.connections.may_manage(who)
-    policy = await _policy(apps, who)
     rows: list[dict[str, Any]] = []
     for card in cards:
         plugin = cast(dict[str, Any] | None, card.get("plugin"))
@@ -218,7 +216,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
         tools = await apps_tools(apps, who, card)
         # Nothing is switched on while the app is off: say what it reads once turned on.
         tools = [t for t in tools if t["access"] == "read"] if off else [t for t in tools if t["added"]]
-        tools = await _reviewed(apps, who, tools, policy)
+        tools = await _reviewed(apps, who, tools)
         accounts = [] if off else own
         saved = {str(t["connection_id"]) for t in signed if t.get("pinned")}
         live = [a for a in accounts if a["state"] == "connected"]

@@ -145,9 +145,9 @@ async def drafted(client: AsyncClient, asker: dict[str, str]) -> str:
 async def test_an_asker_who_decides_reviews_is_not_asked_until_the_tenant_switches_it_off(
     production: AsyncClient,
 ) -> None:
-    """Roles decide: James decides Operations' reviews, so his own write is decided as his at once
-    and the card is no longer waiting; with requesterMayDecide off, Maya decides it."""
-    james = person("usr_james", ["team_ops"])
+    """Roles decide: James decides Operations' reviews, so in a workspace that turned requesterMayDecide on his own
+    write is decided as his at once and the card is no longer waiting; with it off, the default, Maya decides it."""
+    james = person("usr_james", ["team_ops"], policies={"requesterMayDecide": True})
     url = await drafted(production, james)
     again = await production.post(url, json={"type": "approve"}, headers=james)
     assert (again.status_code, again.json()["error"]["message"]) == (409, "This approval was already decided."), (
@@ -205,12 +205,16 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_in_the_thr
 
 async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> None:
     dana = {"X-Dev-User": "dana@harborpine.example"}
-    async for c in _client(Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED), platform=False):
-        # The operation asks for no step-up and the policy is open: the dev asker, who passes every role rule, is not
+    # The asker may decide here (requesterMayDecide on), so the step-up policy is what each run tests.
+    loose = {"requesterMayDecide": True}
+    async for c in _client(
+        Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies=loose), platform=False
+    ):
+        # The operation asks for no step-up and step-up is off: the dev asker, who passes every role rule, is not
         # asked, so the card is decided as theirs.
         own = await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)
         assert own.status_code == 409, own.text
-    strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True})
+    strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True, **loose})
     async for c in _client(strict, platform=False):
         url = await drafted(c, dana)
         bare = await c.post(url, json={"type": "approve"}, headers=dana)

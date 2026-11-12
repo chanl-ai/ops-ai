@@ -115,6 +115,7 @@ async def approval_widget(client: AsyncClient, content: str) -> tuple[str, str, 
     return thread["id"], url, widget
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_a_money_decision_records_the_fingerprint_of_its_step_up(client: AsyncClient) -> None:
     tid, url, widget = await approval_widget(client, "Place a 24-hour hold on wire W-88213")
     assert widget["stepUp"] is True
@@ -127,6 +128,7 @@ async def test_a_money_decision_records_the_fingerprint_of_its_step_up(client: A
     assert review["stepUpRef"] is not None and token not in review["stepUpRef"]
 
 
+@pytest.mark.usefixtures("requester_may_decide")
 async def test_a_decision_that_needed_no_step_up_records_none(client: AsyncClient) -> None:
     tid, url, _ = await approval_widget(client, "Place a 24-hour hold on wire W-88213")
     rejected = await client.post(url, json={"type": "reject", "reason": "Not this one."})

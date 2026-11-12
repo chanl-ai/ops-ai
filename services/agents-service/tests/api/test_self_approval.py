@@ -48,7 +48,8 @@ async def strict() -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def open_() -> AsyncIterator[AsyncClient]:
-    async for c in client():
+    # A workspace that turned requesterMayDecide on; off is the default.
+    async for c in client(requesterMayDecide=True):
         yield c
 
 

@@ -99,6 +99,8 @@ ENTRIES: dict[str, set[str]] = {
     },
     "scope": {
         "services/agents-service/src/ops_agents/api/batches.py",
+        # The apps a team has turned off are read in the team the call names.
+        "services/tools-service/src/ops_tools/app.py",
         # A checkpointer built for one tenant and team (tests, tools) scopes each transaction to them, never to a
         # config's; the Runtime's checkpointer acts in the caller's context.
         "packages/ops_checkpointer/src/ops_checkpointer/saver.py",
