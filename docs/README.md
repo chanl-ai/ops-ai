@@ -542,3 +542,6 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/kb-service/rerank-and-query-rewrite.md` | uc-677: A knowledge owner turns on rerank and query rewrite |
 | `usecases/kb-service/sharepoint-and-confluence-sources.md` | uc-678: A team takes in SharePoint libraries and Confluence spaces |
 | `usecases/agents-service/guardrail-names-per-team.md` | uc-731: Two teams keep a guardrail of the same name and one team cannot hold two |
+| `usecases/agents-service/start-from-a-template-sdk.md` | uc-740: A team lists templates of each kind and installs a starter skill through the SDK |
+| `usecases/agents-service/templates-over-mcp.md` | uc-741: An assistant on the team MCP address lists templates and installs one as the signed-in person |
+| `usecases/agents-service/skills-as-mcp-prompts.md` | uc-742: A team skill is offered as an MCP prompt with its inputs as arguments |

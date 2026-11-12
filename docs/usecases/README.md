@@ -357,5 +357,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-721 | tools-service | A connected app writes at once: every tool on and writes run without asking until a team admin turns asking on, per team or per app; a turned-off tool says how to turn it on | api, sdk | passing |
 | uc-730 | console | A team admin decides whether agents ask before changing an app with one switch on Approvals, who answers once it is on, and a test-account checkbox under Advanced | ui | current |
 | uc-731 | agents-service | A team that makes a second guardrail of the same name is refused with name_taken, and the first keeps the plain slug | api | draft |
+| uc-740 | agents-service | A team lists templates of each kind and installs a starter skill through the SDK | sdk | draft |
+| uc-741 | agents-service | An assistant on the team MCP address lists templates and installs one as the signed-in person | mcp | draft |
+| uc-742 | agents-service | A team skill is offered as an MCP prompt with its inputs as arguments | mcp | draft |
 | uc-723 | console | The console shows one area of pages at a time, chosen from the top bar and offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams, on a desktop and a phone | ui | failing |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |

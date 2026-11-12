@@ -103,7 +103,7 @@ test('model keys are removed unless APPROVED_REAL_CALLS is a positive count', ()
 test('coverage marks a missing required script apart from a layer that does not exist yet', () => {
   const root = repo();
   const [row] = coverage(root, parseRegistry(TABLE), 'agents-service').filter((r) => r.id === 'uc-002');
-  assert.deepEqual(row!.cells, { api: 'missing', sdk: 'not available yet', cli: 'not available yet', ui: 'missing' });
+  assert.deepEqual(row!.cells, { api: 'missing', sdk: 'not available yet', cli: 'not available yet', ui: 'missing', mcp: 'not available yet' });
 });
 
 test('new takes the next id, registers it, and its stub script fails until written', () => {

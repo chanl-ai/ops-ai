@@ -1,0 +1,70 @@
+"""The stack the template use cases share (uc-740 to uc-742): platform-service signing people in, tools-service with
+the starters pack and the team MCP address on, agents-service reading tools-service. The team admin turns the starters
+pack on for team_ops before the script's first step. No model call.
+
+The starters pack is read from the plugins working copy beside this repo, or from OPS_USECASE_STARTERS_PACK."""
+
+from __future__ import annotations
+
+import json
+import os
+from collections.abc import Generator
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from usecase_harness import (
+    AGENTS_PORT,
+    PLATFORM_INTERNAL_PORT,
+    PLATFORM_PORT,
+    ROOT,
+    agents,
+    bearer,
+    platform,
+    signed_in,
+    tools,
+)
+
+PACK = "opsai.starters"
+SOURCE = f"plugin:{PACK}"
+# A starter skill from the starters pack, with inputs (topic, doc_type).
+SKILL = "doc-coauthoring"
+STARTERS = Path(
+    os.environ.get(
+        "OPS_USECASE_STARTERS_PACK",
+        str(ROOT.parent / "ops-ai-plugins" / "plugins" / "starters" / "src" / "ops_plugin_starters"),
+    )
+)
+AUTH = {
+    "OPS_AUTH_MODE": "platform",
+    "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+    "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
+}
+
+
+@dataclass
+class Stack:
+    accounts: Any
+    gw: Any
+    api: Any
+    priya: dict[str, str]
+
+    def token(self, email: str) -> str:
+        """A signed-in person's bearer token, which the team MCP address takes as an assistant's credential."""
+        return str(signed_in(self.accounts, email).get("token") or "")
+
+
+@contextmanager
+def templates_stack() -> Generator[Stack]:
+    plugins = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(STARTERS)] if STARTERS.exists() else [])}
+    with (
+        platform() as (accounts, _),
+        tools(
+            {**AUTH, **plugins, "OPS_FLAGS": "mcp_gateway", "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}
+        ) as gw,
+        agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH) as api,
+    ):
+        priya = bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops")
+        gw.put(f"/v1/apps/{SOURCE}/team", json={"enabled": True}, headers=priya)
+        yield Stack(accounts, gw, api, priya)

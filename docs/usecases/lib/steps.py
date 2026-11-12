@@ -161,3 +161,49 @@ def run_workflow(
     """Starts a run of a workflow's current version and waits until it ends or stops at a human task (`taskId`)."""
     started = ops.runs.start(workflow_id, input=input or {})
     return ops.runs.wait(started["runId"], timeout=timeout)
+
+
+# Templates: what a team can start from, and the team MCP address that offers the same list and install.
+# The SDK words are `ops.templates.list` and `ops.templates.install`; until they exist the step raises, so the script
+# shows the step failing instead of reaching for the raw client.
+
+
+def list_templates(ops: OpsAI, kind: str | None = None) -> list[dict[str, Any]]:
+    """Every template offered to the client's team, across every pack and app that is on; `kind` keeps one kind."""
+    words = getattr(ops, "templates", None)
+    if words is None:
+        raise RuntimeError("the SDK has no templates.list")
+    return list(words.list(**({"kind": kind} if kind else {})))
+
+
+def install_template(ops: OpsAI, resource: str, **fields: Any) -> dict[str, Any]:
+    """Installs `<source>:<id>` into the client's team as the team's own copy, through the kind's create checks."""
+    words = getattr(ops, "templates", None)
+    if words is None:
+        raise RuntimeError("the SDK has no templates.install")
+    return dict(words.install(resource, **fields))
+
+
+def mcp_session(credential: str, team: str, *, client: str = "use case assistant") -> Any:
+    """An MCP client session on the team's MCP address with the official MCP Python SDK, as an outside assistant
+    connects. Use as `async with mcp_session(token, "team_ops") as c:`."""
+    from contextlib import asynccontextmanager
+
+    import httpx2
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+    from mcp_types import Implementation
+
+    @asynccontextmanager
+    async def opened() -> Any:
+        async with (
+            httpx2.AsyncClient(headers={"Authorization": f"Bearer {credential}"}, timeout=30) as http,
+            Client(
+                streamable_http_client(f"http://127.0.0.1:{TOOLS_PORT}/mcp/{team}", http_client=http),
+                client_info=Implementation(name=client, version="1.0"),
+                cache=None,
+            ) as c,
+        ):
+            yield c
+
+    return opened()
