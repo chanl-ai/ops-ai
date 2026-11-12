@@ -99,6 +99,8 @@ const call = async (base, method, path, headers, body) => {
   return { status: r.status, data: json?.data, text: text.slice(0, 400) };
 };
 
+// A card's own testid; the state badge inside it ends in -state and also carries data-state.
+const CARDS = '[data-testid^="system-"][data-state]:not([data-testid$="-state"])';
 /** One story; on a failure the page it was on is kept as `failed-<n>.png` beside the evidence. */
 async function step(name, body, page) {
   try {
@@ -331,27 +333,31 @@ try {
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // The Connected view holds the app that is signed in, with no button and its accounts named.
+          // Person desk signs in as each person, so Team setup shows the viewer's own state: Priya has not signed in as
+          // herself, so it reads Needs sign-in under Available, not Connected.
           await page.getByTestId('view-tab-connected').click();
+          await page.waitForTimeout(300);
           const ours = page.getByTestId(`system-${APP}`);
+          const inConnected = await ours.count();
+          const connectedStates = await page.locator(CARDS).evaluateAll((els) => els.map((e) => e.getAttribute('data-state')));
+          await shoot(page, 'catalog-connected');
+          // The Available view holds the rest, each with its one action.
+          await page.getByTestId('view-tab-available').click();
           await ours.waitFor({ timeout: 60_000 });
-          const connectedHas = (await page.locator('[data-testid^="system-"][data-state]').evaluateAll((els) => els.map((e) => e.getAttribute('data-state')))).every((st) => ['connected', 'test_failed', 'removed'].includes(st));
           const ourState = await ours.getAttribute('data-state');
           const ourText = ((await ours.innerText()) ?? '').replace(/\s+/g, ' ');
-          const oneAction = (await ours.locator('button').count()) === 0;
-          await shoot(page, 'catalog-connected');
-          // The Available view holds the rest, each with Connect.
-          await page.getByTestId('view-tab-available').click();
-          await page.waitForTimeout(300);
-          const others = await page.locator('[data-testid^="system-"][data-state]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-testid'), e.getAttribute('data-state')]));
-          const othersConnect = await page.locator('main button[data-testid^="connect-"]').count();
+          const oneAction = (await ours.locator('button').count()) === 1;
+          const others = await page.locator(CARDS).evaluateAll((els) => els.map((e) => [e.getAttribute('data-testid'), e.getAttribute('data-state')]));
           await shoot(page, 'catalog-available');
-          // The Category filter narrows the whole list to one app.
+          // The Category filter narrows the whole list to the apps in one category.
           await page.getByTestId('view-tab-all').click();
+          const allCards = await page.locator(CARDS).count();
           await page.getByRole('button', { name: 'Category' }).click();
           await page.getByTestId('facet-option-Service desk').click();
           await page.getByTestId('facet-apply').click();
           await page.waitForTimeout(300);
-          const narrowedCards = await page.locator('[data-testid^="system-"][data-state]').count();
+          const narrowedCards = await page.locator(CARDS).count();
+          const narrowedHasOurs = await page.getByTestId('system-plugin:test.person-key').count();
           await shoot(page, 'catalog-category');
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await ours.waitFor({ timeout: 60_000 });
@@ -361,31 +367,30 @@ try {
           const opened = await page.waitForURL((u) => u.pathname === `/data/connectors/${encodeURIComponent(APP)}` || u.pathname === `/data/connectors/${APP}`, { timeout: 30_000 }).then(() => true, () => false);
           check(
             '42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page',
-            connectedHas && ourState === 'connected' && /Connected · \d+ accounts?/.test(ourText) && oneAction &&
-              others.length >= 1 && others.every(([, st]) => ['off', 'needs_auth_config', 'needs_sign_in'].includes(st)) && othersConnect >= 1 &&
-              narrowedCards === 1 && href === `/data/connectors/${encodeURIComponent(APP)}` && opened,
-            { connectedHas, ourState, ourText, oneAction, others, othersConnect, narrowedCards, href, opened },
+            inConnected === 0 && connectedStates.every((st) => st === 'connected' || st === 'test_failed') && ourState === 'needs_sign_in' && /Needs sign-in/.test(ourText) && oneAction &&
+              others.length >= 2 && others.some(([id]) => id === `system-${APP}`) && others.every(([, st]) => ['off', 'needs_auth_config', 'needs_sign_in'].includes(st)) &&
+              narrowedCards === 1 && narrowedHasOurs === 1 && href === `/data/connectors/${encodeURIComponent(APP)}` && opened,
+            { inConnected, connectedStates, ourState, ourText, oneAction, others, allCards, narrowedCards, narrowedHasOurs, href, opened },
           );
         }, page);
 
         const james = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
         await step('6 James presses Connect on My accounts, allows access as himself, and his account reads james.person, Connected', async () => {
           // A person's own account is connected on My accounts, one row per account they may sign in to themselves.
-          const team = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP)?.connectionId;
           await james.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          const button = james.getByTestId(`connect-${team}`);
+          const button = james.getByTestId(`connector-action-${APP}`);
           await button.waitFor({ timeout: 90_000 });
           await shoot(james, 'app-connect-my-account');
           const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await allow(popup, 'james.person');
-          // The row reads who signed in once the page refetches after the sign-in.
-          const row = james.locator('tr', { has: james.getByTestId(`my-account-${team}`) });
-          await row.getByText(/james\.person/).first().waitFor({ timeout: 60_000 }).catch(() => {});
-          const said = ((await row.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
+          // The card reads who signed in once the page refetches after the sign-in.
+          const signedIn = james.getByTestId(`connector-signed-in-${APP}`);
+          await signedIn.getByText(/james\.person/).first().waitFor({ timeout: 60_000 }).catch(() => {});
+          const said = ((await james.getByTestId(`connector-${APP}`).innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
           await shoot(james, 'app-connected-as');
           check(
             '6 James presses Connect on My accounts, allows access as himself, and his account reads james.person, Connected',
-            /james\.person/.test(said) && /Connected/.test(said) && (await james.getByTestId(`connect-${team}`).count()) === 0,
+            /james\.person/.test(said) && /Connected/.test(said) && (await james.getByTestId(`connector-action-${APP}`).count()) === 0,
             { said },
           );
         }, james);
@@ -467,9 +472,12 @@ try {
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // The four places are sidebar items under Data Hub, side by side; no page repeats them as a tab row.
           const sidebar = (await james.locator('[data-sidebar="menu-button"]').allInnerTexts()).map((t) => t.trim());
-          const at = sidebar.indexOf('Apps');
+          const at = sidebar.indexOf('Connectors');
           const menu = sidebar.slice(at, at + 3).join();
-          const myAccountsOnTop = sidebar.indexOf('My accounts') > -1 && sidebar.indexOf('My accounts') < sidebar.indexOf('Knowledge bases');
+          // My connectors has no sidebar row; it is in the user menu.
+          await james.getByRole('button', { name: /James Richardson/ }).click();
+          const myAccountsOnTop = await james.getByRole('menuitem', { name: 'My connectors' }).isVisible().catch(() => false);
+          await james.keyboard.press('Escape');
           const tabRows = () => james.locator('[data-testid^="apps-tab-"]').count();
           const tabsOnApps = await tabRows();
           const views = (await james.getByRole('tablist', { name: 'App views' }).innerText()).replace(/\s+/g, ' ');
@@ -479,12 +487,12 @@ try {
           await james.getByTestId('view-tab-all').click();
           await james.goto(`${consoleUrl}/settings/account/connections`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.waitForURL((u) => u.pathname === '/settings/account/connectors', { timeout: 60_000 });
-          await james.getByTestId('my-connections').waitFor({ timeout: 60_000 });
+          await james.getByTestId('connectors').waitFor({ timeout: 60_000 });
           const mine = ((await james.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
           await shoot(james, 'mine');
           // The Disconnect window, opened and closed again without disconnecting.
-          await james.locator('[data-testid^="my-account-menu-"]').first().click();
-          await james.locator('[data-testid^="disconnect-"]').first().click();
+          await james.getByTestId(`connector-menu-${APP}`).click();
+          await james.getByTestId(`connector-disconnect-${APP}`).click();
           await james.getByRole('dialog').waitFor({ timeout: 30_000 });
           await shoot(james, 'mine-disconnect');
           await james.keyboard.press('Escape');
@@ -513,11 +521,20 @@ try {
           await shoot(james, 'creds-secrets');
           check(
             '7b the Apps menu: Apps, Secrets and Tools in the sidebar with My accounts in its top rows, no tab row; the old My connections, Secrets and call log addresses land in it',
-            menu === 'Apps,Secrets,Tools' && myAccountsOnTop && /Connected/.test(views) && /Available/.test(views) &&
-              /My accounts/.test(mine) && /Person desk/.test(mine) && !/Settings \/ My accounts/.test(mine) && !/sample data/.test(mine) && moved &&
+            menu === 'Connectors,Tools,Secrets' && myAccountsOnTop && /Connected/.test(views) && /Available/.test(views) &&
+              /My connectors/.test(mine) && /Person desk/.test(mine) && moved &&
               credsState !== 'blank' && secretsMoved && secretsShown && tabsOnApps + tabsOnCalls + tabsOnTools + tabsOnCredentials === 0,
             { sidebar, menu, myAccountsOnTop, views, mine: mine.slice(0, 400), moved, credsState, secretsMoved, secretsShown, tabsOnApps, tabsOnCalls, tabsOnTools, tabsOnCredentials },
           );
+        }, james);
+
+        // My connectors reads tools-service, but /settings is still an unserved area in isPreviewPath, so the page wears the
+        // Preview badge and says its data is sample. Open step: the check stays red until the page stops saying so.
+        await step('7b My connectors reads real data and carries no Preview badge or sample-data note', async () => {
+          await james.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await james.getByTestId('connectors').waitFor({ timeout: 60_000 });
+          const reason = await james.getByTestId('preview-reason').count();
+          check('7b My connectors reads real data and carries no Preview badge or sample-data note', reason === 0, { previewNote: reason });
         }, james);
 
         // 7c. What the PM walk on the live stack found (2026-11-01), each checked where it shows. James is a builder, not
@@ -527,7 +544,9 @@ try {
           // Connected on the grid reads the app's state, as the app page does.
           await james.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
-          const cards = (await call(tools, 'GET', '/v1/apps', priya)).data ?? [];
+          // A person's card is their own state, so the grid is compared with James's answer, not Priya's.
+          const jamesToken = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
+          const cards = (await call(tools, 'GET', '/v1/apps', jamesToken)).data ?? [];
           out.disagree = [];
           // The grid pages its cards, so each app is found as a person finds it: by search.
           for (const c of cards.filter((x) => x.kind !== 'builtin')) {
@@ -540,7 +559,7 @@ try {
           await james.getByPlaceholder('Search apps').fill('');
           // No dead Connect button: each card James may not connect says why instead. Whether he may is his role's
           // (builders manage apps since D59), read from his own answer.
-          const his = (await call(tools, 'GET', '/v1/apps', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'))).data ?? [];
+          const his = cards;
           out.blocked = his.filter((c) => !c.mayManage && c.kind !== 'builtin' && c.appState !== 'connected' && c.appState !== 'removed').length;
           out.connectOff = await james.locator('main button[data-testid^="connect-"]:disabled').count();
           // Counted once the cleared search has drawn the whole list again.
@@ -670,8 +689,8 @@ try {
 
         await step('11 Priya connects another account named EU desk and allows it as the EU team account; both are listed, the first the default', async () => {
           await openAccounts(page, consoleUrl, APP);
-          // Another account is the header's one Connect again; its name is under More options.
-          await page.getByTestId('app-connect').click();
+          // Another team account is added from the Accounts tab; the header offers each person their own sign-in.
+          await page.getByTestId('app-add-account').click();
           const dialog = page.getByTestId('connect-window');
           await dialog.waitFor({ timeout: 30_000 });
           // Another account's window shows its name field at once; the first one folds it under More options.
@@ -707,11 +726,12 @@ try {
         }, page);
 
         await step('13 James connects his own EU desk account; his chat then reads with his newest, and Make my default puts it back on Person desk', async () => {
-          const eu = ((await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}`, priya)).data?.accounts ?? []).find((a) => a.kind !== 'person' && a.name === 'EU desk')?.id;
+          // A second account of his own is added from the card's menu on My connectors, under a name he picks.
           await james.goto(`${consoleUrl}/settings/account/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          const connect = james.getByTestId(`connect-${eu}`);
-          await connect.waitFor({ timeout: 60_000 });
-          const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), connect.click()]);
+          await james.getByTestId(`connector-menu-${APP}`).click();
+          await james.getByTestId(`connector-another-${APP}`).click();
+          await james.getByTestId('another-account-name').fill('EU desk');
+          const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), james.getByTestId('another-account-add').click()]);
           await allow(popup, 'james.eu');
           // Which of a person's own sign-ins their calls use is the account menu's Make my default, on the app's page.
           await openAccounts(james, consoleUrl, APP);
