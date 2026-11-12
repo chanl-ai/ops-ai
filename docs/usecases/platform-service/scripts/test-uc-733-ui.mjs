@@ -31,7 +31,8 @@ await withUiStack(
     });
     check('the client registers (201)', registered.status === 201, registered);
     const session = (await call('POST', '/v1/auth/sign-in', { email: 'j.richardson@harborpine.example', password: 'northfield-demo' })).body?.data;
-    const challenge = createHash('sha256').update(randomBytes(32).toString('hex')).digest('base64url');
+    const verifier = randomBytes(32).toString('hex');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
     const query = new URLSearchParams({
       response_type: 'code',
       client_id: registered.body?.client_id ?? '',
@@ -80,8 +81,35 @@ await withUiStack(
         check(`nothing is clipped sideways at ${width}`, overflow <= 0, overflow);
         check(`no page errors at ${width}`, pageErrors.length === 0, pageErrors);
         await page.screenshot({ path: join(SHOTS, `uc-733-consent-${name}.png`) });
+        if (width === 1440) {
+          // A request the server refuses shows its reason, not the bare HTTP status.
+          const bad = new URLSearchParams(query);
+          bad.set('redirect_uri', 'https://evil.example/cb');
+          await page.goto(`${consoleUrl}/oauth/authorize?${bad}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+          await page.getByText(/return address/i).first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+          const body = await page.locator('body').innerText();
+          check('a refused request shows the reason the server gave', /return address/i.test(body) && !/Bad Request/.test(body), body.slice(0, 300));
+        }
         await context.close();
       }
+      // A connection that has not renewed yet, listed in My security, at phone width.
+      const allowed = await call('POST', '/v1/oauth/consent', { ...Object.fromEntries([...new URLSearchParams(query)].filter(([k]) => k !== 'response_type')), decision: 'allow' }, session.token);
+      const code = new URL(allowed.body?.data?.redirectTo ?? 'https://x.invalid').searchParams.get('code') ?? '';
+      const form = new URLSearchParams({ grant_type: 'authorization_code', code, client_id: registered.body?.client_id ?? '', redirect_uri: REDIRECT, code_verifier: verifier, resource: `${MCP_BASE}/mcp/team_ops` });
+      const exchanged = await fetch(`${platform}/oauth/token`, { method: 'POST', body: form });
+      check('the assistant gets its token (200)', exchanged.status === 200, exchanged.status);
+      const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
+      await context.addInitScript((s) => localStorage.setItem('ops-platform-session', JSON.stringify(s)), session);
+      const page = await context.newPage();
+      await page.goto(`${consoleUrl}/settings/account/security`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const disconnect = page.locator('[data-testid^="disconnect-"]').first();
+      await disconnect.waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const box = await disconnect.boundingBox();
+      check('Disconnect is on screen at 390 without scrolling sideways', !!box && box.x >= 0 && box.x + box.width <= 390, box);
+      const row = await page.locator('tr', { has: disconnect }).innerText().catch(() => '');
+      check('last use reads Never before the assistant renews', /Never/.test(row), row);
+      await page.screenshot({ path: join(SHOTS, 'uc-733-connected-phone.png') });
+      await context.close();
     } finally {
       await browser.close();
     }

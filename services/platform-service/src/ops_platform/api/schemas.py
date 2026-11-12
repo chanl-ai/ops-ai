@@ -872,4 +872,4 @@ class GrantOut(Out):
     resource: str
     created_at: str
     expires_at: str
-    last_used_at: str
+    last_used_at: str | None

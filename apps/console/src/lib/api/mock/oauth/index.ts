@@ -13,6 +13,7 @@ export function createOAuthMock(): { api: OAuthApi } {
   let rows: ConnectedAssistant[] = [
     { id: 'ses_claude', clientId: 'cli_claude', clientName: 'Claude', teamId: 'team_ops', teamName: 'Platform', resource: 'https://ops.harborpine.example/mcp/team_ops', createdAt: ago(3), expiresAt: ahead(5), lastUsedAt: ago(0.2) },
     { id: 'ses_cursor', clientId: 'cli_cursor', clientName: 'Cursor', teamId: 'team_ops', teamName: 'Platform', resource: 'https://ops.harborpine.example/mcp/team_ops', createdAt: ago(30), expiresAt: ahead(2), lastUsedAt: ago(26) },
+    { id: 'ses_vscode', clientId: 'cli_vscode', clientName: 'VS Code', teamId: 'team_ops', teamName: 'Platform', resource: 'https://ops.harborpine.example/mcp/team_ops', createdAt: ago(0.1), expiresAt: ahead(8), lastUsedAt: null },
   ];
   const api: OAuthApi = {
     consent: (request) =>

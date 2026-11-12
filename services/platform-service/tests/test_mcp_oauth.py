@@ -450,6 +450,7 @@ async def test_a_connection_lasts_the_workspace_setting_8_hours_unless_an_admin_
         await a.connect(who, a.params(client, team))
         grants = (await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"]
         newest = max(grants, key=lambda g: g["createdAt"])
+        assert newest["lastUsedAt"] is None, "a connection that has not renewed has no last use"
         left = datetime.fromisoformat(newest["expiresAt"]) - datetime.now(UTC)
         return left.total_seconds() / 3600
 

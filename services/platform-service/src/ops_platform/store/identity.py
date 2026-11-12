@@ -518,6 +518,7 @@ class IdentityStore:
                 s.c.expires_at,
                 t.c.name,
                 s.c.last_seen_at,
+                s.c.code_used_at,
             )
             .join(t, sa.and_(t.c.id == s.c.team_id, t.c.tenant_id == s.c.tenant_id))
             .where(
@@ -538,7 +539,9 @@ class IdentityStore:
         return [
             {
                 "id": r[0], "clientId": r[1], "clientName": names.get(str(r[1]), str(r[1])), "teamId": r[2],
-                "teamName": r[6], "resource": r[3], "createdAt": r[4], "expiresAt": r[5], "lastUsedAt": r[7],
+                "teamName": r[6], "resource": r[3], "createdAt": r[4], "expiresAt": r[5],
+                # A renewal is the use platform-service sees; one still on the token its code bought has none yet.
+                "lastUsedAt": None if r[7] == r[8] else r[7],
             }
             for r in rows
         ]  # fmt: skip

@@ -100,6 +100,9 @@ export function SessionsTable({ sessions, onRevoke, busyId }: { sessions: Accoun
   );
 }
 
+/** An assistant that has not called the address since it connected has no last use. */
+const lastUsed = (at: string | null | undefined) => (at ? relativeTime(at) : 'Never');
+
 /** Assistants the person connected to a team's MCP address. Disconnecting ends the connection; the assistant cannot renew. */
 export function ConnectedAssistantsTable({ assistants, onDisconnect, busyId }: { assistants: ConnectedAssistant[]; onDisconnect: (a: ConnectedAssistant) => void; busyId: string | null }) {
   const columns: ColumnDef<ConnectedAssistant>[] = [
@@ -112,13 +115,17 @@ export function ConnectedAssistantsTable({ assistants, onDisconnect, busyId }: {
             <Bot className="size-4 shrink-0 text-muted-foreground" />
             <span className="break-words">{row.original.clientName}</span>
           </span>
+          {/* On a phone the team and last use sit under the name, so the row keeps room for Disconnect. */}
+          <span className="text-xs text-muted-foreground md:hidden">
+            {row.original.teamName} · {lastUsed(row.original.lastUsedAt)}
+          </span>
         </div>
       ),
       enableHiding: false,
     },
-    { accessorKey: 'teamName', header: 'Team', cell: ({ row }) => <span className="text-sm whitespace-nowrap">{row.original.teamName}</span> },
-    { accessorKey: 'lastUsedAt', header: 'Last used', cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{relativeTime(row.original.lastUsedAt)}</span> },
-    { accessorKey: 'expiresAt', header: 'Ends', cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{dateTime(row.original.expiresAt)}</span> },
+    { accessorKey: 'teamName', header: 'Team', meta: { className: 'max-md:hidden' }, cell: ({ row }) => <span className="text-sm whitespace-nowrap">{row.original.teamName}</span> },
+    { accessorKey: 'lastUsedAt', header: 'Last used', meta: { className: 'max-md:hidden' }, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{lastUsed(row.original.lastUsedAt)}</span> },
+    { accessorKey: 'expiresAt', header: 'Ends', meta: { className: 'max-md:hidden' }, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{dateTime(row.original.expiresAt)}</span> },
     {
       id: 'actions',
       cell: ({ row }) => (

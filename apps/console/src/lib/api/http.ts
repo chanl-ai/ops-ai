@@ -66,7 +66,11 @@ export function createTransport(baseUrl: string) {
       headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> | undefined) },
     });
     const body = res.status === 204 ? null : await res.json().catch(() => null);
-    if (!res.ok) throw new ApiError(body?.error?.message ?? res.statusText, res.status, body?.error?.team, body?.error?.code, body?.error?.details);
+    if (!res.ok) {
+      // The consent routes refuse in RFC 6749's shape ({ error, error_description }), the others in the envelope.
+      if (typeof body?.error === 'string') throw new ApiError(body.error_description ?? res.statusText, res.status, undefined, body.error);
+      throw new ApiError(body?.error?.message ?? res.statusText, res.status, body?.error?.team, body?.error?.code, body?.error?.details);
+    }
     return body?.data as T;
   }
   const get = <T>(p: string) => call<T>(p);

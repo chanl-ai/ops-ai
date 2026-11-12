@@ -24,5 +24,6 @@ export interface ConnectedAssistant {
   resource: string;
   createdAt: string;
   expiresAt: string;
-  lastUsedAt: string;
+  /** Null until the assistant first calls the address. */
+  lastUsedAt: string | null;
 }

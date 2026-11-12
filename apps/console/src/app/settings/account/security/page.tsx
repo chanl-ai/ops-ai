@@ -135,8 +135,9 @@ export default function AccountSecurityPage() {
           </SettingsSection>
           </SampleData>
           <SettingsSection title="Connected assistants" description="Claude, Cursor, VS Code or ChatGPT, signed in as you at a team’s MCP address. Disconnect one and it stops working.">
-            {assistants.isError && !assistants.data ? (
-              <QueryError what="your connected assistants" onRetry={() => assistants.refetch()} error={assistants.error} retrying={assistants.isFetching} />
+            {/* A first answer that failed shows the error with Retry at once, not a skeleton while the retries run. */}
+            {!assistants.data && (assistants.isError || assistants.failureCount > 0) ? (
+              <QueryError what="your connected assistants" onRetry={() => assistants.refetch()} error={assistants.error ?? assistants.failureReason} retrying={assistants.isFetching} />
             ) : assistants.isPending ? (
               <Skeleton className="h-32 w-full" />
             ) : (

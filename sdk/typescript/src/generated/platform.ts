@@ -2253,7 +2253,7 @@ export interface components {
             /** Id */
             id: string;
             /** Lastusedat */
-            lastUsedAt: string;
+            lastUsedAt: string | null;
             /** Resource */
             resource: string;
             /** Teamid */
