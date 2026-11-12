@@ -42,6 +42,9 @@ class Principal(BaseModel):
     # An API key's own id, and the one agent or workflow it may start (`{kind, id, version}`), from introspection only;
     # None for a person, a service, or a key with no target.
     key_id: str | None = None
+    # The assistant an MCP token was issued to (the `client_id` claim), which the call log names in place of whatever
+    # the assistant says about itself; None for every other caller.
+    client_id: str | None = None
     key_target: dict[str, Any] | None = None
 
     @property
