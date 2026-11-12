@@ -1209,14 +1209,16 @@ try {
           await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('connect-plugin:opsai.salesforce').click();
           const live = await ownWindow({ credential: liveCredential, login_url: loginUrl }, 'priya.live');
-          // A test account is the same Connect from the app's header, with Test account ticked; its name is suggested.
+          // A test account is the same Connect window from the Accounts tab's Add account, with Test account ticked; its name is suggested.
           await openAccounts(page, consoleUrl, SF);
-          await page.getByTestId('app-connect').click({ timeout: 60_000 });
+          await page.getByTestId('app-add-account').click({ timeout: 60_000 });
           await page.getByTestId('connect-window').waitFor({ timeout: 30_000 });
           await page.getByTestId('connect-window-test-account').click();
           // Another account's window shows its name field at once; the first one folds it under More options.
           if (!(await page.getByTestId('connect-window-name').isVisible())) await page.getByTestId('connect-window-more').click();
-          const suggested = await page.getByTestId('connect-window-name').getAttribute('placeholder').catch(() => null);
+          // The name is asked for, never suggested: the window flags it until it is typed.
+          const suggested = 'Salesforce test account';
+          await page.getByTestId('connect-window-name').fill(suggested);
           const sandbox = await ownWindow({ credential: sandboxCredential, login_url: sf.sandbox_login_url }, 'priya.sandbox', { sandbox: true });
           await openAccounts(page, consoleUrl, SF);
           const rows = ((await page.getByRole('tabpanel').innerText()) ?? '').replace(/\s+/g, ' ');

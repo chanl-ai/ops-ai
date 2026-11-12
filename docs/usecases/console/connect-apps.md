@@ -101,7 +101,13 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | api | `console/scripts/test-uc-607-api.py` | target: 21 and 23 wait on S1 and D2 |
 | sdk | `console/scripts/test-uc-607-sdk.py` | target: waits on K1 |
 | cli | `console/scripts/test-uc-607-cli.py` | target: waits on L1 |
-| ui | `console/scripts/test-uc-607-ui.mjs` | failing (2026-11-12): steps 0 to 9b, 40, 42, 44 and 46 pass; 7b fails (My connectors wears a Preview badge, lib/api/index.ts:181); 11 and 13 are rewritten to the new Accounts tab and My connectors menu but not yet run; 13a to 21 not yet walked. Earlier notes (2026-11-03): Steps 45 and 13c: the run's Human Task offers no Connect my account, as agents-service's connect wait drops the account's app (`services/agents-service/src/ops_agents/api/engine_reviews.py:71`), which starting the sign-in needs. Step 40: with its hosts off the allow list the account still tests 200, since an app reaches its own hosts (commit 2d496c7). Step 46: Tools reads agents-service's paged `GET /v1/tools` (commit ba9f12c). Step 8: `GET /v1/apps` lists no built-in app without `include=builtin`. Step 7c: a builder's grid explains Connect on 10 cards and disables none |
+| ui | `console/scripts/test-uc-607-ui.mjs` | failing (2026-11-12): 40 checks pass; step 13 fails on the gap below. Step 19 follows the console's Add account and its required account name |
+
+## Gaps
+
+| Step | What the console does | Product fix |
+|---|---|---|
+| 13 | Add another account refuses James naming his own account "EU desk": "You already have an account with this name." It compares with every account of the app he could connect, including the team's EU desk, which he has not connected (`another-account-dialog.tsx:48`, rows from `connectors.py:196` with `every=True`) | Compare only with accounts the person has connected |
 
 ## Non-vacuous check
 
