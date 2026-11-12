@@ -46670,7 +46670,7 @@
     },
     "/v1/skills/{skill_id}/render": {
       "post": {
-        "description": "The published version's text with the inputs filled in, for one part when the skill has parts. A read: it\ntakes a service token holding skills:view, as the MCP prompts call it. 422 `skill_not_published`,\n`part_required`, `unknown_part`, `unknown_input` or `missing_input`.",
+        "description": "The published version's text with the inputs filled in, for one part when the skill has parts. A read: it\ntakes a service token holding skills:view in the skill's team, as the MCP prompts call it; a person needs\nskills: view there too (403 `forbidden`). 422 `skill_not_published`, `part_required`, `unknown_part`,\n`unknown_input` or `missing_input`.",
         "operationId": "agents_render_skill",
         "parameters": [
           {

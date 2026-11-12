@@ -220,8 +220,11 @@ def render(content: dict[str, Any], part: str | None, given: dict[str, str]) -> 
     }
 
 
-async def render_published(rt: Runtime, skill_id: str, part: str | None, given: dict[str, str]) -> dict[str, Any]:
-    """`render` on the skill's published version, never a draft.
+async def render_published(
+    rt: Runtime, skill_id: str, part: str | None, given: dict[str, str], *, team: str | None = None
+) -> dict[str, Any]:
+    """`render` on the skill's published version, never a draft. `team` is the conversation's team when a chat uses
+    it: a skill another team owns is not found, whatever team the request reads as.
 
     Raises:
         NotFound: no such skill in the team.
@@ -229,7 +232,7 @@ async def render_published(rt: Runtime, skill_id: str, part: str | None, given: 
     """
     reg = skills(rt)
     row = await reg.find(skill_id)
-    if row is None:
+    if row is None or (team is not None and row["team_id"] != team):
         raise NotFound(f"Skill {skill_id}")
     v = await reg.version(skill_id, int(row["published_version"])) if row["published_version"] else None
     if v is None or row["deprecated_reason"]:
@@ -677,15 +680,20 @@ def require_unpinned(pinning: list[str], name: str) -> None:
         raise Conflict(f"{name} is attached to {', '.join(pinning)}; detach it first.", code="skill_pinned")
 
 
-async def usable(rt: Runtime, *, menu: str, pinned: list[str]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    """(skill row, published version) of each skill a chat with an agent may use under its skill menu setting: every
-    published, live skill for `team`, the agent's own for `attached`, none for `off`."""
+async def usable(
+    rt: Runtime, *, team: str, menu: str, pinned: list[str]
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """(skill row, published version) of each skill of `team` a chat with an agent may use under its skill menu
+    setting: every published, live one for the `team` menu, the agent's own for `attached`, none for `off`. Only the
+    conversation's team counts, whatever team the request reads as (a dev caller reads every team)."""
     if menu == "off":
         return []
     reg = skills(rt)
     out: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for r in await reg.rows():
-        if r["published_version"] is None or r["deprecated_reason"] or (menu == "attached" and r["id"] not in pinned):
+        if r["team_id"] != team or r["published_version"] is None or r["deprecated_reason"]:
+            continue
+        if menu == "attached" and r["id"] not in pinned:
             continue
         if (v := await reg.version(r["id"], int(r["published_version"]))) is not None:
             out.append((r, v))
@@ -696,9 +704,9 @@ def _key(entry: dict[str, Any]) -> tuple[str, str]:
     return str(entry.get("skillId")), str(entry.get("part") or "")
 
 
-async def _rendered(rt: Runtime, skill_id: str, part: str | None, given: dict[str, str]) -> KernelSkill:
-    """The published skill, or one part of it, as the kernel loads it, with the inputs filled in."""
-    out = await render_published(rt, skill_id, part, given)
+async def _rendered(rt: Runtime, team: str, skill_id: str, part: str | None, given: dict[str, str]) -> KernelSkill:
+    """The published skill of `team`, or one part of it, as the kernel loads it, with the inputs filled in."""
+    out = await render_published(rt, skill_id, part, given, team=team)
     v = await skills(rt).version(skill_id, int(out["version"]))
     assert v is not None
     entry = next(
@@ -710,11 +718,12 @@ async def _rendered(rt: Runtime, skill_id: str, part: str | None, given: dict[st
 
 
 async def skill_turn(
-    rt: Runtime, agent: AgentDefinition, pick: SkillPick | None, earlier: list[dict[str, Any]]
+    rt: Runtime, agent: AgentDefinition, pick: SkillPick | None, earlier: list[dict[str, Any]], *, team: str
 ) -> dict[str, Any] | None:
     """The skills one chat reply runs with beyond the agent's pins: the team's published skills its menu setting
     allows (offered to load on a match), the skills the reply before carried, and the part the person picked, filled
-    with its inputs. None when there are none, so a reply without skills runs as before.
+    with its inputs. `team` is the conversation's: no skill of another team is offered or loaded. None when there are
+    none, so a reply without skills runs as before.
 
     Raises:
         Unprocessable: `skill_menu_limit` when the agent's setting does not offer the pick, `skill_needs_scope` when
@@ -725,7 +734,7 @@ async def skill_turn(
     holds = {"toolIds": list(agent.tools), "collections": list(agent.default_kb_ids)}
     extra: list[KernelSkill] = []
     if agent.skill_menu == "team":
-        for r, v in await usable(rt, menu="team", pinned=pinned):
+        for r, v in await usable(rt, team=team, menu="team", pinned=pinned):
             if r["id"] in pinned or v["content"].get("loading") != "on_match" or missing_for(v["content"], holds):
                 continue
             extra.extend(kernel_skills(r["id"], int(v["version"]), str(r["slug"]), v["content"], int(v["tokens"])))
@@ -737,7 +746,7 @@ async def skill_turn(
                 f"{agent.name} does not offer that skill in chat; ask an admin to change its skill menu setting.",
                 code="skill_menu_limit",
             )
-        picked = await _rendered(rt, pick.skill_id, pick.part, pick.inputs)
+        picked = await _rendered(rt, team, pick.skill_id, pick.part, pick.inputs)
         v = await skills(rt).version(pick.skill_id, picked.version)
         if missing := missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), holds):
             raise Unprocessable(
@@ -776,7 +785,9 @@ async def skill_turn(
     for e in carried:
         if e.get("how") == "carried" and e.get("inputs") and e["skillId"] not in pinned:
             try:
-                extra.insert(0, await _rendered(rt, str(e["skillId"]), e.get("part"), dict(e["inputs"])))
+                extra.insert(
+                    0, await _rendered(rt, team, str(e["skillId"]), e.get("part"), cast(dict[str, str], e["inputs"]))
+                )
             except (NotFound, Unprocessable):
                 continue
     if not extra and not carried:

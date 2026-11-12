@@ -169,10 +169,14 @@ async def list_skills(
     spec: dict[str, Any] | None = None
     if agent_id is not None:
         agents = agent_registry(rt)
-        spec = (await agents.version(agent_id, int((await agents.row(agent_id))["version"])))["spec"]
-        menu = str(spec.get("skillMenu") or "team")
-        pinned = [str(p["skillId"]) for p in cast(list[dict[str, Any]], spec.get("skillPins") or [])]
-        offered = {r["id"] for r, _ in await usable(rt, menu=menu, pinned=pinned)}
+        agent_row = await agents.row(agent_id)
+        held: dict[str, Any] = (await agents.version(agent_id, int(agent_row["version"])))["spec"]
+        spec = held
+        menu = str(held.get("skillMenu") or "team")
+        pinned = [str(p["skillId"]) for p in cast(list[dict[str, Any]], held.get("skillPins") or [])]
+        # A chat's skills are its team's: the team the request acts in, else the agent's own.
+        team = caller.team_id or str(agent_row.get("team_id") or "")
+        offered = {r["id"] for r, _ in await usable(rt, team=team, menu=menu, pinned=pinned)}
         raw = [r for r in raw if r["id"] in offered]
     rows = [await row_view(rt, r, pins) for r in raw]
     if search:
@@ -222,10 +226,15 @@ async def get_skill(rt: Rt, skill_id: str) -> JSONResponse:
 
 
 @router.post("/v1/skills/{skill_id}/render", response_model=Envelope[SkillRendered])
-async def render_skill(rt: Rt, skill_id: str, body: SkillRenderInput) -> JSONResponse:
+async def render_skill(
+    rt: Rt, skill_id: str, body: SkillRenderInput, caller: Annotated[Principal, Depends(caller_in("skills"))]
+) -> JSONResponse:
     """The published version's text with the inputs filled in, for one part when the skill has parts. A read: it
-    takes a service token holding skills:view, as the MCP prompts call it. 422 `skill_not_published`,
-    `part_required`, `unknown_part`, `unknown_input` or `missing_input`."""
+    takes a service token holding skills:view in the skill's team, as the MCP prompts call it; a person needs
+    skills: view there too (403 `forbidden`). 422 `skill_not_published`, `part_required`, `unknown_part`,
+    `unknown_input` or `missing_input`."""
+    row = await skills(rt).row(skill_id)
+    can(caller_of(caller), "skills", "view", team=str(row["team_id"]), what=row["slug"], code="forbidden")
     return ok(await render_published(rt, skill_id, body.part, body.inputs))
 
 

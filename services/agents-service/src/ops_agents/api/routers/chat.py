@@ -722,7 +722,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         can(caller_of(me), "skills", "view", team=str(row["team_id"]), what="the team's skills", code="forbidden")
     last = next((m for m in reversed(transcript) if m.role == "assistant"), None)
     earlier = cast(list[dict[str, Any]], history_entry(last).get("skills") or []) if last is not None else []
-    if (turn := await skill_turn(rt, agent, body.skill, earlier)) is not None:
+    if (turn := await skill_turn(rt, agent, body.skill, earlier, team=str(row["team_id"] or ""))) is not None:
         graph_input["skill_turn"] = turn
     # The settings this turn runs on: the agent's limits, then the thread's overrides, then this message's; a value
     # outside the limits is a 422 naming the field and no run starts.

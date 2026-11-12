@@ -2086,8 +2086,9 @@ export interface paths {
         /**
          * Render Skill
          * @description The published version's text with the inputs filled in, for one part when the skill has parts. A read: it
-         *     takes a service token holding skills:view, as the MCP prompts call it. 422 `skill_not_published`,
-         *     `part_required`, `unknown_part`, `unknown_input` or `missing_input`.
+         *     takes a service token holding skills:view in the skill's team, as the MCP prompts call it; a person needs
+         *     skills: view there too (403 `forbidden`). 422 `skill_not_published`, `part_required`, `unknown_part`,
+         *     `unknown_input` or `missing_input`.
          */
         post: operations["agents_render_skill"];
         delete?: never;
