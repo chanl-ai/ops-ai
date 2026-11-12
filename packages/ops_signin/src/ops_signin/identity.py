@@ -15,8 +15,9 @@ class VerifiedIdentity:
     email: str
     name: str
     auth_time: int | None = None
-    # The groups the provider says the person is in, from the claim or attribute the caller names; empty when none.
-    groups: tuple[str, ...] = ()
+    # The groups the provider says the person is in, from the claim or attribute the caller names: () when the
+    # provider sent the list empty, None when it sent no list (or Entra's overage claim), which says nothing.
+    groups: tuple[str, ...] | None = None
 
 
 class SignInRefused(Exception):
@@ -26,3 +27,8 @@ class SignInRefused(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class CertificateExpired(SignInRefused):
+    """The response was signed by a certificate of the provider's that is past its end date. Unlike other refusals it
+    may be shown: the provider already proved who signed, and the state says nothing about the workspace's people."""

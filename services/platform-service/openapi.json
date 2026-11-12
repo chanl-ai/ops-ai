@@ -814,6 +814,47 @@
         "title": "BackgroundProcessOut",
         "type": "object"
       },
+      "BreakGlassOut": {
+        "additionalProperties": false,
+        "properties": {
+          "addedAt": {
+            "title": "Addedat",
+            "type": "string"
+          },
+          "addedBy": {
+            "title": "Addedby",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastusedat"
+          },
+          "userId": {
+            "title": "Userid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "email",
+          "addedBy",
+          "addedAt",
+          "lastUsedAt"
+        ],
+        "title": "BreakGlassOut",
+        "type": "object"
+      },
       "BulkOut": {
         "additionalProperties": false,
         "properties": {
@@ -869,6 +910,55 @@
           "action"
         ],
         "title": "CellIn",
+        "type": "object"
+      },
+      "CertificateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "addedAt": {
+            "title": "Addedat",
+            "type": "string"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "notAfter": {
+            "title": "Notafter",
+            "type": "string"
+          },
+          "notBefore": {
+            "title": "Notbefore",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "metadata",
+              "upload",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "current",
+              "expiring",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "notBefore",
+          "notAfter",
+          "source",
+          "addedAt",
+          "state"
+        ],
+        "title": "CertificateOut",
         "type": "object"
       },
       "CheckRefusal": {
@@ -1210,6 +1300,25 @@
         "title": "Envelope[Me]",
         "type": "object"
       },
+      "Envelope_MetadataOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MetadataOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[MetadataOut]",
+        "type": "object"
+      },
       "Envelope_OptionsOut_": {
         "additionalProperties": false,
         "properties": {
@@ -1438,6 +1547,44 @@
         "title": "Envelope[SignInSecretOut]",
         "type": "object"
       },
+      "Envelope_SignInTestOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SignInTestOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SignInTestOut]",
+        "type": "object"
+      },
+      "Envelope_SignInTestStartOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SignInTestStartOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SignInTestStartOut]",
+        "type": "object"
+      },
       "Envelope_SsoStarted_": {
         "additionalProperties": false,
         "properties": {
@@ -1634,6 +1781,29 @@
           "data"
         ],
         "title": "Envelope[list[ApiKeySummary]]",
+        "type": "object"
+      },
+      "Envelope_list_BreakGlassOut__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/BreakGlassOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[BreakGlassOut]]",
         "type": "object"
       },
       "Envelope_list_PersonName__": {
@@ -2090,6 +2260,21 @@
             "title": "Map",
             "type": "array"
           },
+          "onMissing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "remove"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onmissing"
+          },
           "source": {
             "anyOf": [
               {
@@ -2119,6 +2304,14 @@
             "title": "Map",
             "type": "array"
           },
+          "onMissing": {
+            "enum": [
+              "keep",
+              "remove"
+            ],
+            "title": "Onmissing",
+            "type": "string"
+          },
           "source": {
             "anyOf": [
               {
@@ -2133,7 +2326,8 @@
         },
         "required": [
           "source",
-          "map"
+          "map",
+          "onMissing"
         ],
         "title": "GroupSettingsOut",
         "type": "object"
@@ -2858,6 +3052,90 @@
           "status"
         ],
         "title": "MemberOut",
+        "type": "object"
+      },
+      "MetadataCertificateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "notAfter": {
+            "title": "Notafter",
+            "type": "string"
+          },
+          "notBefore": {
+            "title": "Notbefore",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "notBefore",
+          "notAfter"
+        ],
+        "title": "MetadataCertificateOut",
+        "type": "object"
+      },
+      "MetadataIn": {
+        "additionalProperties": false,
+        "description": "An identity provider's metadata to read: its URL, or the file's contents.",
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "pattern": "^https?://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "xml": {
+            "anyOf": [
+              {
+                "maxLength": 262144,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xml"
+          }
+        },
+        "title": "MetadataIn",
+        "type": "object"
+      },
+      "MetadataOut": {
+        "additionalProperties": false,
+        "properties": {
+          "certificates": {
+            "items": {
+              "$ref": "#/components/schemas/MetadataCertificateOut"
+            },
+            "title": "Certificates",
+            "type": "array"
+          },
+          "idpEntityId": {
+            "title": "Idpentityid",
+            "type": "string"
+          },
+          "ssoUrl": {
+            "title": "Ssourl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idpEntityId",
+          "ssoUrl",
+          "certificates"
+        ],
+        "title": "MetadataOut",
         "type": "object"
       },
       "OidcSettings": {
@@ -4188,10 +4466,34 @@
         "additionalProperties": false,
         "properties": {
           "certificate": {
-            "maxLength": 20000,
-            "minLength": 100,
-            "title": "Certificate",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificate"
+          },
+          "certificates": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 20000,
+                  "minLength": 100,
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificates"
           },
           "emailAttribute": {
             "anyOf": [
@@ -4210,6 +4512,19 @@
             "minLength": 1,
             "title": "Idpentityid",
             "type": "string"
+          },
+          "metadataUrl": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "pattern": "^https?://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataurl"
           },
           "nameAttribute": {
             "anyOf": [
@@ -4239,12 +4554,16 @@
             "pattern": "^https?://",
             "title": "Ssourl",
             "type": "string"
+          },
+          "tiles": {
+            "default": true,
+            "title": "Tiles",
+            "type": "boolean"
           }
         },
         "required": [
           "idpEntityId",
-          "ssoUrl",
-          "certificate"
+          "ssoUrl"
         ],
         "title": "SamlSettings",
         "type": "object"
@@ -4252,9 +4571,34 @@
       "SamlSettingsOut": {
         "additionalProperties": false,
         "properties": {
+          "acsUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acsurl"
+          },
           "certificate": {
-            "title": "Certificate",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificate"
+          },
+          "certificates": {
+            "items": {
+              "$ref": "#/components/schemas/CertificateOut"
+            },
+            "title": "Certificates",
+            "type": "array"
           },
           "emailAttribute": {
             "anyOf": [
@@ -4271,6 +4615,39 @@
             "title": "Idpentityid",
             "type": "string"
           },
+          "metadataError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataerror"
+          },
+          "metadataReadAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatareadat"
+          },
+          "metadataUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataurl"
+          },
           "nameAttribute": {
             "anyOf": [
               {
@@ -4286,23 +4663,69 @@
             "title": "Requireencryption",
             "type": "boolean"
           },
+          "signOnUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signonurl"
+          },
           "signRequests": {
             "title": "Signrequests",
             "type": "boolean"
           },
+          "spEntityId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spentityid"
+          },
+          "spMetadataUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spmetadataurl"
+          },
           "ssoUrl": {
             "title": "Ssourl",
             "type": "string"
+          },
+          "tiles": {
+            "title": "Tiles",
+            "type": "boolean"
           }
         },
         "required": [
           "idpEntityId",
           "ssoUrl",
           "certificate",
+          "certificates",
+          "metadataUrl",
+          "metadataReadAt",
+          "metadataError",
           "emailAttribute",
           "nameAttribute",
           "signRequests",
-          "requireEncryption"
+          "requireEncryption",
+          "tiles",
+          "spEntityId",
+          "acsUrl",
+          "spMetadataUrl",
+          "signOnUrl"
         ],
         "title": "SamlSettingsOut",
         "type": "object"
@@ -4417,6 +4840,102 @@
         "title": "SignInSecretOut",
         "type": "object"
       },
+      "SignInTestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "enum": [
+              "waiting",
+              "ok",
+              "refused"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "SignInTestOut",
+        "type": "object"
+      },
+      "SignInTestStartOut": {
+        "additionalProperties": false,
+        "properties": {
+          "flowId": {
+            "title": "Flowid",
+            "type": "string"
+          },
+          "redirectUrl": {
+            "title": "Redirecturl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "redirectUrl",
+          "flowId"
+        ],
+        "title": "SignInTestStartOut",
+        "type": "object"
+      },
       "Skip": {
         "additionalProperties": false,
         "properties": {
@@ -4484,13 +5003,21 @@
       },
       "SsoStartIn": {
         "additionalProperties": false,
+        "description": "Either the person's work email, or a provider's address id (`/sso?provider=`, from an app-portal tile).",
         "properties": {
           "email": {
-            "maxLength": 320,
-            "minLength": 3,
-            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
-            "title": "Email",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "minLength": 3,
+                "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
           },
           "next": {
             "anyOf": [
@@ -4503,11 +5030,22 @@
               }
             ],
             "title": "Next"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           }
         },
-        "required": [
-          "email"
-        ],
         "title": "SsoStartIn",
         "type": "object"
       },
@@ -7296,7 +7834,7 @@
     },
     "/v1/auth/saml/acs": {
       "post": {
-        "description": "The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page.",
+        "description": "The SAML POST binding for providers saved before each had its own address: a form with SAMLResponse and\nRelayState, posted by the provider's page.",
         "operationId": "auth_saml_acs",
         "responses": {
           "303": {
@@ -7399,6 +7937,129 @@
           }
         },
         "summary": "Saml Acs",
+        "tags": [
+          "auth"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/auth/saml/acs/{sp_id}": {
+      "post": {
+        "description": "One provider's own consumer URL. A response that answers none of our requests (an app-portal tile) is\nchecked, discarded, and the browser is sent to start a normal sign-in.",
+        "operationId": "auth_saml_provider_acs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sp_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,40}$",
+              "title": "Sp Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Saml Provider Acs",
         "tags": [
           "auth"
         ],
@@ -7512,6 +8173,131 @@
           }
         },
         "summary": "Saml Metadata",
+        "tags": [
+          "auth"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/auth/saml/metadata/{sp_id}": {
+      "get": {
+        "description": "One provider's own SAML service provider metadata: its entity id and consumer URL. Public.",
+        "operationId": "auth_saml_provider_metadata",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sp_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,40}$",
+              "title": "Sp Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/samlmetadata+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Saml Provider Metadata",
         "tags": [
           "auth"
         ],
@@ -12613,6 +13399,465 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/settings/sign-in/break-glass": {
+      "get": {
+        "description": "The Security admins who may sign in by password while company sign-in is required.",
+        "operationId": "sign_in_providers_list_break_glass",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_BreakGlassOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List Break Glass",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/sign-in/break-glass/{user_id}": {
+      "delete": {
+        "description": "Takes a person off the list; 409 `break_glass_last` while company sign-in is required. Returns the list.",
+        "operationId": "sign_in_providers_remove_break_glass",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_BreakGlassOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Remove Break Glass",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "put": {
+        "description": "Adds a Security admin to the list (at most three); 422 `break_glass_not_security_admin`,\n`break_glass_full`. Returns the list.",
+        "operationId": "sign_in_providers_add_break_glass",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_BreakGlassOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Add Break Glass",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/settings/sign-in/domains/{domain}/verify": {
       "post": {
         "description": "Checks the domain's TXT record and, when it holds the claim's value, lets the domain route sign-in; returns\nits provider. 422 `domain_unverified` with what DNS held, 409 `domain_taken` when another workspace has it.",
@@ -12912,6 +14157,163 @@
           }
         },
         "summary": "List Signin Providers",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/sign-in/providers/metadata": {
+      "post": {
+        "description": "What an identity provider's metadata says (entity id, sign-in URL, certificates and their dates), read from\nits URL or file; saves nothing. Security team admins only.",
+        "operationId": "sign_in_providers_read_signin_metadata",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MetadataOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Read Signin Metadata",
         "tags": [
           "sign-in-providers"
         ],
@@ -13226,6 +14628,320 @@
           }
         },
         "summary": "Save Signin Provider",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/sign-in/providers/{provider_id}/refresh": {
+      "post": {
+        "description": "Reads the provider's metadata URL now and adds its new certificates for the same entity id.",
+        "operationId": "sign_in_providers_refresh_signin_provider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ProviderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Refresh Signin Provider",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/sign-in/providers/{provider_id}/test": {
+      "post": {
+        "description": "Starts a test sign-in: the admin signs in at the provider as themself, in a new tab, and the result is read\nfrom `GET /v1/settings/sign-in/test-results/{flowId}`. Runs while the provider is off; signs nobody in.",
+        "operationId": "sign_in_providers_test_signin_provider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SignInTestStartOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Test Signin Provider",
         "tags": [
           "sign-in-providers"
         ],
@@ -13837,6 +15553,163 @@
           }
         },
         "summary": "Save Signin Secret",
+        "tags": [
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/sign-in/test-results/{flow_id}": {
+      "get": {
+        "description": "What a test sign-in got back: email, name and groups, or the check that failed. 404 to anyone but the admin\nwho started it.",
+        "operationId": "sign_in_providers_signin_test_result",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "flow_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Flow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SignInTestOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Signin Test Result",
         "tags": [
           "sign-in-providers"
         ],

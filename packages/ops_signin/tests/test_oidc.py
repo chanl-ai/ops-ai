@@ -165,4 +165,4 @@ async def test_groups_are_read_from_the_named_claim_only() -> None:
     who = await oidc.complete(code="c", verifier=start.verifier, nonce=start.nonce, redirect_uri=REDIRECT)
     assert who.groups == ("tellers", "branch-12")
     unnamed = await sign_in(provider(token))
-    assert unnamed.groups == ()
+    assert unnamed.groups is None

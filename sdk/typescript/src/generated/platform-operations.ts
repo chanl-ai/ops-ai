@@ -145,6 +145,28 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "auth_saml_provider_acs": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/saml/acs/{sp_id}",
+    "pathParams": [
+      "sp_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "auth_saml_provider_metadata": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/auth/saml/metadata/{sp_id}",
+    "pathParams": [
+      "sp_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "auth_session": {
     "body": null,
     "headers": [],
@@ -520,6 +542,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "sign_in_providers_add_break_glass": {
+    "body": null,
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/settings/sign-in/break-glass/{user_id}",
+    "pathParams": [
+      "user_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sign_in_providers_delete_signin_provider": {
     "body": null,
     "headers": [],
@@ -539,6 +572,15 @@ export const platformOperations = {
     "pathParams": [
       "name"
     ],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_list_break_glass": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/settings/sign-in/break-glass",
+    "pathParams": [],
     "query": [],
     "stream": false
   },
@@ -569,6 +611,37 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "sign_in_providers_read_signin_metadata": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/settings/sign-in/providers/metadata",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_refresh_signin_provider": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/settings/sign-in/providers/{provider_id}/refresh",
+    "pathParams": [
+      "provider_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_remove_break_glass": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/settings/sign-in/break-glass/{user_id}",
+    "pathParams": [
+      "user_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sign_in_providers_save_signin_provider": {
     "body": "json",
     "headers": [],
@@ -587,6 +660,28 @@ export const platformOperations = {
     "path": "/v1/settings/sign-in/secrets/{name}",
     "pathParams": [
       "name"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_signin_test_result": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/settings/sign-in/test-results/{flow_id}",
+    "pathParams": [
+      "flow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_test_signin_provider": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/settings/sign-in/providers/{provider_id}/test",
+    "pathParams": [
+      "provider_id"
     ],
     "query": [],
     "stream": false

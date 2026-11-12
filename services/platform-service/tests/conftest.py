@@ -32,6 +32,7 @@ from ops_platform.store.tables import api_keys, members, role_assignments, teams
 from ops_policy import Ed25519Signer
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
@@ -214,6 +215,19 @@ IDP = "http://idp.test"
 CONSOLE = "http://console.test"
 PUBLIC_URL = "http://platform"
 OIDC_SECRET = "bank-oidc"
+# The address the rig's resolver gives the fake identity provider's host: public, so provider fetches pass the guard
+# the way a real provider's would. A test swaps the resolver's answer to show the guard refusing.
+IDP_ADDRESS = "93.184.216.34"
+
+
+@dataclass
+class RigResolver:
+    answers: dict[str, list[str]] = field(default_factory=lambda: {"idp.test": [IDP_ADDRESS]})
+
+    async def resolve(self, host: str, port: int) -> list[str]:
+        return self.answers.get(host, [])
+
+
 # The SAML service provider's key pair every rig's platform-service holds.
 SP_KEY, SP_CERT = self_signed("sp")
 
@@ -239,6 +253,7 @@ class SignInRig:
     ops_team: str
     admin: dict[str, str]
     app: FastAPI
+    resolver: RigResolver
     # A domain of this run's own: email domains are unique across tenants, and the test database outlives a run.
     zone: str = field(default_factory=lambda: f"{secrets.token_hex(4)}.bank.test")
 
@@ -359,15 +374,21 @@ class SignInRig:
             back = httpx.URL(at_idp.headers["location"])
             r = await self.public.get(back.path, params=dict(back.params))
         else:
-            form = dict(re.findall(r'name="(\w+)" value="([^"]*)"', at_idp.text))
-            form = {k: html.unescape(v) for k, v in form.items()}
-            r = await self.public.post(
-                "/v1/auth/saml/acs",
-                content=urlencode(form),
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
+            r = await self.post_form(at_idp.text)
         assert r.status_code == 303, r.text
         return r.headers["location"]
+
+    async def post_form(self, page: str, *, to: str | None = None) -> httpx.Response:
+        """Posts the identity provider's auto-submit form to platform-service, at the consumer URL the form names
+        (or `to`), as the browser would."""
+        form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page)}
+        action = re.search(r'action="([^"]*)"', page)
+        assert action is not None, page[:200]
+        return await self.public.post(
+            to or httpx.URL(html.unescape(action.group(1))).path,
+            content=urlencode(form),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
 
     async def sign_in_sso(self, email: str, *, user: str | None = None, stale: bool = False) -> Round:
         r = await self.public.post("/v1/auth/sso/start", json={"email": email})
@@ -390,6 +411,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
     mail = MemorySender()
     fake_dns = FakeDns()
     dns_port, stop_dns = fake_dns.serve()
+    resolver = RigResolver()
     options = SignInOptions(
         password_iterations=1_000,
         password_min_length=12,
@@ -402,6 +424,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         dns=TxtResolver([f"127.0.0.1:{dns_port}"], timeout_s=2),
         saml_sp_key=SecretStr(SP_KEY),
         saml_sp_certificate=SP_CERT,
+        fetch=PublicFetch(resolver=resolver, require_https=False),
     )
     public = create_public_app(
         store,
@@ -462,7 +485,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         # The client secret the OIDC providers name, saved by the workspace's Security admin.
         saved = await pub.put(f"/v1/settings/sign-in/secrets/{OIDC_SECRET}", json={"value": "s3cret"}, headers=headers)
         assert saved.status_code == 200, saved.text
-        yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public)
+        yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public, resolver)
     stop_dns.set()
     await store.close()
 

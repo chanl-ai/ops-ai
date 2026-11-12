@@ -29,7 +29,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import NameOID
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from jwt.algorithms import RSAAlgorithm
 from lxml import etree
 from lxml.etree import _Element as Element  # pyright: ignore[reportPrivateUsage]
@@ -43,6 +43,8 @@ PROTOCOL = "urn:oasis:names:tc:SAML:2.0:protocol"
 RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
 ASSERTION = "urn:oasis:names:tc:SAML:2.0:assertion"
 _NS = {"samlp": PROTOCOL, "saml": ASSERTION}
+# What Entra ID sends in place of the groups list for a person in more than 150 groups.
+GROUPS_OVERAGE = "http://schemas.microsoft.com/claims/groups.link"
 
 
 @dataclass
@@ -56,6 +58,9 @@ class Idp:
     # What this provider knows of the service provider: its certificate, whether requests must be signed,
     # and how to encrypt assertions to it.
     sp: dict[str, Any] = field(default_factory=dict[str, Any])
+    # Certificates its metadata still lists after a rollover, and an entity id its metadata names instead of its own.
+    previous: list[str] = field(default_factory=list[str])
+    metadata_entity: str | None = None
 
     def login_time(self, email: str, *, forced: bool, stale: bool) -> int:
         now = int(time.time())
@@ -78,8 +83,7 @@ def self_signed(name: str) -> tuple[str, str]:
     return pair.key_pem().decode(), pair.cert_pem
 
 
-def _new_idp(name: str) -> Idp:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+def _certificate(name: str, key: rsa.RSAPrivateKey, *, starts: timedelta, ends: timedelta) -> str:
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"fake-idp-{name}")])
     now = datetime.now(UTC)
     cert = (
@@ -88,11 +92,45 @@ def _new_idp(name: str) -> Idp:
         .issuer_name(subject)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now - timedelta(days=1))
-        .not_valid_after(now + timedelta(days=365))
+        .not_valid_before(now + starts)
+        .not_valid_after(now + ends)
         .sign(key, hashes.SHA256())
     )
-    return Idp(name, key, cert.public_bytes(serialization.Encoding.PEM).decode(), kid=f"{name}-{secrets.token_hex(4)}")
+    return cert.public_bytes(serialization.Encoding.PEM).decode()
+
+
+def _new_idp(name: str, *, valid_days: int = 365) -> Idp:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cert = _certificate(name, key, starts=timedelta(days=-1), ends=timedelta(days=valid_days))
+    return Idp(name, key, cert, kid=f"{name}-{secrets.token_hex(4)}")
+
+
+def expired_idp(name: str) -> Idp:
+    """A provider whose only certificate ended yesterday: it still signs, with a key nobody should trust now."""
+    i = _new_idp(name)
+    i.cert_pem = _certificate(name, i.key, starts=timedelta(days=-400), ends=timedelta(days=-1))
+    return i
+
+
+def metadata_xml(base: str, i: Idp) -> bytes:
+    """The provider's SAML metadata: entity id, redirect sign-in URL and every signing certificate it lists."""
+    md, ds = "urn:oasis:names:tc:SAML:2.0:metadata", "http://www.w3.org/2000/09/xmldsig#"
+    root = etree.Element(
+        f"{{{md}}}EntityDescriptor", nsmap={"md": md, "ds": ds}, entityID=i.metadata_entity or f"{base}/saml/{i.name}"
+    )
+    idp_el = etree.SubElement(root, f"{{{md}}}IDPSSODescriptor", protocolSupportEnumeration=PROTOCOL)
+    for pem in (i.cert_pem, *i.previous):
+        body = "".join(line for line in pem.strip().splitlines() if "CERTIFICATE" not in line)
+        kd = etree.SubElement(idp_el, f"{{{md}}}KeyDescriptor", use="signing")
+        x = etree.SubElement(etree.SubElement(kd, f"{{{ds}}}KeyInfo"), f"{{{ds}}}X509Data")
+        etree.SubElement(x, f"{{{ds}}}X509Certificate").text = body
+    etree.SubElement(
+        idp_el,
+        f"{{{md}}}SingleSignOnService",
+        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+        Location=f"{base}/saml/{i.name}/sso",
+    )
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8")
 
 
 def subject_of(email: str) -> str:
@@ -212,6 +250,37 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
     async def certificate(name: str) -> str:  # pyright: ignore[reportUnusedFunction]
         return idp(name).cert_pem
 
+    @app.get("/saml/{name}/metadata")
+    async def metadata(name: str) -> Response:  # pyright: ignore[reportUnusedFunction]
+        return Response(metadata_xml(base, idp(name)), media_type="application/samlmetadata+xml")
+
+    @app.post("/saml/{name}/rollover")
+    async def rollover(name: str) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        """Signs with a new key from now on; the metadata lists the new certificate and the old one, as Entra and Okta
+        do during a rollover."""
+        i = idp(name)
+        fresh = _new_idp(name)
+        i.previous.insert(0, i.cert_pem)
+        i.key, i.cert_pem = fresh.key, fresh.cert_pem
+        return {"certificate": i.cert_pem}
+
+    @app.post("/saml/{name}/expire")
+    async def expire(name: str) -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        """Replaces the provider's certificate with one for the same key that ended yesterday."""
+        i = idp(name)
+        i.cert_pem = _certificate(name, i.key, starts=timedelta(days=-400), ends=timedelta(days=-1))
+        return {"certificate": i.cert_pem}
+
+    @app.put("/saml/{name}/metadata-entity")
+    async def metadata_entity(name: str, request: Request) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        """`{entityId}`: the metadata names this entity id instead (a hijacked metadata URL), with a new key."""
+        i = idp(name)
+        i.metadata_entity = str((await request.json())["entityId"])
+        fresh = _new_idp(name)
+        i.previous.insert(0, i.cert_pem)
+        i.key, i.cert_pem = fresh.key, fresh.cert_pem
+        return {"entityId": i.metadata_entity}
+
     @app.put("/saml/{name}/sp")
     async def service_provider(name: str, request: Request) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         """`{certificate, requireSignedRequests, encrypt, cipher, keyTransport, signAssertion, signResponse}`."""
@@ -245,23 +314,45 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
             in_response_to=str(req.get("ID")),
             email=email,
             auth_time=auth_time,
-            groups=[g for g in q.get("groups", "").split(",") if g],
+            # No `groups` parameter sends no attribute; `groups=` sends an empty one.
+            groups=[g for g in q["groups"].split(",") if g] if "groups" in q else None,
+            overage=q.get("overage") == "1",
             encrypt_to=str(known["certificate"]) if known.get("encrypt") else None,
             cipher=str(known.get("cipher", "aes256-gcm")),
             key_transport=str(known.get("keyTransport", "rsa-oaep-mgf1p")),
             sign_assertion=bool(known.get("signAssertion", True)),
             sign_response=bool(known.get("signResponse", False)),
         )
-        fields = {"SAMLResponse": response, "RelayState": q.get("RelayState", "")}
-        inputs = "".join(
-            f'<input type="hidden" name="{k}" value="{html.escape(v, quote=True)}">' for k, v in fields.items()
+        return _post_form(acs, {"SAMLResponse": response, "RelayState": q.get("RelayState", "")})
+
+    @app.get("/saml/{name}/unsolicited", response_class=HTMLResponse)
+    async def unsolicited(name: str, user: str, acs: str, audience: str) -> str:  # pyright: ignore[reportUnusedFunction]
+        """What an app-portal tile does when set to post straight to the service: a response nobody asked for."""
+        i = idp(name)
+        email = user.strip().lower()
+        response = saml_response(
+            i,
+            issuer=f"{base}/saml/{name}",
+            audience=audience,
+            acs=acs,
+            in_response_to=None,
+            email=email,
+            auth_time=i.login_time(email, forced=False, stale=False),
         )
-        return (
-            f'<html><body onload="document.forms[0].submit()"><form method="post" action="{html.escape(acs)}">'
-            f"{inputs}</form></body></html>"
-        )
+        return _post_form(acs, {"SAMLResponse": response, "RelayState": ""})
 
     return app
+
+
+def _post_form(action: str, fields: dict[str, str]) -> str:
+    """The page a provider returns to post its answer to the service with the POST binding."""
+    inputs = "".join(
+        f'<input type="hidden" name="{k}" value="{html.escape(v, quote=True)}">' for k, v in fields.items()
+    )
+    return (
+        f'<html><body onload="document.forms[0].submit()"><form method="post" action="{html.escape(action)}">'
+        f"{inputs}</form></body></html>"
+    )
 
 
 def saml_response(
@@ -270,10 +361,11 @@ def saml_response(
     issuer: str,
     audience: str,
     acs: str,
-    in_response_to: str,
+    in_response_to: str | None,
     email: str,
     auth_time: int,
     groups: list[str] | None = None,
+    overage: bool = False,
     encrypt_to: str | None = None,
     cipher: str = "aes256-gcm",
     key_transport: str = "rsa-oaep-mgf1p",
@@ -281,7 +373,9 @@ def saml_response(
     sign_response: bool = False,
 ) -> str:
     """A Response holding one assertion signed with the provider's key, base64 as the POST binding sends it. With
-    `encrypt_to` (a certificate) the assertion is encrypted to it; `sign_response` signs the Response around it."""
+    `encrypt_to` (a certificate) the assertion is encrypted to it; `sign_response` signs the Response around it.
+    `groups` None sends no groups attribute and [] an empty one; `overage` sends Entra's groups.link claim in its
+    place, as Entra does for a person in more than 150 groups."""
     now = datetime.now(UTC)
     later = now + timedelta(minutes=5)
     response = etree.Element(
@@ -291,8 +385,9 @@ def saml_response(
         Version="2.0",
         IssueInstant=_iso(now),
         Destination=acs,
-        InResponseTo=in_response_to,
     )
+    if in_response_to is not None:
+        response.set("InResponseTo", in_response_to)
     etree.SubElement(response, f"{{{ASSERTION}}}Issuer").text = issuer
     status = etree.SubElement(response, f"{{{PROTOCOL}}}Status")
     etree.SubElement(status, f"{{{PROTOCOL}}}StatusCode", Value="urn:oasis:names:tc:SAML:2.0:status:Success")
@@ -308,13 +403,11 @@ def saml_response(
     sc = etree.SubElement(
         subject, f"{{{ASSERTION}}}SubjectConfirmation", Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"
     )
-    etree.SubElement(
-        sc,
-        f"{{{ASSERTION}}}SubjectConfirmationData",
-        InResponseTo=in_response_to,
-        Recipient=acs,
-        NotOnOrAfter=_iso(later),
+    confirmation = etree.SubElement(
+        sc, f"{{{ASSERTION}}}SubjectConfirmationData", Recipient=acs, NotOnOrAfter=_iso(later)
     )
+    if in_response_to is not None:
+        confirmation.set("InResponseTo", in_response_to)
     cond = etree.SubElement(
         a, f"{{{ASSERTION}}}Conditions", NotBefore=_iso(now - timedelta(minutes=1)), NotOnOrAfter=_iso(later)
     )
@@ -325,7 +418,10 @@ def saml_response(
     for key, value in (("email", email), ("displayName", email.split("@", maxsplit=1)[0].replace(".", " ").title())):
         attr = etree.SubElement(attrs, f"{{{ASSERTION}}}Attribute", Name=key)
         etree.SubElement(attr, f"{{{ASSERTION}}}AttributeValue").text = value
-    if groups:
+    if overage:
+        attr = etree.SubElement(attrs, f"{{{ASSERTION}}}Attribute", Name=GROUPS_OVERAGE)
+        etree.SubElement(attr, f"{{{ASSERTION}}}AttributeValue").text = "https://graph.microsoft.com/v1.0/me/memberOf"
+    elif groups is not None:
         attr = etree.SubElement(attrs, f"{{{ASSERTION}}}Attribute", Name="groups")
         for g in groups:
             etree.SubElement(attr, f"{{{ASSERTION}}}AttributeValue").text = g

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import time
 
-from ops_tools.tokens import Binding, mint
-from ops_service_kit.ids import input_hash
-
 from usecase_harness import check, finish, service_headers, tools
+
+from ops_service_kit.ids import input_hash
+from ops_tools.tokens import Binding, mint
 
 # A seeded write (Core banking, answering from its stub).
 TOOL = "update_address"

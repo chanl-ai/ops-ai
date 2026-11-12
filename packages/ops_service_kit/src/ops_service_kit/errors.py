@@ -52,6 +52,11 @@ class Unprocessable(ApiError):
     code = "unprocessable"
 
 
+class TooLarge(ApiError):
+    status = 413
+    code = "too_large"
+
+
 class TooManyRequests(ApiError):
     status = 429
     code = "too_many_requests"

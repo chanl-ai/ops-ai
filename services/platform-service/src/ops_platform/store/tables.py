@@ -250,7 +250,10 @@ signin_providers = sa.Table(
     sa.Column("jit_role", sa.String(16)),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("updated_at", sa.String(40), nullable=False),
+    # Random, set at creation: names the provider in its own SAML addresses across workspaces (migration 0033).
+    sa.Column("sp_id", sa.String(40)),
     sa.ForeignKeyConstraint(["tenant_id", "jit_team_id"], ["teams.tenant_id", "teams.id"], name="fk_signin_jit_team"),
+    sa.Index("ux_signin_providers_sp_id", "sp_id", unique=True),
     info=TENANT_SCOPED,
 )
 
@@ -285,6 +288,96 @@ signin_domains = sa.Table(
         ["signin_providers.tenant_id", "signin_providers.id"],
         name="fk_signin_domains_provider",
         ondelete="CASCADE",
+    ),
+    info=TENANT_SCOPED,
+)
+signin_certificates = sa.Table(
+    "signin_certificates",
+    metadata,
+    # A provider's trusted signing certificates (migration 0033). Keyed by fingerprint within the provider, since two
+    # workspaces may trust one identity provider's certificate.
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("provider_id", sa.String(64), primary_key=True),
+    sa.Column("fingerprint", sa.String(64), primary_key=True),
+    sa.Column("pem", sa.Text, nullable=False),
+    sa.Column("not_before", sa.String(40), nullable=False),
+    sa.Column("not_after", sa.String(40), nullable=False),
+    sa.Column("source", sa.String(16), nullable=False),  # metadata | upload | manual
+    sa.Column("added_at", sa.String(40), nullable=False),
+    sa.Column("added_by", sa.String(64), nullable=False),
+    # Set when an admin removes it or a save no longer lists it; a removed certificate is never trusted.
+    sa.Column("removed_at", sa.String(40)),
+    # The last expiry notice sent: "30", "7" or "expired".
+    sa.Column("warned", sa.String(16)),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "provider_id"],
+        ["signin_providers.tenant_id", "signin_providers.id"],
+        name="fk_signin_certificates_provider",
+        ondelete="CASCADE",
+    ),
+    sa.Index("ix_signin_certificates_not_after", "not_after"),
+    info=TENANT_SCOPED,
+)
+signin_group_rules = sa.Table(
+    "signin_group_rules",
+    metadata,
+    # A provider's group mapping (migration 0033): the person in `group_value` (the exact value the provider sends)
+    # gets `role` in `team_id`. Never admin: the service refuses it on save (decision D5).
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, index=True),
+    sa.Column("provider_id", sa.String(64), nullable=False),
+    sa.Column("group_value", sa.String(255), nullable=False),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("role", sa.String(16), nullable=False),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    sa.Column("created_by", sa.String(64), nullable=False),
+    sa.UniqueConstraint("provider_id", "group_value", "team_id", name="uq_signin_group_rules"),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "provider_id"],
+        ["signin_providers.tenant_id", "signin_providers.id"],
+        name="fk_signin_group_rules_provider",
+        ondelete="CASCADE",
+    ),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_signin_group_rules_team"
+    ),
+    info=TENANT_SCOPED,
+)
+signin_grants = sa.Table(
+    "signin_grants",
+    metadata,
+    # Where a membership came from: a provider's first sign-in (`jit`) or one of its group rules (`group`, one row
+    # per rule that gives it). Group removal ends only a membership with a `group` row and no matching rule left, so a
+    # membership given by hand, which has no row here, is never removed by a sign-in.
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, index=True),
+    sa.Column("member_id", sa.String(64), sa.ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True),
+    sa.Column("provider_id", sa.String(64), nullable=False),
+    # Null for a first-sign-in grant, for a group grant whose rule was deleted, and for one read back from the audit log
+    # that no single rule explains; a group grant with no rule still counts as given by groups.
+    sa.Column("rule_id", sa.String(64), sa.ForeignKey("signin_group_rules.id", ondelete="SET NULL")),
+    sa.Column("why", sa.String(8), nullable=False),  # jit | group
+    sa.Column("granted_at", sa.String(40), nullable=False),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "provider_id"],
+        ["signin_providers.tenant_id", "signin_providers.id"],
+        name="fk_signin_grants_provider",
+        ondelete="CASCADE",
+    ),
+    info=TENANT_SCOPED,
+)
+signin_break_glass = sa.Table(
+    "signin_break_glass",
+    metadata,
+    # The Security admins who may sign in by password while company sign-in is required (migration 0033, decision D7).
+    # A person who no longer holds settings.manage in the Security team is not counted, whatever this table holds.
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("user_id", sa.String(64), primary_key=True),
+    sa.Column("added_by", sa.String(64), nullable=False),
+    sa.Column("added_at", sa.String(40), nullable=False),
+    sa.Column("last_used_at", sa.String(40)),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "user_id"], ["users.tenant_id", "users.id"], name="fk_signin_break_glass_user", ondelete="CASCADE"
     ),
     info=TENANT_SCOPED,
 )
@@ -328,7 +421,7 @@ signin_flows = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False, index=True),
     sa.Column("provider_id", sa.String(64), nullable=False),
-    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up
+    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up | test
     sa.Column("state_hash", sa.String(64), nullable=False, unique=True),
     # The hash of the key the starting browser holds; completing the flow needs it.
     sa.Column("browser_hash", sa.String(64), nullable=False),
@@ -343,6 +436,9 @@ signin_flows = sa.Table(
     sa.Column("expires_at", sa.String(40), nullable=False),
     sa.Column("answered_at", sa.String(40)),
     sa.Column("used_at", sa.String(40)),
+    # A test sign-in's result (0033): state, subject, email, name, groups, or the check that failed. Read only by the
+    # admin who started it (`user_id`); a test flow never gets a handoff, so it can never become a session.
+    sa.Column("test_result", sa.JSON(none_as_null=True)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "provider_id"],
         ["signin_providers.tenant_id", "signin_providers.id"],

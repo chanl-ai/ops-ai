@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
 from pydantic.alias_generators import to_camel
 
 from ops_service_kit.flags import FlagName
@@ -631,8 +631,17 @@ class OptionsOut(Out):
 
 
 class SsoStartIn(In):
-    email: str = Field(min_length=3, max_length=320, pattern=EMAIL)
+    """Either the person's work email, or a provider's address id (`/sso?provider=`, from an app-portal tile)."""
+
+    email: str | None = Field(default=None, min_length=3, max_length=320, pattern=EMAIL)
+    provider: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
     next: str | None = Field(default=None, pattern=NEXT_PATH)
+
+    @model_validator(mode="after")
+    def _one_of(self) -> SsoStartIn:
+        if (self.email is None) == (self.provider is None):
+            raise ValueError("give either email or provider")
+        return self
 
 
 class StepUpSsoStartIn(In):
@@ -670,12 +679,20 @@ class OidcSettings(In):
 class SamlSettings(In):
     idp_entity_id: str = Field(min_length=1, max_length=500)
     sso_url: str = Field(min_length=8, max_length=500, pattern=r"^https?://")
-    certificate: str = Field(min_length=100, max_length=20000)
+    # A certificate typed or uploaded, kept for a console that sends one; `certificates` takes several.
+    certificate: str | None = Field(default=None, min_length=100, max_length=20000)
+    certificates: list[Annotated[str, StringConstraints(min_length=100, max_length=20000)]] | None = Field(
+        default=None, max_length=10
+    )
+    # The provider's metadata URL: its certificates are read from it on save and again every day.
+    metadata_url: str | None = Field(default=None, max_length=1000, pattern=r"^https?://")
     email_attribute: str | None = Field(default=None, max_length=255)
     name_attribute: str | None = Field(default=None, max_length=255)
     # Sign each AuthnRequest, and refuse an assertion that is not encrypted; both need the SP key.
     sign_requests: bool = False
     require_encryption: bool = False
+    # Whether an app-portal tile (a response nobody asked for) sends the person round a normal sign-in.
+    tiles: bool = True
 
 
 class JitSettings(In):
@@ -698,6 +715,9 @@ class GroupSettings(In):
 
     source: str | None = Field(default=None, max_length=255)
     map: list[GroupRule] = Field(min_length=1, max_length=100)
+    # When a person signs in without a group that gave them a membership: `remove` ends it (the default for a new
+    # provider), `keep` leaves it. A missing, empty or overage groups claim removes nothing either way.
+    on_missing: Literal["keep", "remove"] | None = None
 
 
 class ProviderIn(In):
@@ -720,14 +740,60 @@ class OidcSettingsOut(Out):
     scopes: list[str] | None
 
 
+class CertificateOut(Out):
+    fingerprint: str
+    not_before: str
+    not_after: str
+    source: Literal["metadata", "upload", "manual"]
+    added_at: str
+    state: Literal["current", "expiring", "expired"]
+
+
+class MetadataCertificateOut(Out):
+    fingerprint: str
+    not_before: str
+    not_after: str
+
+
+class MetadataIn(In):
+    """An identity provider's metadata to read: its URL, or the file's contents."""
+
+    url: str | None = Field(default=None, max_length=1000, pattern=r"^https?://")
+    xml: str | None = Field(default=None, max_length=262144)
+
+    @model_validator(mode="after")
+    def _one_of(self) -> MetadataIn:
+        if (self.url is None) == (self.xml is None):
+            raise ValueError("give either url or xml")
+        return self
+
+
+class MetadataOut(Out):
+    idp_entity_id: str
+    sso_url: str
+    certificates: list[MetadataCertificateOut]
+
+
 class SamlSettingsOut(Out):
     idp_entity_id: str
     sso_url: str
-    certificate: str
+    certificate: str | None
+    certificates: list[CertificateOut]
+    metadata_url: str | None
+    metadata_read_at: str | None
+    # What went wrong at the last metadata read; the certificates already trusted stay.
+    metadata_error: str | None
     email_attribute: str | None
     name_attribute: str | None
     sign_requests: bool
     require_encryption: bool
+    tiles: bool
+    # What the identity provider is told about Ops AI: its entity id, consumer (reply) URL and metadata URL.
+    sp_entity_id: str | None
+    acs_url: str | None
+    sp_metadata_url: str | None
+    # The console address an app-portal tile opens; null for a provider saved before providers had their own address.
+    sign_on_url: str | None
 
 
 class JitOut(Out):
@@ -741,9 +807,34 @@ class GroupRuleOut(Out):
     role: str
 
 
+class SignInTestStartOut(Out):
+    redirect_url: str
+    flow_id: str
+
+
+class SignInTestOut(Out):
+    # waiting until the provider answers; ok with what it sent; refused with the check that failed.
+    state: Literal["waiting", "ok", "refused"]
+    subject: str | None = None
+    email: str | None = None
+    name: str | None = None
+    # None: the provider sent no groups list (or Entra's overage claim), so group rules would change nothing.
+    groups: list[str] | None = None
+    reason: str | None = None
+
+
+class BreakGlassOut(Out):
+    user_id: str
+    email: str
+    added_by: str
+    added_at: str
+    last_used_at: str | None
+
+
 class GroupSettingsOut(Out):
     source: str | None
     map: list[GroupRuleOut]
+    on_missing: Literal["keep", "remove"]
 
 
 class TxtRecordOut(Out):

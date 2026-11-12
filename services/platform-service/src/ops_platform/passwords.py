@@ -1,7 +1,10 @@
 """Password sign-in, reset and step-up checks: the decisions, with hashes and reset tokens behind `SignInStore`.
 
 A password works only where the person's workspace allows one: a workspace with no sign-in providers does, and one
-with providers does only through an enabled password provider. A stored password is a PBKDF2 hash; the demo password
+with providers does only through an enabled password provider. While the workspace requires company sign-in
+(`companySignInRequired`), a person whose email is on one of its verified SSO domains gets the wrong-password refusal
+for any password, unless they are a break-glass account (`break_glass.py`), who may always use one, audited and told
+to the Security admins. A stored password is a PBKDF2 hash; the demo password
 is a fallback for a person with no stored password, and is None outside dev. Hashing runs off the event loop, and a
 refusal does the same hashing work as a success, so timing does not tell an unknown email from a wrong password. A
 reset link is mailed only to a person who could sign in by password, and the reply to the request is the same whether
@@ -27,9 +30,10 @@ from ops_email import MailSender, OutboundMessage
 from ops_service_kit.errors import ServiceUnavailable, TooManyRequests, ValidationFailed
 from ops_signin import PasswordHasher
 
+from .break_glass import BreakGlass
 from .signin_options import Limits
 from .store.identity import IdentityStore, User
-from .store.signin import SignInStore
+from .store.signin import PASSWORD, SignInStore
 
 RESET_PREFIX = "prt_"
 
@@ -63,6 +67,8 @@ class Passwords:
     limits: Limits = field(default_factory=Limits)
     # The key an address is hashed with for its wrong-password count (`email_key_from`); see `screen_email`.
     email_key: bytes = b""
+    # Company sign-in required and its break-glass accounts; unset, a password follows the providers alone.
+    break_glass: BreakGlass | None = None
     _dummy: str = field(init=False, default="")
 
     def __post_init__(self) -> None:
@@ -81,7 +87,8 @@ class Passwords:
     async def check(self, user: User, password: str, *, request_id: str) -> str | None:
         """The method a correct password signs `user` in with (`password`, or `dev` for the demo password), or None.
         Raises 429 `signin_locked` while the person is locked, whatever the password."""
-        if not await self.store.password_allowed(user.tenant_id):
+        rescue = await self._break_glass(user)
+        if not rescue and not await self._password_works(user):
             await self._verify(password, self._dummy)
             return None
         now = _now()
@@ -92,6 +99,8 @@ class Passwords:
         method = await self._compare(user, password)
         if method is not None:
             await self.store.clear_failures(user.tenant_id, user.id)
+            if rescue and self.break_glass is not None:
+                await self.break_glass.used(user, request_id=request_id)
             return method
         locked = await self.store.count_failure(
             user.tenant_id,
@@ -105,6 +114,18 @@ class Passwords:
         if locked:
             raise _locked(_iso(now + timedelta(seconds=self.limits.lockout_s)), now)
         return None
+
+    async def _break_glass(self, user: User) -> bool:
+        return self.break_glass is not None and await self.break_glass.counts(user)
+
+    async def _password_works(self, user: User) -> bool:
+        """Whether the person's workspace lets them use a password, break-glass aside."""
+        if not await self.store.password_allowed(user.tenant_id):
+            return False
+        if self.break_glass is None or not await self.break_glass.required(user.tenant_id):
+            return True
+        hit = await self.store.domain(user.email.rpartition("@")[2])
+        return hit is None or hit.tenant_id != user.tenant_id or hit.kind == PASSWORD
 
     async def _compare(self, user: User, password: str) -> str | None:
         stored = await self.store.password_hash(user.tenant_id, user.id)
@@ -157,7 +178,7 @@ class Passwords:
         if self.mail is None or self.console_url is None:
             raise ServiceUnavailable("Password reset is not set up on this installation.", code="mail_not_configured")
         found = await self.identity.users_by_email(email)
-        if len(found) != 1 or not await self.store.password_allowed(found[0].tenant_id):
+        if len(found) != 1 or not (await self._break_glass(found[0]) or await self._password_works(found[0])):
             return
         user = found[0]
         now = _now()

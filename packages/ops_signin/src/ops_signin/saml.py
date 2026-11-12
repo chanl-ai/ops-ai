@@ -19,10 +19,11 @@ from __future__ import annotations
 import base64
 import secrets
 import zlib
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from urllib.parse import quote_plus, urlencode
 
+from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from lxml import etree
@@ -32,7 +33,7 @@ from signxml.exceptions import InvalidInput, InvalidSignature
 from signxml.verifier import SignatureConfiguration, VerifyResult, XMLVerifier
 
 from . import xmlenc
-from .identity import SignInRefused, VerifiedIdentity
+from .identity import CertificateExpired, SignInRefused, VerifiedIdentity
 
 PROTOCOL = "urn:oasis:names:tc:SAML:2.0:protocol"
 ASSERTION = "urn:oasis:names:tc:SAML:2.0:assertion"
@@ -44,6 +45,8 @@ EMAIL_FORMAT = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
 METADATA = "urn:oasis:names:tc:SAML:2.0:metadata"
 DSIG = "http://www.w3.org/2000/09/xmldsig#"
 RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+# Entra ID's overage claim: sent in place of the groups list when a person is in more than 150 groups.
+GROUPS_OVERAGE = "http://schemas.microsoft.com/claims/groups.link"
 DECRYPT_REFUSED = "the encrypted assertion could not be read"
 # A posted response larger than this is refused before it is parsed.
 MAX_RESPONSE_BYTES = 256 * 1024
@@ -89,8 +92,9 @@ def _text(el: Element | None) -> str:
 class SamlConfig:
     idp_entity_id: str
     idp_sso_url: str
-    # The identity provider's signing certificate, PEM.
-    idp_certificate: str
+    # The identity provider's signing certificates, PEM: during a rollover its metadata lists the old and the new, and
+    # a response signed by either passes while it is within its dates. A single PEM string is read as a list of one.
+    idp_certificates: tuple[str, ...] | str
     sp_entity_id: str
     acs_url: str
     # The attribute that carries the email; None reads it from the NameID.
@@ -103,6 +107,11 @@ class SamlConfig:
     sign_requests: bool = False
     # A plain assertion is refused: the provider must encrypt to the service provider's certificate.
     require_encryption: bool = False
+
+    @property
+    def certificates(self) -> tuple[str, ...]:
+        c = self.idp_certificates
+        return (c,) if isinstance(c, str) else c
 
 
 @dataclass(frozen=True)
@@ -146,10 +155,23 @@ class SamlServiceProvider:
             query = f"{query}&Signature={quote_plus(base64.b64encode(signature).decode())}"
         return SamlStart(f"{c.idp_sso_url}{'&' if '?' in c.idp_sso_url else '?'}{query}", request_id)
 
+    def check_unsolicited(self, *, saml_response: str, now: datetime | None = None) -> None:
+        """Checks a response no request asked for (an app-portal tile) exactly as `complete` does, with no
+        InResponseTo anywhere and a Destination that names this consumer URL; returns nothing, so nobody is ever signed
+        in from it. Raises SignInRefused."""
+        self.complete(saml_response=saml_response, request_id=None, now=now)
+
     def complete(
-        self, *, saml_response: str, request_id: str, now: datetime | None = None, fresh_since: int | None = None
+        self,
+        *,
+        saml_response: str,
+        request_id: str | None,
+        now: datetime | None = None,
+        fresh_since: int | None = None,
     ) -> VerifiedIdentity:
-        """`fresh_since` (Unix seconds) is set for a forced sign-in: the assertion's AuthnInstant must not be older."""
+        """The person a response vouches for. `request_id` is the AuthnRequest it must answer; None checks an
+        unsolicited response, which must carry no InResponseTo and must name this consumer URL as Destination.
+        `fresh_since` (Unix seconds) is set for a forced sign-in: the assertion's AuthnInstant must not be older."""
         c = self.config
         now = now or datetime.now(UTC)
         try:
@@ -182,20 +204,12 @@ class SamlServiceProvider:
             raise SignInRefused("response answers another request")
         if posted.get("Destination") not in (None, c.acs_url):
             raise SignInRefused("response is for another destination")
+        if request_id is None and posted.get("Destination") != c.acs_url:
+            raise SignInRefused("an unsolicited response must name this consumer URL")
         if encrypted:
-            assertion = self._decrypted(raw, posted, encrypted[0])
+            assertion = self._decrypted(raw, posted, encrypted[0], now)
             return self._read(assertion, request_id=request_id, now=now, fresh_since=fresh_since)
-        try:
-            result: VerifyResult | list[VerifyResult] = XMLVerifier().verify(  # pyright: ignore[reportUnknownMemberType]
-                raw, x509_cert=c.idp_certificate, id_attribute="ID", expect_config=_SIGNATURE, parser=_parser()
-            )
-        except (InvalidSignature, InvalidInput, ValueError) as e:
-            raise SignInRefused(f"signature refused: {e}") from e
-        if isinstance(result, list):
-            raise SignInRefused("more than one signature")
-        signed = result.signed_xml
-        if signed is None:
-            raise SignInRefused("nothing was signed")
+        signed = _verified(raw, c.certificates, now)
         if signed.tag == f"{{{ASSERTION}}}Assertion":
             assertion = signed
         elif signed.tag == f"{{{PROTOCOL}}}Response":
@@ -207,7 +221,7 @@ class SamlServiceProvider:
             raise SignInRefused("the signature covers neither the response nor the assertion")
         return self._read(assertion, request_id=request_id, now=now, fresh_since=fresh_since)
 
-    def _decrypted(self, raw: bytes, posted: Element, encrypted: Element) -> Element:
+    def _decrypted(self, raw: bytes, posted: Element, encrypted: Element, now: datetime) -> Element:
         """The assertion inside `encrypted`, taken from whichever element a checked signature covers."""
         key = self.config.sp_key
         assert key is not None
@@ -217,7 +231,7 @@ class SamlServiceProvider:
             raise SignInRefused(f"unsupported encryption: {e}") from e
         if posted.find(f"{{{DSIG}}}Signature") is not None:
             # The Response is signed: its signature covers the ciphertext, so decrypt what it covers.
-            signed = _verified(raw, self.config.idp_certificate)
+            signed = _verified(raw, self.config.certificates, now)
             inner = signed.findall("saml:EncryptedAssertion", NS) if signed.tag == f"{{{PROTOCOL}}}Response" else []
             if len(inner) != 1:
                 raise SignInRefused("the signature covers neither the response nor the assertion")
@@ -226,12 +240,12 @@ class SamlServiceProvider:
         # Parsed before the signature check, so content that decrypts to anything but an assertion gets the one
         # decryption refusal, never a signature error that tells it apart.
         _assertion_of(plaintext)
-        signed = _verified(plaintext, self.config.idp_certificate)
+        signed = _verified(plaintext, self.config.certificates, now)
         if signed.tag != f"{{{ASSERTION}}}Assertion":
             raise SignInRefused("the signature covers neither the response nor the assertion")
         return signed
 
-    def _read(self, a: Element, *, request_id: str, now: datetime, fresh_since: int | None) -> VerifiedIdentity:
+    def _read(self, a: Element, *, request_id: str | None, now: datetime, fresh_since: int | None) -> VerifiedIdentity:
         c = self.config
         if _text(a.find("saml:Issuer", NS)) != c.idp_entity_id:
             raise SignInRefused("assertion from another issuer")
@@ -271,13 +285,21 @@ class SamlServiceProvider:
         if fresh_since is not None and (auth_time is None or auth_time < fresh_since - self.skew_s):
             raise SignInRefused("the provider did not ask for credentials again")
         name = attrs.get(c.name_attribute, "") if c.name_attribute else ""
-        groups = tuple(
-            _text(v)
-            for x in a.findall("saml:AttributeStatement/saml:Attribute", NS)
-            if c.groups_attribute and x.get("Name") == c.groups_attribute
-            for v in x.findall("saml:AttributeValue", NS)
-        )
+        groups = self._groups(a)
         return VerifiedIdentity(subject=subject, email=email, name=name or email, auth_time=auth_time, groups=groups)
+
+    def _groups(self, a: Element) -> tuple[str, ...] | None:
+        """The values of the named groups attribute; () when it is there with none; None when it is missing, or when
+        Entra's overage claim stands in for it, since neither says which groups the person is in."""
+        if not self.config.groups_attribute:
+            return None
+        named = list(a.findall("saml:AttributeStatement/saml:Attribute", NS))
+        if any(x.get("Name") == GROUPS_OVERAGE for x in named):
+            return None
+        found = [x for x in named if x.get("Name") == self.config.groups_attribute]
+        if not found:
+            return None
+        return tuple(_text(v) for x in found for v in x.findall("saml:AttributeValue", NS))
 
     def _window(self, not_before: str | None, not_on_or_after: str | None, now: datetime) -> None:
         start, end = _parse_instant(not_before), _parse_instant(not_on_or_after)
@@ -312,11 +334,18 @@ def _assertion_of(plaintext: bytes) -> Element:
     return assertion
 
 
-def _verified(document: bytes, certificate: str) -> Element:
-    """The element the document's one signature covers, checked against the provider's certificate."""
+def certificate_dates(pem: str) -> tuple[datetime, datetime]:
+    """When a PEM certificate starts and stops being valid. Raises ValueError for anything but one certificate."""
+    cert = x509.load_pem_x509_certificate(pem.encode())
+    return cert.not_valid_before_utc, cert.not_valid_after_utc
+
+
+def _verify_one(document: bytes, certificate: str, at: datetime | None = None) -> Element:
+    """`at` judges the certificate's dates at that time instead of now (signxml refuses an expired certificate)."""
+    config = _SIGNATURE if at is None else replace(_SIGNATURE, verification_time=at)
     try:
         result: VerifyResult | list[VerifyResult] = XMLVerifier().verify(  # pyright: ignore[reportUnknownMemberType]
-            document, x509_cert=certificate, id_attribute="ID", expect_config=_SIGNATURE, parser=_parser()
+            document, x509_cert=certificate, id_attribute="ID", expect_config=config, parser=_parser()
         )
     except (InvalidSignature, InvalidInput, ValueError) as e:
         raise SignInRefused(f"signature refused: {e}") from e
@@ -325,6 +354,37 @@ def _verified(document: bytes, certificate: str) -> Element:
     if result.signed_xml is None:
         raise SignInRefused("nothing was signed")
     return result.signed_xml
+
+
+def _verified(document: bytes, certificates: tuple[str, ...], now: datetime) -> Element:
+    """The element the document's one signature covers, checked against the provider's certificates that are within
+    their dates now. signxml is given a bare certificate and checks no dates, so they are judged here. A signature
+    that only an expired certificate verifies is CertificateExpired, so the person and the admins are told the
+    provider's certificate needs an update; every other failure is the one refusal."""
+    current: list[str] = []
+    expired: list[tuple[str, datetime]] = []
+    for pem in certificates:
+        try:
+            start, end = certificate_dates(pem)
+        except ValueError:
+            continue
+        if start <= now <= end:
+            current.append(pem)
+        elif end < now:
+            expired.append((pem, end))
+    refusal: SignInRefused = SignInRefused("no current signing certificate")
+    for pem in current:
+        try:
+            return _verify_one(document, pem)
+        except SignInRefused as e:
+            refusal = e
+    for pem, end in expired:
+        try:
+            _verify_one(document, pem, at=end - timedelta(seconds=1))
+        except SignInRefused:
+            continue
+        raise CertificateExpired("signed with an expired certificate")
+    raise refusal
 
 
 def sp_metadata(*, entity_id: str, acs_url: str, certificate: str | None, sign_requests: bool) -> bytes:

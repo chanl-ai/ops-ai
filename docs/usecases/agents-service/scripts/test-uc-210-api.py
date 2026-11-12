@@ -52,7 +52,7 @@ RULES = AGENTS_DIR / "tests" / "fixtures" / "levy-extraction-fake-openai"
 NOTICE: dict[str, Any] = json.loads((AGENTS_DIR / "tests" / "fixtures" / "mailbox" / "levy_notice.json").read_text())
 SEED = {w["id"]: w for w in json.loads((AGENTS_DIR / "seed" / "engine_workflows.json").read_text())}
 sys.path.insert(0, str(AGENTS_DIR / "scripts"))
-from send_levy_email import message  # noqa: E402
+from send_levy_email import message
 
 RUN = uuid.uuid4().hex[:8]
 MAILBOX = f"levy-{RUN}@harborpine.example"

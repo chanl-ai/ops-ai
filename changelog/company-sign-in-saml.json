@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Safer company sign-in setup",
+  "description": "Ops AI only fetches your identity provider's details from public internet addresses, so a typed-in address can never reach inside your network.",
+  "tag": "improved"
+}

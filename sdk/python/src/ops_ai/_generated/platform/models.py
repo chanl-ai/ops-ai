@@ -78,10 +78,27 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class BreakGlassOut(TypedDict, closed=True):
+    addedAt: str
+    addedBy: str
+    email: str
+    lastUsedAt: str | None
+    userId: str
+
+
 class CellIn(TypedDict, closed=True):
     action: str
     area: str
     scope: NotRequired[Literal["all", "own"]]
+
+
+class CertificateOut(TypedDict, closed=True):
+    addedAt: str
+    fingerprint: str
+    notAfter: str
+    notBefore: str
+    source: Literal["metadata", "upload", "manual"]
+    state: Literal["current", "expiring", "expired"]
 
 
 class CheckRefusal(TypedDict, closed=True):
@@ -98,6 +115,11 @@ class DeleteIn(TypedDict, closed=True):
 
 class EnvelopeAuditEventOut(TypedDict, closed=True):
     data: AuditEventOut
+    success: Literal[True]
+
+
+class EnvelopeListBreakGlassOut(TypedDict, closed=True):
+    data: list[BreakGlassOut]
     success: Literal[True]
 
 
@@ -154,11 +176,13 @@ class GroupRuleOut(TypedDict, closed=True):
 
 class GroupSettings(TypedDict, closed=True):
     map: list[GroupRule]
+    onMissing: NotRequired[Literal["keep", "remove"] | None]
     source: NotRequired[str | None]
 
 
 class GroupSettingsOut(TypedDict, closed=True):
     map: list[GroupRuleOut]
+    onMissing: Literal["keep", "remove"]
     source: str | None
 
 
@@ -263,6 +287,23 @@ class MemberOut(TypedDict, closed=True):
     teamId: str
     userId: NotRequired[str | None]
     workspaceRoles: NotRequired[list[str]]
+
+
+class MetadataCertificateOut(TypedDict, closed=True):
+    fingerprint: str
+    notAfter: str
+    notBefore: str
+
+
+class MetadataIn(TypedDict, closed=True):
+    url: NotRequired[str | None]
+    xml: NotRequired[str | None]
+
+
+class MetadataOut(TypedDict, closed=True):
+    certificates: list[MetadataCertificateOut]
+    idpEntityId: str
+    ssoUrl: str
 
 
 Scope: TypeAlias = str
@@ -452,24 +493,39 @@ class RoleRef(TypedDict, closed=True):
     name: str
 
 
+Certificate: TypeAlias = str
+
+
 class SamlSettings(TypedDict, closed=True):
-    certificate: str
+    certificate: NotRequired[str | None]
+    certificates: NotRequired[list[Certificate] | None]
     emailAttribute: NotRequired[str | None]
     idpEntityId: str
+    metadataUrl: NotRequired[str | None]
     nameAttribute: NotRequired[str | None]
     requireEncryption: NotRequired[bool]
     signRequests: NotRequired[bool]
     ssoUrl: str
+    tiles: NotRequired[bool]
 
 
 class SamlSettingsOut(TypedDict, closed=True):
-    certificate: str
+    acsUrl: str | None
+    certificate: str | None
+    certificates: list[CertificateOut]
     emailAttribute: str | None
     idpEntityId: str
+    metadataError: str | None
+    metadataReadAt: str | None
+    metadataUrl: str | None
     nameAttribute: str | None
     requireEncryption: bool
+    signOnUrl: str | None
     signRequests: bool
+    spEntityId: str | None
+    spMetadataUrl: str | None
     ssoUrl: str
+    tiles: bool
 
 
 class SignIn(TypedDict, closed=True):
@@ -489,6 +545,20 @@ class SignInSecretOut(TypedDict, closed=True):
     version: int
 
 
+class SignInTestOut(TypedDict, closed=True):
+    email: NotRequired[str | None]
+    groups: NotRequired[list[str] | None]
+    name: NotRequired[str | None]
+    reason: NotRequired[str | None]
+    state: Literal["waiting", "ok", "refused"]
+    subject: NotRequired[str | None]
+
+
+class SignInTestStartOut(TypedDict, closed=True):
+    flowId: str
+    redirectUrl: str
+
+
 class Skip(TypedDict, closed=True):
     id: str
     reason: str
@@ -505,8 +575,9 @@ class SsoOption(TypedDict, closed=True):
 
 
 class SsoStartIn(TypedDict, closed=True):
-    email: str
+    email: NotRequired[str | None]
     next: NotRequired[str | None]
+    provider: NotRequired[str | None]
 
 
 class SsoStarted(TypedDict, closed=True):
@@ -730,6 +801,11 @@ class EnvelopeInvitePreview(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeMetadataOut(TypedDict, closed=True):
+    data: MetadataOut
+    success: Literal[True]
+
+
 class EnvelopeOptionsPage(TypedDict, closed=True):
     data: OptionsPage
     success: Literal[True]
@@ -762,6 +838,16 @@ class EnvelopeRoleGrantOut(TypedDict, closed=True):
 
 class EnvelopeSignInSecretOut(TypedDict, closed=True):
     data: SignInSecretOut
+    success: Literal[True]
+
+
+class EnvelopeSignInTestOut(TypedDict, closed=True):
+    data: SignInTestOut
+    success: Literal[True]
+
+
+class EnvelopeSignInTestStartOut(TypedDict, closed=True):
+    data: SignInTestStartOut
     success: Literal[True]
 
 

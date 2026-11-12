@@ -610,6 +610,8 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
         "OPS_SIGNIN_DNS_SERVERS": json.dumps([f"127.0.0.1:{IDP_PORT}"]),
         "OPS_SAML_SP_KEY": SAML_SP_KEY,
         "OPS_SAML_SP_CERTIFICATE": SAML_SP_CERT,
+        # The fake identity provider listens on loopback over http, which the provider-fetch guard refuses.
+        "OPS_SIGNIN_FETCH_LOCAL": "true",
         "OPS_MAIL_PROVIDER": "fake",
         "OPS_MAIL_FROM": "ops@harborpine.example",
         "OPS_MAIL_FAKE_OUT_DIR": str(mail),
@@ -718,6 +720,7 @@ def sso_round_trip(
     user: str | None = None,
     stale: bool = False,
     groups: tuple[str, ...] = (),
+    idp_params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """A browser's SSO sign-in, without the browser: start for `email`, log `user` (default `email`) in at the identity
     provider, hand its answer to platform-service, and complete with the flow key when it sent back a code. Returns
@@ -731,22 +734,31 @@ def sso_round_trip(
     if groups:
         # The groups the fake identity provider says the person is in.
         params["groups"] = ",".join(groups)
+    # Anything else the fake identity provider takes, e.g. {"overage": "1"} for Entra's groups.link claim.
+    params |= idp_params or {}
     at_idp = idp.get(url.path, params=params)
     if at_idp.status_code == 302:
         back = httpx.URL(at_idp.headers["location"])
         answered = api.get(back.path, params=dict(back.params))
     else:
-        form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', at_idp.text)}
-        answered = api.post(
-            "/v1/auth/saml/acs", content=str(httpx.QueryParams(form)),
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )  # fmt: skip
+        answered = post_saml_form(api, at_idp.text)
     location = answered.headers.get("location", "")
     query = dict(httpx.URL(location).params) if location else {}
     completed = None
     if "code" in query:
         completed = api.post("/v1/auth/sso/complete", json={"code": query["code"], "flowKey": started["flowKey"]})
     return {"start": start, "location": location, "query": query, "flowKey": started["flowKey"], "completed": completed}
+
+
+def post_saml_form(api: httpx.Client, page: str) -> httpx.Response:
+    """Posts an identity provider's auto-submit SAML form to platform-service at the consumer URL the form names, as a
+    browser would: each provider saved since providers had their own addresses has its own."""
+    form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page)}
+    action = re.search(r'action="([^"]*)"', page)
+    path = httpx.URL(html.unescape(action.group(1))).path if action else "/v1/auth/saml/acs"
+    return api.post(
+        path, content=str(httpx.QueryParams(form)), headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
 
 
 def approve_tool_review(gw: httpx.Client, module_id: str, headers: dict[str, str]) -> dict[str, Any]:

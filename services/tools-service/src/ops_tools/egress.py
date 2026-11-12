@@ -15,12 +15,10 @@ safe to reach.
 
 from __future__ import annotations
 
-import asyncio
 import http.cookiejar
 import ipaddress
 import os
 import re
-import socket
 import ssl
 import tempfile
 import time
@@ -32,11 +30,11 @@ import httpcore
 import httpx
 
 from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_service_kit.public_address import CGNAT, Resolver, SystemResolver, address_allowed
 
 from .store.egress import EgressStore
 
 HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
-CGNAT = ipaddress.IPv4Network("100.64.0.0/10")
 
 
 class EgressDenied(ValueError):
@@ -73,10 +71,6 @@ def listable_range(value: str) -> str:
 # Said to people, on the Connect window and the tool page: what is wrong and who fixes it, with no network terms.
 NOT_ALLOWED = "{host} is not an allowed address yet. The Security team allows it on the Egress page in Settings."
 
-ALWAYS_DENIED = (
-    ipaddress.ip_network("169.254.169.254/32"),
-    ipaddress.ip_network("fd00:ec2::254/128"),
-)
 # The request extension that names the tenant an outbound request is made for. Every request through the egress
 # client carries it (`for_tenant`); the transport dials with that tenant's allow-list, and refuses a request without.
 TENANT_EXTENSION = "ops_tenant"
@@ -169,16 +163,6 @@ def certificate_context(
     return context
 
 
-class Resolver(Protocol):
-    async def resolve(self, host: str, port: int) -> list[str]: ...
-
-
-class SystemResolver:
-    async def resolve(self, host: str, port: int) -> list[str]:
-        infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
-        return list(dict.fromkeys(str(info[4][0]) for info in infos))
-
-
 class OverrideResolver:
     """Dev only (Settings refuses `egress_resolve` elsewhere): fixed answers for some names, DNS for the rest. An
     answer is `address` or `address:port`; the port replaces 443 when dialling, so a fake that cannot listen on 443
@@ -206,22 +190,6 @@ def _is_address(host: str) -> bool:
         ipaddress.ip_address(host.strip("[]"))
     except ValueError:
         return False
-    return True
-
-
-def address_allowed(address: str, ranges: list[str]) -> bool:
-    """Loopback, link-local, multicast, unspecified and cloud-metadata addresses never; private, CGNAT and reserved
-    ones only inside a listed range; public ones always (the host was already checked against the list)."""
-    ip = ipaddress.ip_address(address)
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
-    if ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
-        return False
-    if any(ip in net for net in ALWAYS_DENIED):
-        return False
-    cgnat = ip.version == 4 and ipaddress.IPv4Address(int(ip)) in CGNAT
-    if ip.is_private or ip.is_reserved or cgnat:
-        return any(ip in ipaddress.ip_network(r) for r in ranges)
     return True
 
 

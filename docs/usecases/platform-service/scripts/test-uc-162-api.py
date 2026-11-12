@@ -3,8 +3,6 @@ docs/usecases/platform-service/saml-sign-in-and-step-up.md."""
 
 from __future__ import annotations
 
-import html
-import re
 import secrets
 
 import httpx
@@ -13,6 +11,7 @@ from usecase_harness import (
     check,
     data,
     finish,
+    post_saml_form,
     security_admin_on_ops,
     set_provider,
     signin_stack,
@@ -64,12 +63,7 @@ with signin_stack() as (api, idp, _):
         url = httpx.URL(data(start)["redirectUrl"])
         params = dict(url.params) | {"user": analyst} | ({"stale": "1"} if stale else {})
         page = idp.get(url.path, params=params)
-        form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page.text)}
-        back = api.post(
-            "/v1/auth/saml/acs",
-            content=str(httpx.QueryParams(form)),
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        back = post_saml_form(api, page.text)
         query = dict(httpx.URL(back.headers.get("location", "")).params)
         if "code" not in query:
             return query, None

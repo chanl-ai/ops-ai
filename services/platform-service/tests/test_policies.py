@@ -28,6 +28,7 @@ DEFAULTS: dict[str, Any] = {
     "extractionFloor": 0.8,
     "stepUp": False,
     "publishReview": {},
+    "companySignInRequired": False,
     "chatThreadsOwnerOnly": True,
     "egressNewHosts": "ask_security",
     "securityTeamAddsSecrets": False,
