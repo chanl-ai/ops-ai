@@ -72,6 +72,21 @@ export interface SkillContent {
   resources: SkillResource[];
   /** What the agent says when one of these guardrails refuses: a next step, not just a no. Absent uses the platform's sentence. */
   refusal?: string;
+  /** Jobs picked on their own from the chat's / menu, each loaded with the instructions as the shared overview. */
+  parts?: SkillPartContent[];
+}
+
+/** One part of a skill as saved in its version. */
+export interface SkillPartContent {
+  slug: string;
+  name: string;
+  useWhen: string;
+  instructions: string;
+  inputs: SkillInputField[];
+  /** Some of the skill's own tools. */
+  toolIds: string[];
+  /** Most tokens it may hold when loaded; absent takes the reply's whole skill budget. */
+  budget?: number;
 }
 
 export interface SkillTestRunSummary {
@@ -287,6 +302,7 @@ export interface SkillDraftPatch {
   knowledgeBases?: string[];
   guardrails?: string[];
   refusal?: string;
+  parts?: SkillPartContent[];
   note?: string;
   /** The version the edit was made against; a newer one returns 409. */
   baseVersion: number;
