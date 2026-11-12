@@ -8,6 +8,7 @@ import httpx
 from pydantic import SecretStr
 
 from ops_email import MailSender
+from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_signin.dns import TxtResolver
 
@@ -35,6 +36,10 @@ class SignInOptions:
     reset_ttl_s: int
     public_url: str | None = None
     console_url: str | None = None
+    # tools-service's public base: a team's MCP address, the resource an assistant's grant is for, is under it.
+    mcp_url: str | None = None
+    # The install's proxies (forms_trusted_proxies): registration and sign-in start limits count the caller behind them.
+    trusted_proxies: list[str] = field(default_factory=lambda: ["127.0.0.1/32"])
     mail: MailSender | None = None
     transport: httpx.AsyncBaseTransport | None = None
     dns: TxtResolver = field(default_factory=TxtResolver)
@@ -42,6 +47,8 @@ class SignInOptions:
     # The SAML service provider's key and certificate, PEM; both or neither.
     saml_sp_key: SecretStr | None = None
     saml_sp_certificate: str | None = None
+    # How identity-provider metadata and OIDC discovery are fetched; None fetches unchecked (dev's local fake only).
+    fetch: PublicFetch | None = field(default_factory=PublicFetch)
 
     @classmethod
     def from_settings(cls, settings: Settings, *, mail: MailSender | None = None) -> SignInOptions:
@@ -52,10 +59,13 @@ class SignInOptions:
             reset_ttl_s=settings.password_reset_seconds,
             public_url=settings.platform_public_url,
             console_url=settings.console_url,
+            mcp_url=settings.tools_public_url,
+            trusted_proxies=settings.forms_trusted_proxies,
             mail=mail,
             dns=TxtResolver(settings.signin_dns_servers, timeout_s=settings.signin_dns_timeout_seconds),
             saml_sp_key=settings.saml_sp_key,
             saml_sp_certificate=settings.saml_sp_certificate,
+            fetch=None if settings.signin_fetch_local else PublicFetch(ranges=tuple(settings.signin_fetch_ranges)),
             limits=Limits(
                 max_failures=settings.signin_max_failures,
                 failure_window_s=settings.signin_failure_window_seconds,

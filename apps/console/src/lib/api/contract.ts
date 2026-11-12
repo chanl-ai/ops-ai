@@ -12,6 +12,7 @@ import type { GovernanceApi } from './governance-contract';
 import type { SettingsApi } from './settings-contract';
 import type { SignInPolicyApi } from './sign-in-contract';
 import type { InvitesApi } from './invites-contract';
+import type { OAuthApi } from './oauth-contract';
 import type { AccountApi } from './account-contract';
 import type { WorkspacePoliciesApi } from './workspace-policies-contract';
 import type { ProviderConnectionsApi } from './provider-connections-contract';
@@ -200,6 +201,8 @@ export interface OpsApi {
   signInPolicy: SignInPolicyApi;
   invites: InvitesApi;
   account: AccountApi;
+  /** Assistants connected to a team's MCP address: the consent page and the person's connections (platform-service). */
+  oauth: OAuthApi;
   /** The workspace's access policies (platform-service); other stacks get sample ones. */
   workspacePolicies: WorkspacePoliciesApi;
   workspaceTeams: WorkspaceTeamsApi;

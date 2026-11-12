@@ -3,6 +3,7 @@ import type { Team } from '@/lib/types/team';
 
 import type { OpsApi } from './contract';
 import { createTransport } from './http';
+import { createOAuthHttp } from './oauth-http';
 import { createSignInProvidersHttp } from './sign-in-providers-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
 import { createWorkspaceTeamsHttp } from './workspace-teams-http';
@@ -48,6 +49,12 @@ export function createPlatformPoliciesHttp(baseUrl: string): OpsApi['workspacePo
 export function createPlatformSignInProvidersHttp(baseUrl: string): OpsApi['signInProviders'] {
   const { get, send } = createTransport(`${baseUrl}/v1`);
   return { ...createSignInProvidersHttp(get, send), samlMetadataUrl: `${baseUrl}/v1/auth/saml/metadata` };
+}
+
+/** The consent page and the person's connected assistants (/v1/oauth/…). */
+export function createPlatformOAuthHttp(baseUrl: string): OpsApi['oauth'] {
+  const { get, send } = createTransport(`${baseUrl}/v1`);
+  return createOAuthHttp(get, send);
 }
 
 /** Every team of the workspace, for workspace admins (GET, POST, PATCH /v1/settings/teams). */

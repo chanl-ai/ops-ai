@@ -17,6 +17,7 @@ import { createExecutionsHttp, createGovernanceHttp } from './governance-http';
 import { createSettingsHttp } from './settings-http';
 import { createSignInPolicyHttp } from './sign-in-http';
 import { createInvitesHttp } from './invites-http';
+import { createOAuthHttp } from './oauth-http';
 import { createAccountHttp } from './account-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
 import { createProviderConnectionsHttp } from './provider-connections-http';
@@ -65,7 +66,11 @@ export function createTransport(baseUrl: string) {
       headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> | undefined) },
     });
     const body = res.status === 204 ? null : await res.json().catch(() => null);
-    if (!res.ok) throw new ApiError(body?.error?.message ?? res.statusText, res.status, body?.error?.team, body?.error?.code, body?.error?.details);
+    if (!res.ok) {
+      // The consent routes refuse in RFC 6749's shape ({ error, error_description }), the others in the envelope.
+      if (typeof body?.error === 'string') throw new ApiError(body.error_description ?? res.statusText, res.status, undefined, body.error);
+      throw new ApiError(body?.error?.message ?? res.statusText, res.status, body?.error?.team, body?.error?.code, body?.error?.details);
+    }
     return body?.data as T;
   }
   const get = <T>(p: string) => call<T>(p);
@@ -129,8 +134,11 @@ interface DirectoryTool {
 export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'] {
   const { get } = createTransport(`${baseUrl}/v1`);
   return async (p) => {
-    const wanted = [...(p.filters?.type?.includes('workflow') ? ['workflow'] : []), ...(p.filters?.access ?? [])];
-    const rows = await get<DirectoryTool[]>(`/tools${wanted.length ? `?${new URLSearchParams(wanted.map((a) => ['access', a]))}` : ''}`);
+    // GET /v1/tools filters on `kind` (workflow, agent, app, custom); it has no `access` filter, so asking by access
+    // returned every tool and the Workflows tab counted none.
+    const query = new URLSearchParams(p.filters?.type?.includes('workflow') ? [['kind', 'workflow']] : []).toString();
+    // The route answers a paged list ({ data, total, facets }); the rows are in `data`.
+    const rows = (await get<{ data: DirectoryTool[] }>(`/tools?pageSize=200${query ? `&${query}` : ''}`)).data;
     const data: Tool[] = rows.map((t) => ({
       id: t.id,
       name: t.name,
@@ -295,6 +303,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     signInPolicy: createSignInPolicyHttp(get, send),
     invites: createInvitesHttp(get, send),
     account: createAccountHttp(get, send, qs),
+    oauth: createOAuthHttp(get, send),
     workspacePolicies: createWorkspacePoliciesHttp(get, send),
     workspaceTeams: createWorkspaceTeamsHttp(get, send),
     signInProviders: createSignInProvidersHttp(get, send),

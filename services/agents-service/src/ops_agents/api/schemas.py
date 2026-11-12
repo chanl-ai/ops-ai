@@ -1331,6 +1331,15 @@ class SkillToolRef(Out):
     access: str
 
 
+class SkillInputField(Out):
+    """One value a person or assistant gives when using the skill; an MCP client asks for it as a prompt argument."""
+
+    name: str
+    type: Literal["string"] = "string"
+    description: str = ""
+    required: bool = False
+
+
 class SkillContent(Out):
     name: str
     slug: str
@@ -1343,6 +1352,8 @@ class SkillContent(Out):
     resources: list[dict[str, Any]]
     # What the agent says when one of the skill's guardrails refuses; absent uses the platform's sentence.
     refusal: str | None = None
+    # Absent on a skill that takes no inputs.
+    inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
 
 
 class Skill(Out):
@@ -1366,6 +1377,8 @@ class Skill(Out):
     updated_by: str
     origin: Literal["blank", "generated", "imported", "duplicated"]
     pending_review_id: str | None = None
+    # The newest version's inputs, so a list page carries what an MCP prompt asks for without a read per skill.
+    inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
 
 
 class SkillVersion(Out):

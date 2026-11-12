@@ -3,7 +3,7 @@ pinned on agents by `{skillId, version}`. Versions are immutable once published;
 is requested. Publish requests are the registry's (`registry_publish_requests`, kind `skill`).
 
 A version's `content`: name, slug, useWhen, loading (`on_match` | `always`), instructions, toolIds, knowledgeBases,
-guardrails. `tokens` is what the body adds to a turn when loaded.
+guardrails, inputs (absent when the skill takes none). `tokens` is what the body adds to a turn when loaded.
 """
 
 from __future__ import annotations
@@ -84,6 +84,7 @@ LABELS = {
     "knowledgeBases": "knowledge bases",
     "guardrails": "guardrails",
     "refusal": "refusal",
+    "inputs": "inputs",
 }
 
 

@@ -1,14 +1,15 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { KeyRound, LogOut, MonitorSmartphone, Smartphone, Trash2 } from 'lucide-react';
+import { Bot, KeyRound, LogOut, MonitorSmartphone, Smartphone, Trash2 } from 'lucide-react';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { ListEmpty } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { relativeTime } from '@/lib/format';
+import { dateTime, relativeTime } from '@/lib/format';
 import type { AccountSession, MfaDevice } from '@/lib/types/account';
+import type { ConnectedAssistant } from '@/lib/types/oauth';
 
 /** Authenticators and recovery codes on the account. Removing the last authenticator is refused while MFA is required. */
 export function MfaDevicesTable({ devices, onRegenerate, onRemove, busy }: { devices: MfaDevice[]; onRegenerate: () => void; onRemove: (d: MfaDevice) => void; busy: boolean }) {
@@ -95,6 +96,55 @@ export function SessionsTable({ sessions, onRevoke, busyId }: { sessions: Accoun
       searchPlaceholder="Search devices or places…"
       hideViewSwitcher
       emptyState={<ListEmpty icon={MonitorSmartphone} noun="sessions" filtered={false} description="Sessions appear here when you sign in." />}
+    />
+  );
+}
+
+/** An assistant that has not called the address since it connected has no last use. */
+const lastUsed = (at: string | null | undefined) => (at ? relativeTime(at) : 'Never');
+
+/** Assistants the person connected to a team's MCP address. Disconnecting ends the connection; the assistant cannot renew. */
+export function ConnectedAssistantsTable({ assistants, onDisconnect, busyId }: { assistants: ConnectedAssistant[]; onDisconnect: (a: ConnectedAssistant) => void; busyId: string | null }) {
+  const columns: ColumnDef<ConnectedAssistant>[] = [
+    {
+      accessorKey: 'clientName',
+      header: 'Assistant',
+      cell: ({ row }) => (
+        <div className="max-w-56 min-w-32 whitespace-normal">
+          <span className="flex items-center gap-2 font-medium">
+            <Bot className="size-4 shrink-0 text-muted-foreground" />
+            <span className="break-words">{row.original.clientName}</span>
+          </span>
+          {/* On a phone the team and last use sit under the name, so the row keeps room for Disconnect. */}
+          <span className="text-xs text-muted-foreground md:hidden">
+            {row.original.teamName} · {lastUsed(row.original.lastUsedAt)}
+          </span>
+        </div>
+      ),
+      enableHiding: false,
+    },
+    { accessorKey: 'teamName', header: 'Team', meta: { className: 'max-md:hidden' }, cell: ({ row }) => <span className="text-sm whitespace-nowrap">{row.original.teamName}</span> },
+    { accessorKey: 'lastUsedAt', header: 'Last used', meta: { className: 'max-md:hidden' }, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{lastUsed(row.original.lastUsedAt)}</span> },
+    { accessorKey: 'expiresAt', header: 'Ends', meta: { className: 'max-md:hidden' }, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{dateTime(row.original.expiresAt)}</span> },
+    {
+      id: 'actions',
+      cell: ({ row }) => (
+        <Button size="sm" variant="outline" disabled={busyId === row.original.id} onClick={() => onDisconnect(row.original)} data-testid={`disconnect-${row.original.id}`}>
+          <LogOut className="size-4" /> Disconnect
+        </Button>
+      ),
+      enableHiding: false,
+    },
+  ];
+  return (
+    <DataTableWithViews
+      columns={columns}
+      data={assistants}
+      getRowId={(a) => a.id}
+      searchColumn="clientName"
+      searchPlaceholder="Search assistants…"
+      hideViewSwitcher
+      emptyState={<ListEmpty icon={Bot} noun="assistants" filtered={false} description="Paste a team's MCP address into Claude, Cursor, VS Code or ChatGPT and allow it; it appears here." />}
     />
   );
 }

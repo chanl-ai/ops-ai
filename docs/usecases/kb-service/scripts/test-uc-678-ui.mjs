@@ -1,20 +1,19 @@
 // uc-678 a team takes in SharePoint libraries and Confluence spaces, ui layer:
-// docs/usecases/kb-service/sharepoint-and-confluence-sources.md, story S5. The SharePoint and Confluence plugins run in
+// docs/usecases/knowledge/sharepoint-and-confluence.md. The SharePoint and Confluence plugins run in
 // the stack's tools-service against their fakes (docs/usecases/lib/fake_sharepoint_confluence.py, run as a script), and
 // kb-service reads them through it. The team's sign-ins go through the API as the api layer proved them; then James,
-// a builder, uses Add source's pickers in the console. Screenshots of each picker state go to evidenceDir('uc-678')
-// (OPS_EVIDENCE_DIR, else .logs/usecases).
+// a builder, uses Add source's pickers in the console.  With OPS_USECASE_MEDIA=1 the pictures
+// and the clip go to docs/usecases/knowledge/media.
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, shootBothWidths, videoToGif, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
 const TAG = Math.random().toString(36).slice(2, 6);
-const SHOTS = evidenceDir('uc-678');
-mkdirSync(SHOTS, { recursive: true });
 const armed = (p) => (p.catch(() => undefined), p);
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 
@@ -51,7 +50,10 @@ try {
       const browser = await chromium.launch();
       const errors = [];
       try {
-        const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+        const videos = mkdtempSync(join(tmpdir(), 'uc-678-video-'));
+        const recording = Date.now();
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir: videos, size: { width: 1440, height: 900 } } });
+        const page = await context.newPage();
         page.on('pageerror', (e) => errors.push(e.message));
         await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByLabel('Email').fill(JAMES);
@@ -59,7 +61,8 @@ try {
         await page.getByRole('button', { name: /^Sign in/ }).first().click();
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-        await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const started = Date.now();
+        await page.goto(`${consoleUrl}/data/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: 'New knowledge base' }).first().click({ timeout: 120_000 });
         await page.getByLabel('Name').fill(`Policies ${TAG}`);
         const made = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/knowledge-bases'), { timeout: 60_000 }));
@@ -81,7 +84,6 @@ try {
         await sites.getByTestId('as-sites-option').filter({ hasText: 'Operations' }).waitFor({ state: 'detached', timeout: 60_000 });
         await sites.getByTestId('as-sites-option').filter({ hasText: 'Human Resources' }).waitFor({ timeout: 60_000 });
         const offered = await sites.getByTestId('as-sites-option').allInnerTexts();
-        await sites.screenshot({ path: join(SHOTS, 'sharepoint-picker-search.png') });
         check('10 the sites picker searched for "human" lists Human Resources only', offered.length === 1 && offered[0].includes('Human Resources'), offered);
 
         await sites.getByRole('button', { name: 'Select all' }).click();
@@ -92,7 +94,6 @@ try {
         const libsCount = await libraries.getByText(/^\d+ picked/).innerText();
         // Picking libraries asks the sites picker again for what they hold; it settles back on the site.
         await sites.getByTestId('as-sites-option').filter({ hasText: 'Human Resources' }).waitFor({ timeout: 60_000 });
-        await add.screenshot({ path: join(SHOTS, 'sharepoint-picker-select-all.png') });
         check(
           '11 Select all picks the site, and the libraries picker lists its two libraries, both picked by Select all',
           sitesCount.startsWith('1 picked · 1 listed') && libsCount.startsWith('2 picked · 2 listed') && libs.some((t) => t.includes('Policies Library')) && libs.some((t) => t.includes('Handbook')),
@@ -103,15 +104,18 @@ try {
         await sites.locator('input').fill('zebra');
         const none = sites.getByText('No site called “zebra” that this connection can read.');
         await none.waitFor({ timeout: 60_000 });
-        await sites.screenshot({ path: join(SHOTS, 'sharepoint-picker-empty.png') });
         check('13a a search nothing matches says no site of that name can be read', await none.isVisible());
         await sites.locator('input').fill(fakes.info.failingQuery);
         const failed = sites.getByText(/Couldn’t list the sites:/);
         await failed.waitFor({ timeout: 60_000 });
         const said = await failed.innerText();
-        await sites.screenshot({ path: join(SHOTS, 'sharepoint-picker-error.png') });
+        await page.waitForTimeout(800);
+        const clipMs = Date.now() - started;
         check('13b a search Graph refuses says the sites could not be listed, with the reason', said.includes('503'), said);
+        await shootBothWidths(page, 'knowledge', 'uc-678-sites-picker-error', async () => page.waitForTimeout(600));
+        await page.setViewportSize({ width: 1440, height: 900 });
         await sites.locator('input').fill('');
+        await sites.getByTestId('as-sites-option').filter({ hasText: 'Human Resources' }).waitFor({ timeout: 60_000 });
 
         // Step 12: Create and sync indexes the libraries' files.
         await add.getByTestId('add-source-next').click();
@@ -143,14 +147,16 @@ try {
         await spaces.locator('input').fill('eng');
         await spaces.getByTestId('as-spaces-option').filter({ hasText: 'Legal' }).waitFor({ state: 'detached', timeout: 60_000 });
         const spaceRows = await spaces.getByTestId('as-spaces-option').allInnerTexts();
-        await spaces.screenshot({ path: join(SHOTS, 'confluence-spaces-picker.png') });
+        await shootBothWidths(page, 'knowledge', 'uc-678-spaces-picker', async () => page.waitForTimeout(600));
         check('14 the spaces picker searched for "eng" lists the Engineering space only', spaceRows.length === 1 && spaceRows[0].includes('Engineering'), spaceRows);
         check('no page errors', errors.length === 0, errors);
+        await context.close();
+        videoToGif(videos, 'knowledge', 'uc-678-pick-libraries', started - recording, clipMs);
+        rmSync(videos, { recursive: true, force: true });
       } catch (e) {
         // What the console showed when a step could not go on, so the failure says why.
         const shown = await browser.contexts()[0]?.pages()[0];
         if (shown) {
-          await shown.screenshot({ path: join(SHOTS, 'failure.png') }).catch(() => undefined);
           console.log(`the page when it stopped: ${(await shown.locator('body').innerText().catch(() => '')).slice(0, 1500)}`);
         }
         throw e;

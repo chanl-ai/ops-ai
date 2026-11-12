@@ -47,12 +47,25 @@ CHAINS = ROOT / "deploy" / "images" / "chains"
 # DIALECT=mssql compiles the schema from the store models with no server, and main() hands it to mssql.py.
 DIALECTS: dict[str, Any] = {"postgresql": Postgres, "mssql": None}
 MIGRATOR = "ops_migrator"
-# Revisions applied before offline rendering was a rule: they read rows or inspect tables, so Alembic cannot render them
-# as SQL. Every later revision must render (test_offline.py); an upgrade across one of these is refused by name.
+# Revisions that read rows or inspect tables, so Alembic cannot render them as SQL: most were applied before offline
+# rendering was a rule; tools_0071, tools_0076, 0033 and 0034 backfill per-row values (a casefolded name, JSON policies
+# and provider settings reshaped in Python) that plain SQL cannot compute the same way on every database. Every other
+# revision must render (test_offline.py); an upgrade across one of these is refused by name.
 ONLINE_ONLY = {
     "agents": {"0031_engine_definitions_stage", "0036_widget_name", "0042_skill_published_loading"},
-    "tools": {"tools_0001_gateway", "tools_0020_drop_security_reviews", "tools_0071_account_key"},
-    "platform": {"0006_roles", "0013_team_lifecycle", "0017_signin_domain_verification"},
+    "tools": {
+        "tools_0001_gateway",
+        "tools_0020_drop_security_reviews",
+        "tools_0071_account_key",
+        "tools_0076_account_owner_key",
+    },
+    "platform": {
+        "0006_roles",
+        "0013_team_lifecycle",
+        "0017_signin_domain_verification",
+        "0033_agent_changes_approvals",
+        "0034_saml_sign_in",
+    },
 }
 OFFLINE_URL = "postgresql+asyncpg://offline:offline@localhost:1/offline"
 

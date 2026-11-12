@@ -64,7 +64,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 9 | Priya opens the app's page and its Tools, Resources, Auth configs and Settings tabs | Accounts first, Person desk Connected and Default; Read a record by title; Ops AI's built-in config with no Edit or Delete and no secret on the page; the personal accounts switch on |
 | 11 | Priya presses Connect in the app's header, names the account EU desk, presses Connect and allows access as harbor.eu | Accounts lists Person desk (Default) and EU desk |
 | 12 | A run with nobody behind it calls Read a record naming EU desk, then naming nothing, then naming Nowhere desk | The system reads as harbor.eu, then harbor.ops; the third is refused 404 ACCOUNT_NOT_FOUND |
-| 13 | James connects his own EU desk account (james.eu) on My accounts and asks the agent for a record; then presses Make my default on Person desk and asks again | The first read is as james.eu, his newest sign-in; the second as james.person |
+| 13 | James connects his own EU desk account (james.eu) on My accounts and asks the agent for a record; the call asks which account, he picks james.eu, and he asks again; then presses Make my default on Person desk and asks again | The first call asks which account and saving his pick makes it his default; the next call does not ask and reads as james.eu; after Make my default on Person desk the call reads as james.person |
 | 14 | On a stack with the bank stand-in, Priya presses Add custom app, names it Bank API, types the address, test path and a wrong key, presses Test, then the right key and Test, then Save | Failed with 401, then Working with 200; the key reads Sealed |
 | 15 | She opens Bank API's Accounts tab, then Settings › Edit settings, types a wrong key and tests, the right one and tests, saves, and presses Test now on the account | Working; the window shows the key sealed; 401, then 200; Working after |
 | 17 | On a stack with the certificate test app and the fake token endpoint, she connects it in the window with its certificate pasted and its key from a file, tests and saves, then opens its Accounts tab | The test works; the account reads working; no private key in the page |
@@ -101,7 +101,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | api | `console/scripts/test-uc-607-api.py` | target: 21 and 23 wait on S1 and D2 |
 | sdk | `console/scripts/test-uc-607-sdk.py` | target: waits on K1 |
 | cli | `console/scripts/test-uc-607-cli.py` | target: waits on L1 |
-| ui | `console/scripts/test-uc-607-ui.mjs` | failing (2026-11-03), 32 of 38. Steps 45 and 13c: the run's Human Task offers no Connect my account, as agents-service's connect wait drops the account's app (`services/agents-service/src/ops_agents/api/engine_reviews.py:71`), which starting the sign-in needs. Step 40: with its hosts off the allow list the account still tests 200, since an app reaches its own hosts (commit 2d496c7). Step 46: Tools reads agents-service's paged `GET /v1/tools` (commit ba9f12c). Step 8: `GET /v1/apps` lists no built-in app without `include=builtin`. Step 7c: a builder's grid explains Connect on 10 cards and disables none |
+| ui | `console/scripts/test-uc-607-ui.mjs` | passing (2026-11-12): 41 of 41 checks. Step 19 follows the console's Add account and its required account name |
 
 ## Non-vacuous check
 
@@ -109,3 +109,9 @@ Step 21: the app is not in `?only=connected` before its test passes. Today a sav
 check fails until S1 lands. Step 22 pairs the viewer's 403 with the admin's turn-on in step 21.
 
 Screenshots of each screen at 1280 in light and dark go to `evidenceDir('607', 'uc')`, beside the mock's frames.
+
+## Setup state
+
+On 2026-11-12 the walk reads the moved pages (`/data/connectors`, `/settings/account/connectors`). Steps 0, 2, 3, 4 and 40 pass;
+steps 11 onward still read old element ids or the old tabs. Connectors is the page's title;
+on an app where each person signs in, the header and catalog card show the viewer's state and the team row shows the team's.

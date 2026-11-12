@@ -136,6 +136,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "auth_saml_provider_acs": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/saml/acs/{sp_id}",
+        "pathParams": ["sp_id"],
+        "query": [],
+        "stream": False,
+    },
+    "auth_saml_provider_metadata": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/auth/saml/metadata/{sp_id}",
+        "pathParams": ["sp_id"],
+        "query": [],
+        "stream": False,
+    },
     "auth_session": {
         "body": None,
         "headers": [],
@@ -325,6 +343,42 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "oauth_oauth_consent": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/oauth/consent",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "oauth_oauth_decide": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/oauth/consent",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "oauth_oauth_disconnect": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/oauth/grants/{grant_id}",
+        "pathParams": ["grant_id"],
+        "query": [],
+        "stream": False,
+    },
+    "oauth_oauth_grants": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/oauth/grants",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "people_give_role": {
         "body": "json",
         "headers": [],
@@ -469,6 +523,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sign_in_providers_add_break_glass": {
+        "body": None,
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/settings/sign-in/break-glass/{user_id}",
+        "pathParams": ["user_id"],
+        "query": [],
+        "stream": False,
+    },
     "sign_in_providers_delete_signin_provider": {
         "body": None,
         "headers": [],
@@ -484,6 +547,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/settings/sign-in/secrets/{name}",
         "pathParams": ["name"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_list_break_glass": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/settings/sign-in/break-glass",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -514,6 +586,33 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sign_in_providers_read_signin_metadata": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/settings/sign-in/providers/metadata",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_refresh_signin_provider": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/settings/sign-in/providers/{provider_id}/refresh",
+        "pathParams": ["provider_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_remove_break_glass": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/settings/sign-in/break-glass/{user_id}",
+        "pathParams": ["user_id"],
+        "query": [],
+        "stream": False,
+    },
     "sign_in_providers_save_signin_provider": {
         "body": "json",
         "headers": [],
@@ -529,6 +628,24 @@ OPERATIONS: dict[str, Operation] = {
         "method": "PUT",
         "path": "/v1/settings/sign-in/secrets/{name}",
         "pathParams": ["name"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_signin_test_result": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/settings/sign-in/test-results/{flow_id}",
+        "pathParams": ["flow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_test_signin_provider": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/settings/sign-in/providers/{provider_id}/test",
+        "pathParams": ["provider_id"],
         "query": [],
         "stream": False,
     },
@@ -796,9 +913,17 @@ class Operations:
         "Saml Acs"
         return self._t.call(SERVICE, OPERATIONS["auth_saml_acs"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def auth_saml_provider_acs(self, sp_id: str) -> Any:
+        "Saml Provider Acs"
+        return self._t.call(SERVICE, OPERATIONS["auth_saml_provider_acs"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def auth_saml_metadata(self) -> Any:
         "Saml Metadata"
         return self._t.call(SERVICE, OPERATIONS["auth_saml_metadata"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def auth_saml_provider_metadata(self, sp_id: str) -> Any:
+        "Saml Provider Metadata"
+        return self._t.call(SERVICE, OPERATIONS["auth_saml_provider_metadata"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def auth_session(self) -> Principal:
         "Session"
@@ -855,6 +980,22 @@ class Operations:
     def me_why_not(self, *, area: str | None = None, action: str | None = None) -> WhyOut:
         "Why Not"
         return self._t.call(SERVICE, OPERATIONS["me_why_not"], {}, {"area": area, "action": action}, {}, None)  # type: ignore[no-any-return]
+
+    def oauth_oauth_consent(self) -> ConsentOut:
+        "Oauth Consent"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_consent"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def oauth_oauth_decide(self, body: ConsentIn) -> ConsentDecided:
+        "Oauth Decide"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_decide"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def oauth_oauth_grants(self) -> list[GrantOut]:
+        "Oauth Grants"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_grants"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def oauth_oauth_disconnect(self, grant_id: str) -> Any:
+        "Oauth Disconnect"
+        return self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def people_people_names(self) -> list[PersonName]:
         "People Names"
@@ -960,6 +1101,22 @@ class Operations:
         "Change Roles"
         return self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
+        "List Break Glass"
+        return self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_break_glass"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sign_in_providers_add_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Add Break Glass"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_add_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def sign_in_providers_remove_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Remove Break Glass"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_remove_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def sign_in_providers_verify_signin_domain(self, domain: str) -> ProviderOut:
         "Verify Signin Domain"
         return self._t.call(
@@ -969,6 +1126,10 @@ class Operations:
     def sign_in_providers_list_signin_providers(self) -> list[ProviderOut]:
         "List Signin Providers"
         return self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_providers"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sign_in_providers_read_signin_metadata(self, body: MetadataIn) -> MetadataOut:
+        "Read Signin Metadata"
+        return self._t.call(SERVICE, OPERATIONS["sign_in_providers_read_signin_metadata"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def sign_in_providers_save_signin_provider(self, provider_id: str, body: ProviderIn) -> ProviderOut:
         "Save Signin Provider"
@@ -980,6 +1141,18 @@ class Operations:
         "Delete Signin Provider"
         return self._t.call(
             SERVICE, OPERATIONS["sign_in_providers_delete_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def sign_in_providers_refresh_signin_provider(self, provider_id: str) -> ProviderOut:
+        "Refresh Signin Provider"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_refresh_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def sign_in_providers_test_signin_provider(self, provider_id: str) -> SignInTestStartOut:
+        "Test Signin Provider"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_test_signin_provider"], {"provider_id": provider_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def sign_in_providers_list_signin_secret_names(self) -> list[str]:
@@ -997,6 +1170,12 @@ class Operations:
     def sign_in_providers_delete_signin_secret(self, name: str) -> Any:
         "Delete Signin Secret"
         return self._t.call(SERVICE, OPERATIONS["sign_in_providers_delete_signin_secret"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sign_in_providers_signin_test_result(self, flow_id: str) -> SignInTestOut:
+        "Signin Test Result"
+        return self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_signin_test_result"], {"flow_id": flow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     def teams_list_workspace_teams(
         self,
@@ -1182,9 +1361,17 @@ class AsyncOperations:
         "Saml Acs"
         return await self._t.call(SERVICE, OPERATIONS["auth_saml_acs"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def auth_saml_provider_acs(self, sp_id: str) -> Any:
+        "Saml Provider Acs"
+        return await self._t.call(SERVICE, OPERATIONS["auth_saml_provider_acs"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def auth_saml_metadata(self) -> Any:
         "Saml Metadata"
         return await self._t.call(SERVICE, OPERATIONS["auth_saml_metadata"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def auth_saml_provider_metadata(self, sp_id: str) -> Any:
+        "Saml Provider Metadata"
+        return await self._t.call(SERVICE, OPERATIONS["auth_saml_provider_metadata"], {"sp_id": sp_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def auth_session(self) -> Principal:
         "Session"
@@ -1241,6 +1428,22 @@ class AsyncOperations:
     async def me_why_not(self, *, area: str | None = None, action: str | None = None) -> WhyOut:
         "Why Not"
         return await self._t.call(SERVICE, OPERATIONS["me_why_not"], {}, {"area": area, "action": action}, {}, None)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_consent(self) -> ConsentOut:
+        "Oauth Consent"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_consent"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_decide(self, body: ConsentIn) -> ConsentDecided:
+        "Oauth Decide"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_decide"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_grants(self) -> list[GrantOut]:
+        "Oauth Grants"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_grants"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def oauth_oauth_disconnect(self, grant_id: str) -> Any:
+        "Oauth Disconnect"
+        return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def people_people_names(self) -> list[PersonName]:
         "People Names"
@@ -1352,6 +1555,22 @@ class AsyncOperations:
         "Change Roles"
         return await self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
+        "List Break Glass"
+        return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_break_glass"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sign_in_providers_add_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Add Break Glass"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_add_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_remove_break_glass(self, user_id: str) -> list[BreakGlassOut]:
+        "Remove Break Glass"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_remove_break_glass"], {"user_id": user_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def sign_in_providers_verify_signin_domain(self, domain: str) -> ProviderOut:
         "Verify Signin Domain"
         return await self._t.call(
@@ -1361,6 +1580,10 @@ class AsyncOperations:
     async def sign_in_providers_list_signin_providers(self) -> list[ProviderOut]:
         "List Signin Providers"
         return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_providers"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sign_in_providers_read_signin_metadata(self, body: MetadataIn) -> MetadataOut:
+        "Read Signin Metadata"
+        return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_read_signin_metadata"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def sign_in_providers_save_signin_provider(self, provider_id: str, body: ProviderIn) -> ProviderOut:
         "Save Signin Provider"
@@ -1372,6 +1595,18 @@ class AsyncOperations:
         "Delete Signin Provider"
         return await self._t.call(
             SERVICE, OPERATIONS["sign_in_providers_delete_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_refresh_signin_provider(self, provider_id: str) -> ProviderOut:
+        "Refresh Signin Provider"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_refresh_signin_provider"], {"provider_id": provider_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_test_signin_provider(self, provider_id: str) -> SignInTestStartOut:
+        "Test Signin Provider"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_test_signin_provider"], {"provider_id": provider_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def sign_in_providers_list_signin_secret_names(self) -> list[str]:
@@ -1392,6 +1627,12 @@ class AsyncOperations:
         "Delete Signin Secret"
         return await self._t.call(
             SERVICE, OPERATIONS["sign_in_providers_delete_signin_secret"], {"name": name}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_signin_test_result(self, flow_id: str) -> SignInTestOut:
+        "Signin Test Result"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_signin_test_result"], {"flow_id": flow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def teams_list_workspace_teams(

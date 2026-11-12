@@ -1,6 +1,219 @@
-# People connect their own Salesforce account
+# Connect your own Salesforce account
 
-Status: current. Id: `uc-558`. Service: `tools-service`. Layers: api, ui.
+Status: current. Service: `tools-service`. Layers: api, sdk, cli, ui.
+
+In this example we will start a workflow that updates a Salesforce case, as two people who have not connected their own
+Salesforce account yet. It assumes a team that set Salesforce to "Each person's own account" and published its update
+tool.
+
+| Use case | |
+|---|---|
+| Id | `uc-558` |
+| Area | Tools and apps |
+| Runs | Python, TypeScript, CLI; the api and console steps are in their own scripts |
+| Run it | `make usecase-test UC=uc-558` |
+
+## Who is in it
+
+| Person | Role | Signs in as |
+|---|---|---|
+| James, a claims handler | Builder | the `james` profile |
+| Wanjiru, a supervisor | Admin | the `wanjiru` profile |
+| Priya, the team admin | Admin | the `priya` profile |
+
+The run gives each person a profile with their own sign-in on a stack it starts for itself: platform-service signing
+people in, tools-service, agents-service and a worker, and a fake Salesforce. The team's hosts, Salesforce app, update
+tool and the `case_update` workflow are already live. Nobody has connected.
+
+## Before you start
+
+```python tab="Python" tab-group="language"
+import json
+import os
+import time
+
+import httpx
+from ops_ai import OpsAI
+
+james = OpsAI(profile="james")
+wanjiru = OpsAI(profile="wanjiru")
+
+# The run's stand-in for a person's browser: it opens a sign-in address at the fake Salesforce as an account, and
+# answers with the state and code the browser would come back with.
+browser = json.load(open(os.environ["OPS_CONFIG"]))["profiles"]["james"]["services"]["browser"]
+
+
+def sign_in_at(url, account):
+    return httpx.post(f"{browser}/sign-in", json={"url": url, "as": account}, timeout=30).json()
+```
+
+```ts tab="TypeScript"
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { OpsAI } from '@chanl-ai/ops-ai';
+
+const james = new OpsAI({ profile: 'james' });
+const wanjiru = new OpsAI({ profile: 'wanjiru' });
+
+// The run's stand-in for a person's browser: it opens a sign-in address at the fake Salesforce as an account, and
+// answers with the state and code the browser would come back with.
+const browser = JSON.parse(readFileSync(process.env.OPS_CONFIG!, 'utf8')).profiles.james.services.browser as string;
+const signInAt = async (url: string, account: string) =>
+  (await (await fetch(`${browser}/sign-in`, { method: 'POST', body: JSON.stringify({ url, as: account }) })).json()) as Record<string, string>;
+```
+
+```bash tab="CLI"
+set -euo pipefail
+# The run's stand-in for a person's browser: POST /sign-in opens a sign-in address at the fake Salesforce as an account
+# and answers with the state and code the browser would come back with; GET /editors lists who edited the case.
+BROWSER=$(jq -r .profiles.james.services.browser "$OPS_CONFIG")
+```
+
+## Steps
+
+### 1. Start a case update as someone who has not connected
+
+James starts the workflow live. It does not go on as the team or as anyone else: it waits for James to connect his own
+account, naming the account and the event his connecting reports.
+
+```python tab="Python" tab-group="language"
+started = james.runs.start("case_update", input={"status": "Awaiting documents"}, mode="live")
+waiting = james.runs.wait(started["runId"], timeout=60)
+assert waiting["status"] == "waiting"
+assert waiting["waiting"]["payload"]["event"] == "app_account.connected"
+```
+
+```ts tab="TypeScript"
+const started = await james.runs.start('case_update', { input: { status: 'Awaiting documents' }, mode: 'live' });
+const waiting = (await james.runs.wait(started.runId, { timeoutMs: 60_000 })) as Record<string, any>;
+assert.equal(waiting.status, 'waiting');
+assert.equal(waiting.waiting.payload.event, 'app_account.connected');
+```
+
+```bash tab="CLI"
+JAMES_RUN=$(OPS_PROFILE=james opsai runs start case_update --input status="Awaiting documents" --live --wait --json)
+jq -e '.status == "waiting" and .waiting.payload.event == "app_account.connected"' <<<"$JAMES_RUN"
+```
+
+Expected: the run is waiting on `app_account.connected`, and nothing has reached Salesforce.
+
+### 2. Another person's run waits for them, not on James
+
+Wanjiru starts the same workflow. Her run waits for her own account; James's sign-in, when he makes it, is never used
+for her. Her connectors list shows Salesforce with no account connected.
+
+```python tab="Python" tab-group="language"
+hers = wanjiru.runs.start("case_update", input={"status": "Awaiting documents"}, mode="live")
+assert wanjiru.runs.wait(hers["runId"], timeout=60)["status"] == "waiting"
+card = next(c for c in wanjiru.me.connectors.list() if c["name"] == "Salesforce claims")
+assert card["accountCount"] == 0
+```
+
+```ts tab="TypeScript"
+const hers = await wanjiru.runs.start('case_update', { input: { status: 'Awaiting documents' }, mode: 'live' });
+assert.equal(((await wanjiru.runs.wait(hers.runId, { timeoutMs: 60_000 })) as Record<string, any>).status, 'waiting');
+const card = (await wanjiru.me.connectors.list()).find((c) => c.name === 'Salesforce claims');
+assert.equal(card?.accountCount, 0);
+```
+
+```bash tab="CLI"
+OPS_PROFILE=wanjiru opsai runs start case_update --input status="Awaiting documents" --live --wait --json | jq -e '.status == "waiting"'
+OPS_PROFILE=wanjiru opsai connectors list --json | jq -e 'map(select(.name == "Salesforce claims"))[0].accountCount == 0'
+```
+
+Expected: both runs wait; Wanjiru's card has no connected account.
+
+### 3. James connects his own account
+
+James asks for the address to sign in at, signs in to Salesforce as himself and finishes the sign-in. His own accounts
+then list the Salesforce sign-in.
+
+```python tab="Python" tab-group="language"
+url = james.me.connectors.connect("Salesforce claims")["authorizeUrl"]
+back = sign_in_at(url, "handler@kestrel.example")
+james.me.connectors.finish(back["state"], back["code"])
+mine = james.me.connectors.accounts()
+assert len(mine) == 1 and mine[0]["connected"]
+```
+
+```ts tab="TypeScript"
+const url = ((await james.me.connectors.connect('Salesforce claims')) as Record<string, string>).authorizeUrl!;
+const back = await signInAt(url, 'handler@kestrel.example');
+await james.me.connectors.finish(back.state!, back.code);
+const mine = await james.me.connectors.accounts();
+assert.equal(mine.length, 1);
+assert.equal(mine[0]?.connected, true);
+```
+
+```bash tab="CLI"
+URL=$(OPS_PROFILE=james opsai connectors connect "Salesforce claims" --json | jq -r .authorizeUrl)
+BACK=$(curl -sf -X POST "$BROWSER/sign-in" -d "$(jq -n --arg url "$URL" '{url: $url, as: "handler@kestrel.example"}')")
+OPS_PROFILE=james opsai connectors finish --state "$(jq -r .state <<<"$BACK")" --code "$(jq -r .code <<<"$BACK")" --json >/dev/null
+OPS_PROFILE=james opsai connectors accounts --json | jq -e 'length == 1 and .[0].connected'
+```
+
+Expected: James has one connected account.
+
+### 4. His waiting run goes on as him
+
+Connecting ends James's wait: the run updates the case with his token, and Salesforce records him as the editor.
+
+```python tab="Python" tab-group="language"
+for _ in range(60):
+    done = james.runs.wait(started["runId"], timeout=60)
+    if done["status"] != "waiting":
+        break
+    time.sleep(1)
+assert done["status"] == "succeeded" and done["outcome"] == "updated"
+assert httpx.get(f"{browser}/editors").json() == ["handler@kestrel.example"]
+```
+
+```ts tab="TypeScript"
+let done = (await james.runs.wait(started.runId, { timeoutMs: 60_000 })) as Record<string, any>;
+for (let i = 0; i < 60 && done.status === 'waiting'; i++) {
+  await new Promise((r) => setTimeout(r, 1000));
+  done = (await james.runs.wait(started.runId, { timeoutMs: 60_000 })) as Record<string, any>;
+}
+assert.equal(done.status, 'succeeded');
+assert.equal(done.outcome, 'updated');
+assert.deepEqual(await (await fetch(`${browser}/editors`)).json(), ['handler@kestrel.example']);
+```
+
+```bash tab="CLI"
+for _ in $(seq 60); do
+  STATUS=$(OPS_PROFILE=james opsai runs show "$(jq -r .id <<<"$JAMES_RUN")" --json | jq -r .status)
+  case "$STATUS" in succeeded | failed) break ;; esac
+  sleep 1
+done
+test "$STATUS" = succeeded
+curl -sf "$BROWSER/editors" | jq -e '. == ["handler@kestrel.example"]'
+```
+
+Expected: James's run succeeded as `updated`, and the only editor Salesforce recorded is `handler@kestrel.example`.
+
+## Gaps
+
+The SDKs and the command line have no gap for connecting. Disconnect and a sign-in that lacks a scope are walked in the api
+script only.
+
+A call that acts for a person is made by agents-service with a token platform-service signs, never by a person, so "a
+request body cannot choose whose" (api step 7) stays in the api script.
+
+## What proves it
+
+Step 1 fails if a run for someone who has not connected goes on as the team or as another person: the status would not be
+`waiting`. Step 2 fails if Wanjiru's run is answered by James's connecting. Step 3 fails if James's finished sign-in is not listed as his own account. Step 4 fails if his waiting run does not go on, or Salesforce records anyone but him.
+
+## Details
+
+| | |
+|---|---|
+| Services the run starts | tools stack: platform-service, tools-service, agents-service and a worker, with a fake Salesforce (navikt mock-oauth2-server behind an https front) |
+| Api script | `docs/usecases/tools-service/scripts/test-uc-558-api.py` (steps 1 to 11 below) |
+| Console script | `docs/usecases/tools-service/scripts/test-uc-558-ui.mjs` |
+
+## Api and console steps
+
 
 A Salesforce account set to "Each person's own account" signs each call in as the person it acts for, so Salesforce
 records that person as the editor and applies their own permissions. A call for a person who has not connected gets
@@ -49,11 +262,11 @@ the request body.
 | 11 | James lists `GET /v1/me/accounts`, then disconnects | His Salesforce sign-in is listed; after Disconnect his next run waits for him to connect again |
 | 12 | James asks a chat agent holding the update operation to move a case | The reply shows the Connect Salesforce card; nothing reaches Salesforce |
 | 13 | He presses Connect, signs in to Salesforce in the pop-up as `handler@kestrel.example` | The pop-up closes, the card reads Connected, the chat sends a follow-up and the agent's new call updates the case: Salesforce records exactly one edit, his |
-| 14 | He opens My accounts from the person menu (formerly Your connections; the old address opens it) | His Salesforce sign-in is listed with its account |
-| 15 | At 375 px, My accounts and the chat with the card | Neither page scrolls sideways |
-| 16 | He disconnects on My accounts (the old address opens it) | His row offers Connect again and `GET /v1/me/accounts` returns none |
-| 17 | Priya opens the old connection address, then Settings on the app's page, and turns Everyone signs in with their own account off and on | It reads on; off saves `team`, on saves `person` again |
-| 18 | Priya opens the old connection address and presses Connect my account on the app's page | The Accounts row reads Connected as `lead@kestrel.example`, and `GET /v1/me/accounts` lists it |
+| 14 | He opens My connectors from the person menu | His Salesforce card is listed with the account he signed in as |
+| 15 | At 375 px, My connectors and the chat with the card | Neither page scrolls sideways |
+| 16 | He opens the card's menu, chooses Disconnect and confirms | His card offers Connect again and `GET /v1/me/accounts` returns none |
+| 17 | Priya opens the app's page, then Settings, and turns People can connect their own account off and on | It reads on; off saves `team`, on saves `person_or_team` (team backup on) |
+| 18 | Priya opens My connectors and presses Connect on the card | The card reads `lead@kestrel.example`, and `GET /v1/me/accounts` lists it |
 | 19 | Retired: the console switch was removed (af724998) | |
 
 ## Acceptance layers
@@ -61,7 +274,7 @@ the request body.
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-558-api.py` | passing (2026-10-29) |
-| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-11-03), 11 checks |
+| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-11-12), 11 checks |
 
 ## Non-vacuous check
 

@@ -26,9 +26,20 @@ import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson
-from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginError, RateLimited, Response, TooLarge
+from ops_plugin_sdk import (
+    BadInput,
+    Context,
+    NeedsReconnect,
+    Plugin,
+    PluginError,
+    RateLimited,
+    Refused,
+    Response,
+    TooLarge,
+)
 from ops_plugin_sdk import EgressDenied as PluginEgressDenied
 from ops_plugin_sdk import paging as paged
+from ops_plugin_sdk.answers import answer_error
 from ops_plugin_sdk.formats import InputRefused
 from ops_plugin_sdk.knowledge import source_hosts as knowledge_source_hosts
 from ops_plugin_sdk.knowledge import source_of
@@ -44,7 +55,7 @@ if TYPE_CHECKING:
     from ..executor import HttpExecutor
     from .host import PluginHost
 
-OURS = "ours"
+OURS, UPSTREAM = "ours", "upstream"
 DEADLINE_S = 30.0
 # The most one plugin request's answer may hold: read as it streams in and refused past this, so a huge or endless
 # answer never fills the gateway's memory. 25 MB holds any page, document or listing a source fetches.
@@ -144,6 +155,7 @@ class PluginExecutor:
         allowed = list(module.get("egress_hosts") or [])
         reachable = {*allowed, *sites}
         plugin_headers = {h["key"]: h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])}
+        rule = cast(dict[str, Any] | None, op.get("error_when"))
         loop = asyncio.get_running_loop()
         policy = self.http.policy
         client = self.http.client
@@ -181,6 +193,14 @@ class PluginExecutor:
             finally:
                 await r.aclose()
             text = content.decode(r.encoding or "utf-8", errors="replace")
+            if rule is not None and r.status_code < 400:
+                # Parsed only for a plugin that declares error_when, so a page or file it fetches costs nothing more.
+                try:
+                    refused = answer_error(json.loads(text), rule)
+                except ValueError:
+                    refused = None
+                if refused is not None:
+                    raise refused
             return Response(r.status_code, text, dict(r.headers), content)
 
         def send(
@@ -220,6 +240,9 @@ class PluginExecutor:
             return _failure("RATE_LIMITED", str(e), 429)
         except BadInput as e:
             return _failure("INVALID_INPUT", str(e), 422, OURS)
+        except Refused as e:
+            # The system's own answer said the call failed (error_when), so the failure is on its side.
+            return _failure(e.code, str(e), side=UPSTREAM)
         except PluginError as e:
             return _failure(e.code, str(e))
         except httpx.HTTPError as e:

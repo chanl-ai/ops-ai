@@ -31,7 +31,6 @@ from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
 from .connections.records import (
     CONNECTED,
-    PERSON_ORIGIN,
     account_state,
     connection_base,
     person_state,
@@ -68,7 +67,7 @@ from .plugins.host import (
 )
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
-from .store.connections import DEFAULT_VALUE, FIXED_VALUE, name_key, plugin_app, plugin_of, split_config
+from .store.connections import DEFAULT_VALUE, FIXED_VALUE, PERSON_ORIGIN, name_key, plugin_app, plugin_of, split_config
 from .store.modules import ModuleStore
 from .store.team_defaults import TeamDefaults
 
@@ -1892,7 +1891,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 actions += ["delete"] + (["move"] if configs > 1 else [])
         if may and not is_default and not a.get("sandbox") and card["kind"] == "plugin":
             actions.append("make_team_default")
-        if pick is not None and aid not in sandboxes and str(pick["connection_id"]) != aid and own is not None:
+        # Offered on any of the caller's own sign-ins that is not already their saved default, including before
+        # they have saved one: that is the moment a call asks which account to use.
+        if aid not in sandboxes and (pick is None or str(pick["connection_id"]) != aid) and own is not None:
             actions.append("make_default")
         # A person signs in with their own account only where the account lets each person do so beside the team's.
         if sign_in == "person_or_team" and own is None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
@@ -173,6 +174,7 @@ def as_response(outcome: Outcome) -> JSONResponse:
     return JSONResponse({"success": True, "data": data})
 
 
+_TEAM_PATH = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MCP_OFF = "The MCP address is off for this install. Add mcp_gateway to OPS_FLAGS in the install config to turn it on."
 
 
@@ -286,7 +288,14 @@ def create_gateway_app(
 
     resolved_auth = auth or Auth.from_settings(Settings(), audience="tools")
     mcp = (
-        McpAdapter(calls=calls, registry=registry, directory=directory, auth=resolved_auth)
+        McpAdapter(
+            calls=calls,
+            registry=registry,
+            directory=directory,
+            auth=resolved_auth,
+            public_url=Settings().tools_public_url,
+            issuer_url=Settings().platform_public_url,
+        )
         if directory is not None and (flags or Flags()).on("mcp_gateway")
         else None
     )
@@ -325,6 +334,25 @@ def create_gateway_app(
         app.mount("/mcp", mcp)
     else:
         app.mount("/mcp", _mcp_off)
+
+    if mcp is not None:
+
+        @app.get("/.well-known/oauth-protected-resource/mcp/{team}", include_in_schema=False)
+        async def mcp_resource_metadata(team: str) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+            """Tells an assistant that got a 401 at a team's MCP address where to sign in (RFC 9728): the address is the
+            resource, on this service's own public base, and platform-service at its public base is its authorization
+            server."""
+            if mcp.public_url is None or mcp.issuer_url is None or not _TEAM_PATH.match(team):
+                return JSONResponse(
+                    error_body(503, "unavailable", "No sign-in issuer is set for this install."), status_code=503
+                )
+            return JSONResponse(
+                {
+                    "resource": f"{mcp.public_url}/mcp/{team}",
+                    "authorization_servers": [mcp.issuer_url],
+                    "bearer_methods_supported": ["header"],
+                }
+            )
 
     @app.get("/health", response_model=None, tags=["gateway"])
     async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]

@@ -37,6 +37,9 @@ from .modules import metadata, module_operations, service_outbox, tool_modules
 
 _TS = sa.DateTime(timezone=True)
 SHARED = ""
+# An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
+# team, signing only that person's calls, and removed when its sign-in turns out to be an identity they already linked.
+PERSON_ORIGIN = "person"
 # The role every transaction of this store runs as: row-level security applies to it, not to the owner the
 # service connects as, so the database holds a person's sign-ins to their connection's team.
 ROLE = "ops_tools_tenant"
@@ -77,6 +80,10 @@ connections = sa.Table(
     # database: SQL Server has no index over an expression.
     sa.Column("account_name", sa.String(200)),
     sa.Column("account_key", sa.String(200)),
+    # Whose name it is: empty for the team's accounts, the person (case-folded created_by) for an account a person
+    # added for themselves (origin "person"). A name is unique within its owner, so a person may name their own
+    # account as the team names one of its.
+    sa.Column("owner_key", sa.String(200), nullable=False, server_default=""),
     # The kind's plain settings (header name, username, token address, scopes, a client certificate's PEM, the base
     # address); never the OAuth client, which is the app credential's (credential_id) or Ops AI's (platform_app).
     sa.Column("settings", sa.JSON, nullable=False),
@@ -105,20 +112,26 @@ connections = sa.Table(
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 NAMED = connections.c.account_key.isnot(None)
-# Two accounts of one app in one team never share a name, since steps, agents and chats pick an account by its name:
-# the guarantee behind name lookups (PluginHost.account_named), including two adds at the same moment. Filtered, as a
-# plain unique index would hold every unnamed row equal on SQL Server.
+# Two accounts of one app in one team with one owner never share a name, since steps, agents and chats pick an account
+# by its name: the guarantee behind name lookups (PluginHost.account_named), including two adds at the same moment.
+# Filtered, as a plain unique index would hold every unnamed row equal on SQL Server.
 sa.Index(
     "uq_connections_account_key",
     connections.c.tenant_id,
     connections.c.team_id,
     connections.c.app_id,
+    connections.c.owner_key,
     connections.c.account_key,
     unique=True,
     postgresql_where=NAMED,
     mssql_where=NAMED,
     sqlite_where=NAMED,
 )
+
+
+def owner_key(row: dict[str, Any]) -> str:
+    """Who owns an account's name: the person who added it for themselves, else the team (empty)."""
+    return str(row.get("created_by") or "").strip().casefold() if row.get("origin") == PERSON_ORIGIN else ""
 
 
 def name_key(name: object) -> str | None:
@@ -620,7 +633,7 @@ class ConnectionStore:
         """False when the id is taken (nothing written). `row` carries the account's settings and secret names; an
         OAuth client in them goes to the account's app credential."""
         fields: Row = {"settings": row.get("settings") or {}, "secrets": row.get("secrets") or {}}
-        row = {**row, "account_key": name_key(row.get("account_name"))}
+        row = {**row, "account_key": name_key(row.get("account_name")), "owner_key": owner_key(row)}
         async with self._tx() as c:
             try:
                 async with c.begin_nested():

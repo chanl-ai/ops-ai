@@ -30,6 +30,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
 import type { Guardrail } from '@/lib/types/domain';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
 /** Where the newest version stands: a draft to publish, waiting in Reviews, or published. */
 function versionState(g: Guardrail): { label: string; variant: 'secondary' | 'outline' } {
@@ -223,9 +224,12 @@ export default function GuardrailsPage() {
       description="Rules an agent pins by version. A question on a blocked topic gets the guardrail's message instead of an answer."
       actions={
         canBuild && (
-          <Button onClick={() => setCreating(true)} data-testid="new-guardrail-button">
-            New guardrail
-          </Button>
+          <>
+            <TemplatesGallery kind="guardrail" href="/build/guardrails" />
+            <Button onClick={() => setCreating(true)} data-testid="new-guardrail-button">
+              New guardrail
+            </Button>
+          </>
         )
       }
     >

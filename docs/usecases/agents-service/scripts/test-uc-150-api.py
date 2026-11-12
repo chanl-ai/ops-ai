@@ -24,7 +24,7 @@ from usecase_harness import check, finish
 
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "services" / "agents-service" / "scripts"))
-from send_levy_email import message  # noqa: E402
+from send_levy_email import message
 
 PLATFORM = f"http://127.0.0.1:{os.environ.get('OPS_PLATFORM_PORT', '8710')}"
 AGENTS = f"http://127.0.0.1:{os.environ.get('OPS_AGENTS_PORT', '8700')}"

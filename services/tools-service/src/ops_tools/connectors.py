@@ -20,9 +20,10 @@ from ops_service_kit.errors import ServiceUnavailable
 from ops_service_kit.http import Out
 
 from .app_states import AppGroup, AppState
-from .connections.records import PERSON_ORIGIN, connection_base
+from .connections.records import connection_base
 from .connections.service import own_key
 from .plugins.host import account_identity, own_and_registration
+from .store.connections import PERSON_ORIGIN
 
 if TYPE_CHECKING:
     from .apps import Apps

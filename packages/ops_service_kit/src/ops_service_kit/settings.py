@@ -259,6 +259,11 @@ class Settings(BaseSettings):
     # files-service's public base, path included (e.g. https://ops.example/api/files), when a proxy serves it under a
     # path it strips: every upload and download URL the service hands out is built on it. Unset, the request's base.
     files_public_url: str | None = None
+    # tools-service's public base, path included (e.g. https://ops.example/api/tools). A team's MCP address is
+    # `<tools_public_url>/mcp/<team>`: an assistant's token is issued for that address only, so platform-service (which
+    # checks the resource it is asked for) and tools-service (which checks the token's audience) both read it. Unset,
+    # only API keys open an MCP address.
+    tools_public_url: str | None = None
     files_dir: Path = _REPO_ROOT / ".data" / "files"
     files_scanning: Literal["off", "eicar", "hook"] = "hook"
     # This process's own key at models-service: agents-service's turns, files-service's extractions. With
@@ -323,6 +328,11 @@ class Settings(BaseSettings):
     # system's resolvers. A bank that resolves through its own servers names them here.
     signin_dns_servers: list[str] = Field(default_factory=list[str])
     signin_dns_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    # Identity-provider metadata and OIDC discovery are fetched over https from public addresses only
+    # (ops_service_kit.public_address). A bank whose provider sits on its own network lists that network here, in CIDR.
+    signin_fetch_ranges: list[str] = Field(default_factory=list[str])
+    # Dev only: those fetches reach the local fake identity provider over plain http on loopback, unchecked.
+    signin_fetch_local: bool = False
     # Wrong passwords (sign-in and step-up together) a person may type in a window before both refuse them for the
     # lockout time, and reset links one person may be sent per window. A used reset link ends a lock.
     # The service provider's own key pair for SAML, PEM: it signs requests to identity providers that ask for
@@ -423,7 +433,9 @@ class Settings(BaseSettings):
             # caller's team through documents-service.
             # agents:view: an app's "who uses it" asks agents-service which of the team's agents and workflows use its
             # tools, before a team admin turns it off. knowledge:view: search_knowledge searches the calling
-            # team's knowledge bases through kb-service.
+            # team's knowledge bases through kb-service. skills:view and the create cells: the team MCP address
+            # offers the team's skills as prompts and lists and installs templates, each token holding only the
+            # cells the person it calls for holds (mcp_tools.py).
             "tools": [
                 "agents:view",
                 "knowledge:view",
@@ -437,6 +449,11 @@ class Settings(BaseSettings):
                 "files:view",
                 "documents:view",
                 "documents:run",
+                "skills:view",
+                "agents:create",
+                "skills:create",
+                "workflows:create",
+                "guardrails:create",
             ],
             # events:emit: it reports a deleted file as a service event, which purges what was derived from it.
             "files": ["events:emit"],
@@ -456,9 +473,10 @@ class Settings(BaseSettings):
     # The embed app's own origins (apps/embed), such as https://ops.bank.example. A widget request from one of
     # them speaks for the bank page its session names; nothing in the request (Host, X-Forwarded-Host) can add one.
     embed_origins: list[str] = Field(default_factory=list[str])
-    # The proxies a hosted form's submission may pass through on its way here, as CIDRs: the client address is
-    # the right-most X-Forwarded-For entry outside them, so everyone behind the embed app is not counted as one address.
-    # Set per deploy: the compose network the embed app reaches agents from, or Caddy and the embed app on Fly.
+    # The proxies a request may pass through on its way here, as CIDRs (ops_service_kit.client_address): the caller is
+    # the right-most X-Forwarded-For entry outside them, so everyone behind Caddy or the embed app is not counted as one
+    # address. Read by every limit counted per address: hosted form submissions (agents-service) and assistant
+    # registrations and sign-in starts (platform-service). Set per deploy: the compose network, or Fly's private one.
     forms_trusted_proxies: list[str] = Field(default_factory=lambda: ["127.0.0.1/32"])
     gateway_sub: str = "runtime:local"
     opa_url: str = "http://127.0.0.1:8181"
@@ -506,6 +524,8 @@ class Settings(BaseSettings):
             raise ValueError("secrets_key must be 64 hex characters (an AES-256 key)")
         if self.environment not in ("dev", "test") and self.credential_store == "memory":
             raise ValueError("credential_store 'memory' is for dev and test only; its values are lost on restart")
+        if self.environment != "dev" and self.signin_fetch_local:
+            raise ValueError("signin_fetch_local is for dev only; elsewhere provider fetches reach public https only")
         if self.environment != "dev" and self.egress_resolve:
             raise ValueError("egress_resolve is for dev only; outside dev, names resolve through DNS")
         faults = self.engine_fault_kill_after_node is not None or self.engine_fault_ignore_recorded

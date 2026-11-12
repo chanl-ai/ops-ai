@@ -8567,6 +8567,8 @@ export interface components {
             draftVersion: number | null;
             /** Id */
             id: string;
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInputField"][];
             /** Kbcount */
             kbCount: number;
             /** Lastevalpassrate */
@@ -8617,6 +8619,8 @@ export interface components {
         SkillContent: {
             /** Guardrails */
             guardrails: string[];
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInputField"][];
             /** Instructions */
             instructions: string;
             /** Knowledgebases */
@@ -8645,6 +8649,8 @@ export interface components {
         SkillCreateInput: {
             /** Guardrails */
             guardrails?: string[];
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInput"][];
             /** Instructions */
             instructions: string;
             /** Knowledgebases */
@@ -8680,6 +8686,8 @@ export interface components {
              * @default
              */
             reviewNote: string;
+            /** Slug */
+            slug?: string | null;
             /** Toolids */
             toolIds?: string[];
             /**
@@ -8699,6 +8707,8 @@ export interface components {
             draftVersion: number | null;
             /** Id */
             id: string;
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInputField"][];
             /** Kbcount */
             kbCount: number;
             /** Lastevalpassrate */
@@ -8772,6 +8782,8 @@ export interface components {
             baseVersion: number;
             /** Guardrails */
             guardrails?: string[] | null;
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInput"][] | null;
             /** Instructions */
             instructions?: string | null;
             /** Knowledgebases */
@@ -8791,6 +8803,51 @@ export interface components {
             toolIds?: string[] | null;
             /** Usewhen */
             useWhen?: string | null;
+        };
+        /** SkillInput */
+        SkillInput: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Type
+             * @default string
+             * @constant
+             */
+            type: "string";
+        };
+        /**
+         * SkillInputField
+         * @description One value a person or assistant gives when using the skill; an MCP client asks for it as a prompt argument.
+         */
+        SkillInputField: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Type
+             * @default string
+             * @constant
+             */
+            type: "string";
         };
         /** SkillList */
         SkillList: {
@@ -21171,7 +21228,9 @@ export interface operations {
     resources_copy_resource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path: {
                 resource: string;
             };

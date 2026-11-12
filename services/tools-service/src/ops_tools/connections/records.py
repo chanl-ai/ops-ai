@@ -47,11 +47,6 @@ def status_of(conn: dict[str, Any], now: datetime) -> str:
     return "expiring" if left is not None and left < EXPIRING else "healthy"
 
 
-# An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
-# team, signing only that person's calls, and removed when its sign-in turns out to be an identity they already linked.
-PERSON_ORIGIN = "person"
-
-
 # An app's account as people see it. Saving keys or choosing an app credential proves nothing about the
 # account, so an app reads Connected only once the team account holds a token or Test connection last passed.
 CONNECTED, NOT_SIGNED_IN, EXPIRED, REFUSED, REVOKED = "connected", "not_signed_in", "expired", "refused", "revoked"

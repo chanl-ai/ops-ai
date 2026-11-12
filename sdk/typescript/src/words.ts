@@ -194,6 +194,29 @@ export class Connectors {
     if (!target) throw new TypeError(`${connector.name} has no account of yours to disconnect`);
     await call(this.raw, 'tools', 'apps_disconnect', { path: { account_id: target } });
   }
+
+  /** Starts a sign-in and returns where to send the browser (`authorizeUrl`). Pass `link`, the connect link a call for
+   * the caller was answered with, or `app` to sign in from the connector itself. */
+  async connect(app?: string, { link, account, team = false }: { link?: string; account?: string; team?: boolean } = {}): Promise<Obj> {
+    if (link) return call(this.raw, 'tools', 'apps_open_connect_link', { body: { link } });
+    if (!app) throw new TypeError('connect needs an app or a connect link');
+    const connector = await this.get(app);
+    const target = account ?? (connector.primaryAccountId as string | null | undefined) ?? connector.appId;
+    return call(this.raw, 'tools', 'apps_start_sign_in', {
+      path: { app_id: connector.appId, account_id: target },
+      body: { account: team ? 'team' : 'self' },
+    });
+  }
+
+  /** Finishes the sign-in the browser came back from, with the `state` and `code` in the address it returned to. */
+  finish(state: string, code?: string, { error }: { error?: string } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_finish_sign_in', { body: { state, ...(code ? { code } : {}), ...(error ? { error } : {}) } });
+  }
+
+  /** The caller's own accounts on every app. */
+  accounts(): Promise<Obj[]> {
+    return call(this.raw, 'tools', 'apps_my_accounts');
+  }
 }
 
 /** What belongs to the caller themselves. */

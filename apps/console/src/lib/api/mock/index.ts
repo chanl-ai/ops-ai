@@ -32,6 +32,7 @@ import { createSearchMock } from './search';
 import { createGovernanceMock } from './governance';
 import { createSignInPolicyMock } from './sign-in-policy';
 import { createInvitesMock } from './invites';
+import { createOAuthMock } from './oauth';
 import { currentMockUser, registerMockUser, setMockPassword, verifyMockStepUp } from './auth';
 import { createAccountMock } from './sessions';
 import { createMockWorkspacePolicies } from './workspace-policies';
@@ -1168,6 +1169,7 @@ export function createMockApi(): OpsApi {
     signInPolicy: signIn.api,
     invites: invites.api,
     account: account.api,
+    oauth: createOAuthMock().api,
     workspacePolicies: createMockWorkspacePolicies(),
     workspaceTeams: createMockWorkspaceTeams(),
     signInProviders: createMockSignInProviders(),

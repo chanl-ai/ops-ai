@@ -1,11 +1,12 @@
-// uc-096 knowledge bases work end to end from the console, ui layer: docs/usecases/console/knowledge-bases-end-to-end.md.
+// uc-096 knowledge bases work end to end from the console, ui layer: docs/usecases/knowledge/knowledge-base-end-to-end.md.
 // Signed in through platform-service as James, every step clicked as a person would: create a base, add files and a
 // page, watch them index (one fails with its reason), ask the playground a question and see the passage by page and
 // section, retire the base. Each step is checked on its own, so one failing step still lets the later ones report.
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, shootBothWidths, videoToGif, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -39,7 +40,12 @@ await withUiStack(
     const errors = [];
     let kbId;
     try {
-      const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+      const videos = mkdtempSync(join(tmpdir(), 'uc-096-video-'));
+      const recording = Date.now();
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir: videos, size: { width: 1440, height: 900 } } });
+      const page = await context.newPage();
+      let clipStart = 0;
+      let clipMs = 0;
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByLabel('Email').fill(JAMES);
@@ -49,7 +55,7 @@ await withUiStack(
 
       // 1. Create a base from the list; the person lands on it.
       await step('1 James creates a knowledge base and lands on it', async () => {
-        await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: 'New knowledge base' }).click({ timeout: 120_000 });
         const dialog = page.getByRole('dialog', { name: 'New knowledge base' });
         await dialog.locator('#kb-name').fill(NAME);
@@ -66,7 +72,7 @@ await withUiStack(
 
       // 2. Add files from the base's Sources tab: Add source, Files, two PDFs, then Create and sync on the review step.
       await step('2 James adds two PDFs from the Sources tab and syncs them', async () => {
-        await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByTestId('kb-add-source').click({ timeout: 120_000 });
         const add = page.getByTestId('add-source-wizard');
         await add.getByTestId('add-source-kind-file').click({ timeout: 60_000 });
@@ -97,15 +103,17 @@ await withUiStack(
         // The scan's reading ends in the background (no text, even by OCR); the page shows it failed once it has.
         let reason = false;
         for (let tries = 0; tries < 6 && !reason; tries++) {
-          await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           reason = await page.getByRole('row', { name: /scanned-notice/ }).getByText(/no text/i).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
         }
+        await shootBothWidths(page, 'knowledge', 'uc-096-documents', async () => page.waitForTimeout(600));
+        await page.setViewportSize({ width: 1440, height: 900 });
         const manual = page.getByRole('row', { name: /Branch Operations Manual/ });
         if (!(await manual.waitFor({ timeout: 60_000 }).then(() => true, () => false))) {
           throw new Error(`no manual row; rows: ${JSON.stringify(await page.getByRole('row').allInnerTexts())}`);
         }
         const indexed = await manual.getByText('Indexed').count();
-        await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const row = page.getByRole('row', { name: new RegExp(NAME) });
         if (!(await row.waitFor({ timeout: 60_000 }).then(() => true, () => false))) {
           throw new Error(`no base row; rows: ${JSON.stringify(await page.getByRole('row').allInnerTexts())}`);
@@ -119,8 +127,9 @@ await withUiStack(
       });
 
       // 4. Add a page: a titled text written in the console, indexed like a file.
+      clipStart = Date.now();
       await step('4 James writes a page in the console and it indexes', async () => {
-        await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: 'Add page' }).click({ timeout: 60_000 });
         const dialog = page.getByRole('dialog', { name: 'Add a page' });
         await dialog.getByLabel('Title').fill('Cash drawer limits');
@@ -135,7 +144,7 @@ await withUiStack(
       // 5. Test a question in the playground: the search's passages name the manual by page and section, and no control
       // that is not built is offered. An agent's answer needs an agent citing the base, which this base has none of yet.
       await step('5 the playground finds the cited passage by page and section', async () => {
-        await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=playground`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=playground`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const unbuilt = await page.getByText(/^(Rerank|Rewritten|Compare two configurations)$/).count();
         await page.getByLabel('Question').fill('What is the daily ATM withdrawal limit?');
         const asked = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/query$/.test(r.url()), { timeout: 60_000 }));
@@ -147,6 +156,10 @@ await withUiStack(
         // The first cell is the passage's section, then the document, its version and page.
         const section = passage.split('Branch Operations Manual')[0].trim();
         check('5 the playground finds the cited passage by page and section', res?.status() === 200 && cited && !!section && unbuilt === 0, { status: res?.status(), passage: passage.slice(0, 200), unbuilt });
+        await page.waitForTimeout(800);
+        clipMs = Date.now() - clipStart;
+        await shootBothWidths(page, 'knowledge', 'uc-096-playground', async () => page.waitForTimeout(600));
+        await page.setViewportSize({ width: 1440, height: 900 });
       });
 
       // 6. Retire a base an agent cites: the name must be typed, the dialog names the agent, the base leaves the list,
@@ -156,7 +169,7 @@ await withUiStack(
         const J = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
         const agent = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Teller desk ${TAG}`, role: 'Answers teller questions' }) })).json()).data;
         await fetch(`${agents}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ collections: [kbId] }) });
-        await page.goto(`${consoleUrl}/knowledge/${kbId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/data/knowledge/${kbId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: /More|Actions/ }).first().click({ timeout: 60_000 });
         await page.getByRole('menuitem', { name: /Delete|Retire/ }).click();
         const confirm = page.getByRole('dialog').last();
@@ -167,7 +180,7 @@ await withUiStack(
         const removed = armed(page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes(`/v1/knowledge-bases/${kbId}`), { timeout: 60_000 }));
         await button.click();
         const res = await removed;
-        await page.waitForURL((u) => u.pathname === '/knowledge', { timeout: 60_000 }).catch(() => undefined);
+        await page.waitForURL((u) => u.pathname === '/data/knowledge', { timeout: 60_000 }).catch(() => undefined);
         const listed = await page.getByRole('row', { name: new RegExp(NAME) }).count();
         const H = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops' };
         const gone = (await fetch(`${kb}/v1/knowledge-bases/${kbId}`, { headers: H })).status;
@@ -179,6 +192,9 @@ await withUiStack(
       });
 
       check('no page errors', errors.length === 0, errors);
+      await context.close();
+      videoToGif(videos, 'knowledge', 'uc-096-base-end-to-end', clipStart - recording, clipMs);
+      rmSync(videos, { recursive: true, force: true });
     } finally {
       await browser.close();
     }

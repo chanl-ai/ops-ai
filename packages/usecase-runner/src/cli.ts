@@ -1,4 +1,4 @@
-// Entry for scripts/usecase.mjs: list [area] | index | add <area> "<title>" | update <id> | run <id> [layer] | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
+// Entry for scripts/usecase.mjs: list [area] | index | extract <id> | add <area> "<title>" | update <id> | run <id> [layer] | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
 // coverage <service> | new <service> "<title>". Exit codes are in report.ts (EXIT).
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFi
 import { resolveScript, USECASE_DIR } from './resolve.ts';
 import { childEnv, commandFor, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
+import { extract, runPage } from './page.ts';
 import { execFileSync } from 'node:child_process';
 import { buildIndex, formatList, inArea, writeIndex } from './usecase-index.ts';
 import { updateReport } from './update.ts';
@@ -99,16 +100,16 @@ async function runAll(
       console.log(`\n== ${uc.id} ${layer}: ${uc.title} (${r.path})`);
       outcomes.push(
         await databaseFor(async (env) => {
-          const { code, output } = await runScript(commandFor(root, r.path, r.runtime), env, root);
+          const { code, output } = r.kind === 'page' ? await runPage(root, r.path, layer, env) : await runScript(commandFor(root, r.path, r.runtime), env, root);
           const checks = parseChecks(output);
           const v = verdict(code, checks);
           const saved: SavedRun = { id: uc.id, layer, at: new Date().toISOString(), exit: code, checks, commit: headCommit(root) };
           saveRun(root, saved);
           if (v.pass) saveGreen(root, saved);
           saveLog(root, uc.id, layer, output);
-          const doc = findDoc(root, uc);
+          const doc = r.kind === 'page' ? undefined : findDoc(root, uc);
           const steps = doc ? parseSteps(readFileSync(join(root, doc), 'utf8')) : [];
-          console.log(`\n${uc.id} ${layer}, step by step${steps.length ? `\n${formatSteps(steps, checks)}` : ': this doc has no steps table'}\n  ${v.pass ? 'all checks passed' : `failed; full output in ${logPath(uc.id, layer)}`}`);
+          console.log(`\n${uc.id} ${layer}, step by step${r.kind === 'page' ? ': the PASS and FAIL lines above, one per step' : steps.length ? `\n${formatSteps(steps, checks)}` : ': this doc has no steps table'}\n  ${v.pass ? 'all checks passed' : `failed; full output in ${logPath(uc.id, layer)}`}`);
           return {
             id: uc.id,
             layer,
@@ -203,7 +204,7 @@ export async function main(argv: string[], root: string): Promise<number> {
       const uc = findUseCase(registry, rest[0] ?? '');
       const lines = LAYERS.map((l) => {
         const r = resolveScript(root, uc, l);
-        return `  ${l.padEnd(4)} ${r.kind === 'script' ? r.path : r.reason}${uc.layers.includes(l) ? '' : ' (not required)'}`;
+        return `  ${l.padEnd(4)} ${r.kind === 'script' || r.kind === 'page' ? r.path : r.reason}${uc.layers.includes(l) ? '' : ' (not required)'}`;
       });
       console.log(`${uc.id} ${uc.title}\n  service ${uc.service} · status ${uc.status}\n${lines.join('\n')}`);
       return EXIT.ok;
@@ -214,6 +215,14 @@ export async function main(argv: string[], root: string): Promise<number> {
       console.log(services.map((s) => formatCoverage(s, coverage(root, registry, s))).join('\n\n'));
       return EXIT.ok;
     }
+    if (cmd === 'extract') {
+      if (!rest[0]) {
+        console.error('usage: extract <id>');
+        return EXIT.usage;
+      }
+      console.log(`wrote the page's code, one file per tab:\n  ${extract(root, rest[0]).join('\n  ')}`);
+      return EXIT.ok;
+    }
     if (cmd === 'test') return await test(root, registry, flag(rest, 'uc'), flag(rest, 'layer'));
     if (cmd === 'report') {
       const ucId = flag(rest, 'uc');
@@ -221,7 +230,7 @@ export async function main(argv: string[], root: string): Promise<number> {
       console.log(targets.length ? report(root, targets) : 'no use case has a Stories table yet');
       return EXIT.ok;
     }
-    console.error(`unknown command ${cmd}; one of list, index, add, update, run, show, test, report, coverage, new`);
+    console.error(`unknown command ${cmd}; one of list, index, extract, add, update, run, show, test, report, coverage, new`);
     return EXIT.usage;
   } catch (e) {
     if (e instanceof RegistryError || e instanceof StoryError) {

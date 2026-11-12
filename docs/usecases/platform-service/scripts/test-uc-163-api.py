@@ -3,8 +3,6 @@ docs/usecases/platform-service/wrong-sign-in-provider-refused.md."""
 
 from __future__ import annotations
 
-import html
-import re
 import secrets
 
 import httpx
@@ -15,6 +13,7 @@ from usecase_harness import (
     data,
     finish,
     invited,
+    post_saml_form,
     security_admin_on_ops,
     set_provider,
     signin_stack,
@@ -51,12 +50,7 @@ with signin_stack() as (api, idp, _):
     start = api.post("/v1/auth/sso/start", json={"email": f"x@{zone}"})
     url = httpx.URL(data(start)["redirectUrl"])
     page = idp.get("/saml/elsewhere/sso", params=dict(url.params) | {"user": f"x@{zone}"})
-    form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page.text)}
-    r = api.post(
-        "/v1/auth/saml/acs",
-        content=str(httpx.QueryParams(form)),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
+    r = post_saml_form(api, page.text)
     query = dict(httpx.URL(r.headers.get("location", "")).params)
     check(
         "an answer signed by another provider is refused",

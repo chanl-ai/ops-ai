@@ -28,11 +28,13 @@ DEFAULTS: dict[str, Any] = {
     "extractionFloor": 0.8,
     "stepUp": False,
     "publishReview": {},
+    "companySignInRequired": False,
     "chatThreadsOwnerOnly": True,
     "egressNewHosts": "ask_security",
     "securityTeamAddsSecrets": False,
     "memoryRetentionDays": None,
     "reviewSlaHours": 8,
+    "mcpConnectionHours": 8,
     "toolWritesNeedApproval": {},
     # Approvals are off by default: no team lists an app whose writes wait.
     "appWritesNeedApproval": {},

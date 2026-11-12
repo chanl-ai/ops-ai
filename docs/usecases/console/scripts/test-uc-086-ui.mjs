@@ -1,10 +1,14 @@
-// uc-086 a builder takes a bank API from import to a governed agent call, ui layer: docs/usecases/console/import-to-governed-call.md.
+// uc-086 a builder takes a bank API from import to a governed agent call, ui layer: docs/usecases/agents/an-agent-with-three-tools.md.
 // Signed in through platform-service as the seeded people. tools-service reaches the core-banking fake on https, which
 // checks a header key on most routes and a query key on its statement route; the agents service (scripted model, no
 // provider) takes its tools from tools-service. Each step is checked on its own, so one failing step still lets the
 // later ones report.
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
-import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, required, shootBothWidths, videoToGif, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { PEOPLE, allowBank, authHeaders, securityAdminOn, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -19,8 +23,7 @@ const MAYA = 'm.okafor@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-const headers = async (email, team = 'team_ops') => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
+const headers = (email, team = 'team_ops') => authHeaders(email, { team });
 const get = async (path, email = JAMES) => (await (await fetch(`${tools}${path}`, { headers: await headers(email) })).json()).data;
 
 /** Runs one step; a throw fails that step's check with the error and leaves the next steps to run. */
@@ -68,7 +71,8 @@ async function tryOperation(page, consoleUrl, moduleId, op, fields) {
   const ran = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${moduleId}/test`), { timeout: 60_000 }));
   await panel.getByRole('button', { name: 'Run' }).click();
   const res = await ran;
-  return { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), data: res ? ((await res.json().catch(() => ({}))).data ?? {}) : {} };
+  const text = res ? await res.text() : '';
+  return { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), data: required({ status: res?.status() ?? 0, data: text ? JSON.parse(text).data : undefined, text }, `test run of ${op}`) };
 }
 
 /** The bank's own record of the account, read through the gateway as the test call does. */
@@ -82,6 +86,8 @@ async function holdsOn(moduleId, contextId) {
 await withUiStack(
   async (consoleUrl, stack) => {
     const browser = await chromium.launch();
+    // Team-wide policies are changed by a Security admin who acts in the team (Priya invites Sam to team_ops).
+    const samInOps = await securityAdminOn(await signInAs(PEOPLE.priya));
     const errors = [];
     let moduleId;
     let ownerContext;
@@ -89,10 +95,8 @@ await withUiStack(
 
     // 1. The Security admin allows the bank's host and the private range it serves on.
     await step('1 Sam allows the bank host and range', async () => {
-      const P = await headers(SAM, 'team_security');
-      const host = await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.host, note: 'uc-086' }) });
-      const range = await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.range, note: 'uc-086' }) });
-      check('1 Sam allows the bank host and range', host.status === 201 && range.status === 201, { host: host.status, range: range.status });
+      await allowBank(await signInAs(SAM, { team: 'team_security' }), stack.bank, 'uc-086');
+      check('1 Sam allows the bank host and range', true);
     });
 
     const james = await signIn(browser, consoleUrl, JAMES, errors);
@@ -166,7 +170,7 @@ await withUiStack(
       const link = await panel.getByTestId('review-module-link').getAttribute('href').catch(() => null);
       check(
         '4a the review lists its operations and new host and links to the module',
-        /Added/.test(operations) && hosts.includes(stack.bank.host) && link === `/tools/${moduleId}`,
+        /Added/.test(operations) && hosts.includes(stack.bank.host) && link === `/data/tools/${moduleId}`,
         { operations: operations.slice(0, 300), hosts, link },
       );
       const decided = armed(nadia.waitForResponse((r) => r.request().method() === 'POST' && /\/reviews\/[^/]+\/decision$/.test(r.url()), { timeout: 60_000 }));
@@ -245,7 +249,7 @@ await withUiStack(
     await step('7 James grants the operations to Branch Concierge and publishes it', async () => {
       // Approvals are off by default (2026-11-01): steps 9-11 prove a held chat write, so the team turns tool write
       // approvals on before the agent is granted the write.
-      await writeApprovalsOn();
+      await setWriteApprovals(samInOps, true);
       await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
       const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'get_statement', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
@@ -327,6 +331,42 @@ await withUiStack(
         !!write && text.includes(MAYA) && /via ag_branch/.test(text) && /Succeeded/.test(text) && runLink === `/chat/${thread}`,
         { row: text.replace(/\s+/g, ' ').slice(0, 300), runLink, thread, approval: write?.approval, subject: write?.subject, actor: write?.actor },
       );
+    });
+
+    // Media for the page: a clip of James's agent list, the agent and the module's call log, and the agent list at both widths.
+    await step('media the agent list, the agent and the call log', async () => {
+      const videos = mkdtempSync(join(tmpdir(), 'uc-086-video-'));
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir: videos, size: { width: 1440, height: 900 } } });
+      const page = await context.newPage();
+      page.on('pageerror', (e) => errors.push(`media: ${e.message}`));
+      const recording = Date.now();
+      await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByLabel('Email').fill(JAMES);
+      await page.getByLabel('Password').fill('northfield-demo');
+      await page.getByRole('button', { name: /^Sign in/ }).first().click();
+      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+      const started = Date.now();
+      await page.goto(`${consoleUrl}/build/agents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByText('Branch Concierge').first().waitFor({ timeout: 60_000 });
+      await page.waitForTimeout(1200);
+      await page.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByText('place_hold').first().waitFor({ timeout: 60_000 });
+      await page.waitForTimeout(1500);
+      await page.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByRole('tab', { name: /^Activity/ }).click({ timeout: 60_000 });
+      await page.waitForTimeout(1500);
+      const clipMs = Date.now() - started;
+      const state = await context.storageState();
+      await context.close();
+      videoToGif(videos, 'agents', 'uc-086-agent-with-three-tools', started - recording, clipMs);
+      rmSync(videos, { recursive: true, force: true });
+      const still = await browser.newContext({ viewport: { width: 1440, height: 1000 }, storageState: state });
+      const shots = await still.newPage();
+      await shootBothWidths(shots, 'agents', 'uc-086-agents', async () => {
+        await shots.goto(`${consoleUrl}/build/agents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await shots.getByText('Branch Concierge').first().waitFor({ timeout: 60_000 });
+      });
+      await still.close();
     });
 
     // 12. No page error anywhere, and the key never reached a page.

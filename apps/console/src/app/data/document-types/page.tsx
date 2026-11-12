@@ -27,6 +27,7 @@ import { ListEmpty, QueryError } from "@/components/shared/query-states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TemplatesGallery } from '@/components/templates/templates-gallery';
 import {
   useCreateDocumentType,
   useDocumentTypes,
@@ -253,12 +254,15 @@ export default function DocumentTypesPage() {
       description="The fields agents and workflows read from each kind of document, versioned and tested against sample files."
       actions={
         canCreate && (
-          <Button
-            onClick={() => setCreating(true)}
-            data-testid="new-document-type-button"
-          >
-            New type
-          </Button>
+          <>
+            <TemplatesGallery kind="document_type" href="/data/document-types" />
+            <Button
+              onClick={() => setCreating(true)}
+              data-testid="new-document-type-button"
+            >
+              New type
+            </Button>
+          </>
         )
       }
     >

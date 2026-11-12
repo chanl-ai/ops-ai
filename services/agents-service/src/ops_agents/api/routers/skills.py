@@ -18,7 +18,7 @@ from ops_service_kit.logging import get_logger
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
-from ..auth import Principal, principal, require_builder
+from ..auth import Principal, caller_in, principal, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..hitl_facade import page
@@ -42,14 +42,25 @@ from .agents import changeable as agent_changeable
 from .tool_catalog import known_tools
 
 log = get_logger("ops_agents.skills")
-router = APIRouter(dependencies=[Depends(principal)])
+# Reads take a service token holding skills:view (tools-service offers a team's skills as MCP prompts); every change
+# depends on `Me`, a person or key, which refuses service tokens.
+router = APIRouter(dependencies=[Depends(caller_in("skills"))])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 VIEWS = ("all", "published", "always", "drafts", "in_review", "deprecated", "unused")
 
 
+class SkillInput(WireModel):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    type: Literal["string"] = "string"
+    description: str = Field(default="", max_length=500)
+    required: bool = False
+
+
 class SkillCreateInput(WireModel):
     name: str
+    # The name in URL form when absent; a template sets it so the copy keeps the template's id as its prompt name.
+    slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
     use_when: str = ""
     loading: Literal["on_match", "always"] = "on_match"
     instructions: str
@@ -62,6 +73,7 @@ class SkillCreateInput(WireModel):
     origin: Literal["blank", "generated", "imported", "duplicated"] = "blank"
     request_review: bool = False
     review_note: str = ""
+    inputs: list[SkillInput] = Field(default_factory=list[SkillInput], max_length=20)
 
 
 class SkillDraftPatch(WireModel):
@@ -73,6 +85,7 @@ class SkillDraftPatch(WireModel):
     knowledge_bases: list[str] | None = None
     guardrails: list[str] | None = None
     refusal: str | None = Field(default=None, max_length=500)
+    inputs: list[SkillInput] | None = Field(default=None, max_length=20)
     note: str = ""
     base_version: int
 

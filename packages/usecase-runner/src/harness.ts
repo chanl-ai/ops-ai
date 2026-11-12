@@ -3,7 +3,7 @@
 // console dev server whose chat points at it, so a browser test never reaches a model provider or another session's
 // console.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -184,6 +184,42 @@ export async function consoleSignIn(browser: import('playwright').Browser, conso
 export async function replyDone(res: import('playwright').Response | null | undefined, maxMs = 60_000): Promise<void> {
   const page = res?.request().frame()?.page();
   await page?.getByRole('button', { name: 'Stop', exact: true }).waitFor({ state: 'hidden', timeout: maxMs }).catch(() => undefined);
+}
+
+/**
+ * Media for a use case page. Files go to docs/usecases/<area>/media/ when OPS_USECASE_MEDIA=1 (so a normal run leaves
+ * the tree clean) and to the evidence folder otherwise; the checks run either way.
+ */
+export function mediaPath(area: string, file: string): string {
+  const dir = process.env.OPS_USECASE_MEDIA === '1' ? join(ROOT, 'docs', 'usecases', area, 'media') : evidenceDir('media', area);
+  mkdirSync(dir, { recursive: true });
+  return join(dir, file);
+}
+
+/** One screen at 1440 and at 390 wide: `<name>-1440.png` and `<name>-390.png`. `show` draws the screen at the current width. */
+export async function shootBothWidths(page: import('playwright').Page, area: string, name: string, show: () => Promise<void>): Promise<void> {
+  for (const [width, height] of [[1440, 1000], [390, 844]] as const) {
+    await page.setViewportSize({ width, height });
+    await show();
+    const file = mediaPath(area, `${name}-${width}.png`);
+    await page.screenshot({ path: file });
+    check(`screenshot ${name} at ${width}`, statSync(file).size > 5_000, file);
+  }
+}
+
+/**
+ * Cuts the Playwright video a context recorded into a GIF of the part after `skipMs`. A page's clip stays under 15 s
+ * and 2 MB; the check fails when it does not.
+ */
+export function videoToGif(videoDir: string, area: string, name: string, skipMs: number, durationMs: number): string {
+  const webm = readdirSync(videoDir).find((f) => f.endsWith('.webm'));
+  if (!webm) throw new Error('no video was recorded');
+  const gif = mediaPath(area, `${name}.gif`);
+  const filter = 'fps=8,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle';
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', (skipMs / 1000).toFixed(2), '-i', join(videoDir, webm), '-t', Math.min(durationMs / 1000, 14.5).toFixed(2), '-vf', filter, gif]);
+  const size = statSync(gif).size;
+  check(`clip ${name} is under 15 s and 2 MB`, durationMs < 15_000 && size < 2_000_000, { seconds: durationMs / 1000, bytes: size });
+  return gif;
 }
 
 export function finish(): never {

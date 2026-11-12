@@ -38,6 +38,8 @@ class Policy:
     choices: tuple[tuple[str, str, str], ...] = ()
     # A fact no value of the policy changes, said under it on the Policies page.
     note: str = ""
+    # An "hours" policy's largest value; None takes the general limit of a year.
+    maximum: int | None = None
 
 
 KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app")
@@ -85,6 +87,14 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Publish reviews",
+    ),
+    Policy(
+        "companySignInRequired",
+        # Off: a password follows the sign-in providers, as before company sign-in could be required.
+        False,
+        "People on the workspace's verified company domains sign in only through the company's provider; named "
+        "break-glass Security admins keep a password. Off: passwords follow the sign-in providers.",
+        title="Company sign-in required",
     ),
     Policy(
         "chatThreadsOwnerOnly",
@@ -249,6 +259,14 @@ POLICIES: tuple[Policy, ...] = (
         "private range, and only https is called.",
     ),
     Policy(
+        "mcpConnectionHours",
+        8,
+        "How long an assistant stays connected to a team's MCP address before the person signs in again.",
+        kind="hours",
+        title="Assistant connection length",
+        maximum=30 * 24,
+    ),
+    Policy(
         "securityTeamAddsSecrets",
         False,
         "Only the security team adds secrets. Off: builders add and use their own team's secrets.",
@@ -274,7 +292,7 @@ def check_value(key: str, value: Any) -> Any:
         return value
     if policy.kind == "days" and (value is None or (type(value) is int and 1 <= value <= 36500)):
         return value
-    if policy.kind == "hours" and type(value) is int and 1 <= value <= 8760:
+    if policy.kind == "hours" and type(value) is int and 1 <= value <= (policy.maximum or 8760):
         return value
     if (
         policy.kind == "names"
@@ -321,7 +339,7 @@ def check_value(key: str, value: Any) -> Any:
         "bool": "true or false",
         "floor": "a number from 0 to 1, or null",
         "days": "a whole number of days, or null",
-        "hours": "a whole number of hours from 1 to 8760",
+        "hours": f"a whole number of hours from 1 to {policy.maximum or 8760}",
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
@@ -388,7 +406,8 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
     """Whether a call waits, and who answers, for one tool: the single rule every service reads.
 
     The most specific level wins: the tool's `approvalMode`, then the app's entry of `appChangesByApp`, then the team's
-    `appChanges`. A read never waits; a write over MCP always does (nobody is in the chat); a tool with two approvers
+    `appChanges`. A read never waits; a write over MCP always does (nobody is in the chat), except one that only makes a
+    draft (`draft`), which still needs its own publish review before it does anything; a tool with two approvers
     always asks a reviewer. A test run (channel "test") of a write on a live account asks the person while `testRunsAsk`
     is on. A team's checkbox `testAccountsNeverAsk` (on unless saved off) lets a test account through.
     "Ask the person" with nobody in the chat (a workflow) goes to the reviewer role. An unreadable team policy (None)
@@ -403,6 +422,8 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
     team_role = None
     if team is None:
         return {"waits": True, "answer": "reviewer", "reviewerRole": None, "source": "team"}
+    if channel == "mcp" and tool.get("draft"):
+        return {"waits": False, "answer": "none", "reviewerRole": None, "source": "draft"}
     if channel == "mcp":
         return {"waits": True, "answer": "reviewer", "reviewerRole": tool.get("reviewerRole"), "source": "mcp"}
     if tool.get("approvers") == 2:

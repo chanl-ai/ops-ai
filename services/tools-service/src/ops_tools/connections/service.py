@@ -46,18 +46,20 @@ from ..modules.directory import Directory
 from ..modules.service import Caller
 from ..secrets import SecretResolver
 from ..store.connections import (
+    PERSON_ORIGIN,
     SHARED,
     AccountNameTaken,
     ConnectionInUse,
     ConnectionStore,
     StaleConnection,
     name_key,
+    owner_key,
     plugin_app,
     plugin_of,
     verifier_context,
 )
 from .account_events import connected_event
-from .records import PERSON_ORIGIN, status_of
+from .records import status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.
@@ -1387,8 +1389,9 @@ class ConnectionService:
         name = str((given or {}).get("name") or "").strip() or f"{who.name}'s other account"
         own_settings: dict[str, Any] | None = None
         if given is not None:
+            # Names are unique within an owner: the team may hold a name this person's own account also takes.
             others = await self.store.accounts(who.tenant_id, who.team.id, str(src["app_id"]))
-            taken = {name_key(a.get("account_name")) for a in others}
+            taken = {name_key(a.get("account_name")) for a in others if owner_key(a) == who.name.strip().casefold()}
             if name_key(name) in taken:
                 raise AccountNameTaken(name)
         if self.own_place is not None and plugin_of(src) is not None:

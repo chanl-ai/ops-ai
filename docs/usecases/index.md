@@ -56,7 +56,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-084 | agents-service | An agent finds a workflow with search_tools and runs it; its agent step answers by schema | api, ui | `agents-service/agent-runs-a-workflow-by-search.md` |
 | uc-081 | agents-service | Basic workflow nodes run through the queue, and a worker killed after the tool step leaves the tool called once | api, ui | `agents-service/workflow-runner-basic-nodes.md` |
 | uc-085 | agents-service | An agent refuses a blocked topic before answering, through a guardrail it pins by version | api, ui | `agents-service/agent-guardrails-blocked-topics.md` |
-| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui | `console/import-to-governed-call.md` |
+| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui, sdk, cli | `agents/an-agent-with-three-tools.md` |
 | uc-087 | console | A banker finds, starts and continues chats: suggested prompt, regenerate, stop, retry, server search and paging | ui | `console/chat-find-start-continue.md` |
 | uc-088 | agents-service | A builder sets the limits callers override within and publishes them with the agent | ui | `agents-service/agent-limits-published.md` |
 | uc-089 | console | An agent shows a table and a figure in chat with no tool behind them | ui | `console/agent-presents-widgets.md` |
@@ -66,7 +66,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-095 | console | An agent fills a pinned widget and lays out its own in chat | ui | `console/agent-fills-widgets.md` |
 | uc-093 | files-service | A member stores a file once and it is downloaded, held and deleted under its rules | api | `files-service/file-lifecycle.md` |
 | uc-094 | files-service | Another team's file is missing on every files-service route | api, ui | `files-service/file-team-boundary.md` |
-| uc-096 | console | Knowledge bases work end to end from the console: create, add files and a page, watch ingestion, test a question, retire | ui | `console/knowledge-bases-end-to-end.md` |
+| uc-096 | console | Knowledge bases work end to end from the console: create, add files and a page, watch ingestion, test a question, retire | ui | `knowledge/knowledge-base-end-to-end.md` |
 | uc-097 | console | A builder saves create dialogs and account settings with Enter, and Cancel never saves | ui | `console/forms-save-on-enter.md` |
 | uc-098 | console | A builder pages and searches a growing list on the server | ui | `console/lists-page-on-the-server.md` |
 | uc-099 | console | A viewer sees the team's records read-only | api, ui | `console/viewer-sees-read-only-pages.md` |
@@ -111,7 +111,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-141 | console | The one Activity page lists a run by name, filters by kind on the server, narrows to a source, and opens the run | ui | `console/activity-page.md` |
 | uc-142 | console | Channels on real data: the hub, tab dots and an email landing match /v1/channels; Deployments lands on Channels; an embed's version changes in its row | ui | `console/channels-real.md` |
 | uc-143 | console | Access › Tool access lists every workflow's tool access by view, counted on the server | ui | `console/tool-access.md` |
-| uc-129 | kb-service | A builder adds documents to a knowledge base by uploading them or picking them from Files | ui | `kb-service/add-documents-from-files.md` |
+| uc-129 | kb-service | A builder adds documents to a knowledge base by uploading them or picking them from Files | ui | `knowledge/add-documents-from-files.md` |
 | uc-160 | platform-service | A person resets their password by a mailed link and signs in with it; the demo password stops working for them | api, ui | `platform-service/password-sign-in-and-reset.md` |
 | uc-161 | platform-service | A first OIDC sign-in creates a chat-only member once, and the console offers SSO for that email | api, ui | `platform-service/oidc-sign-in-creates-a-chat-user.md` |
 | uc-162 | platform-service | A person signs in through SAML and steps up at the same provider, which must ask again | api | `platform-service/saml-sign-in-and-step-up.md` |
@@ -204,7 +204,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-532 | models-service | An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one | ui | `models-service/an-account-admin-saves-a-model.md` |
 | uc-552 | console | A person works from one Chat, with Overview, their chats and the pages of one area in a folding sidebar, and an ended session keeps their draft | api, ui | `console/chat-first.md` |
 | uc-560 | console | Screens open from saved data, and every request logs its time and returns Server-Timing, with one request id across services | api, ui | `console/screen-speed.md` |
-| uc-558 | tools-service | People connect their own Salesforce account: a call acts as the person who asked, an unconnected person gets a connect link made for them alone, and the body never chooses a token | api, ui | `tools-service/per-person-sign-in.md` |
+| uc-558 | tools-service | People connect their own Salesforce account: a call acts as the person who asked, an unconnected person gets a connect link made for them alone, and the body never chooses a token | api, sdk, cli, ui | `tools-service/per-person-sign-in.md` |
 | uc-561 | agents-service | Memory follows a person across a team's agents and they take it back | api | `agents-service/memory-follows-a-person-across-a.md` |
 | uc-562 | console | Every list, record and settings page reads well on a phone and on a desktop: no preselected decision, phone lists show the name, search boxes and descriptions read in full, tab strips scroll with a cue, a way back on record pages | ui | `console/phone-and-desktop.md` |
 | uc-563 | platform-service | A developer installs the sample team with one command, and a second run makes nothing | cli | `platform-service/a-developer-installs-the-sample-team.md` |
@@ -248,9 +248,9 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | `agents-service/scanned-chat-attachment.md` |
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | `tools-service/app-page-one-state.md` |
 | uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | `kb-service/a-website-source-keeps-a-knowledge.md` |
-| uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, ui | `kb-service/typed-text-and-pushed-items.md` |
-| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | `kb-service/rerank-and-query-rewrite.md` |
-| uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | `kb-service/sharepoint-and-confluence-sources.md` |
+| uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, cli, ui | `kb-service/typed-text-and-pushed-items.md` |
+| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | `knowledge/rerank-and-rewrite.md` |
+| uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | `knowledge/sharepoint-and-confluence.md` |
 | uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | `tools-service/a-second-org-signs-in-at-its-own-address.md` |
 | uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | `tools-service/a-second-server-signs-in-at-its-own-address.md` |
 | uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | `tools-service/every-account-says-what-it-points-at.md` |

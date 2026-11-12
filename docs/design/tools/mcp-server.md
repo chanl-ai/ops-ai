@@ -100,7 +100,7 @@ flowchart LR
 
 | Component | Lives in | Job | State |
 |---|---|---|---|
-| MCP adapter | tools-service | Parse the request, resolve the caller and scope, list tools, map `tools/call` to one `GatewayCalls.call` and its outcome back to an MCP result. Protocol rules only: Origin check, protocol version, scope parsing | Built for slice 1 |
+| MCP adapter | tools-service | Parse the request, resolve the caller and scope, list tools, map `tools/call` to one `GatewayCalls.call` and its outcome back to an MCP result. Protocol rules only: Origin check, protocol version, scope parsing | Built for slice 1, except the Origin and protocol version checks |
 | `GatewayCalls` | tools-service | The one call path, taking a verified principal and returning Allowed, Refused or Held. `POST /v1/calls` keeps its wire contract | Built (Allowed and Refused) |
 | Protected resource metadata | tools-service | Metadata per URL naming platform-service; the 401 challenge points at it | Planned |
 | Authorization server | platform-service | Metadata, authorize with consent, token with PKCE and resource, refresh, revoke, registered clients, client metadata documents | Planned |
@@ -227,18 +227,18 @@ Each URL is its own OAuth resource, so a token minted for one scope or environme
 
 | Credential | How it works | For | State |
 |---|---|---|---|
-| Platform OAuth token | The client discovers platform-service from the 401 and the metadata, signs the person in through the existing sign-in (SSO or password), shows a consent screen naming the client, team, environment and scope, and issues a 15-minute token whose audience is the exact resource URL, with a refresh token bound to the sign-in session. tools-service verifies it locally against the published keys | People in Claude, ChatGPT, Cursor, VS Code, Copilot | Planned |
+| Platform OAuth token | The client discovers platform-service from the 401 and the metadata (the proxy serves the server metadata at the origin's `/.well-known/oauth-authorization-server/api/platform`, where an MCP client looks for an issuer with a path), signs the person in through the existing sign-in (SSO or password), shows a consent screen naming the assistant, the team, the site the browser returns to and the connection length, and issues a 15-minute token whose audience is the team's address and nothing else, with a rotating refresh token. A refresh checks the person still holds `tools.run` in that team and ends the connection when they do not. tools-service verifies it through `ops_identity` `bearer(resource=…)` and holds no token logic of its own | People in Claude, ChatGPT, Cursor, VS Code, Copilot | Built. SAML groups and client metadata documents wait for the safe outside fetch (`ops_service_kit.public_address`); the metadata says `client_id_metadata_document_supported: false` until then |
 | API key | `Authorization: Bearer ok_…`, introspected and cached; bound to one team; optionally pinned to one agent | Bank systems, scripts, coding assistants configured with a header | Built |
 | Service token | Unchanged; agents-service keeps `POST /v1/calls` | Runs | Built |
 
 | Rule | Detail |
 |---|---|
-| Resource server | tools-service answers 401 with `WWW-Authenticate: Bearer resource_metadata="…"` naming platform-service as the only authorization server |
+| Resource server | tools-service answers 401 with `WWW-Authenticate: Bearer resource_metadata="…"` naming platform-service as the only authorization server. The address, its metadata link and the token audience are on tools-service's own public base (`OPS_TOOLS_PUBLIC_URL`, e.g. `<origin>/api/tools/mcp/<team>`); the authorization server is platform-service's (`OPS_PLATFORM_PUBLIC_URL`) |
 | Authorization server | RFC 8414 metadata, authorize, consent, token, revoke, PKCE S256 required, exact redirect addresses, issuer returned, state single-use |
-| Clients | Pre-registered by an admin, or identified by a client metadata document URL. Dynamic registration is a workspace setting, off by default |
+| Clients | Any assistant may register itself (10 registrations and 30 sign-in starts a minute per caller address, the caller read from `X-Forwarded-For` past `OPS_FORMS_TRUSTED_PROXIES` and counted in PostgreSQL; redirect addresses https, loopback or a private-use scheme, unconsented clients deleted after 24 hours). The consent page shows the registered name as the name the assistant gave itself, and the host of the redirect address. A URL client id is refused for now |
 | Audience | A token for `/mcp/test/ops` fails on `/mcp/production/ops` and on `/mcp/test/ops/modules/x` |
 | No passthrough | The inbound token never leaves tools-service. Upstreams get only their connection's credential |
-| Revocation | Revoking a consent or a key takes effect within the token lifetime (15 minutes) or the key cache |
+| Revocation | Disconnect in My security ends the grant; the access token already issued lasts at most 15 minutes and the next refresh is refused. Leaving the team or losing `tools.run` ends it at the next refresh. Every connection also ends after `mcpConnectionHours` |
 | Origin | A request whose Origin header is present and not allowed is 403; clients that send none are not refused for it |
 | Fail closed | With no issuer or key set configured, the MCP mount answers 503 |
 

@@ -1,6 +1,6 @@
 # Ops AI architecture
 
-Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, updated 2026-11-11. The design is [workflows and agents](../design/workflows/workflows-and-agents.md); the current choice per area is [platform choices](platform-choices.md).
 
 Ops AI is one operational AI platform for regulated enterprises, banks first. Agents and workflows are its two ways
 of running work; both use the same shared services and the data and AI gateways. Builders draw agents and workflows in
@@ -23,6 +23,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Human in the loop | [human-in-the-loop.md](human-in-the-loop.md) | Interrupts, reviews, approval tokens, step-up, two approvers, SLA timers | Builder |
 | Agent guardrails and skills | [agent-guardrails.md](agent-guardrails.md) | Pinned guardrails and skills, the check before and after the answer, fail-closed exits, what is enforced | Builder |
 | Tool lifecycle | [tool-lifecycle.md](tool-lifecycle.md) | Connect, import, review, access, grant, call, approve and show a tool, with what is built and what is not | Builder |
+| MCP | [mcp.md](mcp.md) | Ops AI as an MCP server and client, agents and workflows on MCP tools, sign-in, audit, limits and masking, with what is built and what is not | Builder |
 | Channels | [channels-and-deployments.md](channels-and-deployments.md) | Deployments, the adapter contract, identity per channel, external keys, the mailbox adapter | Builder |
 | Identity | [identity-and-tenancy.md](identity-and-tenancy.md) | Sign-in, delegation, process principals, the tools gateway, tenancy, prototype shortcuts | Builder |
 | Versions | [definitions-and-versions.md](definitions-and-versions.md) | Draft to publish, pointers, the pin per thread, migrate | Builder |
@@ -32,7 +33,16 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Make | [make.md](make.md) | Make layout, ports, environment names, daily commands | Operator |
 | Dependencies | [dependencies.md](dependencies.md) | Every Python package in the lock with licence and network behaviour | Operator, approver |
 | Delivery | [delivery.md](delivery.md) | What is proven, what is next, the open decisions | Approver |
-| Decisions | [decisions/](decisions/) | The decision records, each an option unless it was settled; several are superseded in part by the 2026-10-16 decisions | Approver |
+| Platform choices | [platform-choices.md](platform-choices.md) | The product or library each part is built on today, with code paths | Approver, builder |
+| Roles and permissions | [roles-and-permissions.md](roles-and-permissions.md) | Who may do what, approvals, the access rules and the exceptions register | Builder, approver |
+| Console areas | [console-areas.md](console-areas.md) | The four areas of the console and the cells that offer each page | Builder |
+| Logging and data writes | [logging-and-data-writes.md](logging-and-data-writes.md) | Log lines, ids and redaction; the store helper for a person's edit | Builder, operator |
+| Templates | [templates.md](templates.md) | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not | Builder |
+| Knowledge base | [knowledge-base.md](knowledge-base.md) | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not | Builder |
+| Several accounts per app | [app-accounts.md](app-accounts.md) | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built | Builder |
+| SAML sign-in | [saml-sign-in.md](saml-sign-in.md) | Company sign-in over SAML: the checks, domain proof, first sign-in and group rules (built); certificates, test sign-in and break-glass (not built) | Builder |
+| Integrations in layers | [integrations.md](integrations.md) | Integrations in layers: plugins, auth configs, accounts, the gateway, triggers, events and MCP, with what is built per layer | Builder |
+| Decision records | [decisions/](decisions/) | The options and scoring behind the platform choices | Approver |
 
 ## What is proven
 

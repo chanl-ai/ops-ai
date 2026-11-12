@@ -26,7 +26,7 @@ unchanged in content), read only for a member.
 |---|---|
 | The Apps stack | `docs/usecases/lib/apps_walk.py`: platform-service with the seed's roles, tools-service with the test plugins, the fake system |
 | People | Priya (Operations admin), Sam (Security admin), Ravi (Operations viewer) |
-| For the ui layer | The integration console on `CONSOLE_URL` (default <http://localhost:3016>), Priya signed in to Salesforce and GitHub there |
+| For the ui layer | The script builds its own stack (`withUiStack`) with the Salesforce plugin and Ops AI's own app for it, the fake Salesforce, Salesforce on for Operations and given to the team's assistant, and Priya signed in to it as herself. It never reads the local dev stack |
 
 ## Steps and expected results
 

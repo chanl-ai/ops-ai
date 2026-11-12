@@ -4,22 +4,27 @@ the policy's cell, in the team the request acts in, as the sign-in settings do."
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from ops_access import BY_KEY, POLICIES
-from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.errors import Unprocessable, ValidationFailed
 
 from .store.members import Actor
 from .store.policies import OLD_KEYS, PolicyStore
 from .store.roles import RoleStore
 from .teams import Members
 
+Guard = Callable[[Actor, Any], Awaitable[None]]
+
 
 @dataclass
 class Policies:
     store: PolicyStore
     members: Members
+    # Checks a value must pass before it is set, by policy key (companySignInRequired needs a break-glass account).
+    guards: dict[str, Guard] = field(default_factory=dict[str, "Guard"])
 
     async def list(self, actor: Actor) -> list[dict[str, Any]]:
         """Every member of the workspace reads every policy: they are not secret, and a person who may change one
@@ -39,7 +44,11 @@ class Policies:
         policy = BY_KEY.get(landing)
         area, action = policy.changed_by if policy else ("settings", "manage")
         await self.members.require_admin(actor, area, action)
+        if policy and policy.maximum and type(value) is int and value > policy.maximum:
+            raise Unprocessable(f"{policy.title} is at most {policy.maximum} hours.", code="policy_value")
         await self._check_reviewer_roles(actor, key, value)
+        if (guard := self.guards.get(key)) is not None:
+            await guard(actor, value)
         try:
             await self.store.set(
                 actor.tenant_id, key, value, by=actor.user_id, request_id=actor.request_id, team_id=actor.team_id

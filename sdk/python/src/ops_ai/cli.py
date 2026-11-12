@@ -20,6 +20,7 @@ from ._cli.people import models_main, people_main
 from ._cli.records import cases_main, documents_main, files_main
 from ._cli.resources import main as resources_main
 from ._cli.runs import runs_main, tasks_main
+from ._cli.templates import main as templates_main
 from ._cli.testdata import main as testdata_main
 from ._cli.tools import main as tools_main
 from ._cli.workflows import main as workflows_main
@@ -48,6 +49,10 @@ AREAS: dict[str, tuple[Area, str]] = {
     "resources": (
         resources_main,
         "an app's agents, skills, workflows and document types: list, plan, add, update, remove",
+    ),
+    "templates": (
+        templates_main,
+        "what a team can start from, by kind: list, install",
     ),
     "kb": (kb_main, "knowledge: bases, sources, items, add-file, add-text, sync, search, changes"),
     "apps": (apps_main, "apps: list, show, add-tool, accounts, mine, connect, test, auth-configs"),

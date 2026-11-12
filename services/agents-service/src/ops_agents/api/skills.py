@@ -97,7 +97,23 @@ async def check_content(rt: Runtime, fields: dict[str, Any]) -> dict[str, Any]:
         "resources": [],
         # Kept only when written, so a version saved before the field keeps its digest.
         **({"refusal": refusal} if (refusal := str(fields.get("refusal") or "").strip()) else {}),
+        **({"inputs": inputs} if (inputs := _inputs(fields.get("inputs"))) else {}),
     }
+
+
+def _inputs(raw: Any) -> list[dict[str, Any]]:
+    """The skill's inputs, each name once; a version saved without any keeps no key, so its digest is unchanged."""
+    out: dict[str, dict[str, Any]] = {}
+    for f in cast(list[dict[str, Any]], raw or []):
+        name = str(f.get("name") or "").strip()
+        if name and name not in out:
+            out[name] = {
+                "name": name,
+                "type": "string",
+                "description": str(f.get("description") or "").strip(),
+                "required": bool(f.get("required")),
+            }
+    return list(out.values())
 
 
 def tool_ids(content: dict[str, Any]) -> list[str]:
@@ -213,6 +229,7 @@ async def row_view(
         "updatedAt": row["updated_at"],
         "updatedBy": row["updated_by"],
         "origin": row["origin"],
+        "inputs": content.get("inputs") or [],
         **({"pendingReviewId": pending["id"]} if pending else {}),
     }
 

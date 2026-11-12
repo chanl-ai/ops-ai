@@ -86,7 +86,7 @@ with signin_stack() as (api, idp, _):
     stranger = sso_round_trip(api, idp, f"someone@{zone}", user="ceo@other-bank.test")
     check(
         "an email outside the provider's domains is refused",
-        stranger["query"] == {"error": "sign_in_refused"},
+        stranger["query"] == {"error": "no_access"},
         stranger["query"],
     )
     rows = data(api.get("/v1/settings/members", headers=bearer(priya, "team_ops")))["data"]

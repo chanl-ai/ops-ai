@@ -35,6 +35,7 @@ import { count, pct, plural, relativeTime } from '@/lib/format';
 import type { Agent } from '@/lib/types/domain';
 import type { AgentFilters } from '@/lib/types/query';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
 type Row = Agent & { onRowClick: (a: Agent) => void };
 
@@ -174,9 +175,12 @@ export default function AgentsPage() {
       description="Each agent has a job, a model, the tools it may call and the knowledge it may cite"
       actions={
         canBuild && (
-          <Button onClick={newAgent} data-testid="create-agent-button">
-            <Plus className="size-4" /> New agent
-          </Button>
+          <>
+            <TemplatesGallery kind="agent" href="/build/agents" />
+            <Button onClick={newAgent} data-testid="create-agent-button">
+              <Plus className="size-4" /> New agent
+            </Button>
+          </>
         )
       }
     >

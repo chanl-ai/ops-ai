@@ -3,9 +3,12 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { layerAvailability, type Layer } from './layers.ts';
 import type { UseCase } from './registry.ts';
+import { findPage, hasPageTabs } from './page.ts';
 
 export type Resolution =
   | { kind: 'script'; path: string; runtime: 'python' | 'node' }
+  /** A use case page whose code tabs for this layer are the test (page.ts). */
+  | { kind: 'page'; path: string }
   | { kind: 'unavailable'; reason: string }
   | { kind: 'missing'; reason: string };
 
@@ -22,6 +25,8 @@ export function scriptCandidates(uc: UseCase, layer: Layer): { path: string; run
 export function resolveScript(root: string, uc: UseCase, layer: Layer): Resolution {
   const avail = layerAvailability(root, layer);
   if (!avail.available) return { kind: 'unavailable', reason: avail.reason };
+  const page = findPage(root, uc.id);
+  if (page && hasPageTabs(root, page, layer)) return { kind: 'page', path: page };
   const found = scriptCandidates(uc, layer).filter((c) => existsSync(join(root, c.path)));
   if (found.length > 1) return { kind: 'missing', reason: `${uc.id} has both a .py and a .mjs ${layer} script; keep one` };
   if (found[0]) return { kind: 'script', ...found[0] };

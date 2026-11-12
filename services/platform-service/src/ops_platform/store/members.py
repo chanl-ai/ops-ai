@@ -21,7 +21,7 @@ from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 
-from .audit import record
+from .audit import record, record_grants_ending
 from .roles import mirror_membership
 from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
 from .tenancy import INVITE_LOOKUP, TenantDb
@@ -288,16 +288,16 @@ class TeamStore:
                 if member_id in admins and len(admins) == 1:
                     bulk.skip(member_id, "last_admin")
                     continue
-                await c.execute(
-                    members.update()
-                    .where(members.c.id == member_id)
-                    .values(status="removed", invite_token_hash=None, updated_at=at)
-                )
-                admins.discard(member_id)
                 user_id = row["user_id"]
+                await end_membership(c, actor, member_id, str(user_id) if user_id is not None else None, at=at)
+                admins.discard(member_id)
                 if user_id is not None:
-                    await self._mirror(c, actor, str(user_id), None, at)
-                    # I10: their sessions end now, and keys they made for this team stop working.
+                    # I10: their sessions end now, and keys they made for this team stop working. An assistant they
+                    # connected is a session too; each one that ends is audited in its own team.
+                    await record_grants_ending(
+                        c, tenant_id=actor.tenant_id, user_id=str(user_id), actor=actor.user_id, by="admin",
+                        request_id=actor.request_id,
+                    )  # fmt: skip
                     await c.execute(
                         sessions.update()
                         .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))
@@ -311,18 +311,6 @@ class TeamStore:
                             api_keys.c.disabled_at.is_(None),
                         )
                         .values(disabled_at=at)
-                    )
-                    # Their own accounts on the team's apps are tools-service's to delete: reported in this transaction,
-                    # so the removal and the news of it commit together, and relayed until heard.
-                    await add_event(
-                        c,
-                        platform_outbox,
-                        tenant_id=actor.tenant_id,
-                        team_id=actor.team_id,
-                        name=MEMBER_REMOVED,
-                        key=f"{member_id}:{at}",
-                        payload={"personId": str(user_id)},
-                        actor=actor.user_id,
                     )
                 await _audit(c, actor, "member.remove", member_id, {"email": row["email"]})
                 bulk.updated.append(member_id)
@@ -417,6 +405,40 @@ class NotTheInvitee(Exception):
 
 class _AlreadyDone(Exception):
     pass
+
+
+async def end_membership(c: AsyncConnection, actor: Actor, member_id: str, user_id: str | None, *, at: str) -> None:
+    """Ends one membership of `actor.team_id`: marked removed, its role assignments gone, and tools-service told. The
+    caller audits it and decides what else ends with it (sessions, keys)."""
+    await c.execute(
+        members.update()
+        .where(members.c.id == member_id)
+        .values(status="removed", invite_token_hash=None, updated_at=at)
+    )
+    if user_id is None:
+        return
+    await mirror_membership(
+        c,
+        tenant_id=actor.tenant_id,
+        team_id=actor.team_id,
+        user_id=user_id,
+        member_role=None,
+        security_team=await security_team_in(c, actor.tenant_id),
+        granted_by=actor.user_id,
+        at=at,
+    )
+    # Their own accounts on the team's apps are tools-service's to delete: reported in this transaction, so the removal
+    # and the news of it commit together, and relayed until heard.
+    await add_event(
+        c,
+        platform_outbox,
+        tenant_id=actor.tenant_id,
+        team_id=actor.team_id,
+        name=MEMBER_REMOVED,
+        key=f"{member_id}:{at}",
+        payload={"personId": user_id},
+        actor=actor.user_id,
+    )
 
 
 async def _lock_admins(c: AsyncConnection, team_id: str) -> set[str]:

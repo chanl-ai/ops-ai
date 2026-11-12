@@ -24,6 +24,8 @@ export interface Session {
   accessToken: string;
   refreshToken: string;
   renewing?: Promise<boolean>;
+  /** Called with each renewed pair, so a saved profile can keep it. */
+  onRenew?: (accessToken: string, refreshToken: string) => void;
 }
 
 export interface Config {
@@ -103,6 +105,7 @@ export class Transport {
       const data = ((await r.json()) as { data: { token: string; refreshToken: string } }).data;
       s.accessToken = data.token;
       s.refreshToken = data.refreshToken;
+      s.onRenew?.(data.token, data.refreshToken);
       return true;
     })().finally(() => {
       s.renewing = undefined;

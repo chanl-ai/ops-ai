@@ -14,12 +14,23 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 
 from ops_access import ANY_TEAM, OWNER, active, encode_grid
-from ops_service_kit.ids import now_iso
+from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore
 
 from .audit import record
 from .roles import RoleStore, version_in
-from .tables import api_keys, members, role_assignments, sessions, teams, tenants, users
+from .tables import (
+    api_keys,
+    members,
+    oauth_address_counts,
+    oauth_clients,
+    role_assignments,
+    sessions,
+    teams,
+    tenants,
+    users,
+)
 from .tenancy import KEY_LOOKUP, SESSION_LOOKUP, SIGNIN_LOOKUP, TenantDb
 
 
@@ -44,6 +55,39 @@ class SessionMethod:
 
     auth_method: str
     provider_id: str | None
+
+
+@dataclass(frozen=True)
+class Client:
+    """An assistant that registered itself; `redirect_uris` are the only addresses a code may be sent to."""
+
+    id: str
+    name: str
+    redirect_uris: list[str]
+    consented_at: str | None
+    tenant_id: str | None
+
+
+@dataclass(frozen=True)
+class Grant:
+    """What an assistant was allowed: one person, one team, one address, for a client. `code_*` is the authorization
+    code it was opened with."""
+
+    id: str
+    tenant_id: str
+    user_id: str
+    client_id: str
+    team_id: str
+    resource: str
+    auth_method: str
+    code_hash: str | None
+    code_challenge: str | None
+    redirect_uri: str | None
+    code_expires_at: str | None
+    code_used_at: str | None
+    expires_at: str
+    revoked_at: str | None
+    created_at: str
 
 
 @dataclass(frozen=True)
@@ -202,11 +246,23 @@ class IdentityStore:
             row = (await c.execute(q)).first()
         return SessionMethod(str(row[0]), row[1]) if row else None
 
-    async def rotate(self, ref: SessionRef, *, presented: str, replacement: str, at: str, request_id: str) -> bool:
+    async def rotate(
+        self,
+        ref: SessionRef,
+        *,
+        presented: str,
+        replacement: str,
+        at: str,
+        request_id: str,
+        kind: str = "console",
+        team_id: str | None = None,
+    ) -> bool:
         """Swap the refresh hash when `presented` is the current one and the session lives. Otherwise the token was
-        rotated already, so someone holds a copy: the session is revoked and the reuse audited."""
+        rotated already, so someone holds a copy: the session is revoked and the reuse audited. `kind` keeps a
+        console token and an assistant's from renewing each other: a session of the other kind is left alone."""
         live = (
             sessions.c.id == ref.id,
+            sessions.c.kind == kind,
             sessions.c.revoked_at.is_(None),
             sessions.c.expires_at > at,
         )
@@ -224,7 +280,7 @@ class IdentityStore:
                 await record(
                     c,
                     tenant_id=ref.tenant_id,
-                    team_id=None,
+                    team_id=team_id,
                     actor=ref.user_id,
                     action="auth.refresh_reuse",
                     target_kind="session",
@@ -297,3 +353,225 @@ class IdentityStore:
         if row is None or not row[0]:
             return None
         return {"kind": str(row[0]), "id": str(row[1]), "version": row[2]}
+
+    # ── Assistants at a team's MCP address: registered clients and the grants a person gives them ──
+
+    async def team_tenant(self, team_id: str) -> tuple[str, str] | None:
+        """The tenant of an active team, found before anyone is signed in so the address of an authorize request can
+        be checked; None for a team that does not exist or is archived."""
+        q = sa.text("SELECT tenant_id, status FROM platform_team(:t)")
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            row = (await c.execute(q, {"t": team_id})).first()
+        return (str(row[0]), str(row[1])) if row and row[1] == "active" else None
+
+    async def team_name(self, tenant_id: str, team_id: str) -> str | None:
+        async with self.db.tenant_tx(tenant_id) as c:
+            return (await c.execute(sa.select(teams.c.name).where(teams.c.id == team_id))).scalar()
+
+    async def register_client(self, client: Client, *, at: str, stale_before: str) -> None:
+        """Adds a client after deleting the ones never consented to that were registered before `stale_before`."""
+        t = oauth_clients
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            await c.execute(t.delete().where(t.c.consented_at.is_(None), t.c.created_at < stale_before))
+            await c.execute(
+                t.insert().values(id=client.id, name=client.name, redirect_uris=client.redirect_uris, created_at=at)
+            )
+
+    async def client(self, client_id: str) -> Client | None:
+        t = oauth_clients
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            row = (await c.execute(sa.select(t).where(t.c.id == client_id))).mappings().first()
+        if row is None:
+            return None
+        return Client(row["id"], row["name"], list(row["redirect_uris"]), row["consented_at"], row["tenant_id"])
+
+    async def clients_of_tenant(self, tenant_id: str) -> int:
+        t = oauth_clients
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            return int((await c.execute(sa.select(sa.func.count()).where(t.c.tenant_id == tenant_id))).scalar_one())
+
+    async def count_address(self, kind: str, address: str, *, at: str, window_start: str) -> tuple[int, str]:
+        """Counts one request of `kind` from `address`; a window that started before `window_start` starts again at
+        `at`. Returns the count in the window, this one included, and when the window started. Rows whose window has
+        passed are deleted first, so the table holds only the last minute's callers and a surviving row is current.
+        The increment is one UPDATE, so concurrent requests from one address each count."""
+        t = oauth_address_counts
+        key = (t.c.kind == kind) & (t.c.address == address[:64])
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            await c.execute(t.delete().where(t.c.window_start < window_start))
+            row = {"kind": kind, "address": address[:64], "hits": 0, "window_start": at}
+            await c.execute(insert_ignore(c, t, row, keys=["kind", "address"]))
+            await c.execute(t.update().where(key).values(hits=t.c.hits + 1))
+            hits, started = (await c.execute(sa.select(t.c.hits, t.c.window_start).where(key))).one()
+        return int(hits), str(started)
+
+    async def open_grant(
+        self,
+        user: User,
+        *,
+        client: Client,
+        session_id: str,
+        auth_method: str,
+        team_id: str,
+        resource: str,
+        code_hash: str,
+        code_challenge: str,
+        redirect_uri: str,
+        code_expires_at: str,
+        expires_at: str,
+        at: str,
+        request_id: str,
+    ) -> None:
+        """The grant a person gave by pressing Allow: a session of kind `mcp`, waiting for its code to be exchanged.
+        The first Allow of a client adds its tenant and writes the registration to this tenant's audit log."""
+        async with self.db.tenant_tx(user.tenant_id) as c:
+            await c.execute(
+                sessions.insert().values(
+                    id=session_id,
+                    tenant_id=user.tenant_id,
+                    user_id=user.id,
+                    auth_method=auth_method,
+                    # Replaced by the real refresh hash when the code is exchanged; nobody holds this one.
+                    refresh_hash=f"pending-{session_id}",
+                    expires_at=expires_at,
+                    last_seen_at=at,
+                    created_at=at,
+                    kind="mcp",
+                    client_id=client.id,
+                    team_id=team_id,
+                    resource=resource,
+                    code_hash=code_hash,
+                    code_challenge=code_challenge,
+                    redirect_uri=redirect_uri,
+                    code_expires_at=code_expires_at,
+                )
+            )
+            if client.consented_at is None:
+                await record(
+                    c,
+                    tenant_id=user.tenant_id,
+                    team_id=team_id,
+                    actor=user.id,
+                    action="oauth.client_registered",
+                    target_kind="oauth_client",
+                    target_id=client.id,
+                    request_id=request_id,
+                    detail={"name": client.name},
+                )
+            await record(
+                c,
+                tenant_id=user.tenant_id,
+                team_id=team_id,
+                actor=user.id,
+                action="oauth.grant_allowed",
+                target_kind="session",
+                target_id=session_id,
+                request_id=request_id,
+                detail={"clientId": client.id, "resource": resource},
+            )
+        t = oauth_clients
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            await c.execute(
+                t.update()
+                .where(t.c.id == client.id, t.c.consented_at.is_(None))
+                .values(consented_at=at, tenant_id=user.tenant_id)
+            )
+
+    async def grant(self, ref: SessionRef) -> Grant | None:
+        """The MCP grant behind a session id; None for a console session."""
+        s = sessions
+        q = sa.select(s).where(s.c.id == ref.id, s.c.kind == "mcp")
+        async with self.db.tenant_tx(ref.tenant_id) as c:
+            row = (await c.execute(q)).mappings().first()
+        if row is None:
+            return None
+        return Grant(
+            row["id"], row["tenant_id"], row["user_id"], row["client_id"], row["team_id"], row["resource"],
+            row["auth_method"], row["code_hash"], row["code_challenge"], row["redirect_uri"],
+            row["code_expires_at"], row["code_used_at"], row["expires_at"], row["revoked_at"], row["created_at"],
+        )  # fmt: skip
+
+    async def redeem_code(self, grant: Grant, *, code_hash: str, refresh_hash: str, at: str) -> bool:
+        """Marks the grant's code used and holds the first refresh hash, once. A second use of a code that was used
+        ends the grant it opened (someone holds a copy)."""
+        s = sessions
+        live = (s.c.id == grant.id, s.c.kind == "mcp", s.c.code_hash == code_hash, s.c.revoked_at.is_(None))
+        async with self.db.tenant_tx(grant.tenant_id) as c:
+            won = await c.execute(
+                s.update()
+                .where(*live, s.c.code_used_at.is_(None), s.c.code_expires_at > at, s.c.expires_at > at)
+                .values(code_used_at=at, refresh_hash=refresh_hash, last_seen_at=at)
+            )
+            if won.rowcount == 1:
+                return True
+        if grant.code_used_at is not None:
+            await self.end_grant(grant, at=at, by="replay", actor=grant.user_id, request_id="")
+        return False
+
+    async def end_grant(self, grant: Grant, *, at: str, by: str, actor: str, request_id: str) -> bool:
+        """Ends the connection once and audits it with who ended it: `person`, `admin` (the person left the team or lost
+        the right to run tools), or `replay` (a code used twice)."""
+        s = sessions
+        async with self.db.tenant_tx(grant.tenant_id) as c:
+            ended = await c.execute(
+                s.update().where(s.c.id == grant.id, s.c.kind == "mcp", s.c.revoked_at.is_(None)).values(revoked_at=at)
+            )
+            if ended.rowcount != 1:
+                return False
+            await record(
+                c,
+                tenant_id=grant.tenant_id,
+                team_id=grant.team_id,
+                actor=actor,
+                action="oauth.grant_ended",
+                target_kind="session",
+                target_id=grant.id,
+                request_id=request_id or new_request(),
+                detail={"by": by, "clientId": grant.client_id},
+            )
+        return True
+
+    async def grants_of(self, tenant_id: str, user_id: str, *, now: str) -> list[dict[str, Any]]:
+        """A person's live connections, newest first, with the client's name and the team's."""
+        s, t, k = sessions, teams, oauth_clients
+        q = (
+            sa.select(
+                s.c.id,
+                s.c.client_id,
+                s.c.team_id,
+                s.c.resource,
+                s.c.created_at,
+                s.c.expires_at,
+                t.c.name,
+                s.c.last_seen_at,
+                s.c.code_used_at,
+            )
+            .join(t, sa.and_(t.c.id == s.c.team_id, t.c.tenant_id == s.c.tenant_id))
+            .where(
+                s.c.user_id == user_id,
+                s.c.kind == "mcp",
+                s.c.code_used_at.is_not(None),
+                s.c.revoked_at.is_(None),
+                s.c.expires_at > now,
+            )
+            .order_by(s.c.created_at.desc())
+        )
+        async with self.db.tenant_tx(tenant_id) as c:
+            rows = (await c.execute(q)).all()
+        names: dict[str, str] = {}
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+            found = (await c.execute(sa.select(k.c.id, k.c.name).where(k.c.id.in_({r[1] for r in rows})))).all()
+            names = {str(r[0]): str(r[1]) for r in found}
+        return [
+            {
+                "id": r[0], "clientId": r[1], "clientName": names.get(str(r[1]), str(r[1])), "teamId": r[2],
+                "teamName": r[6], "resource": r[3], "createdAt": r[4], "expiresAt": r[5],
+                # A renewal is the use platform-service sees; one still on the token its code bought has none yet.
+                "lastUsedAt": None if r[7] == r[8] else r[7],
+            }
+            for r in rows
+        ]  # fmt: skip
+
+
+def new_request() -> str:
+    return new_id("req")

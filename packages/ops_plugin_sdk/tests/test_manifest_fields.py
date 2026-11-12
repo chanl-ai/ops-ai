@@ -10,6 +10,9 @@ from pathlib import Path
 import pytest
 from test_validate import plugin, problems
 
+from ops_plugin_sdk import NeedsReconnect
+from ops_plugin_sdk.answers import answer_error
+from ops_plugin_sdk.errors import Refused
 from ops_plugin_sdk.paging import at, steps
 
 FIELDS = """
@@ -166,3 +169,32 @@ def test_a_json_body_that_would_send_broken_json_is_refused(tmp_path: Path, body
 def test_a_whole_object_body_still_validates(tmp_path: Path) -> None:
     whole = FIELDS.replace("""body: '{"amount": {{amount}}, "to": {{to}}}'""", 'body: "{{to}}"')
     assert problems(plugin(tmp_path, whole)) == []
+
+
+# Slack answers 200 with `ok: false` and a code at `error`; GraphQL answers 200 with a list at `errors`.
+RULE = {"path": "error", "app": "Desk", "sign_in_errors": [{"error": "invalid_auth", "say": "Connect {app} again."}]}
+
+
+def test_an_error_when_path_that_does_not_parse_is_refused(tmp_path: Path) -> None:
+    assert problems(plugin(tmp_path / "good", FIELDS + "error_when: error\n")) == []
+    found = problems(plugin(tmp_path / "bad", FIELDS + 'error_when: "errors[x"\n'))
+    assert any(p.startswith("error_when") for p in found), found
+
+
+def test_an_error_inside_a_successful_answer_is_read_in_the_systems_words() -> None:
+    slack = answer_error({"ok": False, "error": "channel_not_found"}, RULE)
+    assert isinstance(slack, Refused) and str(slack) == "Desk refused the call: channel_not_found."
+    graphql_answer = {"data": None, "errors": [{"message": "Could not resolve to a Repository."}]}
+    graphql = answer_error(graphql_answer, {**RULE, "path": "errors"})
+    assert isinstance(graphql, Refused) and "Could not resolve to a Repository." in str(graphql)
+
+
+def test_an_error_code_the_plugin_names_for_sign_in_asks_to_connect_again() -> None:
+    refused = answer_error({"ok": False, "error": "invalid_auth"}, RULE)
+    assert isinstance(refused, NeedsReconnect) and str(refused) == "Connect Desk again."
+
+
+@pytest.mark.parametrize("answer", [{"ok": True}, {"ok": True, "error": None}, {"errors": []}, "plain text", [1, 2]])
+def test_an_answer_with_nothing_at_the_path_is_a_success(answer: object) -> None:
+    assert answer_error(answer, RULE) is None
+    assert answer_error(answer, {**RULE, "path": "errors"}) is None

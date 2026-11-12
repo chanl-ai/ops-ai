@@ -579,6 +579,39 @@ def platform(
         yield public, inner
 
 
+PROXY_PORT = int(os.environ.get("OPS_USECASE_PROXY_PORT", "8890"))
+CADDY_IMAGE = "caddy:2.11.9"
+
+
+@contextmanager
+def proxy() -> Generator[str]:
+    """The install's one public origin, as compose, k8s and Fly serve it: the real deploy/fly/Caddyfile in Caddy's
+    image on the use-case proxy port, routing /api/platform/ and /api/tools/ to this run's services. Yields the
+    origin; a service's public URL is `<origin>/api/<service>`, so a script sets those before starting the services
+    (Caddy waits for an upstream that is not up yet). Needs docker."""
+    from ops_service_kit import harness_containers
+
+    if not _port_free(PROXY_PORT):
+        raise SystemExit(f"FAIL port {PROXY_PORT} is already in use; stop that process or set OPS_USECASE_PROXY_PORT")
+    host = "host.docker.internal"
+    started = harness_containers.run(
+        [
+            *("-p", f"127.0.0.1:{PROXY_PORT}:8080", "--add-host", f"{host}:host-gateway"),
+            *("-v", f"{ROOT / 'deploy' / 'fly' / 'Caddyfile'}:/etc/caddy/Caddyfile:ro"),
+            *("-e", f"OPS_UPSTREAM_PLATFORM={host}:{PLATFORM_PORT}", "-e", f"OPS_UPSTREAM_TOOLS={host}:{TOOLS_PORT}"),
+            *("-e", f"OPS_UPSTREAM_CONSOLE={host}:{CONSOLE_PORT}", CADDY_IMAGE),
+            *("caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"),
+        ]
+    )
+    if started.returncode != 0:
+        raise SystemExit(f"FAIL the proxy did not start: {started.stderr.strip()[:300]}")
+    cid = started.stdout.strip()
+    try:
+        yield f"http://127.0.0.1:{PROXY_PORT}"
+    finally:
+        subprocess.run(["docker", "rm", "-f", cid], capture_output=True, check=False)
+
+
 @contextmanager
 def fake_idp() -> Generator[str]:
     """The local OIDC and SAML identity provider (`packages/ops_signin`, `python -m ops_signin.fake_idp`) on the
@@ -606,10 +639,14 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
     env = {
         "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
         "OPS_CONSOLE_URL": f"http://localhost:{CONSOLE_PORT}",
+        # Assistants connect to a team's MCP address under this origin.
+        "OPS_TOOLS_PUBLIC_URL": f"http://127.0.0.1:{TOOLS_PORT}",
         # Domains are proven against the fake identity provider's DNS.
         "OPS_SIGNIN_DNS_SERVERS": json.dumps([f"127.0.0.1:{IDP_PORT}"]),
         "OPS_SAML_SP_KEY": SAML_SP_KEY,
         "OPS_SAML_SP_CERTIFICATE": SAML_SP_CERT,
+        # The fake identity provider listens on loopback over http, which the provider-fetch guard refuses.
+        "OPS_SIGNIN_FETCH_LOCAL": "true",
         "OPS_MAIL_PROVIDER": "fake",
         "OPS_MAIL_FROM": "ops@harborpine.example",
         "OPS_MAIL_FAKE_OUT_DIR": str(mail),
@@ -646,6 +683,72 @@ def signed_in(api: httpx.Client, email: str, password: str = "northfield-demo") 
 def bearer(session: dict[str, Any], team: str | None = None) -> dict[str, str]:
     headers = {"Authorization": f"Bearer {session.get('token', '')}"}
     return headers | ({"X-Team-Id": team} if team else {})
+
+
+REDIRECT = "https://claude.example/callback"
+
+
+def assistant_sign_in(
+    api: httpx.Client,
+    email: str,
+    resource: str,
+    *,
+    client_name: str = "use case assistant",
+    person: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """The company sign-in an outside assistant does for `resource` (a team's MCP address): registers a client, sends
+    the person through consent with a PKCE challenge, and exchanges the code. Returns client_id, access_token,
+    refresh_token and the person's console token ("none" for a token the step failed to get, with a FAIL line).
+    `person` is the console session of someone who has no password (an SSO sign-in); left out, `email` signs in with the
+    seeded password."""
+    import base64
+    import secrets
+    from urllib.parse import parse_qs, urlsplit
+
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    reg = api.post(
+        "/oauth/register",
+        json={
+            "client_name": client_name,
+            "redirect_uris": [REDIRECT],
+            "token_endpoint_auth_method": "none",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+        },
+    )
+    check("2 the client registers (201)", reg.status_code == 201, reg.text[:200])
+    client_id = reg.json().get("client_id", "")
+    person = person or signed_in(api, email)
+    params = {
+        "client_id": client_id,
+        "redirect_uri": REDIRECT,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "resource": resource,
+        "state": "s1",
+    }
+    allowed = api.post("/v1/oauth/consent", json={**params, "decision": "allow"}, headers=bearer(person))
+    check(f"2 {email} allows the assistant (200)", allowed.status_code == 200, allowed.text[:200])
+    code = parse_qs(urlsplit(data(allowed)["redirectTo"]).query)["code"][0] if allowed.status_code == 200 else ""
+    got = api.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": client_id,
+            "redirect_uri": REDIRECT,
+            "code_verifier": verifier,
+            "resource": resource,
+        },
+    )
+    check("2 the code is exchanged for a token (200)", got.status_code == 200, got.text[:200])
+    return {
+        "client_id": client_id,
+        "access_token": got.json().get("access_token") or "none",
+        "refresh_token": got.json().get("refresh_token") or "none",
+        "person_token": str(person.get("token") or ""),
+    }
 
 
 def as_role(api: httpx.Client, role: str, team: str | None = None) -> dict[str, str]:
@@ -718,6 +821,7 @@ def sso_round_trip(
     user: str | None = None,
     stale: bool = False,
     groups: tuple[str, ...] = (),
+    idp_params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """A browser's SSO sign-in, without the browser: start for `email`, log `user` (default `email`) in at the identity
     provider, hand its answer to platform-service, and complete with the flow key when it sent back a code. Returns
@@ -731,22 +835,31 @@ def sso_round_trip(
     if groups:
         # The groups the fake identity provider says the person is in.
         params["groups"] = ",".join(groups)
+    # Anything else the fake identity provider takes, e.g. {"overage": "1"} for Entra's groups.link claim.
+    params |= idp_params or {}
     at_idp = idp.get(url.path, params=params)
     if at_idp.status_code == 302:
         back = httpx.URL(at_idp.headers["location"])
         answered = api.get(back.path, params=dict(back.params))
     else:
-        form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', at_idp.text)}
-        answered = api.post(
-            "/v1/auth/saml/acs", content=str(httpx.QueryParams(form)),
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )  # fmt: skip
+        answered = post_saml_form(api, at_idp.text)
     location = answered.headers.get("location", "")
     query = dict(httpx.URL(location).params) if location else {}
     completed = None
     if "code" in query:
         completed = api.post("/v1/auth/sso/complete", json={"code": query["code"], "flowKey": started["flowKey"]})
     return {"start": start, "location": location, "query": query, "flowKey": started["flowKey"], "completed": completed}
+
+
+def post_saml_form(api: httpx.Client, page: str) -> httpx.Response:
+    """Posts an identity provider's auto-submit SAML form to platform-service at the consumer URL the form names, as a
+    browser would: each provider saved since providers had their own addresses has its own."""
+    form = {k: html.unescape(v) for k, v in re.findall(r'name="(\w+)" value="([^"]*)"', page)}
+    action = re.search(r'action="([^"]*)"', page)
+    path = httpx.URL(html.unescape(action.group(1))).path if action else "/v1/auth/saml/acs"
+    return api.post(
+        path, content=str(httpx.QueryParams(form)), headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
 
 
 def approve_tool_review(gw: httpx.Client, module_id: str, headers: dict[str, str]) -> dict[str, Any]:

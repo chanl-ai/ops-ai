@@ -769,7 +769,8 @@ export interface paths {
          * Add Own Account
          * @description Add another account of the caller's own on this account's app, through the same auth config: where to
          *     send the browser. The body names it and says where it signs in (409 account_name_taken for a name another
-         *     account of the app holds); with no body it is "<name>'s other account" and signs in where this account does.
+         *     account of the caller's own holds; the team's accounts may share it); with no body it is "<name>'s other
+         *     account" and signs in where this account does.
          *     Signing in as an identity the caller already linked updates that account instead.
          */
         post: operations["apps_add_own_account"];

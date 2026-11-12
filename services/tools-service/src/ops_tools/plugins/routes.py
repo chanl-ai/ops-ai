@@ -32,7 +32,7 @@ from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
-from ..store.connections import DEFAULT_VALUE, PLUGIN_APP, AccountNameTaken, plugin_of, split_config
+from ..store.connections import DEFAULT_VALUE, PERSON_ORIGIN, PLUGIN_APP, AccountNameTaken, plugin_of, split_config
 from .host import (
     PluginHost,
     filled_at_sign_in,
@@ -271,7 +271,9 @@ class PluginAccounts:
                 "first.",
                 code="host_app_missing",
             )
-        if package:
+        # A pack (templates only, no endpoint) reaches no system, so turning it on makes no account.
+        accountless = package or not m.endpoint
+        if accountless:
             # A package app has no account of its own: each call signs in with the chosen account of the app it
             # runs on (PluginHost.for_call).
             connection_id = None
@@ -296,7 +298,7 @@ class PluginAccounts:
             await self._first_binding(who, plugin)
         elif self.host.versions and not before.get("version"):
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
-        if body.enabled and not package and not before.get("connection_id") and body.credential_id is None:
+        if body.enabled and not accountless and not before.get("connection_id") and body.credential_id is None:
             await self._fix_first_place(who, plugin, own)
 
     async def _fix_first_place(self, who: Caller, plugin: Plugin, own: dict[str, Any]) -> None:
@@ -348,7 +350,8 @@ class PluginAccounts:
         name = body.name.strip()
         if not name:
             raise ValidationFailed("Name the account.", details={"field": "name"})
-        if await self.host.account_named(who.tenant_id, who.team.id, plugin, name) is not None:
+        held = await self.host.account_named(who.tenant_id, who.team.id, plugin, name)
+        if held is not None and held.get("origin") != PERSON_ORIGIN:
             raise AccountNameTaken(name)
         first = b.get("connection_id") if b else None
         if first is None or await self.connections.store.get(who.tenant_id, str(first)) is None:

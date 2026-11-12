@@ -7,13 +7,13 @@ introspection behind the service token and is bound to a port the public host ne
 import json
 import time
 from pathlib import Path as FilePath
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from urllib.parse import parse_qs
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, Grant
@@ -21,6 +21,7 @@ from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
 from ops_service_kit.background import BackgroundHealthOut
+from ops_service_kit.client_address import client_address
 from ops_service_kit.credentials import credential_store
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized, ValidationFailed
 from ops_service_kit.http import (
@@ -48,15 +49,22 @@ from ..acting_for import ActingFor
 from ..api_keys import ApiKeys
 from ..audit_log import AuditReader
 from ..auth import Auth, Issued, Keys, principal_from_claims
+from ..break_glass import REQUIRED, BreakGlass
+from ..oauth import OAuthError, iso
+from ..oauth.authorize import Authorizer
+from ..oauth.clients import Clients
+from ..oauth.metadata import server_metadata
+from ..oauth.token import Tokens
 from ..passwords import Passwords, email_key_from
 from ..policies import Policies
 from ..roles import Roles
 from ..signin_options import SignInOptions
-from ..signin_settings import SignInSettings
+from ..signin_settings import ProviderMetadata, SignInSettings
+from ..signin_watch import SecurityNotices
 from ..sso import Sso
 from ..store.audit import AuditLog, record_delivered
 from ..store.holders import HolderStore
-from ..store.identity import IdentityStore
+from ..store.identity import IdentityStore, SessionRef
 from ..store.keys import KeyStore
 from ..store.lifecycle import LifecycleStore
 from ..store.members import Actor, TeamStore
@@ -85,11 +93,16 @@ from .schemas import (
     AuditEventOut,
     AuditKind,
     AuditPage,
+    BreakGlassOut,
     BulkOut,
+    ConsentDecided,
+    ConsentIn,
+    ConsentOut,
     DeleteIn,
     DevPerson,
     DevSignInIn,
     ForgotIn,
+    GrantOut,
     Health,
     HoldersOut,
     Introspect,
@@ -99,6 +112,9 @@ from .schemas import (
     Jwks,
     Me,
     MemberOut,
+    MetadataIn,
+    MetadataOut,
+    OAuthErrorOut,
     OptionsIn,
     OptionsOut,
     PermissionsOut,
@@ -125,6 +141,8 @@ from .schemas import (
     SignIn,
     SignInSecretIn,
     SignInSecretOut,
+    SignInTestOut,
+    SignInTestStartOut,
     SsoCompleteIn,
     SsoStarted,
     SsoStartIn,
@@ -283,6 +301,7 @@ def create_public_app(
         flow_ttl_s=sign.flow_ttl_s,
         sp_key=sign.saml_sp_key,
         sp_certificate=sign.saml_sp_certificate,
+        fetch=sign.fetch,
     )
     app = FastAPI(title="Ops AI platform service", version="0.1.0", generate_unique_id_function=operation_id)
     install_error_handlers(app)
@@ -349,7 +368,10 @@ def create_public_app(
     async def sso_start(body: SsoStartIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Where to send the browser to sign in at the email domain's provider, and the flow key that browser keeps
         to finish."""
-        started = await sso.start(body.email, next_path=body.next)
+        if body.provider is not None:
+            started = await sso.start_tile(body.provider, next_path=body.next)
+        else:
+            started = await sso.start(body.email or "", next_path=body.next)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
     @app.get("/v1/auth/oidc/callback", tags=["auth"], status_code=303, responses=ERRORS)
@@ -372,19 +394,46 @@ def create_public_app(
     async def saml_metadata() -> Response:  # pyright: ignore[reportUnusedFunction]
         """The SAML service provider metadata a bank's identity provider imports: entity id, consumer URL and the
         certificate for signed requests and encrypted assertions. Public: it holds nothing secret."""
-        return Response(sso.sp_metadata(), media_type="application/samlmetadata+xml")
+        return Response(await sso.sp_metadata(), media_type="application/samlmetadata+xml")
 
-    @app.post("/v1/auth/saml/acs", tags=["auth"], status_code=303, responses=ERRORS)
-    async def saml_acs(request: Request) -> RedirectResponse:  # pyright: ignore[reportUnusedFunction]
-        """The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page."""
+    @app.get(
+        "/v1/auth/saml/metadata/{sp_id}",
+        tags=["auth"],
+        response_class=Response,
+        responses={
+            200: {"content": {"application/samlmetadata+xml": {"schema": {"type": "string"}}}},
+            **ERRORS,
+        },
+    )
+    async def saml_provider_metadata(  # pyright: ignore[reportUnusedFunction]
+        sp_id: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,40}$")],
+    ) -> Response:
+        """One provider's own SAML service provider metadata: its entity id and consumer URL. Public."""
+        return Response(await sso.sp_metadata(sp_id), media_type="application/samlmetadata+xml")
+
+    async def _saml_post(request: Request, sp_id: str | None) -> RedirectResponse:
         raw = await request.body()
         if len(raw) > 512 * 1024:
             raise ValidationFailed("The SAML response is too large.", code="saml_too_large")
         form = {k: v[0] for k, v in parse_qs(raw.decode(errors="replace")).items()}
         target = await sso.saml_answer(
-            relay_state=form.get("RelayState", ""), saml_response=form.get("SAMLResponse", "")
+            relay_state=form.get("RelayState", ""), saml_response=form.get("SAMLResponse", ""), sp_id=sp_id
         )
         return RedirectResponse(target, status_code=303)
+
+    @app.post("/v1/auth/saml/acs", tags=["auth"], status_code=303, responses=ERRORS)
+    async def saml_acs(request: Request) -> RedirectResponse:  # pyright: ignore[reportUnusedFunction]
+        """The SAML POST binding for providers saved before each had its own address: a form with SAMLResponse and
+        RelayState, posted by the provider's page."""
+        return await _saml_post(request, None)
+
+    @app.post("/v1/auth/saml/acs/{sp_id}", tags=["auth"], status_code=303, responses=ERRORS)
+    async def saml_provider_acs(  # pyright: ignore[reportUnusedFunction]
+        request: Request, sp_id: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,40}$")]
+    ) -> RedirectResponse:
+        """One provider's own consumer URL. A response that answers none of our requests (an app-portal tile) is
+        checked, discarded, and the browser is sent to start a normal sign-in."""
+        return await _saml_post(request, sp_id)
 
     @app.post("/v1/auth/sso/complete", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def sso_complete(body: SsoCompleteIn) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -660,8 +709,25 @@ def create_public_app(
         who = await store.user(tenant, person_id)
         return ok(view | ({"name": who.name, "email": who.email} if who else {}))
 
+    notices = SecurityNotices(signin_store, holder_store, WorkspaceStore(store.db), sign.mail, sign.console_url)
+
+    async def tell_security(tenant_id: str, target: str, subject: str, body: str) -> None:
+        await notices.tell(
+            tenant_id, action="signin.break_glass_told", target=target, subject=subject, body=body, once=new_id("bg")
+        )
+
+    break_glass = BreakGlass(signin_store, holder_store, WorkspaceStore(store.db), policy_store, people, tell_security)
+    passwords.break_glass = break_glass
     signin_settings = SignInSettings(
-        signin_store, people, signin_secrets, sign.dns, sp_key_set=sign.saml_sp_key is not None
+        signin_store,
+        people,
+        signin_secrets,
+        sign.dns,
+        sp_key_set=sign.saml_sp_key is not None,
+        public_url=sign.public_url,
+        console_url=sign.console_url,
+        metadata=ProviderMetadata(signin_store, sso.guarded_get),
+        break_glass=break_glass,
     )
 
     @app.get(
@@ -673,6 +739,31 @@ def create_public_app(
     async def list_signin_providers(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's sign-in providers; Security team admins only."""
         return ok(await signin_settings.list(actor))
+
+    @app.post(
+        "/v1/settings/sign-in/providers/metadata",
+        tags=["sign-in-providers"],
+        response_model=Envelope[MetadataOut],
+        responses=ERRORS,
+    )
+    async def read_signin_metadata(  # pyright: ignore[reportUnusedFunction]
+        body: MetadataIn, actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """What an identity provider's metadata says (entity id, sign-in URL, certificates and their dates), read from
+        its URL or file; saves nothing. Security team admins only."""
+        return ok(await signin_settings.read_metadata(actor, url=body.url, xml=body.xml))
+
+    @app.post(
+        "/v1/settings/sign-in/providers/{provider_id}/refresh",
+        tags=["sign-in-providers"],
+        response_model=Envelope[ProviderOut],
+        responses=ERRORS,
+    )
+    async def refresh_signin_provider(  # pyright: ignore[reportUnusedFunction]
+        provider_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Reads the provider's metadata URL now and adds its new certificates for the same entity id."""
+        return ok(await signin_settings.refresh(actor, provider_id))
 
     @app.put(
         "/v1/settings/sign-in/providers/{provider_id}",
@@ -750,7 +841,87 @@ def create_public_app(
         its provider. 422 `domain_unverified` with what DNS held, 409 `domain_taken` when another workspace has it."""
         return ok(await signin_settings.verify_domain(actor, domain.lower()))
 
-    policies = Policies(policy_store, people)
+    # ── Assistants at a team's MCP address: this service is their authorization server (ops_platform.oauth) ──
+
+    authorizer = Authorizer(store, auth, policy_store, sign.mcp_url, sign.console_url)
+    clients = Clients(store)
+    tokens = Tokens(store, auth, sign.public_url)
+
+    @app.exception_handler(OAuthError)
+    async def oauth_refusal(_: Request, e: OAuthError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        return JSONResponse(
+            {"error": e.error, "error_description": e.description},
+            status_code=e.status,
+            headers={"Cache-Control": "no-store", **e.headers},
+        )
+
+    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+    async def oauth_server_metadata() -> Any:  # pyright: ignore[reportUnusedFunction]
+        return server_metadata(sign.public_url)
+
+    @app.post("/oauth/register", status_code=201, include_in_schema=False)
+    async def oauth_register(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            raise OAuthError("invalid_client_metadata", "Send the registration as a JSON object.")
+        address = client_address(request, sign.trusted_proxies)
+        return JSONResponse(
+            await clients.register(cast(dict[str, Any], body), address=address),
+            status_code=201,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/oauth/authorize", include_in_schema=False)
+    async def oauth_authorize(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        address = client_address(request, sign.trusted_proxies)
+        return RedirectResponse(await authorizer.start(dict(request.query_params), address=address), status_code=303)
+
+    @app.post("/oauth/token", include_in_schema=False)
+    async def oauth_token(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        form = {k: v[0] for k, v in parse_qs((await request.body()).decode("utf-8", "replace")).items()}
+        issued = await tokens.exchange(form, request_id=new_id("req"))
+        return JSONResponse(issued, headers={"Cache-Control": "no-store"})
+
+    oauth_errors = {**ERRORS, 400: {"model": OAuthErrorOut, "description": "The request was refused"}}
+
+    @app.get("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentOut], responses=oauth_errors)
+    async def oauth_consent(  # pyright: ignore[reportUnusedFunction]
+        request: Request, claims: Annotated[dict[str, Any], Depends(claims_of)]
+    ) -> Any:
+        """What the consent page shows for an assistant's request: the assistant, the team its address names, the
+        host the browser returns to and how long the connection lasts. 403 `team_forbidden` for a person outside the
+        team."""
+        return ok(await authorizer.show(claims, dict(request.query_params)))
+
+    @app.post("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentDecided], responses=oauth_errors)
+    async def oauth_decide(  # pyright: ignore[reportUnusedFunction]
+        body: ConsentIn, claims: Annotated[dict[str, Any], Depends(claims_of)]
+    ) -> Any:
+        """The person's answer. Allow opens a grant and returns where to send the browser, with a single-use code;
+        Deny sends it back with `access_denied`."""
+        q = body.model_dump(exclude={"decision"}, exclude_none=True)
+        return ok(await authorizer.decide(claims, q, allow=body.decision == "allow", request_id=new_id("req")))
+
+    @app.get("/v1/oauth/grants", tags=["oauth"], response_model=Envelope[list[GrantOut]], responses=ERRORS)
+    async def oauth_grants(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The assistants the signed-in person has connected, newest first."""
+        return ok(await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso()))
+
+    @app.delete("/v1/oauth/grants/{grant_id}", tags=["oauth"], status_code=204, responses=ERRORS)
+    async def oauth_disconnect(  # pyright: ignore[reportUnusedFunction]
+        grant_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+    ) -> Response:
+        """Ends one of the person's own connections; the assistant cannot renew."""
+        grant = await store.grant(SessionRef(str(claims["tenant_id"]), str(claims["sub"]), grant_id))
+        if grant is None or grant.user_id != str(claims["sub"]):
+            raise NotFound("No such connection.")
+        await store.end_grant(grant, at=iso(), by="person", actor=str(claims["sub"]), request_id=new_id("req"))
+        return Response(status_code=204)
+
+    policies = Policies(policy_store, people, guards={REQUIRED: break_glass.guard_policy})
 
     @app.get("/v1/policies", tags=["policies"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
     async def list_policies(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -834,6 +1005,73 @@ def create_public_app(
     ) -> Response:
         await signin_settings.delete(actor, provider_id)
         return Response(status_code=204)
+
+    @app.post(
+        "/v1/settings/sign-in/providers/{provider_id}/test",
+        tags=["sign-in-providers"],
+        response_model=Envelope[SignInTestStartOut],
+        responses=ERRORS,
+    )
+    async def test_signin_provider(  # pyright: ignore[reportUnusedFunction]
+        provider_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Starts a test sign-in: the admin signs in at the provider as themself, in a new tab, and the result is read
+        from `GET /v1/settings/sign-in/test-results/{flowId}`. Runs while the provider is off; signs nobody in."""
+        await people.require_admin(actor, "settings", "manage")
+        started = await sso.start_test(actor.tenant_id, provider_id, user_id=actor.user_id)
+        return ok({"redirectUrl": started.redirect_url, "flowId": started.flow_id})
+
+    @app.get(
+        "/v1/settings/sign-in/test-results/{flow_id}",
+        tags=["sign-in-providers"],
+        response_model=Envelope[SignInTestOut],
+        responses=ERRORS,
+    )
+    async def signin_test_result(  # pyright: ignore[reportUnusedFunction]
+        flow_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """What a test sign-in got back: email, name and groups, or the check that failed. 404 to anyone but the admin
+        who started it."""
+        await people.require_admin(actor, "settings", "manage")
+        result = await signin_store.test_result(actor.tenant_id, flow_id, actor.user_id)
+        if result is None:
+            raise NotFound("sign-in test")
+        return ok(result)
+
+    @app.get(
+        "/v1/settings/sign-in/break-glass",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[BreakGlassOut]],
+        responses=ERRORS,
+    )
+    async def list_break_glass(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The Security admins who may sign in by password while company sign-in is required."""
+        return ok(await break_glass.list(actor))
+
+    @app.put(
+        "/v1/settings/sign-in/break-glass/{user_id}",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[BreakGlassOut]],
+        responses=ERRORS,
+    )
+    async def add_break_glass(  # pyright: ignore[reportUnusedFunction]
+        user_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Adds a Security admin to the list (at most three); 422 `break_glass_not_security_admin`,
+        `break_glass_full`. Returns the list."""
+        return ok(await break_glass.add(actor, user_id))
+
+    @app.delete(
+        "/v1/settings/sign-in/break-glass/{user_id}",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[BreakGlassOut]],
+        responses=ERRORS,
+    )
+    async def remove_break_glass(  # pyright: ignore[reportUnusedFunction]
+        user_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+    ) -> Any:
+        """Takes a person off the list; 409 `break_glass_last` while company sign-in is required. Returns the list."""
+        return ok(await break_glass.remove(actor, user_id))
 
     team_admin = TeamAdmin(
         TeamAdminStore(store.db),

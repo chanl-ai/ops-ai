@@ -104,7 +104,8 @@ export default function AgentPage() {
   if (query.isPending) return <RecordSkeleton railSide="right" />;
   if (query.isError)
     return <AgentErrorState onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />;
-  return <AgentSettingsPage key={`${query.data.id}-${query.data.version}`} agent={query.data} />;
+  // Keyed by id only: a save can open a new draft version, and a remount then would drop edits made while it was in flight.
+  return <AgentSettingsPage key={query.data.id} agent={query.data} />;
 }
 
 function AgentSettingsPage({ agent }: { agent: Agent }) {
@@ -189,8 +190,17 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   };
   const saveNow = () => {
     const sent = JSON.stringify(draft);
-    update.mutate(patchOf(draft), {
-      onSuccess: () => (setSaveError(null), setFailedDraft(null)),
+    const patch = patchOf(draft);
+    update.mutate(patch, {
+      onSuccess: (result) => {
+        setSaveError(null);
+        setFailedDraft(null);
+        // agents-service drops a stale grant on save. Without dropping it here too the draft never matches the saved
+        // agent, so the page stays "Saving your changes first" and Request publish stays disabled.
+        const sentIds = (patch.toolIds as string[] | undefined) ?? [];
+        const dropped = sentIds.filter((t) => !result.toolIds.includes(t));
+        if (dropped.length) setDraft((d) => ({ ...d, toolIds: d.toolIds.filter((t) => !dropped.includes(t)) }));
+      },
       onError: (e) => (setSaveError(e.message), setFailedDraft(sent)),
     });
   };
@@ -471,6 +481,8 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   onRestore={async (v) => {
                     try {
                       const a = await restore.mutateAsync(v);
+                      // The draft is local state and no longer remounts on a new version, so a restore replaces it here.
+                      setDraft(draftOf(a));
                       toast.success(`Restored v${v} as v${a.version}`);
                       setHistoryOpen(false);
                     } catch (e) {

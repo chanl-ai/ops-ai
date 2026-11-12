@@ -48,6 +48,28 @@ case and take their options as an object: `apps.turnOn(app, fields)`, `apps.addC
 `credentials.set(app, { clientId, clientSecret })`, `accounts.makeDefault(account)`, `accounts.setKey(account, key)`,
 `tools.run(app, tool, input, { real })`.
 
+## Knowledge, templates and connectors
+
+The same words as the [Python SDK](python.md#knowledge-templates-and-connectors), camel case:
+
+```ts
+const base = await ops.knowledge.addBase('Branch procedures', { owner: 'branch.ops@harborpine.example' });
+const source = await ops.knowledge.addSource('Policies', [base.id]);
+await ops.knowledge.push(source.id, 'fees/overdraft', { title: 'Overdraft fees', text: 'Fees are waived on the first day.' });
+
+const made = await ops.templates.install('plugin:opsai.starters:doc-coauthoring');
+
+const start = await ops.me.connectors.connect('Person desk'); // open start.authorizeUrl in a browser
+await ops.me.connectors.finish(state, code);
+const accounts = await ops.me.connectors.accounts();
+```
+
+## Saved profile
+
+`new OpsAI({ profile: 'builder' })` reads the sign-in `opsai login` saved under that name; without `profile` it reads the
+current one. Options you pass win over `OPS_BASE_URL`, `OPS_API_KEY` and `OPS_TEAM`, which win over the saved profile; a
+caller who passes its own `apiKey` is not given the saved person's token.
+
 ## Errors
 
 A refused call rejects with a subclass of `OpsError` carrying `status`, `code`, `message` and `requestId`, the same

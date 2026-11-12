@@ -1,11 +1,12 @@
 // uc-129 a builder adds documents to a knowledge base by uploading them or picking them from Files, ui layer:
-// docs/usecases/kb-service/add-documents-from-files.md. Signed in through platform-service as James; one PDF is put in
+// docs/usecases/knowledge/add-documents-from-files.md. Signed in through platform-service as James; one PDF is put in
 // Files first, then the console uploads a second and picks the first in one Add documents dialog.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { FILES_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { FILES_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, shootBothWidths, videoToGif, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -36,7 +37,10 @@ await withUiStack(
       const existing = await putInFiles(H, PICKED, readFileSync(join(PDFS, 'retail-product-sheet.pdf')));
       check('a PDF is in Files before the console opens', existing?.scan?.status === 'clean', existing);
 
-      const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+      const videos = mkdtempSync(join(tmpdir(), 'uc-129-video-'));
+      const recording = Date.now();
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir: videos, size: { width: 1440, height: 900 } } });
+      const page = await context.newPage();
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByLabel('Email').fill(JAMES);
@@ -44,7 +48,8 @@ await withUiStack(
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-      await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const started = Date.now();
+      await page.goto(`${consoleUrl}/data/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByRole('button', { name: 'New knowledge base' }).click({ timeout: 120_000 });
       const create = page.getByRole('dialog', { name: 'New knowledge base' });
       await create.locator('#kb-name').fill(NAME);
@@ -58,7 +63,7 @@ await withUiStack(
       const tabs = await page.getByRole('tab').allInnerTexts();
       check('the base offers no Documents tab', tabs.length > 0 && !tabs.some((t) => t.startsWith('Documents')), tabs);
 
-      await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('kb-add-documents').first().click({ timeout: 120_000 });
       const dialog = page.getByRole('dialog', { name: 'Add documents' });
       const ticketed = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${files}/v1/files/uploads`, { timeout: 60_000 }));
@@ -73,6 +78,11 @@ await withUiStack(
       await page.getByPlaceholder("Search your team's files by name…").fill(existing.name);
       await page.getByRole('option', { name: new RegExp(`^${existing.name.replace('.', '\\.')}`) }).first().click({ timeout: 30_000 });
       await page.keyboard.press('Escape');
+      await dialog.getByRole('button', { name: 'Add 2 documents' }).waitFor({ timeout: 30_000 });
+      await page.waitForTimeout(800);
+      const clipMs = Date.now() - started;
+      await shootBothWidths(page, 'knowledge', 'uc-129-add-documents', async () => page.waitForTimeout(600));
+      await page.setViewportSize({ width: 1440, height: 1000 });
       const added = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${kb}/v1/knowledge-bases/${kbId}/documents`, { timeout: 120_000 }));
       await dialog.getByRole('button', { name: 'Add 2 documents' }).click({ timeout: 30_000 });
       const res = await added;
@@ -89,6 +99,9 @@ await withUiStack(
       const refs = await Promise.all(sent.map(async (id) => (await (await fetch(`${files}/v1/files/${id}`, { headers: H })).json()).data?.references ?? []));
       check('Files keeps both files: each is referenced by the source', refs.every((r) => r.some((x) => x.type === "source" && x.id === body?.sourceId)), refs);
       check('no page errors', errors.length === 0, errors);
+      await context.close();
+      videoToGif(videos, 'knowledge', 'uc-129-add-documents', started - recording, clipMs);
+      rmSync(videos, { recursive: true, force: true });
     } finally {
       await browser.close();
     }

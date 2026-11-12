@@ -29,6 +29,7 @@ import { count, plural, relativeTime } from '@/lib/format';
 import type { Workflow } from '@/lib/types/domain';
 import type { WorkflowFilters } from '@/lib/types/query';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
 type Row = Workflow & { onRowClick: (w: Workflow) => void };
 
@@ -164,6 +165,7 @@ export default function WorkflowsPage() {
               <PlayCircle className="size-4" /> Start run
             </Button>
           )}
+          {canBuild && <TemplatesGallery kind="workflow" href="/build/workflows" />}
           {canBuild && (
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" /> New workflow
