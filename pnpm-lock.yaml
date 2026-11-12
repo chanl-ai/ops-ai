@@ -468,6 +468,9 @@ importers:
 
   packages/usecase-runner:
     dependencies:
+      '@chanl-ai/ops-ai':
+        specifier: workspace:*
+        version: link:../../sdk/typescript
       playwright:
         specifier: ^1.64.0
         version: 1.64.0

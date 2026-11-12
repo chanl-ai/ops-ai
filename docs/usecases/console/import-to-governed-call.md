@@ -46,3 +46,7 @@ uc-055's last step belongs to the agent page.
 Step 6's statement call answers 401 from the bank unless `{{STATEMENTS_API_KEY}}` in the query is resolved, and its
 `requestedUrl` carries the key unless the gateway scrubs it. Step 10 counts holds at the bank itself, so a write that
 ran twice or not at all fails it.
+
+## Setup state
+
+The test-run responses go through `required()`. On 2026-11-12 steps 7 to 11 fail (the publish response never arrives, and the chat steps follow from it).

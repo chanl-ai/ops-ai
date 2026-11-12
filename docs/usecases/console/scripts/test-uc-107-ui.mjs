@@ -2,7 +2,7 @@
 // Signed in through platform-service as the seeded people. An Operations module whose operations read one secret from
 // the fake core bank's query-key route is set up through the API; Operations' secret starts with a wrong value, so a
 // live run fails until the rotation. Each step is checked on its own.
-import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -95,7 +95,7 @@ await withUiStack(
         await panel.getByRole('button', { name: 'Run' }).click();
         const res = await ran;
         const text = res ? await res.text() : '';
-        const data = text ? (JSON.parse(text).data ?? {}) : {};
+        const data = required({ status: res?.status() ?? 0, data: text ? JSON.parse(text).data : undefined, text }, `live run of ${op}`);
         return { status: data.status, code: data.output?.error?.code, leaked: text.includes(BANK_KEY) };
       };
 

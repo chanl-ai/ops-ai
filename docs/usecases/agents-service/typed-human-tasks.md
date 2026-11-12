@@ -31,3 +31,7 @@ is decided in Human Tasks like any other, and the caller reads the decision from
 |---|---|---|
 | api | `agents-service/scripts/test-uc-254-api.py` | `make usecase-test UC=uc-254 LAYER=api` |
 | ui | `agents-service/scripts/test-uc-254-ui.mjs` | passing (2026-10-28): Human Tasks asks the pinned version's question with its facts and actions; Priya declines it and the caller reads it back |
+
+## Setup state
+
+Setup for the ui script goes through the shared steps (`signInAs`) and the public TypeScript SDK; a refused create throws, so it stops the script as setup. Passing on 2026-11-12.

@@ -51,6 +51,25 @@ This folder holds docs and their scripts together, so its agent guidance lives h
 | Layers | `sdk` scripts call the SDK in `sdk/python` or `sdk/typescript`; `cli` scripts run a command a person runs, today the sample team installer (`scripts/sample_team.py`) and later `ops` from `packages/ops_plugins`. A layer whose provider is missing reports "not available yet; run LAYER=api" and exits 3 when nothing else ran |
 | Stories | Each doc opens with a `## Stories` table (`# \| Story \| Layer \| Steps \| Proved by`), four or five plain stories; checks are named by their step number, so a run reports each story as works or broken with the step that failed. `make usecase-report UC=<id>` prints the stories from the latest runs |
 
+## Shared steps
+
+Setup that several scripts repeat is a named step. Every step calls the public SDK (TypeScript in
+`packages/usecase-runner/src/steps.ts`, imported as `@ops-ai/usecase-runner/steps`; Python in `docs/usecases/lib/steps.py`),
+so a script that uses one also proves the SDK can do it. A step the SDK cannot do is a product gap: file a card and show
+the step as open in the use case, rather than adding a raw HTTP call or a helper that hides it. A request a script still
+makes by hand goes through `required(res, what)` (`@ops-ai/usecase-runner/harness`), which throws on a refused request so
+a failed create stops the script as setup and not as a later FAIL on an empty id.
+
+| Step (TypeScript / Python) | What it does | SDK call |
+|---|---|---|
+| `signInAs` / `sign_in_as` | Signs a seeded person in; the client acts in `team_ops`, another team, or none (the workspace admin) | `OpsAI.signIn`, `raw.platform.auth_sign_in` |
+| `makeTeam` / `make_team` | The workspace admin creates a team with a first admin, who invites each member; each accepts with a name and a password. Returns a client per member | `raw.platform.teams_create_team`, `members_invite_members`, `invites_accept_invite` |
+| `addKnowledgeBase` / `add_knowledge_base` | A knowledge base with a push source and its items, indexed on return (Python: written, not yet run) | `raw.kb.knowledge_bases_create_knowledge_base`, `sources_create_source`, `sources_put_item` |
+| `publishAgent` / `publish_agent` | Creates an agent on the stack's first chat alias and sends it for publish; live on return when the stack auto-approves | `agents.create`, `agents.publish`, `raw.agents.agents_list_model_aliases` |
+| `runWorkflow` / `run_workflow` | Starts a run and waits until it ends or stops at a human task (`taskId`) (written, not yet run) | `runs.start`, `runs.wait` |
+| `madeThings` / `Made` | Records what a run made; `cleanUp` / `clean_up` removes it in reverse order and reports every leftover. A team is archived, since the platform deletes one 30 days later | the matching `*_delete_*` and `teams_archive_team` calls |
+| `clientFor` | An SDK client pointed at the run's services | `new OpsAI({ services })` |
+
 ## Layout
 
 | Path | Holds |
@@ -58,6 +77,7 @@ This folder holds docs and their scripts together, so its agent guidance lives h
 | `docs/usecases/README.md` | This registry; the runner reads the table below |
 | `docs/usecases/<service>/<topic>.md` | The use case, named for its topic, with its id in the header: preconditions, steps and expected results, acceptance layers, non-vacuous check |
 | `docs/usecases/<service>/scripts/test-uc-NNN-<layer>.py` or `.mjs` | One script per layer; Python for api, Node with Playwright for ui |
+| `docs/usecases/lib/steps.py` | The Python shared steps (table above) |
 | `docs/usecases/lib/usecase_harness.py` | Checks, the four thread calls, and the scripted services, shared by the Python scripts |
 | `packages/usecase-runner/` | Registry parser, layer resolver, PASS/FAIL reporter, exit codes, and the ui harness; `scripts/usecase.mjs` calls it |
 

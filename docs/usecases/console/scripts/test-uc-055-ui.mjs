@@ -2,7 +2,7 @@
 // Signed in through platform-service as the seeded people; tools-service reads the fake bank over https, and the agents
 // service (scripted model, no provider) takes its tools from tools-service. Each step is checked on its own, so one
 // failing step still lets the later ones report.
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -128,7 +128,8 @@ await withUiStack(
           const ran = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${moduleId}/test`), { timeout: 60_000 }));
           await panel.getByRole('button', { name: 'Run' }).click();
           const res = await ran;
-          results[op] = { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), ...(res ? (await res.json().catch(() => ({}))).data ?? {} : {}) };
+          const text = res ? await res.text() : '';
+          results[op] = { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), ...required({ status: res?.status() ?? 0, data: text ? JSON.parse(text).data : undefined, text }, `test run of ${op}`) };
         }
         const read = results.get_account;
         const write = results.place_hold;
