@@ -15,7 +15,7 @@ States come from runs, not from the registry. "not run" means no run since the c
 | Id | Short title | What it proves | Layers | State |
 |---|---|---|---|---|
 | uc-013 | An app's key never comes back | A key reaches the system it calls and is never shown to a person or an agent | sdk, cli | page, not run |
-| uc-558 | People connect their own Salesforce account | A call acts as the person who asked; an unconnected person gets a link made for them alone; a body never picks a token | api, ui | api not run; ui pass (11 checks, 2026-11-12) |
+| uc-558 | People connect their own Salesforce account | A call acts as the person who asked; an unconnected person gets a link made for them alone; a body never picks a token | api, sdk, cli, ui | api not run; sdk, cli: steps 1 and 2 pass, connect is a gap (no SDK or CLI call); ui pass (11 checks, 2026-11-12) |
 | uc-607 | A team connects apps from one catalog | Connectors, the Connect window, an app's page, and a tool that runs with a person's own account | api, sdk, cli, ui | ui open: steps 2 to 46 walk the old page (see the gap list) |
 | uc-390 | Connect an app with a key, a password, a token or a client secret | Each sign-in kind reaches the system with the right header, per environment | api, ui | not run |
 | uc-394 | Sign an app in once with the team's account | The team account's token is used and refreshed | api, ui | not run |
