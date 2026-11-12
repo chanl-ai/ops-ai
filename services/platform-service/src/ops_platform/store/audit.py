@@ -142,18 +142,23 @@ async def record(
 
 
 async def record_grants_ending(
-    c: AsyncConnection, *, tenant_id: str, user_id: str, actor: str, by: str, request_id: str
+    c: AsyncConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    actor: str,
+    by: str,
+    request_id: str,
+    team_id: str | None = None,
 ) -> None:
     """One `oauth.grant_ended` entry, in the grant's own team, for each assistant connection of the person still live,
-    written before a caller ends every session of theirs at once. `by` says why: `admin` (removed from the team),
-    `person` (left the workspace) or `password_reset`."""
-    live = (
-        await c.execute(
-            sa.select(sessions.c.id, sessions.c.team_id, sessions.c.client_id).where(
-                sessions.c.user_id == user_id, sessions.c.kind == "mcp", sessions.c.revoked_at.is_(None)
-            )
-        )
-    ).all()
+    written before a caller ends those sessions. `by` says why: `admin` (removed from the team), `person` (left the
+    workspace), `password_reset` or `group` (company sign-in removed them from a team). With `team_id`, only that
+    team's connections, for a caller that ends only those."""
+    where = [sessions.c.user_id == user_id, sessions.c.kind == "mcp", sessions.c.revoked_at.is_(None)]
+    if team_id is not None:
+        where.append(sessions.c.team_id == team_id)
+    live = (await c.execute(sa.select(sessions.c.id, sessions.c.team_id, sessions.c.client_id).where(*where))).all()
     for sid, team, client in live:
         await record(
             c, tenant_id=tenant_id, team_id=team, actor=actor, action="oauth.grant_ended", target_kind="session",

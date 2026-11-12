@@ -11,10 +11,11 @@ import httpx
 import sqlalchemy as sa
 
 from ops_platform.store.roles import mirror_membership
-from ops_platform.store.tables import audit_entries, members, users
+from ops_platform.store.tables import audit_entries, members, sessions, users
 from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import IDP, SignInRig
+from .test_mcp_oauth import Assistant
 from .test_workspace_teams import _team  # pyright: ignore[reportPrivateUsage]
 
 
@@ -34,14 +35,19 @@ async def _provider(rig: SignInRig, domain: str, rules: list[dict[str, str]], **
     return provider
 
 
-async def _sign_in(rig: SignInRig, email: str, extra: str) -> dict[str, str]:
-    """Signs `email` in with the identity provider sending `extra` (e.g. `&groups=a,b`); returns their roles."""
+async def _complete(rig: SignInRig, email: str, extra: str) -> dict[str, Any]:
+    """Signs `email` in with the identity provider sending `extra` (e.g. `&groups=a,b`); returns the sign-in."""
     start = (await rig.public.post("/v1/auth/sso/start", json={"email": email})).json()["data"]
     location = await rig.answer(start["redirectUrl"] + extra, user=email)
     code = httpx.URL(location).params["code"]
     done = await rig.public.post("/v1/auth/sso/complete", json={"code": code, "flowKey": start["flowKey"]})
     assert done.status_code == 200, done.text
-    return dict(done.json()["data"]["principal"]["roles"])
+    return dict(done.json()["data"])
+
+
+async def _sign_in(rig: SignInRig, email: str, extra: str) -> dict[str, str]:
+    """Signs `email` in with the identity provider sending `extra`; returns their roles."""
+    return dict((await _complete(rig, email, extra))["principal"]["roles"])
 
 
 async def _hand_member(rig: SignInRig, email: str, team: str, role: str) -> None:
@@ -154,3 +160,36 @@ async def test_a_new_provider_removes_by_default_and_reads_its_rules_back(signin
     # A new provider removes by default; the choice is shown with the rules read back from their own rows.
     assert saved["groups"]["onMissing"] == "remove"
     assert saved["groups"]["map"] == [{"group": "tellers", "team": tellers, "role": "viewer"}]
+
+
+async def test_leaving_a_group_ends_the_assistant_connections_in_that_team_and_audits_each(signin: SignInRig) -> None:
+    tellers, desk = await _team(signin, "Tellers"), await _team(signin, "Desk")
+    domain = f"mcp.{signin.zone}"
+    await _provider(
+        signin,
+        domain,
+        [{"group": "tellers", "team": tellers, "role": "builder"}, {"group": "desk", "team": desk, "role": "builder"}],
+        onMissing="remove",
+    )
+    email = f"ed@{domain}"
+    first = await _complete(signin, email, "&groups=tellers,desk")
+    who = {"Authorization": f"Bearer {first['token']}"}
+    async with signin.engine.connect() as c:
+        user = (await c.execute(sa.select(users.c.id).where(users.c.email == email))).scalar_one()
+    a = Assistant(signin)
+    client = await a.client()
+    await a.connect(who, a.params(client, desk))
+    await a.connect(who, a.params(client, tellers))
+    # Ed left "desk" at the provider: the Desk connection ends with the membership; the Tellers one stays.
+    await _sign_in(signin, email, "&groups=tellers")
+    async with signin.engine.connect() as c:
+        live = sa.select(sessions.c.team_id).where(
+            sessions.c.user_id == user, sessions.c.kind == "mcp", sessions.c.revoked_at.is_(None)
+        )
+        teams_live = set((await c.execute(live)).scalars())
+        q = sa.select(audit_entries.c.team_id, audit_entries.c.detail).where(
+            audit_entries.c.team_id.in_([tellers, desk]), audit_entries.c.action == "oauth.grant_ended"
+        )
+        ended = [(str(t), d["by"]) for t, d in (await c.execute(q)).all()]
+    assert teams_live == {tellers}, teams_live
+    assert ended == [(desk, "group")], ended

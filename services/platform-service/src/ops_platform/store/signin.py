@@ -913,6 +913,22 @@ class SignInStore:
                 continue
             await end_membership(c, Actor(p.tenant_id, team, user_id, request_id), member_id, user_id, at=at)
             await c.execute(signin_grants.delete().where(signin_grants.c.member_id == member_id))
+            # An assistant connected to this team's MCP address acts in it; it ends with the membership, audited like
+            # a removal by an admin. Their other teams' connections and their console sign-in stay.
+            await record_grants_ending(
+                c, tenant_id=p.tenant_id, user_id=user_id, actor=user_id, by="group", request_id=request_id,
+                team_id=team,
+            )  # fmt: skip
+            await c.execute(
+                sessions.update()
+                .where(
+                    sessions.c.user_id == user_id,
+                    sessions.c.team_id == team,
+                    sessions.c.kind == "mcp",
+                    sessions.c.revoked_at.is_(None),
+                )
+                .values(revoked_at=at)
+            )
             await record(
                 c,
                 tenant_id=p.tenant_id,
