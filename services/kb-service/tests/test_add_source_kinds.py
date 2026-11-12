@@ -6,7 +6,7 @@ from __future__ import annotations
 import httpx
 
 from .test_bases_and_sources import data
-from .test_tool_sources import FakeTools, kb, tools  # noqa: F401 - fixtures
+from .test_tool_sources import FakeTools, kb, tools  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixtures
 
 
 async def test_files_text_and_pushed_sources_do_not_start_as_email_templates(client: httpx.AsyncClient) -> None:
