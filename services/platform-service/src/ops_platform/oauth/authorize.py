@@ -16,7 +16,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib.parse import urlencode, urlsplit
 
-from ops_access import can
 from ops_service_kit.errors import Forbidden, Unauthorized, Unprocessable
 from ops_service_kit.ids import new_id
 
@@ -108,11 +107,11 @@ class Authorizer:
         return f"{self.console_url.rstrip('/')}/oauth/authorize?{urlencode(q)}"
 
     async def _member(self, claims: dict[str, Any], req: Request) -> None:
-        """The person must be in the address's team, in the team's own workspace, and may run tools there."""
+        """The person must be in the address's team, in the team's own workspace. Any member may connect: tools-service
+        checks tools:run and each tool's own right on every call, and a refusal there is a tool error."""
         in_team = req.team_id in [str(t) for t in cast(list[Any], claims.get("team_ids") or [])]
         if not in_team or req.tenant_id != str(claims["tenant_id"]):
             raise Forbidden("You are not a member of that team.", code="team_forbidden")
-        can(Auth.person_in_team(claims, req.team_id), "tools", "run", team=req.team_id, what="this team's tools")
 
     async def _hours(self, tenant_id: str) -> int:
         value = (await self.policies.values(tenant_id)).get("mcpConnectionHours", DEFAULT_HOURS)

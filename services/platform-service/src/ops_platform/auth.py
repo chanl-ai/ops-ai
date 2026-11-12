@@ -16,12 +16,11 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
-from ops_access import ANY_TEAM, BUILTIN_ROLES, can
-from ops_identity import Principal
+from ops_access import ANY_TEAM, BUILTIN_ROLES
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer, TokenError, mint, verify
-from ops_service_kit.errors import ApiError, Forbidden, Unauthorized
+from ops_service_kit.errors import Forbidden, Unauthorized
 from ops_service_kit.ids import new_id
 
 from .passwords import Passwords
@@ -198,8 +197,8 @@ class Auth:
 
     async def issue_for_grant(self, user: User, grant: Grant, refresh_token: str, now: datetime) -> Issued | None:
         """The token an assistant holds for its grant: audience the one MCP address, the one team, and the client. None
-        when the person is no longer in that team or no longer holds the right to run tools there; the caller ends
-        the grant then, so a renewal never returns a token with fewer teams."""
+        when the person is no longer in that team; the caller ends the grant then, so a renewal never returns a token
+        with fewer teams. Any member holds one: tools-service checks tools:run and each tool's right on every call."""
         teams = await self.store.acting_teams(user.tenant_id, user.id, now=_iso(now))
         if grant.team_id not in teams:
             return None
@@ -207,41 +206,7 @@ class Auth:
             user, grant.id, grant.auth_method, now, audience=[grant.resource], team=grant.team_id,
             client_id=grant.client_id,
         )  # fmt: skip
-        if not self.may_run_tools(claims, grant.team_id):
-            return None
         return self._sign(claims, refresh_token, now)
-
-    @staticmethod
-    def person_in_team(claims: dict[str, Any], team_id: str) -> Principal:
-        """The token's person acting in `team_id`, for the right to run its tools to be decided by ops_access."""
-        roles = cast(dict[str, Any], claims.get("roles") or {})
-        access = cast(dict[str, list[Any]], claims.get("access") or {})
-        grids = cast(dict[str, dict[str, Any]], claims.get("grids") or {})
-        return Principal(
-            kind="person",
-            sub=str(claims["sub"]),
-            email=str(claims.get("email", "")),
-            name=str(claims.get("name", "")),
-            tenant_id=str(claims["tenant_id"]),
-            team_id=team_id,
-            team_ids=[team_id],
-            roles={str(k): str(v) for k, v in roles.items()},
-            scopes=[],
-            auth_method="session",
-            access={str(k): [str(r) for r in v] for k, v in access.items()},
-            grids={str(r): {str(a): str(x) for a, x in g.items()} for r, g in grids.items()},
-            permission_version=claims.get("perm_version"),
-            policies=dict(claims.get("policies") or {}),
-            security_team=str(claims["security_team"]) if claims.get("security_team") else None,
-        )  # fmt: skip
-
-    @staticmethod
-    def may_run_tools(claims: dict[str, Any], team_id: str) -> bool:
-        try:
-            can(Auth.person_in_team(claims, team_id), "tools", "run", team=team_id, what="this team's tools")
-        except ApiError:
-            return False
-        return True
 
     async def _issue(self, user: User, session_id: str, refresh_token: str, method: str, now: datetime) -> Issued:
         return self._sign(await self._claims(user, session_id, method, now), refresh_token, now)
