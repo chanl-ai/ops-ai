@@ -45,3 +45,16 @@ async def test_a_live_account_test_run_waits_for_the_persons_yes_then_runs(g: Ga
     said_yes = await _run(g, confirmed=True)
     assert said_yes["decision"] == "allow", (said_yes.get("denyReason"), said_yes.get("denyMessage"))
     assert len([r for r in g.received if r["path"] == "/v1/holds"]) == 1, g.received
+
+
+async def test_a_reviewer_answer_is_not_let_through_by_the_persons_yes(
+    g: Gateway, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def reviewer(self: Any, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
+        return {"ask": True, "answer": "reviewer", "reviewerRole": None}, {}
+
+    monkeypatch.setattr(TeamAsksReviewer, "levels", reviewer)
+    await _on_accounts(g, engine, test_account=False)
+    held = await _run(g, confirmed=True)
+    assert (held["decision"], held.get("denyReason")) == ("deny", "approval_token_missing"), held
+    assert g.received == [], "the asker's yes sent a write the team gave to a reviewer"
