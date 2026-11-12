@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib.parse import urlencode, urlsplit
@@ -24,7 +24,7 @@ from ..auth import Auth
 from ..store.identity import Client, IdentityStore, SessionRef
 from ..store.policies import PolicyStore
 from . import OAuthError, iso
-from .clients import redirect_allowed
+from .clients import AUTHORIZE_PER_MINUTE, AddressLimit, redirect_allowed
 
 CODE_TTL_S = 600
 TEAM_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -65,6 +65,7 @@ class Authorizer:
     # under another path.
     mcp_url: str | None
     console_url: str | None
+    limit: AddressLimit = field(default_factory=lambda: AddressLimit(per_minute=AUTHORIZE_PER_MINUTE))
 
     def _base(self) -> str:
         if not self.mcp_url:
@@ -93,8 +94,9 @@ class Authorizer:
             raise OAuthError("invalid_target", "That address is not a team's MCP address on this install.")
         return Request(client, uri, challenge, f"{base}/mcp/{team_id}", team_id, found[0], q.get("state"))
 
-    async def start(self, q: dict[str, str]) -> str:
+    async def start(self, q: dict[str, str], *, address: str) -> str:
         """Where the browser goes to ask the person, once the request has checked out."""
+        self.limit.refuse_when_busy(address, "sign-in starts")
         if q.get("response_type") != "code":
             raise OAuthError("unsupported_response_type", "Only response_type=code is taken.")
         await self.check(q)

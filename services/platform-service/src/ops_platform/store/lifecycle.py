@@ -26,7 +26,7 @@ from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.dialect import locked
 
-from .audit import record
+from .audit import record, record_grants_ending
 from .members import ADMIN
 from .roles import bump_version, mirror_membership
 from .tables import (
@@ -183,6 +183,9 @@ class LifecycleStore:
                     role_assignments.c.subject_kind == "person",
                     role_assignments.c.subject_id == user_id,
                 )
+            )
+            await record_grants_ending(
+                c, tenant_id=tenant_id, user_id=user_id, actor=user_id, by="person", request_id=request_id
             )
             await c.execute(
                 sessions.update()

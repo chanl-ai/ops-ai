@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 
-from .audit import record
+from .audit import record, record_grants_ending
 from .roles import mirror_membership
 from .tables import (
     members,
@@ -438,6 +438,9 @@ class SignInStore:
             await _set_password(c, tenant_id, user_id, encoded, at)
             # A new password ends a lock from wrong ones.
             await c.execute(signin_lockouts.delete().where(signin_lockouts.c.user_id == user_id))
+            await record_grants_ending(
+                c, tenant_id=tenant_id, user_id=user_id, actor=user_id, by="password_reset", request_id=request_id
+            )
             await c.execute(
                 sessions.update()
                 .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))

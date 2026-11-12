@@ -23,6 +23,8 @@ LOOPBACK = {"127.0.0.1", "localhost", "[::1]", "::1"}
 REFUSED_SCHEMES = {"javascript", "data", "file", "vbscript", "blob", "about", "ftp", "ws", "wss"}
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*$")
 PER_MINUTE = 10
+# Sign-in starts a minute per source address: a person retrying a few times stays well under it.
+AUTHORIZE_PER_MINUTE = 30
 UNUSED_HOURS = 24
 MAX_REDIRECTS = 10
 
@@ -60,9 +62,10 @@ def redirect_allowed(client: Client, uri: str) -> bool:
 
 
 @dataclass
-class RegistrationLimit:
-    """Registrations per source address in the last minute, held by this process. A bank runs one platform-service
-    replica; with more, each replica counts its own, which loosens the limit by the replica count."""
+class AddressLimit:
+    """Requests per source address in the last minute (registrations, sign-in starts), held by this process. A bank
+    runs one platform-service replica; with more, each replica counts its own, which loosens the limit by the replica
+    count."""
 
     per_minute: int = PER_MINUTE
     clock: Any = time.monotonic
@@ -81,11 +84,20 @@ class RegistrationLimit:
             self.seen = {a: w for a, w in self.seen.items() if w and now - w[-1] < 60}
         return 0
 
+    def refuse_when_busy(self, address: str, what: str) -> None:
+        """429 with Retry-After once the address has made `per_minute` of these in the last minute."""
+        wait = self.retry_after(address)
+        if wait:
+            raise OAuthError(
+                "temporarily_unavailable", f"Too many {what} from this address.", status=429,
+                headers={"Retry-After": str(wait)},
+            )  # fmt: skip
+
 
 @dataclass
 class Clients:
     store: IdentityStore
-    limit: RegistrationLimit = field(default_factory=RegistrationLimit)
+    limit: AddressLimit = field(default_factory=AddressLimit)
 
     async def register(self, body: dict[str, Any], *, address: str) -> dict[str, Any]:
         given: object = body.get("redirect_uris")
@@ -101,14 +113,7 @@ class Clients:
             )
         raw = body.get("client_name")
         name = " ".join(raw.split())[:100] if isinstance(raw, str) and raw.strip() else "Unnamed assistant"
-        wait = self.limit.retry_after(address)
-        if wait:
-            raise OAuthError(
-                "temporarily_unavailable",
-                "Too many registrations from this address.",
-                status=429,
-                headers={"Retry-After": str(wait)},
-            )
+        self.limit.refuse_when_busy(address, "registrations")
         now = datetime.now(UTC)
         client = Client(new_id("cli"), name, list(dict.fromkeys(uris)), None, None)
         await self.store.register_client(client, at=iso(now), stale_before=iso(now - timedelta(hours=UNUSED_HOURS)))

@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -20,6 +21,10 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import sqlalchemy as sa
 
+from ops_platform.api.app import create_public_app
+from ops_platform.keys import dev_signer
+from ops_platform.signin_options import SignInOptions
+from ops_platform.store.identity import IdentityStore
 from ops_platform.store.tables import audit_entries, members, role_assignments, sessions, users
 from ops_service_kit.ids import new_id, now_iso
 
@@ -156,6 +161,33 @@ async def test_registration_refuses_redirects_anyone_could_use_and_allows_10_a_m
         assert statuses == [201] * 10, statuses
         eleventh = await a.register()
     assert eleventh.status_code == 429 and 0 < int(eleventh.headers["retry-after"]) <= 60, eleventh.text
+
+
+# uc-mcp-1
+async def test_an_install_with_no_public_address_answers_503_for_its_metadata_and_a_sign_in_start(
+    database_url: str,
+) -> None:
+    store = IdentityStore.open(database_url)
+    bare = SignInOptions(password_iterations=1_000, password_min_length=12, flow_ttl_s=600, reset_ttl_s=3600)
+    app = create_public_app(store, dev_signer(), demo_password=None, audiences=["platform"], signin=bare)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=PUBLIC_URL) as api:
+        meta = await api.get("/.well-known/oauth-authorization-server")
+        start = await api.get("/oauth/authorize", params={"response_type": "code"}, follow_redirects=False)
+    assert (meta.status_code, meta.json()["error"]) == (503, "server_error"), meta.text
+    assert "OPS_PLATFORM_PUBLIC_URL" in meta.json()["error_description"]
+    assert start.status_code == 503 and "location" not in start.headers, start.text
+
+
+# uc-mcp-7
+async def test_sign_in_starts_are_limited_to_30_a_minute_per_source_address(signin: SignInRig) -> None:
+    transport = httpx.ASGITransport(app=signin.app, client=("203.0.113.8", 40000))
+    async with httpx.AsyncClient(transport=transport, base_url=PUBLIC_URL) as other:
+        statuses = [
+            (await other.get("/oauth/authorize", params={"response_type": "code"})).status_code for _ in range(30)
+        ]
+        last = await other.get("/oauth/authorize", params={"response_type": "code"})
+    assert 429 not in statuses, statuses
+    assert last.status_code == 429 and 0 < int(last.headers["retry-after"]) <= 60, last.text
 
 
 # uc-mcp-7
@@ -378,6 +410,35 @@ async def test_a_person_who_stays_in_the_team_but_loses_the_right_to_run_its_too
     # The grant ended with it: a second renewal is refused too, and the person's list no longer shows it.
     assert (await a.renew(got["refresh_token"], client)).status_code == 400
     assert (await signin.public.get("/v1/oauth/grants", headers=who)).json()["data"] == []
+
+
+# uc-mcp-17
+async def test_leaving_the_workspace_or_a_password_reset_audits_each_assistant_connection_it_ends(
+    signin: SignInRig,
+) -> None:
+    a = Assistant(signin)
+    client = await a.client()
+    leaver, team = await a.person()
+    await a.connect(leaver, a.params(client, team))
+    assert (await signin.public.post("/v1/workspace/leave", headers=leaver)).status_code == 204
+    resetter, team2 = await a.person()
+    await a.connect(resetter, a.params(client, team2))
+    async with signin.engine.connect() as c:
+        email = (await c.execute(sa.select(members.c.email).where(members.c.team_id == team2))).scalar_one()
+    assert (await signin.public.post("/v1/auth/password/forgot", json={"email": email})).status_code == 204
+    [mail] = [m for m in signin.mail.sent.values() if m.to == (email,)]
+    found = re.search(r"/reset-password/(prt_[A-Za-z0-9_-]+)", mail.body)
+    assert found, mail.body
+    reset = await signin.public.post(
+        "/v1/auth/password/reset", json={"token": found.group(1), "password": "a new password 12"}
+    )
+    assert reset.status_code in (200, 204), reset.text
+    async with signin.engine.connect() as c:
+        q = sa.select(audit_entries.c.team_id, audit_entries.c.detail).where(
+            audit_entries.c.tenant_id == signin.tenant, audit_entries.c.action == "oauth.grant_ended"
+        )
+        ended = {(str(t), d["by"]) for t, d in (await c.execute(q)).all()}
+    assert {(team, "person"), (team2, "password_reset")} <= ended, ended
 
 
 async def test_a_connection_lasts_the_workspace_setting_8_hours_unless_an_admin_changes_it(signin: SignInRig) -> None:

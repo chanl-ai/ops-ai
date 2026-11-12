@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 
-from .tables import api_keys, audit_entries, members, teams, tenants, users
+from .tables import api_keys, audit_entries, members, sessions, teams, tenants, users
 from .tenancy import TenantDb
 
 # The console's action word for each platform action; the page filters and labels by these.
@@ -139,6 +139,26 @@ async def record(
             detail=detail,
         )
     )
+
+
+async def record_grants_ending(
+    c: AsyncConnection, *, tenant_id: str, user_id: str, actor: str, by: str, request_id: str
+) -> None:
+    """One `oauth.grant_ended` entry, in the grant's own team, for each assistant connection of the person still live,
+    written before a caller ends every session of theirs at once. `by` says why: `admin` (removed from the team),
+    `person` (left the workspace) or `password_reset`."""
+    live = (
+        await c.execute(
+            sa.select(sessions.c.id, sessions.c.team_id, sessions.c.client_id).where(
+                sessions.c.user_id == user_id, sessions.c.kind == "mcp", sessions.c.revoked_at.is_(None)
+            )
+        )
+    ).all()
+    for sid, team, client in live:
+        await record(
+            c, tenant_id=tenant_id, team_id=team, actor=actor, action="oauth.grant_ended", target_kind="session",
+            target_id=sid, request_id=request_id, detail={"by": by, "clientId": client},
+        )  # fmt: skip
 
 
 async def record_delivered(

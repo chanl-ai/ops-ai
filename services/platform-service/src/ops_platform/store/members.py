@@ -21,7 +21,7 @@ from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 
-from .audit import record
+from .audit import record, record_grants_ending
 from .roles import mirror_membership
 from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
 from .tenancy import INVITE_LOOKUP, TenantDb
@@ -299,25 +299,10 @@ class TeamStore:
                     await self._mirror(c, actor, str(user_id), None, at)
                     # I10: their sessions end now, and keys they made for this team stop working. An assistant they
                     # connected is a session too; each one that ends is audited in its own team.
-                    live = (
-                        await c.execute(
-                            sa.select(sessions.c.id, sessions.c.team_id, sessions.c.client_id).where(
-                                sessions.c.user_id == user_id, sessions.c.kind == "mcp", sessions.c.revoked_at.is_(None)
-                            )
-                        )
-                    ).all()
-                    for sid, grant_team, client in live:
-                        await record(
-                            c,
-                            tenant_id=actor.tenant_id,
-                            team_id=grant_team,
-                            actor=actor.user_id,
-                            action="oauth.grant_ended",
-                            target_kind="session",
-                            target_id=sid,
-                            request_id=actor.request_id,
-                            detail={"by": "admin", "clientId": client},
-                        )
+                    await record_grants_ending(
+                        c, tenant_id=actor.tenant_id, user_id=str(user_id), actor=actor.user_id, by="admin",
+                        request_id=actor.request_id,
+                    )  # fmt: skip
                     await c.execute(
                         sessions.update()
                         .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))

@@ -795,7 +795,8 @@ def create_public_app(
 
     @app.get("/oauth/authorize", include_in_schema=False)
     async def oauth_authorize(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
-        return RedirectResponse(await authorizer.start(dict(request.query_params)), status_code=303)
+        address = request.client.host if request.client else "unknown"
+        return RedirectResponse(await authorizer.start(dict(request.query_params), address=address), status_code=303)
 
     @app.post("/oauth/token", include_in_schema=False)
     async def oauth_token(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
