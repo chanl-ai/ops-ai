@@ -23,7 +23,7 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..hitl_facade import page
 from ..publish_policy import decide
-from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions
+from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered
 from ..skills import (
     LIMITS,
     _pinning,  # pyright: ignore[reportPrivateUsage]
@@ -34,6 +34,7 @@ from ..skills import (
     pin,
     pinned_by,
     publish,
+    render_published,
     require_unpinned,
     row_view,
     skills,
@@ -57,6 +58,24 @@ class SkillInput(WireModel):
     required: bool = False
 
 
+class SkillPartInput(WireModel):
+    """One named part of a skill, read with the skill's shared instructions."""
+
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
+    name: str = Field(max_length=200)
+    use_when: str = Field(default="", max_length=1024)
+    instructions: str
+    inputs: list[SkillInput] = Field(default_factory=list[SkillInput], max_length=20)
+    # Some of the skill's own tools, which this part uses.
+    tool_ids: list[str] = Field(default_factory=list[str])
+
+
+class SkillRenderInput(WireModel):
+    # The part to use, for a skill with parts.
+    part: str | None = None
+    inputs: dict[str, str] = Field(default_factory=dict[str, str], max_length=20)
+
+
 class SkillCreateInput(WireModel):
     name: str
     # The name in URL form when absent; a template sets it so the copy keeps the template's id as its prompt name.
@@ -74,6 +93,7 @@ class SkillCreateInput(WireModel):
     request_review: bool = False
     review_note: str = ""
     inputs: list[SkillInput] = Field(default_factory=list[SkillInput], max_length=20)
+    parts: list[SkillPartInput] = Field(default_factory=list[SkillPartInput], max_length=8)
 
 
 class SkillDraftPatch(WireModel):
@@ -86,6 +106,7 @@ class SkillDraftPatch(WireModel):
     guardrails: list[str] | None = None
     refusal: str | None = Field(default=None, max_length=500)
     inputs: list[SkillInput] | None = Field(default=None, max_length=20)
+    parts: list[SkillPartInput] | None = Field(default=None, max_length=8)
     note: str = ""
     base_version: int
 
@@ -106,7 +127,8 @@ class AttachInput(WireModel):
 def _in_view(s: dict[str, Any], view: str) -> bool:
     return {
         "all": True,
-        "published": s["status"] == "published",
+        # A published version stays in use while a newer one is in review.
+        "published": s["publishedVersion"] is not None and s["status"] != "deprecated",
         "always": s["loading"] == "always",
         "drafts": s["draftVersion"] is not None and s["status"] != "in_review",
         "in_review": s["status"] == "in_review",
@@ -125,8 +147,11 @@ async def list_skills(
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
 ) -> JSONResponse:
+    """The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
+    what chat and the MCP prompts use; every other view describes the newest version an editor sees."""
     pins = await _pinning(rt)
-    rows = [await row_view(rt, r, pins) for r in await skills(rt).rows()]
+    raw = await skills(rt).rows()
+    rows = [await row_view(rt, r, pins) for r in raw]
     if search:
         s = search.lower()
         rows = [x for x in rows if s in x["name"].lower() or s in x["useWhen"].lower() or s in x["slug"]]
@@ -137,6 +162,9 @@ async def list_skills(
         for c in facet_cols:
             facets[c][x[c]] = facets[c].get(x[c], 0) + 1
     rows = [x for x in rows if _in_view(x, view)]
+    if view == "published":
+        by_id = {r["id"]: r for r in raw}
+        rows = [await row_view(rt, by_id[x["id"]], pins, served=True) for x in rows]
     for c in facet_cols:
         if wanted := request.query_params.getlist(c):
             rows = [x for x in rows if x[c] in wanted]
@@ -162,6 +190,14 @@ async def skill_options(rt: Rt) -> JSONResponse:
 @router.get("/v1/skills/{skill_id}", response_model=Envelope[SkillDetail])
 async def get_skill(rt: Rt, skill_id: str) -> JSONResponse:
     return ok(await detail(rt, skill_id))
+
+
+@router.post("/v1/skills/{skill_id}/render", response_model=Envelope[SkillRendered])
+async def render_skill(rt: Rt, skill_id: str, body: SkillRenderInput) -> JSONResponse:
+    """The published version's text with the inputs filled in, for one part when the skill has parts. A read: it
+    takes a service token holding skills:view, as the MCP prompts call it. 422 `skill_not_published`,
+    `part_required`, `unknown_part`, `unknown_input` or `missing_input`."""
+    return ok(await render_published(rt, skill_id, body.part, body.inputs))
 
 
 async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, by: str) -> None:

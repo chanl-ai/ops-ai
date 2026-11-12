@@ -3,7 +3,9 @@ pinned on agents by `{skillId, version}`. Versions are immutable once published;
 is requested. Publish requests are the registry's (`registry_publish_requests`, kind `skill`).
 
 A version's `content`: name, slug, useWhen, loading (`on_match` | `always`), instructions, toolIds, knowledgeBases,
-guardrails, inputs (absent when the skill takes none). `tokens` is what the body adds to a turn when loaded.
+guardrails, inputs (absent when the skill takes none), parts (absent when the skill has none: each part is
+{slug, name, useWhen, instructions, inputs, toolIds} read with the shared instructions). `tokens` is what the largest
+load adds to a turn: the whole body, or the shared instructions plus the longest part.
 """
 
 from __future__ import annotations
@@ -85,6 +87,7 @@ LABELS = {
     "guardrails": "guardrails",
     "refusal": "refusal",
     "inputs": "inputs",
+    "parts": "parts",
 }
 
 
@@ -93,10 +96,13 @@ def changes_between(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
 
 
 def tokens_of(content: dict[str, Any]) -> int:
-    """What the body adds to a turn, at four characters a token: the instructions plus the guardrail lines."""
+    """What the body adds to a turn, at four characters a token: the instructions plus the guardrail lines, and with
+    parts the longest part on top, since a part is always read with the shared instructions."""
     lines: list[Any] = list(content.get("guardrails") or [])
     text = str(content.get("instructions") or "") + "".join(str(g) for g in lines)
-    return max(1, (len(text) + 3) // 4)
+    parts: list[dict[str, Any]] = list(content.get("parts") or [])
+    longest = max((len(str(p.get("instructions") or "")) for p in parts), default=0)
+    return max(1, (len(text) + longest + 3) // 4)
 
 
 class SkillRegistry:
