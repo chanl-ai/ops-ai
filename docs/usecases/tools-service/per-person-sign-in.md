@@ -67,3 +67,7 @@ the request body.
 
 Step 4 reads the editor from the fake Salesforce, which takes it from the bearer token's subject, so a call made with
 the team's or another person's token fails it. Step 7 fails if tools-service reads `actingFor` from the body.
+
+## Setup state
+
+The account read goes through `required()`. On 2026-11-12 steps 14 to 18 fail on the console pages for Your connections and the app's page.

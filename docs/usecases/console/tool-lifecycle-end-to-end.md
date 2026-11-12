@@ -44,3 +44,7 @@ calls a real model provider.
 
 Each pending step fails today for the reason named in its check. Step 7's reply "Here is what I found." comes only
 after a tool result; without the grant the scripted model answers "I could not find that.".
+
+## Setup state
+
+The test-run responses go through `required()`. On 2026-11-12 steps 5 to 10 fail, with and without this change: step 5's write answers 403 deny, and the chat steps follow from it.

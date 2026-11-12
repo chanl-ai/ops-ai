@@ -109,3 +109,7 @@ Step 21: the app is not in `?only=connected` before its test passes. Today a sav
 check fails until S1 lands. Step 22 pairs the viewer's 403 with the admin's turn-on in step 21.
 
 Screenshots of each screen at 1280 in light and dark go to `evidenceDir('607', 'uc')`, beside the mock's frames.
+
+## Setup state
+
+The account, app and run reads go through `required()`. On 2026-11-12 steps 2, 4, 6, 7, 7b, 11, 12, 40, 42, 44 and 46 fail on the console's moved pages and the Tools tabs.

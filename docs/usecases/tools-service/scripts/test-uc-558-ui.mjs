@@ -251,7 +251,7 @@ try {
           const everyone = admin.getByTestId('app-everyone');
           await everyone.waitFor({ timeout: 90_000 });
           const first = await everyone.getAttribute('data-state');
-          const read = async () => (await call(tools, 'GET', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya)).data ?? {};
+          const read = async () => required(await call(tools, 'GET', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya), 'read the account');
           const until = async (want) => {
             let now = await read();
             for (let i = 0; i < 20 && now.signIn !== want; i++) await admin.waitForTimeout(500), (now = await read());

@@ -191,7 +191,7 @@ try {
 
         await step('17 granted and saved, the agent page names the tool by its title', async () => {
           // The agent page saves a change as it is made, so the grant is read back rather than saved by a button.
-          const stored = await until(async () => (await call(agents, 'GET', `/v1/agents/${agent.id}`, priya)).data ?? {}, (a) => (a.toolIds ?? []).includes('salesforce_find_cases'), 30);
+          const stored = await until(async () => required(await call(agents, 'GET', `/v1/agents/${agent.id}`, priya), 'read the agent'), (a) => (a.toolIds ?? []).includes('salesforce_find_cases'), 30);
           await page.reload({ waitUntil: 'domcontentloaded' });
           const chip = picker.getByText('Find cases', { exact: true });
           const named = await chip.waitFor({ timeout: 60_000 }).then(() => true, () => false);

@@ -274,7 +274,7 @@ try {
           const accounts = (await page.getByRole('tabpanel').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-connected-team');
           const conn = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
-          const detail = (await call(tools, 'GET', `/v1/apps/${APP}/accounts/${conn?.connectionId}`, priya)).data ?? {};
+          const detail = required(await call(tools, 'GET', `/v1/apps/${APP}/accounts/${conn?.connectionId}`, priya), 'read the account');
           check(
             '4 Connect in the Connect window, allow as the team account, and the app’s page lists it as the default',
             suggested === 'Person desk · Operations' && /Cancel/.test(said) && /Person desk/.test(accounts) && /Default/.test(accounts) && detail.signedIn?.account === 'harbor.ops' && popups.length === 2,
@@ -682,7 +682,7 @@ try {
           await page.waitForTimeout(800);
           const rows = (await page.getByRole('tabpanel').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-accounts');
-          const page_ = (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}`, priya)).data ?? {};
+          const page_ = required(await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}`, priya), 'read the app');
           const accounts = (page_.accounts ?? []).filter((a) => a.kind !== 'person').map((a) => [a.name, a.default, a.status]);
           check(
             '11 Priya connects another account named EU desk and allows it as the EU team account; both are listed, the first the default',
@@ -758,7 +758,7 @@ try {
           // A run acting for a person waits only while no team account stands in for them: each person signs in, with
           // no team backup (Settings' switch keeps the team's as backup, so the API sets this one).
           const teamAccount = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP)?.connectionId;
-          const held = (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}/accounts/${teamAccount}`, priya)).data ?? {};
+          const held = required(await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}/accounts/${teamAccount}`, priya), 'read the team account');
           const personal = await call(tools, 'PATCH', `/v1/apps/${encodeURIComponent(APP)}/accounts/${teamAccount}`, priya, { revision: held.revision, signIn: 'person', teamBackup: false });
           const flow = `uc607_${Math.random().toString(36).slice(2, 8)}`;
           const node = (id, type, parameters = {}) => ({ id, type, typeVersion: 1, name: id, parameters });
@@ -778,7 +778,7 @@ try {
           await call(agents, 'POST', `/v1/workflows/definitions/${flow}/publish-requests`, priya, {});
           const started = await call(agents, 'POST', '/v1/runs', priya, { workflowId: flow, input: {} });
           const runId = String(started.data?.id ?? started.data?.runId ?? '');
-          const runNow = async () => (await call(agents, 'GET', `/v1/runs/${runId}`, priya)).data ?? {};
+          const runNow = async () => required(await call(agents, 'GET', `/v1/runs/${runId}`, priya), 'read the run');
           let run = await runNow();
           for (let i = 0; i < 60 && !['waiting', 'succeeded', 'failed'].includes(run.status); i++) await new Promise((r) => setTimeout(r, 1000)), (run = await runNow());
           // The run's own page shows the task it waits on, with the same two actions.
@@ -920,7 +920,7 @@ async function openSettings(page, consoleUrl, appId) {
   await page.getByTestId('app-settings').waitFor({ timeout: 60_000 });
 }
 /** One account of an app, by its app's id and its own. */
-const accountOf = async (headers, appId, accountId) => (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(appId)}/accounts/${accountId}`, headers)).data ?? {};
+const accountOf = async (headers, appId, accountId) => required(await call(tools, 'GET', `/v1/apps/${encodeURIComponent(appId)}/accounts/${accountId}`, headers), 'read the account');
 const BANK_KEY = 'test-bank-key';
 const WRONG_KEY = 'not-the-bank-key';
 

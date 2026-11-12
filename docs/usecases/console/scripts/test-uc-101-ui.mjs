@@ -3,7 +3,7 @@
 // key in the query string, as the fake's legacy route takes it) and a mock answer are set up through the API; everything
 // after is clicked on the REST tool page (the API-client layout; functions keep the Function workbench). Each step is
 // checked on its own.
-import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -62,7 +62,8 @@ await withUiStack(
         const ran = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${id}/test`), { timeout: 60_000 }));
         await panel.getByTestId('run').click();
         const res = await ran;
-        return { res, body: res ? await res.text() : '', data: res ? (JSON.parse((await res.text()) || '{}').data ?? {}) : {} };
+        const body = res ? await res.text() : '';
+        return { res, body, data: required({ status: res?.status() ?? 0, data: body ? JSON.parse(body).data : undefined, text: body }, 'module test run') };
       };
       const tab = async (name) => {
         await panel.getByRole('tab', { name }).click();

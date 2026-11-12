@@ -3,7 +3,7 @@
 // checks a header key on most routes and a query key on its statement route; the agents service (scripted model, no
 // provider) takes its tools from tools-service. Each step is checked on its own, so one failing step still lets the
 // later ones report.
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, required, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -68,7 +68,8 @@ async function tryOperation(page, consoleUrl, moduleId, op, fields) {
   const ran = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${moduleId}/test`), { timeout: 60_000 }));
   await panel.getByRole('button', { name: 'Run' }).click();
   const res = await ran;
-  return { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), data: res ? ((await res.json().catch(() => ({}))).data ?? {}) : {} };
+  const text = res ? await res.text() : '';
+  return { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), data: required({ status: res?.status() ?? 0, data: text ? JSON.parse(text).data : undefined, text }, `test run of ${op}`) };
 }
 
 /** The bank's own record of the account, read through the gateway as the test call does. */

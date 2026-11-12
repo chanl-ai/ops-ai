@@ -34,3 +34,7 @@ before the 64-character rule.
 | Layer | Script | State |
 |---|---|---|
 | ui | `console/scripts/test-uc-107-ui.mjs` | passing |
+
+## Setup state
+
+The live-run response goes through `required()`. On 2026-11-12 step 1b (storage credentials load as skeleton rows) fails, with and without this change.
