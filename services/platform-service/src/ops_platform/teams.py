@@ -42,7 +42,9 @@ class Members:
     # Where a caller's role assignments are read for `require_admin`; the tenant's RoleStore unless a test gives one.
     roles: RoleStore | None = None
 
-    async def require_admin(self, actor: Actor, area: str = "access", action: str = "manage") -> None:
+    async def require_admin(
+        self, actor: Actor, area: str = "access", action: str = "manage", *, in_team: bool = False
+    ) -> None:
         """`can(area, action)` in the actor's team, from the roles the database holds now rather than the token's, so a
         demoted admin loses the right at once. The refusal keeps its documented code, `admin_required`."""
         roles = self.roles or RoleStore(self.store.db)
@@ -69,7 +71,7 @@ class Members:
         )
         # The built-in roles too, so a refusal names who holds the cell in this workspace.
         await access.grids.load(actor.tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
-        access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required")
+        access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required", in_team=in_team)
 
     async def invite(self, actor: Actor, emails: list[str], role: str) -> dict[str, Any]:
         await self.require_admin(actor, "access", "create")

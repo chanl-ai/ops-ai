@@ -29,6 +29,9 @@ class Policy:
     changed_by: tuple[str, str] = ("settings", "manage")
     # A value per team ({team: value}): a change sets the acting team's part only, checked in that team.
     per_team: bool = False
+    # Where `changed_by` is held: "security" (the Security team, for a Security cell) or "team" (the acting team, so a
+    # team's Admin sets their own team's part).
+    held_in: str = "security"
     # Read live from platform-service on each decision (GET /v1/policies/{key}), never carried in a token, so a change
     # applies at once rather than at the next token refresh.
     live: bool = False
@@ -131,6 +134,7 @@ POLICIES: tuple[Policy, ...] = (
         # A team admin's: settings.manage in the team.
         changed_by=("settings", "manage"),
         per_team=True,
+        held_in="team",
         live=True,
         title="Ask before an agent changes anything in an app",
     ),
@@ -142,6 +146,7 @@ POLICIES: tuple[Policy, ...] = (
         kind="app_changes_by_app",
         changed_by=("settings", "manage"),
         per_team=True,
+        held_in="team",
         live=True,
         title="Approval by app",
     ),
@@ -176,6 +181,7 @@ POLICIES: tuple[Policy, ...] = (
         # A team admin's: settings.manage in the team, which builders and members do not hold.
         changed_by=("settings", "manage"),
         per_team=True,
+        held_in="team",
         live=True,
         title="Apps that change without asking",
     ),

@@ -214,8 +214,6 @@ def tools_caller(p: Principal) -> Caller:
         tenant_id=p.tenant_id,
         name=p.name,
         team=Team(id=str(p.team_id), name="Ops", owner_groups=(), scope="owned"),
-        roles=dict(p.roles),
-        team_role=p.role,
         verified=True,
         principal=p,
     )

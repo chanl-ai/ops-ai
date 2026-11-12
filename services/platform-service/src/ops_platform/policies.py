@@ -37,13 +37,14 @@ class Policies:
         return self._rows(await self.store.values(tenant_id))
 
     async def set(self, actor: Actor, key: str, value: Any) -> dict[str, Any]:
-        # The cell the policy names: settings.manage in the security team for most, chat.manage for memory retention.
+        # The cell the policy names: settings.manage in the security team for most (in the acting team for a team's
+        # approval rule, `held_in`), chat.manage for memory retention.
         # An old key lands in appChanges / appChangesByApp (the store moves it), so the cell checked is that key's:
         # otherwise a holder of the old key's cell could change what its cell never covered.
         landing = {"toolWritesNeedApproval": "appChanges"}.get(key, "appChangesByApp") if key in OLD_KEYS else key
         policy = BY_KEY.get(landing)
         area, action = policy.changed_by if policy else ("settings", "manage")
-        await self.members.require_admin(actor, area, action)
+        await self.members.require_admin(actor, area, action, in_team=bool(policy and policy.held_in == "team"))
         if policy and policy.maximum and type(value) is int and value > policy.maximum:
             raise Unprocessable(f"{policy.title} is at most {policy.maximum} hours.", code="policy_value")
         await self._check_reviewer_roles(actor, key, value)

@@ -154,6 +154,7 @@ class Access:
         protection: str | None = None,
         speaking_of: str | None = None,
         role: str | None = None,
+        in_team: bool = False,
     ) -> Scope:
         """Returns the scope the caller holds, or raises 403. `team` is the team that owns the record (None: the team
         the request acts in, for a create); `owner` is the record's owner or creator (email), for `own` scope.
@@ -166,7 +167,8 @@ class Access:
         says "Maya asked for this" instead of "You asked for this". `role` is a role id the caller must also hold in
         the team (a review that names its reviewer): a membership name maps to it as `roles_in` reads it, and an `*`
         assignment counts in every team. A workspace Admin (an `*` Admin assignment) may decide for any named role; a
-        team Admin holds only the roles the team gives them, so a review naming a compliance group waits for it."""
+        team Admin holds only the roles the team gives them, so a review naming a compliance group waits for it.
+        `in_team` holds a Security cell in the team instead, for a per-team setting a team's Admin changes."""
         you, your, own = (speaking_of, f"{speaking_of}'s", "their") if speaking_of else ("You", "Your", "your")
         if (area, action) not in _CELLS:
             raise ValueError(f"{area}.{action} is not in the catalogue")
@@ -187,15 +189,16 @@ class Access:
             return "all"
         if p.kind == "api_key":
             return _key(p, area, action, team=team, owner=owner, what=what)
-        held_in = self.security_team_of(p) if (area, action) in SECURITY_TEAM_ACTIONS else team or p.team_id
-        if held_in is None and (area, action) in SECURITY_TEAM_ACTIONS:
+        security = (area, action) in SECURITY_TEAM_ACTIONS and not in_team
+        held_in = self.security_team_of(p) if security else team or p.team_id
+        if held_in is None and security:
             raise Forbidden(
                 f"This workspace names no Security team, so nobody may {action} {what}. A workspace admin names it.",
                 code="no_security_team",
             )
         if held_in is None:
             raise Forbidden("Choose a team with the X-Team-Id header.", code="team_required")
-        if (area, action) not in SECURITY_TEAM_ACTIONS and not from_any_team:
+        if not security and not from_any_team:
             _same_team(p, held_in, action, what)
         scope = self.scope(p, area, action, held_in)
         if scope is None:
@@ -325,6 +328,7 @@ def can(
     code: str = "role_required",
     protection: str | None = None,
     role: str | None = None,
+    in_team: bool = False,
 ) -> Scope:
     """`Access.can` with built-in grids and the Security team the token names."""
     return DEFAULT.can(
@@ -340,6 +344,7 @@ def can(
         code=code,
         protection=protection,
         role=role,
+        in_team=in_team,
     )
 
 
