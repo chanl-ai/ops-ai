@@ -14,6 +14,7 @@ from ops_agents.activities.gateway import (
     GatewayToolExecutor,
     RunContext,
 )
+from ops_agents.activities.tool_directory import OperationRef
 from ops_identity import ServiceClient, dev_service_signer
 
 from .conftest import Gateway
@@ -35,11 +36,32 @@ async def test_a_read_runs_through_the_gateway_and_is_logged(gateway: Gateway) -
     assert [(r["tool"], r["access"], r["decision"]) for r in rows] == [("lookup_account", "read", "allow")]
 
 
-async def test_refusal_reaches_the_model_as_a_tool_error(gateway: Gateway) -> None:
+class KeptList:
+    """A directory whose kept list may predate the team turning approvals on."""
+
+    def __init__(self) -> None:
+        self.forgotten = 0
+
+    async def operations(self) -> list[OperationRef]:
+        return []
+
+    def forget(self) -> None:
+        self.forgotten += 1
+
+
+async def test_a_write_the_turn_thought_free_is_held_for_approval_not_refused_in_token_words(gateway: Gateway) -> None:
+    """Approvals turned on after the turn read its tool list: the gateway wants a token the turn never asked for. The
+    turn pauses for approval in plain words, and the kept list is dropped so the next turn reads the new answer."""
     RUN_CONTEXT.set(RunContext(thread=gateway.thread))
-    out = await executor(gateway).execute("request_document", DOC, key="k2", approval_token=None)
+    kept = KeptList()
+    client = GatewayClient(
+        ServiceClient(gateway.client, dev_service_signer(), "agents", "tools", tenant=lambda: "local")
+    )
+    out = await GatewayToolExecutor(client, kept).execute("request_document", DOC, key="k2", approval_token=None)
     assert not out.ok
-    assert out.output == "The tool gateway refused this call: write needs an approval token."
+    assert out.needs_review and "token" not in out.needs_review, out
+    assert "token" not in str(out.output), out.output
+    assert kept.forgotten == 1, "the stale tool list must be dropped"
 
 
 async def test_write_carries_thread_and_step_from_the_run(gateway: Gateway) -> None:

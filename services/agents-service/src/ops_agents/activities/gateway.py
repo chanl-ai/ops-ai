@@ -108,6 +108,11 @@ class GatewayRefused(Exception):
 
 
 EXPIRED = "approval token has expired"
+# OPA's reason for a write sent with no token that the team's settings make wait (policy/gateway.rego).
+TOKEN_MISSING = "write needs an approval token"
+# What the person and the model read when a write the turn thought free is held: approvals were turned on after the
+# turn read its tool list.
+HELD = "this change needs approval before it runs"
 # The gateway refuses a write its check before sending wants a person for with this code (tools-service send_check).
 NEEDS_REVIEW_CODE = "needs_review"
 NEEDS_REVIEW = "the approval is too old to renew; it needs a fresh review"
@@ -357,6 +362,13 @@ class GatewayToolExecutor:
                 # Check before sending: the kernel pauses the turn for a person with the reason.
                 why = e.reasons[0] if e.reasons else str(e)
                 return ToolOutcome(False, f"This needs a person's approval first: {why}", needs_review=why)
+            if approval_token is None and e.code == "gateway_refused" and TOKEN_MISSING in e.reasons:
+                # The turn's tool list said this write runs freely, so it was sent with no token; the team has since
+                # turned approvals on. The list is dropped, so the approval node and the next turn read the new answer,
+                # and the turn pauses for approval like any write that waits.
+                if (forget := getattr(self._directory, "forget", None)) is not None:
+                    forget()
+                return ToolOutcome(False, f"Held: {HELD}.", needs_review=HELD)
             # Back to the model as information, like any tool error; the gateway has logged the refusal.
             return ToolOutcome(False, f"The tool gateway refused this call: {e}.")
         except ServiceCallError as e:
