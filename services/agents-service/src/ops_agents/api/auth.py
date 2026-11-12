@@ -70,6 +70,19 @@ def caller_in(area: str) -> Callable[..., Awaitable[Principal]]:
     return dependency
 
 
+def reader_of(area: str) -> Callable[..., Awaitable[Principal]]:
+    """`caller` for a router's reads: a person needs `<area>.view` in the team the request acts in (403 `forbidden`),
+    a service token `<area>:view`. An API key keeps its own path: it holds no view cell and reads only what its
+    routes give it, the runs it starts."""
+
+    async def dependency(p: CurrentCaller) -> Principal:
+        if p.kind != "api_key":
+            can(p, area, "view", team=p.team_id or None, what=f"the team's {area}", code="forbidden")
+        return _principal(p)
+
+    return dependency
+
+
 def _principal(p: Caller) -> Principal:
     return Principal(
         name=p.name or p.email,
