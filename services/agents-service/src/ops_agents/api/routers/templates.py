@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from ops_contracts.chat import WireModel
 from ops_documents_client import DocumentsClient, DocumentsRefused
@@ -503,16 +503,25 @@ async def _make_agent(rt: Runtime, me: Principal, team: str, t: dict[str, Any], 
 async def _skill_content(rt: Runtime, team: str, t: dict[str, Any], name: str, bases: list[str]) -> dict[str, Any]:
     """The skill create route's content, through `check_content` (a tool the team is not offered is refused)."""
     b = cast(dict[str, Any], t.get("body") or {})
-    fields = SkillCreateInput.model_validate(
-        {
-            **{k: v for k, v in b.items() if k not in ("tool_ids", "toolIds", "owner_team", "ownerTeam", "origin")},
-            "name": name,
-            "owner_team": team,
-            "tool_ids": list(t["requires"]["tools"]),
-            "knowledge_bases": list(bases),
-            "origin": "imported",
-        }
-    )
+    try:
+        fields = SkillCreateInput.model_validate(
+            {
+                **{k: v for k, v in b.items() if k not in ("tool_ids", "toolIds", "owner_team", "ownerTeam", "origin")},
+                "name": name,
+                "owner_team": team,
+                "tool_ids": list(t["requires"]["tools"]),
+                "knowledge_bases": list(bases),
+                "origin": "imported",
+            }
+        )
+    except ValidationError as e:
+        # The request is well formed and the template is not, so 422 as a workflow failing the engine's checks.
+        fields_wrong = sorted({".".join(str(p) for p in err["loc"]) for err in e.errors()})
+        raise Unprocessable(
+            f"{t['title']} version {t['version']} is not a skill this service can make: {', '.join(fields_wrong)}.",
+            code="template_invalid",
+            details={"fields": fields_wrong},
+        ) from e
     return await check_content(rt, fields.model_dump(by_alias=True))
 
 

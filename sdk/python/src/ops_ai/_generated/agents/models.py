@@ -1640,32 +1640,18 @@ class Skill(TypedDict, closed=True):
     version: int
 
 
-class SkillCreateInput(TypedDict, closed=True):
-    guardrails: NotRequired[list[str]]
-    instructions: str
-    knowledgeBases: NotRequired[list[str]]
-    loading: NotRequired[Literal["on_match", "always"]]
+class SkillInput(TypedDict, closed=True):
+    description: NotRequired[str]
     name: str
-    origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
-    ownerTeam: str
-    refusal: NotRequired[str]
-    requestReview: NotRequired[bool]
-    reviewNote: NotRequired[str]
-    toolIds: NotRequired[list[str]]
-    useWhen: NotRequired[str]
+    required: NotRequired[bool]
+    type: NotRequired[Literal["string"]]
 
 
-class SkillDraftPatch(TypedDict, closed=True):
-    baseVersion: int
-    guardrails: NotRequired[list[str] | None]
-    instructions: NotRequired[str | None]
-    knowledgeBases: NotRequired[list[str] | None]
-    loading: NotRequired[Literal["on_match", "always"] | None]
-    name: NotRequired[str | None]
-    note: NotRequired[str]
-    refusal: NotRequired[str | None]
-    toolIds: NotRequired[list[str] | None]
-    useWhen: NotRequired[str | None]
+class SkillInputField(TypedDict, closed=True):
+    description: NotRequired[str]
+    name: str
+    required: NotRequired[bool]
+    type: NotRequired[Literal["string"]]
 
 
 class SkillList(TypedDict, closed=True):
@@ -3220,6 +3206,7 @@ class RunRow(TypedDict, closed=True):
 
 class SkillContent(TypedDict, closed=True):
     guardrails: list[str]
+    inputs: NotRequired[list[SkillInputField]]
     instructions: str
     knowledgeBases: list[str]
     loading: Literal["on_match", "always"]
@@ -3229,6 +3216,37 @@ class SkillContent(TypedDict, closed=True):
     slug: str
     tools: list[SkillToolRef]
     useWhen: str
+
+
+class SkillCreateInput(TypedDict, closed=True):
+    guardrails: NotRequired[list[str]]
+    inputs: NotRequired[list[SkillInput]]
+    instructions: str
+    knowledgeBases: NotRequired[list[str]]
+    loading: NotRequired[Literal["on_match", "always"]]
+    name: str
+    origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
+    ownerTeam: str
+    refusal: NotRequired[str]
+    requestReview: NotRequired[bool]
+    reviewNote: NotRequired[str]
+    slug: NotRequired[str | None]
+    toolIds: NotRequired[list[str]]
+    useWhen: NotRequired[str]
+
+
+class SkillDraftPatch(TypedDict, closed=True):
+    baseVersion: int
+    guardrails: NotRequired[list[str] | None]
+    inputs: NotRequired[list[SkillInput] | None]
+    instructions: NotRequired[str | None]
+    knowledgeBases: NotRequired[list[str] | None]
+    loading: NotRequired[Literal["on_match", "always"] | None]
+    name: NotRequired[str | None]
+    note: NotRequired[str]
+    refusal: NotRequired[str | None]
+    toolIds: NotRequired[list[str] | None]
+    useWhen: NotRequired[str | None]
 
 
 class SkillOptions(TypedDict, closed=True):

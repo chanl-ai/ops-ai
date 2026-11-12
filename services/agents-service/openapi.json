@@ -15926,6 +15926,13 @@
             "title": "Guardrails",
             "type": "array"
           },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SkillInputField"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
           "instructions": {
             "title": "Instructions",
             "type": "string"
@@ -16008,6 +16015,14 @@
             "title": "Guardrails",
             "type": "array"
           },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SkillInput"
+            },
+            "maxItems": 20,
+            "title": "Inputs",
+            "type": "array"
+          },
           "instructions": {
             "title": "Instructions",
             "type": "string"
@@ -16062,6 +16077,18 @@
             "default": "",
             "title": "Reviewnote",
             "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
           },
           "toolIds": {
             "items": {
@@ -16323,6 +16350,21 @@
             ],
             "title": "Guardrails"
           },
+          "inputs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkillInput"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
+          },
           "instructions": {
             "anyOf": [
               {
@@ -16421,6 +16463,69 @@
           "baseVersion"
         ],
         "title": "SkillDraftPatch",
+        "type": "object"
+      },
+      "SkillInput": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "string",
+            "default": "string",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SkillInput",
+        "type": "object"
+      },
+      "SkillInputField": {
+        "additionalProperties": false,
+        "description": "One value a person or assistant gives when using the skill; an MCP client asks for it as a prompt argument.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "string",
+            "default": "string",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SkillInputField",
         "type": "object"
       },
       "SkillList": {
