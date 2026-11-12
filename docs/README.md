@@ -383,7 +383,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/an-agent-reads-a-team-file.md` | uc-613: An agent reads a team's file and a document's fields by its type, and never another team's |
 | `usecases/agents-service/agent-guardrails-blocked-topics.md` | uc-085: an agent refuses a blocked topic before answering, through a guardrail it pins by version |
 | `usecases/kb-service/knowledge-cited-answers.md` | uc-080: uploaded PDFs indexed by page and section; a granted agent cites them in chat; a replaced document leaves a change row |
-| `usecases/kb-service/add-documents-from-files.md` | uc-129: Add documents on a base uploads to Files or picks from it; both index and Files keeps them referenced |
+| `usecases/knowledge/add-documents-from-files.md` | uc-129: Add documents on a base uploads to Files or picks from it; both index and Files keeps them referenced |
 | `usecases/kb-service/people-and-services-read-knowledge-usage.md` | uc-399: People and services read knowledge usage, refs, search and workflow refs on one route each |
 | `usecases/files-service/file-lifecycle.md` | uc-093: James stores a PDF through files-service's proxy route; download waits for the scan hook; Priya holds it and delete is refused; released, it deletes |
 | `usecases/files-service/file-team-boundary.md` | uc-094: another team's admin gets 404 on every files-service route for a file it does not own; another tenant's service gets 404 |

@@ -45,7 +45,9 @@ def main() -> None:
                 fake = stack.enter_context(fake_openai(RERANK_RULES))
                 models_url = stack.enter_context(models({"OPS_MODELS_FAKE_OPENAI_URL": fake}))
                 env = {"OPS_MODELS_URL": models_url, "OPS_MODELS_KEY": "mk_dev_kb"}
-            services["kb"] = str(stack.enter_context(kb(Path(tmp) / "files", env=env)).base_url).rstrip("/")
+            store = stack.enter_context(kb(Path(tmp) / "files", env=env))
+            services["kb"] = str(store.base_url).rstrip("/")
+            services["files"] = store.files_url.rstrip("/")
         if not services:
             raise SystemExit(f"page_stack starts the knowledge services only; the page asks for: {ns.services!r}")
         profile = {"baseUrl": "http://127.0.0.1", "team": "team_ops", "services": services}

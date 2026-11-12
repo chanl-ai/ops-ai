@@ -111,7 +111,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-141 | console | The one Activity page lists a run by name, filters by kind on the server, narrows to a source, and opens the run | ui | `console/activity-page.md` |
 | uc-142 | console | Channels on real data: the hub, tab dots and an email landing match /v1/channels; Deployments lands on Channels; an embed's version changes in its row | ui | `console/channels-real.md` |
 | uc-143 | console | Access › Tool access lists every workflow's tool access by view, counted on the server | ui | `console/tool-access.md` |
-| uc-129 | kb-service | A builder adds documents to a knowledge base by uploading them or picking them from Files | ui | `kb-service/add-documents-from-files.md` |
+| uc-129 | kb-service | A builder adds documents to a knowledge base by uploading them or picking them from Files | ui | `knowledge/add-documents-from-files.md` |
 | uc-160 | platform-service | A person resets their password by a mailed link and signs in with it; the demo password stops working for them | api, ui | `platform-service/password-sign-in-and-reset.md` |
 | uc-161 | platform-service | A first OIDC sign-in creates a chat-only member once, and the console offers SSO for that email | api, ui | `platform-service/oidc-sign-in-creates-a-chat-user.md` |
 | uc-162 | platform-service | A person signs in through SAML and steps up at the same provider, which must ask again | api | `platform-service/saml-sign-in-and-step-up.md` |

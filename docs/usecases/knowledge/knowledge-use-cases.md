@@ -17,7 +17,7 @@ console step is only written once the same step exists through the SDK.
 | uc-676 | Typed text and pushed items | Typed pages and pushed items are indexed, versioned and cited; the same push changes nothing | api, sdk, ui | ok |
 | uc-677 | Turn on rerank and rewrite | An owner turns them on and a hard question gets a better passage | api, sdk, ui | sdk and ui pass; CLI cannot set retrieval |
 | uc-678 | Take in SharePoint and Confluence | A team takes in libraries and spaces, kept current and cited | api, sdk, ui | sdk and ui pass; CLI cannot pick or make plugin sources |
-| uc-129 | Add documents from Files | A builder adds files already in Files to a base | ui | ui ok |
+| uc-129 | Add files from Files | A builder adds files already in Files to a base | sdk, ui | sdk and ui pass; CLI cannot add a file by id |
 | uc-096 | Knowledge base end to end | A person creates a base, adds files and a page, tests a question and retires it | ui | ui ok |
 | uc-113 | Pick a base past the first hundred | The agent page's picker searches on the server | ui | ui ok |
 | uc-138 | Knowledge pages follow what the caller may do | Edit and delete controls follow the record's own flags | ui | ui ok |
