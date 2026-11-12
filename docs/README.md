@@ -70,7 +70,7 @@ names it or a folder it takes whole, and a page it does not place fails the site
 | Reader | Read in this order |
 |---|---|
 | Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0016; every ADR is an option, not decided, until it is confirmed) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
+| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
 ## Requirements
@@ -111,7 +111,15 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/channels-and-deployments.md` | Deployments, the adapter contract, identity and keys per channel, busy-thread input, the mailbox adapter |
 | `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
-| `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, decided questions and the exceptions register |
+| `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, approvals, the access rules and the exceptions register |
+| `architecture/platform-choices.md` | The product or library each part is built on today, with code paths; the current outcome of every record in `architecture/decisions/` |
+| `architecture/templates.md` | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not |
+| `architecture/knowledge-base.md` | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not |
+| `architecture/app-accounts.md` | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built |
+| `architecture/saml-sign-in.md` | Company sign-in over SAML: the checks, domain proof, first sign-in and group rules (built); certificates, test sign-in and break-glass (not built) |
+| `architecture/integrations.md` | Integrations in layers: plugins, auth configs, accounts, the gateway, triggers, events and MCP, with what is built per layer |
+| `architecture/console-areas.md` | The console's four areas (Work, Build, Data, Govern), the cells that offer each page, the area switcher and chat's links back (switcher designed, not built) |
+| `architecture/logging-and-data-writes.md` | One JSON log line per event with ids and redaction (built), and the store helper for a person's edit with revision check, audit and outbox (designed) |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
