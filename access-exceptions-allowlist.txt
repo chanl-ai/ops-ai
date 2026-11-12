@@ -29,7 +29,6 @@ services/files-service/src/ops_files/tenant_files.py refusal role_required 3 E13
 services/models-service/src/ops_models/app.py refusal images_not_cleared 1 E16
 services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 E16
 services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E44
-services/platform-service/src/ops_platform/store/signin.py role-name admin 2 E30
 services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45
 services/platform-service/src/ops_platform/store/teams.py role-name admin 1 E17
 services/platform-service/src/ops_platform/store/workspace.py role-name admin 1 E17

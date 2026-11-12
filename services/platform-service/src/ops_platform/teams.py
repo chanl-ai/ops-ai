@@ -13,10 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ops_access import BUILTIN_ROLES, Access, Grids, active
-from ops_identity import Principal
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized
-from ops_service_kit.ids import now_iso
 
 from .store.members import Actor, Bulk, Invite, NotTheInvitee, TeamArchivedError, TeamStore
 from .store.roles import RoleStore
@@ -48,29 +45,7 @@ class Members:
         """`can(area, action)` in the actor's team, from the roles the database holds now rather than the token's, so a
         demoted admin loses the right at once. The refusal keeps its documented code, `admin_required`."""
         roles = self.roles or RoleStore(self.store.db)
-        held = await roles.holdings(actor.tenant_id, actor.user_id)
-        live = active(held.assignments, now_iso())
-        version = await roles.version(actor.tenant_id)
-        p = Principal(
-            kind="person",
-            sub=actor.user_id,
-            email="",
-            name="",
-            roles={},
-            scopes=[],
-            tenant_id=actor.tenant_id,
-            team_id=actor.team_id,
-            team_ids=list(held.teams),
-            access={t: [a.role_id for a in live if a.team_id == t] for t in {a.team_id for a in live}},
-            permission_version=version,
-            auth_method="session",
-        )
-        access = Access(
-            security_team=await self.store.security_team_of(actor.tenant_id),
-            grids=Grids(fetch=lambda t, _v, ids: roles.grids(t, ids)),
-        )
-        # The built-in roles too, so a refusal names who holds the cell in this workspace.
-        await access.grids.load(actor.tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
+        p, access = await roles.live(actor.tenant_id, actor.user_id, team=actor.team_id)
         access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required", in_team=in_team)
 
     async def invite(self, actor: Actor, emails: list[str], role: str) -> dict[str, Any]:

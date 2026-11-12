@@ -19,13 +19,15 @@ from ops_access import (
     BUILTIN_IDS,
     BUILTIN_ROLES,
     OWNER,
+    Access,
     Assignment,
     Grant,
+    Grids,
     active,
     builtin_roles_for,
-    effective,
 )
 from ops_access.catalogue import ADMIN
+from ops_identity import Principal
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import lock_key
@@ -128,52 +130,27 @@ class RoleStore:
 
     async def holdings(self, tenant_id: str, user_id: str) -> Holdings:
         """The person's active teams and the assignments made to them or to one of those teams."""
-        mine = (
-            sa.select(teams.c.id, teams.c.name)
-            .join(members, members.c.team_id == teams.c.id)
-            .where(members.c.user_id == user_id, members.c.status == "active", teams.c.status == "active")
-        )
         async with self.db.tenant_tx(tenant_id) as c:
-            names = {str(r[0]): str(r[1]) for r in (await c.execute(mine)).all()}
-            subject = sa.or_(
-                sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
-                sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
-            )
-            q = (
-                sa.select(
-                    role_assignments.c.role_id,
-                    roles.c.name,
-                    role_assignments.c.team_id,
-                    role_assignments.c.subject_kind,
-                    role_assignments.c.expires_at,
-                )
-                .join(roles, roles.c.id == role_assignments.c.role_id)
-                .where(subject)
-                .order_by(role_assignments.c.created_at, role_assignments.c.id)
-            )
-            rows = (await c.execute(q)).all()
-            # An assignment in an archived team grants nothing there.
-            archived = {
-                str(t) for t in (await c.execute(sa.select(teams.c.id).where(teams.c.status != "active"))).scalars()
-            }
-            rows = [r for r in rows if str(r[2]) not in archived]
-            # A team named by an assignment but not a membership still needs its name.
-            extra = {str(r[2]) for r in rows} - set(names) - {"*"}
-            if extra:
-                more = await c.execute(sa.select(teams.c.id, teams.c.name).where(teams.c.id.in_(sorted(extra))))
-                names |= {str(r[0]): str(r[1]) for r in more.all()}
-        assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
-        return Holdings(teams=names, assignments=assignments)
+            return await holdings_in(c, user_id)
+
+    async def live(
+        self, tenant_id: str, user_id: str, *, team: str | None = None, conn: AsyncConnection | None = None
+    ) -> tuple[Principal, Access]:
+        """The person as `can` sees them now, built from the database with no token: a decision taken before a token
+        exists (which teams a sign-in may act in, whether a first SSO sign-in may link) or one that must not trust the
+        token's roles (a demoted admin). `conn` reads on the caller's own transaction."""
+        if conn is not None:
+            return await live_in(conn, tenant_id, user_id, team=team)
+        async with self.db.tenant_tx(tenant_id) as c:
+            return await live_in(c, tenant_id, user_id, team=team)
 
     async def workspace_admin(self, tenant_id: str, user_id: str, *, now: str) -> bool:
         """Whether the person holds `access.manage` through a role assigned in every team (`*`): a workspace admin,
         who acts in any team of the workspace whether or not they belong to it."""
-        held = await self.holdings(tenant_id, user_id)
-        every = [a for a in active(held.assignments, now) if a.team_id == ANY_TEAM]
-        if not every:
-            return False
-        grids = await self.grids(tenant_id, sorted({a.role_id for a in every}))
-        return ("access", "manage") in effective(every, grids, [ANY_TEAM], now).get(ANY_TEAM, {})
+        del now  # `live` reads the clock itself
+        p, access = await self.live(tenant_id, user_id)
+        # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
+        return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
 
     async def workspace_roles(self, tenant_id: str, user_ids: list[str], *, now: str) -> dict[str, list[str]]:
         """Each person's roles assigned in every team (`*`), by name, so a team's member list says where access beyond
@@ -544,6 +521,73 @@ async def _name_free(c: AsyncConnection, tenant_id: str, name: str, role_id: str
         q = q.where(roles.c.id != role_id)
     if (await c.execute(q)).first() is not None:
         raise RoleNameTakenError
+
+
+async def live_in(
+    c: AsyncConnection, tenant_id: str, user_id: str, *, team: str | None = None
+) -> tuple[Principal, Access]:
+    """`RoleStore.live` on the caller's transaction."""
+    held = await holdings_in(c, user_id)
+    live = active(held.assignments, now_iso())
+    version = await version_in(c, tenant_id)
+    p = Principal(
+        kind="person",
+        sub=user_id,
+        email="",
+        name="",
+        roles={},
+        scopes=[],
+        tenant_id=tenant_id,
+        team_id=team,
+        team_ids=list(held.teams),
+        access={t: [a.role_id for a in live if a.team_id == t] for t in {a.team_id for a in live}},
+        permission_version=version,
+        auth_method="session",
+    )
+    security = (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
+    access = Access(security_team=security, grids=Grids(fetch=lambda _t, _v, ids: _grids(c, ids)))
+    # The built-in roles too, so a refusal names who holds the cell in this workspace.
+    await access.grids.load(tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
+    # Loaded once on `c`; a later load would read on a transaction that has ended.
+    access.grids.fetch = None
+    return p, access
+
+
+async def holdings_in(c: AsyncConnection, user_id: str) -> Holdings:
+    """`RoleStore.holdings` on the caller's transaction."""
+    mine = (
+        sa.select(teams.c.id, teams.c.name)
+        .join(members, members.c.team_id == teams.c.id)
+        .where(members.c.user_id == user_id, members.c.status == "active", teams.c.status == "active")
+    )
+    names = {str(r[0]): str(r[1]) for r in (await c.execute(mine)).all()}
+    subject = sa.or_(
+        sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
+        sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
+    )
+    q = (
+        sa.select(
+            role_assignments.c.role_id,
+            roles.c.name,
+            role_assignments.c.team_id,
+            role_assignments.c.subject_kind,
+            role_assignments.c.expires_at,
+        )
+        .join(roles, roles.c.id == role_assignments.c.role_id)
+        .where(subject)
+        .order_by(role_assignments.c.created_at, role_assignments.c.id)
+    )
+    rows = (await c.execute(q)).all()
+    # An assignment in an archived team grants nothing there.
+    archived = {str(t) for t in (await c.execute(sa.select(teams.c.id).where(teams.c.status != "active"))).scalars()}
+    rows = [r for r in rows if str(r[2]) not in archived]
+    # A team named by an assignment but not a membership still needs its name.
+    extra = {str(r[2]) for r in rows} - set(names) - {"*"}
+    if extra:
+        more = await c.execute(sa.select(teams.c.id, teams.c.name).where(teams.c.id.in_(sorted(extra))))
+        names |= {str(r[0]): str(r[1]) for r in more.all()}
+    assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
+    return Holdings(teams=names, assignments=assignments)
 
 
 async def version_in(c: AsyncConnection, tenant_id: str) -> int:

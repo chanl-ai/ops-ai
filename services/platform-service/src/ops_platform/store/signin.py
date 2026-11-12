@@ -30,12 +30,11 @@ from ops_store import Guarantee
 
 from .audit import record, record_grants_ending
 from .members import Actor, end_membership
-from .roles import mirror_membership
+from .roles import live_in, mirror_membership
 from .tables import (
     members,
     password_credentials,
     password_resets,
-    role_assignments,
     sessions,
     signin_break_glass,
     signin_certificates,
@@ -822,7 +821,7 @@ class SignInStore:
         created = False
         jit_team = (p.jit_team_id or await default_team_in(c, p.tenant_id)) if p.jit_role else None
         if existing is not None:
-            if existing[1] != "active" or await _holds_admin(c, str(existing[0])):
+            if existing[1] != "active" or await _holds_admin(c, p.tenant_id, str(existing[0])):
                 # An admin links from their own signed-in session, never by an email the provider asserts: whoever
                 # controls the provider could otherwise sign in as any admin on a verified domain.
                 return None
@@ -1105,19 +1104,16 @@ async def _record_break_glass(
     )
 
 
-async def _holds_admin(c: AsyncConnection, user_id: str) -> bool:
-    """Whether the person is Admin of any team, by membership or by a grant, or on the break-glass list: none of them
-    is ever linked to a provider by the email it asserts."""
-    member = sa.select(members.c.id).where(
-        members.c.user_id == user_id, members.c.role == "admin", members.c.status == "active"
-    )
-    granted = sa.select(role_assignments.c.id).where(
-        role_assignments.c.subject_kind == "person",
-        role_assignments.c.subject_id == user_id,
-        role_assignments.c.role_id == "admin",
-    )
+async def _holds_admin(c: AsyncConnection, tenant_id: str, user_id: str) -> bool:
+    """Whether the person may manage access in any team they hold a role in, or in every team, or is on the break-glass
+    list: none of them is ever linked to a provider by the email it asserts. Decided by the cell through `can`, so a
+    custom role holding `access.manage` counts as Admin does."""
     listed = sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
-    return (await c.execute(member.union_all(granted, listed).limit(1))).first() is not None
+    if (await c.execute(listed)).first() is not None:
+        return True
+    p, access = await live_in(c, tenant_id, user_id)
+    held = {*p.team_ids, *p.access}
+    return any(access.may(p, "access", "manage", team=t, from_any_team=True) for t in held)
 
 
 async def _add_certificates(
