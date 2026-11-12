@@ -1,6 +1,6 @@
 # A team's skill is an assistant's prompt
 
-Status: current. Service: `agents-service`. Layers: sdk (Python; see Gaps).
+Status: current. Service: `agents-service`. Layers: mcp.
 
 In this example we will install the starter skill "Doc co-authoring" and fetch it from the team's MCP address as a
 prompt, with its inputs as the prompt's arguments. It assumes the starters pack is on for the team and the skill
@@ -10,8 +10,8 @@ declares the inputs `topic` and `doc_type`.
 |---|---|
 | Id | `uc-742` |
 | Area | Agents |
-| Runs | Python |
-| Run it | `make usecase-test UC=uc-742 LAYER=sdk` |
+| Runs | the Python MCP client, as an outside assistant connects |
+| Run it | `make usecase-test UC=uc-742 LAYER=mcp` |
 
 ## Who is in it
 
@@ -21,7 +21,7 @@ declares the inputs `topic` and `doc_type`.
 
 ## Before you start
 
-```python tab="Python" tab-group="language"
+```python tab="MCP"
 import asyncio
 import json
 import os
@@ -50,7 +50,7 @@ async def assistant():
 
 ### 1. Install the starter skill
 
-```python tab="Python" tab-group="language"
+```python tab="MCP"
 assert priya.templates.install("plugin:opsai.starters:doc-coauthoring")["created"] is True
 ```
 
@@ -58,7 +58,7 @@ Expected: installed.
 
 ### 2. The assistant finds it in the prompt list
 
-```python tab="Python" tab-group="language"
+```python tab="MCP"
 async def prompts():
     async with assistant() as c:
         return {p.name: p for p in (await c.list_prompts()).prompts}
@@ -71,7 +71,7 @@ Expected: `doc-coauthoring` with arguments `topic` and `doc_type`.
 
 ### 3. The prompt returns the skill with the arguments filled in
 
-```python tab="Python" tab-group="language"
+```python tab="MCP"
 async def get():
     async with assistant() as c:
         return await c.get_prompt("doc-coauthoring", {"topic": "Card dispute letters", "doc_type": "runbook"})
@@ -81,12 +81,6 @@ assert "Card dispute letters" in text
 ```
 
 Expected: the skill's instructions with the topic in them.
-
-## Gaps
-
-| Product fix | Step | What the TypeScript SDK and the command line cannot do |
-|---|---|---|
-| A TypeScript tab needs an MCP client in the repo's tooling, and `opsai` needs a command that reads the team's MCP prompts (`opsai mcp prompts`, `opsai mcp prompt`) | 2 to 3 | Neither tab can list or fetch a prompt on the team's MCP address; the page has Python tabs only |
 
 ## What proves it
 

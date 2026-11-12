@@ -362,7 +362,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-731 | agents-service | A team that makes a second guardrail of the same name is refused with name_taken, and the first keeps the plain slug | api | draft |
 | uc-733 | platform-service | A person connects an assistant to a team's MCP address with their company sign-in; a console token, another address and a person who left the team are refused | api, ui | failing |
 | uc-740 | agents-service | A team lists templates of each kind and installs a starter skill through the SDK | sdk, cli | page |
-| uc-741 | agents-service | An assistant on the team MCP address lists templates and installs one as the signed-in person | mcp | draft |
-| uc-742 | agents-service | A team skill is offered as an MCP prompt with its inputs as arguments | mcp | draft |
+| uc-741 | agents-service | An assistant on the team MCP address lists templates and installs one as the signed-in person | mcp | page |
+| uc-742 | agents-service | A team skill is offered as an MCP prompt with its inputs as arguments | mcp | page |
 | uc-723 | console | The console shows one area of pages at a time, chosen from the top bar and offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams, on a desktop and a phone | ui | failing |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |

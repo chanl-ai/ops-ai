@@ -51,5 +51,5 @@ States come from the registry and runs. "page" means the page runs on `make usec
 | Layer | Needs |
 |---|---|
 | sdk, cli | `lib/page_stack.py` starts the stack the page's Details row names. An agents page uses the templates stack (platform-service, tools-service with the starters pack and the team MCP address, agents-service) so a page starts one stack and not three |
-| mcp | A team address token from the company sign-in; the SDKs have no words for it, so a page connects with the official MCP client and the stack hands the token over (see uc-741) |
+| mcp | One MCP tab, run by the official Python MCP client the way Claude or Cursor connects; the stack does the company sign-in and hands the token over. No TypeScript or CLI tab is expected |
 | ui | Scripts on `/build/agents` with a screenshot at 1440 and 390 and a clip under 15 s and 2 MB (`OPS_USECASE_MEDIA=1`) |

@@ -10,11 +10,11 @@ import type { Layer } from './layers.ts';
 import { DB_VAR, dropDatabase, runDatabaseName } from './isolation.ts';
 import { commandFor, runScript } from './run.ts';
 
-export const TABS = ['Python', 'TypeScript', 'CLI'] as const;
+export const TABS = ['Python', 'TypeScript', 'CLI', 'MCP'] as const;
 export type Tab = (typeof TABS)[number];
 
-/** The tabs a layer runs: the two SDKs for `sdk`, the command line for `cli`. */
-export const LAYER_TABS: Partial<Record<Layer, Tab[]>> = { sdk: ['Python', 'TypeScript'], cli: ['CLI'] };
+/** The tabs a layer runs: the two SDKs for `sdk`, the command line for `cli`, an MCP client (Python, as Claude or Cursor connects) for `mcp`. */
+export const LAYER_TABS: Partial<Record<Layer, Tab[]>> = { sdk: ['Python', 'TypeScript'], cli: ['CLI'], mcp: ['MCP'] };
 
 export interface Block {
   tab: Tab;
@@ -125,8 +125,8 @@ function units(page: Page, tab: Tab): Unit[] {
  * Python: each block compiled under the page's name with its page line numbers, run in one namespace, so a
  * traceback points at the page and later steps see earlier steps' names.
  */
-export function pythonProgram(page: Page, sdkSrc: string): string {
-  const blocks = units(page, 'Python').map((u) => [u.label, u.block.line, u.block.code, u.step]);
+export function pythonProgram(page: Page, sdkSrc: string, tab: Tab = 'Python'): string {
+  const blocks = units(page, tab).map((u) => [u.label, u.block.line, u.block.code, u.step]);
   return [
     'import json, sys, traceback',
     `sys.path.insert(0, ${JSON.stringify(sdkSrc)})`,
@@ -204,7 +204,7 @@ export function extract(root: string, id: string): string[] {
   const page = parsePage(readFileSync(join(root, path), 'utf8'), path);
   const dir = join(root, '.logs/usecases/pages', id);
   mkdirSync(dir, { recursive: true });
-  const files: [string, Tab, string][] = [['python.py', 'Python', '#'], ['typescript.mts', 'TypeScript', '//'], ['cli.sh', 'CLI', '#']];
+  const files: [string, Tab, string][] = [['python.py', 'Python', '#'], ['typescript.mts', 'TypeScript', '//'], ['cli.sh', 'CLI', '#'], ['mcp.py', 'MCP', '#']];
   return files.map(([name, tab, mark]) => {
     const text = units(page, tab).map((u) => `${mark} ${u.label}\n${u.block.code}`).join('\n\n');
     writeFileSync(join(dir, name), `${text}\n`);
@@ -289,8 +289,8 @@ export async function runPage(root: string, path: string, layer: Layer, env: Nod
 }
 
 async function runTab(root: string, page: Page, tab: Tab, dir: string, work: string, env: NodeJS.ProcessEnv, say: (line: string) => void): Promise<{ code: number | null; output: string }> {
-  if (tab === 'Python') {
-    writeFileSync(join(dir, 'program.py'), pythonProgram(page, join(root, 'sdk/python/src')));
+  if (tab === 'Python' || tab === 'MCP') {
+    writeFileSync(join(dir, 'program.py'), pythonProgram(page, join(root, 'sdk/python/src'), tab));
     return runScript(commandFor(root, relative(root, join(dir, 'program.py')), 'python'), env, work);
   }
   if (tab === 'TypeScript') {
