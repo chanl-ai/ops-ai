@@ -51,7 +51,10 @@ await withUiStack(
         page.on('pageerror', (e) => errors.push(e.message));
         const response = await page.goto(`${consoleUrl}/oauth/authorize?${query}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByTestId('consent-allow').waitFor({ timeout: 15_000 }).catch(() => undefined);
+        // Snapshot before the iframe step: the browser's own blocked-frame error is not a page error.
+        let pageErrors = [];
         const text = (id) => page.getByTestId(id).innerText().catch(() => '');
+        pageErrors = [...errors];
         if (width === 1440) {
           check('the real redirect host is shown', (await text('consent-redirect-host')).includes('claude.example'), await text('consent-redirect-host'));
           check(
@@ -73,7 +76,7 @@ await withUiStack(
         }
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         check(`nothing is clipped sideways at ${width}`, overflow <= 0, overflow);
-        check(`no page errors at ${width}`, errors.length === 0, errors);
+        check(`no page errors at ${width}`, pageErrors.length === 0, pageErrors);
         await page.screenshot({ path: join(SHOTS, `uc-733-consent-${name}.png`) });
         await context.close();
       }
