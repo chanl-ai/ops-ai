@@ -49,48 +49,48 @@ export OPS_PROFILE=builder
 The knowledge owner makes an empty base for the handbook.
 
 ```python tab="Python" tab-group="language"
-handbook = ops.knowledge.add_base("Claims handbook")
+handbook = ops.knowledge.add_base("Claims handbook", owner="claims.lead@insurer.example")
 assert handbook["name"] == "Claims handbook"
 ```
 
 ```ts tab="TypeScript"
-const handbook = await ops.knowledge.addBase('Claims handbook');
+const handbook = await ops.knowledge.addBase('Claims handbook', { owner: 'claims.lead@insurer.example' });
 assert.equal(handbook.name, 'Claims handbook');
 ```
 
 ```bash tab="CLI"
-HANDBOOK=$(opsai kb create "Claims handbook" --json | jq -r .id)
+HANDBOOK=$(opsai kb create "Claims handbook" --owner claims.lead@insurer.example --json | jq -r .id)
 ```
 
 Expected: a knowledge base with no sources and no pages.
 
-### 2. Write a page and find it by meaning
+### 2. Write a page and search it
 
-The owner writes the water damage rule as a page. A search that does not use the page's words still finds it.
+The owner writes the water damage rule as a page. A search for its words finds it.
 
 ```python tab="Python" tab-group="language"
 page = ops.knowledge.add_page(handbook["id"], "Water damage", "Report a burst pipe within 14 days.")
-assert page["outcome"] == "created"
+assert page["status"] == "indexed"
 
-found = ops.knowledge.search({"kbIds": [handbook["id"]], "question": "How long do I have to claim for a leak?"})
+found = ops.knowledge.search({"kbIds": [handbook["id"]], "question": "burst pipe report days"})
 assert found["passages"][0]["title"] == "Water damage"
-assert found["passages"][0]["version"] == 1
+assert found["passages"][0]["version"] == "v1"
 ```
 
 ```ts tab="TypeScript"
 const page = await ops.knowledge.addPage(handbook.id, 'Water damage', 'Report a burst pipe within 14 days.');
-assert.equal(page.outcome, 'created');
+assert.equal(page.status, 'indexed');
 
-const found = await ops.knowledge.search({ kbIds: [handbook.id], question: 'How long do I have to claim for a leak?' });
+const found = await ops.knowledge.search({ kbIds: [handbook.id], question: 'burst pipe report days' });
 assert.equal(found.passages[0].title, 'Water damage');
-assert.equal(found.passages[0].version, 1);
+assert.equal(found.passages[0].version, 'v1');
 ```
 
 ```bash tab="CLI"
 opsai kb add-text "$HANDBOOK" --title "Water damage" --text "Report a burst pipe within 14 days." --json \
-  | jq -e '.outcome == "created"'
-opsai kb search "$HANDBOOK" "How long do I have to claim for a leak?" --json \
-  | jq -e '.passages[0].title == "Water damage" and .passages[0].version == 1'
+  | jq -e '.status == "indexed"'
+opsai kb search "$HANDBOOK" "burst pipe report days" --json \
+  | jq -e '.passages[0].title == "Water damage" and .passages[0].version == "v1"'
 ```
 
 Expected: the page is created and indexed at once; the first passage is the page, at version 1.
@@ -132,25 +132,25 @@ Expected: `created`, then `unchanged`; no second sync runs.
 sheet["text"] = "Home cover pays for sudden leaks and for tracing the leak."
 assert ops.knowledge.push(feed["id"], "home-cover.md", **sheet)["outcome"] == "updated"
 
-found = ops.knowledge.search({"kbIds": [handbook["id"]], "question": "Does home cover pay to trace a leak?"})
+found = ops.knowledge.search({"kbIds": [handbook["id"]], "question": "home cover tracing the leak"})
 assert "tracing the leak" in found["passages"][0]["text"]
-assert found["passages"][0]["version"] == 2
+assert found["passages"][0]["version"] == "v2"
 ```
 
 ```ts tab="TypeScript"
 sheet.text = 'Home cover pays for sudden leaks and for tracing the leak.';
 assert.equal((await ops.knowledge.push(feed.id, 'home-cover.md', sheet)).outcome, 'updated');
 
-const again = await ops.knowledge.search({ kbIds: [handbook.id], question: 'Does home cover pay to trace a leak?' });
+const again = await ops.knowledge.search({ kbIds: [handbook.id], question: 'home cover tracing the leak' });
 assert.match(again.passages[0].text, /tracing the leak/);
-assert.equal(again.passages[0].version, 2);
+assert.equal(again.passages[0].version, 'v2');
 ```
 
 ```bash tab="CLI"
 SHEET="Home cover pays for sudden leaks and for tracing the leak."
 opsai kb push "$FEED" --name home-cover.md --title "Home cover" --text "$SHEET" --json | jq -e '.outcome == "updated"'
-opsai kb search "$HANDBOOK" "Does home cover pay to trace a leak?" --json \
-  | jq -e '(.passages[0].text | contains("tracing the leak")) and .passages[0].version == 2'
+opsai kb search "$HANDBOOK" "home cover tracing the leak" --json \
+  | jq -e '(.passages[0].text | contains("tracing the leak")) and .passages[0].version == "v2"'
 ```
 
 Expected: `updated`; the passage quotes the new text, at version 2, and the old text is no longer returned.
