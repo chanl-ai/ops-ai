@@ -683,6 +683,65 @@ def bearer(session: dict[str, Any], team: str | None = None) -> dict[str, str]:
     return headers | ({"X-Team-Id": team} if team else {})
 
 
+REDIRECT = "https://claude.example/callback"
+
+
+def assistant_sign_in(
+    api: httpx.Client, email: str, resource: str, *, client_name: str = "use case assistant"
+) -> dict[str, str]:
+    """The company sign-in an outside assistant does for `resource` (a team's MCP address): registers a client, sends
+    the person through consent with a PKCE challenge, and exchanges the code. Returns client_id, access_token,
+    refresh_token and the person's console token ("none" for a token the step failed to get, with a FAIL line)."""
+    import base64
+    import secrets
+    from urllib.parse import parse_qs, urlsplit
+
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    reg = api.post(
+        "/oauth/register",
+        json={
+            "client_name": client_name,
+            "redirect_uris": [REDIRECT],
+            "token_endpoint_auth_method": "none",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+        },
+    )
+    check("2 the client registers (201)", reg.status_code == 201, reg.text[:200])
+    client_id = reg.json().get("client_id", "")
+    person = signed_in(api, email)
+    params = {
+        "client_id": client_id,
+        "redirect_uri": REDIRECT,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "resource": resource,
+        "state": "s1",
+    }
+    allowed = api.post("/v1/oauth/consent", json={**params, "decision": "allow"}, headers=bearer(person))
+    check(f"2 {email} allows the assistant (200)", allowed.status_code == 200, allowed.text[:200])
+    code = parse_qs(urlsplit(data(allowed)["redirectTo"]).query)["code"][0] if allowed.status_code == 200 else ""
+    got = api.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": client_id,
+            "redirect_uri": REDIRECT,
+            "code_verifier": verifier,
+            "resource": resource,
+        },
+    )
+    check("2 the code is exchanged for a token (200)", got.status_code == 200, got.text[:200])
+    return {
+        "client_id": client_id,
+        "access_token": got.json().get("access_token") or "none",
+        "refresh_token": got.json().get("refresh_token") or "none",
+        "person_token": str(person.get("token") or ""),
+    }
+
+
 def as_role(api: httpx.Client, role: str, team: str | None = None) -> dict[str, str]:
     """A standard dev user's headers: the role's seeded person (services/platform-service/seed/dev-roles.json:
     admin, builder, approver, viewer, security, platform) signed in through the password sign-in, acting in the team the

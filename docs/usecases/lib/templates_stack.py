@@ -19,7 +19,9 @@ from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
     ROOT,
+    TOOLS_PORT,
     agents,
+    assistant_sign_in,
     bearer,
     platform,
     signed_in,
@@ -36,6 +38,11 @@ STARTERS = Path(
         str(ROOT.parent / "ops-ai-plugins" / "plugins" / "starters" / "src" / "ops_plugin_starters"),
     )
 )
+# The public addresses the company sign-in names: this stack has no proxy, so they are the services' own ports.
+PUBLIC = {
+    "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+    "OPS_TOOLS_PUBLIC_URL": f"http://127.0.0.1:{TOOLS_PORT}",
+}
 AUTH = {
     "OPS_AUTH_MODE": "platform",
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
@@ -51,19 +58,27 @@ class Stack:
     priya: dict[str, str]
 
     def token(self, email: str) -> str:
-        """A signed-in person's bearer token, which the team MCP address takes as an assistant's credential."""
-        return str(signed_in(self.accounts, email).get("token") or "")
+        """The token an assistant gets for the person through the company sign-in: the team MCP address refuses
+        console tokens."""
+        address = f"http://127.0.0.1:{TOOLS_PORT}/mcp/team_ops"
+        return assistant_sign_in(self.accounts, email, address)["access_token"]
 
 
 @contextmanager
 def templates_stack() -> Generator[Stack]:
     plugins = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(STARTERS)] if STARTERS.exists() else [])}
     with (
-        platform() as (accounts, _),
+        platform(env=PUBLIC) as (accounts, _),
         tools(
-            {**AUTH, **plugins, "OPS_FLAGS": "mcp_gateway", "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}
+            {
+                **AUTH,
+                **PUBLIC,
+                **plugins,
+                "OPS_FLAGS": "mcp_gateway",
+                "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",
+            }
         ) as gw,
-        agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH) as api,
+        agents(gateway_url=str(gw.base_url).rstrip("/"), env={**AUTH, **PUBLIC}) as api,
     ):
         priya = bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops")
         gw.put(f"/v1/apps/{SOURCE}/team", json={"enabled": True}, headers=priya)

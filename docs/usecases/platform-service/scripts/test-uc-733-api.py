@@ -7,12 +7,8 @@ No model call."""
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
-import secrets
 from contextlib import ExitStack
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from mcp.client.auth.utils import (
@@ -25,9 +21,9 @@ from mcp.client.auth.utils import (
 from usecase_harness import (
     AGENTS_PORT,
     PLATFORM_INTERNAL_PORT,
+    assistant_sign_in,
     bearer,
     check,
-    data,
     finish,
     platform,
     proxy,
@@ -35,7 +31,6 @@ from usecase_harness import (
     tools,
 )
 
-REDIRECT = "https://claude.example/callback"
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
 ACCEPT = {"Accept": "application/json, text/event-stream"}
 
@@ -111,44 +106,9 @@ with ExitStack() as stack:
         server,
     )
 
-    verifier = secrets.token_urlsafe(48)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-    reg = api.post(
-        "/oauth/register",
-        json={
-            "client_name": "uc-733 assistant",
-            "redirect_uris": [REDIRECT],
-            "token_endpoint_auth_method": "none",
-            "grant_types": ["authorization_code", "refresh_token"],
-            "response_types": ["code"],
-        },
-    )
-    check("2 the client registers (201)", reg.status_code == 201, reg.text[:200])
-    client_id = reg.json().get("client_id", "")
-    james = signed_in(api, "j.richardson@harborpine.example")
-    params = {
-        "client_id": client_id,
-        "redirect_uri": REDIRECT,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-        "resource": ADDRESS,
-        "state": "s1",
-    }
-    allowed = api.post("/v1/oauth/consent", json={**params, "decision": "allow"}, headers=bearer(james))
-    check("2 James allows the assistant (200)", allowed.status_code == 200, allowed.text[:200])
-    code = parse_qs(urlsplit(data(allowed)["redirectTo"]).query)["code"][0] if allowed.status_code == 200 else ""
-    form = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "client_id": client_id,
-        "redirect_uri": REDIRECT,
-        "code_verifier": verifier,
-        "resource": ADDRESS,
-    }
-    got = api.post("/oauth/token", data=form)
-    check("2 the code is exchanged for a token (200)", got.status_code == 200, got.text[:200])
-    token = got.json().get("access_token") or "none"
-    renewal = got.json().get("refresh_token") or "none"
+    signin = assistant_sign_in(api, "j.richardson@harborpine.example", ADDRESS, client_name="uc-733 assistant")
+    client_id, token, renewal = signin["client_id"], signin["access_token"], signin["refresh_token"]
+    james = {"token": signin["person_token"]}
 
     r = gateway.post("/mcp/team_ops", json=LIST, headers={**ACCEPT, "Authorization": f"Bearer {token}"})
     check("3 tools/list with the token lists James's tools (200)", r.status_code == 200, r.text[:200])
