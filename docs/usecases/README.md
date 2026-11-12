@@ -138,7 +138,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-084 | agents-service | An agent finds a workflow with search_tools and runs it; its agent step answers by schema | api, ui | passing |
 | uc-081 | agents-service | Basic workflow nodes run through the queue, and a worker killed after the tool step leaves the tool called once | api, ui | passing |
 | uc-085 | agents-service | An agent refuses a blocked topic before answering, through a guardrail it pins by version | api, ui | passing |
-| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui | passing |
+| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui, sdk, cli | ui passing |
 | uc-087 | console | A banker finds, starts and continues chats: suggested prompt, regenerate, stop, retry, server search and paging | ui | passing |
 | uc-088 | agents-service | A builder sets the limits callers override within and publishes them with the agent | ui | passing |
 | uc-089 | console | An agent shows a table and a figure in chat with no tool behind them | ui | passing |

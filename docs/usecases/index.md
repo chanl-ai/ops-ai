@@ -56,7 +56,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-084 | agents-service | An agent finds a workflow with search_tools and runs it; its agent step answers by schema | api, ui | `agents-service/agent-runs-a-workflow-by-search.md` |
 | uc-081 | agents-service | Basic workflow nodes run through the queue, and a worker killed after the tool step leaves the tool called once | api, ui | `agents-service/workflow-runner-basic-nodes.md` |
 | uc-085 | agents-service | An agent refuses a blocked topic before answering, through a guardrail it pins by version | api, ui | `agents-service/agent-guardrails-blocked-topics.md` |
-| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui | `console/import-to-governed-call.md` |
+| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui, sdk, cli | `agents/an-agent-with-three-tools.md` |
 | uc-087 | console | A banker finds, starts and continues chats: suggested prompt, regenerate, stop, retry, server search and paging | ui | `console/chat-find-start-continue.md` |
 | uc-088 | agents-service | A builder sets the limits callers override within and publishes them with the agent | ui | `agents-service/agent-limits-published.md` |
 | uc-089 | console | An agent shows a table and a figure in chat with no tool behind them | ui | `console/agent-presents-widgets.md` |

@@ -15,7 +15,7 @@ States come from the registry and runs. "page" means the page runs on `make usec
 
 | Id | Short title | What it proves | Layers | State |
 |---|---|---|---|---|
-| uc-086 | An agent with three tools | A bank API imported, reviewed and published reaches an agent; a read answers, a write is held until a second person approves | api, sdk, cli, ui | ui 16 of 16 pass; sdk and cli have no page yet |
+| uc-086 | An agent with three tools | A bank API imported, reviewed and published reaches an agent; a read answers, a write is held until a second person approves | api, sdk, cli, ui | ui passes; sdk and cli have no page yet |
 | uc-018 | Make, publish and chat with an agent | A builder drafts, edits and publishes an agent and chats with it | api, sdk, cli, ui | api, ui pass; no page |
 | uc-740 | Start a skill from a template | A team lists templates of each kind and installs a starter skill as its own copy | sdk, cli | page |
 | uc-741 | List and install templates from an assistant | An assistant on the team address lists templates and installs one as the person it signed in as | mcp | page |

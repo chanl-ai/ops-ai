@@ -1,10 +1,13 @@
-// uc-086 a builder takes a bank API from import to a governed agent call, ui layer: docs/usecases/console/import-to-governed-call.md.
+// uc-086 a builder takes a bank API from import to a governed agent call, ui layer: docs/usecases/agents/an-agent-with-three-tools.md.
 // Signed in through platform-service as the seeded people. tools-service reaches the core-banking fake on https, which
 // checks a header key on most routes and a query key on its statement route; the agents service (scripted model, no
 // provider) takes its tools from tools-service. Each step is checked on its own, so one failing step still lets the
 // later ones report.
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, required, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, required, shootBothWidths, videoToGif, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 import { PEOPLE, allowBank, authHeaders, securityAdminOn, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -328,6 +331,42 @@ await withUiStack(
         !!write && text.includes(MAYA) && /via ag_branch/.test(text) && /Succeeded/.test(text) && runLink === `/chat/${thread}`,
         { row: text.replace(/\s+/g, ' ').slice(0, 300), runLink, thread, approval: write?.approval, subject: write?.subject, actor: write?.actor },
       );
+    });
+
+    // Media for the page: a clip of James's agent list, the agent and the module's call log, and the agent list at both widths.
+    await step('media the agent list, the agent and the call log', async () => {
+      const videos = mkdtempSync(join(tmpdir(), 'uc-086-video-'));
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir: videos, size: { width: 1440, height: 900 } } });
+      const page = await context.newPage();
+      page.on('pageerror', (e) => errors.push(`media: ${e.message}`));
+      const recording = Date.now();
+      await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByLabel('Email').fill(JAMES);
+      await page.getByLabel('Password').fill('northfield-demo');
+      await page.getByRole('button', { name: /^Sign in/ }).first().click();
+      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+      const started = Date.now();
+      await page.goto(`${consoleUrl}/build/agents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByText('Branch Concierge').first().waitFor({ timeout: 60_000 });
+      await page.waitForTimeout(1200);
+      await page.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByText('place_hold').first().waitFor({ timeout: 60_000 });
+      await page.waitForTimeout(1500);
+      await page.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByRole('tab', { name: /^Activity/ }).click({ timeout: 60_000 });
+      await page.waitForTimeout(1500);
+      const clipMs = Date.now() - started;
+      const state = await context.storageState();
+      await context.close();
+      videoToGif(videos, 'agents', 'uc-086-agent-with-three-tools', started - recording, clipMs);
+      rmSync(videos, { recursive: true, force: true });
+      const still = await browser.newContext({ viewport: { width: 1440, height: 1000 }, storageState: state });
+      const shots = await still.newPage();
+      await shootBothWidths(shots, 'agents', 'uc-086-agents', async () => {
+        await shots.goto(`${consoleUrl}/build/agents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await shots.getByText('Branch Concierge').first().waitFor({ timeout: 60_000 });
+      });
+      await still.close();
     });
 
     // 12. No page error anywhere, and the key never reached a page.
