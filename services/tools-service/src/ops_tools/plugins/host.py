@@ -31,11 +31,11 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
 from ..auth.tokens import SIGNED_IN_AS, person_named
-from ..connections.records import PERSON_ORIGIN, account_for, choice_needed, default_sign_in
+from ..connections.records import account_for, choice_needed, default_sign_in
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..environments import LIVE
 from ..modules.seed import blank
-from ..store.connections import ConnectionStore, name_key, plugin_app, plugin_of
+from ..store.connections import PERSON_ORIGIN, ConnectionStore, name_key, plugin_app, plugin_of
 from ..store.modules import Aggregate, ModuleStore, StaleModuleError
 from ..store.plugin_bindings import PluginBindings
 

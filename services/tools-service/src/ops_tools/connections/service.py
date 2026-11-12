@@ -46,6 +46,7 @@ from ..modules.directory import Directory
 from ..modules.service import Caller
 from ..secrets import SecretResolver
 from ..store.connections import (
+    PERSON_ORIGIN,
     SHARED,
     AccountNameTaken,
     ConnectionInUse,
@@ -58,7 +59,7 @@ from ..store.connections import (
     verifier_context,
 )
 from .account_events import connected_event
-from .records import PERSON_ORIGIN, status_of
+from .records import status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.

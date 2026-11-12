@@ -31,7 +31,6 @@ from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
 from .connections.records import (
     CONNECTED,
-    PERSON_ORIGIN,
     account_state,
     connection_base,
     person_state,
@@ -68,7 +67,7 @@ from .plugins.host import (
 )
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
-from .store.connections import DEFAULT_VALUE, FIXED_VALUE, name_key, plugin_app, plugin_of, split_config
+from .store.connections import DEFAULT_VALUE, FIXED_VALUE, PERSON_ORIGIN, name_key, plugin_app, plugin_of, split_config
 from .store.modules import ModuleStore
 from .store.team_defaults import TeamDefaults
 

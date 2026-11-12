@@ -33,11 +33,13 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-from ..connections.records import PERSON_ORIGIN
 from .modules import metadata, module_operations, service_outbox, tool_modules
 
 _TS = sa.DateTime(timezone=True)
 SHARED = ""
+# An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
+# team, signing only that person's calls, and removed when its sign-in turns out to be an identity they already linked.
+PERSON_ORIGIN = "person"
 # The role every transaction of this store runs as: row-level security applies to it, not to the owner the
 # service connects as, so the database holds a person's sign-ins to their connection's team.
 ROLE = "ops_tools_tenant"

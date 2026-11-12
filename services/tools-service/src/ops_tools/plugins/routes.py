@@ -25,7 +25,6 @@ from ops_service_kit.http import Envelope, ok
 
 from ..auth.kinds import Kind, kind_of
 from ..callers import caller_in
-from ..connections.records import PERSON_ORIGIN
 from ..connections.schemas import CREDENTIAL_MAX, AccountIn
 from ..connections.service import ConnectionService, connection_rights
 from ..held_hosts import HostHeld
@@ -33,7 +32,7 @@ from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
-from ..store.connections import DEFAULT_VALUE, PLUGIN_APP, AccountNameTaken, plugin_of, split_config
+from ..store.connections import DEFAULT_VALUE, PERSON_ORIGIN, PLUGIN_APP, AccountNameTaken, plugin_of, split_config
 from .host import (
     PluginHost,
     filled_at_sign_in,
