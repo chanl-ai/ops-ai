@@ -8,9 +8,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from steps import MAYA, PRIYA, mcp_session
+from steps import MAYA, PRIYA, list_skills, mcp_session, sign_in_as
 from templates_stack import SKILL, SOURCE, templates_stack
-from usecase_harness import check, data, finish
+from usecase_harness import check, finish
 
 TOOLS = ("list_templates", "install_template")
 
@@ -26,7 +26,7 @@ async def call(token: str, name: str, args: dict[str, Any]) -> Any:
 
 
 def skill_ids(s: Any) -> list[str]:
-    return [str(x.get("id")) for x in data(s.api.get("/v1/skills", headers=s.priya)) or []]
+    return [str(x.get("id")) for x in list_skills(sign_in_as(PRIYA))]
 
 
 with templates_stack() as s:

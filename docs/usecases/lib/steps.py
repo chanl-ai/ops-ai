@@ -168,6 +168,15 @@ def run_workflow(
 # shows the step failing instead of reaching for the raw client.
 
 
+def list_skills(ops: OpsAI) -> list[dict[str, Any]]:
+    """The team's skills. The route answers a page ({data, total, ...}); a bare list is accepted too."""
+    page = ops.raw.agents.agents_list_skills()
+    rows = page if isinstance(page, list) else (page or {}).get("data")
+    if not isinstance(rows, list):
+        raise RuntimeError(f"the skills list answered neither a list nor a page: {str(page)[:200]}")
+    return rows
+
+
 def list_templates(ops: OpsAI, kind: str | None = None) -> list[dict[str, Any]]:
     """Every template offered to the client's team, across every pack and app that is on; `kind` keeps one kind."""
     words = getattr(ops, "templates", None)
