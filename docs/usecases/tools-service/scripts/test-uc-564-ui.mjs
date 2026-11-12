@@ -123,6 +123,10 @@ try {
   await withUiStack(
     async (consoleUrl) => {
       mkdirSync(SHOTS, { recursive: true });
+      // Approvals are off unless a team turns them on (2026-11-01). They go on first: the agents service keeps a team's tool
+      // list for 30 seconds (a list read while they were off sends the write with no approval), and a policy change
+      // voids tokens issued before it.
+      await writeApprovalsOn('team_ops');
       const sam = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
       const james = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
@@ -201,8 +205,6 @@ try {
 
         let reviewId;
         await step('14 asked to escalate it, the card names the tool by its title and shows the field it changes; the change waits and Salesforce is unchanged', async () => {
-          // Approvals are off unless a team turns them on (2026-11-01); this team holds its tool writes for a person.
-          await writeApprovalsOn('team_ops');
           await send('Escalate case 00044818.');
           const card = page.locator('section').filter({ hasText: /salesforce_update_record|Update record|Escalated/ }).last();
           await card.waitFor({ timeout: 90_000 });
