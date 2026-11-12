@@ -213,9 +213,9 @@ export function Composer({
           }}
         />
       )}
-      {(skill ?? filling) && (
+      {skill && (
         <div className="mb-2 flex">
-          <SkillChip label={(skill ?? filling)!.label} onRemove={() => (setSkill(null), setFilling(null))} />
+          <SkillChip label={skill.label} onRemove={() => setSkill(null)} />
         </div>
       )}
       {typed && (

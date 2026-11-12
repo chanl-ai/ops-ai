@@ -54,9 +54,19 @@ function entries(s: ChatMenuSkill): PickedSkill[] {
 export function SkillMenu({ agentId, agentName, query, onPick }: { agentId: string; agentName: string; query: string; onPick: (p: PickedSkill) => void }) {
   const menu = useChatMenuSkills(agentId, true);
   const q = query.trim().toLowerCase();
-  const skills = (menu.data ?? []).filter(
-    (s) => !q || `${s.name} ${s.slug} ${s.useWhen} ${(s.parts ?? []).map((p) => `${p.name} ${p.slug}`).join(' ')}`.toLowerCase().includes(q),
-  );
+  const has = (...fields: (string | undefined)[]) => fields.join(' ').toLowerCase().includes(q);
+  // A skill with parts matches by its own name (all its parts show) or part by part on each part's name and use-when;
+  // its general use-when would otherwise pull in parts the search does not describe.
+  const skills = (menu.data ?? []).flatMap((sk) => {
+    if (!q) return [{ s: sk, rows: entries(sk) }];
+    if (!sk.parts?.length) return has(sk.name, sk.slug, sk.useWhen) ? [{ s: sk, rows: entries(sk) }] : [];
+    if (has(sk.name, sk.slug)) return [{ s: sk, rows: entries(sk) }];
+    const rows = entries(sk).filter((e) => {
+      const part = sk.parts!.find((x) => x.slug === e.part)!;
+      return has(part.name, part.slug, part.useWhen);
+    });
+    return rows.length ? [{ s: sk, rows }] : [];
+  });
   const refused = menu.error instanceof ApiError && menu.error.status === 403;
   return (
     <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-lg border bg-popover shadow-md" data-testid="skill-menu">
@@ -75,8 +85,7 @@ export function SkillMenu({ agentId, agentName, query, onPick }: { agentId: stri
           ) : (
             <>
               <CommandEmpty>{q ? `No skill matches “${query}”.` : `${agentName} offers no skills in chat. A builder publishes skills, and an admin sets which ones an agent offers.`}</CommandEmpty>
-              {skills.map((s) => {
-                const rows = entries(s);
+              {skills.map(({ s, rows }) => {
                 return (
                   <CommandGroup key={s.id} heading={rows.length > 1 || s.parts?.length ? s.name : s.ownerTeam}>
                     {rows.map((e) => (
