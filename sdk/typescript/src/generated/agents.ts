@@ -1959,9 +1959,9 @@ export interface paths {
          * @description The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
          *     what chat and the MCP prompts use; every other view describes the newest version an editor sees.
          *
-         *     `usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what
-         *     that agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base
-         *     the agent lacks as `locked`, naming them in `needs`.
+         *     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
+         *     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
+         *     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`.
          */
         get: operations["agents_list_skills"];
         put?: never;

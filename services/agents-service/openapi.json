@@ -45076,7 +45076,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.\n\n`usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what\nthat agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base\nthe agent lacks as `locked`, naming them in `needs`.",
+        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
