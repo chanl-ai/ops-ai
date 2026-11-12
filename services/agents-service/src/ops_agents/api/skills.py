@@ -249,6 +249,13 @@ async def render_published(
     }
 
 
+def _wire(content: dict[str, Any]) -> dict[str, Any]:
+    """A version's content as the console reads it: a part saved without inputs keeps no key, so it is sent as []."""
+    if not content.get("parts"):
+        return content
+    return {**content, "parts": [{"inputs": [], **p} for p in content["parts"]]}
+
+
 def _inputs(raw: Any) -> list[dict[str, Any]]:
     """The skill's inputs, each name once; a version saved without any keeps no key, so its digest is unchanged."""
     out: dict[str, dict[str, Any]] = {}
@@ -455,7 +462,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         )
     return {
         **base,
-        "content": newest["content"],
+        "content": _wire(newest["content"]),
         "versions": [
             {
                 "version": v["version"],
@@ -465,7 +472,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
                 "changes": v["changes"],
                 "savedBy": v["saved_by"],
                 "savedAt": v["saved_at"],
-                "content": v["content"],
+                "content": _wire(v["content"]),
                 "tokens": v["tokens"],
                 **({"reviewId": v["review_id"]} if v["review_id"] else {}),
                 **({"publishedAt": v["published_at"], "publishedBy": v["published_by"]} if v["published_at"] else {}),

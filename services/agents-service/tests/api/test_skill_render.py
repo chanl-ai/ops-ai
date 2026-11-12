@@ -93,3 +93,12 @@ async def test_parts_are_checked_listed_and_render_with_the_overview(tmp_path: P
 
         plain = await _published(c, {**HARDSHIP, "name": "No parts"})
         assert "parts" not in plain["content"]
+
+
+async def test_a_part_with_no_inputs_reads_back_with_an_empty_list(tmp_path: Path) -> None:
+    # The console's Parts editor reads part.inputs as a list; a missing key crashed the skill page.
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        made = _ok(await c.post("/v1/skills", json=SALES), 201)
+        got = _ok(await c.get(f"/v1/skills/{made['id']}"))
+        assert [p["inputs"] for p in got["content"]["parts"]][1] == [], got["content"]["parts"]
+        assert [p["inputs"] for p in got["versions"][0]["content"]["parts"]][1] == []
