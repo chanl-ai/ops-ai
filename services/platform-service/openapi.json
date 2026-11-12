@@ -2202,6 +2202,10 @@
             "title": "Id",
             "type": "string"
           },
+          "lastUsedAt": {
+            "title": "Lastusedat",
+            "type": "string"
+          },
           "resource": {
             "title": "Resource",
             "type": "string"
@@ -2223,7 +2227,8 @@
           "teamName",
           "resource",
           "createdAt",
-          "expiresAt"
+          "expiresAt",
+          "lastUsedAt"
         ],
         "title": "GrantOut",
         "type": "object"

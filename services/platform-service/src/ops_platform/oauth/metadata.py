@@ -25,5 +25,6 @@ def server_metadata(public_url: str | None) -> dict[str, Any]:
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
-        "client_id_metadata_document_supported": True,
+        # A URL client id is refused until ops_service_kit.public_address can fetch it safely.
+        "client_id_metadata_document_supported": False,
     }

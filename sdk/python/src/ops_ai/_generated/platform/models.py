@@ -165,6 +165,7 @@ class GrantOut(TypedDict, closed=True):
     createdAt: str
     expiresAt: str
     id: str
+    lastUsedAt: str
     resource: str
     teamId: str
     teamName: str

@@ -509,7 +509,16 @@ class IdentityStore:
         """A person's live connections, newest first, with the client's name and the team's."""
         s, t, k = sessions, teams, oauth_clients
         q = (
-            sa.select(s.c.id, s.c.client_id, s.c.team_id, s.c.resource, s.c.created_at, s.c.expires_at, t.c.name)
+            sa.select(
+                s.c.id,
+                s.c.client_id,
+                s.c.team_id,
+                s.c.resource,
+                s.c.created_at,
+                s.c.expires_at,
+                t.c.name,
+                s.c.last_seen_at,
+            )
             .join(t, sa.and_(t.c.id == s.c.team_id, t.c.tenant_id == s.c.tenant_id))
             .where(
                 s.c.user_id == user_id,
@@ -529,7 +538,7 @@ class IdentityStore:
         return [
             {
                 "id": r[0], "clientId": r[1], "clientName": names.get(str(r[1]), str(r[1])), "teamId": r[2],
-                "teamName": r[6], "resource": r[3], "createdAt": r[4], "expiresAt": r[5],
+                "teamName": r[6], "resource": r[3], "createdAt": r[4], "expiresAt": r[5], "lastUsedAt": r[7],
             }
             for r in rows
         ]  # fmt: skip

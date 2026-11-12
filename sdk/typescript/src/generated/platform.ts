@@ -2252,6 +2252,8 @@ export interface components {
             expiresAt: string;
             /** Id */
             id: string;
+            /** Lastusedat */
+            lastUsedAt: string;
             /** Resource */
             resource: string;
             /** Teamid */
