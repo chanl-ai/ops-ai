@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-11",
+  "title": "Knowledge bases show correct counts and jobs",
+  "description": "A source counts its items, not its pieces. The overview lists recent index jobs, documents show whether they are fresh, stale or have no schedule, files show the right split preset, Add source says why a source cannot be added, and a chat on a test thread of a draft agent opens its connectors.",
+  "tag": "fix"
+}

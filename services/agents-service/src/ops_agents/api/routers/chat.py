@@ -379,6 +379,15 @@ async def _test_agent(rt: Runtime, me: Principal, agent_id: str, version: int | 
     return definition_of(agent_id, n, saved["spec"])
 
 
+async def thread_agent(rt: Runtime, me: Principal, meta: dict[str, Any]) -> AgentDefinition | None:
+    """The agent a thread runs: for a test thread the saved agent it tests (a draft is not in the live catalog),
+    otherwise the live one; None when it is not live. The one place the settings, connectors and kb routes ask."""
+    agent_id = str(meta.get("agentId"))
+    if meta.get("test"):
+        return await _test_agent(rt, me, agent_id, cast(int | None, meta.get("testVersion")))
+    return rt.catalog.agent(agent_id)
+
+
 @router.post("/threads")
 async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
     if body.test:
@@ -483,7 +492,7 @@ async def update_thread(rt: Rt, me: Me, thread_id: str, body: ChatThreadPatch) -
     if body.archived is not None:
         patch["archived"] = body.archived
     if body.kb_ids is not None:
-        agent = rt.catalog.agent(str(meta.get("agentId")))
+        agent = await thread_agent(rt, me, meta)
         if agent is None:
             raise Unprocessable("This conversation's agent is no longer live.")
         patch["kbNames"] = await _check_kbs(rt, agent, body.kb_ids)
