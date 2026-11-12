@@ -639,6 +639,8 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
     env = {
         "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
         "OPS_CONSOLE_URL": f"http://localhost:{CONSOLE_PORT}",
+        # Assistants connect to a team's MCP address under this origin.
+        "OPS_TOOLS_PUBLIC_URL": f"http://127.0.0.1:{TOOLS_PORT}",
         # Domains are proven against the fake identity provider's DNS.
         "OPS_SIGNIN_DNS_SERVERS": json.dumps([f"127.0.0.1:{IDP_PORT}"]),
         "OPS_SAML_SP_KEY": SAML_SP_KEY,
@@ -687,11 +689,18 @@ REDIRECT = "https://claude.example/callback"
 
 
 def assistant_sign_in(
-    api: httpx.Client, email: str, resource: str, *, client_name: str = "use case assistant"
+    api: httpx.Client,
+    email: str,
+    resource: str,
+    *,
+    client_name: str = "use case assistant",
+    person: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """The company sign-in an outside assistant does for `resource` (a team's MCP address): registers a client, sends
     the person through consent with a PKCE challenge, and exchanges the code. Returns client_id, access_token,
-    refresh_token and the person's console token ("none" for a token the step failed to get, with a FAIL line)."""
+    refresh_token and the person's console token ("none" for a token the step failed to get, with a FAIL line).
+    `person` is the console session of someone who has no password (an SSO sign-in); left out, `email` signs in with the
+    seeded password."""
     import base64
     import secrets
     from urllib.parse import parse_qs, urlsplit
@@ -710,7 +719,7 @@ def assistant_sign_in(
     )
     check("2 the client registers (201)", reg.status_code == 201, reg.text[:200])
     client_id = reg.json().get("client_id", "")
-    person = signed_in(api, email)
+    person = person or signed_in(api, email)
     params = {
         "client_id": client_id,
         "redirect_uri": REDIRECT,

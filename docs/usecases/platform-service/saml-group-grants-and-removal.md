@@ -18,9 +18,11 @@ is called.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Wanjiru sets a SAML provider that maps `platform-readers` to team_platform as viewer and `platform-builders` to team_platform as builder | 200; `groups.onMissing` is `remove`, the default for a new provider |
-| 2 | Ana, new, signs in carrying both groups | team_ops as chat user (her first sign-in) and team_platform as builder, the higher of the two roles |
+| 2 | Ana, new, signs in carrying both groups, then connects an assistant to each team's MCP address | team_ops as chat user (her first sign-in) and team_platform as builder, the higher of the two roles; two assistant connections |
 | 3 | Ana signs in and the provider sends Entra's overage claim in place of her groups | Nothing changes: team_platform stays builder |
 | 4 | Ana signs in carrying neither group | team_platform ends (audited `member.group_removed`); team_ops, from her first sign-in, stays |
+| 5 | Ana's assistants try to renew | the team_platform one is refused (`invalid_grant`); the team_ops one renews |
+| 6 | Wanjiru reads the audit in team_platform for `oauth.grant_ended` | one row, ended "by group", for the team_platform connection only |
 
 A membership given by hand is never removed by a sign-in; the service tests cover it
 (`services/platform-service/tests/test_saml_groups.py`). A missing groups attribute and a present but empty one also
@@ -38,4 +40,5 @@ stays at the api layer until it ships.
 ## Non-vacuous check
 
 `after she leaves both groups, team_platform ends`: with the removal in `_join_groups` skipped, team_platform stays and
-the check fails.
+the check fails. Likewise `the audit names that one assistant connection as ended by group` and the renewal check
+fail while the group removal leaves the team's assistant connections live and unaudited.
