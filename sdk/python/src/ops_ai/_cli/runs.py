@@ -4,11 +4,11 @@ cancel, retry), and Human Tasks as the Human Tasks queue shows them (list, open 
 from __future__ import annotations
 
 import argparse
-import os
+import getpass
 import sys
 from typing import Any
 
-from ops_ai import OpsAI
+from ops_ai import OpsAI, OpsError
 from ops_ai._transport import page_items
 
 from .common import client, emit, parser, payload, refuse, short, table, verb_options
@@ -99,7 +99,9 @@ def tasks_main(argv: list[str]) -> int:
     approve.add_argument("task")
     approve.add_argument("--reason")
     approve.add_argument(
-        "--password", help="the approver's password for the step-up a write asks for (or OPS_PASSWORD)"
+        "--password-stdin",
+        action="store_true",
+        help="read the approver's password once from standard input, instead of asking when the write asks for it",
     )
     ns = ap.parse_args(argv)
     try:
@@ -119,6 +121,16 @@ def _tasks(ns: argparse.Namespace, ops: OpsAI) -> int:
         inputs = {"inputs": fields} if fields else {}
         return emit(ns, ops.tasks.decide(ns.task, ns.decision, reason=ns.reason, **inputs))
     if ns.verb == "approve":
-        password = ns.password or os.environ.get("OPS_PASSWORD")
+        # A password on the command line or in the environment would sit in shell history and process lists, and a
+        # standing one would confirm every step-up without the approver being asked: it is read from standard input
+        # on request, and otherwise asked for, without echo, each time the write asks to confirm it is them.
+        if ns.password_stdin:
+            return emit(ns, ops.tasks.approve(ns.task, password=sys.stdin.readline().rstrip("\n"), reason=ns.reason))
+        try:
+            return emit(ns, ops.tasks.approve(ns.task, reason=ns.reason))
+        except OpsError as exc:
+            if exc.code != "step_up_required":
+                raise
+        password = getpass.getpass("Confirm it is you. Password: ")
         return emit(ns, ops.tasks.approve(ns.task, password=password, reason=ns.reason))
     return 2

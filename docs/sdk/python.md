@@ -111,7 +111,7 @@ verb for machine output.
 | `opsai policies get\|set KEY [VALUE]` | The team's policies |
 | `opsai egress list\|allow-host H\|allow-range R\|remove-host H\|remove-range R` | Hosts and ranges tools may reach |
 | `opsai tools discover SPEC`, `import MODULE SPEC [--operation N]`, `request-review MODULE`, `create NAME --display-name N`, `decide-review REVIEW [--decision]`, `publish MODULE`, `run --module MODULE TOOL` | Take an OpenAPI document to a published module |
-| `opsai agents tool-options [--search]`, `grant-tools ID TOOL...`; `opsai tasks approve TASK [--password]` | Grant tools to an agent; approve a held write |
+| `opsai agents tool-options [--search]`, `grant-tools ID TOOL...`; `opsai tasks approve TASK [--password-stdin]` | Grant tools to an agent; approve a held write (asks for your password, without echo, when the write asks you to confirm it is you) |
 | `opsai connectors list`, `connect APP [--link] [--account]`, `finish --state S --code C`, `accounts`, `disconnect APP` | Your own sign-ins on apps |
 
 ```bash
