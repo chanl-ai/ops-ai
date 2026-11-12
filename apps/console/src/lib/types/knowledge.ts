@@ -663,6 +663,8 @@ export interface SourceKindOption {
   /** A source of this kind can be made for this team, by the check create applies; `cannotCreateBecause` says why not. */
   canCreate?: boolean;
   cannotCreateBecause?: string | null;
+  /** `connection_missing` (sign in on the app page fixes it) or `sign_in_not_team` (it does not). */
+  cannotCreateCode?: string | null;
   /** `POST /v1/sources/preview` can say what a source of this kind would take in. */
   previews?: boolean;
   pickers?: boolean;

@@ -2522,6 +2522,8 @@ export interface components {
             canCreate: boolean;
             /** Cannotcreatebecause */
             cannotCreateBecause?: string | null;
+            /** Cannotcreatecode */
+            cannotCreateCode?: string | null;
             /**
              * Connected
              * @default false

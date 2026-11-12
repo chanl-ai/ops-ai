@@ -30,6 +30,7 @@ import { useApproveAiSteps, useCreateSource, usePutSourceItem, useSourceKinds, u
 import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
 import { appPageHref } from '@/lib/app-links';
 import { count, plural } from '@/lib/format';
+import { kindsToConnect } from '@/lib/source-kinds';
 import type { Schedule, Source, SourceKindOption, SourceKindPreview } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
@@ -279,9 +280,7 @@ export function AddSourceWizard({
                 )}
               </CommandList>
             </Command>
-            {options
-              .filter((k) => k.needsConnection && !k.connected && k.canCreate !== false && k.plugin)
-              .map((k) => (
+            {kindsToConnect(options).map((k) => (
                 <p key={kindKey(k)} className="text-xs text-muted-foreground">
                   {k.title} needs a connection first.{' '}
                   <Link href={appPageHref(`plugin:${k.plugin}`)} className="inline-flex items-center gap-1 text-foreground underline underline-offset-4">

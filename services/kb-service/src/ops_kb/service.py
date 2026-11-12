@@ -869,7 +869,7 @@ class KnowledgeService:
                     "needsConnection": needs,
                     "connected": not needs or (bool(d.get("connectionId")) and d.get("connectionStatus") == "healthy"),
                     "canCreate": refusal is None,
-                    **({"cannotCreateBecause": refusal[1]} if refusal else {}),
+                    **({"cannotCreateCode": refusal[0], "cannotCreateBecause": refusal[1]} if refusal else {}),
                     "previews": bool(d.get("previewTool")),
                     "pickers": bool(d.get("scopesTool")),
                     "inputs": d.get("inputs") or {},

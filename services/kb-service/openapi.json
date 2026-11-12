@@ -4910,6 +4910,17 @@
             ],
             "title": "Cannotcreatebecause"
           },
+          "cannotCreateCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cannotcreatecode"
+          },
           "connected": {
             "default": false,
             "title": "Connected",

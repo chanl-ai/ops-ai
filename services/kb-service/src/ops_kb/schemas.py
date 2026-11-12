@@ -507,6 +507,8 @@ class SourceKind(Out):
     # cannot (a connection that signs in each person, no connection).
     can_create: bool = True
     cannot_create_because: str | None = None
+    # Why as a code (connection_missing, sign_in_not_team), so a screen can offer the fix that fits.
+    cannot_create_code: str | None = None
     previews: bool = False
     pickers: bool = False
     # What a source of this kind is set up with (start addresses, sites, spaces).

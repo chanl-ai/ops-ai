@@ -475,6 +475,7 @@ class SourceIn(TypedDict):
 class SourceKind(TypedDict, closed=True):
     canCreate: NotRequired[bool]
     cannotCreateBecause: NotRequired[str | None]
+    cannotCreateCode: NotRequired[str | None]
     connected: NotRequired[bool]
     defaults: dict[str, Any]
     group: Literal["built_in", "apps"]
