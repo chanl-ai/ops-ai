@@ -16,16 +16,16 @@ from lxml.etree import _Element as Element  # pyright: ignore[reportPrivateUsage
 
 from ops_signin import CertificateExpired, SamlConfig, SamlServiceProvider, SignInRefused
 from ops_signin.fake_idp import Idp, saml_response, self_signed
-from ops_signin.fake_idp.app import (  # pyright: ignore[reportPrivateUsage]
-    _new_idp,
-    _signed_by,
+from ops_signin.fake_idp.app import (
     expired_idp,
     metadata_xml,
+    new_idp,
+    signed_by,
 )
 from ops_signin.saml import DECRYPT_REFUSED, sp_metadata
 from ops_signin.saml_metadata import MetadataRefused, read_metadata
 
-BANK, OTHER = _new_idp("bank"), _new_idp("other")
+BANK, OTHER = new_idp("bank"), new_idp("other")
 ISSUER = "https://idp.test/saml/bank"
 SP = "https://ops.test/saml"
 ACS = "https://ops.test/v1/auth/saml/acs"
@@ -215,9 +215,9 @@ def sealed(request_id: str, **kw: object) -> str:
 def test_a_signed_request_verifies_with_the_sp_certificate_only() -> None:
     url = urlparse(SamlServiceProvider(SECURE).begin(relay_state="r/1").url)
     assert "SigAlg=" in url.query and "Signature=" in url.query
-    assert _signed_by(url.query, SP_CERT)
-    assert not _signed_by(url.query, OTHER_CERT)
-    assert not _signed_by(url.query.replace("RelayState=r%2F1", "RelayState=r%2F2"), SP_CERT)
+    assert signed_by(url.query, SP_CERT)
+    assert not signed_by(url.query, OTHER_CERT)
+    assert not signed_by(url.query.replace("RelayState=r%2F1", "RelayState=r%2F2"), SP_CERT)
     with pytest.raises(SignInRefused):
         SamlServiceProvider(SamlConfig(ISSUER, f"{ISSUER}/sso", BANK.cert_pem, SP, ACS, sign_requests=True)).begin(
             relay_state="r"
@@ -335,7 +335,7 @@ def test_a_response_signed_by_an_expired_certificate_is_refused_as_expired() -> 
 
 
 def test_during_a_rollover_either_listed_certificate_signs_in() -> None:
-    new = _new_idp("next")
+    new = new_idp("next")
     sp = SamlServiceProvider(SamlConfig(ISSUER, f"{ISSUER}/sso", (BANK.cert_pem, new.cert_pem), SP, ACS))
     for signer in (BANK, new):
         start = sp.begin(relay_state="r")
@@ -344,7 +344,7 @@ def test_during_a_rollover_either_listed_certificate_signs_in() -> None:
 
 
 def test_metadata_gives_the_entity_the_sign_in_url_and_every_signing_certificate() -> None:
-    i = _new_idp("meta")
+    i = new_idp("meta")
     i.previous.append(BANK.cert_pem)
     read = read_metadata(metadata_xml("https://idp.test", i))
     assert (read.entity_id, read.sso_url) == ("https://idp.test/saml/meta", "https://idp.test/saml/meta/sso")

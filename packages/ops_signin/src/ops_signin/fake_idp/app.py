@@ -79,7 +79,7 @@ class Idp:
 
 def self_signed(name: str) -> tuple[str, str]:
     """A fresh RSA key and its self-signed certificate, both PEM: a service provider's key pair for tests."""
-    pair = _new_idp(name)
+    pair = new_idp(name)
     return pair.key_pem().decode(), pair.cert_pem
 
 
@@ -99,7 +99,7 @@ def _certificate(name: str, key: rsa.RSAPrivateKey, *, starts: timedelta, ends: 
     return cert.public_bytes(serialization.Encoding.PEM).decode()
 
 
-def _new_idp(name: str, *, valid_days: int = 365) -> Idp:
+def new_idp(name: str, *, valid_days: int = 365) -> Idp:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     cert = _certificate(name, key, starts=timedelta(days=-1), ends=timedelta(days=valid_days))
     return Idp(name, key, cert, kid=f"{name}-{secrets.token_hex(4)}")
@@ -107,7 +107,7 @@ def _new_idp(name: str, *, valid_days: int = 365) -> Idp:
 
 def expired_idp(name: str) -> Idp:
     """A provider whose only certificate ended yesterday: it still signs, with a key nobody should trust now."""
-    i = _new_idp(name)
+    i = new_idp(name)
     i.cert_pem = _certificate(name, i.key, starts=timedelta(days=-400), ends=timedelta(days=-1))
     return i
 
@@ -159,7 +159,7 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
 
     def idp(name: str) -> Idp:
         if name not in idps:
-            idps[name] = _new_idp(name)
+            idps[name] = new_idp(name)
         return idps[name]
 
     @app.get("/health")
@@ -259,7 +259,7 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
         """Signs with a new key from now on; the metadata lists the new certificate and the old one, as Entra and Okta
         do during a rollover."""
         i = idp(name)
-        fresh = _new_idp(name)
+        fresh = new_idp(name)
         i.previous.insert(0, i.cert_pem)
         i.key, i.cert_pem = fresh.key, fresh.cert_pem
         return {"certificate": i.cert_pem}
@@ -276,7 +276,7 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
         """`{entityId}`: the metadata names this entity id instead (a hijacked metadata URL), with a new key."""
         i = idp(name)
         i.metadata_entity = str((await request.json())["entityId"])
-        fresh = _new_idp(name)
+        fresh = new_idp(name)
         i.previous.insert(0, i.cert_pem)
         i.key, i.cert_pem = fresh.key, fresh.cert_pem
         return {"entityId": i.metadata_entity}
@@ -292,7 +292,7 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
         q = request.query_params
         email = (q.get("user") or "").strip().lower()
         known = idp(name).sp
-        if known.get("requireSignedRequests") and not _signed_by(request.url.query, str(known.get("certificate", ""))):
+        if known.get("requireSignedRequests") and not signed_by(request.url.query, str(known.get("certificate", ""))):
             raise HTTPException(400, "the request is not signed by the service provider")
         try:
             xml = zlib.decompress(base64.b64decode(q.get("SAMLRequest", "")), wbits=-15)
@@ -443,7 +443,7 @@ def saml_response(
     return base64.b64encode(etree.tostring(response)).decode()
 
 
-def _signed_by(raw_query: str, certificate: str) -> bool:
+def signed_by(raw_query: str, certificate: str) -> bool:
     """Whether the redirect-binding query carries a valid RSA-SHA256 signature by `certificate` over
     `SAMLRequest=…&RelayState=…&SigAlg=…`, taken exactly as sent (SAML bindings 3.4.4.1)."""
     parts = dict(p.split("=", 1) for p in raw_query.split("&") if "=" in p)
