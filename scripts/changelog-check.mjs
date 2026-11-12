@@ -149,7 +149,8 @@ function checkCommit(msgFile) {
   const message = readFileSync(msgFile, 'utf8');
   const gitDir = git(['rev-parse', '--git-dir']).trim();
   if (existsSync(join(repo, gitDir, 'MERGE_HEAD'))) return [];
-  if (!NEEDS_ENTRY.test(subjectOf(message)) && !trailerIds(message).length) return [];
+  const subject = subjectOf(message);
+  if (!NEEDS_ENTRY.test(subject) && !(/^fix(\([^)]*\))?!?:/.test(subject) && trailerIds(message).length)) return [];
   const staged = git(['diff', '--cached', '--name-only']).split('\n').filter(Boolean);
   if (!staged.some((p) => USER_PATHS.test(p))) return [];
   const ids = trailerIds(message);
