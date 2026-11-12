@@ -101,7 +101,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | api | `console/scripts/test-uc-607-api.py` | target: 21 and 23 wait on S1 and D2 |
 | sdk | `console/scripts/test-uc-607-sdk.py` | target: waits on K1 |
 | cli | `console/scripts/test-uc-607-cli.py` | target: waits on L1 |
-| ui | `console/scripts/test-uc-607-ui.mjs` | failing (2026-11-03), 32 of 38. Steps 45 and 13c: the run's Human Task offers no Connect my account, as agents-service's connect wait drops the account's app (`services/agents-service/src/ops_agents/api/engine_reviews.py:71`), which starting the sign-in needs. Step 40: with its hosts off the allow list the account still tests 200, since an app reaches its own hosts (commit 2d496c7). Step 46: Tools reads agents-service's paged `GET /v1/tools` (commit ba9f12c). Step 8: `GET /v1/apps` lists no built-in app without `include=builtin`. Step 7c: a builder's grid explains Connect on 10 cards and disables none |
+| ui | `console/scripts/test-uc-607-ui.mjs` | failing (2026-11-12): steps 0, 2, 3, 4 and 40 pass; 42 onward open. Earlier notes (2026-11-03): Steps 45 and 13c: the run's Human Task offers no Connect my account, as agents-service's connect wait drops the account's app (`services/agents-service/src/ops_agents/api/engine_reviews.py:71`), which starting the sign-in needs. Step 40: with its hosts off the allow list the account still tests 200, since an app reaches its own hosts (commit 2d496c7). Step 46: Tools reads agents-service's paged `GET /v1/tools` (commit ba9f12c). Step 8: `GET /v1/apps` lists no built-in app without `include=builtin`. Step 7c: a builder's grid explains Connect on 10 cards and disables none |
 
 ## Non-vacuous check
 
@@ -112,4 +112,6 @@ Screenshots of each screen at 1280 in light and dark go to `evidenceDir('607', '
 
 ## Setup state
 
-The account, app and run reads go through `required()`. On 2026-11-12 steps 2, 4, 6, 7, 7b, 11, 12, 40, 42, 44 and 46 fail on the console's moved pages and the Tools tabs.
+On 2026-11-12 the walk reads the moved pages (`/data/connectors`, `/settings/account/connectors`). Steps 0, 2, 3, 4 and 40 pass;
+steps 42, 6, 7, 44 and 46 and those after them still read old element ids or the old tabs. Connectors is the page's title;
+on an app where each person signs in, the header and catalog card show the viewer's state and the team row shows the team's.

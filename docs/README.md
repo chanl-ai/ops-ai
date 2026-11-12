@@ -224,6 +224,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/use-case-areas.md` | Use cases tab landing (draft): how to read a use case page, how to run one, the areas |
 | `usecases/knowledge/written-and-pushed-knowledge.md` | uc-676 as a page (draft): written pages and pushed items become cited knowledge |
 | `usecases/knowledge/knowledge-use-cases.md` | Every knowledge use case with what it proves, layers, state, merges and the SDK, CLI and MCP gaps |
+| `usecases/tools-and-apps/tools-use-cases.md` | Every tools and apps use case with what it proves, layers, state, merges and the SDK, CLI and MCP gaps |
 | `usecases/tools-and-apps/an-app-key-never-comes-back.md` | uc-013 as a page (draft): an app's key reaches the system it calls and never comes back |
 | `usecases/agents/draft-publish-and-chat-with-an-agent.md` | uc-018 as a page (draft): draft, test, publish and chat with an agent |
 | `usecases/workflows/validate-apply-and-test-run-a-workflow.md` | uc-623 as a page (draft): check, save and test-run a workflow from a file |

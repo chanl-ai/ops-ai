@@ -49,11 +49,11 @@ the request body.
 | 11 | James lists `GET /v1/me/accounts`, then disconnects | His Salesforce sign-in is listed; after Disconnect his next run waits for him to connect again |
 | 12 | James asks a chat agent holding the update operation to move a case | The reply shows the Connect Salesforce card; nothing reaches Salesforce |
 | 13 | He presses Connect, signs in to Salesforce in the pop-up as `handler@kestrel.example` | The pop-up closes, the card reads Connected, the chat sends a follow-up and the agent's new call updates the case: Salesforce records exactly one edit, his |
-| 14 | He opens My accounts from the person menu (formerly Your connections; the old address opens it) | His Salesforce sign-in is listed with its account |
-| 15 | At 375 px, My accounts and the chat with the card | Neither page scrolls sideways |
-| 16 | He disconnects on My accounts (the old address opens it) | His row offers Connect again and `GET /v1/me/accounts` returns none |
-| 17 | Priya opens the old connection address, then Settings on the app's page, and turns Everyone signs in with their own account off and on | It reads on; off saves `team`, on saves `person` again |
-| 18 | Priya opens the old connection address and presses Connect my account on the app's page | The Accounts row reads Connected as `lead@kestrel.example`, and `GET /v1/me/accounts` lists it |
+| 14 | He opens My connectors from the person menu | His Salesforce card is listed with the account he signed in as |
+| 15 | At 375 px, My connectors and the chat with the card | Neither page scrolls sideways |
+| 16 | He opens the card's menu, chooses Disconnect and confirms | His card offers Connect again and `GET /v1/me/accounts` returns none |
+| 17 | Priya opens the app's page, then Settings, and turns People can connect their own account off and on | It reads on; off saves `team`, on saves `person_or_team` (team backup on) |
+| 18 | Priya opens My connectors and presses Connect on the card | The card reads `lead@kestrel.example`, and `GET /v1/me/accounts` lists it |
 | 19 | Retired: the console switch was removed (af724998) | |
 
 ## Acceptance layers
@@ -61,13 +61,9 @@ the request body.
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-558-api.py` | passing (2026-10-29) |
-| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-11-03), 11 checks |
+| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-11-12), 11 checks |
 
 ## Non-vacuous check
 
 Step 4 reads the editor from the fake Salesforce, which takes it from the bearer token's subject, so a call made with
 the team's or another person's token fails it. Step 7 fails if tools-service reads `actingFor` from the body.
-
-## Setup state
-
-On 2026-11-12 steps 14 to 18 still fail: the redirect targets are now /settings/account/connectors and /data/connectors/, but the checks' element ids on those pages are not yet re-read.
