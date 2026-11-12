@@ -57,7 +57,7 @@ from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError
 from . import openapi
 from .directory import Directory, Team
 from .executions import call_row
-from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, tool_mode
+from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
 from .seed import blank, kind_of, major_of, open_connection, tool_title
@@ -2222,13 +2222,22 @@ class ModuleService:
         if team_id is not None and a.get("decider_team") not in (None, team_id):
             # The system workflow runs in the deciding team; a run in another team decides nothing here.
             raise Forbidden("This request is decided by another team.", code="team_forbidden")
-        asker = str(a.get("requested_by_email") or "").lower()
-        if asker and asker in {str(d).lower() for d in (*deciders, by or "")}:
-            # Separation of duties follows the tenant's requesterMayDecide, as every other decision does: the
-            # asker decides their own request only while it is on.
-            allowed = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
-            if not allowed:
-                raise Forbidden("The person who asked for this access cannot decide it.", code="requester_decides")
+        asker = str(a.get("requested_by_email") or "")
+        if asker and asker.casefold() in {str(d).casefold() for d in (*deciders, by or "")}:
+            # Separation of duties through can(requested_by=), with requesterMayDecide read now rather than from a
+            # token: the asker decides their own request only while it is on.
+            may_decide = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
+            refused = own_request_refusal(
+                Access(),
+                tenant_id,
+                asker,
+                (*deciders, by),
+                may_decide=may_decide,
+                team_id=a.get("decider_team"),
+                what="this access",
+            )
+            if refused is not None:
+                raise refused
         status = "approved" if decision == "approved" else "rejected"
         if a["status"] == status:
             return self._approval_out(a)

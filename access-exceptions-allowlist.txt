@@ -1,4 +1,4 @@
-# 49 access exceptions: decisions taken outside can() and policy defaults that hold something back
+# 48 access exceptions: decisions taken outside can() and policy defaults that hold something back
 # (scripts/check_access_exceptions.py). This number may only go down. Each line is `path kind key count row`; row is
 # the line of the Exceptions register in docs/architecture/roles-and-permissions.md that records the decision.
 # When the code changes, lower the count or delete the line. A new line needs a register row and a Standards-exception:
@@ -47,7 +47,6 @@ services/tools-service/src/ops_tools/modules/directory.py refusal forbidden 1 E1
 services/tools-service/src/ops_tools/modules/review_events.py lock SYSTEM_TOOLS 1 E06
 services/tools-service/src/ops_tools/modules/routes.py refusal service_required 1 E07
 services/tools-service/src/ops_tools/modules/routes.py role-name service-sub 1 E07
-services/tools-service/src/ops_tools/modules/service.py refusal requester_decides 1 E11
 services/tools-service/src/ops_tools/modules/service.py refusal role_required 1 E41
 services/tools-service/src/ops_tools/registry.py lock SYSTEM_ONLY 2 E06
 services/tools-service/src/ops_tools/send_policy_routes.py refusal forbidden 1 E15

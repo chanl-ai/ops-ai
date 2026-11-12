@@ -5,6 +5,7 @@ read counts as "always", so a failed read never lets a version go live unreviewe
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -133,23 +134,51 @@ def asker_refusal(
     """The refusal `can` gives when an approval names the person the call acts for and requesterMayDecide, read at the
     call (`may_decide`), does not let an asker decide; None when someone else approved or the policy allows it. Only
     the separation-of-duties part counts here: the approver's role was checked when the approval was given."""
-    if asker.email.casefold() not in {a.casefold() for a in approvers}:
+    return own_request_refusal(
+        access,
+        tenant_id,
+        asker.email,
+        approvers,
+        may_decide=may_decide,
+        sub=asker.sub,
+        name=asker.name,
+        team_id=asker.team_id,
+        what="this write",
+    )
+
+
+def own_request_refusal(
+    access: Access,
+    tenant_id: str,
+    asker: str,
+    deciders: Iterable[str | None],
+    *,
+    may_decide: bool,
+    sub: str | None = None,
+    name: str = "",
+    team_id: str | None = None,
+    what: str = "this",
+) -> Forbidden | None:
+    """`can(requested_by=)`'s own_request refusal when one of `deciders` is `asker` (an email) and requesterMayDecide,
+    read live by the caller (`may_decide`), does not let an asker decide; None otherwise. The decider's role is checked
+    where the decision is made, so any other refusal `can` gives here does not count."""
+    if not asker or asker.casefold() not in {str(d).casefold() for d in deciders if d}:
         return None
     person = Principal(
         kind="person",
-        sub=asker.sub,
-        email=asker.email,
-        name=asker.name,
+        sub=sub or asker,
+        email=asker,
+        name=name or asker,
         tenant_id=tenant_id,
-        team_id=asker.team_id,
-        team_ids=[asker.team_id] if asker.team_id else [],
+        team_id=team_id,
+        team_ids=[team_id] if team_id else [],
         roles={},
         scopes=[],
         auth_method="session",
         policies={"requesterMayDecide": may_decide},
     )
     try:
-        access.can(person, "reviews", "decide", team=asker.team_id, requested_by=[asker.email], what="this write")
+        access.can(person, "reviews", "decide", team=team_id, requested_by=[asker], what=what)
     except Forbidden as refused:
         return refused if refused.code == "own_request" else None
     return None
