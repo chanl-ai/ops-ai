@@ -25,8 +25,8 @@ Read with [tool lifecycle](tool-lifecycle.md), [workflows as tools](workflows-as
 | Server per person | A person's token is accepted on the team address | `packages/ops_identity/src/ops_identity/resolve.py:116-130` | A way for a client to get that token (the sign-in server below); the audience check |
 | Client of outside servers | An outside server is a module of type `mcp`; `initialize`, paged `tools/list`, `tools/call` over streamable HTTP on the egress allow-list; tools pinned and refused on drift | `T/mcp.py:72-143`; `T/executor.py:578-681`, `:775`; `T/modules/schemas.py:18`; `T/modules/routes.py:131`; `T/apps.py:2098` | Nothing |
 | Agents and workflows | Agents and workflow steps call MCP-backed tools through `POST /v1/calls`; tool search above 20 tools | `services/agents-service/src/ops_agents/activities/gateway.py:242`; `packages/ops_agent_kernel/src/ops_agent_kernel/types.py:74` | Nothing |
-| Knowledge, skills, guide | Nothing over MCP. A knowledge base carries an `access.mcp` switch that is always off | `services/kb-service/src/ops_kb/service.py:420` | `search_knowledge`; skills as prompts plus `search_skills`, `get_skill`, `save_skill`; `guide` |
-| Admin and builder | Nothing over MCP; the SDKs and the `opsai` CLI cover it | `sdk/python/src/ops_ai/`, `sdk/typescript/src/` | A built-in module over the public API, reads first, changes held for a person |
+| Knowledge, skills, guide | The team's skills the caller may read are prompts named by slug, their inputs as arguments; `prompts/list` and `prompts/get` are gateway reads named by those methods. A knowledge base carries an `access.mcp` switch that is always off | `T/mcp_tools.py` (`prompts`, `prompt`); `T/mcp_server.py` (`_list_prompts`, `_get_prompt`); `services/kb-service/src/ops_kb/service.py:420` | `search_knowledge`; `search_skills`, `get_skill`, `save_skill`; `guide` |
+| Admin and builder | `list_templates` and `install_template`, public API operations offered as tools beside the team's own, each a gateway call; the SDKs and the `opsai` CLI cover the rest | `T/mcp_tools.py` (`OPERATIONS`); `sdk/python/src/ops_ai/`, `sdk/typescript/src/` | The rest of the public API as tools |
 | Sign-in | Inbound: API key `Bearer ok_…`. Outbound: RFC 9728 metadata, RFC 8414 issuer match, PKCE S256, RFC 8707 resource, optional dynamic registration | `resolve.py:125-126`; `T/auth/discovery.py:1-9`, `:80-141`; `T/auth/tokens.py:379` | An OAuth 2.1 server in platform-service; protected resource metadata; a 401 that points at it |
 | Audit, limits, masking | One `gateway_calls` row per call with `channel` and `client_name` (`T/store/calls.py:65-67`); a per-operation rate window in PostgreSQL (`T/store/rate_windows.py:1-6`, spent at `T/gateway_calls.py:354-364`); output masks and secret scrub (`T/executor.py:106`, `:539`) | As cited in the cell | A rate window per token; personal data masked per endpoint |
 
@@ -65,7 +65,7 @@ console's MCP page (`apps/console/src/app/channels/mcp/page.tsx`) reads `/connec
 | A key or token for another team gets 403 `team_forbidden` | Built (`resolve.py:116-120`) |
 | A service token on the MCP address is refused | Built (`resolve.py:127-128`) |
 | The tool list is filtered by the caller's rights and the team's visibility; an unknown team sees nothing | Built (`T/mcp_server.py:87-99`) |
-| The title is always set; every listed tool is a read, so `readOnlyHint` is always true | Built (`T/mcp_server.py:109`, `:112`) |
+| The title is always set; every listed team tool is a read, so its `readOnlyHint` is true; `install_template` is the one listed write | Built (`T/mcp_server.py` `_list_tools`, `T/mcp_tools.py` `tools`) |
 | `readOnlyHint` and `destructiveHint` come per tool from the access class and the approval policy | Not built yet |
 | Every outside-assistant call is a test run, using an app's sandbox account when the team has one | Built (`T/mcp_server.py:121-125`) |
 | A write without an approval is refused | Built (`T/gateway_calls.py:405-438`) |
@@ -78,7 +78,11 @@ console's MCP page (`apps/console/src/app/channels/mcp/page.tsx`) reads `/connec
 | A client registers by a pre-registered record or a client ID metadata document; dynamic registration is off | Not built yet |
 | Personal data is masked in what an MCP client receives unless a team manager turns it off, and that change is audited | Not built yet |
 | Knowledge is served as a search tool through the gateway, never as MCP resources, so each read is limited and audited | Not built yet |
-| A skill read with `prompts/get` runs as a `get_skill` gateway call, so it is limited and audited like a tool call | Not built yet |
+| A skill read with `prompts/list` or `prompts/get` is a gateway read named by that method, so it is limited and audited like a tool call; a person who may not read skills gets no prompts | Built (`T/mcp_server.py` `_platform_call`) |
+| A platform operation (`list_templates`, `install_template`) is a gateway call: one `gateway_calls` row on the `mcp` channel, a rate window per tenant, and `install_template` is a write that waits for a person unless the caller is their own approver | Built (`T/gateway_calls.py` `call(operation=…)`, `T/mcp_tools.py` `resolved`) |
+| Running any tool, a platform operation included, needs `tools:run`; a member without it gets a tool error | Built (`T/mcp_server.py` `_call_tool`) |
+| A platform operation's service token carries only the cells the person holds in the team, and the owning service decides with its own `can` (no `skills:create`, no skill installed) | Built (`T/mcp_tools.py` `_headers`) |
+| A write a platform operation makes names the person as its maker, through an acting-for token platform-service signs | Built (`T/mcp_tools.py` `_acting_for`) |
 | A skill saved from a chat is a draft that a builder publishes | Not built yet |
 | An outside server's tools are pinned by schema; a changed tool is refused until re-imported and reviewed | Built (`T/modules/service.py:456`) |
 | Every request to an outside server goes through the egress allow-list at a checked address | Built (`T/mcp.py:1-8`, `:100-107`) |
@@ -98,7 +102,7 @@ The MCP mount stays out of OpenAPI. Every other route is generated into the SDKs
 
 | Route | Who | Service | Built |
 |---|---|---|---|
-| `POST /mcp/{team}` | A key or token in the team, with `tools.run` | tools | Built |
+| `POST /mcp/{team}` | A key or token in the team opens a session and lists; each tool call needs `tools:run`, and each prompt read needs `skills:view` | tools | Built |
 | `POST /mcp/{env}/{team}`, `/mcp/{env}/{team}/e/{slug}` | Same | tools | Not built yet |
 | `GET /.well-known/oauth-protected-resource/mcp/{env}/{team}[/e/{slug}]` | Anyone | tools | Not built yet |
 | `GET /.well-known/oauth-authorization-server`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke` | Clients and people | platform | Not built yet |
