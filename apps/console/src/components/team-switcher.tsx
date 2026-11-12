@@ -102,12 +102,12 @@ export function TeamSwitcher({
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground" aria-label={`Team: ${activeTeam?.name ?? 'loading'}. Switch team`}>
+            <SidebarMenuButton size="lg" tooltip={activeTeam?.name} className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground" aria-label={`Team: ${activeTeam?.name ?? 'loading'}. Switch team`}>
               {brand.logo ? (
                 // eslint-disable-next-line @next/next/no-img-element -- a data: URL or local file from env, not an optimisable asset
-                <img src={brand.logo} alt="" className="aspect-square size-8 rounded-md" />
+                <img src={brand.logo} alt="" className="aspect-square size-8 shrink-0 rounded-md object-cover" />
               ) : (
-                <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <Logo className="size-4" />
                 </div>
               )}
