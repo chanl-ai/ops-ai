@@ -21224,7 +21224,9 @@ export interface operations {
     resources_copy_resource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path: {
                 resource: string;
             };

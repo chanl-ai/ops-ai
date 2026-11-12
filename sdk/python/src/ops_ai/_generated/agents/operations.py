@@ -975,7 +975,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "resources_copy_resource": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/resources/{resource}/copies",
         "pathParams": ["resource"],
@@ -2409,9 +2409,18 @@ class Operations:
         "Plan Resources"
         return self._t.call(SERVICE, OPERATIONS["resources_plan_resources"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
+    def resources_copy_resource(
+        self, resource: str, body: InstallInput, *, x_acting_for: str | None = None
+    ) -> Installation:
         "Copy Resource"
-        return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["resources_copy_resource"],
+            {"resource": resource},
+            {},
+            {"x-acting-for": x_acting_for},
+            body,
+        )  # type: ignore[no-any-return]
 
     def resources_detach_copy(self, resource: str, copy: str) -> CopyRef:
         "Detach Copy"
@@ -3670,9 +3679,18 @@ class AsyncOperations:
         "Plan Resources"
         return await self._t.call(SERVICE, OPERATIONS["resources_plan_resources"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
+    async def resources_copy_resource(
+        self, resource: str, body: InstallInput, *, x_acting_for: str | None = None
+    ) -> Installation:
         "Copy Resource"
-        return await self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["resources_copy_resource"],
+            {"resource": resource},
+            {},
+            {"x-acting-for": x_acting_for},
+            body,
+        )  # type: ignore[no-any-return]
 
     async def resources_detach_copy(self, resource: str, copy: str) -> CopyRef:
         "Detach Copy"

@@ -1208,7 +1208,9 @@ export const agentsOperations = {
   },
   "resources_copy_resource": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/resources/{resource}/copies",
     "pathParams": [
