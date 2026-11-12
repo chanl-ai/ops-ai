@@ -48,7 +48,7 @@ from .policies import policy
 
 BUILTIN_GRIDS: dict[str, tuple[Grant, ...]] = {r.id: r.grants for r in BUILTIN_ROLES}
 BUILTIN_NAMES = {r.id: r.name for r in BUILTIN_ROLES}
-# The role that stands in for a built-in role a decision names: its grid holds every team cell.
+# The role whose `*` (workspace) assignment may decide a review that names any role.
 ADMIN_ROLE = "admin"
 _CELLS = frozenset((a, x) for a in AREAS for x in ACTIONS)
 
@@ -164,9 +164,9 @@ class Access:
         provisioning service needs only its scopes, and its next run puts back the fields the template owns.
         `speaking_of` names the person when someone else asks on their behalf (an admin's Check access): a refusal then
         says "Maya asked for this" instead of "You asked for this". `role` is a role id the caller must also hold in
-        the team (a review that names its reviewer): a membership name maps to it as `roles_in` reads it, an `*`
-        assignment counts in every team, and an Admin stands in for a built-in role, whose cells the Admin grid holds.
-        A custom role names a group of people (a compliance team), so only its holders pass."""
+        the team (a review that names its reviewer): a membership name maps to it as `roles_in` reads it, and an `*`
+        assignment counts in every team. A workspace Admin (an `*` Admin assignment) may decide for any named role; a
+        team Admin holds only the roles the team gives them, so a review naming a compliance group waits for it."""
         you, your, own = (speaking_of, f"{speaking_of}'s", "their") if speaking_of else ("You", "Your", "your")
         if (area, action) not in _CELLS:
             raise ValueError(f"{area}.{action} is not in the catalogue")
@@ -219,7 +219,7 @@ class Access:
             )
         if role is not None:
             held = self.roles_in(p, held_in)
-            if role not in held and not (role in BUILTIN_NAMES and ADMIN_ROLE in held):
+            if role not in held and ADMIN_ROLE not in (p.access or {}).get(ANY_TEAM, ()):
                 named = BUILTIN_NAMES.get(role, role)
                 raise Forbidden(
                     f"{what} waits for a {named} of {held_in}; {your.lower()} roles there do not include it.",
