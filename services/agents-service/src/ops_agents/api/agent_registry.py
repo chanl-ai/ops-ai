@@ -141,6 +141,7 @@ def definition_of(agent_id: str, version: int, spec: dict[str, Any]) -> AgentDef
         widgets_per_turn=cast(int | None, widget_settings.get("perTurn")),
         memory_enabled=bool(memory_of(spec)["enabled"]),
         memory_kinds=tuple(memory_of(spec)["kinds"]),
+        skill_menu=spec.get("skillMenu") or "team",
     )
 
 
@@ -382,6 +383,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
         "toolIds": spec.get("toolIds") or [],
         "collections": spec.get("collections") or [],
         "allTeamKnowledgeBases": bool(spec.get("allTeamKnowledgeBases")),
+        "skillMenu": spec.get("skillMenu") or "team",
         "accounts": dict(spec.get("accounts") or {}),
         # The owning team comes from the creator's token; the console names it from its teams list.
         "teamId": row["team_id"],

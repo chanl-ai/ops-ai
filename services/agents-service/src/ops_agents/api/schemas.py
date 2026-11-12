@@ -194,6 +194,8 @@ class Agent(Out):
     stale_tool_ids: list[str]
     collections: list[str]
     all_team_knowledge_bases: bool = False
+    # Which skills a person may pick in a chat with this agent: team, attached or off.
+    skill_menu: Literal["team", "attached", "off"] = "team"
     # The team account each app's calls use, app id to account name; empty for each app's default.
     accounts: dict[str, str] = Field(default_factory=dict[str, str])
     # The owning team, from the creator's token; null for an agent no team owns.
@@ -1350,6 +1352,8 @@ class SkillPart(Out):
     inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
     # Some of the skill's own tools; absent when the part names none.
     tool_ids: list[str] = Field(default_factory=list[str])
+    # The most tokens the part may hold when loaded; absent takes the reply's whole skill budget.
+    budget: int | None = None
 
 
 class SkillPartSummary(Out):
@@ -1404,6 +1408,10 @@ class Skill(Out):
     # an MCP prompt asks for without a read per skill.
     inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
     parts: list[SkillPartSummary] = Field(default_factory=list[SkillPartSummary])
+    # With usableBy=agent and agentId: the skill needs a tool or knowledge base the agent lacks, named in `needs`, so
+    # the / menu shows it locked.
+    locked: bool | None = None
+    needs: list[str] | None = None
 
 
 class SkillVersion(Out):

@@ -320,7 +320,9 @@ export const agentsOperations = {
       "view",
       "page",
       "pageSize",
-      "search"
+      "search",
+      "usableBy",
+      "agentId"
     ],
     "stream": false
   },

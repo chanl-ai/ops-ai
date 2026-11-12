@@ -125,6 +125,9 @@ class AgentPatch(WireModel):
     collections: list[str] | None = None
     # search_knowledge may search every knowledge base of the agent's team; off, only `collections` (decision D19).
     all_team_knowledge_bases: bool | None = None
+    # Which skills a person may pick from the / menu in a chat with this agent: team (any published team skill whose
+    # tools it holds), attached (its own skills only) or off. Saved with the version.
+    skill_menu: Literal["team", "attached", "off"] | None = None
     # The team account each app's calls use, app id to account name, as the whole map; checked when the agent is
     # published (each must be a team account of the app), never when saved, so a draft may name one not made yet.
     accounts: (

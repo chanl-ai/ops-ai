@@ -102,6 +102,7 @@ from ..memory import finish_learning, person_of, start_learning
 from ..ops_tools import ensure_ops_assistant, fill_cards
 from ..review_text import tool_titles
 from ..runs import config, execute, graph_store, pending, require_graphs, resolve
+from ..skills import skill_turn
 from .agents import changeable
 
 log = get_logger("ops_agents.chat")
@@ -716,6 +717,13 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         "history": await _compacted(rt, thread_id, meta, [history_entry(m) for m in transcript]),
         "requested_by": me.email,
     }
+    if body.skill is not None:
+        # The / menu needs skills: view in the conversation's team (D3).
+        can(caller_of(me), "skills", "view", team=str(row["team_id"]), what="the team's skills", code="forbidden")
+    last = next((m for m in reversed(transcript) if m.role == "assistant"), None)
+    earlier = cast(list[dict[str, Any]], history_entry(last).get("skills") or []) if last is not None else []
+    if (turn := await skill_turn(rt, agent, body.skill, earlier)) is not None:
+        graph_input["skill_turn"] = turn
     # The settings this turn runs on: the agent's limits, then the thread's overrides, then this message's; a value
     # outside the limits is a 422 naming the field and no run starts.
     thread_overrides = ChatOverrides.model_validate(row["overrides"]) if row.get("overrides") else None

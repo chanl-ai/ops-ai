@@ -10,12 +10,16 @@ views return those as empty and the docs page says so.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, cast
 
+from ops_agent_kernel.types import Skill as KernelSkill
+from ops_contracts.chat import SkillPick
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.logging import get_logger
 
+from ..activities.catalog import AgentDefinition, kernel_skills
 from ..store.skills import SkillRegistry, slug_of
 from .agent_registry import SEED_BY, SEED_TEAM, seed_agent_version
 from .agent_registry import registry as agent_registry
@@ -130,6 +134,14 @@ def _parts(raw: Any, tool_ids: list[str], loading: str) -> list[dict[str, Any]]:
                 f"Part {name} names {', '.join(outside)}, which the skill does not; add it to the skill's tools.",
                 code="part_tool_not_in_skill",
             )
+        budget = int(f.get("budget") or 0)
+        if budget and not 0 < budget <= TOKEN_BUDGET:
+            raise ValidationFailed(f"A part's budget is 1 to {TOKEN_BUDGET:,} tokens.", code="bad_part_budget")
+        if budget and (len(instructions) + 3) // 4 > budget:
+            raise ValidationFailed(
+                f"Part {name} is longer than its own {budget:,}-token budget; shorten it or raise the budget.",
+                code="part_over_budget",
+            )
         parts.append(
             {
                 "slug": slug,
@@ -138,6 +150,7 @@ def _parts(raw: Any, tool_ids: list[str], loading: str) -> list[dict[str, Any]]:
                 "instructions": instructions,
                 **({"inputs": inputs} if (inputs := _inputs(f.get("inputs"))) else {}),
                 **({"toolIds": part_tools} if part_tools else {}),
+                **({"budget": budget} if budget else {}),
             }
         )
     if len(parts) > MAX_PARTS:
@@ -376,6 +389,18 @@ async def row_view(
     }
 
 
+def over_budget(v: dict[str, Any]) -> str | None:
+    """Why a version could never load because of its size, or None: an on-match body (with parts, the shared text and
+    its longest part) past the reply's skill budget, an always-on body past the always-on budget."""
+    budget = TOKEN_BUDGET if v["content"]["loading"] == "on_match" else ALWAYS_BUDGET
+    if v["tokens"] <= budget:
+        return None
+    return (
+        f"v{v['version']} is {v['tokens']:,} tokens; a {v['content']['loading']} body over {budget:,} could never "
+        "load. Shorten it."
+    )
+
+
 async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
     reg = skills(rt)
     row = await reg.row(skill_id)
@@ -392,12 +417,8 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         blockers.append(f"v{newest['version']} is already published; save a change to open a draft.")
     elif pending is not None:
         blockers.append(f"{pending['id']} is already open for v{pending['version']}.")
-    budget = TOKEN_BUDGET if newest["content"]["loading"] == "on_match" else ALWAYS_BUDGET
-    if newest["tokens"] > budget:
-        blockers.append(
-            f"v{newest['version']} is {newest['tokens']:,} tokens; a {newest['content']['loading']} body over "
-            f"{budget:,} could never load. Shorten it."
-        )
+    if too_long := over_budget(newest):
+        blockers.append(too_long)
     latest = row["published_version"]
     usage: list[dict[str, Any]] = []
     for a, spec, p in pins:
@@ -495,6 +516,7 @@ def snapshot(skill_id: str, version: int, content: dict[str, Any], tokens: int, 
         "toolIds": tool_ids(content),
         "knowledgeBases": content["knowledgeBases"],
         "tokens": tokens,
+        **({"parts": content["parts"]} if content.get("parts") else {}),
         "attachedBy": by,
         "attachedAt": at,
     }
@@ -653,3 +675,112 @@ def seed_path(seed_dir: Path, agents_seed_file: Path | None) -> Path:
 def require_unpinned(pinning: list[str], name: str) -> None:
     if pinning:
         raise Conflict(f"{name} is attached to {', '.join(pinning)}; detach it first.", code="skill_pinned")
+
+
+async def usable(rt: Runtime, *, menu: str, pinned: list[str]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """(skill row, published version) of each skill a chat with an agent may use under its skill menu setting: every
+    published, live skill for `team`, the agent's own for `attached`, none for `off`."""
+    if menu == "off":
+        return []
+    reg = skills(rt)
+    out: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for r in await reg.rows():
+        if r["published_version"] is None or r["deprecated_reason"] or (menu == "attached" and r["id"] not in pinned):
+            continue
+        if (v := await reg.version(r["id"], int(r["published_version"]))) is not None:
+            out.append((r, v))
+    return out
+
+
+def _key(entry: dict[str, Any]) -> tuple[str, str]:
+    return str(entry.get("skillId")), str(entry.get("part") or "")
+
+
+async def _rendered(rt: Runtime, skill_id: str, part: str | None, given: dict[str, str]) -> KernelSkill:
+    """The published skill, or one part of it, as the kernel loads it, with the inputs filled in."""
+    out = await render_published(rt, skill_id, part, given)
+    v = await skills(rt).version(skill_id, int(out["version"]))
+    assert v is not None
+    entry = next(
+        s
+        for s in kernel_skills(skill_id, int(out["version"]), str(out["slug"]), v["content"])
+        if s.part == (out.get("part") or "")
+    )
+    return replace(entry, instructions=str(out["text"]), tokens=max(1, (len(str(out["text"])) + 3) // 4))
+
+
+async def skill_turn(
+    rt: Runtime, agent: AgentDefinition, pick: SkillPick | None, earlier: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """The skills one chat reply runs with beyond the agent's pins: the team's published skills its menu setting
+    allows (offered to load on a match), the skills the reply before carried, and the part the person picked, filled
+    with its inputs. None when there are none, so a reply without skills runs as before.
+
+    Raises:
+        Unprocessable: `skill_menu_limit` when the agent's setting does not offer the pick, `skill_needs_scope` when
+            the skill names a tool or knowledge base the agent lacks, `skill_budget` past the reply's caps, and
+            `render_published`'s codes (`skill_not_published`, `missing_input`, ...).
+    """
+    pinned = [k.skill_id for k in agent.skills]
+    holds = {"toolIds": list(agent.tools), "collections": list(agent.default_kb_ids)}
+    extra: list[KernelSkill] = []
+    if agent.skill_menu == "team":
+        for r, v in await usable(rt, menu="team", pinned=pinned):
+            if r["id"] in pinned or v["content"].get("loading") != "on_match" or missing_for(v["content"], holds):
+                continue
+            extra.extend(kernel_skills(r["id"], int(v["version"]), str(r["slug"]), v["content"], int(v["tokens"])))
+    # The reply before's on-match skills stay loaded; always-on ones load again from the pins.
+    carried = [{**e, "how": "carried"} for e in earlier if e.get("how") != "always" and e.get("matched") != "Always on"]
+    if pick is not None:
+        if agent.skill_menu == "off" or (agent.skill_menu == "attached" and pick.skill_id not in pinned):
+            raise Unprocessable(
+                f"{agent.name} does not offer that skill in chat; ask an admin to change its skill menu setting.",
+                code="skill_menu_limit",
+            )
+        picked = await _rendered(rt, pick.skill_id, pick.part, pick.inputs)
+        v = await skills(rt).version(pick.skill_id, picked.version)
+        if missing := missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), holds):
+            raise Unprocessable(
+                f"{picked.name} needs {', '.join(missing)}, which {agent.name} does not have; grant it on the agent "
+                "first.",
+                code="skill_needs_scope",
+                details={"needs": missing},
+            )
+        key = (picked.skill_id, picked.part)
+        carried = [e for e in carried if _key(e) != key]
+        if len({_key(e) for e in carried}) + 1 > MAX_PER_TURN:
+            raise Unprocessable(
+                f"At most {MAX_PER_TURN} skills run in one reply, and this conversation already carries "
+                f"{len(carried)}; start a new chat to use {picked.name}.",
+                code="skill_budget",
+            )
+        limit = min(picked.budget or TOKEN_BUDGET, TOKEN_BUDGET)
+        if picked.tokens > limit:
+            raise Unprocessable(
+                f"{picked.name} filled in is {picked.tokens:,} tokens, over its {limit:,}-token budget; shorten the "
+                "inputs.",
+                code="skill_budget",
+            )
+        extra.insert(0, picked)
+        carried.append(
+            {
+                "skillId": picked.skill_id,
+                "version": picked.version,
+                **({"part": picked.part} if picked.part else {}),
+                "matched": "Picked from the / menu",
+                "how": "picked",
+                **({"inputs": pick.inputs} if pick.inputs else {}),
+            }
+        )
+    # A carried pick of a team skill keeps the text its inputs filled.
+    for e in carried:
+        if e.get("how") == "carried" and e.get("inputs") and e["skillId"] not in pinned:
+            try:
+                extra.insert(0, await _rendered(rt, str(e["skillId"]), e.get("part"), dict(e["inputs"])))
+            except (NotFound, Unprocessable):
+                continue
+    if not extra and not carried:
+        return None
+    seen: set[tuple[str, str]] = set()
+    unique = [s for s in extra if (s.skill_id, s.part) not in seen and not seen.add((s.skill_id, s.part))]
+    return {"skills": [asdict(s) for s in unique], "carried": carried}

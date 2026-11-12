@@ -259,7 +259,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/skills",
         "pathParams": [],
-        "query": ["view", "page", "pageSize", "search"],
+        "query": ["view", "page", "pageSize", "search", "usableBy", "agentId"],
         "stream": False,
     },
     "agents_list_tool_uses": {
@@ -2515,13 +2515,22 @@ class Operations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
     ) -> SkillList:
         "List Skills"
         return self._t.call(
             SERVICE,
             OPERATIONS["agents_list_skills"],
             {},
-            {"view": view, "page": page, "pageSize": page_size, "search": search},
+            {
+                "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "usableBy": usable_by,
+                "agentId": agent_id,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3793,13 +3802,22 @@ class AsyncOperations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
     ) -> SkillList:
         "List Skills"
         return await self._t.call(
             SERVICE,
             OPERATIONS["agents_list_skills"],
             {},
-            {"view": view, "page": page, "pageSize": page_size, "search": search},
+            {
+                "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "usableBy": usable_by,
+                "agentId": agent_id,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

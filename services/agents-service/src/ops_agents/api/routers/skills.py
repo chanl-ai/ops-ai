@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
+from ops_access import can
 from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, OptionsPage, options_page, options_window
@@ -18,7 +19,7 @@ from ops_service_kit.logging import get_logger
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
-from ..auth import Principal, caller_in, principal, require_builder
+from ..auth import Principal, caller_in, caller_of, principal, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..hitl_facade import page
@@ -38,6 +39,7 @@ from ..skills import (
     require_unpinned,
     row_view,
     skills,
+    usable,
 )
 from .agents import changeable as agent_changeable
 from .tool_catalog import known_tools
@@ -68,6 +70,8 @@ class SkillPartInput(WireModel):
     inputs: list[SkillInput] = Field(default_factory=list[SkillInput], max_length=20)
     # Some of the skill's own tools, which this part uses.
     tool_ids: list[str] = Field(default_factory=list[str])
+    # The most tokens this part may hold when loaded; unset takes the reply's whole skill budget.
+    budget: int | None = Field(default=None, ge=1, le=6000)
 
 
 class SkillRenderInput(WireModel):
@@ -146,11 +150,30 @@ async def list_skills(
     page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
+    caller: Annotated[Principal, Depends(caller_in("skills"))],
+    usable_by: Annotated[Literal["agent"] | None, Query(alias="usableBy")] = None,
+    agent_id: Annotated[str | None, Query(alias="agentId")] = None,
 ) -> JSONResponse:
     """The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
-    what chat and the MCP prompts use; every other view describes the newest version an editor sees."""
+    what chat and the MCP prompts use; every other view describes the newest version an editor sees.
+
+    `usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what
+    that agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base
+    the agent lacks as `locked`, naming them in `needs`."""
+    if usable_by is not None and caller.identity is not None and caller.identity.kind != "service":
+        can(
+            caller_of(caller), "skills", "view", team=caller.team_id or None, what="the team's skills", code="forbidden"
+        )
     pins = await _pinning(rt)
     raw = await skills(rt).rows()
+    spec: dict[str, Any] | None = None
+    if agent_id is not None:
+        agents = agent_registry(rt)
+        spec = (await agents.version(agent_id, int((await agents.row(agent_id))["version"])))["spec"]
+        menu = str(spec.get("skillMenu") or "team")
+        pinned = [str(p["skillId"]) for p in cast(list[dict[str, Any]], spec.get("skillPins") or [])]
+        offered = {r["id"] for r, _ in await usable(rt, menu=menu, pinned=pinned)}
+        raw = [r for r in raw if r["id"] in offered]
     rows = [await row_view(rt, r, pins) for r in raw]
     if search:
         s = search.lower()
@@ -168,6 +191,12 @@ async def list_skills(
     for c in facet_cols:
         if wanted := request.query_params.getlist(c):
             rows = [x for x in rows if x[c] in wanted]
+    if spec is not None:
+        reg = skills(rt)
+        for x in rows:
+            v = await reg.version(x["id"], int(x["publishedVersion"] or x["version"]))
+            needs = missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), spec)
+            x["locked"], x["needs"] = bool(needs), needs
     rows.sort(key=lambda x: str(x["name"]).lower())
     return ok({**page(rows, page_no, page_size), "facets": facets, "viewCounts": counts})
 

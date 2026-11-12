@@ -1958,6 +1958,10 @@ export interface paths {
          * List Skills
          * @description The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
          *     what chat and the MCP prompts use; every other view describes the newest version an editor sees.
+         *
+         *     `usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what
+         *     that agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base
+         *     the agent lacks as `locked`, naming them in `needs`.
          */
         get: operations["agents_list_skills"];
         put?: never;
@@ -3436,6 +3440,12 @@ export interface components {
             publishedVersion: number | null;
             /** Role */
             role: string;
+            /**
+             * Skillmenu
+             * @default team
+             * @enum {string}
+             */
+            skillMenu: "team" | "attached" | "off";
             /** Slug */
             slug: string;
             /** Staletoolids */
@@ -3562,6 +3572,8 @@ export interface components {
             protection?: ("system" | "managed") | null;
             /** Role */
             role?: string | null;
+            /** Skillmenu */
+            skillMenu?: ("team" | "attached" | "off") | null;
             /** Templateid */
             templateId?: string | null;
             /** Toolids */
@@ -8615,8 +8627,12 @@ export interface components {
              * @enum {string}
              */
             loading: "on_match" | "always";
+            /** Locked */
+            locked?: boolean | null;
             /** Name */
             name: string;
+            /** Needs */
+            needs?: string[] | null;
             /**
              * Origin
              * @enum {string}
@@ -8761,8 +8777,12 @@ export interface components {
              * @enum {string}
              */
             loading: "on_match" | "always";
+            /** Locked */
+            locked?: boolean | null;
             /** Name */
             name: string;
+            /** Needs */
+            needs?: string[] | null;
             /**
              * Origin
              * @enum {string}
@@ -8928,6 +8948,8 @@ export interface components {
          * @description One named part of a skill, read with the skill's shared instructions (`salesforce/prepare-meeting`).
          */
         SkillPart: {
+            /** Budget */
+            budget?: number | null;
             /** Inputs */
             inputs?: components["schemas"]["SkillInputField"][];
             /** Instructions */
@@ -8946,6 +8968,8 @@ export interface components {
          * @description One named part of a skill, read with the skill's shared instructions.
          */
         SkillPartInput: {
+            /** Budget */
+            budget?: number | null;
             /** Inputs */
             inputs?: components["schemas"]["SkillInput"][];
             /** Instructions */
@@ -22755,6 +22779,8 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 search?: string | null;
+                usableBy?: "agent" | null;
+                agentId?: string | null;
             };
             header?: never;
             path?: never;

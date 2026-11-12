@@ -1632,6 +1632,7 @@ class SkillInputField(TypedDict, closed=True):
 
 
 class SkillPart(TypedDict, closed=True):
+    budget: NotRequired[int | None]
     inputs: NotRequired[list[SkillInputField]]
     instructions: str
     name: str
@@ -1641,6 +1642,7 @@ class SkillPart(TypedDict, closed=True):
 
 
 class SkillPartInput(TypedDict, closed=True):
+    budget: NotRequired[int | None]
     inputs: NotRequired[list[SkillInput]]
     instructions: str
     name: str
@@ -2396,6 +2398,7 @@ class AgentPatch(TypedDict, closed=True):
     note: NotRequired[str | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     role: NotRequired[str | None]
+    skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
     templateId: NotRequired[str | None]
     toolIds: NotRequired[list[str] | None]
     widgetPins: NotRequired[list[WidgetPinInput] | None]
@@ -3222,7 +3225,9 @@ class Skill(TypedDict, closed=True):
     lastEvalPassRate: float | None
     liveAgents: int
     loading: Literal["on_match", "always"]
+    locked: NotRequired[bool | None]
     name: str
+    needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
     parts: NotRequired[list[SkillPartSummary]]
@@ -3517,6 +3522,7 @@ class Agent(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     publishedVersion: int | None
     role: str
+    skillMenu: NotRequired[Literal["team", "attached", "off"]]
     slug: str
     staleToolIds: list[str]
     tasks24h: int
@@ -3774,7 +3780,9 @@ class SkillDetail(TypedDict, closed=True):
     lastEvalPassRate: float | None
     liveAgents: int
     loading: Literal["on_match", "always"]
+    locked: NotRequired[bool | None]
     name: str
+    needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
     parts: NotRequired[list[SkillPartSummary]]

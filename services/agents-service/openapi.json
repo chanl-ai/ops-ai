@@ -422,6 +422,16 @@
             "title": "Role",
             "type": "string"
           },
+          "skillMenu": {
+            "default": "team",
+            "enum": [
+              "team",
+              "attached",
+              "off"
+            ],
+            "title": "Skillmenu",
+            "type": "string"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -981,6 +991,22 @@
               }
             ],
             "title": "Role"
+          },
+          "skillMenu": {
+            "anyOf": [
+              {
+                "enum": [
+                  "team",
+                  "attached",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skillmenu"
           },
           "templateId": {
             "anyOf": [
@@ -15835,9 +15861,34 @@
             "title": "Loading",
             "type": "string"
           },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "needs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs"
           },
           "origin": {
             "enum": [
@@ -16219,9 +16270,34 @@
             "title": "Loading",
             "type": "string"
           },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "needs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs"
           },
           "origin": {
             "enum": [
@@ -16690,6 +16766,17 @@
         "additionalProperties": false,
         "description": "One named part of a skill, read with the skill's shared instructions (`salesforce/prepare-meeting`).",
         "properties": {
+          "budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget"
+          },
           "inputs": {
             "items": {
               "$ref": "#/components/schemas/SkillInputField"
@@ -16734,6 +16821,19 @@
         "additionalProperties": false,
         "description": "One named part of a skill, read with the skill's shared instructions.",
         "properties": {
+          "budget": {
+            "anyOf": [
+              {
+                "maximum": 6000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget"
+          },
           "inputs": {
             "items": {
               "$ref": "#/components/schemas/SkillInput"
@@ -44976,7 +45076,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.",
+        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.\n\n`usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what\nthat agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base\nthe agent lacks as `locked`, naming them in `needs`.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -45035,6 +45135,39 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "usableBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "agent",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Usableby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agentId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agentid"
             }
           },
           {
