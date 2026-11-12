@@ -121,16 +121,21 @@ await withUiStack(
       const several = (rows.find((r) => r.appId === GITHUB)?.accountCount ?? 0) > 1;
       const lines = await priya.locator('[data-testid^="connector-can-do-"]').allInnerTexts();
       await priya.getByTestId('title-switcher').click();
-      const views = await priya.locator('[data-testid^="title-switcher-integrations"]').allInnerTexts();
+      const views = await priya.locator('[data-testid^="title-switcher-"][data-testid$="-connectors"]').allInnerTexts();
       await priya.keyboard.press('Escape');
-      await priya.locator('[data-testid^="title-switcher-integrations"]').first().waitFor({ state: 'hidden', timeout: 10_000 });
+      await priya.locator('[data-testid^="title-switcher-"][data-testid$="-connectors"]').first().waitFor({ state: 'hidden', timeout: 10_000 });
       await priya.screenshot({ path: join(SHOTS, 'mine-1280-light.png'), fullPage: true });
+      // My connectors is the user menu's row; Connectors (Team setup) is the Data area's sidebar row (lib/nav.ts).
+      await priya.goto(`${CONSOLE}/data/connectors`, { waitUntil: 'domcontentloaded' });
       const sidebar = priya.locator('[data-sidebar="sidebar"]').first();
-      const top = await sidebar.getByRole('link', { name: 'My connectors', exact: true }).count();
-      // Data Hub folds; open it to read its row.
-      if (!(await sidebar.getByRole('link', { name: 'Connectors', exact: true }).count())) await sidebar.getByText('Data Hub', { exact: true }).click();
+      await sidebar.getByRole('link', { name: 'Connectors', exact: true }).first().waitFor({ timeout: 30_000 }).catch(() => {});
       const hub = await sidebar.getByRole('link', { name: 'Connectors', exact: true }).count();
-      check('8c at 1280 the top row reads My connectors and the Data Hub row Connectors', top === 1 && hub === 1, { top, hub });
+      await sidebar.getByTestId('nav-user').click();
+      const top = await priya.getByTestId('nav-connections').filter({ hasText: 'My connectors' }).count();
+      await priya.keyboard.press('Escape');
+      check('8c at 1280 the user menu reads My connectors and the Data area row Connectors', top === 1 && hub === 1, { top, hub });
+      await priya.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
+      await priya.getByTestId('connectors').waitFor({ timeout: 60_000 });
       // An app the install no longer loads (Ticket desk) is not a connector, so it is never offered Add key.
       const gone = await priya.locator('[data-testid="connectors"]').getByText('Ticket desk').count();
       const search = priya.getByPlaceholder('Search connectors…');
@@ -167,15 +172,15 @@ await withUiStack(
       const fits = await inside(p, '[data-testid^="connector-plugin:"] button, [data-testid^="connector-plugin:"] a');
       const scroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
       await p.screenshot({ path: join(SHOTS, 'mine-390-dark.png'), fullPage: true });
+      await p.goto(`${CONSOLE}/data/connectors`, { waitUntil: 'domcontentloaded' });
       await p.getByRole('button', { name: 'Toggle Sidebar' }).first().click();
       const drawer = p.locator('[data-mobile="true"]').first();
       await drawer.waitFor({ timeout: 15_000 });
-      const top390 = await drawer.getByRole('link', { name: 'My connectors', exact: true }).count();
-      // Data Hub folds, and the fold is remembered: open it only when its row is not shown.
-      if (!(await drawer.getByRole('link', { name: 'Connectors', exact: true }).count())) await drawer.getByText('Data Hub', { exact: true }).click();
       const hub390 = await drawer.getByRole('link', { name: 'Connectors', exact: true }).count();
+      await drawer.getByTestId('nav-user').first().click();
+      const top390 = await p.getByTestId('nav-connections').filter({ hasText: 'My connectors' }).count();
       await p.keyboard.press('Escape');
-      check('10b at 390 the drawer reads My connectors at the top and Connectors under Data Hub', top390 === 1 && hub390 === 1, { top390, hub390 });
+      check('10b at 390 the drawer\'s user menu reads My connectors and its Data area row Connectors', top390 === 1 && hub390 === 1, { top390, hub390 });
       const words = [];
       for (const path of ['/integrations/my-accounts', '/integrations', `/integrations/${encodeURIComponent(GITHUB)}`]) {
         await p.goto(`${CONSOLE}${path}`, { waitUntil: 'domcontentloaded' });
