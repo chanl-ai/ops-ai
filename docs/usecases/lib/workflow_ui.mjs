@@ -7,6 +7,7 @@ export const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 export const PASSWORD = 'northfield-demo';
 export const JAMES = 'j.richardson@harborpine.example';
 export const PRIYA = 'p.shah@harborpine.example';
+const SAM = 's.adeyemi@harborpine.example';
 export const MAYA = 'm.okafor@harborpine.example';
 const SETTLED = ['succeeded', 'failed', 'cancelled'];
 
@@ -25,7 +26,8 @@ export async function as(email, team = 'team_ops') {
  * default (2026-11-01), so a use case proving a held chat or workflow write turns them on first.
  */
 export async function writeApprovalsOn(team = 'team_ops') {
-  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/toolWritesNeedApproval`, { method: 'PUT', headers: await as(PRIYA, team), body: JSON.stringify({ value: true }) });
+  // The app-changes policy is changed by the Security team's admin (policies.py:38-41), not by the acting team's admin.
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/toolWritesNeedApproval`, { method: 'PUT', headers: await as(SAM, 'team_security'), body: JSON.stringify({ value: true }) });
   if (!r.ok) throw new Error(`turning write approvals on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
 

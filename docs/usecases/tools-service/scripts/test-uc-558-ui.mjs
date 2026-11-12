@@ -11,7 +11,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -108,25 +108,25 @@ try {
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-558' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-558' });
       const made = await call(tools, 'POST', '/v1/apps', priya, { name: 'Salesforce', authKind: 'oauth2_auth_code', signIn: 'person', sandbox: false });
-      const conn = made.data ?? {};
+      const conn = required(made, 'create the Salesforce app');
       const settings = { baseUrl: sf.info.api_base, authorizeUrl: sf.info.authorize_url, tokenUrl: sf.info.token_url, revokeUrl: sf.info.revoke_url, clientId: 'ops-ai-kestrel', scopes: 'openid api refresh_token', testPath: '/services/oauth2/userinfo' };
       const put = await call(tools, 'PATCH', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya, { revision: conn.revision, settings, secretValues: { clientSecret: 'kestrel-connected-app-secret' } });
       const http = { name: 'uc558_update_case', description: "Update a Salesforce case's status", access: 'write', method: 'PATCH', url: sf.info.case_url, body: '{"Status": {{status}}}' };
-      const mod = (await call(tools, 'POST', '/v1/tool-modules', priya, { name: 'uc558-update-case', displayName: 'Salesforce cases', system: 'Salesforce', type: 'http', endpoint: '', connectionId: conn.id, signIn: 'person', http })).data ?? {};
+      const mod = required(await call(tools, 'POST', '/v1/tool-modules', priya, { name: 'uc558-update-case', displayName: 'Salesforce cases', system: 'Salesforce', type: 'http', endpoint: '', connectionId: conn.id, signIn: 'person', http }), 'create the tool module');
       const op = (mod.operations ?? [])[0] ?? {};
       await call(tools, 'PATCH', `/v1/tool-modules/${mod.id}/operations/${op.id}`, priya, { requiresApproval: false, scopes: ['cases.write'] });
       await call(tools, 'POST', `/v1/tool-modules/${mod.id}/reviews`, priya, { note: 'uc-558' });
       const review = ((await call(tools, 'GET', `/v1/tool-modules/${mod.id}`, priya)).data?.versions ?? []).find((v) => v.status === 'in_review');
       await call(agents, 'POST', `/v1/publish-requests/${review?.reviewId}/decision`, nadia, { decision: 'approved' });
       const published = (await call(tools, 'GET', `/v1/tool-modules/${mod.id}`, priya)).data;
-      const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Claims desk', role: 'Moves claim cases in Salesforce' })).data ?? {};
+      const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Claims desk', role: 'Moves claim cases in Salesforce' }), 'create the agent');
       // agents-service keeps the grantable tools for 30 s, so the new module's operation is offered within that.
       let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'] });
       for (let i = 0; i < 40 && patched.status === 400; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['uc558_update_case'] });
       }
-      const saved = patched.data ?? {};
+      const saved = required(patched, 'give the agent its tool');
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: saved.version, note: 'uc-558' });
       // The team's publish policy may hold a new agent for a review; Maya, an approver in Operations, approves it.
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');

@@ -13,7 +13,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, replyDone, required } from '@ops-ai/usecase-runner/harness';
 import { writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -148,8 +148,8 @@ try {
 
       // The knowledge base the source fills, and the case helper holding the plugin's case tools and that base.
       const made = await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' });
-      const base = made.data ?? {};
-      const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Case helper', role: 'Works Salesforce cases and answers from the Salesforce articles' })).data ?? {};
+      const base = required(made, 'create the knowledge base');
+      const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Case helper', role: 'Works Salesforce cases and answers from the Salesforce articles' }), 'create the agent');
       const grant = { toolIds: ['salesforce_query', 'salesforce_update_record'], collections: [base.id] };
       // agents-service keeps the grantable tools for 30 s, so the plugin's operations are offered within that.
       const patched = await until(() => call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, grant), (r) => r.status !== 400);
@@ -254,7 +254,7 @@ try {
 
         // S3: the source is made through kb-service's API (the console's Add source offers no plugin sources yet), and
         // synced from its page.
-        const source = (await call(kb, 'POST', '/v1/sources', priya, { type: 'tool', name: 'Salesforce articles', config: { plugin: PLUGIN, source: 'articles' }, kbIds: [base.id] })).data ?? {};
+        const source = required(await call(kb, 'POST', '/v1/sources', priya, { type: 'tool', name: 'Salesforce articles', config: { plugin: PLUGIN, source: 'articles' }, kbIds: [base.id] }), 'create the source');
         const admin = await signIn('p.shah@harborpine.example');
         const fetched = async () => (await fakeState()).fetched;
         // The page header's button; the overview and an empty items list offer their own.
@@ -358,7 +358,9 @@ try {
         await browser.close();
       }
     },
-    { demo: true, fakeModelRules: RULES, tools: { env: { ...sf.info.settings, OPS_PLUGIN_PATHS: JSON.stringify([SALESFORCE]) } } },
+    { demo: true, fakeModelRules: RULES, tools: { env: { ...sf.info.settings, OPS_PLUGIN_PATHS: JSON.stringify([SALESFORCE]) } },
+    // kb-service reads the plugin's declared sources through tools-service; without these it refuses to make a tool source.
+    kbEnv: { OPS_PLUGIN_PATHS: JSON.stringify([SALESFORCE]), OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}` } },
   );
 } finally {
   sf.child.stdin.end();

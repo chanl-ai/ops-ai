@@ -83,6 +83,16 @@ export function check(name: string, ok: boolean, detail: unknown = ''): boolean 
 }
 
 /**
+ * The body of a setup request that must succeed. `res` is a `{ status, data, text }` result of a script's `call`; a
+ * non-2xx status throws with the status and body, so a refused create fails as setup instead of leaving an undefined
+ * id for a later product step to trip on.
+ */
+export function required<T = Record<string, any>>(res: { status: number; data?: unknown; text?: string }, what: string): T {
+  if (res.status < 200 || res.status > 299) throw new Error(`setup request refused, ${what}: ${res.status} ${res.text ?? ''}`);
+  return (res.data ?? {}) as T;
+}
+
+/**
  * Approves a tool module's open review in agents-service's Reviews as `headers` (a Security approver), as Human
  * Tasks would; Reviews applies it in tools-service. The module is read as `owner`, a person of its own team:
  * the approver acts in Security, which does not read another team's modules. Returns the module's detail

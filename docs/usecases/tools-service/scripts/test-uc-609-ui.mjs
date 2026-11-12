@@ -11,7 +11,7 @@ import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -85,7 +85,7 @@ try {
       execFileSync('psql', [`postgresql://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`, '-c', sql], { encoding: 'utf8' });
       // A new app hands agents its read tools only; the team's admin adds the writes, as from the app's Tools tab.
       await call(tools, 'POST', `/v1/apps/plugin:${ID}/tools`, priya, { tools: ['fields_post_message'] });
-      const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Message desk', role: 'Posts updates to the desk' })).data ?? {};
+      const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Message desk', role: 'Posts updates to the desk' }), 'create the agent');
       let granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'] });
       for (let i = 0; i < 40 && granted.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'] }));
       // The team's copy of the desk's agent template, so the review can say which version it came from.
