@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Database, Plus, X } from 'lucide-react';
+import { Database, Plus, Slash, X } from 'lucide-react';
 
+import { type PickedSkill, SkillChip, SkillInputsForm, SkillMenu, toPick } from '@/components/chat/skill-menu';
 import { KbDot } from '@/components/knowledge/knowledge-meta';
 import { ChatPrompt } from '@/components/shared/chat-blocks';
 import { FileUpload, type UploadItem, uploadsBlocker } from '@/components/shared/file-upload';
@@ -11,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { ChatAttachment } from '@/lib/types/chat';
+import type { ChatAttachment, SkillPick } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
 
 const MAX = 8000;
@@ -87,6 +88,8 @@ export interface MentionOption {
 
 // "@" at the start or after a space, then the name typed so far, at the end of the text.
 const MENTION = /(^|\s)@([\w-]*)$/;
+// "/" at the start or after a space, then the skill searched for so far, at the end of the text.
+const SLASH = /(^|\s)\/([^\s/]*)$/;
 
 // A chat's unsent draft, kept in this tab only, so signing in again after the session ends brings it back.
 const DRAFT = 'ops.chat.draft.';
@@ -129,8 +132,9 @@ export function Composer({
   mentions,
   onMention,
   draftKey,
+  skillsFor,
 }: {
-  onSend: (text: string, attachments: ChatAttachment[]) => void;
+  onSend: (text: string, attachments: ChatAttachment[], skill?: SkillPick) => void;
   streaming: boolean;
   onStop: () => void;
   /** When set, the composer is read-only and says why. */
@@ -145,6 +149,8 @@ export function Composer({
   onMention?: (agent: MentionOption) => void;
   /** Keeps the unsent text under this key for the tab (the chat's id, or "new" on Chat's home). */
   draftKey?: string;
+  /** The agent whose skills / offers; without it / is plain text. */
+  skillsFor?: { id: string; name: string };
 }) {
   const [text, setTextState] = React.useState('');
   React.useEffect(() => {
@@ -157,10 +163,23 @@ export function Composer({
   const [files, setFiles] = React.useState<UploadItem[]>([]);
   // Remounting the upload control clears it after a send.
   const [uploadKey, setUploadKey] = React.useState(0);
+  // The skill picked for the next message; `filling` while its inputs form is open.
+  const [skill, setSkill] = React.useState<PickedSkill | null>(null);
+  const [filling, setFilling] = React.useState<PickedSkill | null>(null);
+  React.useEffect(() => {
+    setSkill(null);
+    setFilling(null);
+  }, [draftKey, skillsFor?.id]);
   const tooLong = text.length > MAX;
   const waiting = files.length ? uploadsBlocker(files) : undefined;
-  const canSend = !disabledReason && !streaming && !!text.trim() && !tooLong && !waiting;
-  const typed = mentions?.length && onMention ? MENTION.exec(text) : null;
+  const canSend = !disabledReason && !streaming && (!!text.trim() || !!skill) && !tooLong && !waiting && !filling;
+  const slash = skillsFor && !filling ? SLASH.exec(text) : null;
+  const pickSkill = (p: PickedSkill) => {
+    setText(text.replace(SLASH, '$1').trimEnd());
+    if (p.fields.length) setFilling(p);
+    else setSkill(p);
+  };
+  const typed = mentions?.length && onMention && !slash ? MENTION.exec(text) : null;
   const matches = typed ? mentions!.filter((a) => a.name.toLowerCase().includes(typed[2].toLowerCase())) : [];
   const mention = (a: MentionOption) => {
     setText(text.replace(MENTION, '$1').trimEnd());
@@ -170,8 +189,10 @@ export function Composer({
   const send = () => {
     if (!canSend) return;
     const attachments: ChatAttachment[] = files.flatMap((f) => (f.fileId ? [{ fileId: f.fileId, name: f.name, size: f.size }] : []));
-    onSend(text.trim(), attachments);
+    // A skill sent with no words of its own asks for what the skill does.
+    onSend(text.trim() || (skill ? `Use ${skill.label}.` : ''), attachments, skill ? toPick(skill) : undefined);
     setText('');
+    setSkill(null);
     setFiles([]);
     setUploadKey((k) => k + 1);
   };
@@ -180,7 +201,23 @@ export function Composer({
     return <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{disabledReason}</div>;
 
   return (
-    <div className="relative">
+    <div className="relative" onKeyDown={(e) => e.key === 'Escape' && slash && setText(text.replace(SLASH, '$1'))}>
+      {slash && skillsFor && <SkillMenu agentId={skillsFor.id} agentName={skillsFor.name} query={slash[2]} onPick={pickSkill} />}
+      {filling && (
+        <SkillInputsForm
+          picked={filling}
+          onBack={() => setFilling(null)}
+          onDone={(inputs) => {
+            setSkill({ ...filling, inputs });
+            setFilling(null);
+          }}
+        />
+      )}
+      {skill && (
+        <div className="mb-2 flex">
+          <SkillChip label={skill.label} onRemove={() => setSkill(null)} />
+        </div>
+      )}
       {typed && (
         <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-lg border bg-popover shadow-md" data-testid="mention-list">
           <Command shouldFilter={false}>
@@ -212,6 +249,11 @@ export function Composer({
       tools={
         <>
           {canAttach && <FileUpload key={uploadKey} variant="compact" purpose="chat_attachment" multiple onChange={setFiles} id="chat-attach" testId="chat-attach" />}
+          {skillsFor && (
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-muted-foreground" onClick={() => setText(text && !/\s$/.test(text) ? `${text} /` : `${text}/`)} data-testid="chat-skills" aria-label="Pick a skill">
+              <Slash className="size-3" /> Skills
+            </Button>
+          )}
           {footer}
         </>
       }

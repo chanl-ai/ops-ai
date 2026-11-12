@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
+from ops_access import can
 from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, OptionsPage, options_page, options_window
@@ -18,12 +19,12 @@ from ops_service_kit.logging import get_logger
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
-from ..auth import Principal, caller_in, principal, require_builder
+from ..auth import Principal, caller_in, caller_of, principal, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..hitl_facade import page
 from ..publish_policy import decide
-from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions
+from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered
 from ..skills import (
     LIMITS,
     _pinning,  # pyright: ignore[reportPrivateUsage]
@@ -34,9 +35,11 @@ from ..skills import (
     pin,
     pinned_by,
     publish,
+    render_published,
     require_unpinned,
     row_view,
     skills,
+    usable,
 )
 from .agents import changeable as agent_changeable
 from .tool_catalog import known_tools
@@ -57,6 +60,26 @@ class SkillInput(WireModel):
     required: bool = False
 
 
+class SkillPartInput(WireModel):
+    """One named part of a skill, read with the skill's shared instructions."""
+
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
+    name: str = Field(max_length=200)
+    use_when: str = Field(default="", max_length=1024)
+    instructions: str
+    inputs: list[SkillInput] = Field(default_factory=list[SkillInput], max_length=20)
+    # Some of the skill's own tools, which this part uses.
+    tool_ids: list[str] = Field(default_factory=list[str])
+    # The most tokens this part may hold when loaded; unset takes the reply's whole skill budget.
+    budget: int | None = Field(default=None, ge=1, le=6000)
+
+
+class SkillRenderInput(WireModel):
+    # The part to use, for a skill with parts.
+    part: str | None = None
+    inputs: dict[str, str] = Field(default_factory=dict[str, str], max_length=20)
+
+
 class SkillCreateInput(WireModel):
     name: str
     # The name in URL form when absent; a template sets it so the copy keeps the template's id as its prompt name.
@@ -74,6 +97,7 @@ class SkillCreateInput(WireModel):
     request_review: bool = False
     review_note: str = ""
     inputs: list[SkillInput] = Field(default_factory=list[SkillInput], max_length=20)
+    parts: list[SkillPartInput] = Field(default_factory=list[SkillPartInput], max_length=8)
 
 
 class SkillDraftPatch(WireModel):
@@ -86,6 +110,7 @@ class SkillDraftPatch(WireModel):
     guardrails: list[str] | None = None
     refusal: str | None = Field(default=None, max_length=500)
     inputs: list[SkillInput] | None = Field(default=None, max_length=20)
+    parts: list[SkillPartInput] | None = Field(default=None, max_length=8)
     note: str = ""
     base_version: int
 
@@ -106,7 +131,8 @@ class AttachInput(WireModel):
 def _in_view(s: dict[str, Any], view: str) -> bool:
     return {
         "all": True,
-        "published": s["status"] == "published",
+        # A published version stays in use while a newer one is in review.
+        "published": s["publishedVersion"] is not None and s["status"] != "deprecated",
         "always": s["loading"] == "always",
         "drafts": s["draftVersion"] is not None and s["status"] != "in_review",
         "in_review": s["status"] == "in_review",
@@ -124,9 +150,35 @@ async def list_skills(
     page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
+    caller: Annotated[Principal, Depends(caller_in("skills"))],
+    usable_by: Annotated[Literal["agent"] | None, Query(alias="usableBy")] = None,
+    agent_id: Annotated[str | None, Query(alias="agentId")] = None,
 ) -> JSONResponse:
+    """The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
+    what chat and the MCP prompts use; every other view describes the newest version an editor sees.
+
+    `usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what
+    that agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base
+    the agent lacks as `locked`, naming them in `needs`."""
+    if usable_by is not None and caller.identity is not None and caller.identity.kind != "service":
+        can(
+            caller_of(caller), "skills", "view", team=caller.team_id or None, what="the team's skills", code="forbidden"
+        )
     pins = await _pinning(rt)
-    rows = [await row_view(rt, r, pins) for r in await skills(rt).rows()]
+    raw = await skills(rt).rows()
+    spec: dict[str, Any] | None = None
+    if agent_id is not None:
+        agents = agent_registry(rt)
+        agent_row = await agents.row(agent_id)
+        held: dict[str, Any] = (await agents.version(agent_id, int(agent_row["version"])))["spec"]
+        spec = held
+        menu = str(held.get("skillMenu") or "team")
+        pinned = [str(p["skillId"]) for p in cast(list[dict[str, Any]], held.get("skillPins") or [])]
+        # A chat's skills are its team's: the team the request acts in, else the agent's own.
+        team = caller.team_id or str(agent_row.get("team_id") or "")
+        offered = {r["id"] for r, _ in await usable(rt, team=team, menu=menu, pinned=pinned)}
+        raw = [r for r in raw if r["id"] in offered]
+    rows = [await row_view(rt, r, pins) for r in raw]
     if search:
         s = search.lower()
         rows = [x for x in rows if s in x["name"].lower() or s in x["useWhen"].lower() or s in x["slug"]]
@@ -137,9 +189,18 @@ async def list_skills(
         for c in facet_cols:
             facets[c][x[c]] = facets[c].get(x[c], 0) + 1
     rows = [x for x in rows if _in_view(x, view)]
+    if view == "published":
+        by_id = {r["id"]: r for r in raw}
+        rows = [await row_view(rt, by_id[x["id"]], pins, served=True) for x in rows]
     for c in facet_cols:
         if wanted := request.query_params.getlist(c):
             rows = [x for x in rows if x[c] in wanted]
+    if spec is not None:
+        reg = skills(rt)
+        for x in rows:
+            v = await reg.version(x["id"], int(x["publishedVersion"] or x["version"]))
+            needs = missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), spec)
+            x["locked"], x["needs"] = bool(needs), needs
     rows.sort(key=lambda x: str(x["name"]).lower())
     return ok({**page(rows, page_no, page_size), "facets": facets, "viewCounts": counts})
 
@@ -160,8 +221,25 @@ async def skill_options(rt: Rt) -> JSONResponse:
 
 
 @router.get("/v1/skills/{skill_id}", response_model=Envelope[SkillDetail])
-async def get_skill(rt: Rt, skill_id: str) -> JSONResponse:
+async def get_skill(rt: Rt, skill_id: str, caller: Annotated[Principal, Depends(caller_in("skills"))]) -> JSONResponse:
+    """The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
+    right render asks for, so a person who may only chat never reads a skill's text."""
+    row = await skills(rt).row(skill_id)
+    can(caller_of(caller), "skills", "view", team=str(row["team_id"]), what=row["slug"], code="forbidden")
     return ok(await detail(rt, skill_id))
+
+
+@router.post("/v1/skills/{skill_id}/render", response_model=Envelope[SkillRendered])
+async def render_skill(
+    rt: Rt, skill_id: str, body: SkillRenderInput, caller: Annotated[Principal, Depends(caller_in("skills"))]
+) -> JSONResponse:
+    """The published version's text with the inputs filled in, for one part when the skill has parts. A read: it
+    takes a service token holding skills:view in the skill's team, as the MCP prompts call it; a person needs
+    skills: view there too (403 `forbidden`). 422 `skill_not_published`, `part_required`, `unknown_part`,
+    `unknown_input` or `missing_input`."""
+    row = await skills(rt).row(skill_id)
+    can(caller_of(caller), "skills", "view", team=str(row["team_id"]), what=row["slug"], code="forbidden")
+    return ok(await render_published(rt, skill_id, body.part, body.inputs))
 
 
 async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, by: str) -> None:

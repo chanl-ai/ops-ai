@@ -10,12 +10,16 @@ views return those as empty and the docs page says so.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, cast
 
+from ops_agent_kernel.types import Skill as KernelSkill
+from ops_contracts.chat import SkillPick
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.logging import get_logger
 
+from ..activities.catalog import AgentDefinition, kernel_skills
 from ..store.skills import SkillRegistry, slug_of
 from .agent_registry import SEED_BY, SEED_TEAM, seed_agent_version
 from .agent_registry import registry as agent_registry
@@ -32,6 +36,9 @@ ALWAYS_BUDGET = 2000
 USE_WHEN_MAX = 1024
 NAME_MAX = 200
 INSTRUCTIONS_MAX = 24000
+MAX_PARTS = 8
+# The shared instructions a skill with parts reads before any part, at four characters a token (1,000 tokens).
+OVERVIEW_MAX = 4000
 LIMITS: dict[str, int] = {
     "maxPerTurn": MAX_PER_TURN,
     "maxAttached": MAX_ATTACHED,
@@ -76,9 +83,13 @@ async def check_content(rt: Runtime, fields: dict[str, Any]) -> dict[str, Any]:
         offered = {t["id"]: t for t in await known_tools(rt, fresh=True)}
     if unknown := [t for t in tool_ids if t not in offered]:
         raise ValidationFailed(f"Unknown tools: {', '.join(unknown)}.", code="unknown_tool")
+    slug = str(fields.get("slug") or slug_of(name))
+    parts = _parts(fields.get("parts"), tool_ids, loading)
+    if parts:
+        await _check_overview(rt, fields, slug, parts)
     return {
         "name": name,
-        "slug": str(fields.get("slug") or slug_of(name)),
+        "slug": slug,
         "useWhen": use_when,
         "loading": loading,
         "instructions": str(fields["instructions"]).strip(),
@@ -98,7 +109,151 @@ async def check_content(rt: Runtime, fields: dict[str, Any]) -> dict[str, Any]:
         # Kept only when written, so a version saved before the field keeps its digest.
         **({"refusal": refusal} if (refusal := str(fields.get("refusal") or "").strip()) else {}),
         **({"inputs": inputs} if (inputs := _inputs(fields.get("inputs"))) else {}),
+        **({"parts": parts} if parts else {}),
     }
+
+
+def _parts(raw: Any, tool_ids: list[str], loading: str) -> list[dict[str, Any]]:
+    """The skill's named parts, each read with the shared instructions; a version saved without any keeps no key, so
+    its digest is unchanged. A part's tools are some of the skill's own, so picking a part never adds scope."""
+    parts: list[dict[str, Any]] = []
+    for f in cast(list[dict[str, Any]], raw or []):
+        slug = str(f.get("slug") or "").strip()
+        name = str(f.get("name") or "").strip()
+        use_when = str(f.get("useWhen") or "").strip()
+        instructions = str(f.get("instructions") or "").strip()
+        if not slug or not name or not instructions:
+            raise ValidationFailed("Each part needs a slug, a name and instructions.", code="incomplete_part")
+        if loading == "on_match" and not use_when:
+            raise ValidationFailed(f"Part {name} needs a use-when line.", code="no_use_when")
+        if any(p["slug"] == slug for p in parts):
+            raise ValidationFailed(f"Two parts are named {slug}; give each its own.", code="duplicate_part")
+        part_tools = list(dict.fromkeys(str(t) for t in cast(list[Any], f.get("toolIds") or [])))
+        if outside := [t for t in part_tools if t not in tool_ids]:
+            raise ValidationFailed(
+                f"Part {name} names {', '.join(outside)}, which the skill does not; add it to the skill's tools.",
+                code="part_tool_not_in_skill",
+            )
+        budget = int(f.get("budget") or 0)
+        if budget and not 0 < budget <= TOKEN_BUDGET:
+            raise ValidationFailed(f"A part's budget is 1 to {TOKEN_BUDGET:,} tokens.", code="bad_part_budget")
+        if budget and (len(instructions) + 3) // 4 > budget:
+            raise ValidationFailed(
+                f"Part {name} is longer than its own {budget:,}-token budget; shorten it or raise the budget.",
+                code="part_over_budget",
+            )
+        parts.append(
+            {
+                "slug": slug,
+                "name": name,
+                "useWhen": use_when,
+                "instructions": instructions,
+                **({"inputs": inputs} if (inputs := _inputs(f.get("inputs"))) else {}),
+                **({"toolIds": part_tools} if part_tools else {}),
+                **({"budget": budget} if budget else {}),
+            }
+        )
+    if len(parts) > MAX_PARTS:
+        raise ValidationFailed(f"A skill has at most {MAX_PARTS} parts.", code="too_many_parts")
+    return parts
+
+
+async def _check_overview(rt: Runtime, fields: dict[str, Any], slug: str, parts: list[dict[str, Any]]) -> None:
+    """A skill with parts: the shared text stays short, inputs sit on the parts, and no part's assistant prompt name
+    (`<skill>-<part>`) is another skill's name."""
+    if len(str(fields.get("instructions") or "").strip()) > OVERVIEW_MAX:
+        raise ValidationFailed(
+            f"With parts, the shared instructions are at most {OVERVIEW_MAX:,} characters; move the rest into a part.",
+            code="overview_too_long",
+        )
+    if fields.get("inputs"):
+        raise ValidationFailed("A skill with parts takes its inputs on each part.", code="inputs_on_parts")
+    taken = {str(r["slug"]) for r in await skills(rt).rows()} - {slug}
+    if clash := [f"{slug}-{p['slug']}" for p in parts if f"{slug}-{p['slug']}" in taken]:
+        raise ValidationFailed(
+            f"{', '.join(clash)} is already another skill's name; rename the part.", code="part_name_taken"
+        )
+
+
+def render(content: dict[str, Any], part: str | None, given: dict[str, str]) -> dict[str, Any]:
+    """The text a person or assistant uses: the skill's instructions, or its shared instructions and one part, with
+    the inputs filled in. The one place inputs become text; chat and the MCP prompts both call it.
+
+    Raises:
+        Unprocessable: `part_required` or `unknown_part` for the part, `unknown_input` for a value the skill does
+            not ask for, `missing_input` naming each required input left empty.
+    """
+    name = str(content["name"])
+    parts = cast(list[dict[str, Any]], content.get("parts") or [])
+    chosen = next((p for p in parts if p["slug"] == part), None) if part else None
+    slugs = [p["slug"] for p in parts]
+    if part and chosen is None:
+        raise Unprocessable(f"{name} has no part {part}.", code="unknown_part", details={"parts": slugs})
+    if parts and chosen is None:
+        raise Unprocessable(
+            f"Pick a part of {name}: {', '.join(slugs)}.", code="part_required", details={"parts": slugs}
+        )
+    declared = cast(list[dict[str, Any]], (chosen or content).get("inputs") or [])
+    names = [str(i["name"]) for i in declared]
+    if unknown := sorted(set(given) - set(names)):
+        raise Unprocessable(
+            f"{name} does not take {', '.join(unknown)}.", code="unknown_input", details={"unknown": unknown}
+        )
+    values = {n: str(given.get(n) or "").strip() for n in names}
+    if missing := [str(i["name"]) for i in declared if i.get("required") and not values[str(i["name"])]]:
+        raise Unprocessable(
+            f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} required.",
+            code="missing_input",
+            details={"missing": missing},
+        )
+    text = str(content["instructions"])
+    if chosen is not None:
+        text += "\n\n" + str(chosen["instructions"])
+    for n, v in values.items():
+        # An optional input left empty is dropped, never left as {{name}}.
+        text = text.replace("{{" + n + "}}", v)
+    if filled := [f"- {n}: {v}" for n, v in values.items() if v]:
+        text += "\n\nInputs:\n" + "\n".join(filled)
+    return {
+        "text": text,
+        **({"part": chosen["slug"], "partName": chosen["name"]} if chosen else {}),
+    }
+
+
+async def render_published(
+    rt: Runtime, skill_id: str, part: str | None, given: dict[str, str], *, team: str | None = None
+) -> dict[str, Any]:
+    """`render` on the skill's published version, never a draft. `team` is the conversation's team when a chat uses
+    it: a skill another team owns is not found, whatever team the request reads as.
+
+    Raises:
+        NotFound: no such skill in the team.
+        Unprocessable: `skill_not_published` when it has no published version or is deprecated; `render`'s codes.
+    """
+    reg = skills(rt)
+    row = await reg.find(skill_id)
+    if row is None or (team is not None and row["team_id"] != team):
+        raise NotFound(f"Skill {skill_id}")
+    v = await reg.version(skill_id, int(row["published_version"])) if row["published_version"] else None
+    if v is None or row["deprecated_reason"]:
+        raise Unprocessable(
+            f"{row['slug']} has no published version in use; only a published skill can be used.",
+            code="skill_not_published",
+        )
+    return {
+        "skillId": skill_id,
+        "name": v["content"]["name"],
+        "slug": row["slug"],
+        "version": v["version"],
+        **render(v["content"], part, given),
+    }
+
+
+def _wire(content: dict[str, Any]) -> dict[str, Any]:
+    """A version's content as the console reads it: a part saved without inputs keeps no key, so it is sent as []."""
+    if not content.get("parts"):
+        return content
+    return {**content, "parts": [{"inputs": [], **p} for p in content["parts"]]}
 
 
 def _inputs(raw: Any) -> list[dict[str, Any]]:
@@ -199,10 +354,16 @@ def _version_state(row: dict[str, Any], v: dict[str, Any], requests: list[dict[s
 
 
 async def row_view(
-    rt: Runtime, row: dict[str, Any], pins: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]
+    rt: Runtime,
+    row: dict[str, Any],
+    pins: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]],
+    *,
+    served: bool = False,
 ) -> dict[str, Any]:
+    """One list row. `served` describes the published version (what chat and the MCP prompts use) instead of the
+    newest one an editor sees."""
     reg = skills(rt)
-    newest = await reg.version(row["id"], int(row["version"]))
+    newest = await reg.version(row["id"], int(row["published_version"] if served else row["version"]))
     assert newest is not None
     requests = await _requests(rt, row["id"])
     pending = next((r for r in requests if r["status"] == "pending"), None)
@@ -218,7 +379,7 @@ async def row_view(
         "status": _status(row, pending),
         "version": row["version"],
         "publishedVersion": row["published_version"],
-        "draftVersion": row["version"] if newest["published_at"] is None else None,
+        "draftVersion": row["version"] if row["version"] != row["published_version"] else None,
         "usedBy": len(users),
         "liveAgents": sum(1 for a, _ in users if a["published_version"] is not None and not a["paused"]),
         "toolCount": len(content["tools"]),
@@ -230,8 +391,24 @@ async def row_view(
         "updatedBy": row["updated_by"],
         "origin": row["origin"],
         "inputs": content.get("inputs") or [],
+        "parts": [
+            {"slug": p["slug"], "name": p["name"], "useWhen": p["useWhen"], "inputs": p.get("inputs") or []}
+            for p in cast(list[dict[str, Any]], content.get("parts") or [])
+        ],
         **({"pendingReviewId": pending["id"]} if pending else {}),
     }
+
+
+def over_budget(v: dict[str, Any]) -> str | None:
+    """Why a version could never load because of its size, or None: an on-match body (with parts, the shared text and
+    its longest part) past the reply's skill budget, an always-on body past the always-on budget."""
+    budget = TOKEN_BUDGET if v["content"]["loading"] == "on_match" else ALWAYS_BUDGET
+    if v["tokens"] <= budget:
+        return None
+    return (
+        f"v{v['version']} is {v['tokens']:,} tokens; a {v['content']['loading']} body over {budget:,} could never "
+        "load. Shorten it."
+    )
 
 
 async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
@@ -250,12 +427,8 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         blockers.append(f"v{newest['version']} is already published; save a change to open a draft.")
     elif pending is not None:
         blockers.append(f"{pending['id']} is already open for v{pending['version']}.")
-    budget = TOKEN_BUDGET if newest["content"]["loading"] == "on_match" else ALWAYS_BUDGET
-    if newest["tokens"] > budget:
-        blockers.append(
-            f"v{newest['version']} is {newest['tokens']:,} tokens; a {newest['content']['loading']} body over "
-            f"{budget:,} could never load. Shorten it."
-        )
+    if too_long := over_budget(newest):
+        blockers.append(too_long)
     latest = row["published_version"]
     usage: list[dict[str, Any]] = []
     for a, spec, p in pins:
@@ -289,7 +462,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         )
     return {
         **base,
-        "content": newest["content"],
+        "content": _wire(newest["content"]),
         "versions": [
             {
                 "version": v["version"],
@@ -299,7 +472,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
                 "changes": v["changes"],
                 "savedBy": v["saved_by"],
                 "savedAt": v["saved_at"],
-                "content": v["content"],
+                "content": _wire(v["content"]),
                 "tokens": v["tokens"],
                 **({"reviewId": v["review_id"]} if v["review_id"] else {}),
                 **({"publishedAt": v["published_at"], "publishedBy": v["published_by"]} if v["published_at"] else {}),
@@ -353,6 +526,7 @@ def snapshot(skill_id: str, version: int, content: dict[str, Any], tokens: int, 
         "toolIds": tool_ids(content),
         "knowledgeBases": content["knowledgeBases"],
         "tokens": tokens,
+        **({"parts": content["parts"]} if content.get("parts") else {}),
         "attachedBy": by,
         "attachedAt": at,
     }
@@ -511,3 +685,135 @@ def seed_path(seed_dir: Path, agents_seed_file: Path | None) -> Path:
 def require_unpinned(pinning: list[str], name: str) -> None:
     if pinning:
         raise Conflict(f"{name} is attached to {', '.join(pinning)}; detach it first.", code="skill_pinned")
+
+
+async def usable(
+    rt: Runtime, *, team: str, menu: str, pinned: list[str]
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """(skill row, published version) of each skill of `team` a chat with an agent may use under its skill menu
+    setting: every published, live one for the `team` menu, the agent's own for `attached`, none for `off`. Only the
+    conversation's team counts, whatever team the request reads as (a dev caller reads every team)."""
+    if menu == "off":
+        return []
+    return await skills(rt).published_in(team, pinned if menu == "attached" else None)
+
+
+PICKED = "Picked from the / menu"
+
+
+def _picked(entry: dict[str, Any]) -> bool:
+    """A skill the person chose from the / menu on this or an earlier reply (a carried entry keeps its `matched`)."""
+    return entry.get("matched") == PICKED or bool(entry.get("inputs"))
+
+
+def _offered(menu: str, skill_id: str, pinned: list[str]) -> bool:
+    """Whether an agent's skill menu setting offers the skill in its / menu."""
+    return menu == "team" or (menu == "attached" and skill_id in pinned)
+
+
+def _key(entry: dict[str, Any]) -> tuple[str, str]:
+    return str(entry.get("skillId")), str(entry.get("part") or "")
+
+
+async def _rendered(rt: Runtime, team: str, skill_id: str, part: str | None, given: dict[str, str]) -> KernelSkill:
+    """The published skill of `team`, or one part of it, as the kernel loads it, with the inputs filled in."""
+    out = await render_published(rt, skill_id, part, given, team=team)
+    v = await skills(rt).version(skill_id, int(out["version"]))
+    assert v is not None
+    entry = next(
+        s
+        for s in kernel_skills(skill_id, int(out["version"]), str(out["slug"]), v["content"])
+        if s.part == (out.get("part") or "")
+    )
+    return replace(entry, instructions=str(out["text"]), tokens=max(1, (len(str(out["text"])) + 3) // 4))
+
+
+async def skill_turn(
+    rt: Runtime,
+    agent: AgentDefinition,
+    pick: SkillPick | None,
+    earlier: list[dict[str, Any]],
+    *,
+    team: str,
+    may_pick: bool = True,
+) -> dict[str, Any] | None:
+    """The skills one chat reply runs with beyond the agent's pins: the team's published skills its menu setting
+    allows (offered to load on a match), the skills the reply before carried, and the part the person picked, filled
+    with its inputs. `team` is the conversation's: no skill of another team is offered or loaded. None when there are
+    none, so a reply without skills runs as before. A part picked earlier is carried only while `may_pick` (the
+    person still holds skills: view) and the agent's menu still offers it.
+
+    Raises:
+        Unprocessable: `skill_menu_limit` when the agent's setting does not offer the pick, `skill_needs_scope` when
+            the skill names a tool or knowledge base the agent lacks, `skill_budget` past the reply's caps, and
+            `render_published`'s codes (`skill_not_published`, `missing_input`, ...).
+    """
+    pinned = [k.skill_id for k in agent.skills]
+    holds = {"toolIds": list(agent.tools), "collections": list(agent.default_kb_ids)}
+    extra: list[KernelSkill] = []
+    if agent.skill_menu == "team":
+        for r, v in await usable(rt, team=team, menu="team", pinned=pinned):
+            if r["id"] in pinned or v["content"].get("loading") != "on_match" or missing_for(v["content"], holds):
+                continue
+            extra.extend(kernel_skills(r["id"], int(v["version"]), str(r["slug"]), v["content"], int(v["tokens"])))
+    # The reply before's on-match skills stay loaded; always-on ones load again from the pins.
+    carried = [{**e, "how": "carried"} for e in earlier if e.get("how") != "always" and e.get("matched") != "Always on"]
+    carried = [
+        e for e in carried if not _picked(e) or (may_pick and _offered(agent.skill_menu, str(e.get("skillId")), pinned))
+    ]
+    if pick is not None:
+        if not _offered(agent.skill_menu, pick.skill_id, pinned):
+            raise Unprocessable(
+                f"{agent.name} does not offer that skill in chat; ask an admin to change its skill menu setting.",
+                code="skill_menu_limit",
+            )
+        picked = await _rendered(rt, team, pick.skill_id, pick.part, pick.inputs)
+        v = await skills(rt).version(pick.skill_id, picked.version)
+        if missing := missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), holds):
+            raise Unprocessable(
+                f"{picked.name} needs {', '.join(missing)}, which {agent.name} does not have; grant it on the agent "
+                "first.",
+                code="skill_needs_scope",
+                details={"needs": missing},
+            )
+        key = (picked.skill_id, picked.part)
+        carried = [e for e in carried if _key(e) != key]
+        if len({_key(e) for e in carried}) + 1 > MAX_PER_TURN:
+            raise Unprocessable(
+                f"At most {MAX_PER_TURN} skills run in one reply, and this conversation already carries "
+                f"{len(carried)}; start a new chat to use {picked.name}.",
+                code="skill_budget",
+            )
+        limit = min(picked.budget or TOKEN_BUDGET, TOKEN_BUDGET)
+        if picked.tokens > limit:
+            raise Unprocessable(
+                f"{picked.name} filled in is {picked.tokens:,} tokens, over its {limit:,}-token budget; shorten the "
+                "inputs.",
+                code="skill_budget",
+            )
+        extra.insert(0, picked)
+        carried.append(
+            {
+                "skillId": picked.skill_id,
+                "version": picked.version,
+                **({"part": picked.part} if picked.part else {}),
+                "matched": PICKED,
+                "how": "picked",
+                **({"inputs": pick.inputs} if pick.inputs else {}),
+            }
+        )
+    # A carried pick of a team skill keeps the text its inputs filled.
+    for e in carried:
+        if e.get("how") == "carried" and e.get("inputs") and e["skillId"] not in pinned:
+            try:
+                extra.insert(
+                    0, await _rendered(rt, team, str(e["skillId"]), e.get("part"), cast(dict[str, str], e["inputs"]))
+                )
+            except (NotFound, Unprocessable):
+                continue
+    # With an earlier reply, the turn's carried list replaces the history's, so a dropped pick does not come back.
+    if not extra and not carried and not earlier:
+        return None
+    seen: set[tuple[str, str]] = set()
+    unique = [s for s in extra if (s.skill_id, s.part) not in seen and not seen.add((s.skill_id, s.part))]
+    return {"skills": [asdict(s) for s in unique], "carried": carried}

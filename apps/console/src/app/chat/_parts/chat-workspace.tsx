@@ -138,12 +138,12 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           initialAgentId={searchParams.get('agent') ?? undefined}
           header={<span className="px-1 text-sm font-semibold">New chat</span>}
           creating={create.isPending}
-          onStart={async (agentId, kbIds, text, attachments, connectorsOff) => {
+          onStart={async (agentId, kbIds, text, attachments, connectorsOff, skill) => {
             try {
               const t = await create.mutateAsync({ agentId, kbIds });
               // The connectors chosen on the home go onto the chat before its first message, so that message uses them.
               if (connectorsOff.length) await applyConnectors.mutateAsync({ threadId: t.id, off: connectorsOff });
-              chat.send(t.id, { content: text, attachments });
+              chat.send(t.id, { content: text, attachments, skill });
               router.push(`/chat/${t.id}`);
             } catch (e) {
               toast.error('Couldn’t start the chat', { description: (e as Error).message });
@@ -419,12 +419,13 @@ function ThreadView({
           )}
           <Composer
             draftKey={t.id}
-            placeholder={`Message ${t.agentName}… Type @ to hand the chat to another agent.`}
+            placeholder={`Message ${t.agentName}… Type / for a skill or @ to hand the chat to another agent.`}
             mentions={agents.filter((a) => a.id !== t.agentId).map((a) => ({ id: a.id, name: a.name, role: a.role }))}
             onMention={(a) => handTo(a)}
             streaming={streaming}
             onStop={onStop}
-            onSend={(text, files) => onSend({ content: text, attachments: files.length ? files : undefined })}
+            onSend={(text, files, skill) => onSend({ content: text, attachments: files.length ? files : undefined, skill })}
+            skillsFor={{ id: t.agentId, name: t.agentName }}
             // The chat's connectors, narrowed for this chat only; offered to its owner while it takes messages.
             footer={owner && !t.archived ? <ConnectorsPicker threadId={t.id} disabled={streaming} /> : undefined}
             disabledReason={

@@ -139,10 +139,12 @@ def publish_agent(
     role: str,
     model: str | None = None,
     instructions: str | None = None,
+    tool_ids: list[str] | None = None,
     made: Made | None = None,
 ) -> tuple[str, int]:
     """An agent created and sent for publish; on a stack that auto-approves (the default) it is live when this
     returns. Without `model` it uses the first chat alias the stack offers, since the aliases differ between stacks.
+    `tool_ids` are granted before publish, so a skill naming those tools may be used in its chats.
     Returns (agent id, published version)."""
     alias = model or next(iter(ops.raw.agents.agents_list_model_aliases()), {}).get("name")
     if not alias:
@@ -151,6 +153,8 @@ def publish_agent(
     if made:
         made.add(f"agent {name}", lambda: ops.raw.agents.agents_delete_agent(agent["id"]))
     version = agent.get("draftVersion") or agent.get("version") or 1
+    if tool_ids:
+        version = ops.agents.apply({"id": agent["id"], "toolIds": tool_ids}).get("version") or version
     ops.agents.publish(agent["id"], note="Published by the use case", version=version)
     return agent["id"], version
 

@@ -364,9 +364,10 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                         for r in refs
                     ],
                 )
-            case SkillLoaded(skill_id=sid, version=v, name=name, matched=matched):
-                # The run journal's record of each load (spec 11 5.3.7).
-                emit("skill_loaded", node, {"skillId": sid, "version": v, "name": name, "matched": matched})
+            case SkillLoaded(skill_id=sid, version=v, name=name, matched=matched, part=part, how=how, inputs=inputs):
+                # The run journal's record of each load (spec 11 5.3.7), with the part and how it entered the reply.
+                extra = {k: x for k, x in (("part", part), ("how", how), ("inputs", inputs)) if x}
+                emit("skill_loaded", node, {"skillId": sid, "version": v, "name": name, "matched": matched, **extra})
             case TurnFinished(result=r):
                 result = r
                 # The audit record of what a guardrail kept from the person (withheld, never shown) or took back

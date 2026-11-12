@@ -1631,11 +1631,53 @@ class SkillInputField(TypedDict, closed=True):
     type: NotRequired[Literal["string"]]
 
 
+class SkillPart(TypedDict, closed=True):
+    budget: NotRequired[int | None]
+    inputs: NotRequired[list[SkillInputField]]
+    instructions: str
+    name: str
+    slug: str
+    toolIds: NotRequired[list[str]]
+    useWhen: str
+
+
+class SkillPartInput(TypedDict, closed=True):
+    budget: NotRequired[int | None]
+    inputs: NotRequired[list[SkillInput]]
+    instructions: str
+    name: str
+    slug: str
+    toolIds: NotRequired[list[str]]
+    useWhen: NotRequired[str]
+
+
+class SkillPartSummary(TypedDict, closed=True):
+    inputs: NotRequired[list[SkillInputField]]
+    name: str
+    slug: str
+    useWhen: str
+
+
 class SkillPublishCheck(TypedDict, closed=True):
     approversNeeded: int
     blockers: list[str]
     canRequest: bool
     editClass: Literal["free", "re_test", "re_approval"]
+
+
+class SkillRenderInput(TypedDict, closed=True):
+    inputs: NotRequired[dict[str, str]]
+    part: NotRequired[str | None]
+
+
+class SkillRendered(TypedDict, closed=True):
+    name: str
+    part: NotRequired[str | None]
+    partName: NotRequired[str | None]
+    skillId: str
+    slug: str
+    text: str
+    version: int
 
 
 class SkillToolRef(TypedDict, closed=True):
@@ -2356,6 +2398,7 @@ class AgentPatch(TypedDict, closed=True):
     note: NotRequired[str | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     role: NotRequired[str | None]
+    skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
     templateId: NotRequired[str | None]
     toolIds: NotRequired[list[str] | None]
     widgetPins: NotRequired[list[WidgetPinInput] | None]
@@ -2785,6 +2828,11 @@ class EnvelopeRunStarted(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSkillRendered(TypedDict, closed=True):
+    data: SkillRendered
+    success: Literal[True]
+
+
 class EnvelopeStepUpToken(TypedDict, closed=True):
     data: StepUpToken
     success: Literal[True]
@@ -3177,9 +3225,12 @@ class Skill(TypedDict, closed=True):
     lastEvalPassRate: float | None
     liveAgents: int
     loading: Literal["on_match", "always"]
+    locked: NotRequired[bool | None]
     name: str
+    needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
+    parts: NotRequired[list[SkillPartSummary]]
     pendingReviewId: NotRequired[str | None]
     publishedVersion: int | None
     slug: str
@@ -3200,6 +3251,7 @@ class SkillContent(TypedDict, closed=True):
     knowledgeBases: list[str]
     loading: Literal["on_match", "always"]
     name: str
+    parts: NotRequired[list[SkillPart]]
     refusal: NotRequired[str | None]
     resources: list[dict[str, Any]]
     slug: str
@@ -3216,6 +3268,7 @@ class SkillCreateInput(TypedDict, closed=True):
     name: str
     origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
     ownerTeam: str
+    parts: NotRequired[list[SkillPartInput]]
     refusal: NotRequired[str]
     requestReview: NotRequired[bool]
     reviewNote: NotRequired[str]
@@ -3233,6 +3286,7 @@ class SkillDraftPatch(TypedDict, closed=True):
     loading: NotRequired[Literal["on_match", "always"] | None]
     name: NotRequired[str | None]
     note: NotRequired[str]
+    parts: NotRequired[list[SkillPartInput] | None]
     refusal: NotRequired[str | None]
     toolIds: NotRequired[list[str] | None]
     useWhen: NotRequired[str | None]
@@ -3468,6 +3522,7 @@ class Agent(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     publishedVersion: int | None
     role: str
+    skillMenu: NotRequired[Literal["team", "attached", "off"]]
     slug: str
     staleToolIds: list[str]
     tasks24h: int
@@ -3725,9 +3780,12 @@ class SkillDetail(TypedDict, closed=True):
     lastEvalPassRate: float | None
     liveAgents: int
     loading: Literal["on_match", "always"]
+    locked: NotRequired[bool | None]
     name: str
+    needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
+    parts: NotRequired[list[SkillPartSummary]]
     pendingReview: NotRequired[dict[str, Any] | None]
     pendingReviewId: NotRequired[str | None]
     provenance: dict[str, Any]

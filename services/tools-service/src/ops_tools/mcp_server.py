@@ -27,6 +27,7 @@ import httpx
 import mcp_types as types
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from mcp.shared.exceptions import MCPError
 from starlette.types import Receive, Scope, Send
 
 from ops_access import can
@@ -199,8 +200,9 @@ class McpAdapter:
         out = await self._platform_call(ctx, "prompts/get", {"name": str(params.name), "arguments": args}, run)
         if isinstance(out, Allowed) and out.ok:
             return types.GetPromptResult.model_validate(out.output)
-        # The protocol has no error result for a prompt, so a refusal or a missing skill is its error message.
-        raise ValueError(_said(out))
+        # The protocol has no error result for a prompt, so a refusal or a missing skill is its error message; any
+        # other exception reaches the client as "Internal server error" and hides what to fix.
+        raise MCPError(code=types.INVALID_PARAMS, message=_said(out))
 
     async def _call_tool(self, ctx: Any, params: Any) -> types.CallToolResult:
         who = _caller(ctx)

@@ -166,3 +166,22 @@ async def test_groups_are_read_from_the_named_claim_only() -> None:
     assert who.groups == ("tellers", "branch-12")
     unnamed = await sign_in(provider(token))
     assert unnamed.groups is None
+
+
+async def test_a_missing_groups_claim_means_no_groups_and_only_the_overage_marker_means_unknown() -> None:
+    config = OidcConfig(ISSUER, CLIENT, "secret", groups_claim="groups")
+
+    async def groups_for(**over: Any) -> tuple[str, ...] | None:
+        def token(n: str) -> str:
+            return jwt.encode(_claims(n, **over), _pem(KEY), algorithm="RS256", headers={"kid": "k1"})
+
+        http = provider(token)
+        oidc = OidcClient(config, http)
+        start = await oidc.begin(redirect_uri=REDIRECT)
+        getattr(http, "_seen")["nonce"] = start.nonce  # noqa: B009
+        who = await oidc.complete(code="c", verifier=start.verifier, nonce=start.nonce, redirect_uri=REDIRECT)
+        return who.groups
+
+    assert await groups_for() == ()
+    assert await groups_for(groups=[]) == ()
+    assert await groups_for(_claim_names={"groups": "src1"}) is None

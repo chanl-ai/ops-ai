@@ -29,6 +29,7 @@ import { useKnowledgeBases } from '@/hooks/knowledge-queries';
 import { AgentTestPanel, TEST_TABS, type TestTab } from '@/components/agents/agent-test-panel';
 import { LivePlacesPanel } from '@/components/channels/hub/live-places';
 import { AgentChatChannel } from '@/components/agents/agent-channels';
+import { SkillMenuSection } from '@/components/agents/skill-menu-section';
 import { MakeDefaultAgentDialog } from '@/components/chat/make-default-agent';
 import { AgentSkillsSection, type AttachFilter } from '@/components/skills/agent-skills-section';
 import { useAgentSkills, useAttachSkill, useDetachSkill } from '@/hooks/skill-queries';
@@ -393,6 +394,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   }
                 }}
               />
+              <SkillMenuSection draft={draft} set={set} attached={skills.data?.pins.length ?? 0} />
               <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
               <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} />
               </BuilderFieldset>

@@ -30,10 +30,17 @@ from usecase_harness import (
     tools,
 )
 
+SALESFORCE_APP = "plugin:opsai.salesforce"
 PACK = "opsai.starters"
 SOURCE = f"plugin:{PACK}"
 # A starter skill from the starters pack, with inputs (topic, doc_type).
 SKILL = "doc-coauthoring"
+SALESFORCE_PLUGIN = Path(
+    os.environ.get(
+        "OPS_USECASE_SALESFORCE_PLUGIN",
+        str(ROOT.parent / "ops-ai-plugins" / "plugins" / "salesforce" / "src" / "ops_plugin_salesforce"),
+    )
+)
 STARTERS = Path(
     os.environ.get(
         "OPS_USECASE_STARTERS_PACK",
@@ -52,6 +59,38 @@ AUTH = {
 }
 
 
+def salesforce_on(gw: Any, accounts: Any, admin: dict[str, str], sf: dict[str, Any]) -> None:
+    """The team (`admin` acts in it) has the Salesforce plugin on and signed in as the fake org's integration user,
+    after Security lists the fake's hosts and range. Raises SystemExit naming the step that was refused."""
+    from usecase_harness import data
+
+    sam = bearer(signed_in(accounts, "s.adeyemi@harborpine.example"), "team_security")
+    for host in sf["hosts"]:
+        gw.post("/v1/egress/hosts", json={"value": host, "note": "stack"}, headers=sam)
+    gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "stack"}, headers=sam)
+    own = {"app": SALESFORCE_APP, "clientId": "ops-ai-kestrel", "clientSecret": "kestrel-connected-app-secret"}
+    credential = data(gw.post("/v1/app-credentials", json=own, headers=admin)) or {}
+    team = {
+        "enabled": True,
+        "signIn": "team",
+        "settings": {"login_url": sf["login_url"]},
+        "credentialId": credential.get("id"),
+    }
+    turned = gw.put(f"/v1/apps/{SALESFORCE_APP}/team", json=team, headers=admin)
+    connection = (data(turned) or {}).get("connectionId")
+    started = gw.post(f"/v1/apps/{SALESFORCE_APP}/accounts/{connection}/sign-in", json={}, headers=admin)
+    if started.status_code != 200:
+        raise SystemExit(
+            f"the stack could not start the Salesforce sign-in: {started.status_code} {started.text[:300]}"
+        )
+    back = sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), "kestrel.integration")
+    done = gw.post(
+        "/v1/sign-ins/complete", json={"state": back.get("state", ""), "code": back.get("code", "")}, headers=admin
+    )
+    if turned.status_code != 200 or done.status_code != 200:
+        raise SystemExit(f"the stack could not sign the team in to Salesforce: {turned.text[:200]} {done.text[:200]}")
+
+
 @dataclass
 class Stack:
     accounts: Any
@@ -67,10 +106,14 @@ class Stack:
 
 
 @contextmanager
-def templates_stack(*, documents: bool = False) -> Generator[Stack]:
-    """`documents` also starts documents-service (beside kb-service and files-service) reading templates from
+def templates_stack(*, documents: bool = False, salesforce: dict[str, Any] | None = None) -> Generator[Stack]:
+    """`salesforce` (a fake_salesforce.salesforce() yield) also loads the Salesforce plugin and points tools-service at
+    that fake. `documents` also starts documents-service (beside kb-service and files-service) reading templates from
     tools-service, which `opsai resources` and the app's Resources tab join to the apps' copies."""
-    plugins = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(STARTERS)] if STARTERS.exists() else [])}
+    paths = [str(p) for p in (STARTERS, SALESFORCE_PLUGIN if salesforce else None) if p and p.exists()]
+    plugins = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps(paths)} | (
+        salesforce["settings"] if salesforce else {}
+    )
     with (
         platform(env=PUBLIC) as (accounts, _),
         tools(
@@ -79,6 +122,7 @@ def templates_stack(*, documents: bool = False) -> Generator[Stack]:
                 **PUBLIC,
                 **plugins,
                 "OPS_FLAGS": "mcp_gateway",
+                "OPS_CONSOLE_URL": "https://console.kestrel.test",
                 "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",
             }
         ) as gw,

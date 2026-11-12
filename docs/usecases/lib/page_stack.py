@@ -285,7 +285,9 @@ def main() -> None:
         if "starters pack" in ns.services:
             from agents_stack import agents_stack
 
-            profiles = agents_stack(stack, ns.profiles.split(","), "MCP" in ns.services)
+            profiles = agents_stack(
+                stack, ns.profiles.split(","), "MCP" in ns.services, "fake Salesforce" in ns.services
+            )
             Path(ns.config).write_text(json.dumps({"profiles": profiles, "current": next(iter(profiles))}))
             print("READY", flush=True)
             sys.stdin.read()

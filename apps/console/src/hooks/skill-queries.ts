@@ -30,10 +30,14 @@ export const sk = {
   importPreview: (fileId: string) => ['skills', 'import', fileId] as const,
   agent: (agentId: string) => ['agent', agentId, 'skills'] as const,
   candidates: (scope: unknown) => ['skills', 'candidates', scope] as const,
+  chatMenu: (agentId: string) => ['skills', 'chat-menu', agentId] as const,
 };
 
 export const useSkills = (p: ListParams<SkillFilters> & { view: SkillView }) => usePagedQuery({ queryKey: sk.list(p), queryFn: () => api.skills.list(p) });
 export const useSkill = (id: string) => useTeamQuery({ queryKey: sk.one(id), queryFn: () => api.skills.get(id) });
+/** The chat's / menu for one agent; fetched only once the menu opens. */
+export const useChatMenuSkills = (agentId: string | undefined, enabled: boolean) =>
+  useTeamQuery({ queryKey: sk.chatMenu(agentId ?? ''), queryFn: () => api.skills.chatMenu(agentId!), enabled: enabled && !!agentId, staleTime: 30_000, retry: false });
 export const useSkillOptions = () => useTeamQuery({ queryKey: sk.options, queryFn: api.skills.options, staleTime: 60_000 });
 export const useSkillGenerateOptions = (enabled: boolean) => useTeamQuery({ queryKey: sk.generateOptions, queryFn: api.skills.generateOptions, enabled, staleTime: 30_000 });
 export const useSkillImportPreview = (fileId: string | undefined) => useTeamQuery({ queryKey: sk.importPreview(fileId ?? ''), queryFn: () => api.skills.previewImport(fileId!), enabled: !!fileId, retry: false });

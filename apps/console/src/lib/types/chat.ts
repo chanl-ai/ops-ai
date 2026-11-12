@@ -219,7 +219,17 @@ export interface ChatMessage {
    *  when the reader may view the audit; the stream never carries it. */
   guardrailAudit?: GuardrailAudit[];
   /** Skills the turn loaded, always-on first. */
-  skills?: { skillId: string; name: string; version: number; matched: string }[];
+  skills?: {
+    skillId: string;
+    name: string;
+    version: number;
+    matched: string;
+    /** The part of a skill with parts that ran, by its slug. */
+    part?: string;
+    /** Picked from the / menu, carried from the reply before, loaded on a match, or always on. */
+    how?: 'picked' | 'carried' | 'loaded' | 'always';
+    inputs?: Record<string, string>;
+  }[];
   /** The settings the turn ran on, for whoever explains the answer later. */
   settings?: EffectiveSettings;
   /** The conversation's budget ran out at this turn; its numbers are the server's ledger. */
@@ -420,6 +430,15 @@ export interface SendInput {
   regenerate?: string;
   /** Edit this user message: later messages are dropped and the edited question is answered again. */
   edit?: string;
+  /** A skill, or one of its parts, picked from the / menu for this reply, with its inputs. */
+  skill?: SkillPick;
+}
+
+/** A published skill of the team picked for one reply; 422 when the agent's skill menu setting does not offer it. */
+export interface SkillPick {
+  skillId: string;
+  part?: string;
+  inputs?: Record<string, string>;
 }
 
 /**

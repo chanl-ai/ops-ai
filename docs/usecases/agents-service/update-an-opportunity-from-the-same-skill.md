@@ -1,0 +1,156 @@
+# Update an opportunity from the same skill
+
+Status: draft. Service: `agents-service`. Layers: api, sdk, mcp, ui.
+
+In this example we will use a second part of the Salesforce skill in the same chat as the first, and see the first carried and not loaded again. It assumes the skill of the previous example is published. Design case sk-chat-2.
+
+| Use case | |
+|---|---|
+| Id | `uc-744` |
+| Area | Agents |
+| Design label | `sk-chat-2` |
+| Runs | Python, TypeScript, MCP; api and ui in their own scripts |
+| Run it | `make usecase-test UC=uc-744` |
+
+## Who is in it
+
+| Person | Role | Signs in as |
+|---|---|---|
+| Priya, the team's admin | Admin | the `priya` profile |
+
+## Before you start
+
+```python tab="MCP"
+import asyncio
+import json
+import os
+from contextlib import asynccontextmanager
+
+import httpx2
+from mcp import Client
+from mcp.client.streamable_http import streamable_http_client
+from mcp_types import Implementation
+from ops_ai import OpsAI
+
+profile = json.load(open(os.environ["OPS_CONFIG"]))["profiles"]["priya"]
+priya = OpsAI(profile="priya")
+
+
+@asynccontextmanager
+async def assistant():
+    async with (
+        httpx2.AsyncClient(headers={"Authorization": f"Bearer {profile['mcpToken']}"}, timeout=30) as http,
+        Client(streamable_http_client(profile["mcpUrl"], http_client=http), client_info=Implementation(name="assistant", version="1.0"), cache=None) as c,
+    ):
+        yield c
+
+
+def prompts():
+    async def go():
+        async with assistant() as c:
+            return {p.name: p for p in (await c.list_prompts()).prompts}
+    return asyncio.run(go())
+
+
+def get_prompt(name, args):
+    async def go():
+        async with assistant() as c:
+            return await c.get_prompt(name, args)
+    return asyncio.run(go())
+```
+
+
+```python tab="Python" tab-group="language"
+from ops_ai import OpsAI
+from steps import publish_agent
+
+priya = OpsAI(profile="priya")
+SALESFORCE_TOOLS = ["salesforce_search", "salesforce_query", "salesforce_get_record", "salesforce_field_values", "salesforce_save_records"]
+```
+```ts tab="TypeScript" tab-group="language"
+import assert from 'node:assert/strict';
+import { OpsAI } from '@chanl-ai/ops-ai';
+import { publishAgent } from '@ops-ai/usecase-runner/steps';
+
+const SALESFORCE_TOOLS = ['salesforce_search', 'salesforce_query', 'salesforce_get_record', 'salesforce_field_values', 'salesforce_save_records'];
+const priya = new OpsAI({ profile: 'priya' });
+```
+
+## Steps
+
+### 1. The team's Salesforce skill has three parts
+
+```python tab="Python" tab-group="language"
+rows = priya.raw.agents.agents_list_skills()
+made = next(s for s in (rows["data"] if isinstance(rows, dict) else rows) if s["name"] == "Salesforce")
+parts = [p["slug"] for p in (priya.raw.agents.agents_get_skill(made["id"]).get("parts") or [])]
+assert parts == ["prepare-meeting", "client-brief", "update-opportunity"], parts
+```
+```ts tab="TypeScript" tab-group="language"
+const rows = (await priya.raw.agents.agents_list_skills()) as any;
+const made = (Array.isArray(rows) ? rows : rows.data).find((s: any) => s.name === 'Salesforce');
+const got = (await priya.raw.agents.agents_get_skill({ path: { skill_id: made.id } } as any)) as any;
+assert.deepEqual((got.parts ?? []).map((p: any) => p.slug), ['prepare-meeting', 'client-brief', 'update-opportunity']);
+```
+```python tab="MCP"
+rows = priya.raw.agents.agents_list_skills()
+made = next(s for s in (rows["data"] if isinstance(rows, dict) else rows) if s["name"] == "Salesforce")
+parts = [p["slug"] for p in (priya.raw.agents.agents_get_skill(made["id"]).get("parts") or [])]
+assert parts == ["prepare-meeting", "client-brief", "update-opportunity"], parts
+```
+
+Expected: three parts listed.
+
+### 2. Use both parts in one chat
+
+```python tab="Python" tab-group="language"
+agent_id, _ = publish_agent(priya, "Desk", role="Answers the team", tool_ids=SALESFORCE_TOOLS)
+thread = priya.chat.start(agent_id)["id"]
+list(priya.chat.say(thread, "Prepare my meeting", skill=made["id"], part="client-brief", inputs={"client": "Okafor Family Trust"}))
+list(priya.chat.say(thread, "They agreed to $75,000, move it forward a stage", skill=made["id"], part="update-opportunity", inputs={"client": "Okafor Family Trust"}))
+reply = [m for m in priya.chat.get(thread)["messages"] if m["role"] == "assistant"][-1]
+how = {s["part"]: s["how"] for s in reply["skills"]}
+assert how == {"update-opportunity": "picked", "client-brief": "carried"}, how
+```
+```ts tab="TypeScript" tab-group="language"
+const { agentId } = await publishAgent(priya, { name: 'Desk', role: 'Answers the team', toolIds: SALESFORCE_TOOLS });
+const thread = ((await (priya as any).chat.start(agentId)) as any).id;
+await (priya as any).chat.say(thread, 'Prepare my meeting', { skill: made.id, part: 'client-brief', inputs: { client: 'Okafor Family Trust' } });
+await (priya as any).chat.say(thread, 'They agreed to $75,000', { skill: made.id, part: 'update-opportunity', inputs: { client: 'Okafor Family Trust' } });
+const last = ((await (priya as any).chat.get(thread)) as any).messages.filter((m: any) => m.role === 'assistant').at(-1);
+assert.deepEqual(Object.fromEntries(last.skills.map((s: any) => [s.part, s.how])), { 'update-opportunity': 'picked', 'client-brief': 'carried' });
+```
+
+```python tab="MCP"
+text = " ".join(getattr(m.content, "text", "") for m in get_prompt("salesforce-update-opportunity", {"client": "Okafor Family Trust", "note": "They agreed to $75,000"}).messages)
+assert "Okafor Family Trust" in text and "$75,000" in text, text
+```
+
+Expected: the second part is picked, the first is carried. Over MCP the same part is served with both inputs filled in.
+
+### 3. The assistant gets the second part as its own prompt
+
+```python tab="Python" tab-group="language"
+part = next(p for p in priya.raw.agents.agents_get_skill(made["id"])["parts"] if p["slug"] == "update-opportunity")
+assert [i["name"] for i in part["inputs"]] == ["client", "note"], part["inputs"]
+```
+```ts tab="TypeScript" tab-group="language"
+const update = (got.parts as any[]).find((p) => p.slug === 'update-opportunity');
+assert.deepEqual(update.inputs.map((i: any) => i.name), ['client', 'note']);
+```
+```python tab="MCP"
+found = prompts()["salesforce-update-opportunity"]
+assert [a.name for a in found.arguments] == ["client", "note"], found.arguments
+```
+
+Expected: `salesforce-update-opportunity` with `client` and `note`, both optional.
+
+## What proves it
+
+Step 2 fails if the first part is loaded again instead of carried, or if the second part is not recorded as picked.
+
+## Details
+
+| | |
+|---|---|
+| Services the run starts | agents stack: platform-service, tools-service with the starters pack, the Salesforce plugin and the team MCP address, a fake Salesforce signed in for the team, agents-service (MCP) |

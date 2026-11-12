@@ -54,7 +54,6 @@ from .events import (
     CitationsReady,
     Interrupted,
     KernelEvent,
-    SkillLoaded,
     StatusChanged,
     TextDelta,
     TextReplaced,
@@ -136,6 +135,9 @@ class _TurnState:
     # Text already sent as deltas this turn.
     shown_text: str = ""
     loads: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # How each of `loads` entered the reply (picked, carried, loaded, always), in the same order: told in the journal
+    # event, kept out of the result's entries.
+    hows: list[str] = field(default_factory=list[str])
     # Skills an earlier turn of the conversation loaded, kept loaded here outside this turn's load caps.
     carried: list[Skill] = field(default_factory=list[Skill])
     # Widget parts present showed this turn, against the agent's widgets_per_turn.
@@ -314,11 +316,16 @@ def _with_skills(system_prompt: str, pinned: list[Skill]) -> str:
 
 
 def _with_earlier(
-    system_prompt: str, carried: list[Skill], reads: list[str], plan: dict[str, Any] | None = None
+    system_prompt: str,
+    carried: list[Skill],
+    reads: list[str],
+    plan: dict[str, Any] | None = None,
+    picked: list[Skill] | None = None,
 ) -> str:
-    """The bodies of skills an earlier turn loaded, the results earlier turns read and a plan an earlier turn left
-    open, after the skill index."""
-    parts = [f"## {s.name} (loaded earlier in this conversation)\n\n{s.instructions}" for s in carried]
+    """The bodies of skills picked for this reply and of skills an earlier turn loaded, the results earlier turns read
+    and a plan an earlier turn left open, after the skill index."""
+    parts = [f"## {s.name} (picked by the person for this reply)\n\n{s.instructions}" for s in picked or []]
+    parts += [f"## {s.name} (loaded earlier in this conversation)\n\n{s.instructions}" for s in carried]
     if plan is not None:
         parts.append(planner.prompt(plan))
     if reads:
@@ -434,15 +441,17 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         if (over := state.charge_builtin()) is not None:
             rec.status, rec.output = "error", {"error": over}
             return {"error": over}
-        skill, why = skillset.load(
-            state.req.settings.skills, state.loaded, str(arguments.get("slug") or ""), state.carried
-        )
+        slug = str(arguments.get("slug") or "")
+        if part := str(arguments.get("part") or ""):
+            slug = f"{slug.split('/', maxsplit=1)[0]}/{part}"
+        skill, why = skillset.load(state.req.settings.skills, state.loaded, slug, state.carried)
         if skill is None:
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
         if skill not in state.loaded:
             state.loaded.append(skill)
             state.loads.append(skillset.loaded_entry(skill, str(arguments.get("matched") or skill.use_when)))
+            state.hows.append("loaded")
         rec.status, rec.output = "ok", {"loaded": skill.slug, "version": skill.version}
         return {"skill": skill.name, "version": skill.version, "instructions": skill.instructions}
 
@@ -851,8 +860,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # A plan the turn goes on with: kept at its pause (an approval), or left open by an earlier turn (a Connect card).
     state.plan = (req.resume.interrupt.plan if req.resume else None) or req.carried_plan
     # A skill an earlier turn loaded is carried in whole (below): it is neither listed to load nor loadable again.
-    carried_ids = {str(e.get("skillId")) for e in req.carried_skills}
-    loadable = [s for s in req.settings.skills if s.skill_id not in carried_ids]
+    loadable = [s for s in req.settings.skills if not any(skillset.same(s, e) for e in req.carried_skills)]
     if (load_grant := skillset.grant(loadable)) is not None:
         state.grants[skillset.NAME] = load_grant
         tools.append(_load_skill(state, load_grant))
@@ -860,24 +868,30 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         if s.loading == "always":
             state.loaded.append(s)
             state.loads.append(skillset.loaded_entry(s, skillset.ALWAYS))
+            state.hows.append("always")
     # A resumed turn keeps the on-match skills it loaded before the pause (already journalled, so not loaded again).
     restored = 0
     for entry in req.resume.interrupt.loaded_skills if req.resume else []:
         skill = next(
-            (s for s in req.settings.skills if s.skill_id == entry["skillId"] and s.version == entry["version"]), None
+            (s for s in req.settings.skills if skillset.same(s, entry) and s.version == entry["version"]), None
         )
         if skill is not None and skill not in state.loaded:
             state.loaded.append(skill)
             state.loads.append(entry)
+            state.hows.append(str(entry.get("how") or "loaded"))
             restored += 1
-    # Skills an earlier turn loaded stay loaded (pinned at their current version), outside this turn's load caps.
+    # Skills an earlier turn loaded stay loaded (pinned at their current version), outside this turn's load caps. A
+    # part the person picked for this reply arrives the same way but counts against the caps (it is not carried).
     carried: list[Skill] = []
+    picked: list[Skill] = []
     for entry in req.carried_skills:
-        skill = next((s for s in req.settings.skills if s.skill_id == entry.get("skillId")), None)
+        skill = next((s for s in req.settings.skills if skillset.same(s, entry)), None)
         if skill is not None and skill.loading == "on_match" and skill not in state.loaded:
+            how = "picked" if entry.get("how") == "picked" else "carried"
             state.loaded.append(skill)
-            state.loads.append(skillset.loaded_entry(skill, str(entry.get("matched") or EARLIER)))
-            carried.append(skill)
+            state.loads.append(skillset.loaded_entry(skill, str(entry.get("matched") or EARLIER), entry.get("inputs")))
+            state.hows.append(how)
+            (picked if how == "picked" else carried).append(skill)
             restored += 1
     state.carried = carried
     passages: list[Passage] = []
@@ -952,8 +966,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield finish("completed", "guardrail", guardrail=_fired(hit, "before"))
             return
     # A resumed turn journalled its loads before the pause.
-    for entry in [] if req.resume else state.loads:
-        yield SkillLoaded(entry["skillId"], entry["version"], entry["name"], entry["matched"])
+    if not req.resume:
+        for entry, how in zip(state.loads, state.hows, strict=True):
+            yield skillset.event(entry, how)
     yield StatusChanged("thinking")
     try:
         if req.resume:
@@ -967,7 +982,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             results = DeferredToolResults(approvals={call_id: decision})
             system_prompt, user_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable), None
             system_prompt = _with_earlier(
-                _with_skills(system_prompt, loadable), carried, req.earlier_reads, req.carried_plan
+                _with_skills(system_prompt, loadable), carried, req.earlier_reads, req.carried_plan, picked
             )
         else:
             # Attached files' pages come first: they are what the person asked about, numbered before knowledge.
@@ -998,7 +1013,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             digest = ctx.digest
             history, results, system_prompt, user_prompt = ctx.history, None, ctx.system_prompt, ctx.user_prompt
             system_prompt = _with_earlier(
-                _with_skills(system_prompt, loadable), carried, req.earlier_reads, req.carried_plan
+                _with_skills(system_prompt, loadable), carried, req.earlier_reads, req.carried_plan, picked
             )
     except UnknownVariableError as e:
         yield finish("failed", "error", error=str(e))
@@ -1219,8 +1234,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         rules.extend(skillset.guardrails_of(s))
         # The answer is checked against them, so the turn records them as checked.
         checked.extend(skillset.guardrails_of(s))
-    for entry in state.loads[always_count + restored :]:
-        yield SkillLoaded(entry["skillId"], entry["version"], entry["name"], entry["matched"])
+    for entry, how in list(zip(state.loads, state.hows, strict=True))[always_count + restored :]:
+        yield skillset.event(entry, how)
     if guarded and state.text:
         # A guarded answer is checked once complete when any rule applies; an agent guarded only by a skill that never
         # loaded, or whose pins are all off, has none. A held answer is sent here whole after its check; a streamed one

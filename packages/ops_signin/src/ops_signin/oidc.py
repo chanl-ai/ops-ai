@@ -143,16 +143,27 @@ class OidcClient:
         email = str(claims.get("email") or "").strip().lower()
         if not email or claims.get("email_verified") is False:
             raise SignInRefused("no verified email")
-        raw = claims.get(self.config.groups_claim) if self.config.groups_claim else None
-        # A missing claim, or Entra's overage marker (_claim_names.groups) in its place, says nothing about groups.
-        listed = cast(list[Any], raw) if isinstance(raw, list) else [raw] if isinstance(raw, str) else None
+        groups = self._groups(claims)
         return VerifiedIdentity(
             subject=str(claims["sub"]),
             email=email,
             name=str(claims.get("name") or email),
             auth_time=auth_time if isinstance(auth_time, int) else None,
-            groups=tuple(str(g) for g in listed) if listed is not None else None,
+            groups=groups,
         )
+
+    def _groups(self, claims: dict[str, Any]) -> tuple[str, ...] | None:
+        """The values of the named groups claim; () when it is missing or empty, since providers such as Keycloak drop
+        it once the person is in no group; None when no claim is named, or when Entra's overage marker
+        (_claim_names.groups) stands in for it, which says the list is too long to send, not that it is empty."""
+        if not self.config.groups_claim:
+            return None
+        names = claims.get("_claim_names")
+        if isinstance(names, dict) and self.config.groups_claim in cast(dict[str, Any], names):
+            return None
+        raw = claims.get(self.config.groups_claim)
+        listed = cast(list[Any], raw) if isinstance(raw, list) else [raw] if isinstance(raw, str) else []
+        return tuple(str(g) for g in listed)
 
     async def _verify(self, doc: dict[str, Any], id_token: str) -> dict[str, Any]:
         try:

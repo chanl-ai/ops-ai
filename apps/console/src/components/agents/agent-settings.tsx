@@ -30,7 +30,7 @@ import type { Lookups } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
-import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, Guardrail, MemorySettings, ModelAlias } from '@/lib/types/domain';
+import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, Guardrail, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
 
 import { modelHint, ModelSelect } from './model-select';
 import { teamLabel } from '@/components/shared/team-name';
@@ -55,6 +55,7 @@ export interface AgentDraft {
   widgetPins: WidgetPin[];
   widgets: WidgetSettings;
   memory: MemorySettings;
+  skillMenu: SkillMenu;
 }
 
 export const draftOf = (a: Agent): AgentDraft => ({
@@ -72,6 +73,7 @@ export const draftOf = (a: Agent): AgentDraft => ({
   widgetPins: a.widgetPins ?? [],
   widgets: a.widgets ?? { compose: false, perTurn: null },
   memory: a.memory ?? { enabled: true, kinds: ['fact', 'preference', 'episode'] },
+  skillMenu: a.skillMenu ?? 'team',
 });
 
 /**
@@ -106,6 +108,7 @@ const SECTION: Record<keyof AgentDraft, string> = {
   widgetPins: 'Widgets',
   widgets: 'Widgets',
   memory: 'Memory',
+  skillMenu: 'Skills',
 };
 
 /** Section names whose values differ between the saved agent and the draft. */

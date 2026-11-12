@@ -13,7 +13,7 @@ import { useChatAgents, useDefaultAgent } from '@/hooks/chat-queries';
 import { useCan } from '@/hooks/me-queries';
 import { useOverview } from '@/hooks/queries';
 import { hintsFrom } from '@/lib/overview';
-import type { ChatAttachment } from '@/lib/types/chat';
+import type { ChatAttachment, SkillPick } from '@/lib/types/chat';
 
 /** The four general ways to begin when nothing waits, each sent as the first message; the Ops Assistant answers them with cards. */
 const STARTS = [
@@ -50,7 +50,7 @@ export function ChatHome({
   creating: boolean;
   /** `agentId` undefined starts on the team's default, made on the first chat when the team has none. */
   /** `connectorsOff`: the apps the picker left out, which the new chat takes before its first message. */
-  onStart: (agentId: string | undefined, kbIds: string[], text: string, attachments: ChatAttachment[], connectorsOff: string[]) => void;
+  onStart: (agentId: string | undefined, kbIds: string[], text: string, attachments: ChatAttachment[], connectorsOff: string[], skill?: SkillPick) => void;
 }) {
   const list = agents.data ?? [];
   const defaultId = useDefaultAgent().data?.agentId;
@@ -65,7 +65,7 @@ export function ChatHome({
   React.useEffect(() => {
     setConnectorsOff([]);
   }, [agent?.id]);
-  const begin = (text: string, attachments: ChatAttachment[] = []) => onStart(agent?.id, agent?.defaultKbIds ?? [], text, attachments, connectorsOff);
+  const begin = (text: string, attachments: ChatAttachment[] = [], skill?: SkillPick) => onStart(agent?.id, agent?.defaultKbIds ?? [], text, attachments, connectorsOff, skill);
   // The agent and its default knowledge bases come from the list, so sending waits for it: a message sent before it
   // arrived started on the team's default agent, whatever ?agent= asked for.
   const busy = creating || agents.isPending;
@@ -111,7 +111,8 @@ export function ChatHome({
               placeholder="Ask, find a case or customer, or start a workflow…"
               streaming={busy}
               onStop={() => undefined}
-              onSend={(text, files) => begin(text, files)}
+              onSend={(text, files, skill) => begin(text, files, skill)}
+              skillsFor={agent ? { id: agent.id, name: agent.name } : undefined}
               footer={<NewChatConnectorsPicker agentId={agent?.id} off={connectorsOff} onChange={setConnectorsOff} disabled={busy} />}
             />
             {overview.isPending ? (

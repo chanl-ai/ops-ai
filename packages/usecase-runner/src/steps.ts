@@ -106,16 +106,21 @@ export async function addKnowledgeBase(
 /**
  * An agent created and sent for publish; on a stack that auto-approves (the default) it is live when this returns.
  * Without `model` it uses the first chat alias the stack offers, since the aliases differ between stacks.
+ * `toolIds` are granted before publish, so a skill naming those tools may be used in its chats.
  */
 export async function publishAgent(
   ops: OpsAI,
-  { name, role, model, instructions, made }: { name: string; role: string; model?: string; instructions?: string; made?: Made },
+  { name, role, model, instructions, toolIds, made }: { name: string; role: string; model?: string; instructions?: string; toolIds?: string[]; made?: Made },
 ): Promise<{ agentId: string; version: number }> {
   const alias = model ?? ((await ops.raw.agents.agents_list_model_aliases({})) as { name: string }[])[0]?.name;
   if (!alias) throw new Error('the stack offers no model alias to give the agent');
   const agent = (await ops.agents.create({ name, role, model: alias, instructions })) as { id: string; version?: number; draftVersion?: number };
   made?.add(`agent ${name}`, () => ops.raw.agents.agents_delete_agent({ path: { agent_id: agent.id } }));
-  const version = agent.draftVersion ?? agent.version ?? 1;
+  let version = agent.draftVersion ?? agent.version ?? 1;
+  if (toolIds?.length) {
+    const saved = (await ops.raw.agents.agents_update_agent({ path: { agent_id: agent.id }, body: { toolIds } as never })) as { version?: number };
+    version = saved.version ?? version;
+  }
   await ops.agents.publish(agent.id, 'Published by the use case', version);
   return { agentId: agent.id, version };
 }

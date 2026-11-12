@@ -16,7 +16,16 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import interrupt
 
-from ops_agent_kernel.types import AttachedFile, Passage, Resume, ToolGrant, TranscriptMessage, TurnRequest
+from ops_agent_kernel.types import (
+    AgentSettings,
+    AttachedFile,
+    Passage,
+    Resume,
+    Skill,
+    ToolGrant,
+    TranscriptMessage,
+    TurnRequest,
+)
 from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.gateway import LIVE, TEST, acting_as, current_run_context
@@ -50,6 +59,20 @@ def _earlier(source: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[s
     carried = list(cast(list[dict[str, Any]], replies[-1].get("skills") or [])) if replies else []
     reads = [str(r) for m in replies[-2:] for r in cast(list[Any], m.get("reads") or [])]
     return carried, reads[-EARLIER_READS:]
+
+
+def _with_turn_skills(settings: AgentSettings, turn: dict[str, Any] | None) -> AgentSettings:
+    """The agent's settings with the chat's own skills first; a picked or carried part replaces the same pinned entry,
+    which has no inputs filled."""
+    if not turn:
+        return settings
+    extra: list[Skill] = []
+    for d in cast(list[dict[str, Any]], turn.get("skills") or []):
+        fields: dict[str, Any] = {**d, "guardrails": tuple(cast(list[str], d.get("guardrails") or []))}
+        extra.append(Skill(**fields))
+    keys = {(s.skill_id, s.part) for s in extra}
+    kept = [s for s in settings.skills if (s.skill_id, s.part) not in keys]
+    return replace(settings, skills=[*extra, *kept])
 
 
 def turn_environment(state: Mapping[str, Any]) -> str:
@@ -92,6 +115,9 @@ class AgentState(TypedDict):
     attached_passages: NotRequired[list[dict[str, Any]]]
     # Every file attached in this thread, {fileId, name, unread?}: named to the model whether or not it was read.
     attached_files: NotRequired[list[dict[str, Any]]]
+    # Set by a chat run (api/skills.py skill_turn): kernel skills beyond the pins (team skills the agent may use, a
+    # picked part filled with its inputs, carried picks) and the skills this reply carries or was picked.
+    skill_turn: NotRequired[dict[str, Any]]
 
 
 def build(
@@ -121,6 +147,8 @@ def build(
         source = state["history"] if "history" in state else state["messages"]
         transcript = [TranscriptMessage(m["role"], m["content"]) for m in source]  # pyright: ignore[reportArgumentType]
         carried, reads = _earlier(cast(list[dict[str, Any]], source))
+        if (turn := state.get("skill_turn")) is not None:
+            carried = list(turn.get("carried") or [])
         replies = [m for m in cast(list[dict[str, Any]], source) if m.get("role") == "assistant"]
         open_plan = cast(dict[str, Any] | None, replies[-1].get("plan")) if replies else None
         effective = _effective(state)
@@ -132,8 +160,13 @@ def build(
         req = TurnRequest(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
-            settings=await with_apps(
-                deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
+            settings=_with_turn_skills(
+                await with_apps(
+                    deps,
+                    await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id),
+                    a.id,
+                ),
+                state.get("skill_turn"),
             ),
             tools=[*await asked(state, _switched_on(await agent_grants(deps, a), effective)), *offers],
             transcript=transcript,
@@ -226,8 +259,13 @@ def build(
         req = TurnRequest(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
-            settings=await with_apps(
-                deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
+            settings=_with_turn_skills(
+                await with_apps(
+                    deps,
+                    await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id),
+                    a.id,
+                ),
+                state.get("skill_turn"),
             ),
             tools=[*await asked(state, _switched_on(await agent_grants(deps, a), effective), now), *offers],
             # The same bases as the turn it resumes, so a search after the approval keeps to them.

@@ -22,6 +22,7 @@ import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
 import { type CallArgs, type Config, type Operation, pageItems, result, type Service, Transport } from './transport.js';
 import { Agents } from './agents.js';
+import { Chat } from './chat.js';
 import { savedOptions } from './profile.js';
 import { Templates } from './templates.js';
 import { Workflows } from './workflows.js';
@@ -260,6 +261,7 @@ export class OpsAI {
   readonly raw: Raw;
   readonly teams: Resource;
   readonly agents: Agents;
+  readonly chat: Chat;
   readonly workflows: Workflows;
   readonly threads: Resource;
   readonly cases: Resource;
@@ -316,6 +318,7 @@ export class OpsAI {
     this.runs = new Runs(t, this.raw);
     this.tasks = new Tasks(t, this.raw);
     this.agents = new Agents(this.raw);
+    this.chat = new Chat(t);
     this.workflows = new Workflows(this.raw, this.runs);
   }
 

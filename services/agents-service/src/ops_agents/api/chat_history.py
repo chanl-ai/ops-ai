@@ -30,7 +30,16 @@ def history_entry(m: ChatMessage) -> dict[str, Any]:
         return entry
     if m.skills:
         entry["skills"] = [
-            {"skillId": s.skill_id, "version": s.version, "name": s.name, "matched": s.matched} for s in m.skills
+            {
+                "skillId": s.skill_id,
+                "version": s.version,
+                "name": s.name,
+                "matched": s.matched,
+                **({"part": s.part} if s.part else {}),
+                **({"how": s.how} if s.how else {}),
+                **({"inputs": s.inputs} if s.inputs else {}),
+            }
+            for s in m.skills
         ]
     reads = [
         read_line(c.name, c.input, c.output)

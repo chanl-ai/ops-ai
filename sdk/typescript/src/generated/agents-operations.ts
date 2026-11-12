@@ -320,7 +320,9 @@ export const agentsOperations = {
       "view",
       "page",
       "pageSize",
-      "search"
+      "search",
+      "usableBy",
+      "agentId"
     ],
     "stream": false
   },
@@ -396,6 +398,17 @@ export const agentsOperations = {
     "query": [
       "limit"
     ],
+    "stream": false
+  },
+  "agents_render_skill": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/skills/{skill_id}/render",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
     "stream": false
   },
   "agents_request_guardrail_publish": {

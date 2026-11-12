@@ -259,7 +259,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/skills",
         "pathParams": [],
-        "query": ["view", "page", "pageSize", "search"],
+        "query": ["view", "page", "pageSize", "search", "usableBy", "agentId"],
         "stream": False,
     },
     "agents_list_tool_uses": {
@@ -314,6 +314,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/agents/{agent_id}/runs",
         "pathParams": ["agent_id"],
         "query": ["limit"],
+        "stream": False,
+    },
+    "agents_render_skill": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/skills/{skill_id}/render",
+        "pathParams": ["skill_id"],
+        "query": [],
         "stream": False,
     },
     "agents_request_guardrail_publish": {
@@ -2506,13 +2515,22 @@ class Operations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
     ) -> SkillList:
         "List Skills"
         return self._t.call(
             SERVICE,
             OPERATIONS["agents_list_skills"],
             {},
-            {"view": view, "page": page, "pageSize": page_size, "search": search},
+            {
+                "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "usableBy": usable_by,
+                "agentId": agent_id,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -2544,6 +2562,10 @@ class Operations:
     def agents_request_skill_publish(self, skill_id: str, body: ReviewInput) -> SkillDetail:
         "Request Skill Publish"
         return self._t.call(SERVICE, OPERATIONS["agents_request_skill_publish"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_render_skill(self, skill_id: str, body: SkillRenderInput) -> SkillRendered:
+        "Render Skill"
+        return self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def reviews_list_task_types(self) -> list[TaskTypeView]:
         "List Task Types"
@@ -3780,13 +3802,22 @@ class AsyncOperations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
     ) -> SkillList:
         "List Skills"
         return await self._t.call(
             SERVICE,
             OPERATIONS["agents_list_skills"],
             {},
-            {"view": view, "page": page, "pageSize": page_size, "search": search},
+            {
+                "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "usableBy": usable_by,
+                "agentId": agent_id,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3820,6 +3851,10 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["agents_request_skill_publish"], {"skill_id": skill_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    async def agents_render_skill(self, skill_id: str, body: SkillRenderInput) -> SkillRendered:
+        "Render Skill"
+        return await self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def reviews_list_task_types(self) -> list[TaskTypeView]:
         "List Task Types"

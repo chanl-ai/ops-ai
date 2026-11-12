@@ -276,6 +276,13 @@ class LoadedSkill(WireModel):
     version: int
     # The words that matched its use-when line; "Always on" for always-on skills.
     matched: str
+    # The part of a skill with parts that ran, by its slug; absent for a whole skill.
+    part: str | None = None
+    # How it entered the reply: picked from the / menu, carried from the reply before, loaded by the model on a
+    # match, or always on. Absent on replies written before picks existed.
+    how: Literal["picked", "carried", "loaded", "always"] | None = None
+    # The inputs a picked part was filled with, kept so the next reply carries the same text.
+    inputs: dict[str, str] | None = None
 
 
 class BudgetPause(WireModel):
@@ -559,8 +566,19 @@ class BulkResult(WireModel):
     skipped: list[BulkSkip]
 
 
+class SkillPick(WireModel):
+    """A skill picked from the / menu for this one reply: a published skill of the team, one of its parts when it has
+    parts, and the values of its inputs."""
+
+    skill_id: str = Field(min_length=1, max_length=120)
+    part: str | None = Field(default=None, max_length=64)
+    inputs: dict[str, str] = Field(default_factory=dict[str, str], max_length=20)
+
+
 class SendInput(WireModel):
     content: str
+    # A skill picked for this reply; needs skills: view in the team.
+    skill: SkillPick | None = None
     attachments: list[ChatAttachment] | None = None
     # This message only; may narrow the thread's overrides. Raw, checked by overrides.parse (see ChatThreadInput).
     overrides: dict[str, Any] | None = None

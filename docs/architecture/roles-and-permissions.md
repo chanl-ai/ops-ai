@@ -306,6 +306,13 @@ fails the commit until it is classified.
 | `reviewSlaHours` | 8 | n/a | When a waiting publish review shows as overdue | `reviews.manage` | no |
 | `extractionFloor` | 0.8 | n/a | The lowest confidence an extraction step accepts; a quality threshold, not an access rule | `settings.manage` | no |
 
+Per-agent settings that decide what a person may do in a chat, saved with the agent's version and published through
+its review:
+
+| Setting | Default | What it decides | Changed by |
+|---|---|---|---|
+| `skillMenu` | `team` | Which skills a person may pick from the chat's / menu for one reply: `team` (any published team skill whose tools and knowledge bases the agent holds; the model may also load them on a match), `attached` (the agent's own skills), `off` (none; 422 `skill_menu_limit`). Picking needs `skills.view` in the conversation's team (403 `forbidden`) | `agents.edit`, on the agent's Skills tab |
+
 ## Approvals
 
 Every approval behaviour is one of the settings below or the approve cell in the roles grid. The gateway's `needs`

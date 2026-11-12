@@ -194,6 +194,8 @@ class Agent(Out):
     stale_tool_ids: list[str]
     collections: list[str]
     all_team_knowledge_bases: bool = False
+    # Which skills a person may pick in a chat with this agent: team, attached or off.
+    skill_menu: Literal["team", "attached", "off"] = "team"
     # The team account each app's calls use, app id to account name; empty for each app's default.
     accounts: dict[str, str] = Field(default_factory=dict[str, str])
     # The owning team, from the creator's token; null for an agent no team owns.
@@ -1340,6 +1342,29 @@ class SkillInputField(Out):
     required: bool = False
 
 
+class SkillPart(Out):
+    """One named part of a skill, read with the skill's shared instructions (`salesforce/prepare-meeting`)."""
+
+    slug: str
+    name: str
+    use_when: str
+    instructions: str
+    inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
+    # Some of the skill's own tools; absent when the part names none.
+    tool_ids: list[str] = Field(default_factory=list[str])
+    # The most tokens the part may hold when loaded; absent takes the reply's whole skill budget.
+    budget: int | None = None
+
+
+class SkillPartSummary(Out):
+    """A part as a list row carries it: enough for a menu or an MCP prompt without a read per skill."""
+
+    slug: str
+    name: str
+    use_when: str
+    inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
+
+
 class SkillContent(Out):
     name: str
     slug: str
@@ -1354,6 +1379,8 @@ class SkillContent(Out):
     refusal: str | None = None
     # Absent on a skill that takes no inputs.
     inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
+    # Absent on a skill without parts: the whole body is one skill.
+    parts: list[SkillPart] = Field(default_factory=list[SkillPart])
 
 
 class Skill(Out):
@@ -1377,8 +1404,14 @@ class Skill(Out):
     updated_by: str
     origin: Literal["blank", "generated", "imported", "duplicated"]
     pending_review_id: str | None = None
-    # The newest version's inputs, so a list page carries what an MCP prompt asks for without a read per skill.
+    # The described version's inputs and parts (the published one under view=published), so a list page carries what
+    # an MCP prompt asks for without a read per skill.
     inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
+    parts: list[SkillPartSummary] = Field(default_factory=list[SkillPartSummary])
+    # With usableBy=agent and agentId: the skill needs a tool or knowledge base the agent lacks, named in `needs`, so
+    # the / menu shows it locked.
+    locked: bool | None = None
+    needs: list[str] | None = None
 
 
 class SkillVersion(Out):
@@ -1430,6 +1463,18 @@ class SkillDetail(Skill):
     provenance: dict[str, Any]
     pending_review: dict[str, Any] | None = None
     publish_check: SkillPublishCheck
+
+
+class SkillRendered(Out):
+    """POST /v1/skills/{id}/render: the published version's text with the inputs filled in."""
+
+    skill_id: str
+    name: str
+    slug: str
+    version: int
+    part: str | None = None
+    part_name: str | None = None
+    text: str
 
 
 class SkillList(ListResult[Skill]):
