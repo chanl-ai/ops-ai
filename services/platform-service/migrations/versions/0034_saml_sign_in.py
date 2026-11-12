@@ -51,8 +51,9 @@ LOOKUP = "ops_platform_lookup"
 PINNED = "SET search_path = pg_catalog, public, pg_temp"
 SIGNATURE = "platform_signin_sp(p_sp_id text)"
 RETURNS = "RETURNS TABLE (tenant_id varchar, provider_id varchar, kind varchar, enabled boolean, tiles boolean)"
+# PostgreSQL only: upgrade() creates these functions on PostgreSQL alone; config is a json column.
 BODY = (
-    "SELECT p.tenant_id, p.id, p.kind, p.enabled, COALESCE((p.config->>'tiles')::boolean, true) "
+    "SELECT p.tenant_id, p.id, p.kind, p.enabled, COALESCE(json_extract_path_text(p.config, 'tiles')::boolean, true) "
     "FROM public.signin_providers p WHERE p.sp_id = p_sp_id"
 )
 

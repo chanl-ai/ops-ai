@@ -12,11 +12,11 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert
 
 from ops_access import ANY_TEAM, OWNER, active, encode_grid
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore
 
 from .audit import record
 from .roles import RoleStore, version_in
@@ -391,27 +391,18 @@ class IdentityStore:
             return int((await c.execute(sa.select(sa.func.count()).where(t.c.tenant_id == tenant_id))).scalar_one())
 
     async def count_address(self, kind: str, address: str, *, at: str, window_start: str) -> tuple[int, str]:
-        """Counts one request of `kind` from `address` in one upsert; a window that started before `window_start` starts
-        again at `at`. Returns the count in the window, this one included, and when the window started. Rows whose
-        window has passed are deleted on the way, so the table holds only the last minute's callers."""
+        """Counts one request of `kind` from `address`; a window that started before `window_start` starts again at
+        `at`. Returns the count in the window, this one included, and when the window started. Rows whose window has
+        passed are deleted first, so the table holds only the last minute's callers and a surviving row is current.
+        The increment is one UPDATE, so concurrent requests from one address each count."""
         t = oauth_address_counts
-        stale = t.c.window_start < window_start
+        key = (t.c.kind == kind) & (t.c.address == address[:64])
         async with self.db.system_tx(SIGNIN_LOOKUP) as c:
-            await c.execute(t.delete().where(stale))
-            hits, started = (
-                await c.execute(
-                    insert(t)
-                    .values(kind=kind, address=address[:64], hits=1, window_start=at)
-                    .on_conflict_do_update(
-                        index_elements=[t.c.kind, t.c.address],
-                        set_={
-                            "hits": sa.case((stale, 1), else_=t.c.hits + 1),
-                            "window_start": sa.case((stale, at), else_=t.c.window_start),
-                        },
-                    )
-                    .returning(t.c.hits, t.c.window_start)
-                )
-            ).one()
+            await c.execute(t.delete().where(t.c.window_start < window_start))
+            row = {"kind": kind, "address": address[:64], "hits": 0, "window_start": at}
+            await c.execute(insert_ignore(c, t, row, keys=["kind", "address"]))
+            await c.execute(t.update().where(key).values(hits=t.c.hits + 1))
+            hits, started = (await c.execute(sa.select(t.c.hits, t.c.window_start).where(key))).one()
         return int(hits), str(started)
 
     async def open_grant(
