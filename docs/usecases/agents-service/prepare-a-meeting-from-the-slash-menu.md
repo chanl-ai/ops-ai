@@ -118,6 +118,13 @@ assert.ok(last.skills.some((s: any) => s.name === 'Salesforce' && s.part === 'cl
 
 Expected: the reply records the skill, its version, the part and how: picked.
 
+```python tab="MCP"
+text = " ".join(getattr(m.content, "text", "") for m in get_prompt("salesforce-client-brief", {"client": "Okafor Family Trust"}).messages)
+assert "Okafor Family Trust" in text, text
+```
+
+Expected: the part is served with the client filled in, the same text a picked part sends.
+
 ### 3. The assistant finds the part as a prompt and gets it filled in
 
 ```python tab="MCP"

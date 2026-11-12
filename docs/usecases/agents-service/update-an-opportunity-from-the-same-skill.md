@@ -118,7 +118,12 @@ const last = ((await (priya as any).chat.get(thread)) as any).messages.filter((m
 assert.deepEqual(Object.fromEntries(last.skills.map((s: any) => [s.part, s.how])), { 'update-opportunity': 'picked', 'client-brief': 'carried' });
 ```
 
-Expected: the second part is picked, the first is carried.
+```python tab="MCP"
+text = " ".join(getattr(m.content, "text", "") for m in get_prompt("salesforce-update-opportunity", {"client": "Okafor Family Trust", "note": "They agreed to $75,000"}).messages)
+assert "Okafor Family Trust" in text and "$75,000" in text, text
+```
+
+Expected: the second part is picked, the first is carried. Over MCP the same part is served with both inputs filled in.
 
 ### 3. The assistant gets the second part as its own prompt
 

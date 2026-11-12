@@ -92,8 +92,10 @@ try:
     raise AssertionError("the draft was served")
 except AssertionError:
     raise
-except Exception as exc:
-    assert "not published" in str(exc).lower() or "unknown" in str(exc).lower(), exc
+except BaseException as exc:
+    def leaves(e):
+        return [x for sub in e.exceptions for x in leaves(sub)] if hasattr(e, "exceptions") else [e]
+    assert any("no published skill" in str(e).lower() for e in leaves(exc)), leaves(exc)
 ```
 
 Expected: refused.

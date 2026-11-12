@@ -77,8 +77,11 @@ Expected: the team's Salesforce skill, installed from the Salesforce plugin, lis
 ```python tab="MCP"
 try:
     text = " ".join(getattr(m.content, "text", "") for m in get_prompt("salesforce-client-brief", {}).messages)
-except Exception as exc:
-    assert "client" in str(exc).lower(), exc
+except BaseException as exc:
+    def leaves(e):
+        return [x for sub in e.exceptions for x in leaves(sub)] if hasattr(e, "exceptions") else [e]
+    refusals = [e for e in leaves(exc) if "missing_input" in str(e)]
+    assert refusals and "client" in str(refusals[0]).lower(), leaves(exc)
 else:
     raise AssertionError("served with the input missing: " + text[:120])
 ```
