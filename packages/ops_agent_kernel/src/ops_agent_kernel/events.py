@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from .types import CitationRef, Interrupt, ToolCallRecord, TurnResult
@@ -62,6 +62,12 @@ class SkillLoaded:
     version: int
     name: str
     matched: str
+    # The part that ran, for a skill with parts; how it entered the reply (picked, carried, loaded, always); the
+    # inputs a picked part was filled with.
+    part: str | None = None
+    # Descriptive only: two events for the same load are equal whatever they say about how it came.
+    how: str | None = field(default=None, compare=False)
+    inputs: dict[str, str] | None = field(default=None, compare=False)
 
 
 KernelEvent = (

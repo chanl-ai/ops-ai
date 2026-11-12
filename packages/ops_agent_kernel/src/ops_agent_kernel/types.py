@@ -54,6 +54,10 @@ class Skill:
     # What the agent says when one of this skill's guardrails refuses (a next step, not just a no); empty uses the
     # platform's sentence.
     refusal: str = ""
+    # One named part of a skill with parts, by its slug; `slug` is then `<skill>/<part>`. Empty for a whole skill.
+    part: str = ""
+    # The most tokens this skill or part may hold when loaded; 0 is the reply's whole skill budget.
+    budget: int = 0
 
 
 @dataclass(frozen=True)
