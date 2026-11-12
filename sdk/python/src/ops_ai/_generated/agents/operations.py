@@ -316,6 +316,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["limit"],
         "stream": False,
     },
+    "agents_render_skill": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/skills/{skill_id}/render",
+        "pathParams": ["skill_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_request_guardrail_publish": {
         "body": "json",
         "headers": [],
@@ -2545,6 +2554,10 @@ class Operations:
         "Request Skill Publish"
         return self._t.call(SERVICE, OPERATIONS["agents_request_skill_publish"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def agents_render_skill(self, skill_id: str, body: SkillRenderInput) -> SkillRendered:
+        "Render Skill"
+        return self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def reviews_list_task_types(self) -> list[TaskTypeView]:
         "List Task Types"
         return self._t.call(SERVICE, OPERATIONS["reviews_list_task_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3820,6 +3833,10 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["agents_request_skill_publish"], {"skill_id": skill_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    async def agents_render_skill(self, skill_id: str, body: SkillRenderInput) -> SkillRendered:
+        "Render Skill"
+        return await self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def reviews_list_task_types(self) -> list[TaskTypeView]:
         "List Task Types"

@@ -1954,7 +1954,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Skills */
+        /**
+         * List Skills
+         * @description The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
+         *     what chat and the MCP prompts use; every other view describes the newest version an editor sees.
+         */
         get: operations["agents_list_skills"];
         put?: never;
         /** Create Skill */
@@ -2060,6 +2064,28 @@ export interface paths {
          *     or saved it); approved at once under the dev auto-approve setting.
          */
         post: operations["agents_request_skill_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skills/{skill_id}/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render Skill
+         * @description The published version's text with the inputs filled in, for one part when the skill has parts. A read: it
+         *     takes a service token holding skills:view, as the MCP prompts call it. 422 `skill_not_published`,
+         *     `part_required`, `unknown_part`, `unknown_input` or `missing_input`.
+         */
+        post: operations["agents_render_skill"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5837,6 +5863,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SkillRendered] */
+        Envelope_SkillRendered_: {
+            data: components["schemas"]["SkillRendered"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[StepUpToken] */
         Envelope_StepUpToken_: {
             data: components["schemas"]["StepUpToken"];
@@ -8589,6 +8624,8 @@ export interface components {
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
             ownerTeam: string;
+            /** Parts */
+            parts?: components["schemas"]["SkillPartSummary"][];
             /** Pendingreviewid */
             pendingReviewId?: string | null;
             /** Publishedversion */
@@ -8632,6 +8669,8 @@ export interface components {
             loading: "on_match" | "always";
             /** Name */
             name: string;
+            /** Parts */
+            parts?: components["schemas"]["SkillPart"][];
             /** Refusal */
             refusal?: string | null;
             /** Resources */
@@ -8671,6 +8710,8 @@ export interface components {
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
             ownerTeam: string;
+            /** Parts */
+            parts?: components["schemas"]["SkillPartInput"][];
             /**
              * Refusal
              * @default
@@ -8729,6 +8770,8 @@ export interface components {
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
             ownerTeam: string;
+            /** Parts */
+            parts?: components["schemas"]["SkillPartSummary"][];
             /** Pendingreview */
             pendingReview?: {
                 [key: string]: unknown;
@@ -8797,6 +8840,8 @@ export interface components {
              * @default
              */
             note: string;
+            /** Parts */
+            parts?: components["schemas"]["SkillPartInput"][] | null;
             /** Refusal */
             refusal?: string | null;
             /** Toolids */
@@ -8878,6 +8923,59 @@ export interface components {
             /** Tools */
             tools: components["schemas"]["SkillToolRef"][];
         };
+        /**
+         * SkillPart
+         * @description One named part of a skill, read with the skill's shared instructions (`salesforce/prepare-meeting`).
+         */
+        SkillPart: {
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInputField"][];
+            /** Instructions */
+            instructions: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Toolids */
+            toolIds?: string[];
+            /** Usewhen */
+            useWhen: string;
+        };
+        /**
+         * SkillPartInput
+         * @description One named part of a skill, read with the skill's shared instructions.
+         */
+        SkillPartInput: {
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInput"][];
+            /** Instructions */
+            instructions: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Toolids */
+            toolIds?: string[];
+            /**
+             * Usewhen
+             * @default
+             */
+            useWhen: string;
+        };
+        /**
+         * SkillPartSummary
+         * @description A part as a list row carries it: enough for a menu or an MCP prompt without a read per skill.
+         */
+        SkillPartSummary: {
+            /** Inputs */
+            inputs?: components["schemas"]["SkillInputField"][];
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Usewhen */
+            useWhen: string;
+        };
         /** SkillPublishCheck */
         SkillPublishCheck: {
             /** Approversneeded */
@@ -8891,6 +8989,35 @@ export interface components {
              * @enum {string}
              */
             editClass: "free" | "re_test" | "re_approval";
+        };
+        /** SkillRenderInput */
+        SkillRenderInput: {
+            /** Inputs */
+            inputs?: {
+                [key: string]: string;
+            };
+            /** Part */
+            part?: string | null;
+        };
+        /**
+         * SkillRendered
+         * @description POST /v1/skills/{id}/render: the published version's text with the inputs filled in.
+         */
+        SkillRendered: {
+            /** Name */
+            name: string;
+            /** Part */
+            part?: string | null;
+            /** Partname */
+            partName?: string | null;
+            /** Skillid */
+            skillId: string;
+            /** Slug */
+            slug: string;
+            /** Text */
+            text: string;
+            /** Version */
+            version: number;
         };
         /** SkillToolRef */
         SkillToolRef: {
@@ -23373,6 +23500,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SkillDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_render_skill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkillRenderInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SkillRendered_"];
                 };
             };
             /** @description Invalid request */

@@ -7706,6 +7706,25 @@
         "title": "Envelope[SkillOptions]",
         "type": "object"
       },
+      "Envelope_SkillRendered_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SkillRendered"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SkillRendered]",
+        "type": "object"
+      },
       "Envelope_StepUpToken_": {
         "additionalProperties": false,
         "properties": {
@@ -15834,6 +15853,13 @@
             "title": "Ownerteam",
             "type": "string"
           },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/SkillPartSummary"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
           "pendingReviewId": {
             "anyOf": [
               {
@@ -15963,6 +15989,13 @@
             "title": "Name",
             "type": "string"
           },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/SkillPart"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
           "refusal": {
             "anyOf": [
               {
@@ -16068,6 +16101,14 @@
           "ownerTeam": {
             "title": "Ownerteam",
             "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/SkillPartInput"
+            },
+            "maxItems": 8,
+            "title": "Parts",
+            "type": "array"
           },
           "refusal": {
             "default": "",
@@ -16195,6 +16236,13 @@
           "ownerTeam": {
             "title": "Ownerteam",
             "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/SkillPartSummary"
+            },
+            "title": "Parts",
+            "type": "array"
           },
           "pendingReview": {
             "anyOf": [
@@ -16435,6 +16483,21 @@
             "title": "Note",
             "type": "string"
           },
+          "parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkillPartInput"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parts"
+          },
           "refusal": {
             "anyOf": [
               {
@@ -16623,6 +16686,130 @@
         "title": "SkillOptions",
         "type": "object"
       },
+      "SkillPart": {
+        "additionalProperties": false,
+        "description": "One named part of a skill, read with the skill's shared instructions (`salesforce/prepare-meeting`).",
+        "properties": {
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SkillInputField"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "toolIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Toolids",
+            "type": "array"
+          },
+          "useWhen": {
+            "title": "Usewhen",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "useWhen",
+          "instructions"
+        ],
+        "title": "SkillPart",
+        "type": "object"
+      },
+      "SkillPartInput": {
+        "additionalProperties": false,
+        "description": "One named part of a skill, read with the skill's shared instructions.",
+        "properties": {
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SkillInput"
+            },
+            "maxItems": 20,
+            "title": "Inputs",
+            "type": "array"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "title": "Slug",
+            "type": "string"
+          },
+          "toolIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Toolids",
+            "type": "array"
+          },
+          "useWhen": {
+            "default": "",
+            "maxLength": 1024,
+            "title": "Usewhen",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "instructions"
+        ],
+        "title": "SkillPartInput",
+        "type": "object"
+      },
+      "SkillPartSummary": {
+        "additionalProperties": false,
+        "description": "A part as a list row carries it: enough for a menu or an MCP prompt without a read per skill.",
+        "properties": {
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SkillInputField"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "useWhen": {
+            "title": "Usewhen",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "useWhen"
+        ],
+        "title": "SkillPartSummary",
+        "type": "object"
+      },
       "SkillPublishCheck": {
         "additionalProperties": false,
         "properties": {
@@ -16658,6 +16845,89 @@
           "approversNeeded"
         ],
         "title": "SkillPublishCheck",
+        "type": "object"
+      },
+      "SkillRenderInput": {
+        "additionalProperties": false,
+        "properties": {
+          "inputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 20,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          }
+        },
+        "title": "SkillRenderInput",
+        "type": "object"
+      },
+      "SkillRendered": {
+        "additionalProperties": false,
+        "description": "POST /v1/skills/{id}/render: the published version's text with the inputs filled in.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "partName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partname"
+          },
+          "skillId": {
+            "title": "Skillid",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "skillId",
+          "name",
+          "slug",
+          "version",
+          "text"
+        ],
+        "title": "SkillRendered",
         "type": "object"
       },
       "SkillToolRef": {
@@ -44706,6 +44976,7 @@
     },
     "/v1/skills": {
       "get": {
+        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -46258,6 +46529,204 @@
           }
         },
         "summary": "Request Skill Publish",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/skills/{skill_id}/render": {
+      "post": {
+        "description": "The published version's text with the inputs filled in, for one part when the skill has parts. A read: it\ntakes a service token holding skills:view, as the MCP prompts call it. 422 `skill_not_published`,\n`part_required`, `unknown_part`, `unknown_input` or `missing_input`.",
+        "operationId": "agents_render_skill",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillRenderInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SkillRendered_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Render Skill",
         "tags": [
           "Agents"
         ],
