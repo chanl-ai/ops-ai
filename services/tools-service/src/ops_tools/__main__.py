@@ -324,7 +324,7 @@ def main() -> None:
             platform_events_router(
                 {
                     **member_removed_handlers(connection_service.store, credentials),
-                    **team_created_handlers(store, TeamDefaults(engine)),
+                    **team_created_handlers(store, TeamDefaults(engine), plugins),
                 }
             ),
         ),

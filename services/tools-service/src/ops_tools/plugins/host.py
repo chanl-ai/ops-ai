@@ -705,16 +705,31 @@ class PluginHost:
         return dict(self.locked.get(plugin_id) or {})
 
     async def off_reason(self, tenant_id: str, team_id: str | None, plugin: Plugin) -> str | None:
-        """Why the installed plugin is off for the team, or None when it is on (the team turned it on, or it is built in
-        and the team never turned it off): the one place that decides whether a plugin's tools run for a team."""
+        """Why the installed plugin is off for the team, or None when it is on (its binding row is enabled): the one
+        place that decides whether a plugin's tools run for a team. A team with no row has it off, built in or not; a
+        new team gets enabled rows for the built-in plugins from `turn_on_builtins`."""
         if team_id is None:
             return f"{plugin.manifest.title} is turned on per team; this call names no team."
         b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
-        if b is None and plugin.manifest.id in self.builtin:
-            return None
         if b is None or not b["enabled"]:
             return f"{plugin.manifest.title} is off for this team; a team admin turns it on."
         return None
+
+    async def turn_on_builtins(self, tenant_id: str, team_id: str, *, by: str = "tools-service") -> int:
+        """Every built-in plugin on for a team platform-service reports as new; returns how many it turned on. Only the
+        team.created event calls this, so a team made before built-in plugins started on keeps them off, and a plugin
+        the team already has a row for (a repeated event, an admin's choice) is left as it is."""
+        made = 0
+        for pid in sorted(self.builtin):
+            plugin = self.plugins.get(pid)
+            if plugin is None or await self.bindings.get(tenant_id, team_id, pid) is not None:
+                continue
+            await self.bindings.put(tenant_id, team_id, pid, enabled=True, connection_id=None, settings={}, by=by)
+            await self.bindings.set_tools(tenant_id, team_id, pid, first_tools_on(plugin.manifest))
+            if self.versions:
+                await self.take_installed(tenant_id, team_id, plugin)
+            made += 1
+        return made
 
     async def visible(self, tenant_id: str, team_id: str | None, module: Mapping[str, Any]) -> bool:
         """Whether the team sees the module in its tool lists: every other module yes, a plugin's only while on."""

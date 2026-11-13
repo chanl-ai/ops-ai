@@ -1,7 +1,8 @@
 """The plugins a fresh install loads, by failure mode: a clone or image with an empty plugins folder loads no app and
 no template pack, so the template gallery is empty; and an outside copy of a built-in plugin in the plugins folder (a
-stale synced copy, a PLUGINS_DEV link to a working copy) makes the loader refuse the plugin in both places; and a new
-team has every built-in plugin off, so its templates list but none of their tools run until an admin turns each on."""
+stale synced copy, a PLUGINS_DEV link to a working copy) makes the loader refuse the plugin in both places; and a team
+that existed before built-in plugins started on keeps them off (its templates list, its tools do not run) while a team
+platform-service reports as new starts with every built-in plugin on."""
 
 from __future__ import annotations
 
@@ -10,11 +11,14 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_access.platform_events import TEAM_CREATED
 from ops_plugin_sdk.loader import discover
 from ops_service_kit.settings import Settings
+from ops_tools.platform_events import team_created_handlers
 from ops_tools.plugins.host import PluginHost
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
+from ops_tools.store.team_defaults import TeamDefaults
 
 BUILTIN = Path(__file__).resolve().parents[3] / "builtin-plugins"
 SHIPPED = {
@@ -55,15 +59,22 @@ def test_an_outside_copy_of_a_built_in_plugin_replaces_it_instead_of_disabling_b
     assert str(BUILTIN / "ops_plugin_core") not in settings.plugin_folders
 
 
-async def test_a_built_in_plugin_is_on_for_a_team_that_never_switched_it_and_off_once_an_admin_turns_it_off(
+async def test_built_in_plugins_stay_off_for_an_existing_team_and_start_on_for_a_team_reported_new(
     engine: AsyncEngine, tenant: str, tmp_path: Path
 ) -> None:
     settings = Settings(plugins_dir=tmp_path / "plugins", builtin_plugins_dir=BUILTIN)
     bindings = PluginBindings(engine)
-    host = PluginHost.start(ModuleStore(engine), bindings, {}, settings.plugin_folders, builtin_dir=BUILTIN)
+    store = ModuleStore(engine)
+    host = PluginHost.start(store, bindings, {}, settings.plugin_folders, builtin_dir=BUILTIN)
     salesforce = host.plugins["opsai.salesforce"]
+    off = "Salesforce is off for this team; a team admin turns it on."
+    # A team from before the change has no binding row: its built-in apps stay off until an admin turns them on.
+    assert await host.off_reason(tenant, "team_old", salesforce) == off
+    provision = team_created_handlers(store, TeamDefaults(engine), host)[TEAM_CREATED].act
+    await provision(tenant, "team_new", {})
     assert await host.off_reason(tenant, "team_new", salesforce) is None
+    assert await host.off_reason(tenant, "team_old", salesforce) == off
+    # A repeated event leaves an admin's later choice alone.
     await bindings.put(tenant, "team_new", "opsai.salesforce", enabled=False, connection_id=None, settings={}, by="t")
-    assert await host.off_reason(tenant, "team_new", salesforce) == (
-        "Salesforce is off for this team; a team admin turns it on."
-    )
+    await provision(tenant, "team_new", {})
+    assert await host.off_reason(tenant, "team_new", salesforce) == off

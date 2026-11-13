@@ -10,6 +10,7 @@ from ops_access.platform_events import MEMBER_REMOVED, TEAM_CREATED, Handler
 from ops_policy import CredentialStore
 
 from .defaults import ensure_defaults
+from .plugins.host import PluginHost
 from .store.connections import ConnectionStore, held_of
 from .store.modules import ModuleStore
 from .store.team_defaults import TeamDefaults
@@ -27,11 +28,17 @@ def member_removed_handlers(store: ConnectionStore, credentials: CredentialStore
     return {MEMBER_REMOVED: Handler("connections", "delete", forget)}
 
 
-def team_created_handlers(modules: ModuleStore, defaults: TeamDefaults) -> dict[str, Handler]:
-    """A new team gets this service's defaults, its built-in apps, before anyone opens it."""
+def team_created_handlers(
+    modules: ModuleStore, defaults: TeamDefaults, plugins: PluginHost | None = None
+) -> dict[str, Handler]:
+    """A new team gets this service's defaults, its built-in apps, before anyone opens it, with every built-in plugin
+    on. Only this event turns them on, so a team that existed before keeps them off."""
 
     async def provision(tenant_id: str, team_id: str, _: dict[str, Any]) -> int:
         at = datetime.now(UTC)
-        return int(await ensure_defaults(modules, defaults, tenant_id=tenant_id, team_id=team_id, at=at))
+        made = int(await ensure_defaults(modules, defaults, tenant_id=tenant_id, team_id=team_id, at=at))
+        if plugins is not None:
+            made += await plugins.turn_on_builtins(tenant_id, team_id)
+        return made
 
     return {TEAM_CREATED: Handler("tools", "create", provision)}
