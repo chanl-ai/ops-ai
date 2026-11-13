@@ -7,9 +7,11 @@ from __future__ import annotations
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert
 
 from ops_access import BY_KEY, POLICIES, check_value
 from ops_access.platform_events import POLICY_CHANGED
+from ops_access.policies import PUBLISH_AREAS
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
@@ -149,3 +151,31 @@ class PolicyStore:
                 await c.execute(
                     policies.update().where(policies.c.key == old).values(value=whole, updated_by=by, updated_at=at)
                 )
+
+
+def new_workspace_values(team_ids: list[str]) -> dict[str, Any]:
+    """What a workspace starts with when it is created: publishes go live at once in each first team and an app may call
+    any public address. Written as the workspace's own rows, so a workspace created before reads the catalogue default
+    it always read and keeps it; an admin turns either back on in Settings. Approvals and step-up need no row: the
+    catalogue already has them off."""
+    return {
+        "publishReview": {t: dict.fromkeys(PUBLISH_AREAS, "never") for t in team_ids},
+        "egressNewHosts": "any_public",
+    }
+
+
+async def write_new_workspace_policies(c: Any, tenant_id: str, team_ids: list[str], *, at: str) -> None:
+    """Inside the transaction that inserted the tenant row, and only then, so a later seed run never overwrites what an
+    admin set since."""
+    for key, wanted in new_workspace_values(team_ids).items():
+        # A per-team value is checked one team's part at a time, as a save through `set` checks it.
+        value = (
+            {team: check_value(key, part) for team, part in wanted.items()}
+            if BY_KEY[key].per_team
+            else check_value(key, wanted)
+        )
+        await c.execute(
+            insert(policies)
+            .values(tenant_id=tenant_id, key=key, value=value, updated_by="workspace", updated_at=at)
+            .on_conflict_do_nothing(index_elements=[policies.c.tenant_id, policies.c.key])
+        )

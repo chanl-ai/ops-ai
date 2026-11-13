@@ -23,6 +23,7 @@ from ops_access.platform_events import TEAM_CREATED
 from ops_service_kit.ids import now_iso
 from ops_store.outbox import add as add_event
 
+from .policies import write_new_workspace_policies
 from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership
 from .tables import members, platform_outbox, role_assignments, teams, tenants, users
 from .tenancy import TenantDb
@@ -45,7 +46,7 @@ async def write_seed(
     tenant_id = str(tenant["id"])
     now = now_iso()
     async with db.tenant_tx(tenant_id) as c:
-        await c.execute(
+        made_tenant = await c.execute(
             insert(tenants)
             .values(
                 id=tenant_id,
@@ -55,8 +56,11 @@ async def write_seed(
                 created_at=now,
             )
             .on_conflict_do_nothing(index_elements=[tenants.c.id])
+            .returning(tenants.c.id)
         )
         seeded: list[dict[str, Any]] = data.get("teams") or []
+        if made_tenant.first() is not None:
+            await write_new_workspace_policies(c, tenant_id, [str(t["id"]) for t in seeded], at=now)
         if security_team in {str(t["id"]) for t in seeded}:
             # The workspace's record names its Security team; a workspace that already names one keeps it.
             await c.execute(
