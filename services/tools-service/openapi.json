@@ -2000,6 +2000,17 @@
             "title": "State",
             "type": "string"
           },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
           "title": {
             "title": "Title",
             "type": "string"

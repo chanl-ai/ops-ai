@@ -2007,6 +2007,8 @@ export interface components {
              * @enum {string}
              */
             state: "available" | "added" | "update_available" | "removed_upstream" | "needs_sign_in";
+            /** Summary */
+            summary?: string | null;
             /** Title */
             title: string;
             /** Version */

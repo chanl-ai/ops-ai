@@ -1272,6 +1272,7 @@ class AppResource(TypedDict):
     service: str
     source: str
     state: Literal["available", "added", "update_available", "removed_upstream", "needs_sign_in"]
+    summary: NotRequired[str | None]
     title: str
     version: int
 

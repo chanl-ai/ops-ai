@@ -16,7 +16,8 @@ import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { ScrollTabsList } from '@/components/shared/setting/scroll-tabs';
 import { AccountsTab } from '@/components/connections/app-accounts-tab';
 import { AuthConfigsTab } from '@/components/connections/app-auth-configs';
-import { ResourcesTab } from '@/components/connections/app-resources';
+import { KIND_ORDER, KIND_TAB, ResourcesTab } from '@/components/connections/app-resources';
+import { useAppResources } from '@/hooks/app-resources-queries';
 import { SettingsTab } from '@/components/connections/app-settings-tab';
 import { ToolsTab } from '@/components/connections/app-tools-tab';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
@@ -67,6 +68,8 @@ export function AppPageView({ appId }: { appId: string }) {
     onFailed: (why) => toast.error('The sign-in did not finish', { description: why }),
   });
   const signedInAs = React.useRef<'self' | 'team' | null>(null);
+  const card0 = app.data?.card as SystemCard | undefined;
+  const resources = useAppResources(card0?.pluginId && card0.appGroup !== 'gone' ? `plugin:${card0.pluginId}` : '');
 
   if (app.isPending || kinds.isPending) return <RecordSkeleton />;
   if (app.isError) return <QueryError what="this app" error={app.error} onRetry={() => app.refetch()} retrying={app.isFetching} />;
@@ -76,6 +79,8 @@ export function AppPageView({ appId }: { appId: string }) {
   const all = kinds.data as Kinds | undefined;
   // A built-in app runs inside Ops AI: it has no accounts to sign in, so no Accounts, Auth configs or Connect.
   const builtIn = card.kind === 'builtin' || card.kind === 'module';
+  // An app that signs in to nothing (a pack of skills or agents) has no accounts either.
+  const noAccounts = builtIn || card.authKind === 'none';
   const accounts = data.accounts ?? [];
   const configs = (data.authConfigs ?? []).filter((c) => c.type !== 'account');
   // Team setup is the team's view: Connect here is managing the team's apps (the roles grid's connections.manage).
@@ -138,14 +143,17 @@ export function AppPageView({ appId }: { appId: string }) {
     run();
   };
 
+  const kindTabs = KIND_ORDER.map((k) => [k, (resources.data ?? []).filter((r) => r.kind === k).length] as const).filter(([, n]) => n > 0);
   const toolsAdded = data.tools.filter((t) => t.added ?? true).length;
   const mayReadCalls = allows(TOOL_CALL_LOG) === true;
   const tabs: [string, string][] = [
-    ...(builtIn ? [] : ([['accounts', `Accounts · ${accounts.length}`]] as [string, string][])),
-    ['tools', card.kind === 'plugin' ? `Tools · ${toolsAdded} of ${data.tools.length} added` : 'Tools'],
+    ...(noAccounts ? [] : ([['accounts', `Accounts · ${accounts.length}`]] as [string, string][])),
+    // A plugin with no tools (a pack of skills) has nothing to show on Tools.
+    ...(card.kind === 'plugin' && !data.tools.length ? [] : ([['tools', card.kind === 'plugin' ? `Tools · ${toolsAdded} of ${data.tools.length} added` : 'Tools']] as [string, string][])),
     // Auth configs are a builder's and an admin's (card.mayManage); the API sends no one else any.
     ...(builtIn || !card.mayManage || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
-    ['resources', 'Resources'],
+    // One tab per kind the app brings, so agents, skills and workflows each read as their own list.
+    ...(kindTabs.length ? kindTabs.map(([k, n]) => [`resources-${k}`, `${KIND_TAB[k]} · ${n}`] as [string, string]) : ([['resources', 'Resources']] as [string, string][])),
     // The call log names who called each tool, so it is offered only with its cell (lib/nav.ts TOOL_CALL_LOG).
     ...(mayReadCalls ? ([['logs', 'Logs']] as [string, string][]) : []),
     // Settings are the team's to change, so the tab is a builder's and an admin's, as Auth configs is.
@@ -186,7 +194,7 @@ export function AppPageView({ appId }: { appId: string }) {
       <Tabs value={tab && tabs.some(([v]) => v === tab) ? tab : tabs[0][0]} onValueChange={(v) => (setTab(v), v !== 'accounts' && setConfig(null))} className="min-w-0">
         {/* Six tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
-        {!builtIn && (
+        {!noAccounts && (
           <TabsContent value="accounts" className="flex flex-col gap-4">
             <AccountsTab app={data} config={config} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} addBlocked={addAccountBlocked(card)} onSignIn={signIn} />
           </TabsContent>
@@ -202,6 +210,11 @@ export function AppPageView({ appId }: { appId: string }) {
         <TabsContent value="resources">
           <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} installed={!gone} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} />
         </TabsContent>
+        {kindTabs.map(([k]) => (
+          <TabsContent key={k} value={`resources-${k}`}>
+            <ResourcesTab kind={k} appName={data.card.name} pluginId={data.card.pluginId} installed={!gone} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} />
+          </TabsContent>
+        ))}
         <TabsContent value="logs">
           {/* The same call log as Tool calls, fixed to this app's tools. */}
           <div className="flex flex-col gap-2" data-testid="app-logs">

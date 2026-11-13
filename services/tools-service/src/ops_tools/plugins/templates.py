@@ -115,6 +115,13 @@ def view_of(plugin: Plugin, template: Template) -> dict[str, Any]:
     ).model_dump(by_alias=True)
 
 
+def summary_of(body: dict[str, Any]) -> str | None:
+    for key in ("description", "use_when", "useWhen", "role"):
+        if isinstance(v := body.get(key), str) and v.strip():
+            return v.strip()
+    return None
+
+
 def source_view(plugin: Plugin, source: KnowledgeSource) -> dict[str, Any]:
     """A knowledge source as a resource: kb-service makes it, in a knowledge base the team picks, syncing through the
     two tools named here. Its body is the source's definition, so its digest moves when the plugin changes it."""
@@ -174,6 +181,8 @@ class AppResource(_Wire):
     id: str
     version: int
     title: str
+    # One line on what it does, from its definition: a description, a skill's use-when or an agent's role.
+    summary: str | None = None
     requires: TemplateRequires
     # The copies the team holds; None for a knowledge source, which has no single copy.
     installed: ResourceInstalled | None = None
@@ -279,6 +288,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
         if copies is None:
             raise ServiceUnavailable("This service has no address for the services that keep copies.")
         m = plugin.manifest
+        summaries = {(t.kind, t.id): summary_of(body_of(plugin, t)) for t in m.templates}
         out: list[dict[str, Any]] = []
         for row in await copies.of(who.tenant_id, who.team_id, app_id):
             cell = cast(dict[str, str], row.get("addCell") or {})
@@ -296,6 +306,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                     view
                     | {
                         "plugin": {"id": m.id, "title": m.title, "version": m.version},
+                        "summary": summaries.get((str(row["kind"]), str(row["id"]))),
                         "state": row["state"],
                         "canAdd": may and not held and blocked is None,
                         "canRemove": removes,
@@ -335,6 +346,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                     AppResource.model_validate(
                         view
                         | {
+                            "summary": f"Keeps {s.title} pages in a knowledge base you pick, synced as they change.",
                             "state": state,
                             "copy": copy,
                             "installed": {"copies": len(mine), "version": 1 if mine else None, "newerAvailable": False},
