@@ -14,7 +14,7 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 
-up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); OPS_INFRA=external uses side containers and skips db-up/db-down
+up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
 	@# Always migrate, never drop data on its own. A chain the database holds ahead of this checkout
@@ -41,6 +41,11 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 		ALIAS=memory-extract MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=extract MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py; }
 	@$(STACK) health
+	@# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try; the marker
+	@# goes with the database (make reset-db removes it). SAMPLE=0 skips it.
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then \
+		$(MAKE) -s sample-team && touch "$(OPS_RUN_DIR)/sample-team.installed"; \
+	fi
 
 reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first (CONFIRM=yes skips)
 	@if [ "$(CONFIRM)" != yes ]; then \
@@ -48,6 +53,7 @@ reset-db: ## Wipe the stack's database and rebuild it empty from the chains; ask
 		[ "$$answer" = yes ] || { echo "reset-db: nothing changed"; exit 1; }; \
 	fi
 	@$(STACK) stop-for-reset
+	@rm -f "$(OPS_RUN_DIR)/sample-team.installed"
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --reset
 	@$(MAKE) -s migrate
 
