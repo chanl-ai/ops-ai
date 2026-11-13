@@ -1,13 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { FormField } from '@/components/shared/form-field';
-import { LoadingButton } from '@/components/shared/loading-button';
+import { PageSaveActions } from '@/components/shared/page-save-actions';
 import { SettingsField, SettingsSection } from '@/components/shared/settings-section';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
@@ -125,17 +123,7 @@ export function KbRetrievalTab({ kb }: { kb: KnowledgeBaseDetail }) {
       </SettingsSection>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {dirty && (
-          <div className="flex items-center gap-2" data-unsaved-bar>
-            <span className="text-sm text-muted-foreground">Unsaved changes</span>
-            <Button variant="ghost" size="sm" onClick={() => setDraft(saved)} disabled={update.isPending}>
-              <RotateCcw className="size-3.5" /> Discard
-            </Button>
-            <LoadingButton size="sm" isLoading={update.isPending} disabled={invalid} onClick={save} data-testid="kb-retrieval-save">
-              Save
-            </LoadingButton>
-          </div>
-        )}
+        <PageSaveActions dirty={dirty} saving={update.isPending} invalid={invalid} onSave={save} onDiscard={() => setDraft(saved)} testId="kb-retrieval-save" />
       </div>
     </div>
   );

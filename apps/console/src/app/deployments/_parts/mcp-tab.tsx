@@ -2,20 +2,19 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Bot, PauseCircle, RotateCcw, SquareTerminal } from 'lucide-react';
+import { AlertTriangle, Bot, PauseCircle, SquareTerminal } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AssistantsPanel } from '@/components/deployments/mcp/assistants-panel';
+import { PageSaveActions } from '@/components/shared/page-save-actions';
 import { CallsPanel } from '@/components/deployments/mcp/calls-panel';
 import { EndpointPanel } from '@/components/deployments/mcp/endpoint-panel';
 import { ConnectedStrip, JourneyBand } from '@/components/deployments/mcp/journey-band';
 import { ToolsPanel } from '@/components/deployments/mcp/tools-panel';
-import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -186,19 +185,7 @@ export function McpTab({ focusTools }: { focusTools?: boolean }) {
             </p>
           </SettingsSection>
 
-          {dirty && (
-            <div data-unsaved-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
-              <span className="text-sm text-muted-foreground">Unsaved changes</span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setDraft(null)} disabled={save.isPending}>
-                  <RotateCcw className="size-3.5" /> Discard
-                </Button>
-                <LoadingButton size="sm" isLoading={save.isPending} onClick={submit}>
-                  Save changes
-                </LoadingButton>
-              </div>
-            </div>
-          )}
+          <PageSaveActions dirty={!!dirty} saving={save.isPending} onSave={submit} onDiscard={() => setDraft(null)} />
         </div>
       ) : null}
     </>

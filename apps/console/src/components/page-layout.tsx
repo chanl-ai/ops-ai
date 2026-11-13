@@ -13,6 +13,7 @@ import { PreviewBadge } from '@/components/shared/preview-badge';
 import { SectionTabs, TitleSwitcher } from '@/components/shared/title-switcher';
 import { SampleNoteOnPage, SampleOnPage } from '@/components/shared/sample-data';
 import { WholeTokens } from '@/components/shared/whole-tokens';
+import { PageSaveSlot } from '@/components/shared/page-save-actions';
 import { usePreview } from '@/hooks/use-preview';
 import {
   BulkSelectionContext,
@@ -119,6 +120,9 @@ export function PageLayout({
     return icon;
   };
 
+  // Save and Discard of a form on the page (PageSaveActions) are drawn here.
+  const [saveSlot, setSaveSlot] = useState<HTMLElement | null>(null);
+
   // Bulk selection UI replaces normal actions when rows are selected
   const renderActions = () => {
     if (actionsLoading) {
@@ -174,6 +178,7 @@ export function PageLayout({
   };
 
   return (
+    <PageSaveSlot.Provider value={saveSlot}>
     <SampleOnPage.Provider value={reportSample}>
     <SampleNoteOnPage.Provider value={reportNote}>
     <BulkSelectionContext.Provider value={ctxValue}>
@@ -290,7 +295,10 @@ export function PageLayout({
           </div>
 
           {/* Actions area — bulk selection overrides normal actions; wraps to own row on narrow */}
-          <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">{renderActions()}</div>
+          <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">
+            <span ref={setSaveSlot} className="flex items-center gap-2 empty:hidden" data-testid="page-save-actions" />
+            {renderActions()}
+          </div>
         </div>
 
         {/* Tabs (if provided). shrink-0: the layout is a full-height column, and a scroll container may shrink to its
@@ -310,5 +318,6 @@ export function PageLayout({
     </BulkSelectionContext.Provider>
     </SampleNoteOnPage.Provider>
     </SampleOnPage.Provider>
+    </PageSaveSlot.Provider>
   );
 }
