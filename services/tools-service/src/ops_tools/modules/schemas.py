@@ -710,6 +710,8 @@ class ToolCallRow(Out):
     # Where the call came in: POST /v1/calls or the MCP server, and the assistant that sent an MCP call.
     channel: Literal["api", "mcp", "console"] | None = None
     client_name: str | None = None
+    # The assistant a person allowed when they signed in (platform-service's client id).
+    client_id: str | None = None
     acting_for: str | None = None
     credential: Literal["person", "team"] | None = None
     run_as: CallRunAs | None = None

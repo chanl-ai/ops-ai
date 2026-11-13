@@ -72,6 +72,8 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
         decision: Annotated[str | None, Query(pattern="^(allow|deny)$")] = None,
         key: Annotated[str | None, Query(max_length=200)] = None,
         call: Annotated[str | None, Query(max_length=200)] = None,
+        # The calls made through one MCP link (mcp_links.id).
+        link: Annotated[str | None, Query(max_length=64)] = None,
     ) -> JSONResponse:
         data = await service.executions(
             who,
@@ -83,6 +85,7 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
             decision=decision,
             key=key,
             call_id=call,
+            link_id=link,
         )
         return ok(data)
 

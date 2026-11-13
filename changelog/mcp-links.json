@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-13",
+  "title": "MCP links for your assistants",
+  "description": "Under Channels › MCP, a team admin makes a link: a name and the tools and published workflows it offers. People paste its address into Claude, Cursor or VS Code and sign in with their own account; the link's page lists every call made through it.",
+  "tag": "new"
+}

@@ -71,6 +71,8 @@ KINDS = ["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
 # addable and what install_template is checked against.
 CREATE = ("agents:create", "skills:create", "workflows:create", "guardrails:create")
 SKILLS_VIEW = ("skills:view",)
+# Starting a workflow's live version (agents-service require_runs_start).
+RUN_WORKFLOW = ("workflows:run",)
 ACCESS = Access()
 
 OPERATIONS: tuple[Operation, ...] = (
@@ -228,6 +230,31 @@ class PlatformTools:
                 True,
                 {o.wrap: out} if o.wrap else (cast(dict[str, Any], out) if isinstance(out, dict) else {"result": out}),
             )
+        err = cast(dict[str, Any], body.get("error") or {})
+        return _failed(str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase))
+
+    async def start_workflow(self, workflow_id: str, args: dict[str, Any], *, who: Principal, team: str) -> ToolOutcome:
+        """Starts the live version of a workflow an MCP link picked, as the person: agents-service decides with
+        workflows.run, which the token carries only when the person holds it in the team. Returns the run's id and
+        status; the run itself goes on in agents-service."""
+        if "agents" not in self.bases:
+            return _failed("SERVICE_UNAVAILABLE", 503, "No workflow service is set for this install.")
+        try:
+            headers = self._headers(who, team, "agents", RUN_WORKFLOW)
+            headers.update(await self._acting_for(who, team))
+            async with _Client(self.http) as http:
+                r = await http.post(
+                    f"{self.bases['agents']}/v1/runs",
+                    headers=headers,
+                    json={"workflowId": workflow_id, "input": args, "mode": "live"},
+                )
+        except (httpx.HTTPError, ApiError) as e:
+            return _failed("SERVICE_UNAVAILABLE", 503, f"agents-service did not answer: {type(e).__name__}")
+        raw: Any = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        body = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+        if r.is_success:
+            started = cast(dict[str, Any], body.get("data") or {})
+            return ToolOutcome(True, {k: started.get(k) for k in ("runId", "workflowId", "version", "status")})
         err = cast(dict[str, Any], body.get("error") or {})
         return _failed(str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase))
 

@@ -48,6 +48,7 @@ from .secrets import SecretResolver
 from .send_check import SendCheck
 from .store import CallLog
 from .store.connections import ConnectionStore, plugin_app
+from .store.mcp_links import McpLinks
 from .store.mocks import MockStore
 from .store.modules import Aggregate
 from .store.rate_windows import RateWindows
@@ -211,6 +212,7 @@ def create_gateway_app(
     cursor_key: bytes = b"",
     flags: Flags | None = None,
     modules: ModuleService | None = None,
+    links: McpLinks | None = None,
 ) -> FastAPI:
     """`clock` is the time a token's expiry is judged by, sent to OPA with each call; tests pass a fixed one.
     `policy` is the Rego the gateway decides by, `policy/gateway.rego` unless given; it is written into OPA at start
@@ -228,6 +230,7 @@ def create_gateway_app(
     `authenticator` signs a module's calls in through its connection; without it a connection adds nothing.
     `directory` holds the teams the MCP adapter scopes each assistant's tools to; without it no /mcp.
     `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
+    `links` holds the teams' MCP links, each served at `/mcp/{team}/{link}`; without it only `/mcp/{team}` answers.
     `code` runs code operations on runner-service and checks their calls back; without it they fail."""
     rules = policy if policy is not None else POLICY_FILE.read_text()
     client = http_client or (egress_client(egress) if egress else httpx.AsyncClient())
@@ -295,6 +298,7 @@ def create_gateway_app(
             auth=resolved_auth,
             public_url=Settings().tools_public_url,
             issuer_url=Settings().platform_public_url,
+            links=links,
         )
         if directory is not None and (flags or Flags()).on("mcp_gateway")
         else None
@@ -338,17 +342,19 @@ def create_gateway_app(
     if mcp is not None:
 
         @app.get("/.well-known/oauth-protected-resource/mcp/{team}", include_in_schema=False)
-        async def mcp_resource_metadata(team: str) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-            """Tells an assistant that got a 401 at a team's MCP address where to sign in (RFC 9728): the address is the
-            resource, on this service's own public base, and platform-service at its public base is its authorization
-            server."""
-            if mcp.public_url is None or mcp.issuer_url is None or not _TEAM_PATH.match(team):
+        @app.get("/.well-known/oauth-protected-resource/mcp/{team}/{link}", include_in_schema=False)
+        async def mcp_resource_metadata(team: str, link: str | None = None) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+            """Tells an assistant that got a 401 at a team's MCP address, or one of its links, where to sign in (RFC
+            9728): the address is the resource, on this service's own public base, and platform-service at its public
+            base is its authorization server."""
+            paths = [team] if link is None else [team, link]
+            if mcp.public_url is None or mcp.issuer_url is None or not all(_TEAM_PATH.match(x) for x in paths):
                 return JSONResponse(
                     error_body(503, "unavailable", "No sign-in issuer is set for this install."), status_code=503
                 )
             return JSONResponse(
                 {
-                    "resource": f"{mcp.public_url}/mcp/{team}",
+                    "resource": f"{mcp.public_url}/mcp/{'/'.join(paths)}",
                     "authorization_servers": [mcp.issuer_url],
                     "bearer_methods_supported": ["header"],
                 }

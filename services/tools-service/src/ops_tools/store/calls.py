@@ -69,6 +69,9 @@ gateway_calls = sa.Table(
     # The assistant an MCP token was issued to (platform-service's client id), which a person allowed by name;
     # client_name above stays what the assistant says about itself.
     sa.Column("client_id", sa.String(64)),
+    # The MCP link the call came through (mcp_links.id); null for the team's whole address and every other channel.
+    sa.Column("link_id", sa.String(64)),
+    sa.Index("ix_gateway_calls_link_created", "link_id", "created_at"),
     sa.Index("ix_gateway_calls_module_created", "module_id", "created_at"),
     sa.Index("ix_gateway_calls_thread_id", "thread_id"),
     # An approved write acts once per effect scope (tools migration 0017).
@@ -314,6 +317,7 @@ class CallLog:
         since: str | None = None,
         key: str | None = None,
         call_id: str | None = None,
+        link_id: str | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[dict[str, Any]], int]:
@@ -336,6 +340,8 @@ class CallLog:
             where.append(gateway_calls.c.idempotency_key == key)
         if call_id:
             where.append(gateway_calls.c.id == call_id)
+        if link_id:
+            where.append(gateway_calls.c.link_id == link_id)
         if since:
             where.append(gateway_calls.c.created_at >= since)
         q = gateway_calls.select().where(*where).order_by(gateway_calls.c.created_at.desc()).offset(offset).limit(limit)
@@ -343,6 +349,23 @@ class CallLog:
         async with self.engine.connect() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return rows, int((await c.execute(total)).scalar_one())
+
+    async def last_by_link(self, tenant_id: str, team_id: str, link_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Each link's newest call in the team, for the links list's Last call column."""
+        if not link_ids:
+            return {}
+        t = gateway_calls
+        newest = (
+            sa.select(t.c.link_id, sa.func.max(t.c.created_at).label("at"))
+            .where(t.c.tenant_id == tenant_id, t.c.team_id == team_id, t.c.link_id.in_(link_ids))
+            .group_by(t.c.link_id)
+            .subquery()
+        )
+        q = sa.select(t.c.link_id, t.c.created_at, t.c.outcome, t.c.client_name, t.c.client_id, t.c.sub).join(
+            newest, sa.and_(t.c.link_id == newest.c.link_id, t.c.created_at == newest.c.at)
+        )
+        async with self.engine.connect() as c:
+            return {str(r["link_id"]): dict(r) for r in (await c.execute(q)).mappings()}
 
     async def made_for(
         self, person: str, module_ids: list[str], since: str, *, tenant_id: str, team_id: str

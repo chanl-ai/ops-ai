@@ -98,6 +98,9 @@ def call_row(
         row["channel"] = r["channel"]
     if r.get("client_name"):
         row["clientName"] = r["client_name"]
+    # The assistant a person allowed by name when they signed in (platform-service's client id).
+    if r.get("client_id"):
+        row["clientId"] = r["client_id"]
     # Whom the call acted for and whose sign-in signed it.
     if r.get("acting_for"):
         row["actingFor"] = r["acting_for"]

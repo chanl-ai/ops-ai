@@ -11705,6 +11705,17 @@
             ],
             "title": "Channel"
           },
+          "clientId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clientid"
+          },
           "clientName": {
             "anyOf": [
               {
@@ -21673,6 +21684,23 @@
                 }
               ],
               "title": "Call"
+            }
+          },
+          {
+            "in": "query",
+            "name": "link",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Link"
             }
           },
           {

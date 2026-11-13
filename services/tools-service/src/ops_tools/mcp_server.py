@@ -41,13 +41,23 @@ from ops_store import isolation
 
 from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls, Outcome, Run
-from .mcp_tools import PlatformTools
+from .mcp_tools import PLATFORM, PlatformTools
 from .modules.directory import Directory, Team
-from .registry import ToolRegistry
+from .registry import Resolved, ToolRegistry
+from .store.mcp_links import McpLinks
 from .store.modules import Aggregate
 
-_PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)/?$")
+# `/mcp/<team>` is the team's whole address; `/mcp/<team>/<link>` one of its MCP links (store/mcp_links.py).
+_PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)(?:/(?P<link>[^/]+))?/?$")
 _CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
+# A published workflow picked on a link is listed as `workflow__<id>`, the name agents call one by.
+WORKFLOW_PREFIX = "workflow__"
+# Starting a picked workflow's live version: it makes a run, and the workflow's own review steps are its gate, as
+# agents-service decides for a workflow an agent calls (tool_catalog.py, requiresApproval False), so it does not wait
+# as other MCP writes do.
+WORKFLOW_RUN = Resolved(
+    "write", PLATFORM, operation={"name": "start_workflow", "access": "write", "rate_limit_per_min": 30, "draft": True}
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +66,8 @@ class McpCaller:
 
     principal: Principal
     team: Team
+    # The MCP link the address names: its tools are the only ones listed and run. None on the team's whole address.
+    link: dict[str, Any] | None = None
 
 
 class McpAdapter:
@@ -69,6 +81,7 @@ class McpAdapter:
         platform: PlatformTools | None = None,
         public_url: str | None = None,
         issuer_url: str | None = None,
+        links: McpLinks | None = None,
     ) -> None:
         # This service's public base (OPS_TOOLS_PUBLIC_URL): an assistant's token is for `<public_url>/mcp/<team>` and
         # nothing else. platform-service at its own public base (OPS_PLATFORM_PUBLIC_URL) is the authorization server.
@@ -76,6 +89,7 @@ class McpAdapter:
         self.public_url = public_url.rstrip("/") if public_url and issuer_url else None
         self.issuer_url = issuer_url.rstrip("/") if public_url and issuer_url else None
         self.calls = calls
+        self.links = links
         self.platform = platform or _platform_tools(Settings())
         self.registry = registry
         self.directory = directory
@@ -107,8 +121,8 @@ class McpAdapter:
         found = _PATH.match(scope["path"])
         try:
             if found is None:
-                raise NotFound("No MCP server answers at this URL; use /mcp/{team}.")
-            team_id = found["team"]
+                raise NotFound("No MCP server answers at this URL; use /mcp/{team} or /mcp/{team}/{link}.")
+            team_id, slug = found["team"], found["link"]
             headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
             authorization = headers.get("authorization")
             if self.public_url is None and not (authorization or "").startswith("Bearer ok_"):
@@ -119,15 +133,17 @@ class McpAdapter:
                 )
             # 401 without a credential, 403 team_forbidden when the key or token belongs to another team. Any member
             # opens a session and lists; each call checks its own right and a refusal is a tool error.
+            address = f"/mcp/{team_id}" + (f"/{slug}" if slug else "")
             principal = await self.auth.identity.bearer(
-                authorization, team_id, resource=f"{self.public_url}/mcp/{team_id}" if self.public_url else None
+                authorization, team_id, resource=f"{self.public_url}{address}" if self.public_url else None
             )
+            link = await self._link(principal, team_id, slug) if slug else None
         except ApiError as e:
             await _refuse(send, e, self._metadata_url(scope))
             return
         # An id the seed does not know is nobody's team, so it sees no module (never the all-scope fallback).
         team = self.directory.team_by_id(team_id) or Team(team_id, team_id, (), "owned")
-        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team)
+        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team, link)
         # The team scope an API route gets from its auth dependency. This adapter is an ASGI app, so nothing else enters
         # it, and the registry and connection store raise NoTenantError without it. The SDK starts each request's
         # handler task from this task's context, so the scope reaches tools/list and tools/call.
@@ -141,7 +157,20 @@ class McpAdapter:
         found = _PATH.match(scope["path"])
         if self.public_url is None or found is None:
             return None
-        return f"{self.public_url}/.well-known/oauth-protected-resource/mcp/{found['team']}"
+        link = f"/{found['link']}" if found["link"] else ""
+        return f"{self.public_url}/.well-known/oauth-protected-resource/mcp/{found['team']}{link}"
+
+    async def _link(self, principal: Principal, team_id: str, slug: str) -> dict[str, Any]:
+        """The link the address names, in the caller's own team (the bearer check above already held them to it)."""
+        found = await self.links.by_slug(principal.tenant_id, team_id, slug) if self.links is not None else None
+        if found is None:
+            raise NotFound(f"This team has no MCP link at {slug}.")
+        if found["paused"]:
+            # A paused link is out of service for everyone, as a paused deployment is; not a refusal of this caller.
+            raise ServiceUnavailable(
+                f"The MCP link {found['name']} is paused. A team admin can resume it.", code="link_paused"
+            )
+        return found
 
     def _sees(self, team: Team) -> Any:
         def sees(module: Aggregate) -> bool:
@@ -152,6 +181,8 @@ class McpAdapter:
     async def _list_tools(self, ctx: Any, _params: Any) -> types.ListToolsResult:
         who = _caller(ctx)
         rows = await self.registry.grantable(who.principal.tenant_id, self._sees(who.team))
+        if who.link is not None:
+            return types.ListToolsResult(tools=_link_tools(who.link, rows))
         tools = [
             types.Tool(
                 name=r["name"],
@@ -164,7 +195,9 @@ class McpAdapter:
         ]
         return types.ListToolsResult(tools=[*self.platform.tools(), *tools])
 
-    async def _platform_call(self, ctx: Any, name: str, args: dict[str, Any], run: Run) -> Outcome:
+    async def _platform_call(
+        self, ctx: Any, name: str, args: dict[str, Any], run: Run, *, resolved: Resolved | None = None
+    ) -> Outcome:
         """One platform operation as a gateway call for the caller: logged on the MCP channel, rate limited, and a write
         held as the team's rule for MCP writes says."""
         who = _caller(ctx)
@@ -174,7 +207,8 @@ class McpAdapter:
             request,
             channel=MCP,
             client_name=None if who.principal.client_id else _client_name(ctx),
-            operation=(self.platform.resolved(name), run),
+            operation=(resolved or self.platform.resolved(name), run),
+            link_id=who.link["id"] if who.link else None,
         )
 
     async def _list_prompts(self, ctx: Any, _params: Any) -> types.ListPromptsResult:
@@ -215,7 +249,20 @@ class McpAdapter:
                 structured_content={"code": e.code, "status": e.status, "message": e.message},
                 is_error=True,
             )
-        if self.platform.offers(name := str(params.name)):
+        name = str(params.name)
+        if who.link is not None:
+            picked = {str(t["name"]): t for t in who.link["tools"]}
+            if name not in picked:
+                return _refused_tool(f"{name} is not one of this link's tools.", "not_on_link")
+            if picked[name].get("kind") == "workflow":
+                workflow_id = name.removeprefix(WORKFLOW_PREFIX)
+                args = dict(params.arguments or {})
+
+                async def start(given: dict[str, Any]) -> ToolOutcome:
+                    return await self.platform.start_workflow(workflow_id, given, who=who.principal, team=who.team.id)
+
+                return _tool_result(await self._platform_call(ctx, name, args, start, resolved=WORKFLOW_RUN))
+        if who.link is None and self.platform.offers(name):
             args = dict(params.arguments or {})
 
             async def run(given: dict[str, Any]) -> ToolOutcome:
@@ -237,8 +284,50 @@ class McpAdapter:
             # A signed-in assistant is named by its client id; what it says about itself is not kept beside it.
             client_name=None if who.principal.client_id else _client_name(ctx),
             sees=self._sees(who.team),
+            link_id=who.link["id"] if who.link else None,
         )
         return _tool_result(outcome)
+
+
+def _link_tools(link: dict[str, Any], rows: list[dict[str, Any]]) -> list[types.Tool]:
+    """The link's picked tools that the team may still run, in the order picked, and its picked workflows. A tool the
+    team can no longer run (its module unpublished or drifted) is left out, as the gateway would refuse it."""
+    by_name = {str(r["name"]): r for r in rows}
+    out: list[types.Tool] = []
+    for t in cast(list[dict[str, Any]], link["tools"]):
+        name = str(t["name"])
+        if t.get("kind") == "workflow":
+            title = str(t.get("title") or name.removeprefix(WORKFLOW_PREFIX))
+            out.append(
+                types.Tool(
+                    name=name,
+                    description=f"Start the {title} workflow with this input; returns its run id.",
+                    input_schema={"type": "object"},
+                    annotations=types.ToolAnnotations(title=title, read_only_hint=False, open_world_hint=True),
+                )
+            )
+        elif (r := by_name.get(name)) is not None:
+            out.append(
+                types.Tool(
+                    name=name,
+                    description=r["description"],
+                    input_schema=r["input_schema"],
+                    annotations=types.ToolAnnotations(
+                        title=str(r.get("title") or name),
+                        read_only_hint=r["access"] not in WRITES,
+                        open_world_hint=True,
+                    ),
+                )
+            )
+    return out
+
+
+def _refused_tool(message: str, code: str) -> types.CallToolResult:
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=f"{code}: {message}")],
+        structured_content={"code": code, "status": 403, "message": message},
+        is_error=True,
+    )
 
 
 def _said(outcome: Outcome) -> str:

@@ -971,6 +971,7 @@ class ModuleService:
         decision: str | None,
         key: str | None = None,
         call_id: str | None = None,
+        link_id: str | None = None,
     ) -> dict[str, Any]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
         sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
@@ -981,6 +982,9 @@ class ModuleService:
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_ids is not None:
             scope = [m for m in module_ids if scope is None or m in scope]
+        if link_id is not None:
+            # A link's calls are the team's own already, and a workflow started through one has no module.
+            scope = None
         if key is not None:
             # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
             await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
@@ -993,6 +997,7 @@ class ModuleService:
             decision=decision,
             key=key,
             call_id=call_id,
+            link_id=link_id,
             offset=(page - 1) * page_size,
             limit=page_size,
         )
