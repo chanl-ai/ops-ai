@@ -372,5 +372,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-748 | agents-service | A pick over the reply's budget is refused | api, ui | page |
 | uc-749 | agents-service | A part needing a tool the agent lacks is locked | api, ui | page |
 | uc-750 | agents-service | An admin limits what the menu offers | api, ui | page |
-| uc-723 | console | The console shows one area of pages at a time, chosen from the top bar and offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams, on a desktop and a phone | ui | failing |
+| uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | passing |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |
