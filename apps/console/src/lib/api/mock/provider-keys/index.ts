@@ -27,5 +27,9 @@ export function createMockProviderKeys(): ProviderKeysApi {
       if (!rows.some((k) => k.name === name)) throw new ApiError(`Model provider key ${name} was not found.`, 404, undefined, 'not_found');
       rows = rows.filter((k) => k.name !== name);
     },
+    // The mock has no provider: a saved key works and lists two models (Azure: one deployment).
+    check: async (name) => (rows.some((k) => k.name === name) ? { ok: true, models: 2 } : Promise.reject(new ApiError(`Model provider key ${name} was not found.`, 404, undefined, 'not_found'))),
+    models: async (_name, where) => (where.provider === 'azure-openai' ? [{ id: 'chat-prod', model: 'gpt-4.1-mini' }] : where.provider === 'anthropic' ? [{ id: 'claude-sonnet-4-5' }, { id: 'claude-haiku-4-5' }] : [{ id: 'gpt-4.1-mini' }, { id: 'gpt-4.1' }]),
+    setChatModel: async (choice) => ({ providerId: `prov_${choice.provider}`, model: choice.model, aliases: ['default', 'assistant'] }),
   };
 }

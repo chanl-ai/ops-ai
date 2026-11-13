@@ -32,10 +32,11 @@ const SWITCH = 'Ask before an agent changes anything in an app';
 const OWN_REQUESTS = 'People can approve their own requests';
 const TEST_ACCOUNTS = 'Test accounts never ask';
 const TEST_RUNS = 'Test runs on live accounts ask first';
+const MAKERS = 'Writes an app or template marks “ask first” wait for approval';
 const NOT_THESE_ROLES = new Set(['viewer', 'chat_user', 'owner', 'builder']);
 
 const teamSchema = z
-  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), requesterMayDecide: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean() })
+  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), requesterMayDecide: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean(), makersAsk: z.boolean() })
   .refine((v) => !v.ask || v.answer !== BY_REVIEWER || !!v.reviewerRole, { message: 'Choose the role that reviews.', path: ['reviewerRole'] });
 type TeamForm = z.infer<typeof teamSchema>;
 
@@ -84,6 +85,8 @@ export default function ApprovalsPage() {
       requesterMayDecide: mayDecide?.value === true,
       testAccountsNeverAsk: saved.testAccountsNeverAsk !== false,
       testRunsAsk: saved.testRunsAsk !== false,
+      // Unset means a maker's ask-first holds; a new workspace stores false for the whole workspace.
+      makersAsk: saved.makersAsk !== false,
     },
   });
   const ask = form.watch('ask');
@@ -124,6 +127,16 @@ export default function ApprovalsPage() {
       toast.error('Couldn’t save the test run setting', { description: (e as Error).message });
     }
   };
+  // Saves this switch alone into the team's part, on top of what the team saved; the team's part wins over the workspace's.
+  const saveMakers = async () => {
+    try {
+      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: saved.testRunsAsk !== false, makersAsk: form.getValues('makersAsk') };
+      await set.mutateAsync({ key: 'appChanges', teamId, value });
+      toast.success(`Saved: ${MAKERS}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
+    } catch (e) {
+      toast.error(`Couldn’t save: ${MAKERS}`, { description: (e as Error).message });
+    }
+  };
   const saveApps = async () => {
     try {
       await set.mutateAsync({ key: 'appChangesByApp', teamId, value: { ...savedTools, ...overrides } });
@@ -154,7 +167,7 @@ export default function ApprovalsPage() {
             requiredRole="admin"
             onSave={saveTeam}
             saving={set.isPending}
-            dirty={Object.keys(form.formState.dirtyFields).some((k) => k !== 'testAccountsNeverAsk' && k !== 'testRunsAsk')}
+            dirty={Object.keys(form.formState.dirtyFields).some((k) => k !== 'testAccountsNeverAsk' && k !== 'testRunsAsk' && k !== 'makersAsk')}
           >
             <div className="flex flex-col gap-4">
               <Controller
@@ -221,6 +234,29 @@ export default function ApprovalsPage() {
                 </>
               )}
             </div>
+          </SettingCard>
+
+          <SettingCard
+            id="approvals-makers"
+            title={MAKERS}
+            description="Some app actions and template tools are marked by their maker to ask first. Off: they run like any other write, and the switch above decides. A new workspace starts with this off."
+            help="Default: off in a new workspace · Changed by a team admin"
+            locked={locked}
+            requiredRole="admin"
+            onSave={saveMakers}
+            saving={set.isPending}
+            dirty={form.formState.dirtyFields.makersAsk === true}
+          >
+            <Controller
+              control={form.control}
+              name="makersAsk"
+              render={({ field }) => (
+                <label className="flex items-center gap-3 text-sm">
+                  <Switch checked={field.value} onCheckedChange={field.onChange} disabled={locked} aria-label={MAKERS} data-testid="approvals-makers-switch" />
+                  {field.value ? 'On: they wait for approval' : 'Off: they run unless the switch above asks'}
+                </label>
+              )}
+            />
           </SettingCard>
 
           <Collapsible>
