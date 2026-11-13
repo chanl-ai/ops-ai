@@ -15,8 +15,8 @@ branch that never renders (a not-found state). This use case checks the rendered
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya opens every route in the sidebar | Each draws the shared header (`page-header`), except the chat workspace, a full-height shell |
-| 2 | She opens one record of each kind: the first record each list links to, and a Human Task, a case, a run, a file, a workflow and an agent | Each draws the shared header |
+| 1 | Priya opens every route in the sidebar, and every tab those pages show (Workflows › Runs, Access › Roles) | Each draws the shared header (`page-header`), except the chat workspace, a full-height shell |
+| 2 | She opens one record of each kind: the first record each list links to, and a Human Task (from All tasks, at `/work/tasks?review=`), a case, a run (one started in setup), a file, a workflow and an agent | Each draws the shared header |
 
 ## Acceptance layers
 
