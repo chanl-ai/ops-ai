@@ -28,7 +28,7 @@ async def waits(levels: tuple[Any, dict[str, Any]], module: dict[str, Any]) -> b
 
 
 async def test_a_new_workspace_runs_a_write_its_maker_marked_ask_first() -> None:
-    off = ({"makersAsk": False}, {})
+    off: tuple[dict[str, bool], dict[str, Any]] = ({"makersAsk": False}, {})
     assert not await waits(off, PLUGIN)
     assert not await waits(off, SEEDED)
     # A workspace that saved nothing keeps each maker's ask.

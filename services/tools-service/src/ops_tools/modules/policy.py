@@ -117,7 +117,8 @@ def maker_asks(module: dict[str, Any] | None, tool: str | None) -> bool:
     the manifest's) or a seeded one that declared the wait (requires_approval true beside it)."""
     if not module or not tool:
         return False
-    op = next((o for o in module.get("operations") or [] if o.get("name") == tool), None)
+    operations: list[dict[str, Any]] = module.get("operations") or []
+    op = next((o for o in operations if o.get("name") == tool), None)
     if op is None or op.get("approval_mode") != "reviewer":
         return False
     return str(module.get("template_id") or "").startswith("plugin:") or op.get("requires_approval") is True

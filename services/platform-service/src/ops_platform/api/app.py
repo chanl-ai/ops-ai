@@ -519,7 +519,8 @@ def create_public_app(
     ) -> Actor:
         """Where a read of a workspace-wide record (the roles) is decided: the team X-Team-Id names, else the token's
         only team, else every team (`*`), so a workspace admin with several teams reads without naming one."""
-        named = [str(t) for t in claims.get("team_ids") or []]
+        team_ids: list[Any] = claims.get("team_ids") or []
+        named = [str(t) for t in team_ids]
         if x_team_id is None and len(named) != 1:
             return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
         return await acting(claims, x_team_id)

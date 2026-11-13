@@ -17,7 +17,7 @@ from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
 
 from .conftest import SERVICE, Models
-from .test_provider_keys import _people
+from .test_provider_keys import people
 
 AZURE = "https://contoso.openai.azure.com"
 
@@ -54,7 +54,7 @@ async def rig(models: Models) -> AsyncIterator[Rig]:
     # Aliases are install-wide; fresh names stand in for `default` and `assistant` so tests do not share them.
     names = (f"chat-{uuid4().hex[:8]}", f"assist-{uuid4().hex[:8]}")
     app = create_models_app(models.engine, upstream=_provider(seen), chat_aliases=names)
-    app.dependency_overrides[current_principal] = _people(tenant)
+    app.dependency_overrides[current_principal] = people(tenant)
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://models", event_hooks=hooks

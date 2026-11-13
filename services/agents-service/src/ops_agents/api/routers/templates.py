@@ -687,7 +687,8 @@ async def _dependencies(
 def _off(t: dict[str, Any]) -> str | None:
     """Why the template cannot be copied yet: its app is off for the team and the copy would grant the app's tools,
     which do not run for the team. A template needing no tool (a starter skill, a task type) copies either way."""
-    return str(t["off"]) if t.get("off") and (t.get("requires") or {}).get("tools") else None
+    requires: dict[str, Any] = t.get("requires") or {}
+    return str(t["off"]) if t.get("off") and requires.get("tools") else None
 
 
 def _template(offered: dict[str, dict[str, Any]], source: str, template_id: str) -> dict[str, Any]:

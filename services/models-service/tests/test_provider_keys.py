@@ -41,7 +41,7 @@ def _provider(seen: list[str | None]) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handle))
 
 
-def _people(tenant: str) -> Any:
+def people(tenant: str) -> Any:
     """A person signed in to `tenant` with the role X-Role names in the team X-Team-Id names (admin of team_security
     is the account admin); a request with a bearer token (a service) is resolved as usual."""
 
@@ -101,7 +101,7 @@ async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[
     tenant, key_name = f"t_{uuid4().hex[:8]}", f"OPENAI_{uuid4().hex[:6].upper()}"
     fallback = {key_name: in_settings} if in_settings else {}
     app = create_models_app(models.engine, upstream=_provider(seen), provider_secrets=fallback)
-    app.dependency_overrides[current_principal] = _people(tenant)
+    app.dependency_overrides[current_principal] = people(tenant)
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:

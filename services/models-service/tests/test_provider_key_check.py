@@ -18,7 +18,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.public_address import PublicFetch
 
 from .conftest import Models
-from .test_provider_keys import _people
+from .test_provider_keys import people
 
 GOOD = "sk-good"
 AZURE = "https://contoso.openai.azure.com"
@@ -28,7 +28,7 @@ AZURE = "https://contoso.openai.azure.com"
 class Resolver:
     """DNS: every name is a public address unless listed."""
 
-    answers: dict[str, str] = field(default_factory=dict)
+    answers: dict[str, str] = field(default_factory=dict[str, str])
 
     async def resolve(self, host: str, port: int) -> list[str]:
         return [self.answers.get(host, "52.1.2.3")]
@@ -68,7 +68,7 @@ async def rig(models: Models) -> AsyncIterator[Rig]:
     app = create_models_app(
         models.engine, upstream=_upstream(seen, redirect), key_fetch=PublicFetch(resolver=dns, max_redirects=0)
     )
-    app.dependency_overrides[current_principal] = _people(f"t_{uuid4().hex[:8]}")
+    app.dependency_overrides[current_principal] = people(f"t_{uuid4().hex[:8]}")
     transport = httpx.ASGITransport(app=app)
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:

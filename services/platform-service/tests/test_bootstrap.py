@@ -4,6 +4,7 @@ admin, and a later run (each release calls it) changes nothing the admin may sin
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -106,8 +107,9 @@ async def test_a_new_workspace_publishes_without_review_and_calls_any_public_add
     admin = first_admin()
     await bootstrap(database_url, admin, iterations=1000)
     headers = await admin_headers(production, admin)
-    reviews = await policy_value(production, headers, "publishReview")
-    assert isinstance(reviews, dict)
+    value = await policy_value(production, headers, "publishReview")
+    assert isinstance(value, dict)
+    reviews = cast(dict[str, Any], value)
     # The first team and a team added later read the same: every area publishes at once.
     for team in (admin.team_id, "team_added_later"):
         assert {a: publish_mode(reviews, team, a) for a in PUBLISH_AREAS} == dict.fromkeys(PUBLISH_AREAS, "never")

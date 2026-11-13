@@ -525,10 +525,11 @@ def create_models_app(
             fields["key_ref"] = body.key_name
         name = f"{chat_aliases[0]}-{body.provider}"
         held = next((r for r in await providers.all() if r["name"] == name), None)
-        if held is None:
-            pid = new_id("prov")
-            if not await providers.create({"id": pid, "name": name, **fields, "region": None, "created_at": now_iso()}):
-                held = next(r for r in await providers.all() if r["name"] == name)
+        pid = new_id("prov") if held is None else str(held["id"])
+        if held is None and not await providers.create(
+            {"id": pid, "name": name, **fields, "region": None, "created_at": now_iso()}
+        ):
+            held = next(r for r in await providers.all() if r["name"] == name)
         if held is not None:
             pid = str(held["id"])
             await providers.rebind(pid, {**fields, "region": None})

@@ -102,7 +102,8 @@ async def listed_models(
     except FetchFailed as e:
         raise KeyRefused(_reason(e.status)) from e
     try:
-        rows = cast(list[dict[str, Any]], (json.loads(body) or {}).get("data") or [])
+        answer: Any = json.loads(body) or {}
+        rows = cast(list[dict[str, Any]], answer.get("data") or [])
     except (ValueError, AttributeError) as e:
         raise KeyRefused("The provider's answer was not a list of models.") from e
     listed = [
