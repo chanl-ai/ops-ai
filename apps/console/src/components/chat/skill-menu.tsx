@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useChatMenuSkills } from '@/hooks/skill-queries';
 import { ApiError } from '@/lib/api/contract';
+import { cn } from '@/lib/utils';
 import type { SkillPick } from '@/lib/types/chat';
 import type { ChatMenuSkill, SkillInputField } from '@/lib/types/skills';
 
@@ -49,9 +50,21 @@ function entries(s: ChatMenuSkill): PickedSkill[] {
 /**
  * The chat's / menu: the published skills the agent may use under its skill menu setting, a skill with parts as a
  * group of its parts. A skill needing a tool or knowledge base the agent lacks is shown locked with what it needs.
- * Opened above the composer; `query` is what follows the /.
+ * The composer places it with `className` (above it, or below near the top of the page); `query` is what follows the /.
  */
-export function SkillMenu({ agentId, agentName, query, onPick }: { agentId: string; agentName: string; query: string; onPick: (p: PickedSkill) => void }) {
+export function SkillMenu({
+  agentId,
+  agentName,
+  query,
+  onPick,
+  className,
+}: {
+  agentId: string;
+  agentName: string;
+  query: string;
+  onPick: (p: PickedSkill) => void;
+  className?: string;
+}) {
   const menu = useChatMenuSkills(agentId, true);
   const q = query.trim().toLowerCase();
   const has = (...fields: (string | undefined)[]) => fields.join(' ').toLowerCase().includes(q);
@@ -69,7 +82,7 @@ export function SkillMenu({ agentId, agentName, query, onPick }: { agentId: stri
   });
   const refused = menu.error instanceof ApiError && menu.error.status === 403;
   return (
-    <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-lg border bg-popover shadow-md" data-testid="skill-menu">
+    <div className={cn('absolute inset-x-0 z-10 overflow-hidden rounded-lg border bg-popover shadow-md', className)} data-testid="skill-menu">
       <Command shouldFilter={false} loop>
         <CommandList className="max-h-72">
           {menu.isPending ? (

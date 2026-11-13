@@ -16,6 +16,15 @@ import type { ChatAttachment, SkillPick } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
 
 const MAX = 8000;
+/** Height the / and @ menus need above the composer; with less room they open below it. */
+const MENU_ROOM = 340;
+
+/** Room between `el` and the top of the area it scrolls in, which ends at that area's header. */
+function roomAbove(el: HTMLElement): number {
+  let p = el.parentElement;
+  while (p && !/(auto|scroll)/.test(getComputedStyle(p).overflowY)) p = p.parentElement;
+  return el.getBoundingClientRect().top - (p ? p.getBoundingClientRect().top : 0);
+}
 
 export interface KbOption {
   id: string;
@@ -181,6 +190,14 @@ export function Composer({
   };
   const typed = mentions?.length && onMention && !slash ? MENTION.exec(text) : null;
   const matches = typed ? mentions!.filter((a) => a.name.toLowerCase().includes(typed[2].toLowerCase())) : [];
+  // The menus open above the composer, unless it sits near the top (Chat's home), where they would run under the header.
+  const box = React.useRef<HTMLDivElement>(null);
+  const [below, setBelow] = React.useState(false);
+  const menuOpen = !!slash || !!typed;
+  React.useLayoutEffect(() => {
+    if (menuOpen && box.current) setBelow(roomAbove(box.current) < MENU_ROOM);
+  }, [menuOpen]);
+  const menuPlace = below ? 'top-full mt-2' : 'bottom-full mb-2';
   const mention = (a: MentionOption) => {
     setText(text.replace(MENTION, '$1').trimEnd());
     onMention!(a);
@@ -201,8 +218,8 @@ export function Composer({
     return <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{disabledReason}</div>;
 
   return (
-    <div className="relative" onKeyDown={(e) => e.key === 'Escape' && slash && setText(text.replace(SLASH, '$1'))}>
-      {slash && skillsFor && <SkillMenu agentId={skillsFor.id} agentName={skillsFor.name} query={slash[2]} onPick={pickSkill} />}
+    <div ref={box} className="relative" onKeyDown={(e) => e.key === 'Escape' && slash && setText(text.replace(SLASH, '$1'))}>
+      {slash && skillsFor && <SkillMenu agentId={skillsFor.id} agentName={skillsFor.name} query={slash[2]} onPick={pickSkill} className={menuPlace} />}
       {filling && (
         <SkillInputsForm
           picked={filling}
@@ -219,7 +236,7 @@ export function Composer({
         </div>
       )}
       {typed && (
-        <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-lg border bg-popover shadow-md" data-testid="mention-list">
+        <div className={cn('absolute inset-x-0 z-10 overflow-hidden rounded-lg border bg-popover shadow-md', menuPlace)} data-testid="mention-list">
           <Command shouldFilter={false}>
             <CommandList className="max-h-56">
               <CommandEmpty>No agent called “{typed[2]}” you can chat with.</CommandEmpty>
