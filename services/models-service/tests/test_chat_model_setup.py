@@ -111,3 +111,17 @@ async def test_an_azure_endpoint_outside_openai_azure_com_is_refused(rig: Rig) -
     body = {"provider": "azure-openai", "model": "m", "keyName": "MAIN", "endpoint": "https://evil.example"}
     refused = await rig.client.put("/v1/models/chat-model", json={**body, "apiVersion": "v1"})
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "endpoint_refused", refused.text
+
+
+async def test_a_new_chat_model_keeps_the_prices_the_alias_had(rig: Rig) -> None:
+    first = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
+    assert (await rig.client.put("/v1/models/chat-model", json=first)).status_code == 200
+    url = f"/v1/models/aliases/{rig.aliases[0]}/versions"
+    held = (await rig.client.get(url, headers=SERVICE)).json()["data"][-1]
+    price = {"inputPerMillion": "2.5", "outputPerMillion": "10"}
+    body = {"providerId": held["providerId"], "modelId": held["modelId"], "clearedSensitivity": "confidential", **price}
+    assert (await rig.client.post(url, json=body, headers=SERVICE)).status_code in (200, 201)
+    again = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-4.1"})
+    assert again.status_code == 200, again.text
+    now = (await rig.client.get(url, headers=SERVICE)).json()["data"][-1]
+    assert (now["modelId"], float(now["inputPerMillion"]), float(now["outputPerMillion"])) == ("gpt-4.1", 2.5, 10.0)

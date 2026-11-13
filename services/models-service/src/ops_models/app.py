@@ -542,7 +542,12 @@ def create_models_app(
             "images": False,
         }
         for alias in chat_aliases:
-            if await aliases.add_version(alias, version_fields) is None:
+            # A new model keeps the alias's prices: zero would let every budget pass. A fresh alias starts at zero
+            # until an admin prices it on the Models page.
+            held_version = await aliases.current(alias)
+            prices = ("input_per_million", "output_per_million")
+            priced = {k: held_version[k] for k in prices if held_version and k in held_version}
+            if await aliases.add_version(alias, {**version_fields, **priced}) is None:
                 await aliases.create(alias, "chat", version_fields)
         return ok(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)).model_dump(by_alias=True))
 
