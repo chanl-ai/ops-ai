@@ -418,6 +418,15 @@ class ToolOptionsPage(OptionsPage):
     not_added: list[ToolsNotAdded] = Field(default_factory=list[ToolsNotAdded])
 
 
+class PromptVariable(Out):
+    """A `{key}` an agent's instructions may name, filled at run time from the turn's variables."""
+
+    key: str
+    label: str
+    example: str
+    source: str
+
+
 class ModelAlias(Out):
     """A chat alias an agent may name. Clearance and prices come from models-service; without it the runtime's own
     alias is listed by name alone."""

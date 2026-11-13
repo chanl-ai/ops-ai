@@ -1,7 +1,7 @@
 import type { OpsApi } from './contract';
 import { DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, USERS } from './mock/auth/seed';
 import { createCasesOnlyHttp, createChatOnlyHttp, createHttpApi, createKnowledgeOnlyHttp, createRegistryOnlyHttp,
-  createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
+  createRegistryPromptVariables, createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
 import { createMockApi } from './mock';
 import { withServedAgents } from './mock/evals';
 import { createMockAuthProvider } from './mock/auth';
@@ -59,6 +59,8 @@ function createApi(): OpsApi {
   }
   // The tool list is the registry's directory; tool writes have no route there and stay on the mock (createRegistryToolsList).
   if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl), ...createRegistryToolsDirectory(registryUrl) } };
+  // The instruction placeholders a run can fill come from agents-service; generation and lint stay on the mock.
+  if (registryUrl) api = { ...api, prompts: { ...api.prompts, variables: createRegistryPromptVariables(registryUrl) } };
   // Evals stay sample data; their stand-ins for the registry's agents take each agent's name and versions from it.
   if (registryUrl && !baseUrl) {
     const agents = api.agents;

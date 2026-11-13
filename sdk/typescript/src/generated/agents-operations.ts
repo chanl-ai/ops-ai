@@ -310,6 +310,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_list_prompt_variables": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/prompts/variables",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_list_skills": {
     "body": null,
     "headers": [],

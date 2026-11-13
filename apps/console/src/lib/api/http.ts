@@ -131,6 +131,12 @@ interface DirectoryTool {
  * to the server as `access`. Writing tools (create, update, test) has no route here: those stay on the mock and the
  * Tools page manages modules on tools-service instead.
  */
+/** The placeholders a run fills in instructions: agents-service owns them; generation and lint stay where they are. */
+export function createRegistryPromptVariables(baseUrl: string): OpsApi['prompts']['variables'] {
+  const { get } = createTransport(`${baseUrl}/v1`);
+  return () => get('/prompts/variables');
+}
+
 export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'] {
   const { get } = createTransport(`${baseUrl}/v1`);
   return async (p) => {

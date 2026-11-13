@@ -92,6 +92,7 @@ from .routers import (
     health,
     model_alias_catalog,
     overview,
+    prompt_variables,
     publish_requests,
     reviews,
     service_events,
@@ -540,6 +541,7 @@ def create_app(
     mount(skill_routes.router, "Agents")
     mount(widget_routes.router, "Agents")
     mount(model_alias_catalog.router, "Agents")
+    mount(prompt_variables.router, "Agents")
     mount(publish_requests.router, "Reviews")
     mount(publish_requests.open_router, "Reviews")
     mount(graphs.versions_router, "Graphs")

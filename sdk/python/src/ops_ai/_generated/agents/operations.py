@@ -253,6 +253,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_list_prompt_variables": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/prompts/variables",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_list_skills": {
         "body": None,
         "headers": [],
@@ -2376,6 +2385,10 @@ class Operations:
         "Overview"
         return self._t.call(SERVICE, OPERATIONS["cases_overview"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_list_prompt_variables(self) -> list[PromptVariable]:
+        "List Prompt Variables"
+        return self._t.call(SERVICE, OPERATIONS["agents_list_prompt_variables"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     def reviews_open_publish_request(
         self, body: ToolModuleReviewInput, *, x_service_authorization: str | None = None
     ) -> PublishReview:
@@ -3661,6 +3674,10 @@ class AsyncOperations:
     async def cases_overview(self) -> OverviewCounts:
         "Overview"
         return await self._t.call(SERVICE, OPERATIONS["cases_overview"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_list_prompt_variables(self) -> list[PromptVariable]:
+        "List Prompt Variables"
+        return await self._t.call(SERVICE, OPERATIONS["agents_list_prompt_variables"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def reviews_open_publish_request(
         self, body: ToolModuleReviewInput, *, x_service_authorization: str | None = None
