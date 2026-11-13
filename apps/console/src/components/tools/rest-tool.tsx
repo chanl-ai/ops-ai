@@ -14,6 +14,7 @@ import { ConnectionSelect, type ConnectionOption } from '@/components/tools/conn
 import { BodyEditor, hasBody, HeadersEditor, RequestLine } from '@/components/tools/http-operation-builder';
 import { InputSchemaEditor, schemaOf } from '@/components/tools/input-schema-editor';
 import { MockAnswers } from '@/components/tools/mock-answers';
+import { unusedInputs } from '@/components/tools/operation-sheet';
 import { AskBeforeRun, ResultBody, RunInputFields, useRunValues, type ResultTab } from '@/components/tools/test-console';
 import { ToolAppLink, urlProblem, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -98,6 +99,8 @@ export function RestTool(p: RestToolProps) {
   const [extra, setExtra] = React.useState<'transform' | 'mocks' | null>(null);
   const run = useRunValues(op);
   const urlError = urlProblem(d, p.base);
+  // An input the address, headers and body never name is sent by agents and dropped by the call.
+  const unused = unusedInputs({ ...op, input: schemaOf(d.input).filter((f) => f.name) }, d.http);
   // A system with no sign-in runs for real with no connection, as the server allows.
   const realBlocked = !p.published ? 'Real runs once the tool is published. Until then, Run uses Mock.' : undefined;
   // A value typed for one run leaves the page when the run ends: a kept state would keep a secret in the page's HTML.
@@ -223,6 +226,14 @@ export function RestTool(p: RestToolProps) {
                 bare
                 trailing={viewer ? undefined : runControls}
               />
+              {unused.length > 0 && (
+                <p className="flex items-start gap-1.5 text-xs text-warning-text" data-testid="op-unused-inputs">
+                  <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    {unused.join(', ')} {unused.length === 1 ? 'is an input' : 'are inputs'} of this operation, but the URL, headers and body never use {unused.length === 1 ? 'it' : 'them'}. Agents may send {unused.length === 1 ? 'it' : 'them'} and the call drops {unused.length === 1 ? 'it' : 'them'}.
+                  </span>
+                </p>
+              )}
               <p className="-mt-2 text-xs text-muted-foreground" data-testid="run-help">
                 {cannotRun ? `${NO_RUN} ` : ''}{help} {realBlocked && mode === 'stub' ? realBlocked : ''} Use {'{name}'} in the address for a value the agent supplies.
               </p>
