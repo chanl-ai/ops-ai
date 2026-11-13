@@ -20,6 +20,10 @@ build pointed at them. Package rules: [../CLAUDE.md](../CLAUDE.md); repo-wide ru
   the caller pins one. Model keys are removed from a script's environment unless `APPROVED_REAL_CALLS=<n>` is set.
 - A layer is available when its provider exists (`src/layers.ts:12`): `sdk` needs `sdk/python` or `sdk/typescript`,
   `cli` needs `scripts/sample_team.py` or `packages/ops_plugins`.
+- A ui script fails when a page it opens reads data the console still answers from its mock beside real services:
+  the console writes `[ops-ai sample data] <area> on <path>` (`apps/console/src/lib/api/sample-reads.ts`) and the
+  harness's `chromium` turns it into a `FAIL`. A script that means to show sample data calls
+  `expectSampleData('<path>')` first. Reads the app shell makes on every page (`on *`) are not a page's failure.
 - Screenshots and logs go under `evidenceDir(...)`: `OPS_EVIDENCE_DIR`, else `.logs/usecases/`, which git ignores.
 - UI scripts run headless Chromium against a production console build cached per source hash
   (`src/console-build.ts`); `OPS_USECASE_CONSOLE=dev` runs `next dev` instead.

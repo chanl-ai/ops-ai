@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { ensureConsoleBuild, materializeConsoleBuild } from './console-build.ts';
 import { pgUrl } from './isolation.ts';
 
-export { chromium } from 'playwright';
+import { chromium as playwrightChromium, type Browser, type BrowserContext } from 'playwright';
 
 /** The tree the runner was invoked from (OPS_USECASE_ROOT, set by the runner), else the one this package sits in. */
 export const ROOT = process.env.OPS_USECASE_ROOT ?? resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
@@ -232,6 +232,63 @@ export function videoToGif(videoDir: string, area: string, name: string, skipMs:
   check(`clip ${name} is under 15 s and 2 MB`, durationMs < 15_000 && size < 2_000_000, { seconds: durationMs / 1000, bytes: size });
   return gif;
 }
+
+/**
+ * The console writes `[ops-ai sample data] <area> on <path>` when a page reads an area still answered by its mock
+ * beside real services (apps/console/src/lib/api/sample-reads.ts). On the use-case stack every area a script reaches
+ * should be real, so such a read fails the run unless the script said it expects sample data on that page. Reads the
+ * app shell makes on every page are written `on *` and are listed in the sample-data report instead.
+ */
+const SAMPLE_READ = /^\[ops-ai sample data\] (\S+) on (\S+)$/;
+const expectedSample: string[] = [];
+const sampleReported = new Set<string>();
+const watched = new WeakSet<BrowserContext>();
+
+/** Declares that the pages under each path (all pages when none is given) are meant to draw sample data. */
+export function expectSampleData(...paths: string[]): void {
+  expectedSample.push(...(paths.length ? paths : ['/']));
+}
+
+function sampleExpected(path: string): boolean {
+  return expectedSample.some((p) => p === '/' || path === p || path.startsWith(`${p.replace(/\/$/, '')}/`));
+}
+
+function watchContext(context: BrowserContext): BrowserContext {
+  if (watched.has(context)) return context;
+  watched.add(context);
+  context.on('console', (message) => {
+    const hit = SAMPLE_READ.exec(message.text());
+    if (!hit || hit[2] === '*' || sampleExpected(hit[2])) return;
+    const key = `${hit[2]} ${hit[1]}`;
+    if (sampleReported.has(key)) return;
+    sampleReported.add(key);
+    check(`the page draws no sample data: ${hit[2]}`, false, `${hit[1]} was answered by the console's mock; call expectSampleData('${hit[2]}') if the use case means it`);
+  });
+  return context;
+}
+
+function watchBrowser(browser: Browser): Browser {
+  const newContext = browser.newContext.bind(browser);
+  const newPage = browser.newPage.bind(browser);
+  browser.newContext = async (...args) => watchContext(await newContext(...args));
+  browser.newPage = async (...args) => {
+    const page = await newPage(...args);
+    watchContext(page.context());
+    return page;
+  };
+  return browser;
+}
+
+/** Playwright's Chromium, with every browser it launches watched for pages that draw sample data. */
+export const chromium: typeof playwrightChromium = new Proxy(playwrightChromium, {
+  get(target, key) {
+    if (key === 'launch') return async (...args: Parameters<typeof target.launch>) => watchBrowser(await target.launch(...args));
+    if (key === 'launchPersistentContext')
+      return async (...args: Parameters<typeof target.launchPersistentContext>) => watchContext(await target.launchPersistentContext(...args));
+    const value: unknown = Reflect.get(target, key, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  },
+});
 
 export function finish(): never {
   if (!checked) console.log('FAIL no checks ran');
