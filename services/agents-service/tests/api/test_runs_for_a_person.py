@@ -58,10 +58,12 @@ async def test_a_service_starts_a_run_as_the_person_and_its_writes_still_wait_fo
 async def test_a_person_without_the_run_right_starts_nothing(client: AsyncClient) -> None:
     await _published(client)
     r = await client.post("/v1/runs", json=BODY, headers=await _as_tools([], acting=True))
-    assert r.status_code == 403, r.text
+    # Refused by can() for the missing cell, not by the route turning every service away.
+    assert (r.status_code, r.json()["error"].get("details")) == (403, {"scope": "workflows:run"}), r.text
 
 
 async def test_a_service_acting_for_nobody_starts_nothing(client: AsyncClient) -> None:
     await _published(client)
     r = await client.post("/v1/runs", json=BODY, headers=await _as_tools(["workflows:run"], acting=False))
-    assert r.status_code == 403, r.text
+    # Refused by can() for the missing cell, not by the route turning every service away.
+    assert (r.status_code, r.json()["error"].get("details")) == (403, {"scope": "workflows:run"}), r.text
