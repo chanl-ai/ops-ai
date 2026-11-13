@@ -972,6 +972,8 @@ class ModuleService:
         key: str | None = None,
         call_id: str | None = None,
         link_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> dict[str, Any]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
         sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
@@ -998,6 +1000,8 @@ class ModuleService:
             key=key,
             call_id=call_id,
             link_id=link_id,
+            since=since,
+            until=until,
             offset=(page - 1) * page_size,
             limit=page_size,
         )

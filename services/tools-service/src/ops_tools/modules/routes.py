@@ -74,6 +74,9 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
         call: Annotated[str | None, Query(max_length=200)] = None,
         # The calls made through one MCP link (mcp_links.id).
         link: Annotated[str | None, Query(max_length=64)] = None,
+        # A date range, ISO times compared as the log stores them: from `since`, before `until`.
+        since: Annotated[str | None, Query(max_length=40)] = None,
+        until: Annotated[str | None, Query(max_length=40)] = None,
     ) -> JSONResponse:
         data = await service.executions(
             who,
@@ -86,6 +89,8 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
             key=key,
             call_id=call,
             link_id=link,
+            since=since,
+            until=until,
         )
         return ok(data)
 

@@ -506,7 +506,9 @@ export const toolsOperations = {
       "decision",
       "key",
       "call",
-      "link"
+      "link",
+      "since",
+      "until"
     ],
     "stream": false
   },

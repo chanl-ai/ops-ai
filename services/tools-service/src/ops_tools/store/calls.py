@@ -317,6 +317,7 @@ class CallLog:
         thread_id: str | None = None,
         decision: str | None = None,
         since: str | None = None,
+        until: str | None = None,
         key: str | None = None,
         call_id: str | None = None,
         link_id: str | None = None,
@@ -346,6 +347,8 @@ class CallLog:
             where.append(gateway_calls.c.link_id == link_id)
         if since:
             where.append(gateway_calls.c.created_at >= since)
+        if until:
+            where.append(gateway_calls.c.created_at < until)
         q = gateway_calls.select().where(*where).order_by(gateway_calls.c.created_at.desc()).offset(offset).limit(limit)
         total = sa.select(sa.func.count()).select_from(gateway_calls).where(*where)
         async with self.engine.connect() as c:

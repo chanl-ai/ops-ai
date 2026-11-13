@@ -10280,6 +10280,8 @@ export interface operations {
                 key?: string | null;
                 call?: string | null;
                 link?: string | null;
+                since?: string | null;
+                until?: string | null;
             };
             header?: never;
             path?: never;

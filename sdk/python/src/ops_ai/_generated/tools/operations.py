@@ -421,7 +421,19 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/executions",
         "pathParams": [],
-        "query": ["page", "pageSize", "tool", "moduleId", "thread", "decision", "key", "call", "link"],
+        "query": [
+            "page",
+            "pageSize",
+            "tool",
+            "moduleId",
+            "thread",
+            "decision",
+            "key",
+            "call",
+            "link",
+            "since",
+            "until",
+        ],
         "stream": False,
     },
     "expressions_evaluate_formulas": {
@@ -1066,6 +1078,8 @@ class Operations:
         key: str | None = None,
         call: str | None = None,
         link: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> ExecutionList:
         "List Executions"
         return self._t.call(
@@ -1082,6 +1096,8 @@ class Operations:
                 "key": key,
                 "call": call,
                 "link": link,
+                "since": since,
+                "until": until,
             },
             {},
             None,
@@ -1631,6 +1647,8 @@ class AsyncOperations:
         key: str | None = None,
         call: str | None = None,
         link: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> ExecutionList:
         "List Executions"
         return await self._t.call(
@@ -1647,6 +1665,8 @@ class AsyncOperations:
                 "key": key,
                 "call": call,
                 "link": link,
+                "since": since,
+                "until": until,
             },
             {},
             None,
