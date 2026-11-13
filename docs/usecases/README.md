@@ -364,7 +364,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-740 | agents-service | Start a skill from a template | sdk, cli | page |
 | uc-741 | agents-service | List and install templates from an assistant | mcp | page |
 | uc-742 | agents-service | A team's skill is an assistant's prompt | mcp | page |
-| uc-743 | agents-service | Prepare a client meeting from the slash menu | api, sdk, mcp, ui | page |
+| uc-743 | agents-service | Prepare a client meeting from the slash menu | api, sdk, cli, mcp, ui | page |
 | uc-744 | agents-service | Update an opportunity from the same skill | api, sdk, mcp, ui | page |
 | uc-745 | agents-service | Skills stay out of reach without the right | api, mcp, ui | page |
 | uc-746 | agents-service | Only published skills are offered | api, mcp, ui | page |
