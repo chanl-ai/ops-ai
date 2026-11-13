@@ -8,12 +8,11 @@ agents-service runs beside it for the team's assistant. Salesforce signs in agai
 from __future__ import annotations
 
 import json
-import os
 from contextlib import ExitStack
-from pathlib import Path
 from typing import Any
 
 from fake_salesforce import salesforce
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -26,14 +25,13 @@ from usecase_harness import (
     signed_in,
     tools,
 )
-from usecase_harness import ROOT as REPO
 
 AUTH = {
     "OPS_AUTH_MODE": "platform",
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
     "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
 }
-PLUGINS = Path(os.environ.get("OPS_PLUGINS_REPO") or REPO.parent / "ops-ai-plugins") / "plugins"
+PLUGINS = PLUGINS_REPO / "plugins"
 SALESFORCE = PLUGINS / "salesforce/src/ops_plugin_salesforce"
 GITHUB = PLUGINS / "github/src/ops_plugin_github"
 SF, GH = "plugin:opsai.salesforce", "plugin:opsai.github"

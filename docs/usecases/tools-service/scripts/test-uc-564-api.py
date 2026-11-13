@@ -16,6 +16,7 @@ import httpx
 from apps_layer import run_path
 from fake_salesforce import LIST_VIEW_ID, salesforce
 from steps import required
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -30,7 +31,6 @@ from usecase_harness import (
     tools,
     until,
 )
-from usecase_harness import ROOT as REPO
 
 PLUGIN = "opsai.salesforce"
 AUTH = {
@@ -41,7 +41,7 @@ AUTH = {
 CLIENT_SECRET = "acme-connected-app-secret"
 PLATFORM_CLIENT = "ops-ai-platform"
 PLATFORM_SECRET = "ops-ai-platform-app-secret"
-SALESFORCE = REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
+SALESFORCE = PLUGINS_REPO / "plugins/salesforce/src/ops_plugin_salesforce"
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)])}
 # Ops AI's own OAuth app for Salesforce: the install's, from its config, as a deployment sets it.
 INSTALL_CLIENT = {"OPS_PLUGIN_CLIENTS": json.dumps({PLUGIN: {"id": PLATFORM_CLIENT, "secret": PLATFORM_SECRET}})}

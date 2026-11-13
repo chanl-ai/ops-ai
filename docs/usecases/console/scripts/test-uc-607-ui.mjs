@@ -1105,7 +1105,7 @@ try {
 // Salesforce's own app on each account against the fake Salesforce, whose sandbox signs in at its own address and lands
 // on its own instance: the live account in the Connect window, then a sandbox account added from the app page.
 const SF_LOGIN = 'login.salesforce.test';
-const SALESFORCE = join(ROOT, '..', 'ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce');
+const SALESFORCE = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 const sfProc = spawn('uv', ['run', '--quiet', '--directory', join(ROOT, 'services/agents-service'), 'python', join(ROOT, 'docs/usecases/lib/fake_salesforce.py')], {
   stdio: ['pipe', 'pipe', 'inherit'],
   env: { ...process.env, PYTHONPATH: join(ROOT, 'docs/usecases/lib') },

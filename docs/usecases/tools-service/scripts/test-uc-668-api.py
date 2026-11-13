@@ -15,6 +15,7 @@ from uuid import uuid4
 import httpx
 from fake_salesforce import EDUCATION_ID, GRACE_ID, salesforce
 from steps import required
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -27,7 +28,6 @@ from usecase_harness import (
     signed_in,
     tools,
 )
-from usecase_harness import ROOT as REPO
 
 PLUGIN = "opsai.salesforce"
 AUTH = {
@@ -37,7 +37,7 @@ AUTH = {
 }
 SALESFORCE = Path(
     os.environ.get("OPS_SALESFORCE_PLUGIN")
-    or REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
+    or PLUGINS_REPO / "plugins/salesforce/src/ops_plugin_salesforce"
 )
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)])}
 TENANT: dict[str, str] = {}
