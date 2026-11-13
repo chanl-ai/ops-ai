@@ -14,6 +14,8 @@ from ops_store import isolation
 from ops_store.dialect import vector_distance_sql, vector_search_setup, vector_text
 from ops_store.team_scope import team_visible
 
+from ..retrieval import Search
+from .fulltext import scope_sql
 from .knowledge import ROLE, kb_chunks, kb_unit_vectors, kb_units
 
 # Units read per piece asked for, as the keyword lane reads them: a piece's text, children and questions can all be
@@ -21,7 +23,7 @@ from .knowledge import ROLE, kb_chunks, kb_unit_vectors, kb_units
 OVERFETCH = 4
 
 
-def _search_sql(width: int) -> sa.TextClause:
+def _search_sql(width: int, scope: str = "TRUE") -> sa.TextClause:
     distance = vector_distance_sql("postgresql", "v.embedding", "query", width)
     return sa.text(
         f"""
@@ -34,7 +36,8 @@ def _search_sql(width: int) -> sa.TextClause:
         JOIN kb_items i ON i.tenant_id = c.tenant_id AND i.id = c.item_id AND i.status = 'indexed'
              AND i.duplicate_of IS NULL
         JOIN kb_base_sources l ON l.tenant_id = i.tenant_id AND l.source_id = i.source_id
-        WHERE v.tenant_id = :tenant AND l.kb_id IN :kb_ids AND v.model = :model AND v.width = :width
+        JOIN kb_sources s ON s.tenant_id = i.tenant_id AND s.id = i.source_id
+        WHERE v.tenant_id = :tenant AND l.kb_id IN :kb_ids AND v.model = :model AND v.width = :width AND {scope}
         ORDER BY {distance}
         LIMIT :limit
         """
@@ -151,10 +154,21 @@ class PgVectorStore:
         return int(row["embedded"] or 0), int(row["total"] or 0)
 
     async def nearest(
-        self, tenant: str, kb_ids: list[str], query: list[float], *, model: str, width: int, limit: int
+        self,
+        tenant: str,
+        kb_ids: list[str],
+        query: list[float],
+        *,
+        model: str,
+        width: int,
+        limit: int,
+        how: Search | None = None,
     ) -> list[dict[str, Any]]:
-        """The units nearest the question's vector, with their piece and similarity (1 is the same direction)."""
+        """The units nearest the question's vector within each base's scope, with their piece and similarity (1 is the
+        same direction). The scope is in the query, so the nearest units out of scope never take the places."""
+        scope, scoped = scope_sql(kb_ids, how or Search())
         params = {
+            **scoped,
             "tenant": tenant,
             "kb_ids": kb_ids,
             "query": vector_text(query),
@@ -165,4 +179,4 @@ class PgVectorStore:
         async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
             for statement in vector_search_setup(conn.dialect.name):
                 await conn.execute(sa.text(statement))
-            return [dict(r) for r in (await conn.execute(_search_sql(width), params)).mappings()]
+            return [dict(r) for r in (await conn.execute(_search_sql(width, scope), params)).mappings()]

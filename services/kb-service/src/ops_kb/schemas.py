@@ -437,6 +437,8 @@ class SearchIn(In):
     question: str
     # At most this many pieces; left out, the bases' own limit (their retrieval settings' chunkLimit) decides.
     limit: int | None = Field(default=None, ge=1, le=20)
+    # Only pieces of this collection, on top of each base's own scope (the Test sheet's filter).
+    collection: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class PassageOut(Out):

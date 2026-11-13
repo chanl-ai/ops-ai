@@ -52,6 +52,31 @@ class Passage:
 
 
 @dataclass(frozen=True)
+class Scope:
+    """Which of one base's pieces a search may return (its retrieval settings): empty lists allow everything. An
+    excluded tag wins over an included one; `include_untagged` false drops documents whose source has no tag.
+    `conditions` are (key, op, value) on each piece's metadata, all or any of them by `match`."""
+
+    collections: tuple[str, ...] = ()
+    source_ids: tuple[str, ...] = ()
+    tags_include: tuple[str, ...] = ()
+    tags_exclude: tuple[str, ...] = ()
+    include_untagged: bool = True
+    match: str = "all"
+    conditions: tuple[tuple[str, str, str], ...] = ()
+
+    def narrows(self) -> bool:
+        return bool(
+            self.collections
+            or self.source_ids
+            or self.tags_include
+            or self.tags_exclude
+            or not self.include_untagged
+            or self.conditions
+        )
+
+
+@dataclass(frozen=True)
 class Search:
     """What the bases ask for: the lanes, the threshold each lane's score must reach, the weight toward meaning in
     the fusion, and how many pieces return."""
@@ -65,6 +90,10 @@ class Search:
     meaning_threshold: float = 0.38
     weight: float = 0.6
     limit: int = 8
+    # Each base's own scope by its id, applied in both lanes; a base not named is not narrowed.
+    scopes: dict[str, Scope] = field(default_factory=dict[str, Scope])
+    # One collection for every base, on top of their own scopes (the Test sheet's filter).
+    collection: str | None = None
 
 
 @dataclass(frozen=True)

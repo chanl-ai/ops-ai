@@ -33,11 +33,13 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | A base's settings in five sections, each patched alone and checked whole; presets fill them all | Built | `schemas.py` (`RetrievalSettings` to `SourceDefaults`); `service.py` (`settings_of`, `settled`, `PRESETS`); migration `0024_base_settings.py` |
 | A pushed item's `url`, cited by search | Built | `schemas.py` (`WrittenItemIn.url`); `service.py` (`put_item`) |
 | The base's answer settings read by the kernel | Designed, not built yet | stored; only the query route reads the no-answer message |
-| The base's sync settings applied by syncs; its source defaults copied to a new source | Designed, not built yet | stored and served; syncs and new sources do not read them yet |
+| The base's sync settings applied by syncs, the strictest of the bases a source feeds winning | Built: a changed version held for review, removed items kept and flagged, the failing alert turned off | `service.py` (`sync_rules`, `_hold`, `_apply_held`, `settle_run`); `tool_sources.py` (`_flag_removed`) |
+| Stale after a number of days read by freshness | Designed, not built yet | served on the source detail; freshness still follows the schedule |
+| A new source copies its base's source defaults | Built | `service.py` (`create_source`, `_base_split`) |
 | JavaScript pages rendered in a headless browser worker | Designed, not built yet | |
 | An answer with no cited passage withheld, on by default | Designed, not built yet | the kernel's optional end check corrects uncited knowledge once and is off by default (`packages/ops_agent_kernel/src/ops_agent_kernel/types.py:93-95`) |
 | Playground answer written by a kernel turn | Designed, not built yet | the query route returns passages only (`service.py:1834-1837`) |
-| Filters on collection, source, tags and metadata applied to search | Designed, not built yet | stored and checked in the base's retrieval settings (`RetrievalSettings`); not read by `retrieval.py` or `search.py` |
+| Filters on collection, source, tags and metadata applied to search, each base its own, in both lanes; a per-request collection | Built | `retrieval.py` (`Scope`); `store/fulltext.py` (`scope_sql`); `store/vectors.py` (`nearest`); `schemas.py` (`SearchIn.collection`) |
 | Filters from conversation variables; freshness and trust boosts | Designed, not built yet | |
 | Keyword lane on the shared `ops_store.dialect.full_text` | Designed, not built yet | the lane has its own PostgreSQL query (`store/fulltext.py:1-2`) |
 | Search on SQL Server | Designed, not built yet | |
@@ -96,11 +98,11 @@ other four in its `settings` column (kb_0024); null reads as the defaults.
 
 | Section | Holds | Default | Who reads it |
 |---|---|---|---|
-| `retrieval` | Mode, weight, rerank, rewrite and its instruction and model, pieces returned, keyword and meaning floors; the scope (`scopeCollections`, `scopeSourceIds`), `tagsInclude`, `tagsExclude`, `includeUntagged`, metadata `filters` | Hybrid, 0.6, 8 pieces, floors 0.5 and 0.38, no scope | The search (`retrieval.py`); the scope and filters are not read yet |
+| `retrieval` | Mode, weight, rerank, rewrite and its instruction and model, pieces returned, keyword and meaning floors; the scope (`scopeCollections`, `scopeSourceIds`), `tagsInclude`, `tagsExclude`, `includeUntagged`, metadata `filters` | Hybrid, 0.6, 8 pieces, floors 0.5 and 0.38, no scope | The search: both lanes keep each base's pieces within its scope (`store/fulltext.py` `scope_sql`) |
 | `answer` | `shape` (`answer_with_citations` or `chunks`), `withholdUncited`, `noAnswerMessage` | An answer with citations, withheld when uncited | The query route's no-answer message; the agents kernel is the planned reader |
-| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Served as the base's `automation` (`act` or `suggest`); syncs do not read it yet |
+| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Syncs of every source the base reads; served as `automation` (`act` or `suggest`). `staleAfterDays` is served, not yet read by freshness |
 | `access` | `mcp.enabled`, `mcp.toolName` | Off, `search_<slug>` | Nothing yet; the MCP search tool is not built |
-| `sourceDefaults` | How a new source splits: `strategies`, `size`, `overlap`, `childSize`; AI steps are refused here and set per source with their estimate | At headings with context headers, 400 tokens, overlap 40 | Nothing yet; a new source will copy it, and each source keeps its own copy |
+| `sourceDefaults` | How a new source splits: `strategies`, `size`, `overlap`, `childSize`; AI steps are refused here and set per source with their estimate | At headings with context headers, 400 tokens, overlap 40 | A new source created into the base copies the values that differ from the defaults; each source keeps its own copy |
 
 A base is searchable by its whole team; no narrower list of people is kept, and `access.members` is always
 `{"mode": "all"}`. The model, temperature, length and instructions of an answer belong to the agent, so a base does not
@@ -116,6 +118,12 @@ create sends override it, and any later patch wins. The base does not record whi
 | `balanced` | 8 | 0.50 | 0.38 | Answer with citations | Yes |
 | `precise` | 5 | 0.65 | 0.45 | Answer with citations | Yes |
 | `raw` (Search only) | 10 | 0.40 | 0.30 | Pieces only | No |
+
+When a source feeds several bases, its syncs follow the strictest of their sync settings: review over apply, keep over
+remove, the fewest days to stale, and the failing alert sent when any base asks. A held version waits in Changes as a
+pending change from the source's sync; search serves the current version until it is approved
+(`POST /v1/knowledge-changes/decide`), and the same content found again, waiting or rejected, is not held twice. A
+removed item that is kept stays searchable and carries a warning saying its source removed it.
 
 A pushed item (`POST /v1/sources/{id}/items`) may carry the `url` it lives at, such as a web page's address; the item
 and every passage cut from it cite that `url`.
@@ -250,7 +258,7 @@ caller's `limit` only caps it (`service.py:2850-2866`).
 | Lanes reported | Lanes asked, run and skipped with the reason (`no_embedding_model`, `no_vector_store`, `no_vectors`, `no_candidates`, `embedding_unavailable`, `no_full_text`); `/health` counts units not embedded | Always | Yes |
 | Rewrite | A model rewrites the question with the base's instruction; before and after returned | Off | Yes, with an instruction; templates with variables not built |
 | Rerank | A model scores the top 20 fused pieces from 0 to 10 | Off | Yes |
-| Filters | Source, tags and metadata, exact and typed; later from conversation variables | None | No |
+| Filters | Collection, source, tags in and out, untagged, metadata conditions (`is`, `is_not`, `one_of`, `before`, `after`, `exists`, compared as text), in both lanes, per base; a request may add one collection; later from conversation variables | None | Yes |
 | Freshness and trust | A verified item raised a little; an item from a source failing 7 days or more lowered a little; nothing excluded | On | No |
 
 Several bases in one search use every lane any asks for, the lowest thresholds, the mean weight and the largest limit.

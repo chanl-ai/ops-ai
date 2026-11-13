@@ -396,7 +396,9 @@ def create_kb_app(
     async def search_knowledge(body: SearchIn, caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Passages for an agent's turn (agents-service sends only the bases the agent is granted) or for a person, who
         searches only bases they may read."""
-        return ok(await service.search(caller, body.kb_ids, body.question, limit=body.limit))
+        return ok(
+            await service.search(caller, body.kb_ids, body.question, limit=body.limit, collection=body.collection)
+        )
 
     @kbs.get("/{kb_id}", response_model=Envelope[KnowledgeBaseDetail])
     async def get_knowledge_base(kb_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

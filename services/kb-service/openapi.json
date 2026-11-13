@@ -4224,6 +4224,19 @@
       },
       "SearchIn": {
         "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection"
+          },
           "kbIds": {
             "items": {
               "type": "string"

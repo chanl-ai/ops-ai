@@ -498,30 +498,47 @@ async def sync_tool_source(
                     )
                 else:
                     counts["failed"] += 1
+        # A base this source feeds may keep what its source removed: then it stays searchable and says so.
+        keep = (await service.sync_rules(tenant, str(s["id"])))["removedAtSource"] == "keep"
         if gone_now:
             gone_ids = [str(known[p]["id"]) for p in gone_now]
             gone_files = [str(known[p]["file_id"]) for p in gone_now]
-            counts["deleted"] += await service.store.remove_items(tenant, gone_ids)
-            await release_snapshots(service, who, s, gone_files)
-            log += [f"{known[p]['title']}: gone at the source twice, removed and tombstoned" for p in gone_now]
+            if keep:
+                await _flag_removed(service, tenant, gone_ids)
+                for p in gone_now:
+                    tombstones.pop(p, None)
+            else:
+                counts["deleted"] += await service.store.remove_items(tenant, gone_ids)
+                await release_snapshots(service, who, s, gone_files)
+            done = "kept and flagged" if keep else "removed and tombstoned"
+            log += [f"{known[p]['title']}: gone at the source twice, {done}" for p in gone_now]
         if removed_at_source:
             # Items the system says it deleted (in a changes listing) leave search at once, with their attachments.
             out_ids = [str(known[p]["id"]) for p in removed_at_source if p in known]
             out_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(out_ids)]
             files_out = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(out_ids)]
-            counts["deleted"] += await service.store.remove_items(tenant, out_ids)
-            await release_snapshots(service, who, s, files_out)
-            log += [f"{known[p]['title']}: deleted at the source, removed" for p in removed_at_source if p in known]
+            if keep:
+                await _flag_removed(service, tenant, out_ids)
+            else:
+                counts["deleted"] += await service.store.remove_items(tenant, out_ids)
+                await release_snapshots(service, who, s, files_out)
+            done = "kept and flagged" if keep else "removed"
+            log += [f"{known[p]['title']}: deleted at the source, {done}" for p in removed_at_source if p in known]
         if full and not resumes:
             dropped = [p for p in gone if p not in seen]
             removed_ids = [str(known[p]["id"]) for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
             removed_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(removed_ids)]
             gone_files = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(removed_ids)]
-            counts["deleted"] += await service.store.remove_items(tenant, removed_ids)
-            await release_snapshots(service, who, s, gone_files)
+            if keep:
+                await _flag_removed(service, tenant, removed_ids)
+            else:
+                counts["deleted"] += await service.store.remove_items(tenant, removed_ids)
+                await release_snapshots(service, who, s, gone_files)
             for p in dropped:
-                log.append(f"{known[p]['title']}: no longer listed by the system, removed")
+                log.append(
+                    f"{known[p]['title']}: no longer listed by the system, {'kept and flagged' if keep else 'removed'}"
+                )
         if status == "success":
             cfg["watermark"] = watermark
             cfg["cursor"] = None
@@ -636,3 +653,13 @@ async def release_snapshots(service: KnowledgeService, who: Who, s: dict[str, An
     held = {str(i["file_id"]) for i in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])}
     for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
         await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s["id"]))
+
+
+# What a kept item says once its source has removed it.
+REMOVED_AT_SOURCE = "Removed at its source; kept because a knowledge base it feeds keeps removed items."
+
+
+async def _flag_removed(service: KnowledgeService, tenant: str, item_ids: list[str]) -> None:
+    """Items their source removed, kept searchable under a base's setting and marked so on the item."""
+    for item_id in item_ids:
+        await service.store.update_item(tenant, item_id, {"warning": REMOVED_AT_SOURCE})

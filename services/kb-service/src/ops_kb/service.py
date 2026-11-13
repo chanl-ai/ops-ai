@@ -46,7 +46,7 @@ from .origin import Origin, source_team
 from .query_steps import RERANK_POOL, REWRITE_MODES, QueryModel, QueryStepFailed, ms_since, steps_for
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .repeats import lines_of, repeated, without
-from .retrieval import Found, Lane, Passage, Retriever, Search
+from .retrieval import Found, Lane, Passage, Retriever, Scope, Search
 from .schemas import AccessSettings, AnswerSettings, RetrievalSettings, SourceDefaults, SyncSettings
 from .search import lanes_for
 from .source_settings import (
@@ -758,6 +758,29 @@ class KnowledgeService:
         if not await self.store.remove_base(who.tenant_id, kb_id, by=who.email):
             raise NotFound("No knowledge base with that id.")
 
+    async def _base_split(self, tenant: str, kb_id: str) -> dict[str, Any]:
+        """The splitting values a base's source defaults set apart from the defaults: what a new source copies."""
+        b = await self.store.base(tenant, kb_id)
+        if b is None:
+            return {}
+        default = DEFAULT_SETTINGS["sourceDefaults"]
+        return {k: v for k, v in settings_of(b)["sourceDefaults"].items() if default.get(k) != v}
+
+    async def sync_rules(self, tenant: str, source_id: str) -> dict[str, Any]:
+        """How syncs of a source treat what they find, from the bases it feeds: when they differ the strictest wins
+        (review over apply, keep over remove, the fewest days to stale, notify when any base asks)."""
+        by_kb, _ = await self._joined(tenant)
+        bases = {str(b["id"]): b for b in await self.store.bases(tenant)}
+        rules = [settings_of(bases[k])["sync"] for k, srcs in by_kb.items() if source_id in srcs and k in bases]
+        if not rules:
+            return dict(DEFAULT_SETTINGS["sync"])
+        return {
+            "changes": "review" if any(r["changes"] == "review" for r in rules) else "apply",
+            "removedAtSource": "keep" if any(r["removedAtSource"] == "keep" for r in rules) else "remove",
+            "staleAfterDays": min(int(r["staleAfterDays"]) for r in rules),
+            "notifyOnFailure": any(bool(r["notifyOnFailure"]) for r in rules),
+        }
+
     async def _known_sources(self, who: Who, source_ids: list[str]) -> None:
         found = {s["id"] for s in await self.store.sources(who.tenant_id, source_ids)}
         if missing := [s for s in source_ids if s not in found]:
@@ -812,8 +835,13 @@ class KnowledgeService:
         readers = [b for b in await self.store.bases(who.tenant_id) if b["id"] in by_source.get(source_id, [])]
         recent = [_run(r) for r in (await self.store.runs(who.tenant_id, source_id=source_id))[:5]]
         items = await self.store.items(who.tenant_id, source_ids=[source_id])
+        rules = await self.sync_rules(who.tenant_id, source_id)
         return {
             **self._source(s, by_source.get(source_id, [])),
+            # What its syncs apply, from the bases it feeds (the strictest wins).
+            "deletedAtSource": rules["removedAtSource"],
+            "staleAfterDays": rules["staleAfterDays"],
+            "notifyOnFailure": rules["notifyOnFailure"],
             "readers": [
                 {
                     "id": b["id"],
@@ -879,6 +907,10 @@ class KnowledgeService:
             # Read through a connection's tools: what tools-service declares for the team, checked now.
             row["config"] = await source_config(self.tools, who, i)
         given = {k: i[k] for k in SETTINGS_KEYS if i.get(k) is not None}
+        if kb_ids and (split := await self._base_split(who.tenant_id, kb_ids[0])):
+            # A new source of a base splits as the base says, where it says something other than the default; the
+            # source keeps its own copy, and what the create sends wins.
+            given["ingest"] = {**split, **dict(given.get("ingest") or {})}
         row["settings"] = wire(self._merged(self.settings_of(row), given)) if given else None
         # Files named at creation are checked and referenced like any added later, before the source exists.
         names = [await self._use_file(who, row, f) for f in dict.fromkeys(i.get("fileIds") or [])]
@@ -1178,6 +1210,9 @@ class KnowledgeService:
             await self.embed_now(who.tenant_id)
             return
         long_failing = isinstance(before, datetime) and datetime.now(UTC) - before >= FAILING_AFTER
+        if not (await self.sync_rules(who.tenant_id, str(s["id"])))["notifyOnFailure"]:
+            # Every base the source feeds turned the alert off; the run is still recorded as failed.
+            return
         if in_row == FAILING_AFTER_RUNS or (long_failing and in_row > FAILING_AFTER_RUNS and in_row % 24 == 0):
             payload = {
                 "sourceId": s["id"],
@@ -1543,9 +1578,13 @@ class KnowledgeService:
     ) -> list[dict[str, Any]]:
         """Approve, reject or edit FAQ drafts, each by the knowledge owner of its source. An approved pair is
         searchable at once (embedded with the rest of the tenant's units); an edit keeps it waiting for review."""
-        found = {c["id"]: c for c in await self.store.changes(who.tenant_id, ids=ids) if c["origin"] == "faq"}
+        found = {
+            c["id"]: c
+            for c in await self.store.changes(who.tenant_id, ids=ids)
+            if c["origin"] == "faq" or "held" in detail_of(c)
+        }
         if missing := [i for i in ids if i not in found]:
-            raise NotFound(f"No FAQ draft {missing[0]}.")
+            raise NotFound(f"No FAQ draft or held change {missing[0]}.")
         items: set[str] = set()
         for change_id in ids:
             d = found[change_id]
@@ -1553,6 +1592,15 @@ class KnowledgeService:
             if d["status"] not in DECIDABLE:
                 raise Conflict(f"That draft is {d['status']}; there is nothing to decide.", code="draft_decided")
             values: dict[str, Any] = {"decided_by": who.email, "decided_at": datetime.now(UTC)}
+            if d["origin"] == "sync":
+                # A version a sync held for review: approving indexes it; it cannot be edited.
+                if decision == "edit":
+                    raise Conflict("A synced version is approved or rejected, not edited.", code="draft_decided")
+                values["status"] = "rejected"
+                if decision == "approve":
+                    values["status"] = "approved" if await self._apply_held(who, d) else "superseded"
+                await self.store.update_change(who.tenant_id, change_id, values)
+                continue
             if decision == "edit":
                 detail = {**detail_of(d), **(edit or {})}
                 values = {"detail": detail, "after": f"Q: {detail['question']}\nA: {detail['answer']}"}
@@ -1851,9 +1899,55 @@ class KnowledgeService:
         if existing is not None and existing["version"] > 0:
             before = await self.store.chunks(who.tenant_id, item_id)
             change = _change(who, s, item, existing["version"], before, chunks, now)
+        if (
+            change is not None
+            and existing is not None
+            and not error
+            and existing.get("content_digest") != item["content_digest"]
+            and (await self.sync_rules(who.tenant_id, str(s["id"])))["changes"] == "review"
+        ):
+            return await self._hold(who, existing, item, version_row, chunks, change)
         await self.store.index_version(who.tenant_id, item, version_row, chunks, new=existing is None, change=change)
         await self._settle_drafts(who, s, item_id, chunks, result)
         return await self._duplicates(who, s, item)
+
+    async def _hold(  # noqa: PLR0917 - one call site, every argument a different part of the version
+        self,
+        who: Who,
+        existing: dict[str, Any],
+        item: dict[str, Any],
+        version_row: dict[str, Any],
+        chunks: list[dict[str, Any]],
+        change: dict[str, Any],
+    ) -> dict[str, Any]:
+        """A changed version a base feeding this source reviews: kept in Changes as a pending change with the version
+        built, while search keeps serving the current one. Approving it indexes the version as built. The same content
+        found again (still waiting, or rejected) is not held twice."""
+        held = [c for c in await self.store.changes(who.tenant_id) if c["item_id"] == existing["id"]]
+        digest = str(item["content_digest"])
+        if any(c["origin"] == "sync" and detail_of(c).get("digest") == digest for c in held):
+            return {**existing, "unchanged": True}
+        for c in held:
+            if c["origin"] == "sync" and c["status"] == "pending":
+                await self.store.update_change(who.tenant_id, str(c["id"]), {"status": "superseded"})
+        payload = {"item": item, "version": version_row, "chunks": chunks}
+        detail = {"digest": digest, "held": _json_safe(payload)}
+        # Written with the drafts' insert: one change row, waiting for a decision.
+        await self.store.add_drafts(who.tenant_id, [{**change, "status": "pending", "detail": detail}])
+        return {**existing, "unchanged": True}
+
+    async def _apply_held(self, who: Who, change: dict[str, Any]) -> bool:
+        """Indexes the version a held change carries, as a sync would have when it found it; False when the document
+        moved on since (its version is no longer the one the change started from), and nothing is indexed."""
+        held = cast(dict[str, Any], _from_json_safe(detail_of(change)["held"]))
+        current = await self.store.items(who.tenant_id, source_ids=[str(change["source_id"])])
+        now = next((i for i in current if i["id"] == change["item_id"]), None)
+        if now is None or int(now["version"]) != int(change["from_version"]):
+            return False
+        await self.store.index_version(
+            who.tenant_id, held["item"], held["version"], held["chunks"], new=False, change=None
+        )
+        return True
 
     async def _duplicates(self, who: Who, s: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
         """An item whose cleaned text another indexed item in the same knowledge base already holds. Flagged (the
@@ -1889,7 +1983,9 @@ class KnowledgeService:
             return await self.store.bases(who.tenant_id)
         return await self.store.team_bases(who.tenant_id, who.team_id)
 
-    async def search(self, who: Who, kb_ids: list[str], question: str, *, limit: int | None = None) -> dict[str, Any]:
+    async def search(
+        self, who: Who, kb_ids: list[str], question: str, *, limit: int | None = None, collection: str | None = None
+    ) -> dict[str, Any]:
         """Passages for `question` across `kb_ids` in the caller's tenant, best first, by the bases' own retrieval
         settings; empty when nothing reaches the threshold. Unknown ids are refused, never silently searched as empty,
         and a base a person may not read is unknown to them; a retired base is skipped, so an agent that still names it
@@ -1900,15 +1996,21 @@ class KnowledgeService:
         if missing := [k for k in kb_ids if k not in readable and k not in retired]:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
         live = [k for k in dict.fromkeys(kb_ids) if k in readable]
-        found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit)
+        found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit, collection=collection)
         return found_out(found)
 
     async def _retrieve(
-        self, tenant: str, bases: list[dict[str, Any]], question: str, *, limit: int | None = None
+        self,
+        tenant: str,
+        bases: list[dict[str, Any]],
+        question: str,
+        *,
+        limit: int | None = None,
+        collection: str | None = None,
     ) -> Found:
         """The one search every caller goes through: the question rewritten when a base asks, the lanes, then the best
         fused pieces reranked when a base asks. A step that fails leaves the search as it was and says why."""
-        how = search_settings(bases, limit=limit)
+        how = search_settings(bases, limit=limit, collection=collection)
         steps = steps_for([{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases], self.query_alias)
         searched: str = question
         rewrite: dict[str, Any] | None = None
@@ -2282,12 +2384,18 @@ class KnowledgeService:
             allowed = s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"]
             draft = _draft_out(ch, s, kbs)
             return {**draft, **self.review_state(s), "canDecide": allowed and ch["status"] in DECIDABLE}
+        held = "held" in detail_of(ch)
+        waiting = held and ch["status"] in DECIDABLE
         return {
             "id": ch["id"],
             "summary": f"{ch['title']} changed from v{ch['from_version']} to v{ch['to_version']}",
             "origin": SHOWN_ORIGIN["sync"],
             "proposedBy": ch["changed_by"],
-            "rationale": "A newer file replaced the document when its source was synced.",
+            "rationale": (
+                "A sync found a newer version; it is searched once approved."
+                if held
+                else "A newer file replaced the document when its source was synced."
+            ),
             "documentId": ch["item_id"],
             "documentTitle": ch["title"],
             "sourceId": ch["source_id"],
@@ -2302,12 +2410,18 @@ class KnowledgeService:
             **self.review_state(s),
             "citedBy": [],
             "owner": s["owner"] if s else "",
-            # A sync applies the change when it runs; there is nothing left to decide.
-            "canDecide": False,
-            "status": "approved",
+            # A sync applies its change when it runs, unless a base it feeds holds changes for review.
+            "canDecide": waiting and s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"],
+            "status": ch["status"] if held else "approved",
             "createdAt": _iso(ch["changed_at"]),
-            "decidedAt": _iso(ch["changed_at"]),
-            "decidedBy": ch["changed_by"],
+            **(
+                {
+                    "decidedAt": _iso(ch["decided_at"] or ch["changed_at"]),
+                    "decidedBy": ch["decided_by"] or ch["changed_by"],
+                }
+                if not waiting
+                else {}
+            ),
         }
 
     async def list_changes(
@@ -2977,11 +3091,27 @@ def ai_steps_on(settings: IngestSettings) -> bool:
     return any(step in AI_STEPS and ai_step_allowed(settings, step, preview=False) for step in settings.strategies)
 
 
-def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None) -> Search:
+def scope_of(r: dict[str, Any]) -> Scope:
+    """A base's scope from its retrieval settings: the pieces its search may return."""
+    filters = dict(r.get("filters") or {})
+    conditions = cast(list[dict[str, Any]], filters.get("conditions") or [])
+    return Scope(
+        collections=tuple(r.get("scopeCollections") or ()),
+        source_ids=tuple(r.get("scopeSourceIds") or ()),
+        tags_include=tuple(r.get("tagsInclude") or ()),
+        tags_exclude=tuple(r.get("tagsExclude") or ()),
+        include_untagged=bool(r.get("includeUntagged", True)),
+        match=str(filters.get("match") or "all"),
+        conditions=tuple((str(c["key"]), str(c["op"]), str(c.get("value") or "")) for c in conditions),
+    )
+
+
+def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None, collection: str | None = None) -> Search:
     """One search over several bases: the lanes any of them asks for, the lowest threshold, the mean weight toward
-    meaning and the largest piece limit, so no base gets less than it asks; `limit` caps the pieces further."""
+    meaning and the largest piece limit, so no base gets less than it asks; `limit` caps the pieces further. Scopes do
+    not merge: each base keeps its own, and `collection` narrows them all."""
     if not bases:
-        return Search(limit=limit or int(DEFAULT_RETRIEVAL["chunkLimit"]))
+        return Search(limit=limit or int(DEFAULT_RETRIEVAL["chunkLimit"]), collection=collection)
     settings = [{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases]
     lanes: tuple[Lane, ...] = tuple(dict.fromkeys(lane for r in settings for lane in lanes_for(str(r["searchMode"]))))
     most = max(int(r["chunkLimit"]) for r in settings)
@@ -2991,6 +3121,8 @@ def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None) ->
         meaning_threshold=min(float(r["meaningThreshold"]) for r in settings),
         weight=sum(float(r["hybridWeight"]) for r in settings) / len(settings),
         limit=min(most, limit) if limit else most,
+        scopes={str(b["id"]): scope_of(r) for b, r in zip(bases, settings, strict=True)},
+        collection=collection,
     )
 
 
@@ -3016,6 +3148,28 @@ def checked_retrieval(r: dict[str, Any]) -> dict[str, Any]:
     if len(str(r.get("rewriteInstructions") or "")) > 1000:
         raise ValidationFailed("Keep the rewrite instruction under 1,000 characters.", code="invalid_retrieval")
     return r
+
+
+def _json_safe(value: Any) -> Any:
+    """A held version as JSON: datetimes kept as {"$at": iso} so they come back as datetimes."""
+    if isinstance(value, datetime):
+        return {"$at": value.isoformat()}
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in cast(dict[str, Any], value).items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(v) for v in cast(list[Any], value)]
+    return value
+
+
+def _from_json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        d = cast(dict[str, Any], value)
+        if set(d) == {"$at"}:
+            return datetime.fromisoformat(str(d["$at"]))
+        return {k: _from_json_safe(v) for k, v in d.items()}
+    if isinstance(value, list):
+        return [_from_json_safe(v) for v in cast(list[Any], value)]
+    return value
 
 
 def _keys(model: type[BaseModel]) -> set[str]:
