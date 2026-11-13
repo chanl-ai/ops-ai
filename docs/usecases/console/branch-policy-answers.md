@@ -7,7 +7,7 @@ Status: current. Id: `uc-079`. Service: `console`. Layers: api, ui.
 | Needs | How |
 |---|---|
 | The demo stack | withUiStack's `demo` option, as for uc-078; `services/kb-service/seed/pdfs/fee-schedule-v2.pdf` |
-| platform-service's dev seed | Maya Okafor (asks), Nadia Petrov (owns Branch operations); password `northfield-demo` |
+| platform-service's dev seed | Maya Okafor (asks), Priya Shah (owns Branch operations, in the operations team with Branch Policy); password `northfield-demo` |
 
 ## Steps and expected results
 
@@ -16,7 +16,7 @@ Status: current. Id: `uc-079`. Service: `console`. Layers: api, ui.
 | 1 | Maya asks the Branch Policy agent the outgoing wire fee, the daily ATM limit and how to stop a cheque | each answer cites its document with its page: Fee Schedule p. 1, Branch Operations Manual p. 2 and p. 3 |
 | 2 | She asks about a mortgage prepayment penalty | "That is not in the knowledge base." and no citation |
 | 3 | Read the rate table | a rows widget with the manual's four debit-card limits (the demo rules present() them after the cited answer) |
-| 4 | Nadia uploads fee schedule version 2 under the same name and syncs; Maya asks the fee again | the citation names a newer version of the Fee Schedule |
+| 4 | Priya uploads fee schedule version 2 under the same name and syncs; Maya asks the fee again | the citation names a newer version of the Fee Schedule |
 | 5 | Open Changes, Decided view | a row "Fee Schedule changed from vN to vN+1" (a sync's replacement is recorded as decided) |
 
 ## Acceptance layers
