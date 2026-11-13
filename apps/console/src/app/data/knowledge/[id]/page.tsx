@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronDown, Play, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronDown, FlaskConical, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { KbDot, KbHealthBadge } from '@/components/knowledge/knowledge-meta';
@@ -24,16 +24,16 @@ import { useTabParam } from '@/hooks/use-tab-param';
 import { count, relativeTime } from '@/lib/format';
 
 import { KbDocumentsTab } from '../_parts/kb-documents-tab';
-import { KbPlaygroundTab } from '../_parts/kb-playground-tab';
 import { KbSettingsTab } from '../_parts/kb-settings-tab';
 import { KbSourcesTab } from '../_parts/kb-sources-tab';
 import { KnowledgeChangesQueue } from '@/components/knowledge/knowledge-changes-queue';
+import { TestSheet } from '@/components/knowledge/test-sheet';
 
-// Documents first, Overview last. The Playground stays a tab until the Test sheet replaces it.
+// Documents first, Overview last. `?tab=playground` (older links) opens the Test sheet over Documents.
 const TABS = ['documents', 'sources', 'changes', 'settings', 'overview', 'playground'] as const;
 type Tab = (typeof TABS)[number];
-const SHOWN = TABS;
-const LABEL: Record<Tab, string> = { overview: 'Overview', sources: 'Sources', documents: 'Documents', changes: 'Changes', settings: 'Settings', playground: 'Playground' };
+const SHOWN = TABS.filter((t) => t !== 'playground');
+const LABEL: Record<Tab, string> = { overview: 'Overview', sources: 'Sources', documents: 'Documents', changes: 'Changes', settings: 'Settings', playground: 'Documents' };
 
 export default function KnowledgeBasePage() {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +46,12 @@ export default function KnowledgeBasePage() {
   const remove = useDeleteKb();
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const teamCanBuild = useCanBuild();
+  const [testing, setTesting] = React.useState(false);
+  React.useEffect(() => {
+    if (tab !== 'playground') return;
+    setTesting(true);
+    setTab('documents');
+  }, [tab, setTab]);
 
   if (query.isPending)
     return (
@@ -82,8 +88,8 @@ export default function KnowledgeBasePage() {
         backHref="/data/knowledge"
         actions={
           <div className="flex items-center">
-            <Button className={canBuild ? 'rounded-r-none' : undefined} onClick={() => setTab('playground')}>
-              <Play className="size-4" /> Open playground
+            <Button className={canBuild ? 'rounded-r-none' : undefined} onClick={() => setTesting(true)} data-testid="kb-test">
+              <FlaskConical className="size-4" /> Test
             </Button>
             {canBuild && (
             <DropdownMenu>
@@ -126,7 +132,7 @@ export default function KnowledgeBasePage() {
         }
       >
         <PageTabPanel value={tab}>
-          {/* Searching (documents, playground) is reading; refreshing, retrying and changing sources are a builder's. */}
+          {/* Searching (documents, the Test sheet) is reading; refreshing, retrying and changing sources are a builder's. */}
           <BuilderFieldset canEdit={kb.canEdit}>
           {tab === 'overview' && (
             <KbOverview
@@ -140,8 +146,8 @@ export default function KnowledgeBasePage() {
           {tab === 'sources' && <KbSourcesTab kb={kb} canBuild={canBuild} />}
           {tab === 'settings' && <KbSettingsTab kb={kb} />}
           </BuilderFieldset>
-          {tab === 'documents' && <KbDocumentsTab kb={kb} canBuild={canBuild} />}
-          {tab === 'playground' && <KbPlaygroundTab kb={kb} />}
+          {(tab === 'documents' || tab === 'playground') && <KbDocumentsTab kb={kb} canBuild={canBuild} />}
+          <TestSheet kb={kb} open={testing} onOpenChange={setTesting} />
           {tab === 'changes' && <KnowledgeChangesQueue kbId={kb.id} />}
 
           <DeleteDialog

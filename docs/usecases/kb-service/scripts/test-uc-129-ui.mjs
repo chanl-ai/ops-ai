@@ -1,6 +1,6 @@
 // uc-129 a builder adds documents to a knowledge base by uploading them or picking them from Files, ui layer:
 // docs/usecases/knowledge/add-documents-from-files.md. Signed in through platform-service as James; one PDF is put in
-// Files first, then the console uploads a second and picks the first in one Add documents dialog.
+// Files first, then the console uploads a second and picks the first in one Add files dialog (Add data source → Files).
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -63,13 +63,14 @@ await withUiStack(
       check('the base offers no Documents tab', tabs.length > 0 && !tabs.some((t) => t.startsWith('Documents')), tabs);
 
       await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('kb-add-documents').first().click({ timeout: 120_000 });
-      const dialog = page.getByRole('dialog', { name: 'Add documents' });
+      await page.getByTestId('kb-add-source').first().click({ timeout: 120_000 });
+      await page.getByTestId('kb-add-files').click();
+      const dialog = page.getByRole('dialog', { name: 'Add files' });
       const ticketed = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${files}/v1/files/uploads`, { timeout: 60_000 }));
-      await dialog.locator('input[type="file"]').setInputFiles([{ name: UPLOADED, mimeType: 'application/pdf', buffer: readFileSync(join(PDFS, UPLOADED)) }]);
+      await dialog.locator('input[type="file"]').first().setInputFiles([{ name: UPLOADED, mimeType: 'application/pdf', buffer: readFileSync(join(PDFS, UPLOADED)) }]);
       const ticket = await ticketed;
       check('the upload goes to files-service first', ticket?.status() === 201, ticket?.status());
-      const ready = await dialog.getByRole('button', { name: 'Add 1 document' }).waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      const ready = await dialog.getByRole('button', { name: 'Add 1 file' }).waitFor({ timeout: 60_000 }).then(() => true, () => false);
       if (!ready) throw new Error(`upload not ready: ${await dialog.getByTestId('add-documents-upload').innerText()}`);
 
       // Files stores one copy of identical bytes per team, so the file may carry an earlier upload's name.
@@ -77,13 +78,13 @@ await withUiStack(
       await page.getByPlaceholder("Search your team's files by name…").fill(existing.name);
       await page.getByRole('option', { name: new RegExp(`^${existing.name.replace('.', '\\.')}`) }).first().click({ timeout: 30_000 });
       await page.keyboard.press('Escape');
-      await dialog.getByRole('button', { name: 'Add 2 documents' }).waitFor({ timeout: 30_000 });
+      await dialog.getByRole('button', { name: 'Add 2 files' }).waitFor({ timeout: 30_000 });
       await page.waitForTimeout(800);
       const clipMs = Date.now() - started;
       await shootBothWidths(page, 'knowledge', 'uc-129-add-documents', async () => page.waitForTimeout(600));
       await page.setViewportSize({ width: 1440, height: 1000 });
       const added = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${kb}/v1/knowledge-bases/${kbId}/documents`, { timeout: 120_000 }));
-      await dialog.getByRole('button', { name: 'Add 2 documents' }).click({ timeout: 30_000 });
+      await dialog.getByRole('button', { name: 'Add 2 files' }).click({ timeout: 30_000 });
       const res = await added;
       const body = res ? (await res.json()).data : undefined;
       const sent = res ? JSON.parse(res.request().postData() ?? '{}').fileIds : [];

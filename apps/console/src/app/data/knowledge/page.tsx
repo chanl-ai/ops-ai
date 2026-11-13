@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Database, Globe, KeyRound, Play, Plus, RefreshCw, Server, Trash2, Users } from 'lucide-react';
+import { Database, Globe, KeyRound, FlaskConical, Plus, RefreshCw, Server, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -163,7 +163,7 @@ function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; r
           <DataTableRowActions
             row={row}
             actions={[
-              { label: 'Open playground', icon: Play, onClick: (r) => actions.open(r.original, 'playground') },
+              { label: 'Test', icon: FlaskConical, onClick: (r) => actions.open(r.original, 'playground') },
               ...(actions.canBuild
                 ? [
                     { label: 'Refresh index', icon: RefreshCw, onClick: (r: { original: Row }) => actions.refresh(r.original) },

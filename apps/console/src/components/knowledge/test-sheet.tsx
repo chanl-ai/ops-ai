@@ -2,14 +2,16 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Bot, Send } from 'lucide-react';
+import { Bot, Copy, FileText, FlaskConical, Send } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { SearchTrace } from '@/components/knowledge/search-trace';
-import { Section } from '@/components/shared/surface';
+import { Row, Rows, Section } from '@/components/shared/surface';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAgentsCiting, useAgentTurn, useKbQuery } from '@/hooks/knowledge-queries';
 import { useCanBuild } from '@/hooks/me-queries';
@@ -28,19 +30,40 @@ interface Turn {
 }
 
 const NO_AGENT = 'none';
+const ALL = 'all';
 
 /**
- * Ask this knowledge base a question. The search comes from kb-service's query route (lanes, each passage's scores and
- * the embedding cost); the answer comes from one kernel turn of an agent citing this base, so what is shown is what that
- * agent would say. With no agent citing the base, only the search is shown.
+ * Test a knowledge base from any of its tabs: ask a question, optionally narrowed to one collection, and see the pieces
+ * the search used with their scores, the search trace, and an agent's answer. The search comes from kb-service's query
+ * route; the answer from one kernel turn of an agent citing this base, so what is shown is what that agent would say.
+ * With nothing found, the base's own no-answer message is shown. Nothing is saved.
  */
-export function KbPlaygroundTab({ kb }: { kb: KnowledgeBaseDetail }) {
+export function TestSheet({ kb, open, onOpenChange }: { kb: KnowledgeBaseDetail; open: boolean; onOpenChange: (o: boolean) => void }) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full gap-0 sm:max-w-2xl" data-testid="kb-test-sheet">
+        <SheetHeader className="border-b">
+          <SheetTitle className="flex items-center gap-2">
+            <FlaskConical className="size-4" /> Test {kb.name}
+          </SheetTitle>
+          <SheetDescription>Searches the index the same way an agent would. Nothing is saved.</SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{open && <TestPanel kb={kb} />}</div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function TestPanel({ kb }: { kb: KnowledgeBaseDetail }) {
   const query = useKbQuery(kb.id);
   const turn = useAgentTurn();
-  const agents = useAgentsCiting(kb.id);
   // A test turn is an agent edit at agents-service (Builder or Admin); anyone else sees the search only.
   const canTest = useCanBuild('agents');
+  const agents = useAgentsCiting(kb.id, canTest);
   const [agentId, setAgentId] = React.useState<string>(NO_AGENT);
+  const [collection, setCollection] = React.useState<string>(ALL);
+  // The base's scope, or with none, the collections its sources write, both on its detail.
+  const collections = kb.collections.length ? kb.collections : [...new Set(kb.attached.map((a) => a.source.collection).filter(Boolean))].sort();
   const [turns, setTurns] = React.useState<Turn[]>([]);
   const [input, setInput] = React.useState('');
   const endRef = React.useRef<HTMLDivElement>(null);
@@ -49,7 +72,8 @@ export function KbPlaygroundTab({ kb }: { kb: KnowledgeBaseDetail }) {
     if (agentId === NO_AGENT && citing.length) setAgentId(citing[0].id);
   }, [citing, agentId]);
   React.useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' });
+    // From the second question on, the newest answer scrolls into view; the first leaves the form in sight.
+    if (turns.length > 1) endRef.current?.scrollIntoView({ block: 'end' });
   }, [turns]);
   const busy = query.isPending || turn.isPending;
   const patch = (id: string, p: Partial<Turn>) => setTurns((ts) => ts.map((t) => (t.id === id ? { ...t, ...p } : t)));
@@ -61,20 +85,20 @@ export function KbPlaygroundTab({ kb }: { kb: KnowledgeBaseDetail }) {
     const agent = citing.find((a) => a.id === agentId);
     setInput('');
     setTurns((ts) => [...ts, { id, question, agent }]);
-    query.mutate({ question }, { onSuccess: (search) => patch(id, { search }), onError: (e) => patch(id, { searchError: e.message }) });
+    query.mutate({ question, ...(collection !== ALL ? { collection } : {}) }, { onSuccess: (search) => patch(id, { search }), onError: (e) => patch(id, { searchError: e.message }) });
     if (agent) turn.mutate({ agentId: agent.id, message: question }, { onSuccess: (answer) => patch(id, { answer }), onError: (e) => patch(id, { answerError: e.message }) });
   }
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="kb-playground">
       <form
-        className="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-3"
+        className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           ask(input);
         }}
       >
-        <div className="flex min-w-64 flex-1 flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <label htmlFor="pg-question" className="text-xs text-muted-foreground">
             Question
           </label>
@@ -104,6 +128,24 @@ export function KbPlaygroundTab({ kb }: { kb: KnowledgeBaseDetail }) {
           </Select>
         </div>
         )}
+        <div className="flex flex-col gap-1">
+          <label htmlFor="pg-collection" className="text-xs text-muted-foreground">
+            Collection
+          </label>
+          <Select value={collection} onValueChange={setCollection}>
+            <SelectTrigger id="pg-collection" className="w-56" data-testid="pg-collection">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All collections</SelectItem>
+              {collections.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Button type="submit" disabled={!input.trim() || busy} data-testid="pg-ask">
           <Send className="size-4" /> Ask
         </Button>
@@ -147,17 +189,29 @@ export function KbPlaygroundTab({ kb }: { kb: KnowledgeBaseDetail }) {
               )}
             </Section>
           )}
-          <Section title="Search" description="What kb-service found for the question, before any agent reads it">
-            {t.searchError ? (
-              <Alert variant="destructive">
-                <AlertDescription>The search failed: {t.searchError}</AlertDescription>
-              </Alert>
-            ) : !t.search ? (
-              <p className="animate-pulse text-sm text-muted-foreground">Searching {kb.name}…</p>
-            ) : (
-              <SearchTrace result={t.search} settings={kb.retrieval} />
-            )}
-          </Section>
+          {t.searchError ? (
+            <Alert variant="destructive">
+              <AlertDescription>The search failed: {t.searchError}</AlertDescription>
+            </Alert>
+          ) : !t.search ? (
+            <p className="animate-pulse text-sm text-muted-foreground">Searching {kb.name}…</p>
+          ) : (
+            <>
+              {t.search.noAnswer && (
+                <Section title="Answer" description="Nothing passed the base’s floors, so it says its no-answer message">
+                  <p className="text-sm" data-testid="pg-no-answer">
+                    {t.search.answer}
+                  </p>
+                </Section>
+              )}
+              <PiecesUsed result={t.search} />
+              <Section title="Search trace" description="What the search did, before any agent reads it" flush>
+                <div className="p-3">
+                  <SearchTrace result={t.search} settings={kb.retrieval} />
+                </div>
+              </Section>
+            </>
+          )}
         </div>
       ))}
       <div ref={endRef} />
@@ -200,5 +254,62 @@ function AgentAnswer({ answer: a }: { answer: AgentTestTurn }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The pieces the search returned, best first, each with its document, place and score; Copy as JSON gives them all. The
+ * score shown is the piece's best lane score (0 to 1), since the fused rank score is only for ordering.
+ */
+function PiecesUsed({ result }: { result: PlaygroundAnswer }) {
+  const pieces = result.chunks ?? [];
+  const best = (n: number, fallback: number) => {
+    const lanes = Object.values(result.passages?.[n]?.lanes ?? {});
+    return lanes.length ? Math.max(...lanes) : fallback;
+  };
+  const lanes = result.lanes?.ran.length ? ` · ${result.lanes.ran.join(' and ')}` : '';
+  return (
+    <Section
+      title="Pieces used"
+      description={`${plural(pieces.length, 'piece')}${lanes} · ${ms(result.retrievalMs)}`}
+      flush
+      actions={
+        pieces.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void navigator.clipboard.writeText(JSON.stringify(pieces, null, 2)).then(() => toast.success('Copied the pieces as JSON'))}
+            data-testid="pg-copy-json"
+          >
+            <Copy className="size-3.5" /> Copy as JSON
+          </Button>
+        )
+      }
+    >
+      {pieces.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground">No piece passed the floors.</p>
+      ) : (
+        <Rows testId="pg-pieces">
+          {pieces.map((c, n) => (
+            <Row
+              key={c.chunkId}
+              leading={<FileText className="size-4 text-muted-foreground" />}
+              title={
+                <span>
+                  {c.documentTitle} <span className="text-muted-foreground">· {c.version}{c.location ? ` · ${c.location}` : ''}</span>
+                </span>
+              }
+              description={
+                <span className="line-clamp-2">
+                  “{c.text.slice(0, 220)}
+                  {c.text.length > 220 ? '…' : ''}” · {c.sourceName}
+                </span>
+              }
+              trailing={<span className="font-mono text-xs tabular-nums">{best(n, c.score).toFixed(2)}</span>}
+            />
+          ))}
+        </Rows>
+      )}
+    </Section>
   );
 }

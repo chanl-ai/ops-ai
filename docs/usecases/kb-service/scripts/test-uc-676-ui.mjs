@@ -38,6 +38,7 @@ await withUiStack(
       await page.waitForURL(`**/knowledge/${kbId}**`, { timeout: 60_000 });
 
       await page.getByTestId('kb-add-source').click({ timeout: 60_000 });
+      await page.getByTestId('kb-add-apps').click();
       const add = page.getByTestId('add-source-wizard');
       await page.waitForTimeout(1000);
       await add.getByTestId('add-source-kind-text').click({ timeout: 60_000 });
@@ -85,6 +86,7 @@ await withUiStack(
       await shootBothWidths(shots, 'knowledge', 'uc-676-add-typed-text', async () => {
         await shots.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await shots.getByTestId('kb-add-source').click({ timeout: 60_000 });
+        await shots.getByTestId('kb-add-apps').click();
         const wizard = shots.getByTestId('add-source-wizard');
         await wizard.getByTestId('add-source-kind-text').click({ timeout: 60_000 });
         await wizard.getByTestId('add-source-next').click();

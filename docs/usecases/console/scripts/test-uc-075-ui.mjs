@@ -57,6 +57,7 @@ await withUiStack(
       // Add source: Files, the PDF uploaded to files-service, then Create and sync, which makes the source with the file
       // by id, attaches it to the base and starts its first sync.
       await page.getByTestId('kb-add-source').click();
+      await page.getByTestId('kb-add-apps').click();
       const add = page.getByTestId('add-source-wizard');
       await add.getByTestId('add-source-kind-file').click({ timeout: 60_000 });
       await add.getByTestId('add-source-next').click();

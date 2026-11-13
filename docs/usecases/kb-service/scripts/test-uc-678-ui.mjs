@@ -72,6 +72,7 @@ try {
 
         // Steps 10-11: the sites picker searched, Select all, then the picked site's libraries.
         await page.getByTestId('kb-add-source').click({ timeout: 60_000 });
+        await page.getByTestId('kb-add-apps').click();
         const add = page.getByTestId('add-source-wizard');
         await add.getByTestId('add-source-kind-files').click({ timeout: 60_000 });
         await add.getByTestId('add-source-next').click();
@@ -140,6 +141,7 @@ try {
 
         // Step 14: Confluence's spaces picker.
         await page.getByTestId('kb-add-source').click({ timeout: 60_000 });
+        await page.getByTestId('kb-add-apps').click();
         await add.getByTestId('add-source-kind-spaces').click({ timeout: 60_000 });
         await add.getByTestId('add-source-next').click();
         const spaces = add.getByTestId('as-spaces-picker');

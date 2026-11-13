@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceHealth, SourceKind, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
+import type { DocType, ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceHealth, SourceKind, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
@@ -144,6 +144,19 @@ export function MimeIcon({ mime, className }: { mime: string; className?: string
   if (mime === 'text/html') return <Globe className={c} />;
   return <File className={c} />;
 }
+
+/** The Documents table's Type, by kb-service's `docType`. */
+export const DOC_TYPE_LABEL: Record<DocType, string> = {
+  pdf: 'PDF',
+  word: 'Word',
+  spreadsheet: 'Spreadsheet',
+  slides: 'Slides',
+  web: 'Web page',
+  text: 'Text',
+  typed: 'Typed text',
+  app: 'App article',
+  other: 'Other',
+};
 
 export const KB_COLORS: Record<string, string> = {
   violet: 'bg-violet-500',

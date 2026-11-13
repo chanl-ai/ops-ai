@@ -70,10 +70,12 @@ await withUiStack(
         check('1 James creates a knowledge base and lands on it', res?.status() === 201 && landed && title, { status: res?.status(), url: page.url(), title });
       });
 
-      // 2. Add files from the base's Sources tab: Add source, Files, two PDFs, then Create and sync on the review step.
+      // 2. Add files from the base's Sources tab: Add data source, Add source's Files kind, two PDFs, then Create and sync on the review step.
       await step('2 James adds two PDFs from the Sources tab and syncs them', async () => {
         await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        // Add data source → From your apps opens Add source at its first step, where Files is one kind.
         await page.getByTestId('kb-add-source').click({ timeout: 120_000 });
+        await page.getByTestId('kb-add-apps').click();
         const add = page.getByTestId('add-source-wizard');
         await add.getByTestId('add-source-kind-file').click({ timeout: 60_000 });
         await add.getByTestId('add-source-next').click();
@@ -130,7 +132,8 @@ await withUiStack(
       clipStart = Date.now();
       await step('4 James writes a page in the console and it indexes', async () => {
         await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByRole('button', { name: 'Add page' }).click({ timeout: 60_000 });
+        await page.getByTestId('kb-add-source').click({ timeout: 60_000 });
+        await page.getByTestId('kb-add-text').click();
         const dialog = page.getByRole('dialog', { name: 'Add a page' });
         await dialog.getByLabel('Title').fill('Cash drawer limits');
         await dialog.getByLabel('Text').fill('## Drawer limit\n\nA teller drawer holds at most 5,000 dollars in cash at any time.');

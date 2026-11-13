@@ -227,9 +227,13 @@ export interface Item {
 }
 
 /** A document as the knowledge base's Documents tab lists it. */
+/** What a document is, as kb-service names it for the Documents table's Type column and filter. */
+export type DocType = 'pdf' | 'word' | 'spreadsheet' | 'slides' | 'web' | 'text' | 'typed' | 'app' | 'other';
+
 export interface DocumentRow extends Item {
   sourceName: string;
   freshness: 'fresh' | 'stale' | 'no_schedule';
+  docType: DocType;
 }
 
 /** Heavy per-item content, fetched only when a document is opened. */
@@ -742,6 +746,8 @@ export interface SyncOptions {
 
 export interface QueryInput {
   question: string;
+  /** Only pieces of this collection (the Test sheet's filter). */
+  collection?: string;
   /** Full settings for this call; omitted uses each knowledge base's saved settings. */
   settings?: RetrievalSettings;
   /** Fields that override the saved settings for this call only (workflow steps, chat). */
@@ -761,7 +767,7 @@ export interface RetrieveInput extends Omit<QueryInput, 'alsoKbIds'> {
 
 export type KbFilters = { health?: string[]; access?: string[] };
 export type SourceFilters = { type?: string[]; status?: string[]; schedule?: string[]; usedBy?: string[]; connectionId?: string[] };
-export type DocumentFilters = { sourceId?: string[]; status?: string[]; freshness?: string[]; sensitivity?: string[]; tags?: string[] };
+export type DocumentFilters = { sourceId?: string[]; status?: string[]; collection?: string[]; docType?: string[]; freshness?: string[]; sensitivity?: string[]; tags?: string[] };
 export type ItemFilters = { status?: string[]; mime?: string[]; errorClass?: string[] };
 
 export type { HeldReason, IngestSettings, ItemVersionRow, VersionStatus } from './knowledge-ingest';

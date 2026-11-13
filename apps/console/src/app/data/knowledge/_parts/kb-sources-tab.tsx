@@ -4,30 +4,25 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ExternalLink, FilePlus2, Loader2, Plug, Plus, RefreshCw, Unlink, Upload } from 'lucide-react';
+import { ExternalLink, Loader2, Plug, RefreshCw, Unlink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { scheduleLabel, SourceHealthText, SourceKindIcon } from '@/components/knowledge/knowledge-meta';
-import { AddPageDialog } from '@/components/knowledge/add-page-dialog';
-import { AddDocumentsDialog } from '@/components/shared/add-documents-dialog';
+import { useAddDataSource } from '@/components/knowledge/add-data-source';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StopRowClick } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { kk, useAddDocuments, useAddPage, useAttachSources, useDetachSource, useSource, useSourcesList, useSyncSource } from '@/hooks/knowledge-queries';
+import { kk, useDetachSource, useSource, useSyncSource } from '@/hooks/knowledge-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
-import { AddSourceWizard } from '@/components/sources/add-source-wizard';
 import { useSticky } from '@/hooks/use-sticky';
-import { count, plural, relativeTime } from '@/lib/format';
+import { count, relativeTime } from '@/lib/format';
 import type { KbSourceView, KnowledgeBaseDetail, Source, SourceHealth, SyncRun } from '@/lib/types/knowledge';
-import { cn } from '@/lib/utils';
 
 type Row = KbSourceView & { onRowClick: (r: KbSourceView) => void };
 
@@ -76,22 +71,13 @@ function useWatchedRun(kbId: string) {
 /** `canBuild` is the knowledge base's own edit flag; adding, attaching, syncing and detaching are hidden from anyone without it. */
 export function KbSourcesTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBuild: boolean }) {
   const router = useRouter();
-  const addDocuments = useAddDocuments(kb.id);
-  const addPage = useAddPage(kb.id);
-  const [docsOpen, setDocsOpen] = React.useState(false);
-  const [pageOpen, setPageOpen] = React.useState(false);
-  const attach = useAttachSources(kb.id);
   const detach = useDetachSource(kb.id);
-  const [attachOpen, setAttachOpen] = React.useState(false);
-  const [attachSearch, setAttachSearch] = React.useState('');
-  const candidates = useSourcesList({ page: 1, pageSize: 20, search: attachSearch || undefined });
-  const [addOpen, setAddOpen] = React.useState(false);
   const syncSource = useSyncSource();
-  const [picked, setPicked] = React.useState<string[]>([]);
   const [detaching, setDetaching] = React.useState<KbSourceView | null>(null);
   const detachingShown = useSticky(detaching);
 
   const watched = useWatchedRun(kb.id);
+  const add = useAddDataSource(kb, { sourceCreated: (s) => watched.watch(s.id) });
   const openSource = React.useCallback((r: KbSourceView) => router.push(`/data/sources/${r.sourceId}`), [router]);
   const syncNow = React.useCallback(
     (r: KbSourceView) =>
@@ -210,7 +196,6 @@ export function KbSourcesTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBui
   );
 
   const lastWithPublicLink = kb.sources.length === 1 && kb.access.publicLink.enabled;
-  const candidateRows = candidates.data?.data ?? [];
   // Facet values come from the base's own detail, which lists every source it reads, so nothing is fetched to fill them.
   const kindOptions = [...new Set(rows.map((r) => r.source.kindLabel))].map((t) => ({ label: t, value: t }));
 
@@ -230,135 +215,19 @@ export function KbSourcesTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBui
           { column: 'kind', title: 'Kind', options: kindOptions },
           { column: 'health', title: 'Health', options: HEALTH_OPTIONS },
         ]}
-        toolbarExtra={
-          canBuild && (
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => setAddOpen(true)} data-testid="kb-add-source">
-              <Plus className="size-4" /> Add source
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setDocsOpen(true)} data-testid="kb-add-documents">
-              <Upload className="size-4" /> Add documents
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setPageOpen(true)}>
-              <FilePlus2 className="size-4" /> Add page
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setPicked([]);
-                setAttachSearch('');
-                setAttachOpen(true);
-              }}
-              data-testid="kb-attach-sources"
-            >
-              <Plus className="size-4" /> Attach sources
-            </Button>
-          </div>
-          )
-        }
+        toolbarExtra={canBuild && add.menu}
         emptyState={
           <EmptyState
             icon={Plug}
             title="No sources yet"
             description={canBuild ? 'Add a website, connect an app, or upload files.' : 'Nobody has added a source here yet.'}
-            action={canBuild ? { label: 'Add source', onClick: () => setAddOpen(true) } : undefined}
-            secondaryAction={canBuild ? { label: 'Attach existing source', onClick: () => (setPicked([]), setAttachOpen(true)) } : undefined}
+            action={canBuild ? { label: 'Add a website or app', onClick: () => add.show('apps') } : undefined}
+            secondaryAction={canBuild ? { label: 'Attach existing source', onClick: () => add.show('attach') } : undefined}
           />
         }
       />
 
-      <AddDocumentsDialog
-        open={docsOpen}
-        onOpenChange={setDocsOpen}
-        purpose="knowledge_source"
-        description={`Uploads are stored in Files first. Each document is indexed into ${kb.name} once you add it.`}
-        isPending={addDocuments.isPending}
-        onSubmit={async (fileIds) => {
-          const r = await addDocuments.mutateAsync(fileIds);
-          const failed = r.run.counts.failed ?? 0;
-          toast.success(`Added ${plural(r.files.length, 'document')} to ${kb.name}`, { description: failed ? `${plural(failed, 'document')} could not be read; open the source to see why.` : 'Indexed; agents can cite them now.' });
-          setDocsOpen(false);
-        }}
-      />
-      <AddPageDialog
-        open={pageOpen}
-        onOpenChange={setPageOpen}
-        saving={addPage.isPending}
-        onSubmit={(input) => addPage.mutateAsync(input).then((d) => toast.success(`Added ${d.title}`, { description: d.status === 'indexed' ? 'Indexed; agents can cite it now.' : d.error }))}
-      />
-      <AddSourceWizard
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        kb={kb}
-        onCreated={(s, approval) => {
-          watched.watch(s.id);
-          toast.success(`${s.name} created`, {
-            description:
-              approval.state === 'waiting'
-                ? `First sync started. Its questions and FAQ steps wait for the knowledge owner’s approval: ${approval.reason}`
-                : approval.state === 'approved'
-                  ? 'First sync started, with its questions and FAQ steps approved.'
-                  : 'First sync started.',
-            action: { label: 'View source', onClick: () => router.push(`/data/sources/${s.id}`) },
-          });
-        }}
-      />
-      <DialogShell
-        open={attachOpen}
-        onOpenChange={setAttachOpen}
-        size="md"
-        title="Attach sources"
-        description={`Sources ${kb.name} does not read yet. Their items are indexed on the next refresh.`}
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" onClick={() => setAttachOpen(false)} disabled={attach.isPending}>
-              Cancel
-            </Button>
-            <LoadingButton
-              isLoading={attach.isPending}
-              disabled={!picked.length}
-              onClick={async () => {
-                try {
-                  await attach.mutateAsync(picked);
-                  toast.success(`Attached ${plural(picked.length, 'source')}`, { description: 'Refresh the index to search them.' });
-                  setAttachOpen(false);
-                } catch (e) {
-                  toast.error('Couldn’t attach', { description: (e as Error).message });
-                }
-              }}
-            >
-              {picked.length ? `Attach ${plural(picked.length, 'source')}` : 'Attach'}
-            </LoadingButton>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          <Input value={attachSearch} onChange={(e) => setAttachSearch(e.target.value)} placeholder="e.g. lending policies" aria-label="Search sources" />
-          {candidates.isPending ? (
-            <p className="text-sm text-muted-foreground">Loading sources…</p>
-          ) : candidateRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{attachSearch ? `No source called “${attachSearch}”.` : 'No sources yet.'}</p>
-          ) : (
-            <div className="divide-y rounded-md border">
-              {candidateRows.map((s) => {
-                // Each row names the bases it already feeds, so one already here is shown and left unpickable.
-                const here = s.usedByKbIds.includes(kb.id);
-                return (
-                  <label key={s.id} htmlFor={`att-${s.id}`} className={cn('flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-accent/40', here && 'cursor-default opacity-60', picked.includes(s.id) && 'bg-primary/5')}>
-                    <Checkbox id={`att-${s.id}`} disabled={here} checked={here || picked.includes(s.id)} onCheckedChange={(v) => setPicked((p) => (v ? [...p, s.id] : p.filter((x) => x !== s.id)))} />
-                    <SourceKindIcon kind={s.kind} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{s.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{here ? 'Already feeds this knowledge base' : `${plural(s.itemsIndexed, 'item')} · ${s.scopeSummary}`}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </DialogShell>
+      {add.dialogs}
 
       <DialogShell
         open={!!detaching}
