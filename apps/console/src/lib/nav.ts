@@ -171,22 +171,22 @@ export interface SidebarSection {
   items: NavItem[];
 }
 
-// Build's rows that run or feed workflows; the rest of Build is about making agents.
-const WORKFLOW_ROWS = ['/build/workflows', '/build/channels'];
+// Titles that repeat their section's word read shorter in the one sidebar; the page itself keeps its full title.
+const SHORT: Record<string, string> = { 'Knowledge bases': 'Knowledge' };
 
 /**
  * The one sidebar (owner, 12 November): every area as an always-open section, unless the install turns on the area tabs
- * (flag `area_tabs`). Build reads as two sections, agents and workflows. The areas themselves, and so the header trail
- * and search, do not change. A section with no row the person may open is left out.
+ * (flag `area_tabs`). One short link per page and no sub-rows: a page's child pages are tabs on the page itself
+ * (`SectionTabs`). Build is one section, Agent Builder, with Workflows under Agents and Channels after it. The areas
+ * themselves, and so the header trail and search, do not change. A section with no row the person may open is left out.
  */
 export function sidebarSections(allows: Allows): SidebarSection[] {
-  const build = rowsOfArea('Build', allows);
+  const links = (area: AreaName) => rowsOfArea(area, allows).map((i) => ({ ...i, title: SHORT[i.title] ?? i.title, children: undefined }));
   const sections: SidebarSection[] = [
-    { label: 'Work', items: rowsOfArea('Work', allows) },
-    { label: 'Agent Builder', items: build.filter((i) => !WORKFLOW_ROWS.includes(i.url)) },
-    { label: 'Workflows', items: build.filter((i) => WORKFLOW_ROWS.includes(i.url)) },
-    { label: 'Data Gateway', items: rowsOfArea('Data', allows) },
-    { label: 'Governance', items: rowsOfArea('Govern', allows) },
+    { label: 'Work', items: links('Work') },
+    { label: 'Agent Builder', items: links('Build') },
+    { label: 'Data Gateway', items: links('Data') },
+    { label: 'Governance', items: links('Govern') },
   ];
   return sections.filter((s) => s.items.length > 0);
 }

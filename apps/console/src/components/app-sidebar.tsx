@@ -162,6 +162,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     </div>
   );
 
+  // Chat as one link (its child page, All chats, is reached from the chat pages' column).
+  const chatItem = navMatch('/chat')?.item;
+  const chatRow = chatItem ? navRow({ ...chatItem, children: undefined }) : null;
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -224,17 +228,21 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
               {area === 'Work' && chats && chatsGroup}
             </>
           ) : (
-            // Work first with the chats under it, as the area tabs draw Work; then each other area as its own section. A
-            // person with no Work page (chat only) still gets the chats, first.
+            // Each area as its own section, one link per page. Chat is a link in Work: its list of chats is a column on
+            // the chat pages. A person with no Work page (chat only) still gets a Work section holding Chat.
             <>
-              {chats && !sections.some((s) => s.label === 'Work') && chatsGroup}
+              {chats && !sections.some((s) => s.label === 'Work') && (
+                <FoldingGroup label="Work">
+                  <SidebarMenu>{chatRow}</SidebarMenu>
+                </FoldingGroup>
+              )}
               {sections.map((section) => (
-                <React.Fragment key={section.label}>
-                  <FoldingGroup label={section.label}>
-                    <SidebarMenu>{section.items.map(navRow)}</SidebarMenu>
-                  </FoldingGroup>
-                  {section.label === 'Work' && chats && chatsGroup}
-                </React.Fragment>
+                <FoldingGroup key={section.label} label={section.label}>
+                  <SidebarMenu>
+                    {section.items.map(navRow)}
+                    {section.label === 'Work' && chats && chatRow}
+                  </SidebarMenu>
+                </FoldingGroup>
               ))}
             </>
           )

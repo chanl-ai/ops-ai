@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Archive, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCw, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -14,9 +14,8 @@ import { useChatThreadPages, useDeleteThread, useStreamingThreadIds, useUpdateTh
 import { useSticky } from '@/hooks/use-sticky';
 import type { ChatThreadPatch, ChatThreadRow } from '@/lib/types/chat';
 
-const PAGE = 30;
-/** Chats shown under the pinned ones; the rest are on All chats, which searches them. */
-const RECENT = 5;
+import { RECENT, chatListParams } from '@/app/chat/_parts/chat-list';
+
 export const CHAT_GROUPS = ['Pinned', 'Today', 'Yesterday', 'Previous 7 days', 'Older'] as const;
 export type ChatGroup = (typeof CHAT_GROUPS)[number];
 
@@ -32,16 +31,24 @@ export function chatGroupOf(t: Pick<ChatThreadRow, 'pinned' | 'lastMessageAt'>, 
 }
 
 /**
- * The person's chats inside the Work sidebar: pinned chats first, then the five most recent, each with rename, pin,
- * archive and delete, and an All chats row to the page that lists and searches the rest. Hidden while the sidebar is
- * folded to icons.
+ * The person's chats: pinned chats first, then the five most recent, each with rename, pin, archive and delete, and an
+ * All chats row to the page that lists the rest. In the Work sidebar (area tabs on) that is all; in the chat pages'
+ * column (`searchable`) a search box and "Show more chats" read further pages from the server. Hidden while the main
+ * sidebar is folded to icons.
  */
-export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarChats({ onNavigate, searchable = false }: { onNavigate?: () => void; searchable?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const activeId = pathname.startsWith('/chat/') && pathname !== '/chat/conversations' ? pathname.split('/')[2] : undefined;
-  const pages = useChatThreadPages({ pageSize: PAGE, recent: RECENT, filters: { state: ['active', 'pinned'] } });
+  const [search, setSearch] = React.useState('');
+  const [more, setMore] = React.useState(false);
+  const deferred = React.useDeferredValue(search);
+  const params = chatListParams(searchable ? deferred : '', searchable && more);
+  const pages = useChatThreadPages(params);
+  const paged = params.recent === undefined;
   const threads = React.useMemo(() => pages.data?.pages.flatMap((p) => p.data) ?? [], [pages.data]);
+  // The recent slice holds at most five unpinned chats; five back means there may be more to show.
+  const mayHaveMore = searchable && (paged ? !!pages.hasNextPage : threads.filter((t) => !t.pinned).length >= RECENT);
   const streaming = useStreamingThreadIds();
   const update = useUpdateThread();
   const remove = useDeleteThread();
@@ -52,11 +59,11 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
 
   const groups = React.useMemo(() => {
     const out = Object.fromEntries(CHAT_GROUPS.map((g) => [g, [] as ChatThreadRow[]])) as Record<ChatGroup, ChatThreadRow[]>;
-    // Pinned chats first, then the most recent few; the list arrives newest first.
-    const shown = [...threads.filter((t) => t.pinned), ...threads.filter((t) => !t.pinned).slice(0, RECENT)];
+    // Pinned chats first, then the most recent few; the list arrives newest first. A paged read shows every row it has.
+    const shown = paged ? threads : [...threads.filter((t) => t.pinned), ...threads.filter((t) => !t.pinned).slice(0, RECENT)];
     shown.forEach((t) => out[chatGroupOf(t)].push(t));
     return out;
-  }, [threads]);
+  }, [threads, paged]);
 
   const patch = (id: string, p: ChatThreadPatch, done?: string, undo?: ChatThreadPatch) =>
     update.mutate(
@@ -73,6 +80,11 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="group-data-[collapsible=icon]:hidden" data-testid="sidebar-chats">
+      {searchable && (
+        <div className="px-2 pb-2">
+          <SidebarInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats…" aria-label="Search chats" data-testid="chat-list-search" />
+        </div>
+      )}
       {pages.isPending ? (
         <SidebarMenu data-testid="sidebar-chats-loading">
           {Array.from({ length: 5 }, (_, i) => (
@@ -92,7 +104,7 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
         </SidebarMenu>
       ) : !threads.length ? (
         <p className="px-2 py-2 text-xs text-muted-foreground" data-testid="sidebar-chats-empty">
-          No chats yet. Ask something to start one.
+          {search.trim() ? 'No chats match.' : 'No chats yet. Ask something to start one.'}
         </p>
       ) : (
         CHAT_GROUPS.map((g) =>
@@ -157,6 +169,19 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
         )
       )}
       <SidebarMenu>
+        {mayHaveMore && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              className="text-muted-foreground"
+              disabled={pages.isFetchingNextPage}
+              onClick={() => (paged ? void pages.fetchNextPage() : setMore(true))}
+              data-testid="chat-list-more"
+            >
+              <ChevronDown />
+              <span>{pages.isFetchingNextPage ? 'Loading…' : 'Show more chats'}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton asChild isActive={pathname === '/chat/conversations'} className="text-muted-foreground">
             <Link href="/chat/conversations" onClick={onNavigate} data-testid="sidebar-all-chats">

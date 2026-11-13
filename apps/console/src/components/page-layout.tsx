@@ -10,7 +10,7 @@ import { ArrowLeft, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PreviewBadge } from '@/components/shared/preview-badge';
-import { TitleSwitcher } from '@/components/shared/title-switcher';
+import { SectionTabs, TitleSwitcher } from '@/components/shared/title-switcher';
 import { SampleNoteOnPage, SampleOnPage } from '@/components/shared/sample-data';
 import { WholeTokens } from '@/components/shared/whole-tokens';
 import { usePreview } from '@/hooks/use-preview';
@@ -295,6 +295,10 @@ export function PageLayout({
 
         {/* Tabs (if provided). shrink-0: the layout is a full-height column, and a scroll container may shrink to its
             padding in one, so on a page taller than the window the tab row collapsed to 8px and its tabs were clipped. */}
+        {/* A page's sibling pages as tabs when the one sidebar lists only the page itself; drawn nothing otherwise. */}
+        <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 empty:hidden [&_[data-slot=tabs-list]]:w-max">
+          <SectionTabs />
+        </div>
         {tabs && <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 [&_[data-slot=tabs-list]]:w-max">{tabs}</div>}
 
         {/* Content */}

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "Chats get their own column beside the conversation",
+  "description": "On Chat, your chats sit in a column beside the conversation, with search and Show more chats; it folds away on a desktop and opens as a sheet on a phone. The sidebar keeps New chat and a Chat link, lists one short link per page, and a page's related pages (Workflows and Runs, Members, Roles and Tool access) are tabs under its title.",
+  "tag": "improved"
+}
