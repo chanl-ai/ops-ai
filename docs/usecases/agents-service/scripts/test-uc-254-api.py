@@ -16,7 +16,8 @@ REVIEWER = {**TEAM, "X-Dev-User": "m.okafor@harborpine.example"}
 FACTS = [{"label": "Vendor", "value": "Acme Supplies"}, {"label": "New account", "value": "****4410"}]
 
 with agents() as api, engine_worker("uc254"):
-    # 1. The five general types are seeded and read-only.
+    # 1. The five general types are seeded. A seeded type is a system record: a caller holding workflows.manage (the
+    # dev caller, as Builder and Admin since D59) saves a draft over it, and its published v1 stays what tasks open.
     types = required(api.get("/v1/task-types", headers=CALLER), "list the task types")
     seeded = {t["id"] for t in types if t["origin"] == "seed"}
     check(
@@ -25,8 +26,12 @@ with agents() as api, engine_worker("uc254"):
         sorted(seeded),
     )
     seed = required(api.get("/v1/task-types/write_approval", headers=CALLER), "read write_approval")["versions"][0]["record"]
-    locked = api.put("/v1/task-types/write_approval/draft", json=seed, headers=CALLER)
-    check("a seeded type cannot be edited (409 seed_read_only)", locked.status_code == 409, locked.text[:200])
+    saved = api.put("/v1/task-types/write_approval/draft", json=seed, headers=CALLER)
+    check(
+        "a caller holding manage saves a draft over a seeded type; its published v1 stays",
+        saved.status_code == 200 and data(saved)["publishedVersion"] == 1 and data(saved)["origin"] == "seed",
+        saved.text[:200],
+    )
 
     # 2. A copy with its own question, published as v1.
     header = {"region": "header", "bind": {"title": "Change the bank account for {vendor} to {account}?"}}

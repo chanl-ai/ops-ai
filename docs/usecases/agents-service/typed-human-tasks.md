@@ -3,7 +3,7 @@
 Status: current. Id: `uc-254`. Service: `agents-service`. Layers: api, ui.
 
 A Human Task's screen comes from a task type: a versioned record of params, regions and actions. Five general types
-are seeded and read-only; a team copies one to change it. A workflow review step or `POST /v1/tasks` names a type and
+are seeded as system records: only a role holding `workflows.manage` (Builder and Admin) changes one, and a team copies one to make its own. A workflow review step or `POST /v1/tasks` names a type and
 passes its params; the task keeps the version it opened on. An API task runs as the `api_task` system workflow, so it
 is decided in Human Tasks like any other, and the caller reads the decision from `GET /v1/tasks/{id}`.
 
@@ -18,7 +18,7 @@ is decided in Human Tasks like any other, and the caller reads the decision from
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | List the task types; save over write_approval | The five general types are listed; the save is 409 `seed_read_only` |
+| 1 | List the task types; save over write_approval as a caller holding manage | The five general types are listed; the save is 200, a draft, with published v1 kept |
 | 2 | Copy write_approval as vendor_bank_change with its own question; publish v1 | 201 draft v1, then published |
 | 3 | Post a task of vendor_bank_change with no version and no write | 201 on v1 with a `/reviews/` URL and one warning (`call`) |
 | 4 | Publish a v2 with another question; open the task | It still shows v1's question, its facts, no empty write region, Make the change and Decline with their consequences |
