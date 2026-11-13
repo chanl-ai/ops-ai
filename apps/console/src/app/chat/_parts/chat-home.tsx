@@ -6,6 +6,7 @@ import { Bot } from 'lucide-react';
 import { Suggestion } from '@/components/ai-elements/suggestion';
 import { Composer } from '@/components/chat/composer';
 import { NewChatConnectorsPicker } from '@/components/chat/connectors-picker';
+import { ModelSetupCard } from '@/components/models/model-setup-card';
 import { QueryError } from '@/components/shared/query-states';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -105,6 +106,8 @@ export function ChatHome({
               <h1 className="text-2xl font-semibold tracking-tight">{me ? `${greeting()}, ${me.split(' ')[0]}` : greeting()}</h1>
               <p className="text-sm text-muted-foreground">Ask {agent?.name ?? 'Ops Assistant'} anything, start a workflow, or pick up a task.</p>
             </div>
+            {/* Chat is where a missing model key bites first, so the setup shows here as well as on the overview. */}
+            <ModelSetupCard />
             <Composer
               autoFocus
               draftKey="new"

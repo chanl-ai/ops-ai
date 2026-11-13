@@ -17,6 +17,9 @@ the values it had.
 | S3 | The first admin, with no model key, sees the setup card on the overview and it leads to Model providers | ui | 3 | 3 |
 | S4 | After a key is saved the card is gone, and a chat answers and a write runs without waiting | sdk, ui | 4, 5 | 4, 5 |
 | S5 | A workspace created before reads its old values: publish review `major`, new addresses `ask_security` | sdk | 6 | 6 |
+| S6 | Turning an app on runs every call as the team's account; each person signing in stays a choice on the app's settings | sdk, ui | 7 | 7 |
+| S7 | A built-in OAuth app connects with Ops AI's own client when the team brings none (`OPS_PLUGIN_CLIENTS`, filled from the deploy's secret store) | sdk | 8 | 8 |
+| S8 | The invite dialog preselects Builder; Chat shows an admin the model setup; an empty templates list links to Connectors | ui | 9 | 9 |
 
 ## Preconditions
 
@@ -35,8 +38,16 @@ the values it had.
 | 4 | Add the key on Model providers, back to the overview | No setup card |
 | 5 | Ask an agent with a write tool to change a record | It answers and the write runs without a review |
 | 6 | Steps 1 and 2 on a workspace created before this change | `{}` (each area `major`) and `ask_security` |
+| 7 | Turn GitHub on from Connectors › Team setup without changing "Whose account", then `GET /v1/apps/plugin:opsai.github/accounts/{id}` | The window preselects the team account; the account reads `signIn: team`, so a member's first call needs no sign-in of their own |
+| 8 | With `OPS_PLUGIN_CLIENTS` holding a client for the app, turn it on with no auth config of the team's own | The turn-on succeeds and sign-in uses Ops AI's client; with the variable empty it refuses with `client_missing` |
+| 9 | Open Access › Invite, then Chat as the admin with no model key, then From a template in a team with no packs | Builder is selected; Chat shows "Set up your AI model" above the composer; the empty list says to turn an app on in Connectors, linked to `/data/connectors` |
 
 ## Not covered yet
+
+A member sees no setup card before chatting: whether the account has a model key is readable only by an account admin
+(models-service). A member is told to ask an admin when a reply is refused for the missing key (`provider_key_missing`).
+The team-account default and the Builder preselection apply to every workspace's next turn-on and invite; accounts and
+members made before keep what they hold.
 
 Testing the key when it is saved and choosing which of the account's models chat uses need two models-service routes
 that do not exist (test a key, list a provider's models).

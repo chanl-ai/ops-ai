@@ -39,14 +39,15 @@ export function InviteDialog({
 }) {
   const [teamId, setTeamId] = React.useState(defaultTeamId ?? '');
   const [emails, setEmails] = React.useState('');
-  // The least the invitee can do, so an unchanged choice never hands out approval rights.
-  const [role, setRole] = React.useState<MemberRole>('viewer');
+  // Builder, so an invited person can make and change agents from their first day without approval rights; Viewer
+  // stays one click away for someone who only reads.
+  const [role, setRole] = React.useState<MemberRole>('builder');
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!open) return;
     setTeamId(defaultTeamId ?? '');
     setEmails('');
-    setRole('viewer');
+    setRole('builder');
     setError(null);
   }, [open, defaultTeamId]);
 
