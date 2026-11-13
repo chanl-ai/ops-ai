@@ -109,7 +109,8 @@ function MetricKind({ node }: { node: MetricNode }) {
   const config = { v: { label: node.label, color: 'var(--chart-1)' } } satisfies ChartConfig;
   return (
     <Card className={cn(ENTER, 'min-w-36 flex-1 gap-2')} data-kind="metric">
-      <CardHeader>
+      {/* The card has no padding of its own; without a trend below, the header carries the bottom space. */}
+      <CardHeader className={node.trend ? undefined : 'pb-6'}>
         <CardDescription>{node.label}</CardDescription>
         <CardTitle className="text-3xl tabular-nums">
           {typeof node.value === 'number' ? node.value.toLocaleString() : node.value}
