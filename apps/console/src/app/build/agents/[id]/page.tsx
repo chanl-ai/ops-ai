@@ -135,7 +135,21 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
 
   const saved = React.useMemo(() => draftOf(agent), [agent]);
   const [draft, setDraft] = React.useState<AgentDraft>(saved);
-  const set = <K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }));
+  // A newer copy of the agent (a refetch after a cached first paint, a change made elsewhere) moves every field the
+  // draft has not edited. Left stale, those fields differ from `saved`, and autosave would write the old values back.
+  const savedBefore = React.useRef(saved);
+  React.useEffect(() => {
+    const before = savedBefore.current;
+    savedBefore.current = saved;
+    if (before === saved) return;
+    setDraft((d) => {
+      const next = { ...d } as Record<string, unknown>;
+      for (const k of Object.keys(saved) as (keyof AgentDraft)[])
+        if (JSON.stringify(d[k]) === JSON.stringify(before[k])) next[k] = saved[k];
+      return next as unknown as AgentDraft;
+    });
+  }, [saved]);
+  const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }));
   const sections = changedSections(saved, draft);
   const dirty = sections.length > 0;
   const [attach, setAttach] = React.useState<AttachFilter | null>(null);
