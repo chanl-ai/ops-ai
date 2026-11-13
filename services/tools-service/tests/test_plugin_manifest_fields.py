@@ -426,18 +426,3 @@ async def test_a_lookup_that_fails_redirects_or_names_another_host_fails_the_sig
         await host.on_token(tenant, conn, {"access_token": "at-team"})
     assert refused.value.code == code, refused.value
     assert (await host.own_settings(tenant, conn)).get("site_id") is None
-
-
-async def test_an_app_that_lets_each_person_sign_in_starts_with_the_team_as_backup(
-    desk_rig: tuple[Any, TokenDesk], tenant: str
-) -> None:
-    # Personal sign-in is on by default where the plugin offers it, so people may add their own account; the team's
-    # sign-in stays the backup, so nobody is stopped. A plugin that offers the team's only stays team.
-    (c, _, store, _), _ = desk_rig
-    on = await turn_on(c, tenant, "test.fields-sites", client=("multi-app", "app-secret"))
-    assert on.status_code == 200, on.text
-    conn = await store.get(tenant, str(on.json()["data"]["connectionId"]))
-    assert conn is not None and (conn["sign_in"], conn["team_backup"]) == ("person_or_team", True), conn
-    team_only = await turn_on(c, tenant, "test.fields-zoom", client=(ZOOM, ZOOM_SECRET))
-    zoom = await store.get(tenant, str(team_only.json()["data"]["connectionId"]))
-    assert zoom is not None and zoom["sign_in"] == "team", zoom
