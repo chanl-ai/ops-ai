@@ -72,6 +72,8 @@ export const CONNECTOR_VIEWS: NavChild[] = [
 /** The four areas the sidebar shows one at a time, in the order the header offers them and ⌘1 to ⌘4 reach them. */
 export const AREAS = ['Work', 'Build', 'Data', 'Govern'] as const;
 export type AreaName = (typeof AREAS)[number];
+/** What each area is called on screen: the sidebar, the header trail, search and the area tabs. */
+export const AREA_LABEL: Record<AreaName, string> = { Work: 'Work', Build: 'Agent Builder', Data: 'Data Gateway', Govern: 'Governance' };
 
 export interface NavGroup {
   label: AreaName;
@@ -184,9 +186,9 @@ export function sidebarSections(allows: Allows): SidebarSection[] {
   const links = (area: AreaName) => rowsOfArea(area, allows).map((i) => ({ ...i, title: SHORT[i.title] ?? i.title, children: undefined }));
   const sections: SidebarSection[] = [
     { label: 'Work', items: links('Work') },
-    { label: 'Agent Builder', items: links('Build') },
-    { label: 'Data Gateway', items: links('Data') },
-    { label: 'Governance', items: links('Govern') },
+    { label: AREA_LABEL.Build, items: links('Build') },
+    { label: AREA_LABEL.Data, items: links('Data') },
+    { label: AREA_LABEL.Govern, items: links('Govern') },
   ];
   return sections.filter((s) => s.items.length > 0);
 }
@@ -257,7 +259,7 @@ export function crumbsFor(pathname: string): Crumb[] {
   const best = navMatch(pathname);
   if (!best) return [];
   // Work's pages are the everyday ones, so their trail names no area.
-  const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: best.group.label }];
+  const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: AREA_LABEL[best.group.label] }];
   // My connectors already names its view, so only the Data row's trail adds it (Team setup).
   const view = best.item.views && best.group !== NAV[0] && viewFor(best.item.views, pathname);
   const crumbs: Crumb[] = [

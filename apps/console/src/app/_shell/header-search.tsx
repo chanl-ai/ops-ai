@@ -12,7 +12,7 @@ import { useFlagged } from '@/hooks/flag-queries';
 import { useNavAllows } from '@/hooks/me-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
 import { useTeam } from '@/hooks/use-team';
-import { childrenOffered, itemOffered, NAV, SETTINGS_VIEW } from '@/lib/nav';
+import { AREA_LABEL, childrenOffered, itemOffered, NAV, SETTINGS_VIEW } from '@/lib/nav';
 import type { NavNeed } from '@/lib/nav';
 import type { FlagName } from '@/lib/types/flags';
 import type { SearchHit } from '@/lib/types/search';
@@ -66,11 +66,11 @@ export function HeaderSearch() {
     g.items
       .filter((i) => i.url !== '/chat' && itemOffered(allows, i))
       .flatMap((i) => [
-        { title: i.title, href: i.url, area: g.label, icon: i.icon },
-        ...childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: g.label, section: i.title, icon: c.icon ?? i.icon })),
+        { title: i.title, href: i.url, area: AREA_LABEL[g.label], icon: i.icon },
+        ...childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: AREA_LABEL[g.label], section: i.title, icon: c.icon ?? i.icon })),
       ])
   );
-  const chatPages: PalettePage[] = NAV.flatMap((g) => g.items.filter((i) => i.url === '/chat' && itemOffered(allows, i)).flatMap((i) => childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: g.label, section: 'Chat', icon: c.icon ?? i.icon }))));
+  const chatPages: PalettePage[] = NAV.flatMap((g) => g.items.filter((i) => i.url === '/chat' && itemOffered(allows, i)).flatMap((i) => childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: AREA_LABEL[g.label], section: 'Chat', icon: c.icon ?? i.icon }))));
   const allowedExtra = extraPages.filter((e) => allows(e.needs) === true);
   const pages: PalettePage[] = [...navPages, ...chatPages, ...allowedExtra.filter((e) => ![...navPages, ...chatPages].some((p) => p.href === e.href))];
   const newChat: PaletteAction = { id: 'new-chat', label: 'New chat', icon: MessageSquarePlus, keywords: 'ask conversation start', run: () => go('/chat') };

@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortc
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useFlag } from '@/hooks/flag-queries';
 import { useMyPermissions, useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
-import { areaOf, type AreaName, firstPageOf, offeredAreas, rowsOfArea } from '@/lib/nav';
+import { AREA_LABEL, areaOf, type AreaName, firstPageOf, offeredAreas, rowsOfArea } from '@/lib/nav';
 
 const ICONS: Record<AreaName, LucideIcon> = { Work: Briefcase, Build: Hammer, Data: Database, Govern: ShieldCheck };
 
@@ -180,16 +180,16 @@ function AreaTabs() {
           return (
             <ToggleGroupItem key={a} value={a} className="gap-1.5 px-2.5">
               <Icon />
-              {a}
+              {AREA_LABEL[a]}
             </ToggleGroupItem>
           );
         })}
       </ToggleGroup>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-11 shrink-0 gap-1.5 px-3 md:hidden" aria-label={`Area: ${current}. Switch area`}>
+          <Button variant="outline" className="h-11 shrink-0 gap-1.5 px-3 md:hidden" aria-label={`Area: ${current && AREA_LABEL[current]}. Switch area`}>
             {React.createElement(ICONS[current], { className: 'size-4' })}
-            {current}
+            {current && AREA_LABEL[current]}
             <ChevronDown className="size-4 text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
@@ -199,7 +199,7 @@ function AreaTabs() {
             return (
               <DropdownMenuItem key={a} onSelect={() => select(a)} aria-current={a === lit ? 'true' : undefined}>
                 <Icon className="size-4" />
-                {a}
+                {AREA_LABEL[a]}
                 <DropdownMenuShortcut>⌘{i + 1}</DropdownMenuShortcut>
               </DropdownMenuItem>
             );
