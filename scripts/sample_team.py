@@ -165,6 +165,18 @@ def sign_in(urls: dict[str, str], email: str, password: str, team: str | None = 
     return Session(urls, str(data(r)["token"]), email, team, password)
 
 
+def settled(person: Session) -> Session:
+    """The person signed in again until their token outlives the role and permission writes the install just made: a
+    token issued before the last of them is refused as `permissions_changed` on a new database."""
+    for _ in range(int(WAIT_S / 1.5)):
+        r = person("kb").get("/v1/knowledge-bases", params={"pageSize": 1})
+        if r.status_code != 401 or "permissions_changed" not in r.text:
+            return person
+        time.sleep(1.5)
+        person.token = sign_in(person.urls, person.email, person.password, person.team).token
+    return person
+
+
 def until(probe: Any, seconds: float = WAIT_S, every: float = 1.5) -> Any:
     """`probe()` until it returns something truthy, or None after `seconds`."""
     end = time.monotonic() + seconds
@@ -1254,6 +1266,8 @@ def install(args: argparse.Namespace) -> int:
     if members:
         ensure_members(admin, team, [(e, r) for e, r in members], os.environ[args.member_password_env])
     people["admin"] = admin
+    people = {k: settled(v) for k, v in people.items()}
+    admin = people["admin"]
     ADMIN.append(admin)
     lead, builder, approver = people["lead"], people["builder"], people["approver"]
     ensure_templates(builder, spec["templates"])
