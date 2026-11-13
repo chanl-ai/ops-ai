@@ -13,7 +13,7 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 
 | Part | Built | Where |
 |---|---|---|
-| Bases, sources, items, versions, pieces, changes, runs; team isolation | Built | `services/kb-service/src/ops_kb/store/knowledge.py`; migrations kb_0001 to kb_0023 |
+| Bases, sources, items, versions, pieces, changes, runs; team isolation | Built | `services/kb-service/src/ops_kb/store/knowledge.py`; migrations kb_0001 to kb_0024 |
 | Source kinds file, text, push, tool; website sources as plugin sources | Built | `services/kb-service/src/ops_kb/service.py:101`; `source_settings.py:72-73` |
 | Source kinds listed by the API, so the console keeps no list of its own | Built | `services/kb-service/src/ops_kb/app.py:617` |
 | Settings per source for every stage, validated on save | Built | `source_settings.py`; migration `0015_source_settings.py` |
@@ -30,10 +30,14 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | Contract test any knowledge-source plugin must pass | Built | `packages/ops_plugin_sdk/src/ops_plugin_sdk/testing.py:179` |
 | Website, SharePoint and Confluence plugins | Built, not run against a real tenant | pinned in `deploy/plugins.json` |
 | An agent searches only its own bases, unless its "all team knowledge bases" option is on | Built | `packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py:83`, `:631-635` |
+| A base's settings in five sections, each patched alone and checked whole; presets fill them all | Built | `schemas.py` (`RetrievalSettings` to `SourceDefaults`); `service.py` (`settings_of`, `settled`, `PRESETS`); migration `0024_base_settings.py` |
+| A pushed item's `url`, cited by search | Built | `schemas.py` (`WrittenItemIn.url`); `service.py` (`put_item`) |
+| The base's answer settings read by the kernel | Designed, not built yet | stored; only the query route reads the no-answer message |
+| The base's sync settings applied by syncs; its source defaults copied to a new source | Designed, not built yet | stored and served; syncs and new sources do not read them yet |
 | JavaScript pages rendered in a headless browser worker | Designed, not built yet | |
 | An answer with no cited passage withheld, on by default | Designed, not built yet | the kernel's optional end check corrects uncited knowledge once and is off by default (`packages/ops_agent_kernel/src/ops_agent_kernel/types.py:93-95`) |
 | Playground answer written by a kernel turn | Designed, not built yet | the query route returns passages only (`service.py:1834-1837`) |
-| Filters on source, tags and metadata applied to search | Designed, not built yet | stored in the base's retrieval settings (`service.py:90-93`); not read by `retrieval.py` or `search.py` |
+| Filters on collection, source, tags and metadata applied to search | Designed, not built yet | stored and checked in the base's retrieval settings (`RetrievalSettings`); not read by `retrieval.py` or `search.py` |
 | Filters from conversation variables; freshness and trust boosts | Designed, not built yet | |
 | Keyword lane on the shared `ops_store.dialect.full_text` | Designed, not built yet | the lane has its own PostgreSQL query (`store/fulltext.py:1-2`) |
 | Search on SQL Server | Designed, not built yet | |
@@ -82,6 +86,39 @@ Because every item has a snapshot, a re-index never fetches from the web or the 
 | `kb_runs` | Each sync or rebuild run with counts and model spend | Yes |
 | `kb_outbox` | Audit entries and events, delivered by a relay | Yes |
 | `kb_queries` | Each question, masked: rewrite, lanes run, top score, answered or withheld and why, pieces cited; kept 90 days | No |
+
+## Settings of a base
+
+A base's settings are five sections. `PATCH /v1/knowledge-bases/{id}` takes any of them; the keys sent change and the
+rest of that section and the other sections stay. A key a section does not keep, or a value out of range, is 400
+`invalid_settings`, so no caller saves a value nothing reads. Retrieval sits in the base's `retrieval` column, the
+other four in its `settings` column (kb_0024); null reads as the defaults.
+
+| Section | Holds | Default | Who reads it |
+|---|---|---|---|
+| `retrieval` | Mode, weight, rerank, rewrite and its instruction and model, pieces returned, keyword and meaning floors; the scope (`scopeCollections`, `scopeSourceIds`), `tagsInclude`, `tagsExclude`, `includeUntagged`, metadata `filters` | Hybrid, 0.6, 8 pieces, floors 0.5 and 0.38, no scope | The search (`retrieval.py`); the scope and filters are not read yet |
+| `answer` | `shape` (`answer_with_citations` or `chunks`), `withholdUncited`, `noAnswerMessage` | An answer with citations, withheld when uncited | The query route's no-answer message; the agents kernel is the planned reader |
+| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Served as the base's `automation` (`act` or `suggest`); syncs do not read it yet |
+| `access` | `mcp.enabled`, `mcp.toolName` | Off, `search_<slug>` | Nothing yet; the MCP search tool is not built |
+| `sourceDefaults` | How a new source splits: `strategies`, `size`, `overlap`, `childSize`; AI steps are refused here and set per source with their estimate | At headings with context headers, 400 tokens, overlap 40 | Nothing yet; a new source will copy it, and each source keeps its own copy |
+
+A base is searchable by its whole team; no narrower list of people is kept, and `access.members` is always
+`{"mode": "all"}`. The model, temperature, length and instructions of an answer belong to the agent, so a base does not
+keep them, nor `reranker`, `expandCount`, `asOf`, `structuredTables`, `citationStyle` or `includeChunks`. A base saved
+before kb_0024 keeps those keys in its row until its next save; they are left out when read, and its answer shape and
+no-answer message carry over into `answer`.
+
+A preset given at create (`balanced`, `precise`, or `raw`, shown as "Search only") fills every section; the values a
+create sends override it, and any later patch wins. The base does not record which preset it started from.
+
+| Preset | Pieces | Keyword floor | Meaning floor | Gives back | Withholds uncited |
+|---|---|---|---|---|---|
+| `balanced` | 8 | 0.50 | 0.38 | Answer with citations | Yes |
+| `precise` | 5 | 0.65 | 0.45 | Answer with citations | Yes |
+| `raw` (Search only) | 10 | 0.40 | 0.30 | Pieces only | No |
+
+A pushed item (`POST /v1/sources/{id}/items`) may carry the `url` it lives at, such as a web page's address; the item
+and every passage cut from it cite that `url`.
 
 ## Settings per stage
 

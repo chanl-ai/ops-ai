@@ -6,6 +6,7 @@ import { createMockApi } from './mock';
 import { withServedAgents } from './mock/evals';
 import { createMockAuthProvider } from './mock/auth';
 import { createNoNotifications } from './notifications-none';
+import { recordMockReads } from './sample-reads';
 import type { AuthProvider } from '@/lib/auth/provider';
 import { createFirebaseProvider } from '@/lib/auth/providers/firebase';
 import { createOidcProvider } from '@/lib/auth/providers/oidc';
@@ -49,7 +50,8 @@ const onRealService = Boolean(chatUrl || casesUrl || registryUrl || toolsUrl || 
  * NEXT_PUBLIC_OPS_EMBED_URL for the embed app that serves the chat loader in snippets.
  */
 function createApi(): OpsApi {
-  let api = baseUrl ? createHttpApi(baseUrl) : createMockApi();
+  const mock = baseUrl ? null : createMockApi();
+  let api = mock ?? createHttpApi(baseUrl!);
   if (chatUrl) api = { ...api, chat: createChatOnlyHttp(chatUrl) };
   if (casesUrl) {
     const { runs, run, runState, startRun, startable, reviews } = createCasesOnlyHttp(casesUrl);
@@ -91,6 +93,9 @@ function createApi(): OpsApi {
     );
     api = { ...api, settings: { ...api.settings, members: access.members }, invites: access.invites, governance: { ...api.governance, audit: access.audit } };
   }
+  // Beside real services, every read still answered by the mock is recorded with the page it was made on, so the
+  // page says it shows sample data even when the table below calls its prefix served (lib/api/sample-reads.ts).
+  if (mock && onRealService) api = recordMockReads(api, mock);
   return api;
 }
 export const api: OpsApi = createApi();

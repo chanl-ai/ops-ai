@@ -12,9 +12,10 @@ import { Button } from '@/components/ui/button';
 import { PreviewBadge } from '@/components/shared/preview-badge';
 import { SectionTabs, TitleSwitcher } from '@/components/shared/title-switcher';
 import { SampleNoteOnPage, SampleOnPage } from '@/components/shared/sample-data';
+import { SampleDataBanner } from '@/components/shared/sample-data-banner';
 import { WholeTokens } from '@/components/shared/whole-tokens';
 import { PageSaveSlot } from '@/components/shared/page-save-actions';
-import { usePreview } from '@/hooks/use-preview';
+import { usePreview, useSampleReads } from '@/hooks/use-preview';
 import {
   BulkSelectionContext,
   useBulkSelectionProvider,
@@ -94,7 +95,10 @@ export function PageLayout({
   // A sample note on the page says why already; the header then keeps only its badge, so the words appear once.
   const [notes, setNotes] = useState(0);
   const reportNote = useCallback((change: 1 | -1) => setNotes((n) => n + change), []);
-  const preview = previewProp ?? (previewOfArea || samples > 0);
+  // A read the mock answered on this page counts whatever the area table says: a page under a served prefix can
+  // still call an area no service serves.
+  const mockReads = useSampleReads();
+  const preview = (previewProp ?? (previewOfArea || samples > 0)) || mockReads.length > 0;
 
   const renderIcon = () => {
     if (!icon) return null;
@@ -277,17 +281,7 @@ export function PageLayout({
                   className="flex flex-wrap items-center gap-2 gap-y-1 mt-2 [contain:inline-size]"
                   data-testid="page-badges"
                 >
-                  {preview && (
-                    // The reason in words, not only on hover: a touch screen never shows the badge's title.
-                    <>
-                      <PreviewBadge />
-                      {notes === 0 && (
-                        <span className="text-xs text-muted-foreground" data-testid="preview-reason">
-                          Parts of this page show sample data that isn’t stored yet, so they are read only.
-                        </span>
-                      )}
-                    </>
-                  )}
+                  {preview && <PreviewBadge />}
                   {badge}
                 </div>
               )}
@@ -308,6 +302,14 @@ export function PageLayout({
           <SectionTabs />
         </div>
         {tabs && <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 [&_[data-slot=tabs-list]]:w-max">{tabs}</div>}
+
+        {/* The reason in words, not only on the badge's hover: a touch screen never shows a title. A sample note in the
+            page names its own section, so the page's banner is not drawn twice. */}
+        {preview && notes === 0 && (
+          <div className="shrink-0 pt-4">
+            <SampleDataBanner />
+          </div>
+        )}
 
         {/* Content */}
         {/* px-1 / -mx-1 gives cards breathing room so borders & focus rings
