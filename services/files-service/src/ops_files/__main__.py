@@ -44,10 +44,13 @@ RETENTION_CLASSES = (
 )
 
 # What each purpose accepts until a tenant saves its own limits in Storage settings. A chat attachment is read for the
-# agent through documents-service, so it takes only the formats documents-service parses (ops_ingest.parsers.parse).
+# agent through documents-service, so it takes only the formats documents-service reads (ops_ingest.reading: the
+# format parsers, plus OCR for pictures).
 PURPOSE_LIMITS = (
     PurposeLimit(
-        purpose="chat_attachment", allowed_types=["pdf", "docx", "xlsx", "csv", "html", "txt", "md"], max_size_mb=10
+        purpose="chat_attachment",
+        allowed_types=["pdf", "docx", "xlsx", "pptx", "csv", "html", "txt", "md", "png", "jpg", "jpeg"],
+        max_size_mb=10,
     ),
 )
 
