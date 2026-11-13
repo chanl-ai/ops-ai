@@ -124,6 +124,25 @@ export async function approveToolReview(moduleId: string, headers: Record<string
 }
 
 /**
+ * Approves a publish request as `approver`, a second person of the team: on a platform stack the requester may not
+ * decide their own request. Takes what the publish call answered: an agent's or workflow's review, or a guardrail
+ * naming its `pendingRequestId` (none when the team's rule approved it at once). Returns the decided record; throws on
+ * a refusal.
+ */
+export async function approvePublishRequest(answered: { id: string; status?: string; pendingRequestId?: string | null }, approver: Record<string, string>): Promise<Record<string, unknown>> {
+  const guardrail = answered.id.startsWith('gr_');
+  if (guardrail ? !answered.pendingRequestId : answered.status === 'approved') return answered;
+  const path = guardrail ? `/v1/guardrails/${answered.id}/publish-requests/${answered.pendingRequestId}/decision` : `/v1/publish-requests/${answered.id}/decision`;
+  const r = await fetch(`http://127.0.0.1:${AGENTS_PORT}${path}`, {
+    method: 'POST',
+    headers: { ...approver, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision: 'approved' }),
+  });
+  if (!r.ok) throw new Error(`approving ${answered.id}: ${r.status} ${await r.text()}`);
+  return ((await r.json()) as { data: Record<string, unknown> }).data;
+}
+
+/**
  * Proves each unverified domain of a saved sign-in provider as a bank would: publishes the claim's TXT record
  * at the fake identity provider's DNS and asks platform-service to verify it. Throws on any refusal.
  */
