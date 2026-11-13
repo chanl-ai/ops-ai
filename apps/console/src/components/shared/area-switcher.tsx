@@ -7,6 +7,7 @@ import { Briefcase, ChevronDown, Database, Hammer, ShieldCheck, type LucideIcon 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useFlag } from '@/hooks/flag-queries';
 import { useMyPermissions, useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { areaOf, type AreaName, firstPageOf, offeredAreas, rowsOfArea } from '@/lib/nav';
 
@@ -98,11 +99,30 @@ function typing(e: KeyboardEvent): boolean {
 }
 
 /**
- * The area control in the top bar: four buttons beside the trail, one dropdown on a phone. Nothing is drawn for a person
- * with a single area, or while their cells load. ⌘1 to ⌘4 reach the offered areas in order; the page the person last
- * visited in an area is where it opens. It also keeps the memory and sends `/` to where the person left off.
+ * The area control in the top bar, drawn only when the install turns on `area_tabs`. Off, the sidebar lists every area
+ * as a section and nothing here remembers areas or moves the person, except that `/` still sends a person with no
+ * Overview (chat only) to their first page.
  */
 export function AreaSwitcher() {
+  return useFlag('area_tabs') ? <AreaTabs /> : <HomeWithoutOverview />;
+}
+
+function HomeWithoutOverview() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { areas, ready, overview, pageFor } = useAreas();
+  React.useEffect(() => {
+    if (pathname === '/' && ready && areas.length && !overview) router.replace(pageFor(areas[0]));
+  }, [pathname, ready, overview, areas.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/**
+ * The area tabs: four buttons beside the trail, one dropdown on a phone. Nothing is drawn for a person with a single
+ * area, or while their cells load. ⌘1 to ⌘4 reach the offered areas in order; the page the person last visited in an
+ * area is where it opens. It also keeps the memory and sends `/` to where the person left off.
+ */
+function AreaTabs() {
   const pathname = usePathname();
   const router = useRouter();
   const { areas, current, lit, ready, select, person, memory, pageFor, bump, overview } = useAreas();

@@ -1,5 +1,5 @@
 import type { Icon } from '@tabler/icons-react';
-import { PERSONAL_SETTINGS, SETTINGS_NAV } from './settings-tree';
+import { PERSONAL_SETTINGS, SETTINGS_NAV } from './settings-tree.ts';
 import { IconChecklist, IconCpu, IconGavel, IconDatabase, IconFileSearch, IconFileText, IconFolder, IconHeartbeat, IconHistory, IconHome, IconInbox, IconKey, IconLayoutDashboard, IconList, IconListDetails, IconMail, IconMessage, IconMessages, IconPlayerPlay, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShield, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck, IconUsers, IconUserShield } from '@tabler/icons-react';
 
 /** A page under its parent item: an indented row in the sidebar and an entry in the page-title switcher. */
@@ -163,6 +163,32 @@ export function childrenOffered(allows: Allows, item: NavItem): NavChild[] {
 /** The rows of an area the person may open: every item that draws a row. */
 export function rowsOfArea(area: AreaName, allows: Allows): NavItem[] {
   return NAV.find((g) => g.label === area)!.items.filter((i) => !i.hidden && itemOffered(allows, i));
+}
+
+/** A heading in the one sidebar and the rows under it. */
+export interface SidebarSection {
+  label: string;
+  items: NavItem[];
+}
+
+// Build's rows that run or feed workflows; the rest of Build is about making agents.
+const WORKFLOW_ROWS = ['/build/workflows', '/build/channels'];
+
+/**
+ * The one sidebar (owner, 12 November): every area as an always-open section, unless the install turns on the area tabs
+ * (flag `area_tabs`). Build reads as two sections, agents and workflows. The areas themselves, and so the header trail
+ * and search, do not change. A section with no row the person may open is left out.
+ */
+export function sidebarSections(allows: Allows): SidebarSection[] {
+  const build = rowsOfArea('Build', allows);
+  const sections: SidebarSection[] = [
+    { label: 'Work', items: rowsOfArea('Work', allows) },
+    { label: 'Agent Builder', items: build.filter((i) => !WORKFLOW_ROWS.includes(i.url)) },
+    { label: 'Workflows', items: build.filter((i) => WORKFLOW_ROWS.includes(i.url)) },
+    { label: 'Data Gateway', items: rowsOfArea('Data', allows) },
+    { label: 'Governance', items: rowsOfArea('Govern', allows) },
+  ];
+  return sections.filter((s) => s.items.length > 0);
 }
 
 /** The areas the person has a page in, in header order. */

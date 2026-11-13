@@ -31,11 +31,12 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { useFlag } from '@/hooks/flag-queries';
 import { useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useBrand, useLookups, useOverview } from '@/hooks/queries';
 import { usePreviewCheck } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
-import { type NavItem, childrenOffered, itemOffered, navMatch, rowsOfArea } from '@/lib/nav';
+import { type NavItem, childrenOffered, itemOffered, navMatch, rowsOfArea, sidebarSections } from '@/lib/nav';
 import { useAreas } from '@/components/shared/area-switcher';
 import { readOverview } from '@/lib/overview';
 
@@ -97,6 +98,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
   const allows = useNavAllows();
   const { current: area, ready: cellsReady, failed: cellsFailed, retry: retryCells } = useAreas();
+  // Area tabs on: the sidebar lists the area picked in the top bar. Off (the default): every area as a section.
+  const areaTabs = useFlag('area_tabs');
+  const chats = allows({ area: 'chat', action: 'run' }) === true;
+  const sections = sidebarSections(allows);
   const badges: Record<string, number | undefined> = { '/work/tasks': waiting };
 
   // One console page as a sidebar row, with its child pages as sub-rows under a fold.
@@ -149,6 +154,14 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
   };
 
+  const chatsGroup = (
+    <div className="group-data-[collapsible=icon]:hidden">
+      <FoldingGroup label="Chats" open={groupOpen('Chats')} onOpenChange={(o) => setGroupOpen('Chats', o)}>
+        <SidebarChats onNavigate={closeOnPhone} />
+      </FoldingGroup>
+    </div>
+  );
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -164,8 +177,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           isCreating={create.isPending}
         />
         <SidebarMenu>
-          {/* New chat leads Work; every other area is its rows alone. */}
-          {area === 'Work' && cellsReady && allows({ area: 'chat', action: 'run' }) === true && (
+          {/* New chat leads the sidebar; with area tabs on, only in Work, as every other area is its rows alone. */}
+          {(!areaTabs || area === 'Work') && cellsReady && chats && (
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="New chat" isActive={pathname === '/chat'}>
                 <Link href="/chat" onClick={closeOnPhone} data-testid="sidebar-new-chat">
@@ -201,20 +214,30 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           )
         ) : (
-          <>
-            <SidebarGroup className="pb-0">
-              <SidebarGroupContent>
-                <SidebarMenu>{rowsOfArea(area, allows).map(navRow)}</SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            {area === 'Work' && allows({ area: 'chat', action: 'run' }) === true && (
-              <div className="group-data-[collapsible=icon]:hidden">
-                <FoldingGroup label="Chats" open={groupOpen('Chats')} onOpenChange={(o) => setGroupOpen('Chats', o)}>
-                  <SidebarChats onNavigate={closeOnPhone} />
-                </FoldingGroup>
-              </div>
-            )}
-          </>
+          areaTabs ? (
+            <>
+              <SidebarGroup className="pb-0">
+                <SidebarGroupContent>
+                  <SidebarMenu>{rowsOfArea(area, allows).map(navRow)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+              {area === 'Work' && chats && chatsGroup}
+            </>
+          ) : (
+            // Work first with the chats under it, as the area tabs draw Work; then each other area as its own section. A
+            // person with no Work page (chat only) still gets the chats, first.
+            <>
+              {chats && !sections.some((s) => s.label === 'Work') && chatsGroup}
+              {sections.map((section) => (
+                <React.Fragment key={section.label}>
+                  <FoldingGroup label={section.label}>
+                    <SidebarMenu>{section.items.map(navRow)}</SidebarMenu>
+                  </FoldingGroup>
+                  {section.label === 'Work' && chats && chatsGroup}
+                </React.Fragment>
+              ))}
+            </>
+          )
         )}
       </SidebarContent>
       <SidebarFooter>
