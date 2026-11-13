@@ -153,21 +153,23 @@ class PolicyStore:
                 )
 
 
-def new_workspace_values(team_ids: list[str]) -> dict[str, Any]:
-    """What a workspace starts with when it is created: publishes go live at once in each first team and an app may call
-    any public address. Written as the workspace's own rows, so a workspace created before reads the catalogue default
-    it always read and keeps it; an admin turns either back on in Settings. Approvals and step-up need no row: the
-    catalogue already has them off."""
+def new_workspace_values() -> dict[str, Any]:
+    """What a workspace starts with when it is created: publishes go live at once, an app may call any public address,
+    and a write its plugin or seed marked ask-first runs unless the team asks. Per-team values sit under `*`, the
+    workspace's own part, so a team added later starts the same. Written as the workspace's own rows, so a workspace
+    created before reads the catalogue default it always read; an admin turns each back on in Settings. Step-up needs
+    no row: the catalogue has it off."""
     return {
-        "publishReview": {t: dict.fromkeys(PUBLISH_AREAS, "never") for t in team_ids},
+        "publishReview": {"*": dict.fromkeys(PUBLISH_AREAS, "never")},
         "egressNewHosts": "any_public",
+        "appChanges": {"*": {"makersAsk": False}},
     }
 
 
-async def write_new_workspace_policies(c: Any, tenant_id: str, team_ids: list[str], *, at: str) -> None:
+async def write_new_workspace_policies(c: Any, tenant_id: str, *, at: str) -> None:
     """Inside the transaction that inserted the tenant row, and only then, so a later seed run never overwrites what an
     admin set since."""
-    for key, wanted in new_workspace_values(team_ids).items():
+    for key, wanted in new_workspace_values().items():
         # A per-team value is checked one team's part at a time, as a save through `set` checks it.
         value = (
             {team: check_value(key, part) for team, part in wanted.items()}

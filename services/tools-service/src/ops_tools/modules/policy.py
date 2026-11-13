@@ -58,7 +58,9 @@ class WriteApprovals:
         try:
             team = await self.platform.get("/v1/policies/appChanges", tenant=tenant_id)
             by_app = await self.platform.get("/v1/policies/appChangesByApp", tenant=tenant_id)
-            of_team = dict(team.get("value") or {}).get(team_id) if team_id else None
+            held = dict(team.get("value") or {})
+            # `*` is the workspace's own value (a new workspace's makersAsk off); a team's saved part wins over it.
+            of_team = {**dict(held.get("*") or {}), **dict(held.get(team_id) or {})} if team_id else None
             apps = dict(by_app.get("value") or {}).get(team_id) if team_id else None
             return (of_team or {}), dict(apps or {})
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
@@ -91,6 +93,10 @@ class WriteApprovals:
         # `setting` is the tool's own mode (see `tool_mode`). A bare True or False is a stored requires_approval, which
         # cannot be told from the old default, so it is no override: the app and the team decide.
         mode = setting if isinstance(setting, str) else None
+        # A new workspace turns makers' asks off (appChanges makersAsk false): a wait the manifest or seed declared
+        # stops being the tool's answer, so the app and team decide; an answer a person set on a tool still holds.
+        if isinstance(team, dict) and cast(dict[str, Any], team).get("makersAsk") is False and maker_asks(module, tool):
+            mode = None
         admin: Any = by_app.get(tool_key(tool)) if tool else None
         if isinstance(admin, dict):
             held = cast(dict[str, Any], admin)
@@ -104,6 +110,17 @@ class WriteApprovals:
             "draft": draft,
         }
         return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account)
+
+
+def maker_asks(module: dict[str, Any] | None, tool: str | None) -> bool:
+    """Whether the tool's reviewer answer is its maker's: a plugin's operation (its row has no editor, so the answer is
+    the manifest's) or a seeded one that declared the wait (requires_approval true beside it)."""
+    if not module or not tool:
+        return False
+    op = next((o for o in module.get("operations") or [] if o.get("name") == tool), None)
+    if op is None or op.get("approval_mode") != "reviewer":
+        return False
+    return str(module.get("template_id") or "").startswith("plugin:") or op.get("requires_approval") is True
 
 
 def tool_key(tool: str) -> str:

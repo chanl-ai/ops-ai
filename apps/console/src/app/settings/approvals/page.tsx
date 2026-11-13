@@ -48,8 +48,10 @@ const ANSWERS: { value: string; label: string }[] = [
 ];
 
 const ofTeam = (value: unknown, teamId: string) => {
-  const held = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>)[teamId] : undefined;
-  return held && typeof held === 'object' ? (held as Record<string, unknown>) : {};
+  // `*` is the workspace's own part (a new workspace's makersAsk); the team's saved part wins over it.
+  const map = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const part = (k: string) => (map[k] && typeof map[k] === 'object' ? (map[k] as Record<string, unknown>) : {});
+  return { ...part('*'), ...part(teamId) };
 };
 
 /** Govern › Approvals: one switch for whether an agent asks before it changes an app, and who answers. */
@@ -96,7 +98,7 @@ export default function ApprovalsPage() {
 
   const saveTeam = form.handleSubmit(async (v) => {
     try {
-      await set.mutateAsync({ key: 'appChanges', teamId, value: { ask: v.ask, answer: v.answer, reviewerRole: v.answer === BY_REVIEWER ? v.reviewerRole : null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: saved.testRunsAsk !== false } });
+      await set.mutateAsync({ key: 'appChanges', teamId, value: { ask: v.ask, answer: v.answer, reviewerRole: v.answer === BY_REVIEWER ? v.reviewerRole : null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: saved.testRunsAsk !== false, ...(typeof saved.makersAsk === 'boolean' ? { makersAsk: saved.makersAsk } : {}) } });
       if (v.requesterMayDecide !== (mayDecide?.value === true)) await set.mutateAsync({ key: 'requesterMayDecide', value: v.requesterMayDecide });
       toast.success(`Saved: ${SWITCH}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
     } catch (e) {
@@ -106,7 +108,7 @@ export default function ApprovalsPage() {
   // Saves the checkbox alone, on top of what the team saved, so a half-edited switch above is not stored with it.
   const saveTestAccounts = async () => {
     try {
-      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: form.getValues('testAccountsNeverAsk'), testRunsAsk: saved.testRunsAsk !== false };
+      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: form.getValues('testAccountsNeverAsk'), testRunsAsk: saved.testRunsAsk !== false, ...(typeof saved.makersAsk === 'boolean' ? { makersAsk: saved.makersAsk } : {}) };
       await set.mutateAsync({ key: 'appChanges', teamId, value });
       toast.success(`Saved: ${TEST_ACCOUNTS}`);
     } catch (e) {
@@ -115,7 +117,7 @@ export default function ApprovalsPage() {
   };
   const saveTestRuns = async () => {
     try {
-      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: form.getValues('testRunsAsk') };
+      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: form.getValues('testRunsAsk'), ...(typeof saved.makersAsk === 'boolean' ? { makersAsk: saved.makersAsk } : {}) };
       await set.mutateAsync({ key: 'appChanges', teamId, value });
       toast.success(`Saved: ${TEST_RUNS}`);
     } catch (e) {

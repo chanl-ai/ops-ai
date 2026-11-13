@@ -60,7 +60,7 @@ async def write_seed(
         )
         seeded: list[dict[str, Any]] = data.get("teams") or []
         if made_tenant.first() is not None:
-            await write_new_workspace_policies(c, tenant_id, [str(t["id"]) for t in seeded], at=now)
+            await write_new_workspace_policies(c, tenant_id, at=now)
         if security_team in {str(t["id"]) for t in seeded}:
             # The workspace's record names its Security team; a workspace that already names one keeps it.
             await c.execute(
