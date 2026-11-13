@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -47,6 +47,10 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then \
 		$(MAKE) -s sample-team && touch "$(OPS_RUN_DIR)/sample-team.installed"; \
 	fi
+	@# The demo policy library, once per database, in team Platform where the signed-in dev admin sees it.
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-library.installed" ]; then \
+		$(MAKE) -s sample-library && touch "$(OPS_RUN_DIR)/sample-library.installed"; \
+	fi
 
 reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first (CONFIRM=yes skips)
 	@if [ "$(CONFIRM)" != yes ]; then \
@@ -54,7 +58,7 @@ reset-db: ## Wipe the stack's database and rebuild it empty from the chains; ask
 		[ "$$answer" = yes ] || { echo "reset-db: nothing changed"; exit 1; }; \
 	fi
 	@$(STACK) stop-for-reset
-	@rm -f "$(OPS_RUN_DIR)/sample-team.installed"
+	@rm -f "$(OPS_RUN_DIR)/sample-team.installed" "$(OPS_RUN_DIR)/sample-library.installed"
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --reset
 	@$(MAKE) -s migrate
 
@@ -83,6 +87,9 @@ health: ## Probe every service, OPA and PostgreSQL; shows port, state and who ow
 
 sample-team: ## Install the sample team (scripts/sample-team/sample-team.json) as the first admin; a second run finds it (NAME= another team, EXPECT_FOUND=1 fails on anything made)
 	@MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_team.py install $(if $(NAME),--name "$(NAME)") $(if $(EXPECT_FOUND),--expect-found)
+
+sample-library: ## Install the demo policy library (scripts/sample-team/library/library.json) in team Platform as the platform dev role; a second run finds it (EXPECT_FOUND=1 fails on anything made)
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_library.py $(if $(EXPECT_FOUND),--expect-found)
 
 sample-teams: ## Install the first teams (scripts/sample-team/teams/*.json) with their people and knowledge, and each team's assistant; a second run finds them
 	@for f in $(ROOT)/scripts/sample-team/teams/*.json; do \

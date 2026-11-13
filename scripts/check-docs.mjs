@@ -18,7 +18,7 @@ const MAPPED = ['services', 'packages'];
 const ROOT_FILES = new Set(['README.md', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'SECURITY.md']);
 const BRIEF_NAMES = new Set(['README.md', 'CLAUDE.md', 'AGENTS.md']);
 // Agent working state, not documentation.
-const IGNORED = /^(\.claude|\.cursor|shape|specs|evidence|triage|services\/[^/]+\/seed|examples\/.+\/resources\/)/; // working records and demo data (a knowledge base's documents), not documentation
+const IGNORED = /^(\.claude|\.cursor|shape|specs|evidence|triage|services\/[^/]+\/seed|scripts\/sample-team\/library\/|examples\/.+\/resources\/)/; // working records and demo data (a knowledge base's documents), not documentation
 // Copilot's files, generated from docs/guide/skills/ by scripts/agent_skills.py; their source is the doc.
 const GENERATED = /^\.github\/(prompts\/[^/]+\.prompt\.md|copilot-instructions\.md)$/;
 const BRIEF_MAX_LINES = 40;
