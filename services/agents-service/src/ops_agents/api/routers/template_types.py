@@ -20,6 +20,7 @@ from ..auth import Principal
 from ..case_type_seeds import case_type_store
 from ..deps import Runtime
 from ..task_type_seeds import task_type_store
+from ..typed_record_routes import store_team
 from . import case_types as case_routes
 from . import task_types as task_routes
 
@@ -37,8 +38,9 @@ LABELS = {"description": "description", "deadline": "deadline", "params": "input
           "defaults": "defaults"}  # fmt: skip
 
 
-async def _store(rt: Runtime, kind: str) -> Any:
-    return await (case_type_store(rt) if kind == "case_type" else task_type_store(rt))
+async def _store(rt: Runtime, kind: str, team: str | None = None) -> Any:
+    """`team` defaults to the acting team, which every templates route has set before it reads a type (`_team`)."""
+    return await (case_type_store(rt, team) if kind == "case_type" else task_type_store(rt, team))
 
 
 def body_of(kind: str, t: dict[str, Any]) -> dict[str, Any]:
@@ -88,7 +90,7 @@ async def digest(rt: Runtime, kind: str, type_id: str) -> str | None:
 
 
 async def names_in_use(rt: Runtime, kind: str, team: str) -> set[str]:
-    return {str(r["name"]).casefold() for r in await (await _store(rt, kind)).rows() if r["team_id"] == team}
+    return {str(r["name"]).casefold() for r in await (await _store(rt, kind, team)).rows() if r["team_id"] == team}
 
 
 async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: dict[str, Any]) -> int:
@@ -97,7 +99,7 @@ async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: dict
         await case_routes.save_case_type(rt, me, type_id, case_routes.Definition.model_validate(record))
     else:
         await task_routes.save_task_type(rt, me, type_id, task_routes.Definition.model_validate(record))
-    return int((await (await _store(rt, kind)).get(type_id))["version"])
+    return int((await (await _store(rt, kind, store_team(me))).get(type_id))["version"])
 
 
 def flat(kind: str, record: dict[str, Any] | None) -> dict[str, Any] | None:
