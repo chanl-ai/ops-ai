@@ -1765,6 +1765,7 @@ class PluginTemplate(TypedDict):
         "guardrail",
         "knowledge_source",
     ]
+    off: NotRequired[str | None]
     plugin: PluginRef
     requires: TemplateRequires
     source: str

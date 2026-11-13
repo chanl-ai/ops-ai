@@ -832,9 +832,9 @@ export interface paths {
         };
         /**
          * List Plugin Templates
-         * @description Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the
-         *     team, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,
-         *     since templates are listed per team.
+         * @description Every template and knowledge source of every installed plugin, with its body, each marked `off` while its
+         *     plugin is off for the caller's team. A person in the team, or a service holding `tools:view` that names the
+         *     team, may read it; a call naming no team is refused, since templates are listed per team.
          */
         get: operations["plugins_list_plugin_templates"];
         put?: never;
@@ -4551,6 +4551,8 @@ export interface components {
              * @enum {string}
              */
             kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
+            /** Off */
+            off?: string | null;
             plugin: components["schemas"]["PluginRef"];
             requires: components["schemas"]["TemplateRequires"];
             /** Source */

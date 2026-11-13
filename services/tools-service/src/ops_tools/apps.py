@@ -710,7 +710,8 @@ class Apps:
                         "mayManage": may,
                         "managedClient": platform,
                         "plugin": {
-                            "teamOn": bool(b.get("enabled")),
+                            # A built-in app the team never switched is on (PluginHost.off_reason).
+                            "teamOn": bool(b.get("enabled")) if pid in bindings else pid in self.plugins.builtin,
                             "platformApp": platform,
                             "kinds": list(m.connection.kinds),
                             "signIn": list(m.connection.sign_in),

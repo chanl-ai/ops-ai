@@ -1926,6 +1926,7 @@ class TemplateView(TypedDict, closed=True):
     id: str
     installed: Installed
     kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
+    off: NotRequired[str | None]
     plugin: TemplatePlugin
     removeCell: NotRequired[RemoveCell | None]
     requires: TemplateRequires

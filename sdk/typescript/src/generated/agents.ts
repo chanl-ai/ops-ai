@@ -9629,6 +9629,8 @@ export interface components {
              * @enum {string}
              */
             kind: "agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type";
+            /** Off */
+            off?: string | null;
             plugin: components["schemas"]["TemplatePlugin"];
             removeCell?: components["schemas"]["RemoveCell"] | null;
             requires: components["schemas"]["TemplateRequires"];

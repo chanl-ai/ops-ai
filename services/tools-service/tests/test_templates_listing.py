@@ -1,14 +1,20 @@
 """The plugins a fresh install loads, by failure mode: a clone or image with an empty plugins folder loads no app and
 no template pack, so the template gallery is empty; and an outside copy of a built-in plugin in the plugins folder (a
-stale synced copy, a PLUGINS_DEV link to a working copy) makes the loader refuse the plugin in both places."""
+stale synced copy, a PLUGINS_DEV link to a working copy) makes the loader refuse the plugin in both places; and a new
+team has every built-in plugin off, so its templates list but none of their tools run until an admin turns each on."""
 
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
 
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 from ops_plugin_sdk.loader import discover
 from ops_service_kit.settings import Settings
+from ops_tools.plugins.host import PluginHost
+from ops_tools.store.modules import ModuleStore
+from ops_tools.store.plugin_bindings import PluginBindings
 
 BUILTIN = Path(__file__).resolve().parents[3] / "builtin-plugins"
 SHIPPED = {
@@ -47,3 +53,17 @@ def test_an_outside_copy_of_a_built_in_plugin_replaces_it_instead_of_disabling_b
     assert set(ok) == SHIPPED
     assert str(outside / "core") in settings.plugin_folders
     assert str(BUILTIN / "ops_plugin_core") not in settings.plugin_folders
+
+
+async def test_a_built_in_plugin_is_on_for_a_team_that_never_switched_it_and_off_once_an_admin_turns_it_off(
+    engine: AsyncEngine, tenant: str, tmp_path: Path
+) -> None:
+    settings = Settings(plugins_dir=tmp_path / "plugins", builtin_plugins_dir=BUILTIN)
+    bindings = PluginBindings(engine)
+    host = PluginHost.start(ModuleStore(engine), bindings, {}, settings.plugin_folders, builtin_dir=BUILTIN)
+    salesforce = host.plugins["opsai.salesforce"]
+    assert await host.off_reason(tenant, "team_new", salesforce) is None
+    await bindings.put(tenant, "team_new", "opsai.salesforce", enabled=False, connection_id=None, settings={}, by="t")
+    assert await host.off_reason(tenant, "team_new", salesforce) == (
+        "Salesforce is off for this team; a team admin turns it on."
+    )

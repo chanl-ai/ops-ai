@@ -197,8 +197,11 @@ class TemplateView(WireModel):
     # available: no copy yet; added: a copy of what the app ships now; update_available: the app ships a newer or
     # changed template than the copy was made from; removed_upstream: the team holds a copy the app no longer ships.
     state: State
-    # Whether the caller's roles let them add it, so a screen offers Add only then.
+    # Whether the caller's roles let them add it and its app's tools may run for the team, so a screen offers Add only
+    # then.
     can_add: bool
+    # Why its app is off for the team when the copy needs the app's tools, naming who turns it on; None otherwise.
+    off: str | None = None
     add_cell: AddCell
     remove_cell: RemoveCell | None = None
     # The team's newest live copy, which Open, Remove and an update act on.
@@ -397,7 +400,8 @@ async def list_templates(
                 | {
                     "installed": installed,
                     "state": _state(installed, True),
-                    "canAdd": _may_add(me, t["kind"], team),
+                    "canAdd": _may_add(me, t["kind"], team) and _off(t) is None,
+                    "off": _off(t),
                     "addCell": {"area": AREAS[t["kind"]], "action": "create"},
                     "removeCell": await _remove_cell(rt, latest) if latest else None,
                     "copy": _copy_view(latest) if latest else None,
@@ -680,10 +684,18 @@ async def _dependencies(
     return {resource_ref(r)[1]: records[r] for r in wanted}
 
 
+def _off(t: dict[str, Any]) -> str | None:
+    """Why the template cannot be copied yet: its app is off for the team and the copy would grant the app's tools,
+    which do not run for the team. A template needing no tool (a starter skill, a task type) copies either way."""
+    return str(t["off"]) if t.get("off") and (t.get("requires") or {}).get("tools") else None
+
+
 def _template(offered: dict[str, dict[str, Any]], source: str, template_id: str) -> dict[str, Any]:
     t = offered.get(f"{source}:{template_id}")
     if t is None or t.get("kind") not in KINDS:
-        raise TemplateNotFound(f"No template {template_id} from {source} for this team; its plugin may be off for it.")
+        raise TemplateNotFound(f"No template {template_id} from {source} for this team.")
+    if (off := _off(t)) is not None:
+        raise Unprocessable(f"{t['title']} uses its app's tools. {off}", code="app_off")
     return t
 
 

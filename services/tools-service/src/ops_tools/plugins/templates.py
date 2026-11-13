@@ -3,9 +3,10 @@ them, with each body a copy is made from, and its knowledge sources, which a tea
 
 tools-service is the one service that loads plugins, so agents-service and documents-service read a template's body
 here (their service tokens hold `tools:view` and name the team) and make the team's copy through their own create
-paths. A plugin's templates are listed only while it is on for the team (the install switch and the team's), the same
-rule its tools follow, so a team never copies an agent that grants tools it cannot call. A template's required tools
-are answered as the operations the team's plugin module serves.
+paths. Every installed plugin's templates are listed for every team; the team's switch decides only what runs, so a
+template of a plugin off for the team carries `off`, why, and the services that make copies refuse a copy that needs
+its tools while it is off. A template's required tools are answered as the operations the team's plugin module
+serves.
 
 `/v1/apps/{app}/resources` is the app's Resources tab in one answer: each resource with its state for the team, the
 team's copy and whether the caller may add it. agents-service and documents-service keep the copies, so their template
@@ -77,6 +78,8 @@ class PluginTemplate(_Wire):
     # sha256 of the body as canonical JSON: a copy keeps the digest it was made from, so a template whose body changed
     # since then shows as changed even when its version did not move.
     digest: str
+    # Why the plugin is off for the team, in words naming who turns it on; None while it is on.
+    off: str | None = None
 
 
 def body_of(plugin: Plugin, template: Template) -> dict[str, Any]:
@@ -281,6 +284,8 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
             cell = cast(dict[str, str], row.get("addCell") or {})
             held = row.get("state") != "available"
             may = row.get("state") != "removed_upstream" and access.may(who, cell["area"], cell["action"])
+            # Its app is off for the team and the copy needs the app's tools (agents-service decides which).
+            blocked = cast(str | None, row.get("off"))
             gone = cast(dict[str, Any], row.get("removeCell") or {})
             removes = bool(row.get("copy") and gone) and access.may(
                 who, str(gone.get("area")), str(gone.get("action")), owner=gone.get("owner")
@@ -292,14 +297,19 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                     | {
                         "plugin": {"id": m.id, "title": m.title, "version": m.version},
                         "state": row["state"],
-                        "canAdd": may and not held,
+                        "canAdd": may and not held and blocked is None,
                         "canRemove": removes,
-                        "reason": None if may or held else who_adds(cell["area"], cell["action"]),
+                        "reason": blocked
+                        if blocked and not held
+                        else None
+                        if may or held
+                        else who_adds(cell["area"], cell["action"]),
                         "service": SERVICES[str(row["kind"])],
                     }
                 ).model_dump(by_alias=True)
             )
-        if m.knowledge_sources and await host.off_reason(who.tenant_id, who.team_id, plugin) is None:
+        if m.knowledge_sources:
+            off = await host.off_reason(who.tenant_id, who.team_id, plugin)
             signed_out = await needs_sign_in(who.tenant_id, who.team_id, plugin)
             may = access.may(who, KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"])
             removes = access.may(who, "knowledge", "delete")
@@ -329,8 +339,9 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                             "copy": copy,
                             "installed": {"copies": len(mine), "version": 1 if mine else None, "newerAvailable": False},
                             "canRemove": bool(mine) and removes,
-                            "canAdd": may and state == "available",
-                            "reason": None if may else who_adds(KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"]),
+                            "canAdd": may and state == "available" and off is None,
+                            "reason": off
+                            or (None if may else who_adds(KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"])),
                             "service": "kb",
                         }
                     ).model_dump(by_alias=True)
@@ -345,9 +356,9 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
     async def list_plugin_templates(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Principal, Depends(tools_reader)], kind: Annotated[Kind | None, Query()] = None
     ) -> JSONResponse:
-        """Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the
-        team, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,
-        since templates are listed per team."""
+        """Every template and knowledge source of every installed plugin, with its body, each marked `off` while its
+        plugin is off for the caller's team. A person in the team, or a service holding `tools:view` that names the
+        team, may read it; a call naming no team is refused, since templates are listed per team."""
         if not who.team_id:
             raise ValidationFailed("Templates are listed for one team; this call names none.", code="team_required")
         out: list[dict[str, Any]] = []
@@ -355,10 +366,9 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
             m = plugin.manifest
             if not (m.templates or m.knowledge_sources):
                 continue
-            if await host.off_reason(who.tenant_id, who.team_id, plugin) is not None:
-                continue
-            out += [view_of(plugin, t) for t in m.templates if kind in (None, t.kind)]
-            out += [source_view(plugin, s) for s in m.knowledge_sources if kind in (None, "knowledge_source")]
+            off = {"off": await host.off_reason(who.tenant_id, who.team_id, plugin)}
+            out += [view_of(plugin, t) | off for t in m.templates if kind in (None, t.kind)]
+            out += [source_view(plugin, s) | off for s in m.knowledge_sources if kind in (None, "knowledge_source")]
         return ok(out)
 
     return r

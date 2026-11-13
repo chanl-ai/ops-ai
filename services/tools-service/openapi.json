@@ -9264,6 +9264,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "off": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Off"
+          },
           "plugin": {
             "$ref": "#/components/schemas/PluginRef"
           },
@@ -24139,7 +24150,7 @@
     },
     "/v1/plugin-templates": {
       "get": {
-        "description": "Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the\nteam, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,\nsince templates are listed per team.",
+        "description": "Every template and knowledge source of every installed plugin, with its body, each marked `off` while its\nplugin is off for the caller's team. A person in the team, or a service holding `tools:view` that names the\nteam, may read it; a call naming no team is refused, since templates are listed per team.",
         "operationId": "plugins_list_plugin_templates",
         "parameters": [
           {

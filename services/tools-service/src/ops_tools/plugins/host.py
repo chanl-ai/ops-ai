@@ -13,6 +13,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlencode, urlsplit
 
@@ -474,6 +475,9 @@ class PluginHost:
     # The plugin_updates flag: each team runs the plugin version it took. Off, the row is written once and
     # every call reads the installed manifest, as before.
     versions: bool = False
+    # The plugins Ops AI ships built in: on for a team that never set its switch, so a new team's templates both list
+    # and run; a team admin turning one off writes a binding that keeps it off.
+    builtin: frozenset[str] = frozenset()
     _written: set[str] = field(default_factory=set[str])
 
     @classmethod
@@ -488,6 +492,7 @@ class PluginHost:
         http: httpx.AsyncClient | None = None,
         policy: EgressPolicy | None = None,
         versions: bool = False,
+        builtin_dir: Path | None = None,
     ) -> PluginHost:
         """Reads every installed plugin once, at start, and the developer's plugin folders; a failed one is left out and
         logged with why, where the install's admin reads it."""
@@ -495,6 +500,12 @@ class PluginHost:
         for item in loaded:
             if not item.ok:
                 log.warning("plugin_failed", plugin=item.name, error=item.error)
+        inside = builtin_dir.resolve() if builtin_dir else None
+        builtin = frozenset(
+            i.plugin.manifest.id
+            for i in loaded
+            if i.plugin is not None and inside is not None and i.plugin.root.resolve().is_relative_to(inside)
+        )
         return cls(
             store,
             bindings,
@@ -504,6 +515,7 @@ class PluginHost:
             http=http,
             policy=policy,
             versions=versions,
+            builtin=builtin,
         )
 
     @classmethod
@@ -531,6 +543,7 @@ class PluginHost:
             http=http,
             policy=policy,
             versions=flags.on("plugin_updates"),
+            builtin_dir=settings.builtin_plugins_dir,
         )
 
     @property
@@ -692,11 +705,13 @@ class PluginHost:
         return dict(self.locked.get(plugin_id) or {})
 
     async def off_reason(self, tenant_id: str, team_id: str | None, plugin: Plugin) -> str | None:
-        """Why the installed plugin is off for the team, or None when the team turned it on: the one place that
-        decides whether a plugin's tools run, list and template for a team."""
+        """Why the installed plugin is off for the team, or None when it is on (the team turned it on, or it is built in
+        and the team never turned it off): the one place that decides whether a plugin's tools run for a team."""
         if team_id is None:
             return f"{plugin.manifest.title} is turned on per team; this call names no team."
         b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
+        if b is None and plugin.manifest.id in self.builtin:
+            return None
         if b is None or not b["enabled"]:
             return f"{plugin.manifest.title} is off for this team; a team admin turns it on."
         return None

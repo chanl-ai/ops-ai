@@ -18773,6 +18773,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "off": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Off"
+          },
           "plugin": {
             "$ref": "#/components/schemas/TemplatePlugin"
           },
