@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
+# python-pptx ships partial stubs: placeholders, chart data and shape text are typed as their base classes, so the
+# fixture builders below read as unknown or wrong types though they run as documented.
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportArgumentType=false
 """PowerPoint decks through the shared reading, by failure mode: a slide's text, notes, table or chart is lost or
 lands on another slide's page; a slide with only a picture fails the file or vanishes, so slide numbers shift."""
 
@@ -11,6 +14,8 @@ from PIL import Image
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
+from pptx.presentation import Presentation as Deck
+from pptx.slide import Slide
 from pptx.util import Inches
 
 from ops_ingest.reading import ReadingSettings, read
@@ -26,7 +31,7 @@ def _deck(build: object) -> bytes:
     return out.getvalue()
 
 
-def _title_slide(prs: Presentation, title: str, body: str) -> object:
+def _title_slide(prs: Deck, title: str, body: str) -> Slide:
     slide = prs.slides.add_slide(prs.slide_layouts[1])
     slide.shapes.title.text = title
     slide.placeholders[1].text = body
@@ -34,7 +39,7 @@ def _title_slide(prs: Presentation, title: str, body: str) -> object:
 
 
 def test_slides_read_in_order_with_notes_tables_and_charts() -> None:
-    def build(prs: Presentation) -> None:
+    def build(prs: Deck) -> None:
         first = _title_slide(prs, "Q3 lending review", "Approvals rose 12 percent")
         first.notes_slide.notes_text_frame.text = "Mention the Denver branch first"
         rows = first.shapes.add_table(2, 2, Inches(1), Inches(5), Inches(4), Inches(1)).table
@@ -67,7 +72,7 @@ def test_a_picture_only_slide_is_an_empty_page_in_its_place() -> None:
     picture = io.BytesIO()
     Image.new("RGB", (40, 40), "navy").save(picture, format="PNG")
 
-    def build(prs: Presentation) -> None:
+    def build(prs: Deck) -> None:
         _title_slide(prs, "Agenda", "Rates and pipeline")
         blank = prs.slides.add_slide(prs.slide_layouts[6])
         picture.seek(0)
