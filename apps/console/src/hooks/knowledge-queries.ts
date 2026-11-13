@@ -90,7 +90,16 @@ function useWrite<A, R>(fn: (a: A) => Promise<R>, alsoRoots: string[] = []) {
   });
 }
 
-export const useCreateKb = () => useWrite((i: KnowledgeBaseInput) => api.knowledge.kbs.create(i), ['lookups']);
+// Files chosen in the create dialog are added once the base exists, so they index at once with its settings.
+export const useCreateKb = () =>
+  useWrite(
+    async ({ input, fileIds = [] }: { input: KnowledgeBaseInput; fileIds?: string[] }) => {
+      const kb = await api.knowledge.kbs.create(input);
+      const added = fileIds.length ? await api.knowledge.kbs.addDocuments(kb.id, fileIds) : undefined;
+      return { kb, added };
+    },
+    ['lookups', 'files'],
+  );
 export const useUpdateKb = (id: string) => useWrite((p: KnowledgeBasePatch) => api.knowledge.kbs.update(id, p), ['lookups']);
 export const useDeleteKb = () => useWrite((id: string) => api.knowledge.kbs.remove(id), ['lookups']);
 export const useRefreshKb = () => useWrite((id: string) => api.knowledge.kbs.refresh(id));

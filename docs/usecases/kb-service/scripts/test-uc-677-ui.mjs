@@ -38,14 +38,14 @@ await withUiStack(
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
       const started = Date.now();
-      await page.goto(`${consoleUrl}/data/knowledge/${base.id}?tab=retrieval`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('kb-retrieval-rerank').click({ timeout: 120_000 });
-      await page.locator('#ret-query-model').fill('default');
+      await page.goto(`${consoleUrl}/data/knowledge/${base.id}?tab=settings`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('kb-settings-rerank').click({ timeout: 120_000 });
+      await page.locator('#set-query-model').fill('default');
       const saving = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/knowledge-bases/${base.id}`), { timeout: 60_000 }));
-      await page.getByTestId('kb-retrieval-save').click();
+      await page.getByTestId('kb-settings-save').click();
       const saved = await saving;
       const sent = saved ? JSON.parse(saved.request().postData() ?? '{}').retrieval : undefined;
-      check('7 the Retrieval tab saves rerank on with the alias named', saved?.status() === 200 && sent?.rerank === true && sent?.queryModel === 'default', { status: saved?.status(), sent });
+      check('7 the Settings tab saves rerank on with the alias named', saved?.status() === 200 && sent?.rerank === true && sent?.queryModel === 'default', { status: saved?.status(), sent });
 
       await page.goto(`${consoleUrl}/data/knowledge/${base.id}?tab=playground`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.locator('#pg-question').fill('domestic wire', { timeout: 120_000 });
@@ -67,8 +67,8 @@ await withUiStack(
       const still = await browser.newContext({ viewport: { width: 1440, height: 1000 }, storageState: state });
       const shots = await still.newPage();
       await shootBothWidths(shots, 'knowledge', 'uc-677-retrieval-rerank', async () => {
-        await shots.goto(`${consoleUrl}/data/knowledge/${base.id}?tab=retrieval`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await shots.getByTestId('kb-retrieval-rerank').waitFor({ timeout: 60_000 });
+        await shots.goto(`${consoleUrl}/data/knowledge/${base.id}?tab=settings`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await shots.getByTestId('kb-settings-rerank').waitFor({ timeout: 60_000 });
       });
       await shootBothWidths(shots, 'knowledge', 'uc-677-playground-reranked', async () => {
         await shots.goto(`${consoleUrl}/data/knowledge/${base.id}?tab=playground`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

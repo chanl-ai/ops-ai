@@ -25,21 +25,20 @@ import { count, relativeTime } from '@/lib/format';
 
 import { KbDocumentsTab } from '../_parts/kb-documents-tab';
 import { KbPlaygroundTab } from '../_parts/kb-playground-tab';
-import { KbRetrievalTab } from '../_parts/kb-retrieval-tab';
+import { KbSettingsTab } from '../_parts/kb-settings-tab';
 import { KbSourcesTab } from '../_parts/kb-sources-tab';
 import { KnowledgeChangesQueue } from '@/components/knowledge/knowledge-changes-queue';
 
-const TABS = ['overview', 'sources', 'documents', 'changes', 'retrieval', 'playground'] as const;
+// Documents first, Overview last. The Playground stays a tab until the Test sheet replaces it.
+const TABS = ['documents', 'sources', 'changes', 'settings', 'overview', 'playground'] as const;
 type Tab = (typeof TABS)[number];
-// Documents are added and managed under Sources. The documents view stays a route so a citation or a failure
-// count can open a document, but it is not offered as a tab.
-const SHOWN = TABS.filter((t) => t !== 'documents');
-const LABEL: Record<Tab, string> = { overview: 'Overview', sources: 'Sources', documents: 'Documents', changes: 'Changes', retrieval: 'Retrieval', playground: 'Playground' };
+const SHOWN = TABS;
+const LABEL: Record<Tab, string> = { overview: 'Overview', sources: 'Sources', documents: 'Documents', changes: 'Changes', settings: 'Settings', playground: 'Playground' };
 
 export default function KnowledgeBasePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [tab, setTab] = useTabParam(TABS, 'overview');
+  const [tab, setTab] = useTabParam(TABS, 'documents');
   const changes = useKnowledgeChanges({ page: 1, pageSize: 1, view: 'open', kbId: id });
   const query = useKnowledgeBase(id);
   const refresh = useRefreshKb();
@@ -112,6 +111,7 @@ export default function KnowledgeBasePage() {
               {SHOWN.map((t) => (
                 <TabsTrigger key={t} value={t}>
                   {LABEL[t]}
+                  {t === 'documents' && <span className="ml-1 text-muted-foreground tabular-nums">{kb.stats.documents}</span>}
                   {t === 'sources' && <span className="ml-1 text-muted-foreground tabular-nums">{kb.sources.length}</span>}
                   {t === 'changes' && !!changes.data?.viewCounts.open && (
                     <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground tabular-nums">
@@ -138,7 +138,7 @@ export default function KnowledgeBasePage() {
             />
           )}
           {tab === 'sources' && <KbSourcesTab kb={kb} canBuild={canBuild} />}
-          {tab === 'retrieval' && <KbRetrievalTab kb={kb} />}
+          {tab === 'settings' && <KbSettingsTab kb={kb} />}
           </BuilderFieldset>
           {tab === 'documents' && <KbDocumentsTab kb={kb} canBuild={canBuild} />}
           {tab === 'playground' && <KbPlaygroundTab kb={kb} />}

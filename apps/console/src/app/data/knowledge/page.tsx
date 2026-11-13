@@ -287,10 +287,13 @@ export default function KnowledgeBasesPage() {
         existingNames={(allKbs.data?.data ?? []).map((k) => k.name)}
         isPending={create.isPending}
         defaultOwner={session?.user.email ?? ''}
-        onSubmit={async (input) => {
-          const kb = await create.mutateAsync(input);
-          toast.success(`Created ${kb.name}`, { description: 'Attach a source on its Sources tab; the first index build starts then.' });
-          router.push(`/data/knowledge/${kb.id}?tab=sources`);
+        onSubmit={async (input, fileIds) => {
+          const { kb, added } = await create.mutateAsync({ input, fileIds });
+          const failed = added?.run.counts.failed ?? 0;
+          toast.success(`Created ${kb.name}`, {
+            description: added ? `${plural(added.files.length, 'file')} added${failed ? `; ${plural(failed, 'file')} could not be read` : ''}.` : 'Add documents or a source on its Sources tab; the first index build starts then.',
+          });
+          router.push(`/data/knowledge/${kb.id}?tab=${added ? 'documents' : 'sources'}`);
         }}
       />
 
