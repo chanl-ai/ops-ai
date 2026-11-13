@@ -927,6 +927,8 @@ export interface components {
             tags: string[];
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
             /** Verified */
             verified: boolean;
             /** Version */
@@ -1378,6 +1380,8 @@ export interface components {
             tags: string[];
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
             /** Verified */
             verified: boolean;
             /** Version */
@@ -1465,6 +1469,8 @@ export interface components {
             tags: string[];
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
             /** Verified */
             verified: boolean;
             /** Version */
@@ -1506,6 +1512,10 @@ export interface components {
         KnowledgeBase: {
             /** Access */
             access: {
+                [key: string]: unknown;
+            };
+            /** Answer */
+            answer: {
                 [key: string]: unknown;
             };
             /** Automation */
@@ -1556,10 +1566,18 @@ export interface components {
             };
             /** Slug */
             slug: string;
+            /** Sourcedefaults */
+            sourceDefaults: {
+                [key: string]: unknown;
+            };
             /** Sources */
             sources: components["schemas"]["KbSourceLink"][];
             /** Stats */
             stats: {
+                [key: string]: unknown;
+            };
+            /** Sync */
+            sync: {
                 [key: string]: unknown;
             };
             /** Templateid */
@@ -1583,6 +1601,10 @@ export interface components {
              * @default true
              */
             agentsKnown: boolean;
+            /** Answer */
+            answer: {
+                [key: string]: unknown;
+            };
             /** Attached */
             attached: components["schemas"]["KbSourceView"][];
             /** Automation */
@@ -1644,6 +1666,10 @@ export interface components {
             };
             /** Slug */
             slug: string;
+            /** Sourcedefaults */
+            sourceDefaults: {
+                [key: string]: unknown;
+            };
             /** Sourcenames */
             sourceNames: string[];
             /** Sources */
@@ -1654,11 +1680,23 @@ export interface components {
             };
             /** Suggestedquestions */
             suggestedQuestions: string[];
+            /** Sync */
+            sync: {
+                [key: string]: unknown;
+            };
             /** Templateid */
             templateId?: string | null;
         };
         /** KnowledgeBaseIn */
         KnowledgeBaseIn: {
+            /** Access */
+            access?: {
+                [key: string]: unknown;
+            } | null;
+            /** Answer */
+            answer?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Collections
              * @default []
@@ -1688,16 +1726,36 @@ export interface components {
             preset: "balanced" | "precise" | "raw";
             /** Protection */
             protection?: ("system" | "managed") | null;
+            /** Retrieval */
+            retrieval?: {
+                [key: string]: unknown;
+            } | null;
+            /** Sourcedefaults */
+            sourceDefaults?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Sourceids
              * @default []
              */
             sourceIds: string[];
+            /** Sync */
+            sync?: {
+                [key: string]: unknown;
+            } | null;
             /** Templateid */
             templateId?: string | null;
         };
         /** KnowledgeBasePatch */
         KnowledgeBasePatch: {
+            /** Access */
+            access?: {
+                [key: string]: unknown;
+            } | null;
+            /** Answer */
+            answer?: {
+                [key: string]: unknown;
+            } | null;
             /** Collections */
             collections?: string[] | null;
             /** Color */
@@ -1712,6 +1770,14 @@ export interface components {
             protection?: ("system" | "managed") | null;
             /** Retrieval */
             retrieval?: {
+                [key: string]: unknown;
+            } | null;
+            /** Sourcedefaults */
+            sourceDefaults?: {
+                [key: string]: unknown;
+            } | null;
+            /** Sync */
+            sync?: {
                 [key: string]: unknown;
             } | null;
             /** Templateid */
@@ -1735,6 +1801,10 @@ export interface components {
              * @default true
              */
             agentsKnown: boolean;
+            /** Answer */
+            answer: {
+                [key: string]: unknown;
+            };
             /** Automation */
             automation: string;
             /** Collections */
@@ -1783,12 +1853,20 @@ export interface components {
             };
             /** Slug */
             slug: string;
+            /** Sourcedefaults */
+            sourceDefaults: {
+                [key: string]: unknown;
+            };
             /** Sourcenames */
             sourceNames: string[];
             /** Sources */
             sources: components["schemas"]["KbSourceLink"][];
             /** Stats */
             stats: {
+                [key: string]: unknown;
+            };
+            /** Sync */
+            sync: {
                 [key: string]: unknown;
             };
             /** Templateid */
@@ -2193,6 +2271,8 @@ export interface components {
         };
         /** SearchIn */
         SearchIn: {
+            /** Collection */
+            collection?: string | null;
             /** Kbids */
             kbIds: string[];
             /** Limit */
@@ -2842,6 +2922,8 @@ export interface components {
             text?: string | null;
             /** Title */
             title?: string | null;
+            /** Url */
+            url?: string | null;
         };
     };
     responses: never;

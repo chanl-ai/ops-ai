@@ -80,6 +80,7 @@ class DocumentRow(TypedDict, closed=True):
     status: str
     tags: list[str]
     title: str
+    url: NotRequired[str | None]
     verified: bool
     version: str
     versionStatus: str
@@ -179,6 +180,7 @@ class Item(TypedDict, closed=True):
     status: str
     tags: list[str]
     title: str
+    url: NotRequired[str | None]
     verified: bool
     version: str
     versionStatus: str
@@ -220,6 +222,7 @@ class ItemWithDetail(TypedDict, closed=True):
     status: str
     tags: list[str]
     title: str
+    url: NotRequired[str | None]
     verified: bool
     version: str
     versionStatus: str
@@ -234,6 +237,7 @@ class KbSourceLink(TypedDict, closed=True):
 
 class KnowledgeBase(TypedDict, closed=True):
     access: dict[str, Any]
+    answer: dict[str, Any]
     automation: str
     collections: list[str]
     color: str
@@ -253,12 +257,16 @@ class KnowledgeBase(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     retrieval: dict[str, Any]
     slug: str
+    sourceDefaults: dict[str, Any]
     sources: list[KbSourceLink]
     stats: dict[str, Any]
+    sync: dict[str, Any]
     templateId: NotRequired[str | None]
 
 
 class KnowledgeBaseIn(TypedDict):
+    access: NotRequired[dict[str, Any] | None]
+    answer: NotRequired[dict[str, Any] | None]
     collections: NotRequired[list[str]]
     color: NotRequired[str]
     description: NotRequired[str]
@@ -267,11 +275,16 @@ class KnowledgeBaseIn(TypedDict):
     owner: NotRequired[str | None]
     preset: NotRequired[Literal["balanced", "precise", "raw"]]
     protection: NotRequired[Literal["system", "managed"] | None]
+    retrieval: NotRequired[dict[str, Any] | None]
+    sourceDefaults: NotRequired[dict[str, Any] | None]
     sourceIds: NotRequired[list[str]]
+    sync: NotRequired[dict[str, Any] | None]
     templateId: NotRequired[str | None]
 
 
 class KnowledgeBasePatch(TypedDict):
+    access: NotRequired[dict[str, Any] | None]
+    answer: NotRequired[dict[str, Any] | None]
     collections: NotRequired[list[str] | None]
     color: NotRequired[str | None]
     description: NotRequired[str | None]
@@ -279,6 +292,8 @@ class KnowledgeBasePatch(TypedDict):
     owner: NotRequired[str | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     retrieval: NotRequired[dict[str, Any] | None]
+    sourceDefaults: NotRequired[dict[str, Any] | None]
+    sync: NotRequired[dict[str, Any] | None]
     templateId: NotRequired[str | None]
 
 
@@ -287,6 +302,7 @@ class KnowledgeBaseRow(TypedDict, closed=True):
     agentNames: list[str]
     agentsElsewhere: NotRequired[int]
     agentsKnown: NotRequired[bool]
+    answer: dict[str, Any]
     automation: str
     collections: list[str]
     color: str
@@ -306,9 +322,11 @@ class KnowledgeBaseRow(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     retrieval: dict[str, Any]
     slug: str
+    sourceDefaults: dict[str, Any]
     sourceNames: list[str]
     sources: list[KbSourceLink]
     stats: dict[str, Any]
+    sync: dict[str, Any]
     templateId: NotRequired[str | None]
 
 
@@ -441,6 +459,7 @@ class SearchCost(TypedDict, closed=True):
 
 
 class SearchIn(TypedDict):
+    collection: NotRequired[str | None]
     kbIds: list[str]
     limit: NotRequired[int | None]
     question: str
@@ -572,6 +591,7 @@ class WrittenItemIn(TypedDict):
     name: str
     text: NotRequired[str | None]
     title: NotRequired[str | None]
+    url: NotRequired[str | None]
 
 
 class AddedDocuments(TypedDict, closed=True):
@@ -970,6 +990,7 @@ class KnowledgeBaseDetail(TypedDict, closed=True):
     agentNames: list[str]
     agentsElsewhere: NotRequired[int]
     agentsKnown: NotRequired[bool]
+    answer: dict[str, Any]
     attached: list[KbSourceView]
     automation: str
     canDelete: NotRequired[bool | None]
@@ -996,10 +1017,12 @@ class KnowledgeBaseDetail(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     retrieval: dict[str, Any]
     slug: str
+    sourceDefaults: dict[str, Any]
     sourceNames: list[str]
     sources: list[KbSourceLink]
     stats: dict[str, Any]
     suggestedQuestions: list[str]
+    sync: dict[str, Any]
     templateId: NotRequired[str | None]
 
 
