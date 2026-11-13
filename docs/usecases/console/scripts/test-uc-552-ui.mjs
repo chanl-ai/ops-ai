@@ -1,8 +1,8 @@
 // uc-552 A person works from one chat, with every other page in one collapsible sidebar, ui layer:
 // docs/usecases/console/chat-first.md. The demo stack (platform sign-in, the fake model, a worker). James starts
 // a card dispute that waits for a decision, and it is assigned to Maya; a case is past its deadline. Maya signs in and
-// lands on Chat with hints from her own work, starts a chat from one, finds it under Today in the sidebar, reads the
-// Overview count and widgets from one request, folds the sidebar and a group and finds both remembered, loses her
+// lands on Chat with hints from her own work, starts a chat from one, finds it under Today in the chats column, reads the
+// Overview count and widgets from one request, opens and folds the sidebar and finds it remembered, loses her
 // session mid-draft and gets it back after signing in again, then signs out and the draft is gone. Screenshots go to
 // evidenceDir('552', 'uc').
 import { mkdirSync } from 'node:fs';
@@ -100,20 +100,20 @@ await withUiStack(
         check('1 Maya lands on Chat with hints from her own work', url === '/chat' && task.length > 0 && cases === 1 && starts === 0, { url, task, cases, starts });
       });
 
-      await step('2 the sidebar holds New chat, Overview, Cases and Human Tasks with her count at the top, then the Chats group, with the other areas in the header', async () => {
+      await step('2 the sidebar holds New chat, then Work with Overview, Cases, Human Tasks with her count and Chat, then every other area as a section', async () => {
         // One count: on Human Tasks, the tasks waiting for her; Overview carries none.
-        const count = Number(await page.getByTestId('sidebar-count-reviews').innerText());
-        const overviewCount = await page.getByTestId('sidebar-overview-count').count();
+        const count = Number(await page.getByTestId('sidebar-count-work-tasks').innerText());
+        const overviewCount = await page.locator('[data-testid^="sidebar-count-overview"]').count();
         const mine = (await json(await fetch(`${agents}/reviews?view=mine&pageSize=1`, { headers: maya })))?.viewCounts?.mine;
-        // New chat sits in the sidebar header and the area's pages in its content.
-        const top = (await page.locator('[data-sidebar=header] [data-sidebar=menu-button], [data-sidebar=content] [data-sidebar=menu-button]').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim()).filter(Boolean);
+        const newChat = await page.locator('[data-sidebar=header]').getByTestId('sidebar-new-chat').count();
+        const work = (await page.locator('[data-sidebar=content] [data-nav-group="Work"] [data-sidebar=menu-button]').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim()).filter(Boolean);
+        const sections = await page.locator('[data-sidebar=content] [data-nav-group]').evaluateAll((gs) => gs.map((g) => g.getAttribute('data-nav-group')));
         const search = await page.getByTestId('sidebar-search').count();
-        // One area at a time: the Agents, Data Hub and Govern headings are gone, and the pages of the other areas sit
-        // behind the header's area control, which is named "Area".
-        const groups = { chats: await groupOpen('Chats'), agents: await page.locator('[data-nav-group="Agents"]').count(), dataHub: await page.locator('[data-nav-group="Data Hub"]').count(), govern: await page.locator('[data-nav-group="Govern"]').count(), work: await page.locator('[data-nav-group="Work"]').count() };
-        const areas = (await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').allInnerTexts()).map((t) => t.trim());
-        const want = ['New chat', 'Overview', 'Cases', 'Human Tasks'];
-        check('2 the sidebar holds New chat, Overview, Cases and Human Tasks with her count at the top, then the Chats group, with the other areas in the header', count === mine && count >= 1 && overviewCount === 0 && want.every((w) => top.includes(w)) && search === 0 && groups.chats && groups.agents === 0 && groups.dataHub === 0 && groups.govern === 0 && groups.work === 0 && areas.length >= 2 && areas[0] === 'Work', { count, overviewCount, mine, top, search, groups, areas });
+        // Her chats are a column on the chat pages, not a group in the sidebar; no area control is drawn.
+        const chatsInSidebar = await page.locator('[data-sidebar=content]').first().getByTestId('sidebar-chats').count();
+        const areaControl = await page.getByRole('group', { name: 'Area' }).count();
+        const want = ['Overview', 'Cases', 'Human Tasks', 'Chat'];
+        check('2 the sidebar holds New chat, then Work with Overview, Cases, Human Tasks with her count and Chat, then every other area as a section', count === mine && count >= 1 && overviewCount === 0 && newChat === 1 && JSON.stringify(work) === JSON.stringify(want) && JSON.stringify(sections) === JSON.stringify(['Work', 'Agent Builder', 'Data Gateway', 'Governance']) && search === 0 && chatsInSidebar === 0 && areaControl === 0, { count, overviewCount, mine, newChat, work, sections, search, chatsInSidebar, areaControl });
       });
 
       await step('2c the trail names no Work group, and the agent picker shows its name whole', async () => {
@@ -127,15 +127,17 @@ await withUiStack(
         check('2c the trail names no Work group, and the agent picker shows its name whole', !seen.crumbs.includes('Work') && !!seen.picker && !/Default/.test(seen.picker), seen);
       });
 
-      await step('3 a hint starts a chat, listed under Today in the sidebar', async () => {
+      await step('3 a hint starts a chat, listed under Today in the chats column', async () => {
         await page.getByTestId('home-hint-task').click();
         await page.waitForURL((u) => /^\/chat\/[^/]+$/.test(u.pathname) && u.pathname !== '/chat/conversations', { timeout: 60_000 });
         const id = new URL(page.url()).pathname.split('/')[2];
-        const today = page.locator(`[data-chat-group="Today"] a[href="/chat/${id}"]`);
+        // The column starts folded to a strip; Show chats opens it.
+        await page.getByTestId('chat-list-open').click();
+        const today = page.getByTestId('chat-list-column').locator(`[data-chat-group="Today"] a[href="/chat/${id}"]`);
         await today.waitFor({ timeout: 30_000 });
         const active = await today.getAttribute('aria-current');
         await shot('chat-thread');
-        check('3 a hint starts a chat, listed under Today in the sidebar', active === 'page', { id, active });
+        check('3 a hint starts a chat, listed under Today in the chats column', active === 'page', { id, active });
       });
 
       const threadIds = new Set();
@@ -200,10 +202,10 @@ await withUiStack(
 
       await step('4 Overview shows the four widgets from one request, and a row opens its page', async () => {
         // A fresh load, so the Overview's own request is the one counted rather than the sidebar's cached answer.
-        await page.goto(`${consoleUrl}/`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${consoleUrl}/overview`, { waitUntil: 'domcontentloaded' });
         overviewCalls.length = 0;
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.waitForURL((u) => u.pathname === '/');
+        await page.waitForURL((u) => u.pathname === '/overview');
         await page.getByTestId('overview-tasks').waitFor();
         await page.waitForTimeout(1500);
         const counts = Object.fromEntries(await Promise.all(['tasks', 'runs', 'cases'].map(async (k) => [k, Number(await page.getByTestId(`overview-${k}-count`).innerText())])));
@@ -214,26 +216,30 @@ await withUiStack(
         const filtered = { cases: await page.getByTestId('overview-cases-row').count(), tasks: await page.getByTestId('overview-tasks-row').count() };
         await page.getByTestId('overview-search').fill('');
         await page.getByTestId('overview-tasks-row').first().click();
-        await page.waitForURL((u) => u.pathname === '/reviews');
+        await page.waitForURL((u) => u.pathname === '/work/tasks');
         const opened = new URL(page.url()).searchParams.get('review');
         check('4 Overview shows the four widgets from one request, and a row opens its page', counts.tasks >= 1 && counts.runs >= 1 && counts.cases >= 1 && news === 1 && calls.some((c) => c.endsWith('/v1/overview') || c.includes('/v1/overview?')) && calls.every((c) => c.includes('/v1/overview')) && filtered.cases === 1 && filtered.tasks === 0 && !!opened, { counts, calls, filtered, opened });
       });
 
-      await step('5 the folded sidebar and the area she picked stay as she left them', async () => {
-        await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded' });
+      await step('5 the sidebar stays open or folded as she left it, and open it lists Agents under Agent Builder', async () => {
+        // On a list page: Chat and record pages fold the sidebar for room below 1440 px, which is the page's choice, not hers.
+        const trigger = page.locator('[data-slot=sidebar-trigger]').first();
+        await page.goto(`${consoleUrl}/work/cases`, { waitUntil: 'domcontentloaded' });
         await page.getByTestId('sidebar-new-chat').waitFor();
-        await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').filter({ hasText: 'Build' }).first().click();
-        await page.waitForTimeout(600);
-        await page.locator('[data-slot=sidebar-trigger]').first().click();
+        if ((await sidebar.getAttribute('data-state')) !== 'expanded') await trigger.click();
         await page.waitForTimeout(500);
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(1500);
-        const folded = await sidebar.getAttribute('data-state');
-        const lit = (await page.getByRole('group', { name: 'Area' }).locator('[data-state=on]').allInnerTexts()).map((t) => t.trim());
-        await page.locator('[data-slot=sidebar-trigger]').first().click();
+        await page.getByTestId('sidebar-new-chat').waitFor();
+        await page.waitForTimeout(1000);
+        const opened = await sidebar.getAttribute('data-state');
+        const agentsRow = await page.locator('[data-sidebar=content] [data-nav-group="Agent Builder"]').getByRole('link', { name: 'Agents', exact: true }).count();
+        await trigger.click();
         await page.waitForTimeout(500);
-        const agentsRow = await page.locator('[data-sidebar=content]').getByRole('link', { name: 'Agents', exact: true }).count();
-        check('5 the folded sidebar and the area she picked stay as she left them', folded === 'collapsed' && lit[0] === 'Build' && agentsRow === 1, { folded, lit, agentsRow });
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.getByTestId('sidebar-new-chat').waitFor();
+        await page.waitForTimeout(1000);
+        const folded = await sidebar.getAttribute('data-state');
+        check('5 the sidebar stays open or folded as she left it, and open it lists Agents under Agent Builder', opened === 'expanded' && folded === 'collapsed' && agentsRow === 1, { opened, folded, agentsRow });
       });
 
       await step('5b every sidebar row takes its own click at 1280 and 1440 px, open and folded', async () => {
@@ -241,7 +247,7 @@ await withUiStack(
         for (const w of [1280, 1440]) {
           await page.setViewportSize({ width: w, height: 900 });
           for (const folded of [false, true]) {
-            await page.goto(`${consoleUrl}/cases`, { waitUntil: 'domcontentloaded' });
+            await page.goto(`${consoleUrl}/work/cases`, { waitUntil: 'domcontentloaded' });
             await page.getByTestId('sidebar-new-chat').waitFor();
             const state = await sidebar.getAttribute('data-state');
             if ((state === 'collapsed') !== folded) await page.locator('[data-slot=sidebar-trigger]').first().click();
@@ -249,10 +255,8 @@ await withUiStack(
             // A normal click: Playwright refuses when another element (an invisible group label) would take it.
             await page.getByTestId('sidebar-new-chat').click({ timeout: 5000 });
             await page.waitForURL((u) => u.pathname === '/chat', { timeout: 15_000 });
-            // New chat keeps Work (she starts it from a Work page); the Work click is a no-op and Human Tasks is on Work.
-            await page.getByRole('group', { name: 'Area' }).locator('button, [role=radio]').filter({ hasText: 'Work' }).first().click({ timeout: 5000 });
-            await page.locator('[data-sidebar=content] a[href="/reviews"]').first().click({ timeout: 5000 });
-            await page.waitForURL((u) => u.pathname === '/reviews', { timeout: 15_000 });
+            await page.locator('[data-sidebar=content] a[href="/work/tasks"]').first().click({ timeout: 5000 });
+            await page.waitForURL((u) => u.pathname === '/work/tasks', { timeout: 15_000 });
             hits[`${w}-${folded ? 'folded' : 'open'}`] = 'ok';
           }
         }
@@ -308,16 +312,28 @@ await withUiStack(
         check('7 signing out forgets the draft', left === '', { left });
       });
 
-      await step('8 at 375 px the sidebar opens as a sheet', async () => {
+      await step('8 at 375 px the sidebar and her chats each open as a sheet', async () => {
         await page.setViewportSize({ width: 375, height: 800 });
         await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded' });
         await page.locator('[data-slot=sidebar-trigger]').first().click();
         const sheet = page.locator('[data-slot=sidebar][data-mobile=true]');
         await sheet.waitFor({ timeout: 15_000 });
-        const hasChats = await sheet.getByTestId('sidebar-chats').count();
+        const chatRow = await sheet.locator('[data-nav-group="Work"]').getByRole('link', { name: 'Chat', exact: true }).count();
         await page.screenshot({ path: join(SHOTS, 'sidebar-sheet-375-light.png') });
+        // A tap outside the sheet closes it.
+        await page.mouse.click(365, 400);
+        await sheet.waitFor({ state: 'detached', timeout: 15_000 });
+        // Her chats: the strip's Show chats opens them as a sheet of their own.
+        await page.getByTestId('chat-list-open').click();
+        const chats = page.getByTestId('chat-list-sheet');
+        await chats.waitFor({ timeout: 15_000 });
+        await chats.getByTestId('sidebar-chat').first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+        const hasChats = await chats.getByTestId('sidebar-chats').count();
+        const listed = await chats.getByTestId('sidebar-chat').count();
+        await page.screenshot({ path: join(SHOTS, 'chats-sheet-375-light.png') });
         const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-        check('8 at 375 px the sidebar opens as a sheet', hasChats === 1 && !wide, { hasChats, wide });
+        check('8 at 375 px the sidebar and her chats each open as a sheet', chatRow === 1 && hasChats === 1 && listed >= 1 && !wide, { chatRow, hasChats, listed, wide });
+        await page.keyboard.press('Escape');
         await page.setViewportSize({ width: 1440, height: 1000 });
       });
 
