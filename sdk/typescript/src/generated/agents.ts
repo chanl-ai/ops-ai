@@ -10014,10 +10014,31 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * ToolOption
+         * @description A tool in a picker; an MCP link's picker (`agents=false`) also gets what the tool takes and what it does, which
+         *     the link keeps so an assistant reads a workflow's inputs in tools/list.
+         */
+        ToolOption: {
+            /** Description */
+            description?: string | null;
+            /** Disabled */
+            disabled?: string | null;
+            /** Hint */
+            hint?: string | null;
+            /** Id */
+            id: string;
+            /** Inputschema */
+            inputSchema?: {
+                [key: string]: unknown;
+            } | null;
+            /** Label */
+            label: string;
+        };
         /** ToolOptionsPage */
         ToolOptionsPage: {
             /** Data */
-            data: components["schemas"]["Option"][];
+            data: components["schemas"]["ToolOption"][];
             /** Nextcursor */
             nextCursor?: string | null;
             /** Notadded */

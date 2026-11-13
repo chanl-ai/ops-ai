@@ -4620,8 +4620,14 @@ export interface components {
         };
         /** PickedTool */
         PickedTool: {
+            /** Description */
+            description?: string | null;
             /** Id */
             id: string;
+            /** Inputschema */
+            inputSchema?: {
+                [key: string]: unknown;
+            } | null;
             /** Label */
             label: string;
         };

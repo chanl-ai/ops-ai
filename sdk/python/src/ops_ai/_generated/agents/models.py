@@ -2029,6 +2029,15 @@ class ToolModuleReviewRef(TypedDict, closed=True):
     version: str
 
 
+class ToolOption(TypedDict, closed=True):
+    description: NotRequired[str | None]
+    disabled: NotRequired[str | None]
+    hint: NotRequired[str | None]
+    id: str
+    inputSchema: NotRequired[dict[str, Any] | None]
+    label: str
+
+
 class ToolUser(TypedDict, closed=True):
     id: str
     kind: Literal["agent", "workflow"]
@@ -3420,7 +3429,7 @@ class ToolModuleReviewInput(TypedDict, closed=True):
 
 
 class ToolOptionsPage(TypedDict, closed=True):
-    data: list[Option]
+    data: list[ToolOption]
     nextCursor: NotRequired[str | None]
     notAdded: NotRequired[list[ToolsNotAdded]]
 

@@ -73,8 +73,6 @@ CREATE = ("agents:create", "skills:create", "workflows:create", "guardrails:crea
 SKILLS_VIEW = ("skills:view",)
 # Starting a workflow's live version (agents-service require_runs_start).
 RUN_WORKFLOW = ("workflows:run",)
-# Reading a workflow's row in agents-service's tool catalog (its input schema and description).
-TOOLS_VIEW = ("tools:view",)
 ACCESS = Access()
 
 OPERATIONS: tuple[Operation, ...] = (
@@ -259,23 +257,6 @@ class PlatformTools:
             return ToolOutcome(True, {k: started.get(k) for k in ("runId", "workflowId", "version", "status")})
         err = cast(dict[str, Any], body.get("error") or {})
         return _failed(str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase))
-
-    async def workflow_tool(self, workflow_id: str, *, who: Principal, team: str) -> dict[str, Any] | None:
-        """A published workflow as agents-service's tool catalog describes it to agents (name, description and input
-        schema), read as the person, who must be able to see the team's tools; None when the team offers no such
-        workflow or the person may not read it."""
-        if "agents" not in self.bases:
-            return None
-        headers = self._headers(who, team, "agents", TOOLS_VIEW)
-        async with _Client(self.http) as http:
-            r = await http.get(
-                f"{self.bases['agents']}/v1/tools/{quote(f'workflow:{workflow_id}', safe=':')}", headers=headers
-            )
-        if not r.is_success:
-            return None
-        body: Any = r.json()
-        data: Any = cast(dict[str, Any], body).get("data") if isinstance(body, dict) else None
-        return cast(dict[str, Any], data) if isinstance(data, dict) else None
 
     async def _get(self, path: str, *, who: Principal, team: str, params: dict[str, Any] | None = None) -> Any:
         headers = self._headers(who, team, "agents", SKILLS_VIEW)

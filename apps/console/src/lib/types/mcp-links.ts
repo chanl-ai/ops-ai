@@ -31,5 +31,5 @@ export interface McpLink {
 export interface McpLinkInput {
   name: string;
   /** As the tools picker names them: an operation's name or `workflow:<id>`, with the label it showed. */
-  tools: { id: string; label: string }[];
+  tools: { id: string; label: string; inputSchema?: Record<string, unknown> | null; description?: string | null }[];
 }

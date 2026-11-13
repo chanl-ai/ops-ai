@@ -23,7 +23,6 @@ from ops_service_kit.http import Envelope, ok
 
 from .callers import caller_in
 from .mcp_server import WORKFLOW_PREFIX
-from .mcp_tools import PlatformTools
 from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.service import Caller
@@ -45,6 +44,10 @@ class PickedTool(_Wire):
     # A tool as the tools picker names it: an operation's name, or `workflow:<id>` for a published workflow.
     id: str = Field(min_length=1, max_length=200)
     label: str = Field(min_length=1, max_length=200)
+    # For a workflow, what the link picker's option said it takes and does (agents-service's catalog), listed to
+    # assistants in tools/list. It only describes: agents-service checks the input again when the run starts.
+    input_schema: dict[str, Any] | None = None
+    description: str | None = Field(default=None, max_length=2000)
 
 
 class McpLinkIn(_Wire):
@@ -92,13 +95,8 @@ def slug_of(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:64] or "link"
 
 
-def mcp_links_router(  # noqa: PLR0917 - one owner per argument, each wired once in __main__
-    links: McpLinks,
-    log: CallLog,
-    registry: ToolRegistry,
-    directory: Directory,
-    public_url: str | None,
-    platform: PlatformTools,
+def mcp_links_router(
+    links: McpLinks, log: CallLog, registry: ToolRegistry, directory: Directory, public_url: str | None
 ) -> APIRouter:
     caller = caller_in(directory)
     base = public_url.rstrip("/") if public_url else None
@@ -172,21 +170,14 @@ def mcp_links_router(  # noqa: PLR0917 - one owner per argument, each wired once
         for t in body.tools:
             if t.id.startswith(WORKFLOW_ID):
                 wid = t.id.removeprefix(WORKFLOW_ID)
-                # The workflow as agents-service describes it to agents, so an assistant reads its inputs in
-                # tools/list; a workflow the team does not offer, or the person may not see, is refused here.
-                row = await platform.workflow_tool(wid, who=p, team=team.id)
-                if row is None:
-                    raise Unprocessable(
-                        f"{t.label} is not a published workflow of this team.", code="tool_not_runnable"
-                    )
                 picked.append(
                     {
                         "name": f"{WORKFLOW_PREFIX}{wid}",
-                        "title": str(row.get("name") or t.label),
+                        "title": t.label,
                         "kind": "workflow",
                         "access": "workflow",
-                        "description": row.get("description"),
-                        "input_schema": row.get("inputSchema") or {"type": "object"},
+                        "description": t.description,
+                        "input_schema": t.input_schema or {"type": "object"},
                     }
                 )
             elif (op := grantable.get(t.id)) is not None:

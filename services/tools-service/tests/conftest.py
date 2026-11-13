@@ -31,7 +31,6 @@ from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 from ops_store import isolation
-from ops_tools import mcp_server
 from ops_tools.app import create_gateway_app
 from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Authenticator, Tokens
@@ -381,9 +380,7 @@ def build_app(
             egress_router(EgressStore(engine)),
             secrets_router(resolver, modules=ModuleStore(engine), credentials=connections),
             send_policy_router(SendPolicies(engine), directory),
-            mcp_links_router(
-                links, calls, registry, directory, settings.tools_public_url, mcp_server.platform_tools(settings)
-            ),
+            mcp_links_router(links, calls, registry, directory, settings.tools_public_url),
             mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(accounts, directory),
             apps_router(apps, directory),

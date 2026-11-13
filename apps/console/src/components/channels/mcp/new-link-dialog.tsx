@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCreateMcpLink } from '@/hooks/mcp-link-queries';
 import { linkToolOptions, useOptionLabels } from '@/hooks/options-queries';
 import { useTeam } from '@/hooks/use-team';
+import type { ToolOptionsPage } from '@/lib/types/query';
 
 // tools-service takes at most 20 tools on a link; past that an assistant reads a list too long to choose from.
 const MAX_TOOLS = 20;
@@ -46,9 +47,11 @@ export function NewLinkDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   }, [open, form]);
 
   const submit = form.handleSubmit((v) => {
-    const label = new Map((labels.data?.data ?? []).map((o) => [o.id, o.label]));
+    // The labels query reads the link picker's own source, whose options carry these fields.
+    const option = new Map(((labels.data?.data ?? []) as ToolOptionsPage['data']).map((o) => [o.id, o]));
     create.mutate(
-      { name: v.name.trim(), tools: v.tools.map((id) => ({ id, label: label.get(id) ?? id })) },
+      // A workflow carries what it takes and does, as the picker read it, so assistants see its inputs.
+      { name: v.name.trim(), tools: v.tools.map((id) => ({ id, label: option.get(id)?.label ?? id, inputSchema: option.get(id)?.inputSchema ?? null, description: option.get(id)?.description ?? null })) },
       {
         onSuccess: (link) => {
           toast.success(`Made ${link.name}`, { description: 'Copy its address into an assistant to connect.' });

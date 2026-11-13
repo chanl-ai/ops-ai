@@ -65,14 +65,6 @@ class RunAgents(Agents):
             started = {"runId": "run_1", "workflowId": body["workflowId"], "version": 3, "status": "queued"}
             return JSONResponse({"data": started}, 202)
 
-        @self.app.get("/v1/tools/{tool_id}")
-        async def catalog_row(tool_id: str, request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
-            if "tools:view" not in _scopes(request) or tool_id != "workflow:wf_claims":
-                return JSONResponse({"error": {"code": "not_found", "message": tool_id}}, 404)
-            return {
-                "data": {"id": tool_id, "name": "Claims intake", "description": "Opens a claim.", "inputSchema": SCHEMA}
-            }
-
 
 async def _rest_principal(  # noqa: PLR0917 - FastAPI reads these as the headers Identity.principal takes
     self: People,
@@ -120,7 +112,7 @@ def _session(stack: Stack, who: str, path: str) -> Client:
     )
 
 
-async def _link(stack: Stack, tools: list[dict[str, str]]) -> dict[str, Any]:
+async def _link(stack: Stack, tools: list[dict[str, Any]]) -> dict[str, Any]:
     async with _rest(stack, "linker") as rest:
         r = await rest.post("/v1/mcp-links", json={"name": "Claims lookups", "tools": tools})
     assert r.status_code == 201, r.text
@@ -178,7 +170,13 @@ async def test_a_link_takes_only_tools_the_team_can_run(stack: Stack) -> None:
 
 
 async def test_a_picked_workflow_starts_its_live_version_only_for_who_may_run_it(stack: Stack) -> None:
-    await _link(stack, [{"id": "workflow:wf_claims", "label": "Claims intake"}])
+    picked = {
+        "id": "workflow:wf_claims",
+        "label": "Claims intake",
+        "inputSchema": SCHEMA,
+        "description": "Opens a claim.",
+    }
+    await _link(stack, [picked])
     path = f"/mcp/{TEAM}/claims-lookups"
     async with stack.app.router.lifespan_context(stack.app), _session(stack, "linker", path) as c:
         [listed] = (await c.list_tools()).tools

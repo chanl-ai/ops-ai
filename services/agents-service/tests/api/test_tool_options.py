@@ -120,3 +120,5 @@ async def test_an_mcp_links_picker_offers_no_agents(tmp_path: Path) -> None:
         links = _data(await c.get("/v1/tools/options", params={"limit": 100, "agents": "false"}))
     assert any(o["id"].startswith("agent:") for o in every["data"]), "the fixture offers agents to the agent page"
     assert not [o["id"] for o in links["data"] if o["id"].startswith("agent:")]
+    assert all("inputSchema" in o for o in links["data"]), "a link keeps what each tool takes, for tools/list"
+    assert all("inputSchema" not in o for o in every["data"]), "the agent page's picker stays as it was"

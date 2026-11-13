@@ -774,7 +774,9 @@ class PersonSignedIn(TypedDict, closed=True):
 
 
 class PickedTool(TypedDict, closed=True):
+    description: NotRequired[str | None]
     id: str
+    inputSchema: NotRequired[dict[str, Any] | None]
     label: str
 
 

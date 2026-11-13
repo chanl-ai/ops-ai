@@ -20081,12 +20081,77 @@
         "title": "ToolModuleReviewRef",
         "type": "object"
       },
+      "ToolOption": {
+        "additionalProperties": false,
+        "description": "A tool in a picker; an MCP link's picker (`agents=false`) also gets what the tool takes and what it does, which\nthe link keeps so an assistant reads a workflow's inputs in tools/list.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputSchema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputschema"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ToolOption",
+        "type": "object"
+      },
       "ToolOptionsPage": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/Option"
+              "$ref": "#/components/schemas/ToolOption"
             },
             "title": "Data",
             "type": "array"

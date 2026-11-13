@@ -271,7 +271,9 @@ async def tool_options(
     page = hits[offset : offset + limit + 1]
     # A plugin tool reads by its title; every other tool by its name.
     options = [
-        {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None} for t in page
+        {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None}
+        | ({} if agents else {"inputSchema": t.get("inputSchema"), "description": t.get("description")})
+        for t in page
     ]
     # Said once, above the first page of a search; labelling stored grants says nothing about the catalog.
     waiting = await not_added(rt, team, search) if ids is None and offset == 0 else []

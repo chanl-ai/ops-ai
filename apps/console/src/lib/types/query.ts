@@ -32,6 +32,8 @@ export interface OptionsPage {
 
 /** The tools picker's page: also the apps whose catalog holds tools the team has not added, and how many. */
 export interface ToolOptionsPage extends OptionsPage {
+  /** An MCP link's picker (`agents: false`) also gets what each tool takes and does. */
+  data: (OptionsPage['data'][number] & { inputSchema?: Record<string, unknown> | null; description?: string | null })[];
   notAdded?: { appId: string; name: string; count: number }[];
 }
 
