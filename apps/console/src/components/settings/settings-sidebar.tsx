@@ -8,10 +8,29 @@ import { ArrowLeft, ChevronRight, Search } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 import { Kbd } from '@/components/ui/kbd';
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, useSidebar } from '@/components/ui/sidebar';
 import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
 import { useNavAllows } from '@/hooks/me-queries';
 import type { SidebarTree } from '@/lib/settings-tree';
+
+/**
+ * Folded off-canvas, this sidebar leaves settings with no Back, Find or sections on screen, and the app sidebar starts
+ * folded. So it opens while settings is shown, and the app sidebar is folded again on the way out if it was before.
+ */
+function useOpenWhileShown() {
+  const { open, setOpen, isMobile } = useSidebar();
+  const wasOpen = React.useRef(open);
+  React.useEffect(() => {
+    if (isMobile) return;
+    const before = wasOpen.current;
+    if (!before) setOpen(true);
+    return () => {
+      if (!before) setOpen(false);
+    };
+    // Runs on entering and leaving settings only: a person who folds it inside settings keeps it folded there.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
+}
 
 /**
  * Replaces the app sidebar while a person is in settings: a back arrow, a Find box (press F) that searches every
@@ -19,6 +38,7 @@ import type { SidebarTree } from '@/lib/settings-tree';
  */
 export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof Sidebar> & { tree: SidebarTree }) {
   const pathname = usePathname();
+  useOpenWhileShown();
   const [query, setQuery] = React.useState('');
   const find = React.useRef<HTMLInputElement>(null);
   React.useEffect(() => {
