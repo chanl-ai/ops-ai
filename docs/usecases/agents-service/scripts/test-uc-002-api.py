@@ -3,7 +3,13 @@ docs/usecases/agents-service/write-tool-approval-step-up.md."""
 
 from __future__ import annotations
 
+import os
+
 from usecase_harness import agents, check, data, finish, sse
+
+# The dev user asks and approves; a requester decides only where the team turned requesterMayDecide on (default off,
+# 403 own_request), so this run's workspace has it on and the step-up check is what refuses or lets the approval through.
+os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": true}'
 
 # The fixture knowledge bases' team (seed_fixture_knowledge.py, the dev default): a chat sees only its own team's
 # bases, so the chat runs in Operations.
