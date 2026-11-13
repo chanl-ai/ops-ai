@@ -231,6 +231,14 @@ export interface PluginSpec {
 }
 
 /**
+ * Whether turning a plugin's app on asks nothing: it signs in to nothing (every kind it offers is `none`) and has no
+ * setting the team types. Turn on then saves at once, with no form; a key, a token or a setting always gets one.
+ */
+export function asksNothing(plugin: { kinds: readonly string[]; settings: readonly { locked: boolean }[] }): boolean {
+  return plugin.kinds.length > 0 && plugin.kinds.every((k) => k === 'none') && plugin.settings.every((s) => s.locked);
+}
+
+/**
  * A plugin account's groups of fields. A kind that signs in asks only for the settings each account keeps its own (a
  * sandbox's sign-in address): its OAuth client is an app credential, picked, never typed here. Any other kind asks
  * for its own fields, which the plugin keeps as the account's credentials. The system's address and test address come

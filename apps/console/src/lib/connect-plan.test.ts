@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   accountBody,
+  asksNothing,
   complete,
   draftFor,
   firstSignIn,
@@ -166,4 +167,13 @@ test('an account signed in through the dialog is remembered, so Save opens no se
 test('the Turn on window preselects the team account where the app offers it', () => {
   assert.equal(firstSignIn(['team', 'person', 'person_or_team']), 'team');
   assert.equal(firstSignIn(['person_or_team', 'person']), 'person_or_team');
+});
+
+test('a plugin with no sign-in and nothing to set turns on without a form; one with a key or a setting asks', () => {
+  const settings = (names: string[], locked = false) => names.map((name) => ({ name, label: name, secret: false, perAccount: false, locked }));
+  assert.equal(asksNothing({ kinds: ['none'], settings: [] }), true);
+  assert.equal(asksNothing({ kinds: ['none'], settings: settings(['api_version'], true) }), true);
+  assert.equal(asksNothing({ kinds: ['none'], settings: settings(['site_url']) }), false);
+  assert.equal(asksNothing({ kinds: ['basic', 'bearer'], settings: [] }), false);
+  assert.equal(asksNothing({ kinds: ['oauth2_auth_code'], settings: [] }), false);
 });
