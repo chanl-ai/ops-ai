@@ -90,7 +90,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Work',
     items: [
-      { title: 'Overview', url: '/', icon: IconHome, needs: OVERVIEW_NEEDS[0], or: OVERVIEW_NEEDS.slice(1) },
+      { title: 'Overview', url: '/overview', icon: IconHome, needs: OVERVIEW_NEEDS[0], or: OVERVIEW_NEEDS.slice(1) },
       // The team's customer issues, with their deadlines and timelines; workflow runs are under Workflows.
       { title: 'Cases', url: '/work/cases', icon: IconMail, needs: cell('cases', 'view') },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.

@@ -11,16 +11,16 @@ import { Sidebar, SidebarContent, SidebarHeader } from '@/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-// Whether the column is folded, kept in this browser only; it starts open.
+// Whether the column is folded, kept in this browser only; it starts folded until the person opens it.
 const FOLD_KEY = 'ops.chat.list.folded';
 
 function useFolded(): [boolean, (folded: boolean) => void] {
-  const [folded, setFolded] = React.useState(false);
+  const [folded, setFolded] = React.useState(true);
   React.useEffect(() => {
     try {
-      setFolded(window.localStorage.getItem(FOLD_KEY) === '1');
+      setFolded(window.localStorage.getItem(FOLD_KEY) !== '0');
     } catch {
-      // No storage: the column starts open.
+      // No storage: the column starts folded.
     }
   }, []);
   const set = React.useCallback((next: boolean) => {

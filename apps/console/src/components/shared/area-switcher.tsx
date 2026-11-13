@@ -63,10 +63,10 @@ export function useAreas() {
   const lit = here ?? (pathArea === null || pathname === '/chat' ? current : null);
 
   // The Overview is for people with work to look at; a chat-only person who once had it in another team must not be sent back.
-  const overview = rowsOfArea('Work', allows).some((i) => i.url === '/');
+  const overview = rowsOfArea('Work', allows).some((i) => i.url === '/overview');
   const pageFor = (area: AreaName) => {
     const last = memory.pages[area];
-    return last && areaOf(last) === area && (last !== '/' || overview) ? last : firstPageOf(area, allows);
+    return last && areaOf(last) === area && (last !== '/overview' || overview) ? last : firstPageOf(area, allows);
   };
   const select = (area: AreaName) => {
     writeMemory(person, { ...memory, area });
@@ -112,7 +112,7 @@ function HomeWithoutOverview() {
   const router = useRouter();
   const { areas, ready, overview, pageFor } = useAreas();
   React.useEffect(() => {
-    if (pathname === '/' && ready && areas.length && !overview) router.replace(pageFor(areas[0]));
+    if (pathname === '/overview' && ready && areas.length && !overview) router.replace(pageFor(areas[0]));
   }, [pathname, ready, overview, areas.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
@@ -136,7 +136,7 @@ function AreaTabs() {
   React.useEffect(() => {
     if (!person || !ready || !here || pathname === '/chat' || !areas.includes(here) || recorded.current === pathname) return;
     // The home page is about to send the person back to the area they left; recording Work here would erase it.
-    if (pathname === '/' && memory.area && memory.area !== 'Work') return;
+    if (pathname === '/overview' && memory.area && memory.area !== 'Work') return;
     recorded.current = pathname;
     writeMemory(person, { area: here, pages: { ...memory.pages, [here]: pathname } });
     bump();

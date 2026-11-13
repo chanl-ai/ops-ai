@@ -5,9 +5,10 @@ const KEY = 'ops.sidebar.open';
 
 export function readSidebarOpen(): boolean {
   try {
-    return window.localStorage.getItem(KEY) !== 'false';
+    // Folded until the person opens it; Chat, where the console opens, wants the room.
+    return window.localStorage.getItem(KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 
