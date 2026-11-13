@@ -7,13 +7,13 @@ from __future__ import annotations
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert
 
 from ops_access import BY_KEY, POLICIES, check_value
 from ops_access.platform_events import POLICY_CHANGED
 from ops_access.policies import PUBLISH_AREAS
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore
 from ops_store.outbox import add as add_event
 
 from .audit import record
@@ -176,8 +176,5 @@ async def write_new_workspace_policies(c: Any, tenant_id: str, *, at: str) -> No
             if BY_KEY[key].per_team
             else check_value(key, wanted)
         )
-        await c.execute(
-            insert(policies)
-            .values(tenant_id=tenant_id, key=key, value=value, updated_by="workspace", updated_at=at)
-            .on_conflict_do_nothing(index_elements=[policies.c.tenant_id, policies.c.key])
-        )
+        row = {"tenant_id": tenant_id, "key": key, "value": value, "updated_by": "workspace", "updated_at": at}
+        await c.execute(insert_ignore(c, policies, row, keys=["tenant_id", "key"]))
