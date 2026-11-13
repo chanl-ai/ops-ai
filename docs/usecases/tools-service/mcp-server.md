@@ -26,7 +26,7 @@ executor and call log all apply. Writes, other teams' tools, other teams' URLs, 
 | 2 | It calls `uc410_get_account` for `CHQ-2219` | The bank's own account; the call log row says `channel` mcp, the client's name and test |
 | 3 | It calls `uc410_place_hold` by name | Refused (`write needs an approval token`) and logged as an mcp call; the account still has no hold |
 | 4 | The team_platform key lists and calls at `/mcp/team_platform`, then tries `/mcp/team_ops` | Not listed; the call is 403 `team_forbidden`; the other team's URL is 403 `team_forbidden` |
-| 5 | `/mcp/production/team_ops` (there is no environment segment); no credential; a viewer's token | 404 `not_found`; 401 `unauthorized` with `WWW-Authenticate`; 403 `role_required` |
+| 5 | `/mcp/production/team_ops` (there is no environment segment); no credential; a person's console token | 404 `not_found`; 401 `unauthorized` with `WWW-Authenticate`; 401 `unauthorized`, since the address takes only a token issued for it |
 
 ## Acceptance layers
 
