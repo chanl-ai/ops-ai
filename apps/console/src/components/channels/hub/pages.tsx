@@ -25,6 +25,7 @@ import { ChannelLanding } from './channel-landing';
 import { ChannelTable } from './channel-table';
 import { ChannelTabs } from './channel-tabs';
 import { KINDS, kindInfo } from './kinds';
+import { McpTab } from './mcp-tab';
 
 /**
  * Where a kind is set up; Channels links there instead of keeping a second form. `area` and `action` are the roles-grid
@@ -146,8 +147,11 @@ export function ChannelKindPage({ type }: { type: ChannelType }) {
         <QueryError what={`${k.title.toLowerCase()} connections`} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />
       ) : (
         <div className="flex flex-col gap-6 pb-16">
-          <ChannelLanding type={type} summary={summary} week={week} sources={rows.map((c) => `channel:${c.id}`)} />
-          {summary?.built ? (
+          {/* MCP's own page reports its connections and calls; the channel list holds no MCP rows to count. */}
+          {type !== 'mcp' && <ChannelLanding type={type} summary={summary} week={week} sources={rows.map((c) => `channel:${c.id}`)} />}
+          {type === 'mcp' ? (
+            <McpTab />
+          ) : summary?.built ? (
             <>
               {connect?.note && <Note title="Where it is set up">{connect.note}</Note>}
               <ChannelTable rows={rows} oneKind={type} kind={k.title.toLowerCase()} pagination={q.data.pagination} page={list.pagination} onPaginationChange={list.setPagination} onColumnFiltersChange={list.onColumnFiltersChange} loading={q.isFetching && q.isPlaceholderData} />

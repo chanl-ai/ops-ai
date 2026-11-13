@@ -30,7 +30,7 @@ const lifetimeLabel = (h: number) => (h === 1 ? '1 hour' : h < 24 ? `${h} hours`
 const DISMISS_KEY = 'ops-ai:connect-band-dismissed';
 
 /**
- * The MCP channel of Deployments: one URL per workspace that staff paste into their own assistant. It shows
+ * The MCP channel: one URL per workspace that staff paste into their own assistant. It shows
  * numbers and links out to where each thing is managed; the Expose switch, which creates, resumes or pauses a
  * workflow's MCP deployment, and the settings form are the only edits. `focusTools` scrolls to the exposed
  * workflows table, where the wizard sends someone who chose MCP.

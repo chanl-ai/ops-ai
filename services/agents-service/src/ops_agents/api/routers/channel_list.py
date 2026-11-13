@@ -40,12 +40,12 @@ ChannelType = Literal["email", "chat", "api"]
 # Every kind the gallery shows: a filter may name one not built yet, whose page lists nothing.
 KindType = Literal["email", "chat", "api", "mcp", "slack", "teams"]
 HealthState = Literal["ok", "warn", "error", "idle"]
-# The gallery's order; the last three are coming soon.
+# The gallery's order; the last two are coming soon. MCP is built, but its page is the gateway's own, not rows here.
 KINDS: tuple[tuple[str, bool], ...] = (
     ("api", True),
     ("chat", True),
     ("email", True),
-    ("mcp", False),
+    ("mcp", True),
     ("slack", False),
     ("teams", False),
 )
