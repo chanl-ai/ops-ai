@@ -9,14 +9,14 @@ const unavailable = (what: string) => () => Promise.reject(new ApiError(`${what}
 
 /**
  * The Files page's calls on files-service (`/v1/files`): the list with its views, counts and facets, a file
- * with its references and versions, download, delete, legal hold, the file picker's options, and every upload.
+ * with its references and versions, download, delete, legal hold, the file picker's options, upload limits, and every upload.
  * Uploads of every purpose go here: an upload stored anywhere else gets an id that the list, the picker and
  * every service reading files by id cannot find, and files-service is what reuses a team's file with the same bytes.
  * Retention and evidence export are not offered there yet; the page hides those actions.
  */
 export function createFilesServiceHttp(
   baseUrl: string,
-): Pick<FilesApi, 'list' | 'get' | 'setData' | 'readRequests' | 'downloadUrl' | 'versions' | 'references' | 'remove' | 'bulkRemove' | 'setLegalHold' | 'setRetention' | 'exportEvidence' | 'createUpload' | 'transfer' | 'completeUpload' | 'options'> {
+): Pick<FilesApi, 'list' | 'get' | 'setData' | 'readRequests' | 'downloadUrl' | 'versions' | 'references' | 'remove' | 'bulkRemove' | 'setLegalHold' | 'setRetention' | 'exportEvidence' | 'createUpload' | 'transfer' | 'completeUpload' | 'options' | 'limits'> {
   const { get, send, qs } = createTransport(`${baseUrl}/v1`);
   const filesHost = new URL(baseUrl).origin;
   return {
@@ -25,6 +25,8 @@ export function createFilesServiceHttp(
     transfer: (ticket, body, onProgress) => putToStorage(ticket, body, onProgress, new URL(ticket.uploadUrl, filesHost).origin === filesHost ? identityHeaders() : {}),
     completeUpload: (id) => send('POST', `/files/uploads/${id}/complete`),
     options: (p) => get(`/files/options?${optionsQs(p)}`),
+    // The purpose limits the upload component checks a file against before asking for a ticket.
+    limits: () => get('/files/limits'),
     list: (p) => get(`/files?${qs(p)}`),
     get: (id) => get(`/files/${id}`),
     setData: (id, i) => send('PUT', `/files/${id}/data`, i),

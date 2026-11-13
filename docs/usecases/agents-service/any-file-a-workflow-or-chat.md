@@ -33,7 +33,7 @@ Status: draft. Id: `uc-620`. Service: `agents-service`. Layers: api, ui.
 | 8 | Attach a scan with no text layer and ask about it | The reply ends "scan-….pdf could not be read: it has no text to read" |
 | 9 | In the console, attach the notice in the composer and send the same question | The upload goes through Files' ticket routes; the reply shows "is Marcus Bell, held for 3,250.00"; the message carries a `fil_` id |
 | 10 | Click the attachment on the message | Files opens the file, shown as a Chat attachment |
-| 11 | Attach a PNG | The chip says "PNG is not accepted here. Accepted: PDF, …" |
+| 11 | Attach a ZIP archive | The chip says "ZIP is not accepted here. Accepted: PDF, …" |
 | 12 | Click the file's source chip under the reply, then its citation's Open in Files | Each opens the file in Files with its preview; no "not found" |
 
 ## Acceptance layers
