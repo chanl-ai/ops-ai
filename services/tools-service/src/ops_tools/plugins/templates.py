@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_access import Access
+from ops_access import Access, reader_of
 from ops_access.check import granted_by
 from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_plugin_sdk import Plugin
@@ -337,7 +337,11 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                 )
         return ok(out)
 
-    @r.get("/v1/plugin-templates", response_model=Envelope[list[PluginTemplate]])
+    @r.get(
+        "/v1/plugin-templates",
+        response_model=Envelope[list[PluginTemplate]],
+        dependencies=[Depends(reader_of("tools"))],
+    )
     async def list_plugin_templates(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Principal, Depends(tools_reader)], kind: Annotated[Kind | None, Query()] = None
     ) -> JSONResponse:
