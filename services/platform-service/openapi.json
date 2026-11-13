@@ -12227,9 +12227,25 @@
     },
     "/v1/roles": {
       "get": {
-        "description": "Every role in the tenant, built-in first, with how many permissions it grants and how many hold it.",
+        "description": "Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs\naccess.view in the acting team: 403 `admin_required`.",
         "operationId": "roles_list_roles",
         "parameters": [
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -12673,6 +12689,22 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
             }
           }
         ],

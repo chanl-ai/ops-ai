@@ -812,7 +812,8 @@ export interface paths {
         };
         /**
          * List Roles
-         * @description Every role in the tenant, built-in first, with how many permissions it grants and how many hold it.
+         * @description Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs
+         *     access.view in the acting team: 403 `admin_required`.
          */
         get: operations["roles_list_roles"];
         put?: never;
