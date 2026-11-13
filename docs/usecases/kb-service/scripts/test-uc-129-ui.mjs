@@ -60,7 +60,8 @@ await withUiStack(
       await page.waitForURL(`**/knowledge/${kbId}**`, { timeout: 60_000 });
       await page.getByRole('tab', { name: /^Sources/ }).waitFor({ timeout: 60_000 });
       const tabs = await page.getByRole('tab').allInnerTexts();
-      check('the base offers no Documents tab', tabs.length > 0 && !tabs.some((t) => t.startsWith('Documents')), tabs);
+      // Documents is the first tab even on an empty base, where the drop zone is the first thing to do.
+      check('an empty base opens on its Documents tab', tabs[0]?.startsWith('Documents') ?? false, tabs);
 
       await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('kb-add-source').first().click({ timeout: 120_000 });
