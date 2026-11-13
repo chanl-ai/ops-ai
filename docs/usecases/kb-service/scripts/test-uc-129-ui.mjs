@@ -53,7 +53,6 @@ await withUiStack(
       await page.getByRole('button', { name: 'New knowledge base' }).click({ timeout: 120_000 });
       const create = page.getByRole('dialog', { name: 'New knowledge base' });
       await create.locator('#kb-name').fill(NAME);
-      await create.locator('#kb-owner').fill(JAMES);
       await create.locator('#kb-desc').fill('Branch procedures.');
       const made = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/knowledge-bases'), { timeout: 60_000 }));
       await create.getByTestId('kb-create').click();
