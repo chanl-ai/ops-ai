@@ -128,9 +128,13 @@ def test_the_knowledge_schedule_is_listed_only_when_the_install_has_plugins(
         background.plugins_on.cache_clear()
         return {str(p["key"]) for p in background.report([], "kb", 0.0)}
 
+    dropped, builtin = tmp_path / "plugins", tmp_path / "builtin"
+    dropped.mkdir()
+    builtin.mkdir()
     monkeypatch.delenv("OPS_PLUGIN_PATHS", raising=False)
-    monkeypatch.setenv("OPS_PLUGINS_DIR", str(tmp_path))
+    monkeypatch.setenv("OPS_PLUGINS_DIR", str(dropped))
+    monkeypatch.setenv("OPS_BUILTIN_PLUGINS_DIR", str(builtin))
     assert "knowledge_schedule" not in keys()
-    (tmp_path / "ops_plugin_desk").mkdir()
+    (dropped / "ops_plugin_desk").mkdir()
     assert "knowledge_schedule" in keys()
     background.plugins_on.cache_clear()
