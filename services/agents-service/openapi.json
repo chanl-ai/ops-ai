@@ -43633,6 +43633,22 @@
               ],
               "title": "X-Dev-User"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
+            }
           }
         ],
         "requestBody": {

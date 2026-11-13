@@ -439,7 +439,8 @@ class Settings(BaseSettings):
             # tools, before a team admin turns it off. knowledge:view: search_knowledge searches the calling
             # team's knowledge bases through kb-service. skills:view and the create cells: the team MCP address
             # offers the team's skills as prompts and lists and installs templates, each token holding only the
-            # cells the person it calls for holds (mcp_tools.py).
+            # cells the person it calls for holds (mcp_tools.py). workflows:run: an MCP link starts a workflow's live
+            # version for the signed-in person, held only when that person holds it, with their acting-for token.
             "tools": [
                 "agents:view",
                 "knowledge:view",
@@ -458,6 +459,7 @@ class Settings(BaseSettings):
                 "skills:create",
                 "workflows:create",
                 "guardrails:create",
+                "workflows:run",
             ],
             # events:emit: it reports a deleted file as a service event, which purges what was derived from it.
             "files": ["events:emit"],
