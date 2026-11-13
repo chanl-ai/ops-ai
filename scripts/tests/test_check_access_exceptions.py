@@ -179,6 +179,11 @@ CHECKED = (
 )
 
 
+# Strict: the day the checker finds these kinds again this passes, and the mark must go.
+@pytest.mark.xfail(
+    strict=True,
+    reason="The finder for these kinds was reverted with its allow list; it returns once every read is checked.",
+)
 def test_a_new_unchecked_read_grid_evaluation_or_raw_role_compare_is_found_where_it_lands(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
