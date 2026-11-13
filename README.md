@@ -334,6 +334,7 @@ The team in the screenshots, installed through the public API as its first admin
 
 ```bash
 make sample-team    # Customer Operations from scripts/sample-team/sample-team.json; a second run changes nothing
+make sample-library # a Policy library of 24 bank documents in team Platform; make up runs it once per database
 make demo-walk      # chat, a blocked topic, bank reads, an approved hold, then an emailed levy notice to the replies
 node docs/usecases/lib/capture_demo.mjs --origin http://localhost:3016 --env .run/dev-admin.env
 ```

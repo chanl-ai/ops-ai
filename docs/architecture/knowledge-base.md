@@ -38,7 +38,10 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | A new source copies its base's source defaults | Built | `service.py` (`create_source`, `_base_split`) |
 | JavaScript pages rendered in a headless browser worker | Designed, not built yet | |
 | An answer with no cited passage withheld, on by default | Built | on in the Balanced and Precise presets, off in Search only; applies whether or not the agent's own end check is on |
-| Playground answer written by a kernel turn | Designed, not built yet | the query route returns passages only (`service.py:1834-1837`) |
+| Test sheet: an agent's answer from a kernel turn, the pieces used with scores, the search trace, one collection, the base's no-answer message | Built | `apps/console/src/components/knowledge/test-sheet.tsx`; `schemas.py` (`QueryIn.collection`); the query route's passages carry no answer text of their own |
+| Documents table filtered and faceted by source, status, collection, type, freshness, sensitivity and tag | Built | `service.py` (`documents`, `doc_type`, `DOCUMENT_FACETS`); each facet counts over the rows the other filters keep |
+| Refresh one document | Built as a sync of its source | no per-document route; the row's Refresh syncs the source it came from |
+| Retire one document | Designed, not built yet | no route; a source's items leave with the source |
 | Filters on collection, source, tags and metadata applied to search, each base its own, in both lanes; a per-request collection | Built | `retrieval.py` (`Scope`); `store/fulltext.py` (`scope_sql`); `store/vectors.py` (`nearest`); `schemas.py` (`SearchIn.collection`) |
 | Filters from conversation variables; freshness and trust boosts | Designed, not built yet | |
 | Keyword lane on the shared `ops_store.dialect.full_text` | Designed, not built yet | the lane has its own PostgreSQL query (`store/fulltext.py:1-2`) |
@@ -245,7 +248,7 @@ deletes and the schedule; a plugin owns only how to talk to its system.
 ## Retrieval
 
 One search in kb-service serves every caller: grounding on each turn, the `search_knowledge` tool, the workflow
-Knowledge step, the Playground and the query route. The base's retrieval settings decide how many pieces return; a
+Knowledge step, the console's Test sheet and the query route. The base's retrieval settings decide how many pieces return; a
 caller's `limit` only caps it (`service.py:2850-2866`).
 
 | Part | How it works | Default | Built |
@@ -305,6 +308,23 @@ Designed, not built yet.
 | Unanswered list | Questions withheld or below the threshold, grouped by meaning, with a count each | kb-service |
 | Gap job | Nightly, per group: a new item, an edit, a duplicate to merge, or a contradiction, each as a draft in the Changes queue | a job on the one schedule rule |
 | Evals | A question set per base with expected items: hit at 5, mean reciprocal rank and faithfulness per settings version; the judge sees each turn's question and the pieces used | the platform eval runner |
+
+## Adding data in the console
+
+A base opens on Documents. One Add data source menu, on Documents and on Sources, opens what exists for each kind
+(`apps/console/src/components/knowledge/add-data-source.tsx`):
+
+| Menu item | Opens |
+|---|---|
+| Files, A folder | Add files: FileUpload with its folder option; a file that cannot be read is listed and the rest go in |
+| Website or sitemap, Pushed by API | Add source at step 2 with that kind chosen |
+| From your apps | Add source at step 1 |
+| Typed text | Add page |
+| Attach an existing source | Attach sources |
+
+Files and folders dropped anywhere on the Documents tab open Add files with them listed
+(`components/shared/page-drop-target.tsx`); dropped folders are walked to the files inside. A member sees the table
+and Test only.
 
 ## Add source in the console
 
