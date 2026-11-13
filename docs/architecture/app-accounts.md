@@ -34,7 +34,7 @@ An account is one row of the tools service's `connections` table for one app in 
 
 | Field | Meaning | Built |
 |---|---|---|
-| Name (`account_name`) | What people, steps and agents call it: "EU org", "Platform org", "Logistics site". One per app per team, compared case-folded | Built. The stored `account_key` and the filtered unique index `uq_connections_account_key` (PostgreSQL and SQL Server) hold the rule (`0071_account_key.py:26`, `:70-71`). The routes raise `account_name_taken` with the same message everywhere (`store/connections.py:304-307`) |
+| Name (`account_name`) | What people, steps and agents call it: "EU org", "Platform org", "Logistics site". One per app per owner (the team, or one person's own accounts), compared case-folded, so a person's own account may take a team account's name; a call naming it prefers the caller's own | Built. The stored `account_key` and the filtered unique index over owner and key (`0076_account_owner_key.py`, PostgreSQL and SQL Server) hold the rule. The routes raise `account_name_taken` with the same message everywhere (`store/connections.py:304-307`) |
 | Who signs in | Shared team login, or each person signs in with their own login | Built (`who-signs-in.tsx:38`) |
 | Test only | A test account is used only by test runs and cannot be the team default | Built (`connect-window.tsx:390`, `:513`; `plugins/routes.py:326`) |
 | Auth config | Ops AI's app, or the team's own OAuth app | Built |
@@ -175,7 +175,7 @@ and the names of the workflows and agents (`connections/service.py:676-700`).
 | `ACCOUNT_NOT_YOURS` | 403 | A named account is another person's own |
 | `SANDBOX_REQUIRED` | 409 | A test run names a live account and the team has no test account |
 | `ACCOUNT_CHOICE_NEEDED` | 403 | A person holds two or more accounts of the app and chose no default |
-| `account_name_taken` | 409 | Another account of the app in the team holds the name |
+| `account_name_taken` | 409 | Another account of the app with the same owner (the team, or the person) holds the name |
 | `account_name_unknown` | 422 | Publishing a definition that names an account the team does not have |
 | `account_in_use` | 409 | Deleting an account a draft or published version names |
 
