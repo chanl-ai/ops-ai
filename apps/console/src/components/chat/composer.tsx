@@ -218,7 +218,12 @@ export function Composer({
     return <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{disabledReason}</div>;
 
   return (
-    <div ref={box} className="relative" onKeyDown={(e) => e.key === 'Escape' && slash && setText(text.replace(SLASH, '$1'))}>
+    <div ref={box} className="relative" onKeyDown={(e) => {
+        if (e.key === 'Escape' && slash) setText(text.replace(SLASH, '$1'));
+        // Backspace in an empty box takes the skill off, as it would a token typed before the text.
+        if (e.key === 'Backspace' && skill && !text && e.target instanceof HTMLTextAreaElement) setSkill(null);
+      }}
+    >
       {slash && skillsFor && <SkillMenu agentId={skillsFor.id} agentName={skillsFor.name} query={slash[2]} onPick={pickSkill} className={menuPlace} />}
       {filling && (
         <SkillInputsForm
@@ -229,11 +234,6 @@ export function Composer({
             setFilling(null);
           }}
         />
-      )}
-      {skill && (
-        <div className="mb-2 flex">
-          <SkillChip label={skill.label} onRemove={() => setSkill(null)} />
-        </div>
       )}
       {typed && (
         <div className={cn('absolute inset-x-0 z-10 overflow-hidden rounded-lg border bg-popover shadow-md', menuPlace)} data-testid="mention-list">
@@ -255,6 +255,7 @@ export function Composer({
         </div>
       )}
     <ChatPrompt
+      header={skill && <SkillChip label={skill.label} onRemove={() => setSkill(null)} />}
       value={text}
       onChange={setText}
       onSubmit={send}

@@ -104,10 +104,21 @@ export function ThreadMessages({
   return (
     <ChatConversation>
         {messages.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">No messages yet. Ask something below.</p>}
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           const isLive = !!live && m.id === live.assistant.id;
-          if (m.role === 'user')
-            return <UserMessage key={m.id} message={m} disabled={streaming || readOnly} onEdit={readOnly ? undefined : (text) => onSend({ content: text, edit: m.id }, m.id)} />;
+          if (m.role === 'user') {
+            // The reply records the skill this message picked from the / menu.
+            const picked = messages[i + 1]?.skills?.find((s) => s.how === 'picked');
+            return (
+              <UserMessage
+                key={m.id}
+                message={m}
+                skill={picked && (picked.part ? `${picked.name} · ${picked.part.replace(/-/g, ' ')}` : picked.name)}
+                disabled={streaming || readOnly}
+                onEdit={readOnly ? undefined : (text) => onSend({ content: text, edit: m.id }, m.id)}
+              />
+            );
+          }
           return (
             <React.Fragment key={m.id}>
             {m.skills?.length ? <UsedSkills skills={m.skills} /> : null}

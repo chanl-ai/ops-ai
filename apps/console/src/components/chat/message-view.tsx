@@ -26,6 +26,7 @@ import { ToolCallCard } from './tool-call-card';
 import { AccountChoiceCard, AppOffCard, ConnectionRequiredCard, accountChoice, appOffForTeam, connectionRequired } from './connection-required-card';
 import { MemorySuggestion } from '@/components/memory/memory-suggestion';
 import { rememberedLine } from '@/components/memory/remembered-line';
+import { SkillChip } from '@/components/chat/skill-menu';
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
 import { LayoutWidget } from './widget-layout';
 import { WidgetView } from './widget-view';
@@ -34,7 +35,8 @@ import { wasNotRun } from '@/lib/tool-calls';
 
 const FEEDBACK_REASONS = ['Wrong answer', 'Missing from the knowledge base', 'Cited the wrong document', 'Tool returned the wrong data', 'Not what I asked'];
 
-export function UserMessage({ message, onEdit, disabled }: { message: ChatMessage; onEdit?: (text: string) => void; disabled?: boolean }) {
+/** `skill` names the skill picked from the / menu for this message, shown as its token before the text. */
+export function UserMessage({ message, onEdit, disabled, skill }: { message: ChatMessage; onEdit?: (text: string) => void; disabled?: boolean; skill?: string }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(message.content);
   if (editing)
@@ -93,6 +95,11 @@ export function UserMessage({ message, onEdit, disabled }: { message: ChatMessag
           )
         }
       >
+        {skill && (
+          <span className="mb-1 block">
+            <SkillChip label={skill} />
+          </span>
+        )}
         {message.content}
       </ChatBubble>
     </div>

@@ -188,14 +188,13 @@ export function SkillInputsForm({ picked, onDone, onBack }: { picked: PickedSkil
 /** The picked skill as a chip in the composer; `onRemove` drops it from the message. */
 export function SkillChip({ label, onRemove }: { label: string; onRemove?: () => void }) {
   return (
-    <Badge variant="secondary" className="h-6 max-w-full gap-1.5 rounded-md pr-1 pl-2 font-normal" data-testid="skill-chip">
-      <Sparkles className="size-3" />
-      <span className="truncate">{label}</span>
+    <span className="inline-flex h-6 max-w-full items-center gap-1 rounded-md bg-primary/10 pr-1 pl-1.5 text-sm font-medium text-primary" data-testid="skill-chip">
+      <span className="truncate">/{label}</span>
       {onRemove && (
-        <Button type="button" variant="ghost" size="icon" className="size-4 rounded-full" onClick={onRemove} aria-label={`Remove ${label}`}>
+        <Button type="button" variant="ghost" size="icon" className="size-4 rounded-full text-primary hover:bg-primary/15" onClick={onRemove} aria-label={`Remove ${label}`}>
           <X className="size-3" />
         </Button>
       )}
-    </Badge>
+    </span>
   );
 }
