@@ -56,6 +56,8 @@ kb_bases = sa.Table(
     sa.Column("owner", sa.String(200), nullable=False),
     sa.Column("collections", sa.JSON, nullable=False),
     sa.Column("retrieval", sa.JSON, nullable=False),
+    # Its answer, sync, access and source-default settings (service.settings_of); null: the defaults (kb_0024).
+    sa.Column("settings", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_refreshed_at", sa.DateTime(timezone=True)),

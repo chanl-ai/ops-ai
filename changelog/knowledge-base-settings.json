@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-13",
+  "title": "Knowledge bases keep answer, sync and source settings",
+  "description": "A knowledge base now keeps what it gives back, its no-answer message, how syncs treat changes, how new sources split and its MCP tool name, all filled by the starting preset and editable afterwards. Pushed web pages keep their address, so answers link to it.",
+  "tag": "new"
+}

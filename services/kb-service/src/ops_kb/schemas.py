@@ -18,6 +18,88 @@ class In(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
 
 
+class _Section(BaseModel):
+    """One section of a base's stored settings. A field it does not keep is refused (`invalid_settings`), so a caller
+    never saves a value nothing reads; the defaults and presets are service.py's."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+
+class FilterCondition(_Section):
+    id: str = ""
+    key: str = Field(min_length=1, max_length=120)
+    op: Literal["is", "is_not", "one_of", "before", "after", "exists"]
+    value: str = Field(default="", max_length=500)
+
+
+class FilterGroup(_Section):
+    match: Literal["all", "any"] = "all"
+    conditions: list[FilterCondition] = Field(default_factory=list[FilterCondition], max_length=20)
+
+
+class RetrievalSettings(_Section):
+    """How a search of the base runs (retrieval.py) and which of its pieces it may return."""
+
+    search_mode: Literal["keyword", "meaning", "hybrid"]
+    hybrid_weight: float = Field(ge=0, le=1)
+    rerank: bool
+    chunk_limit: int = Field(ge=1, le=50)
+    threshold: float = Field(ge=0, le=1)
+    meaning_threshold: float = Field(ge=0, le=1)
+    rewrite: str
+    rewrite_instructions: str
+    query_model: str
+    # Empty: every collection and every source the base reads.
+    scope_collections: list[str]
+    scope_source_ids: list[str]
+    tags_include: list[str]
+    tags_exclude: list[str]
+    include_untagged: bool
+    filters: FilterGroup
+
+
+class AnswerSettings(_Section):
+    """What the base gives back to an agent's turn: an answer with citations or the pieces alone, whether an answer
+    citing none of its pieces is withheld, and what is said when nothing is found. The model, temperature, length and
+    instructions are the agent's."""
+
+    shape: Literal["answer_with_citations", "chunks"]
+    withhold_uncited: bool
+    no_answer_message: str = Field(min_length=1, max_length=500)
+
+
+class SyncSettings(_Section):
+    """How the syncs of the base's sources treat what they find: a changed version applied at once or held in Changes
+    for review, an item removed at its source taken out of search or kept and flagged, when an item is stale, and
+    whether the owner is told when a sync keeps failing."""
+
+    changes: Literal["apply", "review"]
+    removed_at_source: Literal["remove", "keep"]
+    stale_after_days: int = Field(ge=1, le=3650)
+    notify_on_failure: bool
+
+
+class McpAccess(_Section):
+    enabled: bool
+    tool_name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+
+
+class AccessSettings(_Section):
+    """Who may search a base is its whole team; what is stored is whether it is offered as an MCP tool, and its name."""
+
+    mcp: McpAccess
+
+
+class SourceDefaults(_Section):
+    """How a new source of the base splits its documents; each source keeps its own copy, changed on the source. AI
+    steps are refused here: they need an estimate and an approval per source."""
+
+    strategies: list[Literal["structure", "fixed", "context_headers", "parent_child", "table_rows", "clean"]]
+    size: int
+    overlap: int
+    child_size: int
+
+
 class KnowledgeBaseIn(In):
     # A caller-chosen id, for knowledge bases that agents were granted before they moved here; kb-service makes one.
     id: str | None = Field(default=None, pattern=r"^kb_[a-z0-9_]{1,60}$")
@@ -29,8 +111,15 @@ class KnowledgeBaseIn(In):
     description: str = ""
     color: str = "blue"
     source_ids: list[str] = []
+    # Fills every settings section as a starting point; `raw` is shown as "Search only". The base does not remember it.
     preset: Literal["balanced", "precise", "raw"] = "balanced"
     collections: list[str] = []
+    # Values over the preset's, section by section, checked as a patch is.
+    retrieval: Json | None = None
+    answer: Json | None = None
+    sync: Json | None = None
+    access: Json | None = None
+    source_defaults: Json | None = None
 
 
 class KnowledgeBasePatch(In):
@@ -42,7 +131,12 @@ class KnowledgeBasePatch(In):
     description: str | None = None
     color: str | None = None
     collections: list[str] | None = None
+    # Each section merges over what is stored: the keys sent change, the rest stay.
     retrieval: Json | None = None
+    answer: Json | None = None
+    sync: Json | None = None
+    access: Json | None = None
+    source_defaults: Json | None = None
 
 
 class AttachIn(In):
@@ -95,7 +189,11 @@ class KnowledgeBase(Out):
     precedence: list[Json]
     metadata_profile: Json
     retrieval: Json
+    answer: Json
+    sync: Json
+    source_defaults: Json
     access: Json
+    # suggest when the sync settings hold changes for review, act when they apply them.
     automation: str
     stats: Json
     health: str
@@ -267,6 +365,8 @@ class Item(Out):
     duplicate_of: str | None = None
     # Where a fetched item sits at its source: a library folder, a space's page tree.
     folder: str | None = None
+    # Its address at its source, which a citation links to: a fetched page's, or the url a pushed item was sent with.
+    url: str | None = None
     chunk_count: int
     tags: list[str]
     metadata: dict[str, str]
@@ -322,6 +422,8 @@ class WrittenItemIn(In):
     # A file's bytes in base64 (a PDF, a Word document), with its `mime`.
     content: str | None = Field(default=None, max_length=30_000_000)
     mime: str | None = Field(default=None, max_length=120)
+    # Where the item lives in the system that pushed it (a web page's address), which a citation of it links to.
+    url: str | None = Field(default=None, max_length=2000, pattern=r"^https?://\S+$")
 
 
 class WrittenItem(Out):
