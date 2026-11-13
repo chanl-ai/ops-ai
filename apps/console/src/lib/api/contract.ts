@@ -39,7 +39,7 @@ import type { FormsApi } from './forms-contract';
 import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
-import type { ConnectApi } from './connect-contract';
+import type { McpLinksApi } from './mcp-links-contract';
 import type { WikiApi } from './wiki-contract';
 import type {
   Agent,
@@ -236,7 +236,8 @@ export interface OpsApi {
   activity: ActivityApi;
   guardrails: GuardrailsApi;
   assurance: AssuranceApi;
-  connect: ConnectApi;
+  /** The team's MCP links (tools-service): a named address for a chosen set of its tools. */
+  mcpLinks: McpLinksApi;
   wiki: WikiApi;
   tools: {
     list(params: ListParams<ToolFilters>): Promise<ListResult<Tool> & { stats: ToolStats }>;

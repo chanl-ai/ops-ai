@@ -75,6 +75,11 @@ export interface ToolCallRow {
   actingFor?: string;
   /** Whose sign-in signed the call in: that person's own, or the team's account; absent when it used no sign-in. */
   credential?: 'person' | 'team';
+  /** Where the call came in (the API, an MCP address or the console), and the assistant that sent an MCP call: its own
+   * name for itself, or the id of the client a person allowed when they signed in. */
+  channel?: 'api' | 'mcp' | 'console';
+  clientName?: string;
+  clientId?: string;
 }
 
 export interface CallIdentity<K extends string> {
@@ -108,6 +113,8 @@ export type ToolCallFilters = {
   tool?: string[];
   /** The calls of an app's tool sets, as the app page's Logs tab lists them. */
   moduleId?: string[];
+  /** The calls made through one MCP link, as its Calls tab lists them. */
+  link?: string[];
 };
 
 export interface ToolCallStats {

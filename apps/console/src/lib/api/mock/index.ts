@@ -57,7 +57,7 @@ import { createTemplatesMock, templateDeps } from './templates';
 import { createPromptsMock } from './prompts';
 import { createAssuranceMock } from './assurance';
 import { createAgentPublishMock, createAgentVersionStore } from './agent-publish';
-import { createConnectMock } from './connect';
+import { createMcpLinksMock } from './mcp-links';
 import { createAgentWrappers } from './agent-wrappers';
 import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
@@ -584,7 +584,6 @@ export function createMockApi(): OpsApi {
     seedTier: modelRisk.seedTier,
     toolAccess: (aid) => tools.filter((t) => t.grantedAgentIds.includes(aid)).map((t) => t.access).sort((x, y) => accessRank.indexOf(y) - accessRank.indexOf(x))[0],
   });
-  const connect = createConnectMock({ workflows: () => workflows.map(workflowRow), deployments, tierOf: (wid) => modelRisk.tierOf(wid, 'workflow'), tools, teams: F.OWNERS, me });
   const assurance = createAssuranceMock({
     agents: () => agents.map(agentRow),
     workflows: () => workflows.map(workflowRow),
@@ -1163,7 +1162,7 @@ export function createMockApi(): OpsApi {
     evals: evals.api,
     modelRisk: modelRisk.api,
     assurance: assurance.api,
-    connect: connect.api,
+    mcpLinks: createMcpLinksMock(),
     wiki: createWikiMock({ me, kbNames: () => knowledge.kbNames() }).api,
     ...createGovernanceMock(),
     signInPolicy: signIn.api,

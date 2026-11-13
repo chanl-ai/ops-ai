@@ -1,4 +1,4 @@
-import type { AccessCheck, Holders, Me, MyPermissions, PersonPermissions, RoleCreated, RoleDetail, RoleGrant, RoleHolder, RoleSummary, WhyNot } from '@/lib/types/settings';
+import type { AccessCheck, ApiKey, Holders, Me, MyPermissions, PersonPermissions, RoleCreated, RoleDetail, RoleGrant, RoleHolder, RoleSummary, WhyNot } from '@/lib/types/settings';
 import type { Team } from '@/lib/types/team';
 
 import type { OpsApi } from './contract';
@@ -61,4 +61,27 @@ export function createPlatformOAuthHttp(baseUrl: string): OpsApi['oauth'] {
 export function createPlatformWorkspaceTeamsHttp(baseUrl: string): OpsApi['workspaceTeams'] {
   const { get, send } = createTransport(`${baseUrl}/v1`);
   return createWorkspaceTeamsHttp(get, send);
+}
+
+/**
+ * The team's API keys (/v1/api-keys), the one list every keys screen reads (Settings › Team › API keys, an MCP link's
+ * Keys tab). platform-service lists the acting team's keys in one answer, so they arrive as one page. A key's
+ * scopes there are `read` and `write`; a console scope that changes anything (`runs:write`) asks for write.
+ */
+export function createPlatformApiKeysHttp(baseUrl: string): OpsApi['settings']['apiKeys'] {
+  const { get, send } = createTransport(`${baseUrl}/v1`);
+  return {
+    list: async () => {
+      const data = await get<ApiKey[]>('/api-keys');
+      return { data, pagination: { page: 1, pageSize: Math.max(data.length, 1), total: data.length, totalPages: 1, hasNext: false, hasPrev: false }, facets: {} };
+    },
+    create: async (input) => {
+      const scopes = input.scopes.some((s) => s === 'write' || s.endsWith(':write')) ? ['read', 'write'] : ['read'];
+      const made = await send<{ key: ApiKey; secret: string }>('POST', '/api-keys', { name: input.name, scopes, expiresInDays: input.expiresInDays });
+      return { key: made.secret, apiKey: made.key };
+    },
+    revoke: async (id) => {
+      await send('POST', `/api-keys/${encodeURIComponent(id)}/revoke`);
+    },
+  };
 }

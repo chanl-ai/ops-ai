@@ -43,7 +43,7 @@ import { createActivityHttp } from './activity-http';
 import { createCaseRecordsHttp } from './case-records-http';
 import { createWidgetsHttp } from './widgets-http';
 import { createAssuranceHttp } from './assurance-http';
-import { createConnectHttp } from './connect-http';
+import { createMcpLinksHttp } from './mcp-links-http';
 import { createWikiHttp } from './wiki-http';
 import { fetchWithIdentity } from './request-identity';
 
@@ -219,7 +219,7 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
 }
 
 /** Tool modules, the egress allow-list, secrets, connections and the gateway's call log (Activity) against tools-service under `/v1`. */
-export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets' | 'connections'> & { toolCalls: GovernanceApi['toolCalls'] } {
+export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets' | 'connections' | 'mcpLinks'> & { toolCalls: GovernanceApi['toolCalls'] } {
   const t = createTransport(`${baseUrl}/v1`);
   return {
     toolModules: createToolModulesHttp(t.get, t.send, t.qs),
@@ -227,6 +227,7 @@ export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules'
     secrets: createSecretsHttp(t.get, t.send, t.qs),
     connections: createConnectionsHttp(t.get, t.send),
     toolCalls: createExecutionsHttp(t.get),
+    mcpLinks: createMcpLinksHttp(t.get, t.send),
   };
 }
 
@@ -330,7 +331,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     activity: createActivityHttp(get),
     guardrails: createGuardrailsHttp(get, send, qs),
     assurance: createAssuranceHttp(get, send, qs),
-    connect: createConnectHttp(get, send),
+    mcpLinks: createMcpLinksHttp(get, send),
     wiki: createWikiHttp(get, send, qs),
     tools: {
       list: (p) => get(`/tools?${qs(p)}`),

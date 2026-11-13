@@ -3,7 +3,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { usePathname } from 'next/navigation';
 
-import { isPreviewPath, knowledgeOnService, policiesOnService } from '@/lib/api';
+import { apiKeysOnService, isPreviewPath, knowledgeOnService, policiesOnService } from '@/lib/api';
 import { sampleReadsOn, subscribeSampleReads } from '@/lib/api/sample-reads';
 
 const NONE: string[] = [];
@@ -29,6 +29,11 @@ export function usePreviewCheck(): (path: string) => boolean {
 /** True when knowledge sources still run on the mock, so their settings cannot be stored. */
 export function useKnowledgeIsSample(): boolean {
   return !knowledgeOnService;
+}
+
+/** True when the team's API keys still run on the mock, so a key made there opens nothing. */
+export function useApiKeysAreSample(): boolean {
+  return !apiKeysOnService;
 }
 
 /** True when workspace policies still run on the mock, so changing one stores nothing. */

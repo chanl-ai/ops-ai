@@ -12,7 +12,7 @@ import { createFirebaseProvider } from '@/lib/auth/providers/firebase';
 import { createOidcProvider } from '@/lib/auth/providers/oidc';
 import { createPlatformProvider } from '@/lib/auth/providers/platform';
 import { createPlatformAccessHttp } from './platform-access-http';
-import { createPlatformOAuthHttp, createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
+import { createPlatformApiKeysHttp, createPlatformOAuthHttp, createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
 import { createDocumentsHttp, createExtractionsHttp, createLayoutsHttp } from './documents-http';
 import { createFilesServiceHttp } from './files-service-http';
 import { createModelsHttp } from './models-http';
@@ -91,7 +91,8 @@ function createApi(): OpsApi {
       },
       (email) => authProvider.signInOptions(email),
     );
-    api = { ...api, settings: { ...api.settings, members: access.members }, invites: access.invites, governance: { ...api.governance, audit: access.audit } };
+    // The team's API keys are platform-service's, the one issuer of every key.
+    api = { ...api, settings: { ...api.settings, members: access.members, apiKeys: createPlatformApiKeysHttp(platformUrl!) }, invites: access.invites, governance: { ...api.governance, audit: access.audit } };
   }
   // Beside real services, every read still answered by the mock is recorded with the page it was made on, so the
   // page says it shows sample data even when the table below calls its prefix served (lib/api/sample-reads.ts).
@@ -117,6 +118,8 @@ const AREAS: { prefix: string; served: boolean }[] = [
   // Cases are agents-service's /v1/cases.
   { prefix: '/work/cases', served: Boolean(registryUrl) },
   { prefix: '/build/channels', served: Boolean(registryUrl) },
+  // MCP links are tools-service's /v1/mcp-links.
+  { prefix: '/build/channels/mcp', served: Boolean(toolsUrl) },
   { prefix: '/build/skills', served: Boolean(registryUrl) },
   { prefix: '/build/guardrails', served: Boolean(registryUrl) },
   { prefix: '/build/widgets', served: Boolean(registryUrl) },
@@ -168,6 +171,8 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/account', served: false },
   { prefix: '/settings', served: false },
 ];
+/** The team's API keys are platform-service's; without it the keys page draws sample ones and says so. */
+export const apiKeysOnService = onPlatform || Boolean(baseUrl);
 /** Workspace policies are platform-service's; without it the page draws sample ones and says so. */
 export const policiesOnService = onPlatform || Boolean(baseUrl);
 /** Agent evals have no service yet: beside real services the Evals tab draws sample cases and runs and says so. */
