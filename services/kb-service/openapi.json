@@ -114,6 +114,37 @@
         "title": "AiEstimate",
         "type": "object"
       },
+      "AnswerSettings": {
+        "additionalProperties": false,
+        "description": "What the base gives back to an agent's turn: an answer with citations or the pieces alone, whether an answer\nciting none of its pieces is withheld, and what is said when nothing is found. The model, temperature, length and\ninstructions are the agent's.",
+        "properties": {
+          "noAnswerMessage": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Noanswermessage",
+            "type": "string"
+          },
+          "shape": {
+            "enum": [
+              "answer_with_citations",
+              "chunks"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "withholdUncited": {
+            "title": "Withholduncited",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shape",
+          "withholdUncited",
+          "noAnswerMessage"
+        ],
+        "title": "AnswerSettings",
+        "type": "object"
+      },
       "AttachIn": {
         "properties": {
           "sourceIds": {
@@ -4272,6 +4303,13 @@
       "SearchOut": {
         "additionalProperties": false,
         "properties": {
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AnswerSettings"
+            },
+            "title": "Answers",
+            "type": "object"
+          },
           "cost": {
             "$ref": "#/components/schemas/SearchCost"
           },

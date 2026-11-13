@@ -1997,7 +1997,7 @@ class KnowledgeService:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
         live = [k for k in dict.fromkeys(kb_ids) if k in readable]
         found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit, collection=collection)
-        return found_out(found)
+        return {**found_out(found), "answers": {k: settings_of(readable[k])["answer"] for k in live}}
 
     async def _retrieve(
         self,

@@ -46,7 +46,7 @@ class KnowledgeUnavailableError(Exception):
 class KnowledgePort(Protocol):
     async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         """Passages for `query` from `kb_ids`, best first, as many as the bases' own settings return; raises
-        KnowledgeUnavailableError when it cannot answer."""
+        KnowledgeUnavailableError when it cannot answer. A `KnowledgeFound` also carries each base's answer settings."""
         ...
 
 

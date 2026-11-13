@@ -146,6 +146,39 @@ class Passage:
 
 
 @dataclass(frozen=True)
+class BaseAnswer:
+    """A knowledge base's answer settings (kb-service's answer section). `withhold_uncited`: an answer that uses the
+    base and cites none of its passages is replaced by `no_answer_message`, which is also said when nothing is found.
+    A base giving back pieces only (`shape` "chunks") leaves the answer to the agent and is never withheld."""
+
+    shape: str
+    withhold_uncited: bool
+    no_answer_message: str
+
+    @property
+    def withholds(self) -> bool:
+        return self.withhold_uncited and self.shape != "chunks"
+
+    @classmethod
+    def of(cls, a: dict[str, Any]) -> BaseAnswer:
+        """A base's answer settings as kb-service serves them (camelCase)."""
+        return cls(
+            shape=str(a.get("shape") or "answer_with_citations"),
+            withhold_uncited=bool(a.get("withholdUncited")),
+            no_answer_message=str(a.get("noAnswerMessage") or ""),
+        )
+
+
+class KnowledgeFound(list[Passage]):
+    """A knowledge search's passages, best first, with each searched base's answer settings by id in search order. A
+    plain list of passages is a search whose bases set no answer rule."""
+
+    def __init__(self, passages: list[Passage], answers: dict[str, BaseAnswer] | None = None) -> None:
+        super().__init__(passages)
+        self.answers: dict[str, BaseAnswer] = dict(answers or {})
+
+
+@dataclass(frozen=True)
 class TranscriptMessage:
     role: Literal["user", "assistant"]
     content: str

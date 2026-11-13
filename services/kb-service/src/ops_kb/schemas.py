@@ -505,6 +505,9 @@ class SearchOut(Out):
     cost: SearchCost
     rewrite: RewriteOut | None = None
     rerank: RerankOut | None = None
+    # Each searched base's answer settings by id, which the agents kernel applies to the answer it writes from them:
+    # an uncited answer withheld and replaced by the base's no-answer message.
+    answers: dict[str, AnswerSettings] = Field(default_factory=dict[str, AnswerSettings])
 
 
 class PlaygroundAnswer(Out):

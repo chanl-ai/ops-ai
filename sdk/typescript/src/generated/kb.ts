@@ -787,6 +787,23 @@ export interface components {
             /** Totalitems */
             totalItems: number;
         };
+        /**
+         * AnswerSettings
+         * @description What the base gives back to an agent's turn: an answer with citations or the pieces alone, whether an answer
+         *     citing none of its pieces is withheld, and what is said when nothing is found. The model, temperature, length and
+         *     instructions are the agent's.
+         */
+        AnswerSettings: {
+            /** Noanswermessage */
+            noAnswerMessage: string;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "answer_with_citations" | "chunks";
+            /** Withholduncited */
+            withholdUncited: boolean;
+        };
         /** AttachIn */
         AttachIn: {
             /** Sourceids */
@@ -2282,6 +2299,10 @@ export interface components {
         };
         /** SearchOut */
         SearchOut: {
+            /** Answers */
+            answers?: {
+                [key: string]: components["schemas"]["AnswerSettings"];
+            };
             cost: components["schemas"]["SearchCost"];
             lanes: components["schemas"]["Lanes"];
             /** Passages */

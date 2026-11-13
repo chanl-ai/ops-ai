@@ -17,6 +17,12 @@ class AiApprovalIn(TypedDict):
     decision: Literal["approve", "revoke"]
 
 
+class AnswerSettings(TypedDict, closed=True):
+    noAnswerMessage: str
+    shape: Literal["answer_with_citations", "chunks"]
+    withholdUncited: bool
+
+
 class AttachIn(TypedDict):
     sourceIds: list[str]
 
@@ -777,6 +783,7 @@ class PlaygroundAnswer(TypedDict, closed=True):
 
 
 class SearchOut(TypedDict, closed=True):
+    answers: NotRequired[dict[str, AnswerSettings]]
     cost: SearchCost
     lanes: Lanes
     passages: list[PassageOut]

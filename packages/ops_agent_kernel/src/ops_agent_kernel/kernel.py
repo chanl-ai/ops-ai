@@ -63,6 +63,7 @@ from .events import (
 )
 from .ports import KernelPorts, KnowledgeUnavailableError
 from .types import (
+    BaseAnswer,
     CitationRef,
     Guardrail,
     Interrupt,
@@ -166,6 +167,8 @@ class _TurnState:
     passages: list[Passage] = field(default_factory=list[Passage])
     # The calls whose result brought passages: a turn that read only these answers from knowledge and cites it.
     passage_calls: set[str] = field(default_factory=set[str])
+    # Each searched base's answer settings by id, in search order, from the knowledge block and search_knowledge.
+    kb_answers: dict[str, BaseAnswer] = field(default_factory=dict[str, BaseAnswer])
     # Calls being made now, by (tool, input hash): the same call made twice in one step waits for the first.
     inflight: dict[tuple[str, str], asyncio.Event] = field(default_factory=dict[tuple[str, str], asyncio.Event])
 
@@ -603,6 +606,11 @@ def _numbered(state: _TurnState, output: Any) -> Any:
     if not isinstance(output, dict):
         return output
     result = cast(dict[str, Any], output)
+    answers = result.get("answers")
+    if isinstance(answers, dict):
+        for kb, a in cast(dict[str, Any], answers).items():
+            if isinstance(a, dict) and kb not in state.kb_answers:
+                state.kb_answers[str(kb)] = BaseAnswer.of(cast(dict[str, Any], a))
     found = result.get("passages")
     if not isinstance(found, list) or not found:
         return result
@@ -627,12 +635,15 @@ def _numbered(state: _TurnState, output: Any) -> Any:
     return {**result, "passages": numbered}
 
 
-async def _retrieve(req: TurnRequest, ports: KernelPorts) -> list[Passage]:
-    """The knowledge block: the bases' own retrieval settings decide how many passages return (kb-service)."""
+async def _retrieve(req: TurnRequest, ports: KernelPorts, state: _TurnState) -> list[Passage]:
+    """The knowledge block: the bases' own retrieval settings decide how many passages return (kb-service), and
+    their answer settings are kept for the end of the turn."""
     query = (req.search_text or req.user_turn or "").strip()
     if not req.kb_ids or not query:
         return []
-    return await ports.knowledge.search(query, req.kb_ids)
+    found = await ports.knowledge.search(query, req.kb_ids)
+    state.kb_answers.update(getattr(found, "answers", None) or {})
+    return list(found)
 
 
 def _own_knowledge(req: TurnRequest, arguments: dict[str, Any]) -> dict[str, Any] | None:
@@ -742,19 +753,37 @@ KNOWLEDGE_WITHDRAWN = (
 )
 
 
+def _system_calls(state: _TurnState) -> list[ToolCallRecord]:
+    """Calls that reached a system; the kernel's own tools say nothing about whether the person's ask was answerable."""
+    return [
+        r
+        for i in state.order
+        if (r := state.records[i]).server != UNGRANTED
+        and r.tool not in (present.NAME, search.NAME, skillset.NAME, planner.NAME)
+    ]
+
+
+def _base_withholds(state: _TurnState, block: int, asked: bool) -> str | None:
+    """The no-answer message that replaces the answer, or None. When the answer comes from knowledge only (the
+    block with no call, or calls that each brought passages), or knowledge was asked for and nothing was found or
+    called, and it cites no passage, the first searched base (kb_ids order) whose answer settings withhold an uncited
+    answer has its message said instead. Runs after the end check, so a correction that adds citations keeps the
+    answer, and whether or not the agent turns the end check on."""
+    rule = next((a for a in state.kb_answers.values() if a.withholds and a.no_answer_message), None)
+    if rule is None or cited_numbers(state.text):
+        return None
+    systems = _system_calls(state)
+    from_knowledge = all(r.tool_call_id in state.passage_calls for r in systems) if systems else block > 0 or asked
+    return rule.no_answer_message if from_knowledge else None
+
+
 async def _end_check(
     state: _TurnState, model: Any, system_prompt: str, history: list[ModelMessage], block: int
 ) -> tuple[str | None, TokenUsage]:
     """The end-clean check (answer_check.py) on the finished answer: None when it is clean, else the one correction,
     made by a tool-less agent told each defect. A correction that fails, comes back empty or has more defects than the
     answer leaves the answer as it was; there is never a second one."""
-    # Calls that reached a system; the kernel's own tools say nothing about whether the person's ask was answerable.
-    systems = [
-        r
-        for i in state.order
-        if (r := state.records[i]).server != UNGRANTED
-        and r.tool not in (present.NAME, search.NAME, skillset.NAME, planner.NAME)
-    ]
+    systems = _system_calls(state)
     # A question the model gave its likely answers for (present followUps) is the interview's own, not an offer.
     interviewed = any(
         r.tool == present.NAME and r.status == "ok" and (r.view or {}).get("followUps") for r in state.records.values()
@@ -991,7 +1020,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             if req.kb_ids and req.user_turn:
                 yield StatusChanged("retrieving")
                 try:
-                    passages = [*req.attached, *await _retrieve(req, ports)]
+                    passages = [*req.attached, *await _retrieve(req, ports, state)]
                     state.passages = list(passages)
                 except KnowledgeUnavailableError:
                     # Asked for knowledge, the turn says it is unavailable; otherwise it goes on without passages
@@ -1225,6 +1254,16 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 yield _replace(state, corrected)
             else:
                 state.text = corrected
+    asked = req.knowledge_asked if req.knowledge_asked is not None else bool(req.kb_ids)
+    withheld_by_base = False
+    if req.output_schema is None and state.text.strip():
+        message = _base_withholds(state, len(passages) - len(req.attached), bool(asked and req.user_turn))
+        if message is not None:
+            withheld_by_base = True
+            if state.shown_text:
+                yield _replace(state, message)
+            else:
+                state.text = message
 
     fired: dict[str, Any] | None = None
     noted: dict[str, Any] | None = None
@@ -1290,14 +1329,13 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield finish("completed", "guardrail", guardrail=fired)
             return
 
-    asked = req.knowledge_asked if req.knowledge_asked is not None else bool(req.kb_ids)
     structured: dict[str, Any] = {"output": output} if req.output_schema is not None else {}
     if noted is not None:
         structured["guardrail"] = noted
     done = finish(
         "completed",
         "final",
-        no_answer=bool(asked and req.user_turn and not passages and not state.order),
+        no_answer=withheld_by_base or bool(asked and req.user_turn and not passages and not state.order),
         **structured,
     )
     if done.result.citations:

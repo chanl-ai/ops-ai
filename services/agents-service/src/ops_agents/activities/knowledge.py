@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from ops_agent_kernel.ports import KnowledgeUnavailableError
-from ops_agent_kernel.types import Passage
+from ops_agent_kernel.types import BaseAnswer, KnowledgeFound, Passage
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
 from ops_service_kit.logging import get_logger
@@ -69,7 +69,7 @@ class KbService:
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("knowledge_unavailable", tenant=current_tenant(), error=type(e).__name__)
             raise KnowledgeUnavailableError("kb-service did not answer") from e
-        return [
+        passages = [
             Passage(
                 document_id=str(p["itemId"]),
                 title=str(p["title"]),
@@ -81,6 +81,9 @@ class KbService:
             )
             for p in cast(list[dict[str, Any]], found["passages"])
         ]
+        # Each base's answer settings, which the kernel applies to the answer written from these passages.
+        answers = cast(dict[str, dict[str, Any]], found.get("answers") or {})
+        return KnowledgeFound(passages, {k: BaseAnswer.of(a) for k, a in answers.items()})
 
 
 class NoKnowledgeService:
