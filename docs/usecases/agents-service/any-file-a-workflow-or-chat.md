@@ -29,8 +29,8 @@ Status: draft. Id: `uc-620`. Service: `agents-service`. Layers: api, ui.
 | 4 | Submit again with a mailbox and no subject | The run waits at the acknowledgement, whose reply has the subject "We received your document" |
 | 5 | Submit with the file and sender empty; start by hand through the API with the sender empty | 422 `invalid_input` naming the empty required fields |
 | 6 | Upload the notice as a chat attachment (ticket, bytes, complete); in a chat with an agent that has no knowledge bases, ask "uc620 who is the first debtor in this notice?" with the file attached | The reply names Marcus Bell and 3,250.00 and cites the file's id on page 1 |
-| 7 | List Files' chat attachments; delete the file in Files; ask "uc620 what did I attach?" | The file is listed as `chat_attachment`; the delete answers 204; the reply says the file could not be read because it is no longer in Files |
-| 8 | Attach a scan with no text layer and ask about it | The reply ends "scan-….pdf could not be read: it has no text to read" |
+| 7 | List Files' chat attachments; delete the file in Files; ask "uc620 what did I attach?" | The file is listed as `chat_attachment`; the delete answers 204; the reply says, by the file's name and without its id, that it could not be read because it is no longer in Files |
+| 8 | Attach a scan of a blank page and ask about it | The reply ends "scan-….pdf could not be read: it has no text to read, even by OCR" |
 | 9 | In the console, attach the notice in the composer and send the same question | The upload goes through Files' ticket routes; the reply shows "is Marcus Bell, held for 3,250.00"; the message carries a `fil_` id |
 | 10 | Click the attachment on the message | Files opens the file, shown as a Chat attachment |
 | 11 | Attach a ZIP archive | The chip says "ZIP is not accepted here. Accepted: PDF, …" |
