@@ -52,7 +52,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/api-keys",
         "pathParams": [],
-        "query": [],
+        "query": ["targetKind", "targetId"],
         "stream": False,
     },
     "api_keys_revoke_api_key": {
@@ -844,9 +844,18 @@ class Operations:
         "Api Key Summaries"
         return self._t.call(SERVICE, OPERATIONS["api_keys_api_key_summaries"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def api_keys_list_api_keys(self) -> list[ApiKeyOut]:
+    def api_keys_list_api_keys(
+        self, *, target_kind: str | None = None, target_id: str | None = None
+    ) -> list[ApiKeyOut]:
         "List Api Keys"
-        return self._t.call(SERVICE, OPERATIONS["api_keys_list_api_keys"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["api_keys_list_api_keys"],
+            {},
+            {"targetKind": target_kind, "targetId": target_id},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def api_keys_create_api_key(self, body: ApiKeyIn) -> ApiKeyCreated:
         "Create Api Key"
@@ -1290,9 +1299,18 @@ class AsyncOperations:
         "Api Key Summaries"
         return await self._t.call(SERVICE, OPERATIONS["api_keys_api_key_summaries"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def api_keys_list_api_keys(self) -> list[ApiKeyOut]:
+    async def api_keys_list_api_keys(
+        self, *, target_kind: str | None = None, target_id: str | None = None
+    ) -> list[ApiKeyOut]:
         "List Api Keys"
-        return await self._t.call(SERVICE, OPERATIONS["api_keys_list_api_keys"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["api_keys_list_api_keys"],
+            {},
+            {"targetKind": target_kind, "targetId": target_id},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def api_keys_create_api_key(self, body: ApiKeyIn) -> ApiKeyCreated:
         "Create Api Key"

@@ -552,7 +552,8 @@ export const agentsOperations = {
       "search",
       "cursor",
       "limit",
-      "ids"
+      "ids",
+      "agents"
     ],
     "stream": false
   },
@@ -2095,7 +2096,9 @@ export const agentsOperations = {
   },
   "workflows_start_engine_run": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/runs",
     "pathParams": [],

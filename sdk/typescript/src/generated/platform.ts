@@ -114,7 +114,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Api Keys */
+        /**
+         * List Api Keys
+         * @description The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab
+         *     lists them.
+         */
         get: operations["api_keys_list_api_keys"];
         put?: never;
         /** Create Api Key */
@@ -2708,7 +2712,8 @@ export interface components {
         };
         /**
          * KeyTarget
-         * @description What an API key may start. `version` pins a workflow version; null runs the live one.
+         * @description What an API key may start, or the one MCP link it opens (`mcp_link`, read only). `version` pins a workflow
+         *     version; null runs the live one.
          */
         KeyTarget: {
             /** Id */
@@ -2717,7 +2722,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "workflow";
+            kind: "agent" | "workflow" | "mcp_link";
             /** Version */
             version?: number | null;
         };
@@ -2729,7 +2734,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "workflow";
+            kind: "agent" | "workflow" | "mcp_link";
             /** Version */
             version?: number | null;
         };
@@ -3987,7 +3992,10 @@ export interface operations {
     };
     api_keys_list_api_keys: {
         parameters: {
-            query?: never;
+            query?: {
+                targetKind?: ("agent" | "workflow" | "mcp_link") | null;
+                targetId?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -21927,7 +21927,9 @@ export interface operations {
     workflows_start_engine_run: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -26365,6 +26367,7 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number;
                 ids?: string[] | null;
+                agents?: boolean;
             };
             header?: never;
             path?: never;
