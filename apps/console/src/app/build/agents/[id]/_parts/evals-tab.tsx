@@ -19,12 +19,14 @@ import { FieldSectionLabel } from '@/components/shared/field-row';
 import { StopRowClick } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { PreviewBadge } from '@/components/shared/preview-badge';
 import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkDeleteEvalCases, useCreateEvalCase, useDeleteEvalCase, useEvalCases, useEvalOptions, useEvalRun, useEvalRuns, useEvalSuites, useImportEvalCases, useLatestEvalRun, useRunEvals } from '@/hooks/eval-queries';
 import { useSticky } from '@/hooks/use-sticky';
+import { evalsArePreview } from '@/lib/api';
 import { useCreatedRows } from '@/hooks/use-created-rows';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { pct, relativeTime, shortId } from '@/lib/format';
@@ -222,8 +224,15 @@ export function EvalsTab({ agent }: { agent: Agent }) {
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold">Latest run</h2>
-            <p className="text-sm text-muted-foreground">Tests the newest version against the version live workflows use. Saving the agent starts a run.</p>
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              Latest run
+              {evalsArePreview && <PreviewBadge />}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {evalsArePreview
+                ? 'Sample cases and runs: evals do not run on this agent yet, so nothing here reflects its real behaviour.'
+                : 'Tests the newest version against the version live workflows use. Saving the agent starts a run.'}
+            </p>
           </div>
           <div className="ml-auto flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>

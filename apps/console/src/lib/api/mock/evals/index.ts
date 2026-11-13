@@ -7,7 +7,7 @@ import type { OpsApi } from '../../contract';
 import { PRINCIPALS } from '../knowledge/principals';
 import type { FileLinks } from '../files';
 import { bulk, field, id, list, notFound, respond } from '../runtime';
-import { AGENT_CASES, PLATFORM_TEMPLATES, RULE_OF, SEED_FAILURES, SUITE_META } from './seed';
+import { AGENT_CASES, GENERIC_CASES, GENERIC_PREVIOUS_FAILURES, PLATFORM_TEMPLATES, RULE_OF, SEED_FAILURES, SUITE_META } from './seed';
 
 /** What an eval scores: the settings of one agent version. */
 interface AgentContent {
@@ -26,6 +26,28 @@ export interface EvalsDeps {
   me: string;
   /** Imported CSVs are files; the eval set is recorded as a reference. */
   files: FileLinks;
+}
+
+/** Name, version and pins of agents another service serves, so their stand-ins (below) carry the real labels. */
+const servedAgents = new Map<string, Pick<Agent, 'name' | 'version' | 'usedIn'>>();
+
+/**
+ * Evals beside a real agents service: before an agent's first eval read, its name, version and pins are read from
+ * that service, so sample runs are labelled with the agent's own versions. A failed read keeps the stand-in defaults.
+ */
+export function withServedAgents(evals: EvalsApi, getAgent: (id: string) => Promise<Agent>): EvalsApi {
+  const learn = async (aid: string) => {
+    if (servedAgents.has(aid)) return;
+    const a = await getAgent(aid).catch(() => null);
+    if (a) servedAgents.set(aid, { name: a.name, version: a.version, usedIn: a.usedIn ?? [] });
+  };
+  const first =
+    <A extends unknown[], R>(fn: (aid: string, ...rest: A) => Promise<R>) =>
+    async (aid: string, ...rest: A) => {
+      await learn(aid);
+      return fn(aid, ...rest);
+    };
+  return { ...evals, suites: first(evals.suites), cases: first(evals.cases), createCase: first(evals.createCase), importCases: first(evals.importCases), caseFromTurn: first(evals.caseFromTurn), run: first(evals.run), runs: first(evals.runs), latest: first(evals.latest), options: first(evals.options) };
 }
 
 const RUN_MS = 3500;
@@ -83,22 +105,30 @@ export function createEvalsMock(deps: EvalsDeps) {
   // ── Cases ──
   const writeToolOf = (c: AgentContent) => c.toolNames.find((t) => deps.toolAccess(t) === 'write') ?? 'transfer_funds';
   const principalName = (pid?: string) => PRINCIPALS.find((p) => p.id === pid)?.name;
-  const ownCases: EvalCase[] = Object.entries(AGENT_CASES).flatMap(([agentId, seeds]) =>
-    seeds.map((s, i) => ({
-      id: `ec_${agentId.slice(3)}_${s.key}`,
-      agentId,
-      suite: 'agent' as const,
-      name: s.name,
-      input: s.input,
-      context: { runAsId: s.runAsId, runAsName: principalName(s.runAsId), collections: s.collections ?? [] },
-      checks: s.checks,
-      source: s.source ?? 'manual',
-      readOnly: false,
-      createdAt: new Date(Date.now() - (40 - i) * 86_400_000).toISOString(),
-      createdBy: 'Maya Okafor',
-      lastOutcome: null,
-    })),
-  );
+  const seededCase = (agentId: string, s: (typeof GENERIC_CASES)[number], i: number, fill?: { write: string; collection: string }): EvalCase => ({
+    id: `ec_${agentId.slice(3)}_${s.key}`,
+    agentId,
+    suite: 'agent' as const,
+    name: s.name,
+    input: s.input,
+    context: { runAsId: s.runAsId, runAsName: principalName(s.runAsId), collections: s.collections ?? [] },
+    checks: fill ? s.checks.map((c) => ({ ...c, ...(c.tool === '{write}' && { tool: fill.write }), ...(c.source === '{collection}' && { source: fill.collection }) })) : s.checks,
+    source: s.source ?? 'manual',
+    readOnly: false,
+    createdAt: new Date(Date.now() - (40 - i) * 86_400_000).toISOString(),
+    createdBy: 'Maya Okafor',
+    lastOutcome: null,
+  });
+  const ownCases: EvalCase[] = Object.entries(AGENT_CASES).flatMap(([agentId, seeds]) => seeds.map((s, i) => seededCase(agentId, s, i)));
+  /** Agents with no test set of their own get the generic one, aimed at their write tool and knowledge. */
+  const genericAgents = new Set<string>();
+  const giveGenericCases = (a: Agent) => {
+    if (AGENT_CASES[a.id] || genericAgents.has(a.id)) return;
+    genericAgents.add(a.id);
+    const c = contentOf(a);
+    const fill = { write: writeToolOf(c), collection: c.collections[0] ?? deps.collections()[0] ?? 'Policies' };
+    ownCases.push(...GENERIC_CASES.map((s, i) => seededCase(a.id, s, i, fill)));
+  };
   const platformCasesFor = (a: Agent): EvalCase[] => {
     const write = writeToolOf(contentOf(a));
     return PLATFORM_TEMPLATES.map((t) => ({
@@ -116,7 +146,7 @@ export function createEvalsMock(deps: EvalsDeps) {
       lastOutcome: null,
     }));
   };
-  const keyOf = (c: EvalCase) => (c.suite === 'agent' ? c.id.split('_').slice(2).join('_') : c.id.slice(c.agentId.length + 1));
+  const keyOf = (c: EvalCase) => (c.suite === 'agent' ? c.id.slice(`ec_${c.agentId.slice(3)}_`.length) : c.id.slice(c.agentId.length + 1));
   const casesOf = (a: Agent) => [...ownCases.filter((c) => c.agentId === a.id), ...platformCasesFor(a)];
 
   // ── Scoring ──
@@ -140,7 +170,7 @@ export function createEvalsMock(deps: EvalsDeps) {
 
   const outcome = (a: Agent, version: number, kase: EvalCase): EvalCaseOutcome => {
     const c = contentAt(a, version);
-    const seeded = SEED_FAILURES[`${a.id}:${version}`]?.[keyOf(kase)];
+    const seeded = SEED_FAILURES[`${a.id}:${version}`]?.[keyOf(kase)] ?? (genericAgents.has(a.id) && version === a.version - 1 ? GENERIC_PREVIOUS_FAILURES[keyOf(kase)] : undefined);
     const rule = kase.suite === 'agent' ? undefined : RULE_OF[keyOf(kase)];
     const caseFailure = seeded ?? (rule ? platformFailure(rule, c, kase) : undefined);
     const checks: EvalCheckResult[] = kase.checks.map((ch, i) => {
@@ -228,16 +258,41 @@ export function createEvalsMock(deps: EvalsDeps) {
   };
 
   // Seed history: the last three versions of each agent, oldest first, a day or more apart.
-  for (const a of deps.agents()) {
+  const seedHistory = (a: Agent) => {
+    giveGenericCases(a);
     const versions = [a.version - 2, a.version - 1, a.version].filter((v) => v >= 1);
     versions.forEach((v, i) => {
       const at = Date.now() - (versions.length - i) * 86_400_000 * (1 + hash(a.id + v) * 3);
       runs.push(settle(execute(a, v, i === versions.length - 1 ? 'save' : 'manual', i % 2 ? 'Maya Okafor' : 'Daniel Brooks', at)));
     });
-  }
+  };
+  for (const a of deps.agents()) seedHistory(a);
   runs.sort((x, y) => y.startedAt.localeCompare(x.startedAt));
 
-  const agentOr404 = (aid: string) => deps.agents().find((a) => a.id === aid) ?? notFound('Agent');
+  /**
+   * Agents another service owns (agents-service, while evals have no service) are unknown here. Each gets a
+   * stand-in on first read, with a sample agent's tools, knowledge and guardrails and the generic test set, so
+   * every agent, including ones created later, shows cases, suites and a finished run. Kept, so ids stay stable.
+   */
+  const standIns = new Map<string, Agent>();
+  const standInFor = (aid: string): Agent | undefined => {
+    if (!aid.startsWith('ag_')) return undefined;
+    const known = standIns.get(aid);
+    if (known) return known;
+    const pool = deps.agents().filter((a) => contentOf(a).toolNames.some((t) => deps.toolAccess(t) === 'write'));
+    const base = pool[Math.floor(hash(aid) * pool.length)] ?? deps.agents()[0];
+    if (!base) return undefined;
+    const words = aid.slice(3).replace(/_/g, ' ');
+    const served = servedAgents.get(aid);
+    const a: Agent = { ...structuredClone(base), id: aid, name: served?.name ?? words.charAt(0).toUpperCase() + words.slice(1), version: Math.max(1, served?.version ?? 3), usedIn: structuredClone(served?.usedIn ?? []) };
+    standIns.set(aid, a);
+    seedContent[aid] = contentOf(a);
+    snapshots[aid] = { [a.version]: contentOf(a) };
+    seedHistory(a);
+    runs.sort((x, y) => y.startedAt.localeCompare(x.startedAt));
+    return a;
+  };
+  const agentOr404 = (aid: string) => deps.agents().find((a) => a.id === aid) ?? standInFor(aid) ?? notFound('Agent');
   const start = (aid: string, trigger: EvalRunTrigger) => {
     const a = agentOr404(aid);
     snapshots[a.id] = { ...snapshots[a.id], [a.version]: contentOf(a) };
@@ -352,6 +407,7 @@ export function createEvalsMock(deps: EvalsDeps) {
     latest: (aid) =>
       respond((m) => {
         if (m === 'empty') return null;
+        agentOr404(aid);
         const r = runs.find((x) => x.agentId === aid);
         return r ? publicRun(r) : null;
       }),
