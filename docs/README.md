@@ -397,6 +397,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/platform-service/oidc-sign-in-creates-a-chat-user.md` | uc-161: a first OIDC sign-in makes one chat-only member; the console offers SSO for the email |
 | `usecases/platform-service/saml-sign-in-and-step-up.md` | uc-162: SAML sign-in, and a step-up at the same provider that must ask again |
 | `usecases/platform-service/saml-group-grants-and-removal.md` | uc-711: leaving a provider group ends only the membership that group gave |
+| `usecases/platform-service/a-new-workspace-chats-and-writes.md` | uc-751: a new workspace chats and writes with no extra setup; the first admin is asked for a model key |
 | `usecases/platform-service/company-sign-in-required-and-break-glass.md` | uc-712: company sign-in required, with a break-glass Security admin |
 | `usecases/platform-service/saml-test-sign-in.md` | uc-713: an admin tests a company provider before anyone signs in through it |
 | `usecases/platform-service/mcp-company-sign-in.md` | uc-733: a person connects an assistant to a team's MCP address with their company sign-in; a console token, another address and a person who left the team are refused |

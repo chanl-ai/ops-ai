@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { CalendarClock, CheckCheck, CirclePlay, Gift, LayoutDashboard, Search, UserCheck } from 'lucide-react';
 
+import { ModelSetupCard } from '@/components/models/model-setup-card';
 import { PageLayout } from '@/components/page-layout';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -85,6 +86,7 @@ export default function OverviewPage() {
         <QueryError what="the overview" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
+          <ModelSetupCard />
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search what is waiting" aria-label="Search what is waiting" className="pl-8" data-testid="overview-search" />
