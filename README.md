@@ -280,6 +280,9 @@ so the template gallery and the Salesforce, GitHub, SharePoint, Confluence and w
 `make up`, with nothing to download. The first `make up` on a new database also installs the sample team (people,
 knowledge, agents, tools and workflows); `SAMPLE=0 make up` skips it. `make down KEEP_DB=1` stops the stack and keeps
 the data. Every service's API reference is on one page at http://localhost:8799.
+These steps were run from a fresh clone on 2026-11-12 with `OPS_PORT_OFFSET=30000`: `make up` installed the sample team
+with nothing failed, and the Python SDK listed 37 templates (22 starter skills, 11 case and task types, the Salesforce
+and GitHub templates) and the Salesforce app's 18 tools, both as the workspace admin and as a team member.
 
 Other commands you may want: `make setup` asks what you have (a model key, a mail account) and tests each answer before
 writing it; `make install-cli` installs only the `opsai` command line (behind a mirror or offline:

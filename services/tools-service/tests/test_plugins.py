@@ -272,11 +272,13 @@ def test_plugins_load_from_the_install_folder_with_no_switch(
     parts = (store, PluginBindings(engine))
     folder = tmp_path / "plugins"
     folder.mkdir()
-    assert PluginHost.when_on(Settings(plugins_dir=folder), *parts) is None
+    # No built-in plugins either, so the empty folder is all this install has.
+    none = tmp_path / "no-builtin"
+    assert PluginHost.when_on(Settings(plugins_dir=folder, builtin_plugins_dir=none), *parts) is None
     copytree(Path(__file__).parent / "plugin_desk", folder / "plugin_desk", ignore=ignore_patterns("__pycache__"))
     (folder / "broken_desk").mkdir()
     (folder / "broken_desk" / "plugin.yaml").write_text("id: [")
-    on = PluginHost.when_on(Settings(plugins_dir=folder), *parts)
+    on = PluginHost.when_on(Settings(plugins_dir=folder, builtin_plugins_dir=none), *parts)
     assert on is not None and "test.desk" in on.plugins
     assert [(x.name, x.ok) for x in on.loaded] == [("broken_desk", False), ("plugin_desk", True)]
 
