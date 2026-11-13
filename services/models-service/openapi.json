@@ -624,6 +624,91 @@
         "title": "ChatMessage",
         "type": "object"
       },
+      "ChatModelIn": {
+        "additionalProperties": false,
+        "description": "The model chat answers with: a provider, the saved key it signs in with, and one of the models (or Azure\ndeployments) that key lists.",
+        "properties": {
+          "apiVersion": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "pattern": "^[0-9a-z-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apiversion"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "keyName": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$",
+            "title": "Keyname",
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "openai",
+              "azure-openai",
+              "anthropic"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "keyName",
+          "model"
+        ],
+        "title": "ChatModelIn",
+        "type": "object"
+      },
+      "ChatModelOut": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "providerId": {
+            "title": "Providerid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "providerId",
+          "model",
+          "aliases"
+        ],
+        "title": "ChatModelOut",
+        "type": "object"
+      },
       "ChatUsage": {
         "additionalProperties": false,
         "properties": {
@@ -825,6 +910,25 @@
           "data"
         ],
         "title": "Envelope[CallPage]",
+        "type": "object"
+      },
+      "Envelope_ChatModelOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ChatModelOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ChatModelOut]",
         "type": "object"
       },
       "Envelope_KeyCheckOut_": {
@@ -1128,6 +1232,7 @@
             "anyOf": [
               {
                 "maxLength": 40,
+                "pattern": "^[0-9a-z-]+$",
                 "type": "string"
               },
               {
@@ -1140,7 +1245,6 @@
             "anyOf": [
               {
                 "maxLength": 500,
-                "pattern": "^https://",
                 "type": "string"
               },
               {
@@ -2662,6 +2766,195 @@
           "calls"
         ],
         "x-ops-public": "internal"
+      }
+    },
+    "/v1/models/chat-model": {
+      "put": {
+        "description": "Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key\nbelongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or\nversion 1 on a fresh install, where no chat alias exists yet.",
+        "operationId": "providers_set_chat_model",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatModelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ChatModelOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not an account admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "No key saved under that name"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The endpoint is refused"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Set Chat Model",
+        "tags": [
+          "providers"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/models/chat/completions": {
@@ -4941,7 +5234,6 @@
               "anyOf": [
                 {
                   "maxLength": 500,
-                  "pattern": "^https://",
                   "type": "string"
                 },
                 {
@@ -4959,6 +5251,7 @@
               "anyOf": [
                 {
                   "maxLength": 40,
+                  "pattern": "^[0-9a-z-]+$",
                   "type": "string"
                 },
                 {

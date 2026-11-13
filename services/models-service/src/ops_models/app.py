@@ -40,7 +40,7 @@ from ops_store import isolation
 from ops_store.database import Database
 
 from .connection_settings import azure_openai_problem
-from .key_check import EndpointRefused, KeyRefused, listed_models
+from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
 from .providers import AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
 from .schemas import (
@@ -129,6 +129,28 @@ class KeyCheckOut(_Wire):
 class ProviderModelOut(_Wire):
     id: str
     model: str | None = None
+
+
+class ChatModelIn(_Wire):
+    """The model chat answers with: a provider, the saved key it signs in with, and one of the models (or Azure
+    deployments) that key lists."""
+
+    provider: Literal["openai", "azure-openai", "anthropic"]
+    key_name: str = Field(pattern="^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$")
+    model: str = Field(min_length=1, max_length=200)
+    endpoint: str | None = Field(default=None, max_length=500)
+    api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
+
+
+class ChatModelOut(_Wire):
+    provider_id: str
+    model: str
+    aliases: list[str]
+
+
+# Where each provider's chat calls go. Anthropic is served through its OpenAI-compatible endpoint, which takes the key
+# as a bearer token, so the OpenAI-compatible client serves it with no client of its own.
+CHAT_BASES = {"openai": "https://api.openai.com/v1", "anthropic": "https://api.anthropic.com/v1"}
 
 
 # The name a provider connection's `key_ref` gives: `OPENAI`, or `openai` as the dev stack names it.
@@ -271,6 +293,7 @@ def create_models_app(
     upstream: httpx.AsyncClient | None = None,
     credentials: CredentialStore | None = None,
     key_fetch: PublicFetch | None = None,
+    chat_aliases: tuple[str, ...] = ("default", "assistant"),
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
@@ -476,6 +499,52 @@ def create_models_app(
         except EndpointRefused as e:
             raise Unprocessable(str(e), code="endpoint_refused") from e
         return ok(found)
+
+    @app.put(
+        "/v1/models/chat-model",
+        tags=["providers"],
+        response_model=Envelope[ChatModelOut],
+        responses=error_responses(
+            {403: "Not an account admin", 404: "No key saved under that name", 422: "The endpoint is refused"}
+        ),
+    )
+    async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key
+        belongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or
+        version 1 on a fresh install, where no chat alias exists yet."""
+        await saved_key(p, body.key_name)
+        if body.provider == "azure-openai":
+            try:
+                base = azure_host(body.endpoint)
+            except EndpointRefused as e:
+                raise Unprocessable(str(e), code="endpoint_refused") from e
+            version = body.api_version or "v1"
+            fields = {"type": "azure-openai", "base_url": base, "api_version": version, "key_ref": body.key_name}
+        else:
+            fields = {"type": "openai-compatible", "base_url": CHAT_BASES[body.provider], "api_version": None}
+            fields["key_ref"] = body.key_name
+        name = f"{chat_aliases[0]}-{body.provider}"
+        held = next((r for r in await providers.all() if r["name"] == name), None)
+        if held is None:
+            pid = new_id("prov")
+            if not await providers.create({"id": pid, "name": name, **fields, "region": None, "created_at": now_iso()}):
+                held = next(r for r in await providers.all() if r["name"] == name)
+        if held is not None:
+            pid = str(held["id"])
+            await providers.rebind(pid, {**fields, "region": None})
+        version_fields = {
+            "provider_id": pid,
+            "model_id": body.model,
+            "cleared_sensitivity": "confidential",
+            "input_per_million": Decimal(0),
+            "output_per_million": Decimal(0),
+            "reasoning_effort": None,
+            "images": False,
+        }
+        for alias in chat_aliases:
+            if await aliases.add_version(alias, version_fields) is None:
+                await aliases.create(alias, "chat", version_fields)
+        return ok(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)).model_dump(by_alias=True))
 
     @app.delete(
         "/v1/provider-keys/{name}",
