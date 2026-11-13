@@ -3,9 +3,9 @@
 Status: current. Id: `uc-552`. Service: `console` with `agents-service`. Layers: api, ui.
 
 A person signs in and lands on Chat: a greeting, the composer and up to three hints from their own work. One sidebar
-holds New chat, Overview, Cases and Human Tasks (with the count of tasks waiting for them) at the top, their
-chats grouped by day. The console's other pages sit in the header's area control (Work, Build, Data, Govern), one area at a time. Overview lists what is waiting from one
-request. When the session ends, a sign-in dialog keeps the page and the unsent draft.
+holds New chat, then a Work section with Overview, Cases, Human Tasks (with the count of tasks waiting for them) and
+Chat, then every other area as its own section. Their chats, grouped by day, are a column on the chat pages. Overview
+lists what is waiting from one request. When the session ends, a sign-in dialog keeps the page and the unsent draft.
 
 ## Preconditions
 
