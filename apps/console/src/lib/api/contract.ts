@@ -131,7 +131,8 @@ export interface OpsApi {
     /** The tools any agent may be granted; a grant names their ids, and an unknown id is refused. */
     grantableTools(): Promise<GrantableTool[]>;
     /** The tools picker: grantable tools searched and paged on the server; `ids` labels stored grants. */
-    toolOptions(p: OptionsParams): Promise<ToolOptionsPage>;
+    /** `agents: false` leaves agents out (an MCP link's picker: its door runs tools and workflows only). */
+    toolOptions(p: OptionsParams & { agents?: boolean }): Promise<ToolOptionsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
     /** One kernel turn on the agent's newest version, nothing kept; a write tool stops at its gate. */

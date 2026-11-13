@@ -10,5 +10,6 @@ export function createMcpLinksHttp(get: Get, send: Send): McpLinksApi {
     get: (id) => get(`/mcp-links/${encodeURIComponent(id)}`),
     create: (input) => send('POST', '/mcp-links', input),
     setPaused: (id, paused) => send('PATCH', `/mcp-links/${encodeURIComponent(id)}`, { paused }),
+    remove: (id) => send('DELETE', `/mcp-links/${encodeURIComponent(id)}`),
   };
 }

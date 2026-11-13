@@ -71,13 +71,15 @@ export function createPlatformWorkspaceTeamsHttp(baseUrl: string): OpsApi['works
 export function createPlatformApiKeysHttp(baseUrl: string): OpsApi['settings']['apiKeys'] {
   const { get, send } = createTransport(`${baseUrl}/v1`);
   return {
-    list: async () => {
-      const data = await get<ApiKey[]>('/api-keys');
+    list: async (p) => {
+      // An MCP link's Keys tab names its link; platform-service keeps the keys made for it.
+      const link = p.filters?.mcpLink?.[0];
+      const data = await get<ApiKey[]>(link ? `/api-keys?targetKind=mcp_link&targetId=${encodeURIComponent(link)}` : '/api-keys');
       return { data, pagination: { page: 1, pageSize: Math.max(data.length, 1), total: data.length, totalPages: 1, hasNext: false, hasPrev: false }, facets: {} };
     },
     create: async (input) => {
-      const scopes = input.scopes.some((s) => s === 'write' || s.endsWith(':write')) ? ['read', 'write'] : ['read'];
-      const made = await send<{ key: ApiKey; secret: string }>('POST', '/api-keys', { name: input.name, scopes, expiresInDays: input.expiresInDays });
+      const scopes = input.target ? ['read'] : input.scopes.some((s) => s === 'write' || s.endsWith(':write')) ? ['read', 'write'] : ['read'];
+      const made = await send<{ key: ApiKey; secret: string }>('POST', '/api-keys', { name: input.name, scopes, expiresInDays: input.expiresInDays, ...(input.target ? { target: input.target } : {}) });
       return { key: made.secret, apiKey: made.key };
     },
     revoke: async (id) => {

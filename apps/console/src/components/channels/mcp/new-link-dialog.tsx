@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreateMcpLink } from '@/hooks/mcp-link-queries';
-import { toolOptions, useOptionLabels } from '@/hooks/options-queries';
+import { linkToolOptions, useOptionLabels } from '@/hooks/options-queries';
 import { useTeam } from '@/hooks/use-team';
 
 // tools-service takes at most 20 tools on a link; past that an assistant reads a list too long to choose from.
@@ -40,7 +40,7 @@ export function NewLinkDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const create = useCreateMcpLink();
   const form = useForm<Values>({ resolver: zodResolver(schema), mode: 'onBlur', defaultValues: { name: '', tools: [] } });
   const picked = form.watch('tools');
-  const labels = useOptionLabels(toolOptions, picked);
+  const labels = useOptionLabels(linkToolOptions, picked);
   React.useEffect(() => {
     if (open) form.reset({ name: '', tools: [] });
   }, [open, form]);
@@ -107,7 +107,7 @@ export function NewLinkDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             name="tools"
             render={({ field }) => (
               <EntityPicker
-                source={toolOptions}
+                source={linkToolOptions}
                 value={field.value}
                 onChange={(ids) => field.onChange(ids)}
                 addLabel="Pick tools"

@@ -33,8 +33,8 @@ const day = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeri
  * The team's API keys, the list Settings › Team › API keys owns (platform-service issues every key). A key runs read
  * tools only over MCP; a key made here can read and nothing else, always expires, and shows its secret once.
  */
-export function KeysTab() {
-  const q = useApiKeys({ page: 1, pageSize: 100 });
+export function KeysTab({ linkId }: { linkId: string }) {
+  const q = useApiKeys({ page: 1, pageSize: 100, filters: { mcpLink: [linkId] } });
   const canCreate = useCan('access', 'create') === true;
   const canRevoke = useCan('access', 'delete') === true;
   const revoke = useRevokeApiKey();
@@ -86,7 +86,7 @@ export function KeysTab() {
   return (
     <div className="flex flex-col gap-3" data-testid="mcp-link-keys">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="min-w-0 flex-1 text-sm text-muted-foreground">Keys run read tools only. A write asks the person to sign in instead. Every key of this team opens each of its links.</p>
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">Keys run read tools only. A write asks the person to sign in instead. Each key opens this link and nothing else.</p>
         {canCreate && (
           <Button onClick={() => setMaking(true)} data-testid="mcp-key-new">
             <Plus className="size-4" /> New key
@@ -101,9 +101,9 @@ export function KeysTab() {
         searchPlaceholder="Search keys…"
         hideViewSwitcher
         hidePaginationOnOnePage
-        emptyState={<ListEmpty icon={KeyRound} noun="keys" filtered={false} description="A key lets a script or another system read through this team’s links without a person signing in." />}
+        emptyState={<ListEmpty icon={KeyRound} noun="keys" filtered={false} description="A key lets a script or another system read through this link without a person signing in." />}
       />
-      <NewKeyDialog open={making} onOpenChange={setMaking} />
+      <NewKeyDialog open={making} onOpenChange={setMaking} linkId={linkId} />
       {revoking && (
         <ConfirmActionDialog
           open
@@ -129,7 +129,7 @@ export function KeysTab() {
   );
 }
 
-function NewKeyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function NewKeyDialog({ open, onOpenChange, linkId }: { open: boolean; onOpenChange: (open: boolean) => void; linkId: string }) {
   const create = useCreateApiKey();
   const [name, setName] = React.useState('');
   const [expiry, setExpiry] = React.useState('90');
@@ -145,7 +145,7 @@ function NewKeyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
   const submit = () => {
     if (!name.trim()) return setError('Name the key after the system that will use it.');
     create.mutate(
-      { name: name.trim(), scopes: ['read'], expiresInDays: Number(expiry) },
+      { name: name.trim(), scopes: ['read'], expiresInDays: Number(expiry), target: { kind: 'mcp_link', id: linkId } },
       { onSuccess: (r) => setSecret(r.key), onError: (e) => setError(e.message) },
     );
   };
@@ -155,7 +155,7 @@ function NewKeyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
       onOpenChange={onOpenChange}
       size="sm"
       title={secret ? 'Key made' : 'New key'}
-      description={secret ? 'Copy it now. It is not shown again.' : 'A key for one system. It reads through this team’s links and always expires.'}
+      description={secret ? 'Copy it now. It is not shown again.' : 'A key for one system. It reads through this link only and always expires.'}
       onSubmit={secret ? undefined : submit}
       footer={
         secret ? (

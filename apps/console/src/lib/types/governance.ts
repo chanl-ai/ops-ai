@@ -115,6 +115,9 @@ export type ToolCallFilters = {
   moduleId?: string[];
   /** The calls made through one MCP link, as its Calls tab lists them. */
   link?: string[];
+  /** A date range, as ISO times: from `since`, before `until`. */
+  since?: string[];
+  until?: string[];
 };
 
 export interface ToolCallStats {

@@ -17,6 +17,8 @@ export interface OptionSource<P extends OptionsPage = OptionsPage> {
 
 export const knowledgeBaseOptions: OptionSource = { key: 'kb-options', fetch: (p) => api.knowledge.kbs.options(p) };
 export const toolOptions: OptionSource<ToolOptionsPage> = { key: 'tool-options', fetch: (p) => api.agents.toolOptions(p) };
+/** An MCP link's picker: the team's tools and published workflows, no agents. */
+export const linkToolOptions: OptionSource<ToolOptionsPage> = { key: 'link-tool-options', fetch: (p) => api.agents.toolOptions({ ...p, agents: false }) };
 /** The team's files in Files; one not scanned clean is shown disabled with the reason. */
 export const fileOptions: OptionSource = { key: 'file-options', fetch: (p) => api.files.options(p) };
 /** The team's active people, by email: who a task is sent to. */

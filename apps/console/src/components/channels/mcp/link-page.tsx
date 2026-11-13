@@ -29,7 +29,7 @@ export function McpLinkPage({ id }: { id: string }) {
   const q = useMcpLink(id);
   const pause = usePauseMcpLink(id);
   const { team } = useTeam();
-  const keys = useApiKeys({ page: 1, pageSize: 100 });
+  const keys = useApiKeys({ page: 1, pageSize: 100, filters: { mcpLink: [id] } });
   const [tab, setTab] = useTabParam(TABS, 'connect');
   if (q.isLoading) return <RecordSkeleton />;
   if (q.isError && !q.data)
@@ -88,7 +88,7 @@ export function McpLinkPage({ id }: { id: string }) {
             <ToolsTab link={link} />
           </PageTabPanel>
           <PageTabPanel value="keys">
-            <KeysTab />
+            <KeysTab linkId={link.id} />
           </PageTabPanel>
           <PageTabPanel value="calls">
             <CallsTab linkId={link.id} />

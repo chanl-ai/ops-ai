@@ -49,6 +49,10 @@ export function createExecutionsHttp(get: Get): GovernanceApi['toolCalls'] {
       for (const m of p.filters?.moduleId ?? []) q.append('moduleId', m);
       const link = p.filters?.link?.[0];
       if (link) q.set('link', link);
+      const since = p.filters?.since?.[0];
+      if (since) q.set('since', since);
+      const until = p.filters?.until?.[0];
+      if (until) q.set('until', until);
       return get(`/executions?${q}`);
     },
     get: () => Promise.reject(new ApiError('tools-service does not serve one call’s request and response yet.', 501)),

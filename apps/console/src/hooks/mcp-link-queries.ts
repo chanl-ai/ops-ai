@@ -27,6 +27,17 @@ export function useCreateMcpLink() {
   return useMutation({ mutationFn: (input: McpLinkInput) => api.mcpLinks.create(input), onSuccess: invalidate });
 }
 
+/** Pause or resume any of the listed links, from a row's menu. */
+export function useSetMcpLinkPaused() {
+  const invalidate = useInvalidate();
+  return useMutation({ mutationFn: ({ id, paused }: { id: string; paused: boolean }) => api.mcpLinks.setPaused(id, paused), onSuccess: invalidate });
+}
+
+export function useDeleteMcpLink() {
+  const invalidate = useInvalidate();
+  return useMutation({ mutationFn: (id: string) => api.mcpLinks.remove(id), onSuccess: invalidate });
+}
+
 /** Pausing makes the link's address refuse every request until it is resumed. */
 export function usePauseMcpLink(id: string) {
   const invalidate = useInvalidate();

@@ -48,6 +48,11 @@ export function createMcpLinksMock(): McpLinksApi {
         all().push(made);
         return made;
       }),
+    remove: (lid) =>
+      respond(() => {
+        find(lid);
+        links = all().filter((l) => l.id !== lid);
+      }),
     setPaused: (lid, paused) =>
       respond(() => {
         const l = find(lid);

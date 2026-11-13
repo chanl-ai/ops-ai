@@ -258,7 +258,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
       grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
-      toolOptions: (p) => get(`/tools/options?${optionsQs(p)}`),
+      toolOptions: (p) => get(`/tools/options?${optionsQs(p)}${p.agents === false ? '&agents=false' : ''}`),
       modelAliases: () => get('/model-aliases'),
       test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
       knowledgeUsage: () => get('/knowledge-usage'),
