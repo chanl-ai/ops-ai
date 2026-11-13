@@ -158,6 +158,10 @@ class Settings(BaseSettings):
     # install`. The repo's plugins/ locally; a mounted volume in Docker and Kubernetes (OPS_PLUGINS_DIR). tools-service
     # loads every plugin in it at start, and kb-service reads knowledge through them, whenever it holds any.
     plugins_dir: Path = _REPO_ROOT / "plugins"
+    # The plugins Ops AI ships built in (builtin-plugins/ in the checkout; the image sets OPS_BUILTIN_PLUGINS_DIR), so a
+    # fresh clone or image has every app and template pack with no fetch step. A folder of the same name in plugins_dir
+    # replaces the built-in one: loading both would refuse the plugin in both places.
+    builtin_plugins_dir: Path = _REPO_ROOT / "builtin-plugins"
     # Plugin package folders tools-service loads beside the plugins folder, for a developer trying a plugin on a
     # local stack before it is packaged: OPS_PLUGIN_PATHS='["/path/to/src/ops_plugin_x"]'. Empty everywhere else.
     plugin_paths: list[str] = Field(default_factory=list[str])
@@ -560,15 +564,12 @@ class Settings(BaseSettings):
 
     @property
     def plugin_folders(self) -> list[str]:
-        """Every plugin folder to load: each folder in plugins_dir (hidden ones and caches skipped), then
-        plugin_paths."""
-        d = self.plugins_dir
-        dropped = (
-            sorted(str(f) for f in d.iterdir() if f.is_dir() and not f.name.startswith((".", "_")))
-            if d.is_dir()
-            else []
-        )
-        return [*dropped, *self.plugin_paths]
+        """Every plugin folder to load: each built-in plugin not replaced by a folder of the same name in plugins_dir,
+        then each folder in plugins_dir (hidden ones and caches skipped), then plugin_paths."""
+        dropped = _folders(self.plugins_dir)
+        names = {_package_of(f) for f in dropped}
+        builtin = [f for f in _folders(self.builtin_plugins_dir) if f.name not in names]
+        return [*(str(f) for f in builtin), *(str(f) for f in dropped), *self.plugin_paths]
 
     @property
     def plugins(self) -> bool:
@@ -585,6 +586,17 @@ class Settings(BaseSettings):
             extra = [s for s in ("tools:view", "tools:run") if s not in kb]
             self.service_scopes = {**self.service_scopes, "kb": [*kb, *extra]}
         return self
+
+
+def _folders(d: Path) -> list[Path]:
+    return sorted(f for f in d.iterdir() if f.is_dir() and not f.name.startswith((".", "_"))) if d.is_dir() else []
+
+
+def _package_of(folder: Path) -> str:
+    """A plugin folder's package name, which names its built-in copy: the folder itself, or the one src/<package> of a
+    whole project (a PLUGINS_DEV link to a working copy)."""
+    found = sorted(p.parent.name for p in folder.glob("src/*/plugin.yaml"))
+    return found[0] if not (folder / "plugin.yaml").exists() and len(found) == 1 else folder.name
 
 
 _PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_KEY}

@@ -82,7 +82,9 @@ ops-runner-service = { workspace = true }
 line-length = 120
 target-version = "py312"
 src = ["packages/*/src", "services/*/src", "services/agents-service"]
-extend-exclude = ["examples", "docs/usecases"]
+# builtin-plugins holds plugins copied byte for byte at a pinned commit and sha256; their own repository lints them.
+extend-exclude = ["examples", "docs/usecases", "builtin-plugins"]
+force-exclude = true
 
 [tool.ruff.lint]
 # T20 no print, G no f-string or % log messages, LOG standard-library logging mistakes (check_standards rule 6b
