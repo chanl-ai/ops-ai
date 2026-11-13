@@ -220,3 +220,27 @@ def mcp_session(credential: str, team: str, *, client: str = "use case assistant
             yield c
 
     return opened()
+
+
+def refusal_text(res: Any) -> str:
+    """A refusal as the platform words it: the error envelope's code and message when the body has them, else the text."""
+    try:
+        error = res.json().get("error") or {}
+    except Exception:  # not JSON: the raw text is the best description
+        error = {}
+    if isinstance(error, dict) and (error.get("code") or error.get("message")):
+        return ": ".join(str(error[k]) for k in ("code", "message") if error.get(k))
+    return str(res.text)[:300]
+
+
+def required(res: Any, what: str) -> Any:
+    """The `data` of a setup request that must succeed. A non-2xx answer raises with its status, code and message, so a
+    refused create stops the script as setup instead of reading as an empty record that a later product step trips on."""
+    if not 200 <= res.status_code <= 299:
+        raise RuntimeError(f"setup request refused, {what}: {res.status_code} {refusal_text(res)}")
+    if not res.content:
+        return {}
+    body = res.json()
+    if not isinstance(body, dict) or body.get("data") is None:
+        raise RuntimeError(f"setup request answered {res.status_code} without data, {what}: {str(res.text)[:300]}")
+    return body["data"]

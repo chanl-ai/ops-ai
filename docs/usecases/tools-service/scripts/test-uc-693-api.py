@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from several_accounts import GH, git_rig, github_on
+from steps import required
 from usecase_harness import check, data, finish
 
 
@@ -61,7 +62,7 @@ with git_rig("uc-693") as r:
         {"mine": mine, "started": started.text[:200]},
     )  # fmt: skip
     # 3. A custom app's two accounts say their addresses.
-    app = data(r.gw.post("/v1/apps", json={"name": "uc693 ledger", "authKind": "none"}, headers=r.priya)) or {}
+    app = required(r.gw.post("/v1/apps", json={"name": "uc693 ledger", "authKind": "none"}, headers=r.priya), "/v1/apps")
     app_id = str(app.get("id") or "app_missing")
     first = data(r.gw.get(f"/v1/apps/{app_id}/accounts/{app_id}", headers=r.priya)) or {}
     r.gw.patch(

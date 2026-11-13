@@ -15,6 +15,7 @@ from uuid import uuid4
 import httpx
 from apps_layer import run_path
 from fake_salesforce import LIST_VIEW_ID, salesforce
+from steps import required
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -147,7 +148,7 @@ with ExitStack() as stack:
     # The org's company address, one of the places the Salesforce plugin signs in.
     login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
-    credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
+    credential = (required(gw.post("/v1/app-credentials", json=own, headers=priya), "/v1/app-credentials")).get("id")
     team_on = {"enabled": True, "signIn": "team", "settings": {"login_url": login}, "credentialId": credential}
     # A viewer: builders manage apps since D59.
     viewer = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
@@ -326,9 +327,9 @@ with ExitStack() as stack:
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
     maya = bearer(signed_in(api, "m.okafor@harborpine.example"), "team_ops")
-    helper = data(chat.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=james)) or {}
+    helper = required(chat.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=james), "/v1/agents")
     first = (
-        data(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Find cases."}, headers=james)) or {}
+required(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Find cases."}, headers=james), "set the helper's instructions")
     )
     waiting = chat.post(
         f"/v1/agents/{helper.get('id')}/publish-requests", json={"version": first.get("version")}, headers=james
@@ -347,7 +348,7 @@ with ExitStack() as stack:
             headers=maya,
         )
     old = data(chat.get(f"/v1/publish-requests/{(data(waiting) or {}).get('id')}", headers=maya)) or {}
-    thread = data(chat.post("/chat/threads", json={"agentId": helper.get("id"), "kbIds": []}, headers=james)) or {}
+    thread = required(chat.post("/chat/threads", json={"agentId": helper.get("id"), "kbIds": []}, headers=james), "/chat/threads")
     turn = chat.post(
         f"/chat/threads/{thread.get('id')}/messages",
         json={"content": f'call salesforce_query {{"q": "{QUERY}"}}'},

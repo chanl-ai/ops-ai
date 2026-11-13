@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from steps import required
 from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
@@ -267,7 +268,7 @@ def form_notice_finishes(api: httpx.Client) -> None:
     wid, cases = f"uc620_notice_{RUN}", f"uc620_case_{RUN}"
     live = {publish(api, case_flow(cases)), publish(api, notice_flow(wid, cases))}
     share = {"mode": "link", "expiresInDays": 30, "dailyCap": 50, "title": f"Send us a notice {RUN}"}
-    form = got(api.post(f"/v1/workflows/{wid}/forms", json=share, headers=OPS)) or {}
+    form = required(api.post(f"/v1/workflows/{wid}/forms", json=share, headers=OPS), "share the workflow form")
     slug, token = str(form.get("slug")), str(form.get("token"))
 
     # 3. A notice sent through the form with the sender and no mailbox opens its cases and ends with no reply.
@@ -316,7 +317,7 @@ def form_notice_finishes(api: httpx.Client) -> None:
 def attach(files: httpx.Client, name: str, body: bytes) -> dict[str, Any]:
     """The console's chat attach: an upload ticket for a chat attachment, the bytes, complete."""
     meta = {"name": name, "size": len(body), "mime": "application/pdf", "purpose": "chat_attachment"}
-    ticket = got(files.post("/v1/files/uploads", json=meta)) or {}
+    ticket = required(files.post("/v1/files/uploads", json=meta), "/v1/files/uploads")
     files.put(str(ticket.get("uploadUrl")), headers=ticket.get("headers") or {}, content=body)
     done = (got(files.post(f"/v1/files/uploads/{ticket.get('fileId')}/complete")) or {}).get("file") or {}
     return {"fileId": done.get("id"), "name": name, "size": len(body)}
@@ -342,7 +343,7 @@ def chat_reads_an_attached_pdf(api: httpx.Client, files: httpx.Client) -> None:
     )
     aid, version = (made or {}).get("id"), (made or {}).get("version")
     api.post(f"/v1/agents/{aid}/publish-requests", json={"version": version, "note": "uc-620"}, headers=OPS)
-    tid = str((got(api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=OPS)) or {}).get("id"))
+    tid = str((required(api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=OPS), "/chat/threads")).get("id"))
     res, reply = ask(api, tid, "uc620 who is the first debtor in this notice?", [notice])
     cited = reply.get("citations") or [{}]
     check(

@@ -82,13 +82,24 @@ export function check(name: string, ok: boolean, detail: unknown = ''): boolean 
   return ok;
 }
 
+/** A refusal as the platform words it: the error envelope's code and message when the body has them, else the raw text. */
+export function refusalText(text: string): string {
+  try {
+    const error = (JSON.parse(text) as { error?: { code?: string; message?: string } }).error;
+    if (error?.code || error?.message) return [error.code, error.message].filter(Boolean).join(': ');
+  } catch {
+    // not JSON: the raw text is the best description
+  }
+  return text.slice(0, 300);
+}
+
 /**
  * The body of a setup request that must succeed. `res` is a `{ status, data, text }` result of a script's `call`; a
- * non-2xx status throws with the status and body, so a refused create fails as setup instead of leaving an undefined
- * id for a later product step to trip on.
+ * non-2xx status throws with the status, the refusal's code and message, so a refused create fails as setup instead
+ * of leaving an undefined id for a later product step to trip on.
  */
 export function required<T = Record<string, any>>(res: { status: number; data?: unknown; text?: string }, what: string): T {
-  if (res.status < 200 || res.status > 299) throw new Error(`setup request refused, ${what}: ${res.status} ${res.text ?? ''}`);
+  if (res.status < 200 || res.status > 299) throw new Error(`setup request refused, ${what}: ${res.status} ${refusalText(res.text ?? '')}`);
   return (res.data ?? {}) as T;
 }
 

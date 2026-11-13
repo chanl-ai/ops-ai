@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 from connection_calls import allow_bank, clean, connection, module
+from steps import required
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, engine_worker, finish, tools
 
 OPS = {"X-Team-Id": "team_ops"}
@@ -43,7 +44,7 @@ FLOW = {
 
 def run(api: httpx.Client, mode: str, account: str) -> dict[str, Any]:
     body = {"workflowId": FLOW["id"], "mode": mode, "input": {"account": account}}
-    started = data(api.post("/v1/runs", json=body, headers=OPS)) or {}
+    started = required(api.post("/v1/runs", json=body, headers=OPS), "/v1/runs")
     deadline = time.monotonic() + 120
     while started.get("runId") and time.monotonic() < deadline:
         detail = data(api.get(f"/v1/runs/{started['runId']}", headers=OPS))

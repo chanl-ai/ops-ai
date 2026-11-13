@@ -4,7 +4,7 @@
 // provider) takes its tools from tools-service. Each step is checked on its own, so one failing step still lets the
 // later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, required, shootBothWidths, videoToGif, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
-import { PEOPLE, allowBank, authHeaders, securityAdminOn, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
+import { PEOPLE, allowBank, authHeaders, securityAdminOn, setWriteApprovals, setup, signInAs } from '@ops-ai/usecase-runner/steps';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 const headers = (email, team = 'team_ops') => authHeaders(email, { team });
-const get = async (path, email = JAMES) => (await (await fetch(`${tools}${path}`, { headers: await headers(email) })).json()).data;
+const get = async (path, email = JAMES) => setup(await fetch(`${tools}${path}`, { headers: await headers(email) }));
 
 /** Runs one step; a throw fails that step's check with the error and leaves the next steps to run. */
 async function step(name, body) {
@@ -78,7 +78,7 @@ async function tryOperation(page, consoleUrl, moduleId, op, fields) {
 /** The bank's own record of the account, read through the gateway as the test call does. */
 async function holdsOn(moduleId, contextId) {
   const res = await fetch(`${tools}/v1/tool-modules/${moduleId}/test`, { method: 'POST', headers: await headers(JAMES), body: JSON.stringify({ operation: 'get_account', contextId, target: 'sandbox', input: { account_id: ACCOUNT } }) });
-  const out = (await res.json()).data?.output;
+  const out = (await setup(res, 'the bank record read')).output;
   return Array.isArray(out?.holds) ? out.holds : undefined;
 }
 

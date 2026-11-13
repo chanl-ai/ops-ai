@@ -35,6 +35,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen.canvas import Canvas
+from steps import required
 from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
@@ -438,7 +439,7 @@ def reads(
     valid = got(api.post("/v1/workflows/definitions/validate", json={"definition": wf}, headers=OPS)) or {}
     live = publish(api, wf)
     body_ = {"workflowId": text_wid, "mode": "live", "input": {"fileId": scan}}
-    run_id = str((got(api.post("/v1/runs", json=body_, headers=OPS)) or {}).get("runId"))
+    run_id = str((required(api.post("/v1/runs", json=body_, headers=OPS), "/v1/runs")).get("runId"))
 
     def ended() -> dict[str, Any] | None:
         run = got(api.get(f"/v1/runs/{run_id}", headers=OPS)) or {}
@@ -747,7 +748,7 @@ def merge(api: httpx.Client) -> None:
     live = publish(api, merge_flow(wid))
     body_ = {"workflowId": wid, "mode": "live", "runKey": f"uc568-{uuid.uuid4().hex[:8]}",
              "input": {"noticeAmount": "1284.50", "bankAmount": "1248.50", "account": "CHK-0091"}}  # fmt: skip
-    run_id = str((got(api.post("/v1/runs", json=body_, headers=OPS)) or {}).get("runId"))
+    run_id = str((required(api.post("/v1/runs", json=body_, headers=OPS), "/v1/runs")).get("runId"))
 
     def waiting() -> dict[str, Any] | None:
         r = got(api.get(f"/v1/runs/{run_id}", headers=OPS)) or {}

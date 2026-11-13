@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from steps import required
 from usecase_harness import (
     AGENTS_PORT,
     PLATFORM_INTERNAL_PORT,
@@ -69,7 +70,7 @@ def salesforce_on(gw: Any, accounts: Any, admin: dict[str, str], sf: dict[str, A
         gw.post("/v1/egress/hosts", json={"value": host, "note": "stack"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "stack"}, headers=sam)
     own = {"app": SALESFORCE_APP, "clientId": "ops-ai-kestrel", "clientSecret": "kestrel-connected-app-secret"}
-    credential = data(gw.post("/v1/app-credentials", json=own, headers=admin)) or {}
+    credential = required(gw.post("/v1/app-credentials", json=own, headers=admin), "/v1/app-credentials")
     team = {
         "enabled": True,
         "signIn": "team",

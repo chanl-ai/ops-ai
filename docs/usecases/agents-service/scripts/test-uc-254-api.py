@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from steps import required
 from usecase_harness import TEAM, agents, check, data, engine_worker, finish, until
 
 CALLER = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
@@ -16,14 +17,14 @@ FACTS = [{"label": "Vendor", "value": "Acme Supplies"}, {"label": "New account",
 
 with agents() as api, engine_worker("uc254"):
     # 1. The five general types are seeded and read-only.
-    types = data(api.get("/v1/task-types", headers=CALLER))
+    types = required(api.get("/v1/task-types", headers=CALLER), "list the task types")
     seeded = {t["id"] for t in types if t["origin"] == "seed"}
     check(
         "the five general types are seeded",
         {"generic_decision", "document_check", "write_approval", "acknowledgement", "data_entry"} <= seeded,
         sorted(seeded),
     )
-    seed = data(api.get("/v1/task-types/write_approval", headers=CALLER))["versions"][0]["record"]
+    seed = required(api.get("/v1/task-types/write_approval", headers=CALLER), "read write_approval")["versions"][0]["record"]
     locked = api.put("/v1/task-types/write_approval/draft", json=seed, headers=CALLER)
     check("a seeded type cannot be edited (409 seed_read_only)", locked.status_code == 409, locked.text[:200])
 
@@ -50,7 +51,7 @@ with agents() as api, engine_worker("uc254"):
     # 3. An API caller opens a task on it with no version: it pins v1.
     params = {"vendor": "Acme Supplies", "account": "****4410", "facts": FACTS}
     posted = api.post("/v1/tasks", json={"type": "vendor_bank_change", "params": params}, headers=CALLER)
-    task = data(posted) if posted.status_code == 201 else {}
+    task = required(posted, "open a task on the copied type")
     check(
         "the task is opened (201) on v1 with a page URL that answers at once",
         (task.get("version"), task.get("url", "")[:9], task.get("status")) == (1, "/reviews/", "waiting"),
@@ -64,9 +65,9 @@ with agents() as api, engine_worker("uc254"):
     )
 
     # 4. The type moves on to v2; the open task keeps v1's question.
-    v2 = {**data(api.get("/v1/task-types/vendor_bank_change", headers=CALLER))["versions"][0]["record"]}
+    v2 = {**required(api.get("/v1/task-types/vendor_bank_change", headers=CALLER), "read the copied type")["versions"][0]["record"]}
     v2["regions"] = [{"region": "header", "bind": {"title": "New bank details for {vendor}"}}, *v2["regions"][1:]]
-    api.put("/v1/task-types/vendor_bank_change/draft", json=v2, headers=CALLER)
+    required(api.put("/v1/task-types/vendor_bank_change/draft", json=v2, headers=CALLER), "save the v2 draft")
     moved = api.post("/v1/task-types/vendor_bank_change/publish", json={"version": 2}, headers=CALLER)
     check("v2 is published", moved.status_code == 200, moved.text[:200])
 

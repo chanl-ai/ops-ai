@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 from several_accounts import QUERY, SF, add_org, retail_on, rig
+from steps import required
 from usecase_harness import check, data, finish, sse, turn_text
 
 
@@ -32,13 +33,13 @@ with rig("uc-704", with_agents=True) as r:
     retail_on(r)
     add_org(r, "EU org", sf["eu_login_url"], "kestrel.eu")
     eu = sf["eu_base"].removeprefix("https://")
-    agent = data(r.api.post("/v1/agents", json={"name": "Desk", "role": "Answers the team"}, headers=r.priya)) or {}
+    agent = required(r.api.post("/v1/agents", json={"name": "Desk", "role": "Answers the team"}, headers=r.priya), "/v1/agents")
     aid = str(agent.get("id"))
-    draft = data(r.api.patch(f"/v1/agents/{aid}", json={"toolIds": ["salesforce_query"]}, headers=r.priya)) or {}
+    draft = required(r.api.patch(f"/v1/agents/{aid}", json={"toolIds": ["salesforce_query"]}, headers=r.priya), "grant the tool")
     r.api.post(f"/v1/agents/{aid}/publish-requests", json={"version": draft.get("version")}, headers=r.priya)
     # The apps line is written for the team's default agent only (api/apps_line.py).
     r.api.put("/v1/chat/default-agent", json={"agentId": aid}, headers=r.priya)
-    thread = str((data(r.api.post("/chat/threads", json={"kbIds": []}, headers=r.priya)) or {}).get("id"))
+    thread = str((required(r.api.post("/chat/threads", json={"kbIds": []}, headers=r.priya), "/chat/threads")).get("id"))
     picked = r.api.put(
         f"/chat/threads/{thread}/connectors", json={"off": [], "accounts": {SF: "EU org"}}, headers=r.priya
     )

@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import httpx
 from fake_salesforce import ACCOUNT_ID, LIST_VIEW_ID, salesforce
+from steps import required
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -90,7 +91,7 @@ with ExitStack() as stack:
     # The org's company address, one of the places the Salesforce plugin signs in, held by the auth config.
     login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": "s3", "settings": {"login_url": login}}
-    credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
+    credential = (required(gw.post("/v1/app-credentials", json=own, headers=priya), "/v1/app-credentials")).get("id")
     team_on = {"enabled": True, "credentialId": credential}
     turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     connection_id = str((data(turned) or {}).get("connectionId") or "con_missing")

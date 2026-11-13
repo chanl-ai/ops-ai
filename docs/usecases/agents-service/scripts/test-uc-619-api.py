@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from steps import required
 from usecase_harness import (
     AGENTS_PORT,
     agents,
@@ -120,7 +121,7 @@ def main() -> None:
         )
 
         # 4. The assistant answers from the knowledge base through search_knowledge.
-        thread = data(api.post("/chat/threads", json={"kbIds": []}, headers=on)) or {}
+        thread = required(api.post("/chat/threads", json={"kbIds": []}, headers=on), "/chat/threads")
         searched = say(
             api, team, str(thread.get("id")), 'call search_knowledge {"query": "How long to file a chargeback?"}'
         )
