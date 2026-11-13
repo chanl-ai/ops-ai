@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Archive, ChevronDown, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCw, Trash2 } from 'lucide-react';
+import { Archive, History, MoreHorizontal, Pencil, Pin, PinOff, RotateCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -36,19 +36,38 @@ export function chatGroupOf(t: Pick<ChatThreadRow, 'pinned' | 'lastMessageAt'>, 
  * column (`searchable`) a search box and "Show more chats" read further pages from the server. Hidden while the main
  * sidebar is folded to icons.
  */
+/** The link to every chat, archived ones included, on their own page. */
+export function AllChatsLink({ active, onNavigate }: { active: boolean; onNavigate?: () => void }) {
+  return (
+    <SidebarMenuButton asChild isActive={active} className="text-muted-foreground">
+      <Link href="/chat/conversations" onClick={onNavigate} data-testid="sidebar-all-chats">
+        <History />
+        <span>All chats</span>
+      </Link>
+    </SidebarMenuButton>
+  );
+}
+
 export function SidebarChats({ onNavigate, searchable = false }: { onNavigate?: () => void; searchable?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const activeId = pathname.startsWith('/chat/') && pathname !== '/chat/conversations' ? pathname.split('/')[2] : undefined;
   const [search, setSearch] = React.useState('');
-  const [more, setMore] = React.useState(false);
   const deferred = React.useDeferredValue(search);
-  const params = chatListParams(searchable ? deferred : '', searchable && more);
+  const params = chatListParams(searchable ? deferred : '', searchable);
   const pages = useChatThreadPages(params);
   const paged = params.recent === undefined;
   const threads = React.useMemo(() => pages.data?.pages.flatMap((p) => p.data) ?? [], [pages.data]);
-  // The recent slice holds at most five unpinned chats; five back means there may be more to show.
-  const mayHaveMore = searchable && (paged ? !!pages.hasNextPage : threads.filter((t) => !t.pinned).length >= RECENT);
+  // The column reads every page as it scrolls: the next one loads when the end of the list comes into view.
+  const mayHaveMore = searchable && paged && !!pages.hasNextPage;
+  const end = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const el = end.current;
+    if (!el || !mayHaveMore) return;
+    const seen = new IntersectionObserver(([e]) => e?.isIntersecting && !pages.isFetchingNextPage && void pages.fetchNextPage(), { rootMargin: '120px' });
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [mayHaveMore, pages]);
   const streaming = useStreamingThreadIds();
   const update = useUpdateThread();
   const remove = useDeleteThread();
@@ -168,29 +187,19 @@ export function SidebarChats({ onNavigate, searchable = false }: { onNavigate?: 
           ) : null,
         )
       )}
-      <SidebarMenu>
-        {mayHaveMore && (
+      {mayHaveMore && (
+        <div ref={end} className="px-2 py-1 text-xs text-muted-foreground" data-testid="chat-list-more">
+          {pages.isFetchingNextPage ? 'Loading more chats…' : null}
+        </div>
+      )}
+      {/* The chat column keeps All chats in its footer; the Work sidebar lists it after the recent chats. */}
+      {!searchable && (
+        <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              className="text-muted-foreground"
-              disabled={pages.isFetchingNextPage}
-              onClick={() => (paged ? void pages.fetchNextPage() : setMore(true))}
-              data-testid="chat-list-more"
-            >
-              <ChevronDown />
-              <span>{pages.isFetchingNextPage ? 'Loading…' : 'Show more chats'}</span>
-            </SidebarMenuButton>
+            <AllChatsLink active={pathname === '/chat/conversations'} onNavigate={onNavigate} />
           </SidebarMenuItem>
-        )}
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild isActive={pathname === '/chat/conversations'} className="text-muted-foreground">
-            <Link href="/chat/conversations" onClick={onNavigate} data-testid="sidebar-all-chats">
-              <History />
-              <span>All chats</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
+        </SidebarMenu>
+      )}
       <DeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}

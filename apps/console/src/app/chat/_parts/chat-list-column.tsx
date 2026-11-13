@@ -2,12 +2,13 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { PanelLeftClose, PanelLeftOpen, SquarePen } from 'lucide-react';
 
-import { SidebarChats } from '@/components/shell/sidebar-chats';
+import { AllChatsLink, SidebarChats } from '@/components/shell/sidebar-chats';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Sidebar, SidebarContent, SidebarHeader } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -59,6 +60,7 @@ function NewChat({ onNavigate }: { onNavigate?: () => void }) {
 
 /** The column's own content: a heading with New chat and fold, then the chats with search and paging. */
 function ChatList({ onNavigate, fold }: { onNavigate?: () => void; fold?: React.ReactNode }) {
+  const pathname = usePathname();
   return (
     <>
       <SidebarHeader className="flex-row items-center gap-1 px-3 py-2">
@@ -69,6 +71,13 @@ function ChatList({ onNavigate, fold }: { onNavigate?: () => void; fold?: React.
       <SidebarContent className="px-1">
         <SidebarChats onNavigate={onNavigate} searchable />
       </SidebarContent>
+      <SidebarFooter className="border-t px-1 py-1">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <AllChatsLink active={pathname === '/chat/conversations'} onNavigate={onNavigate} />
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </>
   );
 }
