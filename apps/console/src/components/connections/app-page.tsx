@@ -159,7 +159,7 @@ export function AppPageView({ appId }: { appId: string }) {
       title={card.name}
       // The tools the page lists, so the header and the Tools tab count the same ones.
       description={`${plural(data.tools.length, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
-      breadcrumbs={[{ label: 'Connectors', href: '/data/connectors' }, { label: 'Team setup', href: '/data/connectors' }, { label: card.name }]}
+      breadcrumbs={[{ label: 'Apps', href: '/data/connectors' }, { label: 'Team setup', href: '/data/connectors' }, { label: card.name }]}
       backHref="/data/connectors"
       badge={<AppStateBadge card={card} whose={whoseState(card)} testId="app-status" />}
       actions={headerAction()}

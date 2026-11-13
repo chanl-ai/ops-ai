@@ -58,12 +58,12 @@ export const BACKGROUND: NavNeed = { area: 'access', action: 'manage', everyTeam
 
 /**
  * Connectors (owner, 8 November): one word for an app that acts for the team or the person, in two views. Mine is each
- * person's own sign-ins, the user menu's "My connectors"; Team setup is where an admin turns apps on, the Data
- * row "Connectors".
+ * person's own sign-ins, the user menu's "My apps"; Team setup is where an admin turns apps on, the Data
+ * row "Apps".
  */
-export const CONNECTORS = 'Connectors';
+export const CONNECTORS = 'Apps';
 /** Mine's one name, on the sidebar row, its page title and the avatar menu. */
-export const MY_CONNECTORS = 'My connectors';
+export const MY_CONNECTORS = 'My apps';
 export const CONNECTOR_VIEWS: NavChild[] = [
   { title: 'Mine', url: '/settings/account/connectors', icon: IconUserCheck },
   { title: 'Team setup', url: '/data/connectors', icon: IconPlugConnected },
