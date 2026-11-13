@@ -83,7 +83,8 @@ def as_pdf(title: str, text: str) -> bytes:
         if kind == "heading":
             flow.append(Paragraph(html.escape(value[1]), styles["Title" if value[0] == 1 else "Heading2"]))
         elif kind in {"bullet", "number"}:
-            flow.append(Paragraph(f"&bull; {html.escape(value)}", styles["BodyText"]))
+            # A plain hyphen: reportlab's bullet glyph is read back from the PDF as "(cid:127)".
+            flow.append(Paragraph(f"- {html.escape(value)}", styles["BodyText"]))
         elif kind == "table":
             flow.append(Table(value))
             flow.append(Spacer(1, 8))
@@ -160,14 +161,16 @@ def slug(s: str) -> str:
 # ── Install ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
-def ensure_base(kb: Any, spec: dict[str, Any], owner: str, collections: list[str]) -> str:
+def ensure_base(kb: Any, spec: dict[str, Any], owner: str) -> str:
     listed = items(data(kb.get("/v1/knowledge-bases", params={"search": spec["name"], "pageSize": 100})))
     # The list is the signed-in team's, so a base of the same name there is this one.
     found = next((b for b in listed if b["name"].lower() == spec["name"].lower()), None)
     if found:
         say("FOUND", f"knowledge base {spec['name']}", found["id"])
         return str(found["id"])
-    body = {**spec, "owner": owner, "collections": collections}
+    # No search scope: the collections stay on the documents, so files added later (collection "Documents") are searched
+    # too, and the Documents and Test filters narrow by collection.
+    body = {**spec, "owner": owner}
     made = data(kb.post("/v1/knowledge-bases", json=body))
     say("MADE", f"knowledge base {spec['name']}", made["id"])
     return str(made["id"])
@@ -226,7 +229,7 @@ def install(args: argparse.Namespace) -> int:
     urls = service_urls(args.origin)
     who = settled(sign_in(urls, email, password, spec["team"]))
     kb = who("kb")
-    kb_id = ensure_base(kb, spec["base"], email, [c["name"] for c in spec["collections"]])
+    kb_id = ensure_base(kb, spec["base"], email)
     sources = {c["name"]: ensure_source(kb, kb_id, c, email) for c in spec["collections"]}
     for doc in spec["documents"]:
         try:
