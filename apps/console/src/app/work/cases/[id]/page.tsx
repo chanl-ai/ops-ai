@@ -357,10 +357,10 @@ export default function CasePage() {
         onSubmit={addNote}
         footer={
           <>
-            <Button variant="outline" onClick={() => setNoteOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setNoteOpen(false)}>
               Cancel
             </Button>
-            <LoadingButton isLoading={note.isPending} disabled={!text.trim()} onClick={addNote} data-testid="case-add-note">
+            <LoadingButton type="submit" isLoading={note.isPending} disabled={!text.trim()} data-testid="case-add-note">
               Add note
             </LoadingButton>
           </>
