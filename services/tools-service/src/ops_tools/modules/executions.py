@@ -42,6 +42,9 @@ def call_row(
     """One call as the log shows it. `title` is the tool's display name (a plugin's manifest gives it); the row
     falls back to the tool's own name, so no reader shows a blank."""
     subject = _identity(r["sub"], SUBJECT_KINDS, names)
+    if r.get("caller_name"):
+        # The name the person or key had when the call was made; older rows keep showing the id.
+        subject = {**subject, "name": str(r["caller_name"])}
     workflow_id = subject["id"] if subject["kind"] == "workflow" else ""
     approval: dict[str, Any] = {"kind": "person" if r["approvers"] else "none"}
     if r["approval_token_id"]:

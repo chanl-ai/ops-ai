@@ -573,7 +573,9 @@ async def test_a_link_address_gets_a_token_for_that_link_alone_and_a_deeper_path
     who, team = await a.person()
     link = a.params(client, team, resource=f"{MCP_URL}/mcp/{team}/claims-lookups")
     got = await a.connect(who, link)
-    assert audiences(claims_of(got["access_token"])) == [f"{MCP_URL}/mcp/{team}/claims-lookups"]
+    claims = claims_of(got["access_token"])
+    assert audiences(claims) == [f"{MCP_URL}/mcp/{team}/claims-lookups"]
+    assert claims["client_name"] == "Claude", "the call log names the assistant the person allowed"
     deeper = a.params(client, team, resource=f"{MCP_URL}/mcp/{team}/claims-lookups/more")
     r = await signin.public.get("/oauth/authorize", params=deeper, follow_redirects=False)
     assert r.status_code == 400 and "location" not in r.headers, r.text

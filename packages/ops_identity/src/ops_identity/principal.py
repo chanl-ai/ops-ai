@@ -45,6 +45,8 @@ class Principal(BaseModel):
     # The assistant an MCP token was issued to (the `client_id` claim), which the call log names in place of whatever
     # the assistant says about itself; None for every other caller.
     client_id: str | None = None
+    # That client's name as registered and shown on the consent page the person allowed (the `client_name` claim).
+    client_name: str | None = None
     key_target: dict[str, Any] | None = None
 
     @property

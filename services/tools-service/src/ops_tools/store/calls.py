@@ -71,6 +71,8 @@ gateway_calls = sa.Table(
     sa.Column("client_id", sa.String(64)),
     # The MCP link the call came through (mcp_links.id); null for the team's whole address and every other channel.
     sa.Column("link_id", sa.String(64)),
+    # The caller's own name (a person's or a key's) when the call was made, so the log names them, not their id.
+    sa.Column("caller_name", sa.String(320)),
     sa.Index("ix_gateway_calls_link_created", "link_id", "created_at"),
     sa.Index("ix_gateway_calls_module_created", "module_id", "created_at"),
     sa.Index("ix_gateway_calls_thread_id", "thread_id"),

@@ -400,6 +400,7 @@ class GatewayCalls:
             "client_id": caller.client_id,
             # The MCP link the call came through, so the link's page lists its own calls.
             "link_id": link_id,
+            "caller_name": (caller.name or caller.email or None) if caller.kind in ("person", "api_key") else None,
             "acting_for": req.acting_for.email if req.acting_for else None,
         }
 

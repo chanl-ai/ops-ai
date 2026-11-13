@@ -208,7 +208,7 @@ class McpAdapter:
             who.principal,
             request,
             channel=MCP,
-            client_name=None if who.principal.client_id else _client_name(ctx),
+            client_name=_assistant(who.principal, ctx),
             operation=(resolved or self.platform.resolved(name), run),
             link_id=who.link["id"] if who.link else None,
         )
@@ -284,7 +284,7 @@ class McpAdapter:
             request,
             channel=MCP,
             # A signed-in assistant is named by its client id; what it says about itself is not kept beside it.
-            client_name=None if who.principal.client_id else _client_name(ctx),
+            client_name=_assistant(who.principal, ctx),
             sees=self._sees(who.team),
             link_id=who.link["id"] if who.link else None,
         )
@@ -395,6 +395,14 @@ def _acting_for(settings: Settings, signer: Any) -> ActingForTokens | None:
     return ActingForTokens.from_platform(
         ServiceClient.for_settings(settings, platform, service="tools", audience="platform")
     )
+
+
+def _assistant(principal: Principal, ctx: Any) -> str | None:
+    """The assistant to name in the call log: for a signed-in one, the name the person allowed on the consent page
+    (from the token); what an assistant says about itself is kept only when it sent no token of its own."""
+    if principal.client_id:
+        return principal.client_name
+    return _client_name(ctx)
 
 
 def _caller(ctx: Any) -> McpCaller:

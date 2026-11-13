@@ -12,11 +12,11 @@ import re
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_access import can
+from ops_access import Access, can
 from ops_identity import Principal
 from ops_service_kit.errors import NotFound, Unprocessable
 from ops_service_kit.http import Envelope, ok
@@ -34,6 +34,7 @@ from .store.mcp_links import McpLinks
 # A link names its tools; past this many an assistant reads a list too long to choose from (tool search starts at 20).
 MAX_TOOLS = 20
 WORKFLOW_ID = "workflow:"
+ACCESS = Access()
 
 
 class _Wire(BaseModel):
@@ -141,11 +142,18 @@ def mcp_links_router(  # noqa: PLR0917 - one owner per argument, each wired once
 
     @r.get("", response_model=Envelope[list[McpLinkView]])
     async def list_mcp_links(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The team's links by name, each with its newest call."""
-        can(_principal(who), "deployments", "view", team=who.team.id, what="this team's MCP links")
-        rows = await links.list(who.tenant_id, who.team.id)
-        last = await log.last_by_link(who.tenant_id, who.team.id, [x["id"] for x in rows])
-        return ok([_view(x, last.get(x["id"])) for x in rows])
+        """The links of every team the person belongs to and may see channels in, by name, each with its newest
+        call: an admin of several teams sees them on one page, as the Team filter needs. A key or service token reads
+        its own team's only."""
+        p = _principal(who)
+        can(p, "deployments", "view", team=who.team.id, what="this team's MCP links")
+        teams = [t for t in dict.fromkeys([who.team.id, *p.team_ids]) if ACCESS.may(p, "deployments", "view", team=t)]
+        out: list[dict[str, Any]] = []
+        for team_id in teams:
+            rows = await links.list(who.tenant_id, team_id)
+            last = await log.last_by_link(who.tenant_id, team_id, [x["id"] for x in rows])
+            out.extend(_view(x, last.get(x["id"])) for x in rows)
+        return ok(sorted(out, key=lambda v: str(v["name"]).lower()))
 
     @r.post("", response_model=Envelope[McpLinkView], status_code=201)
     async def create_mcp_link(body: McpLinkIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -209,5 +217,14 @@ def mcp_links_router(  # noqa: PLR0917 - one owner per argument, each wired once
         assert row is not None
         last = await log.last_by_link(who.tenant_id, who.team.id, [row["id"]])
         return ok(_view(row, last.get(row["id"])))
+
+    @r.delete("/{link_id}", status_code=204)
+    async def delete_mcp_link(link_id: str, who: Annotated[Caller, Depends(caller)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Deletes the link: its address answers 404 and no key made for it opens anything. Its calls stay listed in
+        Activity."""
+        can(_principal(who), "deployments", "delete", team=who.team.id, what="this MCP link")
+        if not await links.delete(who.tenant_id, who.team.id, link_id):
+            raise NotFound(f"MCP link {link_id}")
+        return Response(status_code=204)
 
     return r

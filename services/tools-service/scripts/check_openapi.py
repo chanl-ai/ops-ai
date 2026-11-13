@@ -29,6 +29,8 @@ from ops_tools.connections.service import ConnectionService
 from ops_tools.egress_routes import egress_router
 from ops_tools.expression_routes import expressions_router
 from ops_tools.mailboxes import mailboxes_router
+from ops_tools.mcp_links import mcp_links_router
+from ops_tools.mcp_server import platform_tools
 from ops_tools.mock_routes import mocks_router
 from ops_tools.modules.directory import Directory
 from ops_tools.modules.routes import executions_router, modules_router
@@ -45,6 +47,7 @@ from ops_tools.send_policy_routes import send_policy_router
 from ops_tools.store import CallLog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
+from ops_tools.store.mcp_links import McpLinks
 from ops_tools.store.mocks import MockStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -92,6 +95,9 @@ def document() -> dict[str, Any]:
             expressions_router(),
             secrets_router(secrets),
             send_policy_router(SendPolicies(engine), directory),
+            mcp_links_router(
+                McpLinks(engine), CallLog(engine), ToolRegistry(catalog), directory, None, platform_tools(settings)
+            ),
             mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(connection_service, directory),
             plugins_router(PluginAccounts(host, connection_service), directory),

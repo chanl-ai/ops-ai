@@ -103,6 +103,14 @@ class McpLinks:
             raise Unprocessable(f"This team already has a link named {name}.", code="link_name_taken") from e
         return row
 
+    async def delete(self, tenant_id: str, team_id: str, link_id: str) -> bool:
+        """Removes the link; its address answers 404 from then on. Its calls stay in the call log with its id."""
+        t = mcp_links
+        with acting_as(team_id):
+            q = sa.delete(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
+        async with self.engine.begin() as c:
+            return (await c.execute(q)).rowcount > 0
+
     async def set_paused(self, tenant_id: str, team_id: str, link_id: str, paused: bool) -> dict[str, Any] | None:
         t = mcp_links
         with acting_as(team_id):

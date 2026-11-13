@@ -39,6 +39,7 @@ GRIDS["linker"] = [
     ("deployments", "view", "all"),
     ("deployments", "create", "all"),
     ("deployments", "edit", "all"),
+    ("deployments", "delete", "all"),
     ("workflows", "run", "all"),
     ("activity", "view", "all"),
 ]
@@ -141,6 +142,7 @@ async def test_a_link_lists_and_runs_only_its_tools_and_lists_its_own_calls(stac
         calls = (await rest.get("/v1/executions", params={"link": link["id"]})).json()["data"]["data"]
         listed_links = (await rest.get("/v1/mcp-links")).json()["data"]
     assert [(x["target"], x["channel"]) for x in calls] == [("lookup_case", "mcp")]
+    assert (calls[0]["subject"]["name"], calls[0]["clientName"]) == ("linker", "pytest-assistant"), "names, not ids"
     assert listed_links[0]["lastCall"]["outcome"] == "ok"
 
 
@@ -192,3 +194,26 @@ async def test_a_picked_workflow_starts_its_live_version_only_for_who_may_run_it
     agents: Any = stack.agents
     assert agents.started == [{"workflowId": "wf_claims", "input": {"claim": "4471"}, "mode": "live"}]
     assert refused.is_error is True, "a person without workflows.run starts nothing"
+
+
+async def test_a_deleted_link_stops_answering_and_a_reader_cannot_delete(stack: Stack) -> None:
+    link = await _link(stack, [{"id": "lookup_case", "label": "Look up a case"}])
+    async with _rest(stack, "reader") as rest:
+        refused = await rest.delete(f"/v1/mcp-links/{link['id']}")
+    assert refused.status_code == 403, refused.text
+    async with _rest(stack, "linker") as rest:
+        assert (await rest.delete(f"/v1/mcp-links/{link['id']}")).status_code == 204
+        assert (await rest.get("/v1/mcp-links")).json()["data"] == []
+    body: dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    async with (
+        stack.app.router.lifespan_context(stack.app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=stack.app),
+            base_url="http://tools",
+            headers={"Authorization": "Bearer ok_linker"},
+        ) as http,
+    ):
+        r = await http.post(
+            f"/mcp/{TEAM}/claims-lookups", json=body, headers={"Accept": "application/json, text/event-stream"}
+        )
+    assert r.status_code == 404, r.text
