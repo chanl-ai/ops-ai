@@ -710,8 +710,8 @@ class Apps:
                         "mayManage": may,
                         "managedClient": platform,
                         "plugin": {
-                            # A built-in app the team never switched is on (PluginHost.off_reason).
-                            "teamOn": bool(b.get("enabled")) if pid in bindings else pid in self.plugins.builtin,
+                            # On only with an enabled binding row, as PluginHost.off_reason decides.
+                            "teamOn": bool(b.get("enabled")) if pid in bindings else False,
                             "platformApp": platform,
                             "kinds": list(m.connection.kinds),
                             "signIn": list(m.connection.sign_in),
@@ -863,7 +863,7 @@ class Apps:
             mine_row = own.get(str(conn["id"])) if conn else None
             configured = self._configured(c, conn, creds)
             c["appState"], c["appStateReason"] = app_state(
-                c, conn, token, mine_row, configured=configured, person=is_person
+                c, conn, token, mine_row, configured=configured, person=is_person, pack=self._is_pack(c)
             )
             sign_in = (conn.get("sign_in") or "team") if conn else "team"
             theirs = sign_in == "person" or (sign_in == "person_or_team" and is_person)
@@ -881,6 +881,14 @@ class Apps:
                 if mine_row.get("refused_at") is not None
                 else "connected"
             )
+
+    def _is_pack(self, card: dict[str, Any]) -> bool:
+        """Whether a plugin card is a template pack: no endpoint and no app it runs on, so it reaches no system and
+        turning it on makes no account (PluginAccounts.switch)."""
+        if self.plugins is None or card["kind"] != "plugin":
+            return False
+        held = self.plugins.plugins.get(str(card.get("pluginId")))
+        return held is not None and not held.manifest.endpoint and held.manifest.connection.runs_on is None
 
     def _configured(self, card: dict[str, Any], conn: dict[str, Any] | None, creds: list[dict[str, Any]]) -> str:
         """Whether a plugin's app has an auth config to sign in with: ok, other (on, and the one its default account
@@ -1086,16 +1094,19 @@ def app_state(
     *,
     configured: str = "ok",
     person: bool = False,
+    pack: bool = False,
 ) -> tuple[str, str | None]:
     """One card's state for the caller: signing in is what connects an account, and a failed test after it warns
     without disconnecting. On an app each person signs in to, it is the caller's own sign-in that counts; on one where
     each person signs in with the team's account for runs nobody started, a person's own sign-in counts too, since the
     calls they make never use the team's. `configured` (`Apps._configured`): ok, other (the account's auth config is
     gone or lost its secret, and the team has another) or none; `person`: whether the caller is a person (or a service
-    acting for one)."""
+    acting for one); `pack`: a template pack, which has no account, so being on for the team is all it needs."""
     if card["kind"] in ("builtin", "module"):
         return "connected", None
     plugin = cast(dict[str, Any] | None, card.get("plugin"))
+    if pack and plugin is not None:
+        return ("connected", None) if plugin.get("teamOn") else ("off", None)
     # Only a plugin card the install no longer loads is drawn without its manifest's details.
     if card["kind"] == "plugin" and plugin is None:
         return "removed", REMOVED
