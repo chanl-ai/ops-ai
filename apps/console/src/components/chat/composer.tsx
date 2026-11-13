@@ -1,17 +1,18 @@
 'use client';
 
 import * as React from 'react';
-import { Database, Plus, Slash, X } from 'lucide-react';
+import { Database, Paperclip, Plus, Slash, X } from 'lucide-react';
 
 import { type PickedSkill, SkillChip, SkillInputsForm, SkillMenu, toPick } from '@/components/chat/skill-menu';
 import { KbDot } from '@/components/knowledge/knowledge-meta';
 import { ChatPrompt } from '@/components/shared/chat-blocks';
-import { FileUpload, type UploadItem, uploadsBlocker } from '@/components/shared/file-upload';
+import { AddDocumentsDialog } from '@/components/shared/add-documents-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useFileDetails } from '@/hooks/file-queries';
 import type { ChatAttachment, SkillPick } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
 
@@ -169,9 +170,21 @@ export function Composer({
     setTextState(next);
     writeDraft(draftKey, next);
   };
-  const [files, setFiles] = React.useState<UploadItem[]>([]);
-  // Remounting the upload control clears it after a send.
-  const [uploadKey, setUploadKey] = React.useState(0);
+  // Files for the next message, uploaded or picked from Files in the Attach dialog.
+  const [files, setFiles] = React.useState<ChatAttachment[]>([]);
+  const [attaching, setAttaching] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const fileDetails = useFileDetails();
+  const attach = async (ids: string[]) => {
+    setAdding(true);
+    try {
+      const found = await fileDetails(ids.filter((id) => !files.some((f) => f.fileId === id)));
+      setFiles([...files, ...found.map((f) => ({ fileId: f.id, name: f.name, size: f.size }))]);
+      setAttaching(false);
+    } finally {
+      setAdding(false);
+    }
+  };
   // The skill picked for the next message; `filling` while its inputs form is open.
   const [skill, setSkill] = React.useState<PickedSkill | null>(null);
   const [filling, setFilling] = React.useState<PickedSkill | null>(null);
@@ -180,8 +193,7 @@ export function Composer({
     setFilling(null);
   }, [draftKey, skillsFor?.id]);
   const tooLong = text.length > MAX;
-  const waiting = files.length ? uploadsBlocker(files) : undefined;
-  const canSend = !disabledReason && !streaming && (!!text.trim() || !!skill) && !tooLong && !waiting && !filling;
+  const canSend = !disabledReason && !streaming && (!!text.trim() || !!skill) && !tooLong && !filling;
   const slash = skillsFor && !filling ? SLASH.exec(text) : null;
   const pickSkill = (p: PickedSkill) => {
     setText(text.replace(SLASH, '$1').trimEnd());
@@ -205,13 +217,12 @@ export function Composer({
 
   const send = () => {
     if (!canSend) return;
-    const attachments: ChatAttachment[] = files.flatMap((f) => (f.fileId ? [{ fileId: f.fileId, name: f.name, size: f.size }] : []));
+    const attachments = files;
     // A skill sent with no words of its own asks for what the skill does.
     onSend(text.trim() || (skill ? `Use ${skill.label}.` : ''), attachments, skill ? toPick(skill) : undefined);
     setText('');
     setSkill(null);
     setFiles([]);
-    setUploadKey((k) => k + 1);
   };
 
   if (disabledReason)
@@ -254,8 +265,35 @@ export function Composer({
           </Command>
         </div>
       )}
+    {canAttach && (
+      <AddDocumentsDialog
+        open={attaching}
+        onOpenChange={setAttaching}
+        title="Attach files"
+        description="Upload new files, or pick ones already in Files. The agent reads them with this message."
+        purpose="chat_attachment"
+        noun="file"
+        isPending={adding}
+        onSubmit={attach}
+      />
+    )}
     <ChatPrompt
-      header={skill && <SkillChip label={skill.label} onRemove={() => setSkill(null)} />}
+      header={
+        (skill || files.length > 0) && (
+          <>
+            {skill && <SkillChip label={skill.label} onRemove={() => setSkill(null)} />}
+            {files.map((f) => (
+              <span key={f.fileId} className="inline-flex h-6 max-w-60 items-center gap-1 rounded-md border bg-muted/40 pr-1 pl-1.5 text-xs" data-testid="chat-attached-file">
+                <Paperclip className="size-3 shrink-0 text-muted-foreground" />
+                <span className="truncate">{f.name}</span>
+                <Button type="button" variant="ghost" size="icon" className="size-4 rounded-full" onClick={() => setFiles(files.filter((x) => x.fileId !== f.fileId))} aria-label={`Remove ${f.name}`}>
+                  <X className="size-3" />
+                </Button>
+              </span>
+            ))}
+          </>
+        )
+      }
       value={text}
       onChange={setText}
       onSubmit={send}
@@ -266,7 +304,11 @@ export function Composer({
       autoFocus={autoFocus}
       tools={
         <>
-          {canAttach && <FileUpload key={uploadKey} variant="compact" purpose="chat_attachment" multiple onChange={setFiles} id="chat-attach" testId="chat-attach" />}
+          {canAttach && (
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setAttaching(true)} aria-label="Attach files" data-testid="chat-attach">
+              <Paperclip className="size-3.5" /> Attach
+            </Button>
+          )}
           {skillsFor && (
             <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-muted-foreground" onClick={() => setText(text && !/\s$/.test(text) ? `${text} /` : `${text}/`)} data-testid="chat-skills" aria-label="Pick a skill">
               <Slash className="size-3" /> Skills
@@ -277,7 +319,6 @@ export function Composer({
       }
       status={
         <>
-          {waiting && <span className="text-xs text-muted-foreground">{waiting}</span>}
           {tooLong && (
             <span className="text-xs tabular-nums text-destructive-text">
               {text.length.toLocaleString('en-CA')} / {MAX.toLocaleString('en-CA')}
