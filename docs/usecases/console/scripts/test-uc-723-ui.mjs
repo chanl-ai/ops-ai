@@ -22,7 +22,7 @@ const WANJIRU = 'w.kamau@harborpine.example';
 // The sidebar's sections, in order, for a person whose cells open a page in every area: one link per page, no sub-rows.
 const SECTIONS = ['Work', 'Agent Builder', 'Data Gateway', 'Governance'];
 const sectionsRight = (labels) => JSON.stringify(labels) === JSON.stringify(SECTIONS);
-// The areas the tabs and the search groups still name.
+// The areas the search groups name; the area tabs (flag area_tabs) use the section names above.
 const AREAS = ['Work', 'Build', 'Data', 'Govern'];
 const SHOTS = evidenceDir('723', 'uc');
 const ONLY = process.env.UC723_STEPS?.split(',').map((x) => x.trim());
@@ -93,12 +93,12 @@ async function walk(consoleUrl, browser, errors, mode) {
       const work = { url: path(page), lit: await lit(page) };
       await page.setViewportSize({ width: 390, height: 844 });
       await open(page, '/build/agents');
-      const button = page.getByRole('button', { name: /^Area: Build\. Switch area/ });
+      const button = page.getByRole('button', { name: /^Area: Agent Builder\. Switch area/ });
       await button.waitFor({ timeout: 12_000 });
       const box = await button.boundingBox();
       check(
         '16 with area_tabs on the tabs come back: four areas, a chord switches the sidebar to one area, a phone gets one button',
-        JSON.stringify(areas) === JSON.stringify(AREAS) && oneSidebar.length === 0 && build.url === '/build/agents' && build.lit[0] === 'Build' && build.rows.includes('Agents') && !build.rows.includes('Cases') && work.url === '/work/cases' && work.lit[0] === 'Work' && !!box && box.height >= 44,
+        JSON.stringify(areas) === JSON.stringify(SECTIONS) && oneSidebar.length === 0 && build.url === '/build/agents' && build.lit[0] === 'Agent Builder' && build.rows.includes('Agents') && !build.rows.includes('Cases') && work.url === '/work/cases' && work.lit[0] === 'Work' && !!box && box.height >= 44,
         { areas, oneSidebar, build, work, height: box?.height },
       );
       await page.context().close();
@@ -154,7 +154,7 @@ async function walk(consoleUrl, browser, errors, mode) {
     await page.waitForTimeout(500);
     const narrow = (await control(page).count()) + (await page.getByRole('button', { name: /^Area:/ }).count());
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(`${consoleUrl}/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${consoleUrl}/overview`, { waitUntil: 'domcontentloaded' });
     await page.waitForURL((u) => u.pathname === '/chat', { timeout: 30_000 }).catch(() => undefined);
     const home = path(page);
     await page.goto(`${consoleUrl}/agents`, { waitUntil: 'domcontentloaded' });
@@ -289,11 +289,13 @@ async function walk(consoleUrl, browser, errors, mode) {
     }
     mode = 'fail';
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByText('Pages unavailable').first().waitFor({ timeout: 12_000 });
-    const failed = { retry: await page.getByText('Try again').count(), sections: (await sectionsOf(page)).length, trigger: await page.locator('[data-slot=sidebar-trigger]').count() };
+    // The sidebar starts folded, so the retry row is its icon button, named for what it does.
+    const retry = page.getByRole('button', { name: 'Pages unavailable. Try again' });
+    await retry.waitFor({ timeout: 12_000 });
+    const failed = { retry: await retry.count(), sections: (await sectionsOf(page)).length, trigger: await page.locator('[data-slot=sidebar-trigger]').count() };
     await page.screenshot({ path: join(SHOTS, 'cells-error-1440.png') });
     mode = 'pass';
-    await page.getByText('Try again').first().click();
+    await retry.click();
     await page.locator('[data-sidebar=content] [data-nav-group="Governance"]').waitFor({ timeout: 30_000 });
     check('12 while cells load there are skeleton rows and no sections; when they fail there is one way to try again', slow.skeletons > 0 && slow.sections === 0 && new Set(counts).size === 1 && counts[0] >= SECTIONS.length && failed.retry >= 1 && failed.sections === 0 && failed.trigger >= 1, { slow, counts, failed });
     await context.close();

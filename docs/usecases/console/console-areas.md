@@ -38,11 +38,11 @@ Steps 1 to 15 run with no flags; step 16 runs with `area_tabs` on. Step numbers 
 | 4 | Priya on /work/cases presses the second area chord, then opens /build/agents | Nothing moves and no tabs draw; all four sections stay; Cases is lit in Work, then Agents in Agent Builder |
 | 6 | Search for "knowledge"; Ravi searches "activity" | Each page once, grouped Work, Build, Data, Govern; the pick lights Knowledge in Data Gateway; Ravi is offered no Activity |
 | 8 | Priya opens /deployments, /prompt-blocks, /sources, /wiki, /connect, /reviews/all | Each lights its row in its section (Channels and Skills in Agent Builder, the apps and knowledge rows in Data Gateway, Reviews in Governance) and draws a trail |
-| 12 | Cells held back, then refused | Skeleton rows and no sections; then "Pages unavailable" with Try again, which loads the sections |
-| 13 | Priya opens Settings, then Back | The settings sidebar; Back returns to the console with the four sections |
+| 12 | Cells held back, then refused | Skeleton rows and no sections; then the "Pages unavailable. Try again" button (an icon while the sidebar is folded), which loads the sections |
+| 13 | Priya opens Settings, then Back | The settings sidebar is open, though the app sidebar starts folded; Back returns to the console with the four sections |
 | 14 | Old addresses | /logs/tool-calls, /settings/policies and /account each answer one 307; Policies is at /policies and lit in Governance |
 | 15 | Trails at 1440 on the longest pages | No crumb is cut; the Policies trail ends in Policies |
-| 16 | Second stack with `OPS_FLAGS=area_tabs`: Priya on /work/cases, then at 390 | Four area tabs Work, Build, Data, Govern and no section headings; the second chord opens /build/agents with Build lit and Cases gone from the sidebar; the first chord returns to /work/cases; at 390 one 44 px Area button |
+| 16 | Second stack with `OPS_FLAGS=area_tabs`: Priya on /work/cases, then at 390 | Four area tabs Work, Agent Builder, Data Gateway, Governance and no section headings; the second chord opens /build/agents with Agent Builder lit and Cases gone from the sidebar; the first chord returns to /work/cases; at 390 one 44 px Area button |
 
 ## Acceptance layers
 
