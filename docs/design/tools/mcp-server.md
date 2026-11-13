@@ -196,6 +196,9 @@ Each URL is its own OAuth resource, so a token minted for one scope or environme
 | `/mcp/{env}/{team}/agents/{agent}` | Exactly the tools the agent's live version is granted (in test, its current draft), under the agent's approval rules | A key pinned to the agent, for an outside harness or evaluation |
 | Any of the above with `?tools=a,b` or `?readonly=1` | The same list narrowed by name, or to reads | Clients that want a short list |
 
+Built so far (2026-11-13): `/mcp/{team}` and MCP links at `/mcp/{team}/{link}`, which stand for the curated rows above
+without `{env}` (every link is test). A link's address is its own OAuth resource. See [MCP](../../architecture/mcp.md).
+
 `{env}` is `test` or `production`. `{team}` must match the key's team or one of the token's teams, else 403
 `team_forbidden`. The query narrows and does not change the resource, which RFC 8707 asks to carry no query.
 

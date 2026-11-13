@@ -21,7 +21,8 @@ Read with [tool lifecycle](tool-lifecycle.md), [workflows as tools](workflows-as
 
 | Angle | Built | Where | Not built yet |
 |---|---|---|---|
-| Server per team | `/mcp/{team}` behind the `mcp_gateway` flag; read tools only; every call a test run | `T/mcp_server.py:39`, `:101-114`, `:118-125`; `T/app.py:259-298`; `packages/ops_service_kit/src/ops_service_kit/flags.py:29-31` | `/mcp/{env}/{team}`; curated endpoints `/mcp/{env}/{team}/e/{slug}`; server instructions; Origin check |
+| Server per team | `/mcp/{team}` behind the `mcp_gateway` flag; read tools only; every call a test run | `T/mcp_server.py:39`, `:101-114`, `:118-125`; `T/app.py:259-298`; `packages/ops_service_kit/src/ops_service_kit/flags.py:29-31` | `/mcp/{env}/{team}`; server instructions; Origin check |
+| MCP links (curated endpoints) | A named address for a chosen set of the team's tools and published workflows at `/mcp/{team}/{link}`: tools/list shows only its tools, any other is refused (`not_on_link`), each call is logged with the link's id, a paused link answers 503 `link_paused`. A picked workflow starts its live version for the signed-in person (agents-service `POST /v1/runs` takes tools-service's token with `X-Acting-For`, decided by `can` on the cells that person holds). Console: Channels › MCP | `T/mcp_links.py`, `T/store/mcp_links.py`, `T/mcp_server.py` (`_link`, `_link_tools`); `services/agents-service/src/ops_agents/api/routers/engine.py` (`starter`); `apps/console/src/components/channels/mcp/` | Keys bound to one link; environment in the path; a workflow's input schema in tools/list; tool search above 20 |
 | Server per person | A person's token is accepted on the team address | `packages/ops_identity/src/ops_identity/resolve.py:116-130` | A way for a client to get that token (the sign-in server below); the audience check |
 | Client of outside servers | An outside server is a module of type `mcp`; `initialize`, paged `tools/list`, `tools/call` over streamable HTTP on the egress allow-list; tools pinned and refused on drift | `T/mcp.py:72-143`; `T/executor.py:578-681`, `:775`; `T/modules/schemas.py:18`; `T/modules/routes.py:131`; `T/apps.py:2098` | Nothing |
 | Agents and workflows | Agents and workflow steps call MCP-backed tools through `POST /v1/calls`; tool search above 20 tools | `services/agents-service/src/ops_agents/activities/gateway.py:242`; `packages/ops_agent_kernel/src/ops_agent_kernel/types.py:74` | Nothing |
@@ -91,8 +92,8 @@ console's MCP page (`apps/console/src/app/channels/mcp/page.tsx`) reads `/connec
 
 | Record | Service | Fields | Built |
 |---|---|---|---|
-| `gateway_calls` | tools | adds nothing; `channel` is `api`, `mcp` or `console`, with `client_name` | Built (`T/store/calls.py:65-67`) |
-| `mcp_endpoints` | tools | `id`, `team_id`, `slug`, `environment`, `tool_names`, `accounts`, `who`, `masked`, `paused` | Not built yet |
+| `gateway_calls` | tools | `channel` is `api`, `mcp` or `console`, with `client_name`, `client_id` and `link_id` (the MCP link a call came through) | Built (`T/store/calls.py`) |
+| `mcp_links` | tools | `id`, `team_id`, `slug` (unique per team), `name`, `environment` (always `test`), `tools` (name, title, kind, access), `paused`, `created_by` | Built (migration `0077_mcp_links`); `accounts`, `who`, `masked` not built yet |
 | `mcp_endpoint_keys` | tools | `endpoint_id`, `key_id` (a platform-service key), `person_id` | Not built yet |
 | OAuth clients, codes, refresh tokens | platform | client id, redirect addresses, metadata document address; codes bound to PKCE and resource | Not built yet |
 
@@ -103,10 +104,12 @@ The MCP mount stays out of OpenAPI. Every other route is generated into the SDKs
 | Route | Who | Service | Built |
 |---|---|---|---|
 | `POST /mcp/{team}` | A key or token in the team opens a session and lists; each tool call needs `tools:run`, and each prompt read needs `skills:view` | tools | Built |
-| `POST /mcp/{env}/{team}`, `/mcp/{env}/{team}/e/{slug}` | Same | tools | Not built yet |
+| `POST /mcp/{team}/{link}` | The same, limited to the link's tools; a token issued for the link's exact address | tools | Built |
+| `POST /mcp/{env}/{team}` | Same | tools | Not built yet |
 | `GET /.well-known/oauth-protected-resource/mcp/{env}/{team}[/e/{slug}]` | Anyone | tools | Not built yet |
 | `GET /.well-known/oauth-authorization-server`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke` | Clients and people | platform | Not built yet |
-| `GET`, `POST /v1/mcp-endpoints`; `/{id}`, `/{id}/pause`, `/{id}/keys`, `/{id}/calls` | `tools.run` for one's own key; `connections.manage` to curate, pause, unmask | tools | Not built yet |
+| `GET`, `POST /v1/mcp-links`; `GET`, `PATCH /v1/mcp-links/{id}` | `deployments.view` to read; `deployments.create` to make one; `deployments.edit` to pause or resume | tools | Built |
+| `GET /v1/executions?link={id}` | `activity.view`: a link's calls from the one call log | tools | Built |
 | `POST /v1/tool-modules/discover` with `{kind: "mcp", url}` | `tools.create` | tools | Built (`T/modules/routes.py:131`) |
 
 ## Security, audit and evidence
