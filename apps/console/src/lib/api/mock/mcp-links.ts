@@ -26,8 +26,8 @@ function seed(now: number): McpLink[] {
     lastCall: last,
   });
   return [
-    link('claims-lookups', 'Claims lookups', [tool('read_claim', 'Guidewire · Read claim'), tool('find_account', 'Salesforce · Find account'), tool('update_case', 'Salesforce · Update case', 'write')], { at: new Date(now - HOUR).toISOString(), outcome: 'ok', client: 'Cursor' }),
-    link('card-disputes-desk', 'Card disputes desk', [tool('search_disputes', 'Disputes · Search history'), tool('workflow__wf_dispute_intake', 'Dispute intake', 'workflow')], { at: new Date(now - 0.05 * HOUR).toISOString(), outcome: 'ok', client: 'Claude' }),
+    link('claims-lookups', 'Claims lookups', [tool('read_claim', 'Guidewire · Read claim'), tool('find_account', 'Salesforce · Find account'), tool('update_case', 'Salesforce · Update case', 'write')], { at: new Date(now - HOUR).toISOString(), outcome: 'ok', client: 'Cursor', signedIn: false }),
+    link('card-disputes-desk', 'Card disputes desk', [tool('search_disputes', 'Disputes · Search history'), tool('workflow__wf_dispute_intake', 'Dispute intake', 'workflow')], { at: new Date(now - 0.05 * HOUR).toISOString(), outcome: 'ok', client: 'Claude', signedIn: false }),
     link('outage-desk', 'Outage desk', [tool('lookup_incident', 'ServiceNow · Look up incident')], null),
   ];
 }

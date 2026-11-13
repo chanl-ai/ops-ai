@@ -66,6 +66,7 @@ class LastCall(_Wire):
     at: str
     outcome: str
     client: str | None
+    signed_in: bool
 
 
 class McpLinkView(_Wire):
@@ -116,7 +117,11 @@ def mcp_links_router(
             created_by=row["created_by"],
             created_at=row["created_at"],
             last_call=LastCall(
-                at=last["created_at"], outcome=last["outcome"], client=last["client_name"] or last["client_id"]
+                # A signed-in assistant is known by its client id only; the console words it rather than show the id.
+                at=last["created_at"],
+                outcome=last["outcome"],
+                client=last["client_name"],
+                signed_in=last["client_id"] is not None,
             )
             if last
             else None,

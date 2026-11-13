@@ -59,7 +59,7 @@ const columns: ColumnDef<Row>[] = [
       return (
         <span className="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="mcp-link-last-call">
           <Icon className={ok ? 'size-3.5 text-success' : 'size-3.5 text-destructive'} aria-hidden />
-          {relativeTime(last.at)} · {ok ? (last.client ?? 'an assistant') : last.outcome}
+          {relativeTime(last.at)} · {ok ? (last.client ?? (last.signedIn ? 'signed-in assistant' : 'an assistant')) : last.outcome}
         </span>
       );
     },

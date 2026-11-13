@@ -24,7 +24,8 @@ export interface McpLink {
   paused: boolean;
   createdBy: string;
   createdAt: string;
-  lastCall: { at: string; outcome: string; client: string | null } | null;
+  /** `client` is what an assistant without a token calls itself; a signed-in one is known by its client id only. */
+  lastCall: { at: string; outcome: string; client: string | null; signedIn: boolean } | null;
 }
 
 export interface McpLinkInput {

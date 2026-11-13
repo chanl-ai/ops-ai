@@ -87,8 +87,8 @@ export function NewLinkDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           <Input id="mcp-link-team" value={team?.name ?? ''} readOnly disabled />
         </FormField>
         <FormField id="mcp-link-env" label="Environment" hint="Production is off for outside assistants on this install.">
-          <Select value="test" disabled>
-            <SelectTrigger id="mcp-link-env">
+          <Select value="test">
+            <SelectTrigger id="mcp-link-env" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
