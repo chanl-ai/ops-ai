@@ -617,8 +617,9 @@ def require_keys(settings: Settings, *names: str) -> None:
 
 # Addresses of running services that make exports for the stack it starts (make/env.mk). A test whose Settings picked
 # one up would call the shared stack, so its result would depend on whether that stack is up: an agents test read the
-# publish policy from a stopped platform-service and held a publish it meant to apply.
-STACK_SERVICE_ENV = ("OPS_PLATFORM_URL",)
+# publish policy from a stopped platform-service and held a publish it meant to apply, and a kb search test ranked by
+# the stack's embedding model found a page its keywords no longer held.
+STACK_SERVICE_ENV = ("OPS_PLATFORM_URL", "OPS_MODELS_URL", "OPS_MODELS_KEY")
 
 
 def isolate_from_stack() -> None:
