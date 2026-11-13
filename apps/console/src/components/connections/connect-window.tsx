@@ -38,7 +38,7 @@ import {
   useStartSignIn,
   useTestAccount,
 } from '@/hooks/systems-queries';
-import { draftFor, newAccountBody, pluginGroups, turnOnBody, type KindField, type Kinds } from '@/lib/connect-plan';
+import { draftFor, firstSignIn, newAccountBody, pluginGroups, turnOnBody, type KindField, type Kinds } from '@/lib/connect-plan';
 import { fieldErrors, schemaForFields } from '@/lib/field-schema';
 
 /** A plugin the Connect window connects: one that signs in with an account, through Ops AI's app or the team's own. */
@@ -115,7 +115,7 @@ export function ConnectWindow({
   // signs in and whose account tools use, and whether the team's assistant gets the read tools; the rest is decided.
   // It saves and stops: signing in is a separate, optional action once it is on.
   const turningOn = !card.connectionId && !another && !sandbox && !ownOnly;
-  const [whose, setWhose] = React.useState<SignIn>(() => (plugin?.signIn.includes('person_or_team') ? 'person_or_team' : ((plugin?.signIn[0] as SignIn | undefined) ?? 'team')));
+  const [whose, setWhose] = React.useState<SignIn>(() => firstSignIn(plugin?.signIn ?? []));
   const [giveAssistant, setGiveAssistant] = React.useState(true);
   const give = useGiveAssistantAppTools();
   const page = useApp(card.id);

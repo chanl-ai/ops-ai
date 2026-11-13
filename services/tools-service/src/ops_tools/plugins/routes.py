@@ -462,10 +462,9 @@ class PluginAccounts:
         m = plugin.manifest
         c = m.connection
         kind = self._kind(plugin, body)
-        # Personal sign-in is on by default where the plugin offers it with the team as backup: people may add their
-        # own account, and calls for those who have not use the team's sign-in.
-        backed = "person_or_team" in c.sign_in and kind.per_person
-        sign_in = body.sign_in or ("person_or_team" if backed else c.sign_in[0])
+        # The team's account first wherever the plugin offers it, so nobody is asked for their own sign-in before
+        # their first call; each person signing in is an admin's choice on the app's settings.
+        sign_in = body.sign_in or ("team" if "team" in c.sign_in else c.sign_in[0])
         if sign_in not in c.sign_in:
             raise ValidationFailed(f"{m.title} signs in with {', '.join(c.sign_in)}.", code="sign_in_not_offered")
         plain, secret = self._credentials(plugin, kind, body.credentials)

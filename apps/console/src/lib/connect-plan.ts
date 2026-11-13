@@ -272,6 +272,15 @@ export function pluginKeys(kind: Kind, plugin: PluginSpec, client: Client, draft
 }
 
 /** The `PUT /v1/apps/plugin:{id}/team` body that turns the plugin on with its default account's draft. */
+/**
+ * Whose account a first turn-on preselects: the team's wherever the app offers it, so nobody is asked for their own
+ * sign-in before their first call; each person signing in stays a choice in the window and on the app's settings.
+ */
+export function firstSignIn(offered: readonly string[]): 'team' | 'person' | 'person_or_team' {
+  const first = offered.includes('team') ? 'team' : offered[0];
+  return first === 'person' || first === 'person_or_team' ? first : 'team';
+}
+
 export function turnOnBody(
   kind: Kind,
   plugin: PluginSpec,

@@ -5,6 +5,7 @@ import {
   accountBody,
   complete,
   draftFor,
+  firstSignIn,
   fieldsFor,
   initialState,
   isRequired,
@@ -158,4 +159,11 @@ test('an account signed in through the dialog is remembered, so Save opens no se
   assert.equal(s.signedIn, false);
   s = reduce(reduce(s, { type: 'signing-in' }), { type: 'signed-in' });
   assert.equal(s.signedIn, true);
+});
+
+// The Turn on window sends its choice, so its preselection is the default a first turn-on gets: the team's account
+// wherever the app offers it, else the first way the app signs in.
+test('the Turn on window preselects the team account where the app offers it', () => {
+  assert.equal(firstSignIn(['team', 'person', 'person_or_team']), 'team');
+  assert.equal(firstSignIn(['person_or_team', 'person']), 'person_or_team');
 });
