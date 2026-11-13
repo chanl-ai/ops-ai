@@ -45,6 +45,7 @@ from .header_keys import move_at_start
 from .knowledge_tools import KnowledgeSearch
 from .mailboxes import MailboxSenders, mailboxes_router
 from .mcp_links import mcp_links_router
+from .mcp_server import platform_tools
 from .mock_routes import mocks_router
 from .modules.directory import Directory
 from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WriteApprovals
@@ -312,7 +313,9 @@ def main() -> None:
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
-            mcp_links_router(mcp_links, calls, registry, directory, settings.tools_public_url),
+            mcp_links_router(
+                mcp_links, calls, registry, directory, settings.tools_public_url, platform_tools(settings, agents_url)
+            ),
             mocks_router(MockStore(engine), store, directory),
             *(
                 [

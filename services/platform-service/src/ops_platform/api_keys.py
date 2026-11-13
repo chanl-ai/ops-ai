@@ -59,9 +59,19 @@ class ApiKeys:
     store: KeyStore
     members: Members
 
-    async def list(self, actor: Actor) -> list[dict[str, Any]]:
+    async def list(
+        self, actor: Actor, target_kind: str | None = None, target_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """The team's keys; with a target, only the keys made for it (an MCP link's Keys tab)."""
         await self.members.require_admin(actor)
-        return [shown(r) for r in await self.store.list(actor.tenant_id, actor.team_id)]
+        rows = await self.store.list(actor.tenant_id, actor.team_id)
+        if target_kind is not None:
+            rows = [
+                r
+                for r in rows
+                if r["target_kind"] == target_kind and (target_id is None or r["target_id"] == target_id)
+            ]
+        return [shown(r) for r in rows]
 
     async def create(
         self,
@@ -72,7 +82,10 @@ class ApiKeys:
         target: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         await self.members.require_admin(actor, "access", "create")
-        if target is not None and "write" not in scopes:
+        if target is not None and target["kind"] == "mcp_link" and ("write" in scopes or target.get("version")):
+            # A key opens an MCP link for a system with no person behind it, so it reads only (decision D11).
+            raise ValidationFailed("A key for an MCP link reads only; leave the write scope off.")
+        if target is not None and target["kind"] != "mcp_link" and "write" not in scopes:
             # Starting a run is a write; a scoped key without it could never start what it names.
             raise ValidationFailed("A key that starts an agent or workflow needs the write scope.")
         if target is not None and target["kind"] == "agent" and target.get("version") is not None:

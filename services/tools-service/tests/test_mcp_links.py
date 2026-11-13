@@ -45,6 +45,9 @@ GRIDS["linker"] = [
 GRIDS["reader"] = [*RUN, ("deployments", "view", "all")]
 
 
+SCHEMA = {"type": "object", "required": ["claim"], "properties": {"claim": {"type": "string"}}}
+
+
 class RunAgents(Agents):
     """agents-service with its run start, deciding by the token's scopes as `require_runs_start` does."""
 
@@ -60,6 +63,14 @@ class RunAgents(Agents):
             self.started.append(body)
             started = {"runId": "run_1", "workflowId": body["workflowId"], "version": 3, "status": "queued"}
             return JSONResponse({"data": started}, 202)
+
+        @self.app.get("/v1/tools/{tool_id}")
+        async def catalog_row(tool_id: str, request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+            if "tools:view" not in _scopes(request) or tool_id != "workflow:wf_claims":
+                return JSONResponse({"error": {"code": "not_found", "message": tool_id}}, 404)
+            return {
+                "data": {"id": tool_id, "name": "Claims intake", "description": "Opens a claim.", "inputSchema": SCHEMA}
+            }
 
 
 async def _rest_principal(  # noqa: PLR0917 - FastAPI reads these as the headers Identity.principal takes
@@ -168,7 +179,12 @@ async def test_a_picked_workflow_starts_its_live_version_only_for_who_may_run_it
     await _link(stack, [{"id": "workflow:wf_claims", "label": "Claims intake"}])
     path = f"/mcp/{TEAM}/claims-lookups"
     async with stack.app.router.lifespan_context(stack.app), _session(stack, "linker", path) as c:
-        assert [t.name for t in (await c.list_tools()).tools] == ["workflow__wf_claims"]
+        [listed] = (await c.list_tools()).tools
+        assert (listed.name, listed.input_schema, listed.description) == (
+            "workflow__wf_claims",
+            SCHEMA,
+            "Opens a claim.",
+        )
         started = await c.call_tool("workflow__wf_claims", {"claim": "4471"})
     async with stack.app.router.lifespan_context(stack.app), _session(stack, "reader", path) as c:
         refused = await c.call_tool("workflow__wf_claims", {"claim": "4471"})

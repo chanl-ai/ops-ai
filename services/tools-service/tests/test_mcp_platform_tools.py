@@ -181,7 +181,7 @@ async def _stack(
     def platform_tools(_s: Settings, _agents: str | None = None) -> PlatformTools:
         return platform
 
-    monkeypatch.setattr(mcp_server, "_platform_tools", platform_tools)
+    monkeypatch.setattr(mcp_server, "platform_tools", platform_tools)
     async with opa_client() as opa, httpx.AsyncClient(transport=httpx.ASGITransport(app=fake)) as upstream:
         app = build_app(
             engine,

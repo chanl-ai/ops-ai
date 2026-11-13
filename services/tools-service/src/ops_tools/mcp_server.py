@@ -33,7 +33,7 @@ from starlette.types import Receive, Scope, Send
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForTokens, Auth, Principal, ServiceClient, service_signer
-from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable
+from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable, Unauthorized
 from ops_service_kit.http import error_body
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
@@ -91,7 +91,7 @@ class McpAdapter:
         self.issuer_url = issuer_url.rstrip("/") if public_url and issuer_url else None
         self.calls = calls
         self.links = links
-        self.platform = platform or _platform_tools(Settings(), agents_url)
+        self.platform = platform or platform_tools(Settings(), agents_url)
         self.registry = registry
         self.directory = directory
         self.auth = auth
@@ -139,6 +139,7 @@ class McpAdapter:
                 authorization, team_id, resource=f"{self.public_url}{address}" if self.public_url else None
             )
             link = await self._link(principal, team_id, slug) if slug else None
+            _key_reaches(principal, link)
         except ApiError as e:
             await _refuse(send, e, self._metadata_url(scope))
             return
@@ -290,6 +291,17 @@ class McpAdapter:
         return _tool_result(outcome)
 
 
+def _key_reaches(principal: Principal, link: dict[str, Any] | None) -> None:
+    """A key a link's Keys tab made (platform-service target `mcp_link`) opens that link only: on the team's whole
+    address or another link it is refused as a token for another address is, 401, so a leaked script key reaches one
+    link's tools and nothing else."""
+    target = principal.key_target or {}
+    if target.get("kind") != "mcp_link":
+        return
+    if link is None or link["id"] != target.get("id"):
+        raise Unauthorized("This key opens only the MCP link it was made for.", code="key_target")
+
+
 def _link_tools(link: dict[str, Any], rows: list[dict[str, Any]]) -> list[types.Tool]:
     """The link's picked tools that the team may still run, in the order picked, and its picked workflows. A tool the
     team can no longer run (its module unpublished or drifted) is left out, as the gateway would refuse it."""
@@ -302,8 +314,9 @@ def _link_tools(link: dict[str, Any], rows: list[dict[str, Any]]) -> list[types.
             out.append(
                 types.Tool(
                     name=name,
-                    description=f"Start the {title} workflow with this input; returns its run id.",
-                    input_schema={"type": "object"},
+                    # As agents-service's catalog describes the workflow to agents, read when the link was made.
+                    description=str(t.get("description") or f"Start the {title} workflow; returns its run id."),
+                    input_schema=cast(dict[str, Any], t.get("input_schema") or {"type": "object"}),
                     annotations=types.ToolAnnotations(title=title, read_only_hint=False, open_world_hint=True),
                 )
             )
@@ -358,7 +371,7 @@ def _tool_result(outcome: Outcome) -> types.CallToolResult:
     )
 
 
-def _platform_tools(settings: Settings, agents_url: str | None = None) -> PlatformTools:
+def platform_tools(settings: Settings, agents_url: str | None = None) -> PlatformTools:
     """The platform operations, signed with this service's key; with no key (outside dev, unset) none are offered.
     `agents_url` is where __main__ reaches agents-service, which on a local stack is not in OPS_AGENTS_URL."""
     try:

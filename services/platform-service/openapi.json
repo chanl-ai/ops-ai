@@ -3001,7 +3001,7 @@
       },
       "KeyTarget": {
         "additionalProperties": false,
-        "description": "What an API key may start. `version` pins a workflow version; null runs the live one.",
+        "description": "What an API key may start, or the one MCP link it opens (`mcp_link`, read only). `version` pins a workflow\nversion; null runs the live one.",
         "properties": {
           "id": {
             "maxLength": 64,
@@ -3012,7 +3012,8 @@
           "kind": {
             "enum": [
               "agent",
-              "workflow"
+              "workflow",
+              "mcp_link"
             ],
             "title": "Kind",
             "type": "string"
@@ -3049,7 +3050,8 @@
           "kind": {
             "enum": [
               "agent",
-              "workflow"
+              "workflow",
+              "mcp_link"
             ],
             "title": "Kind",
             "type": "string"
@@ -6483,8 +6485,47 @@
     },
     "/v1/api-keys": {
       "get": {
+        "description": "The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab\nlists them.",
         "operationId": "api_keys_list_api_keys",
         "parameters": [
+          {
+            "in": "query",
+            "name": "targetKind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "agent",
+                    "workflow",
+                    "mcp_link"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Targetkind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "targetId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Targetid"
+            }
+          },
           {
             "in": "header",
             "name": "x-team-id",

@@ -1418,8 +1418,14 @@ def create_public_app(
     keys = ApiKeys(KeyStore(store.db), people)
 
     @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[list[ApiKeyOut]], responses=ERRORS)
-    async def list_api_keys(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        return ok(await keys.list(actor))
+    async def list_api_keys(  # pyright: ignore[reportUnusedFunction]
+        actor: Annotated[Actor, Depends(acting)],
+        target_kind: Annotated[Literal["agent", "workflow", "mcp_link"] | None, Query(alias="targetKind")] = None,
+        target_id: Annotated[str | None, Query(alias="targetId", max_length=64)] = None,
+    ) -> Any:
+        """The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab
+        lists them."""
+        return ok(await keys.list(actor, target_kind, target_id))
 
     @app.post(
         "/v1/api-keys", tags=["api-keys"], status_code=201, response_model=Envelope[ApiKeyCreated], responses=ERRORS

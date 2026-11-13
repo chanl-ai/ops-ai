@@ -23,6 +23,7 @@ from ops_service_kit.http import Envelope, ok
 
 from .callers import caller_in
 from .mcp_server import WORKFLOW_PREFIX
+from .mcp_tools import PlatformTools
 from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.service import Caller
@@ -90,8 +91,13 @@ def slug_of(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:64] or "link"
 
 
-def mcp_links_router(
-    links: McpLinks, log: CallLog, registry: ToolRegistry, directory: Directory, public_url: str | None
+def mcp_links_router(  # noqa: PLR0917 - one owner per argument, each wired once in __main__
+    links: McpLinks,
+    log: CallLog,
+    registry: ToolRegistry,
+    directory: Directory,
+    public_url: str | None,
+    platform: PlatformTools,
 ) -> APIRouter:
     caller = caller_in(directory)
     base = public_url.rstrip("/") if public_url else None
@@ -158,8 +164,22 @@ def mcp_links_router(
         for t in body.tools:
             if t.id.startswith(WORKFLOW_ID):
                 wid = t.id.removeprefix(WORKFLOW_ID)
+                # The workflow as agents-service describes it to agents, so an assistant reads its inputs in
+                # tools/list; a workflow the team does not offer, or the person may not see, is refused here.
+                row = await platform.workflow_tool(wid, who=p, team=team.id)
+                if row is None:
+                    raise Unprocessable(
+                        f"{t.label} is not a published workflow of this team.", code="tool_not_runnable"
+                    )
                 picked.append(
-                    {"name": f"{WORKFLOW_PREFIX}{wid}", "title": t.label, "kind": "workflow", "access": "workflow"}
+                    {
+                        "name": f"{WORKFLOW_PREFIX}{wid}",
+                        "title": str(row.get("name") or t.label),
+                        "kind": "workflow",
+                        "access": "workflow",
+                        "description": row.get("description"),
+                        "input_schema": row.get("inputSchema") or {"type": "object"},
+                    }
                 )
             elif (op := grantable.get(t.id)) is not None:
                 access = "write" if op["access"] not in ("read",) else "read"

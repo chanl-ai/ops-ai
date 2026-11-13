@@ -78,9 +78,10 @@ class ActingForOut(Out):
 
 
 class KeyTarget(Out):
-    """What an API key may start. `version` pins a workflow version; null runs the live one."""
+    """What an API key may start, or the one MCP link it opens (`mcp_link`, read only). `version` pins a workflow
+    version; null runs the live one."""
 
-    kind: Literal["agent", "workflow"]
+    kind: Literal["agent", "workflow", "mcp_link"]
     id: str = Field(min_length=1, max_length=64)
     version: int | None = Field(default=None, ge=1)
 
@@ -413,7 +414,7 @@ class ApiKeySummary(Out):
 
 
 class KeyTargetIn(In):
-    kind: Literal["agent", "workflow"]
+    kind: Literal["agent", "workflow", "mcp_link"]
     id: str = Field(min_length=1, max_length=64)
     version: int | None = Field(default=None, ge=1)
 

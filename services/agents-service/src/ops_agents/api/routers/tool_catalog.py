@@ -233,10 +233,13 @@ async def not_added(rt: Runtime, team: str | None, search: str) -> list[dict[str
 @router.get("/options", response_model=Envelope[ToolOptionsPage], dependencies=[Depends(reader_of("tools"))])
 async def tool_options(
     rt: Rt,
+    *,
     search: str = "",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     ids: Annotated[list[str] | None, Query()] = None,
+    # `agents=false` leaves agents out: an MCP link's picker, whose door runs tools and workflows only.
+    agents: bool = True,
 ) -> JSONResponse:
     """The agent page's tools picker: grantable operations, then the team's workflows, searched by name, module and
     description and paged here, so the browser receives one page. Operations live inside each module's document in
@@ -252,7 +255,11 @@ async def tool_options(
         if team and w.get("team_id") not in (None, "", team)
     }
     # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
-    tools = [t for t in await known_tools(rt, fresh=True) if t["id"] not in others]
+    tools = [
+        t
+        for t in await known_tools(rt, fresh=True)
+        if t["id"] not in others and (agents or not str(t["id"]).startswith("agent:"))
+    ]
     if ids is not None:
         wanted = set(ids)
         hits = [t for t in tools if t["id"] in wanted]

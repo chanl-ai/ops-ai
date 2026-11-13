@@ -51841,6 +51841,16 @@
             }
           },
           {
+            "in": "query",
+            "name": "agents",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Agents",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,

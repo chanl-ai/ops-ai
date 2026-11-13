@@ -56,3 +56,20 @@ async def test_only_a_scoped_service_lists_every_teams_keys_and_no_secret(platfo
     bare = await platform.public.get("/v1/api-key-summaries", headers=service([], admin.tenant_id))
     assert (bare.status_code, bare.json()["error"]["code"]) == (403, "scope_required")
     assert (await platform.public.get("/v1/api-key-summaries", headers=h)).status_code == 403
+
+
+async def test_a_links_key_reads_only_and_lists_under_its_link_alone(platform: Platform) -> None:
+    """A key an MCP link's Keys tab makes names the link, reads only (a write key is refused) and is the only key the
+    link's tab lists; the team's other keys are not."""
+    _, h = await as_admin(platform)
+    link = {"kind": "mcp_link", "id": "mcl_claims"}
+    writes = await platform.public.post(
+        "/v1/api-keys", headers=h, json={"name": "triage", "scopes": ["read", "write"], "target": link}
+    )
+    assert writes.status_code == 400 and "reads only" in writes.text, writes.text
+    made = await create(platform, h, scopes=["read"], target=link)
+    await create(platform, h, scopes=["write"])
+    r = await platform.public.get(
+        "/v1/api-keys", headers=h, params={"targetKind": "mcp_link", "targetId": "mcl_claims"}
+    )
+    assert [k["id"] for k in r.json()["data"]] == [made["key"]["id"]], r.text  # type: ignore[index]

@@ -111,3 +111,12 @@ async def test_the_picker_says_how_many_of_an_apps_tools_are_not_added(tmp_path:
         cards.down = True
         down = _data(await c.get("/v1/tools/options", params={"search": "op_001"}))
         assert [o["id"] for o in down["data"]] == ["op_001"] and down["notAdded"] == []
+
+
+async def test_an_mcp_links_picker_offers_no_agents(tmp_path: Path) -> None:
+    """An MCP link's door runs tools and workflows only, so its picker (agents=false) offers no agent to pick."""
+    async with _app(tmp_path) as (c, _):
+        every = _data(await c.get("/v1/tools/options", params={"limit": 100}))
+        links = _data(await c.get("/v1/tools/options", params={"limit": 100, "agents": "false"}))
+    assert any(o["id"].startswith("agent:") for o in every["data"]), "the fixture offers agents to the agent page"
+    assert not [o["id"] for o in links["data"] if o["id"].startswith("agent:")]
