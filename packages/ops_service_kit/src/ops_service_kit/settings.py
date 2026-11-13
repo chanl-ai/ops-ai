@@ -564,10 +564,11 @@ class Settings(BaseSettings):
 
     @property
     def plugin_folders(self) -> list[str]:
-        """Every plugin folder to load: each built-in plugin not replaced by a folder of the same name in plugins_dir,
-        then each folder in plugins_dir (hidden ones and caches skipped), then plugin_paths."""
+        """Every plugin folder to load: each built-in plugin not replaced by a folder of the same name in plugins_dir or
+        plugin_paths (a developer's working copy wins over the built-in one), then each folder in plugins_dir (hidden
+        ones and caches skipped), then plugin_paths."""
         dropped = _folders(self.plugins_dir)
-        names = {_package_of(f) for f in dropped}
+        names = {_package_of(f) for f in dropped} | {_package_of(Path(p)) for p in self.plugin_paths}
         builtin = [f for f in _folders(self.builtin_plugins_dir) if f.name not in names]
         return [*(str(f) for f in builtin), *(str(f) for f in dropped), *self.plugin_paths]
 
