@@ -54,7 +54,8 @@ def _upstream(seen: list[tuple[str, str]], redirect: list[str]) -> httpx.AsyncCl
             return httpx.Response(401, json={"error": {"message": "Incorrect API key provided: sk-wr****"}})
         if request.url.path == "/openai/deployments":
             return httpx.Response(200, json={"data": [{"id": "chat-prod", "model": "gpt-4o"}]})
-        return httpx.Response(200, json={"data": [{"id": "model-a"}, {"id": "model-b"}]})
+        not_chat = [{"id": "text-embedding-3-small"}, {"id": "whisper-1"}, {"id": "gpt-image-1"}]
+        return httpx.Response(200, json={"data": [{"id": "model-a"}, *not_chat, {"id": "model-b"}]})
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handle))
 

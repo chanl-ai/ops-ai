@@ -33,8 +33,9 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@# egress list is brought up to date with it so mail and bank calls are not refused after a move.
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/dev_egress.py
 	@# The stack's agents and workflow reads run on a real OpenAI model (DEMO_MODEL picks it, DEMO_MODEL=fake keeps
-	@# the fake). Use cases and tests start their own services and keep the fake.
-	@{ \
+	@# the fake). Use cases and tests start their own services and keep the fake. An alias an admin pointed at their
+	@# own model in the console is left there (KEEP_ADMIN_CHOICE).
+	@{ export KEEP_ADMIN_CHOICE=1; \
 		MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=guardrail-check MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=gpt-5.5 MODEL=$(DEMO_CHAT_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \

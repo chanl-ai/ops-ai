@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from typing import Any, Literal, cast
 from urllib.parse import urlsplit
 
@@ -104,4 +105,17 @@ async def listed_models(
         rows = cast(list[dict[str, Any]], (json.loads(body) or {}).get("data") or [])
     except (ValueError, AttributeError) as e:
         raise KeyRefused("The provider's answer was not a list of models.") from e
-    return [{"id": str(m["id"]), **({"model": str(m["model"])} if m.get("model") else {})} for m in rows if m.get("id")]
+    listed = [
+        {"id": str(m["id"]), **({"model": str(m["model"])} if m.get("model") else {})} for m in rows if m.get("id")
+    ]
+    return [m for m in listed if is_chat_model(m.get("model") or m["id"])]
+
+
+# Providers list every model the key reaches; a chat alias can only use the ones that answer chat turns.
+NOT_CHAT = re.compile(
+    r"embed|whisper|tts|transcribe|dall-e|gpt-image|image|audio|realtime|moderation|sora|search|davinci|babbage", re.I
+)
+
+
+def is_chat_model(name: str) -> bool:
+    return not NOT_CHAT.search(name)

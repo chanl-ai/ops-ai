@@ -1103,6 +1103,8 @@ def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
         else:
             say("FOUND", f"model provider {FAKE_PROVIDER}", fake_url)
         provider = str(found["id"])
+        # The connections the dev stack itself points aliases at; any other one is an admin's choice.
+        own = {provider, *(str(p["id"]) for p in providers if p.get("name") == "openai-local")}
         aliases = [fakes["modelAlias"]]
         if model == "fake":
             aliases += fakes.get("modelAliases", [])
@@ -1116,6 +1118,10 @@ def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
                 say("MADE", f"model alias {alias}", f"on {FAKE_PROVIDER}")
                 continue
             current = data(versions)[-1]
+            if alias != fakes["modelAlias"] and current["providerId"] not in own:
+                # An admin pointed this alias at their own model (the console's model setup): it stays there.
+                say("SKIP", f"model alias {alias}", "left on the model an admin chose")
+                continue
             if (current["providerId"], current["modelId"]) == (provider, alias):
                 say("FOUND", f"model alias {alias}", f"v{current['version']} on {FAKE_PROVIDER}")
                 continue
