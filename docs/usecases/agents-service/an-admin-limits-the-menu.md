@@ -1,6 +1,6 @@
 # An admin limits what the menu offers
 
-Status: draft. Service: `agents-service`. Layers: api, ui.
+Status: draft. Service: `agents-service`. Layers: api (no ui script yet).
 
 In this example we will set an agent to Only attached skills, then to None, and see the menu and the send follow. Design case sk-chat-8.
 
@@ -9,7 +9,7 @@ In this example we will set an agent to Only attached skills, then to None, and 
 | Id | `uc-750` |
 | Area | Agents |
 | Design label | `sk-chat-8` |
-| Runs | api and ui in their own scripts |
+| Runs | api in its own script |
 | Run it | `make usecase-test UC=uc-750` |
 
 ## Who is in it

@@ -1,6 +1,6 @@
 # A required input must be filled
 
-Status: draft. Service: `agents-service`. Layers: api, mcp, ui.
+Status: draft. Service: `agents-service`. Layers: api, mcp (no ui script yet).
 
 In this example we will ask an assistant for the "Read a client" part with no Client and be refused with the input named. Design case sk-chat-5; it fails today because the prompt is served with `{{client}}` left in the text.
 
@@ -9,7 +9,7 @@ In this example we will ask an assistant for the "Read a client" part with no Cl
 | Id | `uc-747` |
 | Area | Agents |
 | Design label | `sk-chat-5` |
-| Runs | MCP; api and ui in their own scripts |
+| Runs | MCP; api in its own script |
 | Run it | `make usecase-test UC=uc-747` |
 
 ## Who is in it

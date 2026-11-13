@@ -1,6 +1,6 @@
 # Skills stay out of reach without the right
 
-Status: draft. Service: `agents-service`. Layers: api, mcp, ui.
+Status: draft. Service: `agents-service`. Layers: api, mcp (no ui script yet).
 
 In this example we will see that a person who may chat but not view skills gets no list of them over MCP and no way to name one in a send. It assumes Dana holds the Chat role only. Design case sk-chat-3.
 
@@ -9,7 +9,7 @@ In this example we will see that a person who may chat but not view skills gets 
 | Id | `uc-745` |
 | Area | Agents |
 | Design label | `sk-chat-3` |
-| Runs | MCP; api and ui in their own scripts |
+| Runs | MCP; api in its own script |
 | Run it | `make usecase-test UC=uc-745` |
 
 ## Who is in it
