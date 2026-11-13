@@ -213,6 +213,7 @@ def create_gateway_app(
     flags: Flags | None = None,
     modules: ModuleService | None = None,
     links: McpLinks | None = None,
+    agents_url: str | None = None,
 ) -> FastAPI:
     """`clock` is the time a token's expiry is judged by, sent to OPA with each call; tests pass a fixed one.
     `policy` is the Rego the gateway decides by, `policy/gateway.rego` unless given; it is written into OPA at start
@@ -230,6 +231,7 @@ def create_gateway_app(
     `authenticator` signs a module's calls in through its connection; without it a connection adds nothing.
     `directory` holds the teams the MCP adapter scopes each assistant's tools to; without it no /mcp.
     `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
+    `agents_url` is where the MCP address's platform operations reach agents-service.
     `links` holds the teams' MCP links, each served at `/mcp/{team}/{link}`; without it only `/mcp/{team}` answers.
     `code` runs code operations on runner-service and checks their calls back; without it they fail."""
     rules = policy if policy is not None else POLICY_FILE.read_text()
@@ -299,6 +301,7 @@ def create_gateway_app(
             public_url=Settings().tools_public_url,
             issuer_url=Settings().platform_public_url,
             links=links,
+            agents_url=agents_url,
         )
         if directory is not None and (flags or Flags()).on("mcp_gateway")
         else None

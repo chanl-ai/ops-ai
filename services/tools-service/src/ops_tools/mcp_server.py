@@ -82,6 +82,7 @@ class McpAdapter:
         public_url: str | None = None,
         issuer_url: str | None = None,
         links: McpLinks | None = None,
+        agents_url: str | None = None,
     ) -> None:
         # This service's public base (OPS_TOOLS_PUBLIC_URL): an assistant's token is for `<public_url>/mcp/<team>` and
         # nothing else. platform-service at its own public base (OPS_PLATFORM_PUBLIC_URL) is the authorization server.
@@ -90,7 +91,7 @@ class McpAdapter:
         self.issuer_url = issuer_url.rstrip("/") if public_url and issuer_url else None
         self.calls = calls
         self.links = links
-        self.platform = platform or _platform_tools(Settings())
+        self.platform = platform or _platform_tools(Settings(), agents_url)
         self.registry = registry
         self.directory = directory
         self.auth = auth
@@ -357,13 +358,16 @@ def _tool_result(outcome: Outcome) -> types.CallToolResult:
     )
 
 
-def _platform_tools(settings: Settings) -> PlatformTools:
-    """The platform operations, signed with this service's key; with no key (outside dev, unset) none are offered."""
+def _platform_tools(settings: Settings, agents_url: str | None = None) -> PlatformTools:
+    """The platform operations, signed with this service's key; with no key (outside dev, unset) none are offered.
+    `agents_url` is where __main__ reaches agents-service, which on a local stack is not in OPS_AGENTS_URL."""
     try:
         signer = service_signer(settings)
     except ValueError:
         signer = None
-    return PlatformTools({"agents": settings.agents_url or ""}, signer, people=_acting_for(settings, signer))
+    return PlatformTools(
+        {"agents": agents_url or settings.agents_url or ""}, signer, people=_acting_for(settings, signer)
+    )
 
 
 def _acting_for(settings: Settings, signer: Any) -> ActingForTokens | None:

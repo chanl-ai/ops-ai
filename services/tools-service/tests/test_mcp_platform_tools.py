@@ -178,7 +178,7 @@ async def _stack(
     to_agents = httpx.AsyncClient(transport=httpx.ASGITransport(app=agents.app))
     platform = PlatformTools({"agents": "http://agents"}, service_signer(settings), to_agents)
 
-    def platform_tools(_s: Settings) -> PlatformTools:
+    def platform_tools(_s: Settings, _agents: str | None = None) -> PlatformTools:
         return platform
 
     monkeypatch.setattr(mcp_server, "_platform_tools", platform_tools)

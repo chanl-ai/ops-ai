@@ -229,6 +229,7 @@ def main() -> None:
         registry=registry,
         # Each team's MCP links, served at /mcp/{team}/{link} beside the team's whole address.
         links=mcp_links,
+        agents_url=agents_url,
         plugins=plugins,
         # A tool page's Real run goes through this gateway's checks.
         modules=modules,
