@@ -10,8 +10,8 @@ other team of the tenant, and a reload shows the conversation.
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | A person's chat turn on PostgreSQL saves its checkpoint in the person's team only | api | 1 to 5 | 4 |
-| S2 | The same on a SQL Server install made from the reviewed scripts | api | 1 to 5 | 4 |
+| S1 | A person's chat turn on PostgreSQL saves its checkpoint in the person's team only | api | 1-5 | 4 |
+| S2 | The same on a SQL Server install made from the reviewed scripts | api | 1-5 | 4 |
 
 ## Preconditions
 
