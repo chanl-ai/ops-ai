@@ -986,6 +986,43 @@ def ensure_default_agent(admin: Session, agents: dict[str, str], key: str | None
         say("MADE", "default chat agent", agents[key])
 
 
+# A dispute the demo leaves at its approval step, so Overview, Human Tasks and Reviews show work a person decides.
+# Jordan Whitfield is a fake bank customer (agents-service seed/datasets.json).
+WAITING_DISPUTE = {
+    "cardholder": "Jordan Whitfield",
+    "ssnLast4": "5555",
+    "merchant": "Northline Electronics",
+    "amount": "482.10",
+    "cardType": "credit",
+    "reason": "Ordered a laptop dock on October 20; it never arrived and the merchant stopped answering.",
+}
+
+
+# The run list says `waiting`; one run read alone says `waiting_review`.
+WAITING = {"waiting", "waiting_review"}
+
+
+def ensure_waiting_dispute(lead: Session, workflow_id: str) -> None:
+    """One dispute run waiting at its approval step. A run already waiting there is left; once a person decides it,
+    the next install starts another, so the queue a demo opens on is never empty."""
+    api = lead("agents")
+    runs = items(data(api.get("/v1/runs", params={"workflowId": workflow_id})))
+    waiting = next((r for r in runs if r.get("status") in WAITING), None)
+    if waiting:
+        say("FOUND", "dispute waiting for approval", str(waiting["id"]))
+        return
+    started = data(api.post("/v1/runs", json={"workflowId": workflow_id, "mode": "live", "input": WAITING_DISPUTE}))
+    run = run_until(lead, str(started["runId"]), {*WAITING, "completed", "failed"})
+    if run and run["status"] in WAITING:
+        say("MADE", "dispute waiting for approval", str(run["id"]))
+    else:
+        say(
+            "FAIL",
+            "dispute waiting for approval",
+            f"run {started['runId']} ended {run and run['status']}, not at the approval",
+        )
+
+
 def ensure_assistant(lead: Session) -> None:
     """The team's assistant, which agents-service makes on the team's first chat: a chat started and removed as the
     lead, so the people's first chat, or a test of the assistant, finds it there."""
@@ -1291,6 +1328,9 @@ def install(args: argparse.Namespace) -> int:
     names = {f"agent:{k}": v for k, v in agents.items()} | ids_by_key(spec)
     mailbox = ensure_mailbox(admin, lead, env, spec["mailbox"])
     ensure_workflows(builder, approver, team_workflows(spec, no_levy=args.no_levy), names, mailbox)
+    dispute = next(wf for wf in spec["workflows"] if wf["key"] == "dispute")
+    MODELS.scripted_now()
+    ensure_waiting_dispute(lead, dispute.get("id") or json.loads((WORKFLOWS / dispute["file"]).read_text())["id"])
     if args.tool_access:
         if not (args.tool_access_team and args.tool_approver and os.environ.get(args.tool_approver_password_env)):
             raise SystemExit("sample-team: --tool-access needs --tool-access-team, --tool-approver and its password")
