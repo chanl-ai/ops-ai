@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-13",
+  "title": "PowerPoint decks can be read",
+  "description": "A .pptx deck is read slide by slide, with its tables, chart data and speaker notes, so knowledge bases and agents can use it and answers can name the slide. Old .ppt, .xls and Keynote files say to re-save them as .pptx or .xlsx.",
+  "tag": "new"
+}

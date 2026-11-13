@@ -244,7 +244,7 @@ async def test_a_reading_goes_with_the_teams_last_file_of_its_bytes(make: Make) 
 async def test_a_file_with_no_reader_fails_with_its_reason(make: Make) -> None:
     s = make(Models(), Floor())
     async with s.client as c:
-        fid = await s.stored(b"PK\x03\x04 not a deck", name="deck.pptx", mime="application/octet-stream")
+        fid = await s.stored(b"PK\x03\x04 an archive", name="bundle.zip", mime="application/octet-stream")
         body = (await ask(c, fid)).json()["data"]
     assert body["status"] == "failed" and body["error"]["code"] == "unsupported_format", body
 

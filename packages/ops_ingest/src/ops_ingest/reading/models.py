@@ -17,7 +17,7 @@ from pydantic.alias_generators import to_camel
 
 #: Part of every stored reading's key. Raised whenever the output for the same bytes and settings changes, so an old
 #: reading is read again rather than served.
-READER_VERSION = "reading-3"
+READER_VERSION = "reading-4"
 
 OcrMode = Literal["off", "auto", "always"]
 #: How a page was read: its text layer, OCR of the whole page, its text layer plus OCR of its picture areas, or not at
@@ -203,7 +203,9 @@ def page_text(blocks: list[Block]) -> str:
     return "\n".join(out)
 
 
-ReadingErrorCode = Literal["unsupported_format", "too_large", "too_many_pages", "ocr_unavailable", "unreadable_file"]
+ReadingErrorCode = Literal[
+    "unsupported_format", "legacy_format", "too_large", "too_many_pages", "ocr_unavailable", "unreadable_file"
+]
 
 
 class ReadingError(ValueError):
