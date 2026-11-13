@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 from urllib.parse import urljoin, urlsplit
@@ -62,7 +62,12 @@ class AddressRefused(ValueError):
 
 
 class FetchFailed(ValueError):
-    """The fetch did not return a usable document: an error status, too many redirects, too large, or no answer."""
+    """The fetch did not return a usable document: an error status, too many redirects, too large, or no answer.
+    `status` is the answer's status when there was one."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 @dataclass(frozen=True)
@@ -94,8 +99,10 @@ class PublicFetch:
             raise AddressRefused(f"{host} is not a public address.")
         return host, answers[0], port
 
-    async def get(self, client: httpx.AsyncClient, url: str) -> bytes:
-        """The body of `url`, fetched through `client` to the checked address. Raises AddressRefused or FetchFailed."""
+    async def get(self, client: httpx.AsyncClient, url: str, headers: Mapping[str, str] | None = None) -> bytes:
+        """The body of `url`, fetched through `client` to the checked address. Raises AddressRefused or FetchFailed.
+        `headers` go with each request, so a fetch that carries a credential sets max_redirects=0: a redirect is then
+        refused rather than followed with the credential."""
         for _ in range(self.max_redirects + 1):
             host, address, port = await self.checked_address(url)
             parts = urlsplit(url)
@@ -105,7 +112,7 @@ class PublicFetch:
                 async with client.stream(
                     "GET",
                     target,
-                    headers={"Host": parts.netloc},
+                    headers={**dict(headers or {}), "Host": parts.netloc},
                     extensions={"sni_hostname": host},
                     follow_redirects=False,
                     timeout=self.timeout_s,
@@ -117,7 +124,7 @@ class PublicFetch:
                         url = urljoin(url, location)
                         continue
                     if r.status_code != 200:
-                        raise FetchFailed(f"{host} answered {r.status_code}.")
+                        raise FetchFailed(f"{host} answered {r.status_code}.", r.status_code)
                     body = bytearray()
                     async for chunk in r.aiter_bytes():
                         body.extend(chunk)
