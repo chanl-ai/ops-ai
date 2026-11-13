@@ -197,7 +197,14 @@ export const kbOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sourceId",
+      "status",
+      "collection",
+      "docType",
+      "freshness",
+      "sensitivity",
+      "tags"
     ],
     "stream": false
   },

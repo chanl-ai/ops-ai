@@ -390,6 +390,8 @@ class Item(Out):
 
 class DocumentRow(Item):
     source_name: str
+    # What the document is, for the Documents table's Type column and filter (service.doc_type).
+    doc_type: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
 
 
 class ItemWithDetail(Item):
@@ -404,6 +406,8 @@ class ItemWithDetail(Item):
 
 class QueryIn(In):
     question: str
+    # Only pieces of this collection, on top of the base's own scope (the Test sheet's filter).
+    collection: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class PageIn(In):

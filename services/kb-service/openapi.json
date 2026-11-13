@@ -414,6 +414,21 @@
             "title": "Digest",
             "type": "string"
           },
+          "docType": {
+            "enum": [
+              "pdf",
+              "word",
+              "spreadsheet",
+              "slides",
+              "web",
+              "text",
+              "typed",
+              "app",
+              "other"
+            ],
+            "title": "Doctype",
+            "type": "string"
+          },
           "duplicateOf": {
             "anyOf": [
               {
@@ -634,7 +649,8 @@
           "digest",
           "family",
           "versionStatus",
-          "sourceName"
+          "sourceName",
+          "docType"
         ],
         "title": "DocumentRow",
         "type": "object"
@@ -3984,6 +4000,19 @@
       },
       "QueryIn": {
         "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection"
+          },
           "question": {
             "title": "Question",
             "type": "string"
@@ -8335,6 +8364,7 @@
     },
     "/v1/knowledge-bases/{kb_id}/documents": {
       "get": {
+        "description": "A base's documents. Each filter keeps rows matching any of its values; each facet counts its values over\nthe rows the other filters keep, so a chip's counts say what choosing it would show.",
         "operationId": "knowledge_bases_list_documents",
         "parameters": [
           {
@@ -8383,6 +8413,139 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sourceid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "collection",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collection"
+            }
+          },
+          {
+            "in": "query",
+            "name": "docType",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Doctype"
+            }
+          },
+          {
+            "in": "query",
+            "name": "freshness",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Freshness"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sensitivity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sensitivity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tags",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tags"
             }
           },
           {

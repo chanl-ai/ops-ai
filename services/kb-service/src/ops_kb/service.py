@@ -195,6 +195,42 @@ def _facet(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return out
 
 
+# The Documents table's filters that are facets, by the row field each counts.
+DOCUMENT_FACETS = ("sourceId", "status", "collection", "docType", "freshness", "sensitivity", "tags")
+WORD_MIMES = {"application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+SHEET_MIMES = {
+    "text/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+SLIDE_MIMES = {
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+
+def doc_type(mime: str, source_type: str, has_url: bool) -> str:
+    """What a document is, as the Documents table's Type names it: written in the console, from an app, a web page (a
+    pushed page with its address counts), or by its file type."""
+    if source_type == "text":
+        return "typed"
+    if source_type == "tool":
+        return "app"
+    if mime == "text/html" or source_type == "web" or has_url:
+        return "web"
+    if mime == "application/pdf":
+        return "pdf"
+    if mime in WORD_MIMES:
+        return "word"
+    if mime in SHEET_MIMES:
+        return "spreadsheet"
+    if mime in SLIDE_MIMES:
+        return "slides"
+    if mime.startswith("text/"):
+        return "text"
+    return "other"
+
+
 def _matches(search: str | None, *texts: str) -> bool:
     return not search or any(search.lower() in t.lower() for t in texts)
 
@@ -2056,7 +2092,7 @@ class KnowledgeService:
         rerank["ms"] = ms_since(started)
         return dataclasses.replace(found, passages=passages, rerank=rerank)
 
-    async def query(self, who: Who, kb_id: str, question: str) -> dict[str, Any]:
+    async def query(self, who: Who, kb_id: str, question: str, *, collection: str | None = None) -> dict[str, Any]:
         """The query route and the console's Playground: the passages one knowledge base returns for a question, with
         each lane's score, which lanes ran, and the embedding tokens the question cost. No model writes an answer here;
         an answer is a kernel turn (agents-service), where the rule that withholds an uncited answer lives."""
@@ -2066,7 +2102,7 @@ class KnowledgeService:
         if b["last_refreshed_at"] is None:
             raise Conflict("This knowledge base has not indexed anything yet; sync a source first.", code="not_indexed")
         started = datetime.now(UTC)
-        found = await self._retrieve(who.tenant_id, [b], question)
+        found = await self._retrieve(who.tenant_id, [b], question, collection=collection)
         passages = found.passages
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
         items = {i["id"]: i for i in await self.store.items(who.tenant_id)}
@@ -2611,7 +2647,16 @@ class KnowledgeService:
         run = await self.sync(who, str(source["id"]))
         return {"sourceId": source["id"], "files": added, "run": run}
 
-    async def documents(self, who: Who, kb_id: str, *, page: int, page_size: int, search: str | None) -> dict[str, Any]:
+    async def documents(
+        self,
+        who: Who,
+        kb_id: str,
+        *,
+        page: int,
+        page_size: int,
+        search: str | None,
+        filters: dict[str, set[str]] | None = None,
+    ) -> dict[str, Any]:
         if await self.store.base(who.tenant_id, kb_id) is None:
             raise NotFound("No knowledge base with that id.")
         by_kb, _ = await self._joined(who.tenant_id)
@@ -2620,11 +2665,33 @@ class KnowledgeService:
             {
                 **self._item(i, sources[i["source_id"]]),
                 "sourceName": sources[i["source_id"]]["name"],
+                "docType": doc_type(i["mime"], sources[i["source_id"]]["type"], bool(i.get("url"))),
             }
             for i in await self.store.items(who.tenant_id, source_ids=list(sources))
             if _matches(search, i["title"], i["path"])
         ]
-        return page_of(rows, page=page, page_size=page_size, facets={"status": _facet(rows, "status")})
+        chosen = filters or {}
+
+        def keeps(r: dict[str, Any], skip: str | None = None) -> bool:
+            for key, values in chosen.items():
+                if key == skip:
+                    continue
+                have = set(r["tags"]) if key == "tags" else {str(r.get(key) or "")}
+                if not have & values:
+                    return False
+            return True
+
+        facets: dict[str, dict[str, int]] = {}
+        for key in DOCUMENT_FACETS:
+            # Each facet counts over the rows the other filters keep, so its counts say what choosing a value shows.
+            counted: dict[str, int] = {}
+            for r in rows:
+                if keeps(r, skip=key):
+                    for v in r["tags"] if key == "tags" else [str(r.get(key) or "")]:
+                        if v:
+                            counted[v] = counted.get(v, 0) + 1
+            facets[key] = counted
+        return page_of([r for r in rows if keeps(r)], page=page, page_size=page_size, facets=facets)
 
     async def _reading_summary(self, who: Who, s: dict[str, Any], i: dict[str, Any]) -> dict[str, Any] | None:
         """How the item's file was read and what cleaning removed, page by page, from its stored reading; None for an

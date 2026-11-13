@@ -60,6 +60,7 @@ class DocumentRow(TypedDict, closed=True):
     chunkCount: int
     collection: str
     digest: str
+    docType: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
     duplicateOf: NotRequired[str | None]
     effectiveDate: str
     error: NotRequired[str | None]
@@ -413,6 +414,7 @@ class PreviewPage(TypedDict, closed=True):
 
 
 class QueryIn(TypedDict):
+    collection: NotRequired[str | None]
     question: str
 
 

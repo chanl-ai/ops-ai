@@ -199,7 +199,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Documents */
+        /**
+         * List Documents
+         * @description A base's documents. Each filter keeps rows matching any of its values; each facet counts its values over
+         *     the rows the other filters keep, so a chip's counts say what choosing it would show.
+         */
         get: operations["knowledge_bases_list_documents"];
         put?: never;
         /**
@@ -890,6 +894,11 @@ export interface components {
             collection: string;
             /** Digest */
             digest: string;
+            /**
+             * Doctype
+             * @enum {string}
+             */
+            docType: "pdf" | "word" | "spreadsheet" | "slides" | "web" | "text" | "typed" | "app" | "other";
             /** Duplicateof */
             duplicateOf?: string | null;
             /** Effectivedate */
@@ -2186,6 +2195,8 @@ export interface components {
         };
         /** QueryIn */
         QueryIn: {
+            /** Collection */
+            collection?: string | null;
             /** Question */
             question: string;
         };
@@ -4161,6 +4172,13 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 search?: string | null;
+                sourceId?: string[] | null;
+                status?: string[] | null;
+                collection?: string[] | null;
+                docType?: string[] | null;
+                freshness?: string[] | null;
+                sensitivity?: string[] | null;
+                tags?: string[] | null;
             };
             header?: never;
             path: {
