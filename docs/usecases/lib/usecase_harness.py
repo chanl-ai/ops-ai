@@ -88,7 +88,8 @@ PLATFORM_INTERNAL_PORT = int(os.environ.get("OPS_USECASE_PLATFORM_INTERNAL_PORT"
 IDP_PORT = int(os.environ.get("OPS_USECASE_IDP_PORT", "8797"))
 DB = os.environ.get("OPS_USECASE_DB", "ops_usecase")
 LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", ROOT / ".logs")) / "usecase"
-TEAM = {"X-Team-Id": "team_all"}
+# The dev user's own team, where the dev seeds put the fixture knowledge; a thread runs in the team it was made in.
+TEAM = {"X-Team-Id": "team_ops"}
 
 
 def pg_url(db: str = DB, driver: str = "postgresql+asyncpg") -> str:
