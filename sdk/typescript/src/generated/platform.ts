@@ -2473,7 +2473,7 @@ export interface components {
              * Name
              * @enum {string}
              */
-            name: "mcp_gateway" | "tool_search" | "plugin_updates";
+            name: "mcp_gateway" | "tool_search" | "plugin_updates" | "area_tabs";
             /** On */
             on: boolean;
         };

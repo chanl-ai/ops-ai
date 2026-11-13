@@ -2314,7 +2314,8 @@
             "enum": [
               "mcp_gateway",
               "tool_search",
-              "plugin_updates"
+              "plugin_updates",
+              "area_tabs"
             ],
             "title": "Name",
             "type": "string"

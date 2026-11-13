@@ -120,6 +120,7 @@ OPS_FLAGS=mcp_gateway
 |---|---|
 | `mcp_gateway` | The address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, `/mcp/{env}/{team}`, and the console's MCP channel. Off, `/mcp` answers 404 `feature_off` |
 | `tool_search` | Agents with more tools than `OPS_TOOL_SEARCH_ABOVE` search for the one they need |
+| `area_tabs` | The console's area tabs in the top bar, with the sidebar listing one area at a time. Off, one sidebar lists every area as a section |
 
 The list above is a copy for reading; the registry is `packages/ops_service_kit/src/ops_service_kit/flags.py`, and
 `docker compose`, the Kubernetes overlay (`ops-origin`) and Fly (`[env]`) each pass `OPS_FLAGS` to every service. A name

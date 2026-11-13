@@ -13,7 +13,7 @@ from typing import Literal
 
 # The names, as a type, so the platform answer's schema and the console's generated types carry them; a test keeps
 # this and FLAGS equal.
-FlagName = Literal["mcp_gateway", "tool_search", "plugin_updates"]
+FlagName = Literal["mcp_gateway", "tool_search", "plugin_updates", "area_tabs"]
 
 
 @dataclass(frozen=True)
@@ -39,6 +39,11 @@ FLAGS: tuple[Flag, ...] = (
         name="plugin_updates",
         description="Each team keeps the plugin version it took and reviews an upgrade before its tools change.",
         remove_when="Plugin updates are released to every install.",
+    ),
+    Flag(
+        name="area_tabs",
+        description="The console shows one area at a time, picked from the top bar; off, the sidebar lists every area.",
+        remove_when="The owner picks one console layout and the other is deleted.",
     ),
 )
 
