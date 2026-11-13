@@ -27,8 +27,11 @@ await withUiStack(async (consoleUrl) => {
     const box = page.getByRole('textbox', { name: 'Message' });
     await box.waitFor({ timeout: 120_000 });
 
-    await page.locator('#chat-attach').setInputFiles(SCAN);
-    const ready = await page.getByTestId('chat-attach-items').locator('[data-phase="ready"]').waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    await page.getByTestId('chat-attach').click();
+    await page.getByRole('dialog').locator('input[type="file"]').setInputFiles(SCAN);
+    await page.getByRole('dialog').locator('[data-phase="ready"]').first().waitFor({ timeout: 60_000 });
+    await page.getByTestId('add-documents-submit').click();
+    const ready = await page.getByTestId('chat-attached-file').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
     await box.fill('What is the late payment fee?');
     const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && MESSAGES.test(r.url()), { timeout: 180_000 }));
     await page.getByRole('button', { name: 'Send', exact: true }).click();
