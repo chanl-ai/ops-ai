@@ -6,9 +6,9 @@ Status: current on main. Id: `uc-629`. Service: `files-service` with documents-s
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | An admin or a viewer opens a PDF or an image and sees its pages, and a text file says to download it, with no outage banner | ui | 1-3 | 1-3 |
+| S1 | An admin or a viewer opens a PDF or an image and sees its pages, and a text file says to download it, with no outage banner | ui | 1, 2, 3 | 1 |
 | S2 | A file whose stored bytes are gone says so in its preview, and the page around it still works with no outage banner | ui | 4 | 4 |
-| S3 | A file not yet read for text is a normal state: no request answers 404 and none is cut short | ui | 1-4 | 1-4 |
+| S3 | A file not yet read for text is a normal state: no request answers 404 and none is cut short | ui | 1, 2, 3, 4 | 4 |
 
 ## Preconditions
 

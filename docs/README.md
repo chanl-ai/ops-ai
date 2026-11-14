@@ -576,3 +576,5 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-reply-over-the-skill-budget-is-refused.md` | uc-748: A pick past the reply's skill cap is refused before the model is called |
 | `usecases/agents-service/a-skill-needing-a-tool-the-agent-lacks.md` | uc-749: A part naming a tool the agent lacks is locked and refused |
 | `usecases/agents-service/an-admin-limits-the-menu.md` | uc-750: An agent's menu setting limits which skills a member can pick |
+| `usecases/agents-service/a-schedule-starts-a-run-once.md` | uc-workflows-1: A Schedule trigger starts one run per tick key |
+| `usecases/platform-service/team-usage-guards-team-deletion.md` | uc-platform-1: A team's running work is counted for that team only and stops its deletion |
