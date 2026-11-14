@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 
+import { brandColours } from '@/lib/api';
+import { brandStyle } from '@/lib/brand';
+
 import { AppShell } from './_shell/app-shell';
 import { Providers } from './providers';
 
@@ -17,6 +20,9 @@ export const metadata: Metadata = {
 
 const FOLLOW_SYSTEM_THEME = `(function(){try{var m=window.matchMedia('(prefers-color-scheme: dark)');var set=function(){document.documentElement.classList.toggle('dark',m.matches)};set();m.addEventListener('change',set)}catch(e){}})();`;
 
+// A demo's accent colour from .env (OPS_BRAND_PRIMARY), read when the server starts.
+const BRAND = brandStyle(brandColours);
+
 /** Fonts and providers; AppShell adds the dashboard shell (inset sidebar, fixed header) and the sign-in guard. */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -25,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* The console follows the system's light or dark setting, before the first paint and as it changes; there is
             no switch of its own. */}
         <script dangerouslySetInnerHTML={{ __html: FOLLOW_SYSTEM_THEME }} />
+        {BRAND && <style dangerouslySetInnerHTML={{ __html: BRAND }} />}
       </head>
       <body className={`${inter.variable} ${mono.variable} font-sans`}>
         <Providers>

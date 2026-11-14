@@ -66,7 +66,9 @@ def main() -> int:
         ENV_FILE.write_text("".join(f"{k}={v}\n" for k, v in values.items()))
         print(f"first admin: {values['OPS_BOOTSTRAP_ADMIN_EMAIL']}, password kept in {ENV_FILE}")
     # The names always follow the seed's, so a file written before a rename never names the dev workspace back.
+    # OPS_BRAND_NAME in .env names the workspace for a demo (another bank's name) with no code change.
     values |= {k: DEFAULTS[k] for k in ("OPS_BOOTSTRAP_TENANT_NAME", "OPS_BOOTSTRAP_TEAM_NAME")}
+    values["OPS_BOOTSTRAP_TENANT_NAME"] = os.environ.get("OPS_BRAND_NAME") or values["OPS_BOOTSTRAP_TENANT_NAME"]
     env = os.environ | {k: v for k, v in values.items() if k.startswith("OPS_BOOTSTRAP_")}
     done = subprocess.run([sys.executable, "-m", "ops_platform.bootstrap"], env=env, check=False)
     if done.returncode == 0:
