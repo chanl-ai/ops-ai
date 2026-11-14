@@ -3,8 +3,8 @@
 // masks her SSN's last four, email, phone and account and keeps her name, and the same holds after a reload, so the
 // stored message is masked too. He turns Redact personal data off on the agent's page and publishes it; asked again,
 // the reply shows what the model wrote. Platform sign-in, the fake model's ai-steps rules; no real model is called.
-import { check, chromium, consoleSignIn, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
-import { AI_STACK, JAMES, PASSWORD, agents, as } from '../../lib/workflow_ui.mjs';
+import { approvePublishRequest, check, chromium, consoleSignIn, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
+import { AI_STACK, JAMES, PASSWORD, PRIYA, agents, as, publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const RAW = ['6789', 'ann.lee@example.com', '555-0147', '4401235567'];
 const shows = (text) => RAW.filter((r) => text.includes(r));
@@ -25,9 +25,14 @@ async function ask(page, consoleUrl, agentId, question) {
 
 await withUiStack(
   async (consoleUrl) => {
+    // Reviews are optional: Priya, the team's admin, turns them on for its agents, and approves each publish James asks
+    // for. Turning redaction off is a security change, which waits for a reviewer under every mode.
+    await publishReviewOn({ agents: 'always' });
     const J = await as(JAMES);
+    const P = await as(PRIYA);
     const made = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `PII Probe ${Math.random().toString(36).slice(2, 6)}`, role: 'Answers about customers' }) })).json()).data;
-    await fetch(`${agents}/v1/agents/${made.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: made.version, note: 'first' }) });
+    const first = (await (await fetch(`${agents}/v1/agents/${made.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: made.version, note: 'first' }) })).json()).data;
+    await approvePublishRequest(first, P);
 
     const browser = await chromium.launch();
     const errors = [];
@@ -52,11 +57,13 @@ await withUiStack(
       const published = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/agents/${made.id}/publish-requests`), { timeout: 60_000 }).catch(() => undefined);
       await dialog.getByRole('button', { name: /^(Request publish|Publish)$/ }).click();
       const pub = await published;
+      const asked = pub ? (await pub.json().catch(() => ({}))).data : undefined;
+      const live = asked?.id ? await approvePublishRequest(asked, P).catch((e) => ({ status: String(e).slice(0, 200) })) : {};
       const plain = await ask(page, consoleUrl, made.id, 'UC265-PII who is Ann?');
       check(
-        '4 with Redact personal data off and published, the reply shows what the model wrote',
-        patch?.status() === 200 && pub?.status() === 201 && shows(plain).length === RAW.length,
-        { patch: patch?.status(), publish: pub?.status(), shown: shows(plain), text: plain.slice(-300) },
+        '4 with Redact personal data off, published and approved by Priya, the reply shows what the model wrote',
+        patch?.status() === 200 && pub?.status() === 201 && asked?.status === 'pending' && live?.status === 'approved' && shows(plain).length === RAW.length,
+        { patch: patch?.status(), publish: pub?.status(), asked: asked?.status, live: live?.status, shown: shows(plain), text: plain.slice(-300) },
       );
       check('no page errors', errors.length === 0, errors);
     } finally {

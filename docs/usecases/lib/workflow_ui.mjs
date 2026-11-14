@@ -32,6 +32,17 @@ export async function writeApprovalsOn(team = 'team_ops') {
   if (!r.ok) throw new Error(`turning write approvals on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
 
+/**
+ * Turns publish review on for `team` (publishReview), as Priya, its admin, does in Settings › Policies. Reviews are
+ * optional and a new workspace publishes at once, so a use case proving a publish that waits for a reviewer turns them
+ * on first. `areas` maps an area (agents, workflows, ...) to a mode (always, major, never). A policy change refuses
+ * every token issued before it, so sign people in after this call.
+ */
+export async function publishReviewOn(areas, team = 'team_ops') {
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: await as(PRIYA, team), body: JSON.stringify({ value: areas }) });
+  if (!r.ok) throw new Error(`turning publish review on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
+}
+
 /** Polls `probe` once a second until it returns something truthy, or `seconds` pass (then undefined). */
 export async function until(probe, seconds = 90) {
   for (const end = Date.now() + seconds * 1000; Date.now() < end; await sleep(1000)) {

@@ -2,6 +2,7 @@
 // page is editable with no View only and Access offers no Invite; on the pending review a viewer of the team sees who
 // decides and no Approve (builders decide their team's reviews since D59).
 import { AGENTS_PORT, INVITED_PASSWORD, check, chromium, consoleSignIn, finish, invitePerson, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const EMAIL = `builder.${Math.random().toString(36).slice(2, 7)}@harborpine.example`;
 const VIEWER = `viewer.${Math.random().toString(36).slice(2, 7)}@harborpine.example`;
@@ -9,6 +10,8 @@ const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 
 await withUiStack(
   async (consoleUrl) => {
+    // A new workspace publishes at once; Priya turns review on for the team's agents, so the request stays pending.
+    await publishReviewOn({ agents: 'always' });
     // The viewer first: each invitation changes the workspace's permissions, which refuses tokens issued before it.
     await invitePerson('p.shah@harborpine.example', VIEWER, 'viewer');
     const token = await invitePerson('p.shah@harborpine.example', EMAIL, 'builder');
