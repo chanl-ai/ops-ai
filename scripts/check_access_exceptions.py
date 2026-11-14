@@ -93,7 +93,8 @@ PY_ROLE = [
     re.compile(rf"([\w.\[\]\"']+)\s*(?:==|!=)\s*[\"']({ROLES})[\"']"),
     re.compile(rf"[\"']({ROLES})[\"']\s*(?:==|!=)\s*([\w.]+)"),
 ]
-PY_SUB = re.compile(r"\b\w+\.sub\s*(?:==|!=)\s*([\w\"':.-]+)")
+# A caller's subject compared with a service's; a table's `sub` column (`<table>.c.sub`) filtered by it is not one.
+PY_SUB = re.compile(r"\b(?!c\.sub)\w+\.sub\s*(?:==|!=)\s*([\w\"':.-]+)")
 TS_ROLE = re.compile(rf"([\w.?]+)\s*(?:===|!==|==|!=)\s*['\"]({ROLES})['\"]")
 LOCKS = [
     ("protection-system", re.compile(r"protection\"?\)?\s*(?:==|!=)\s*[\"']system[\"']")),

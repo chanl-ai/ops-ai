@@ -34,7 +34,7 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | A pushed item's `url`, cited by search | Built | `schemas.py` (`WrittenItemIn.url`); `service.py` (`put_item`) |
 | The base's answer settings read by the kernel | Built | every search answer carries each base's `answer` section; the kernel replaces an uncited answer, or a turn that found nothing, with the first withholding base's no-answer message (`packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py` `_base_withholds`); a pieces-only base never withholds |
 | The base's sync settings applied by syncs, the strictest of the bases a source feeds winning | Built: a changed version held for review, removed items kept and flagged, the failing alert turned off | `service.py` (`sync_rules`, `_hold`, `_apply_held`, `settle_run`); `tool_sources.py` (`_flag_removed`) |
-| Stale after a number of days read by freshness | Designed, not built yet | served on the source detail; freshness still follows the schedule |
+| Stale after a number of days read by freshness | Designed, not built yet | stored and served, but not shown in Settings until freshness reads it; freshness still follows the schedule |
 | A new source copies its base's source defaults | Built | `service.py` (`create_source`, `_base_split`) |
 | JavaScript pages rendered in a headless browser worker | Designed, not built yet | |
 | An answer with no cited passage withheld, on by default | Built | on in the Balanced and Precise presets, off in Search only; applies whether or not the agent's own end check is on |
@@ -103,8 +103,8 @@ other four in its `settings` column (kb_0024); null reads as the defaults.
 |---|---|---|---|
 | `retrieval` | Mode, weight, rerank, rewrite and its instruction and model, pieces returned, keyword and meaning floors; the scope (`scopeCollections`, `scopeSourceIds`), `tagsInclude`, `tagsExclude`, `includeUntagged`, metadata `filters` | Hybrid, 0.6, 8 pieces, floors 0.5 and 0.38, no scope | The search: both lanes keep each base's pieces within its scope (`store/fulltext.py` `scope_sql`) |
 | `answer` | `shape` (`answer_with_citations` or `chunks`), `withholdUncited`, `noAnswerMessage` | An answer with citations, withheld when uncited | The query route's no-answer message; the agents kernel, from `answers` in each search answer |
-| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Syncs of every source the base reads; served as `automation` (`act` or `suggest`). `staleAfterDays` is served, not yet read by freshness |
-| `access` | `mcp.enabled`, `mcp.toolName` | Off, `search_<slug>` | Nothing yet; the MCP search tool is not built |
+| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Syncs of every source the base reads; served as `automation` (`act` or `suggest`). `staleAfterDays` is served, not yet read by freshness, so Settings does not show it |
+| `access` | `mcp.enabled`, `mcp.toolName` | Off, `search_<slug>` | Nothing yet; the MCP search tool is not built, so Settings does not show either field |
 | `sourceDefaults` | How a new source splits: `strategies`, `size`, `overlap`, `childSize`; AI steps are refused here and set per source with their estimate | At headings with context headers, 400 tokens, overlap 40 | A new source created into the base copies the values that differ from the defaults; each source keeps its own copy |
 
 A base is searchable by its whole team; no narrower list of people is kept, and `access.members` is always

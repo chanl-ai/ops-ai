@@ -1,6 +1,6 @@
 # An assistant lists and runs a team's read tools over MCP with an API key
 
-Status: blocked by a product bug (steps 2 to 4 fail: the call has no tenant); steps 1 and 5 pass. Id: `uc-410`. Service: `tools-service`. Layers: api.
+Status: passing. Id: `uc-410`. Service: `tools-service`. Layers: api, ui.
 
 An outside assistant (Claude Code, Cursor) connects to `/mcp/{team}` with an API key of that team and uses the
 official MCP Python SDK client to list and call the team's tools. Listing shows the team's published read operations
@@ -27,14 +27,17 @@ executor and call log all apply. Writes, other teams' tools, other teams' URLs, 
 | 3 | It calls `uc410_place_hold` by name | Refused (`write needs an approval token`) and logged as an mcp call; the account still has no hold |
 | 4 | The team_platform key lists and calls at `/mcp/team_platform`, then tries `/mcp/team_ops` | Not listed; the call is 403 `team_forbidden`; the other team's URL is 403 `team_forbidden` |
 | 5 | `/mcp/production/team_ops` (there is no environment segment); no credential; a person's console token | 404 `not_found`; 401 `unauthorized` with `WWW-Authenticate`; 401 `unauthorized`, since the address takes only a token issued for it |
+| 6 | Priya makes the link "uc410 lookups"; James calls `uc410_get_account` through it with his own assistant sign-in; Priya and Ravi (viewer) open the link's calls (`GET /v1/executions?link=`, read with `mcp.view`) | Priya sees James's call; Ravi gets 200 with his own calls only, none here, and is still refused the team's whole tool-call log (403) |
+| 6 (ui) | Ravi, then Priya, open a link's Calls tab | Both see the call list (Ravi's empty: "No calls yet"), no access refusal |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-410-api.py` | passing, `make usecase-test UC=uc-410 LAYER=api` (2026-10-19) |
+| api | `tools-service/scripts/test-uc-410-api.py` | passing, `make usecase-test UC=uc-410 LAYER=api` (2026-11-14, 35 checks) |
+| ui | `tools-service/scripts/test-uc-410-ui.mjs` | passing, `make usecase-test UC=uc-410 LAYER=ui` (2026-11-14, 7 checks) |
 
-In the console: none; an assistant reaches these tools over MCP with an API key, so the use case stays at the api layer.
+In the console: a link's Calls tab (step 6); the calls themselves come from assistants over MCP.
 
 ## Non-vacuous check
 

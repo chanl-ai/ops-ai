@@ -1,5 +1,5 @@
 /** Areas and actions of the roles grid in a person's words, and the order the grid reads in. */
-const AREA_WORDS: Record<string, string> = { secrets_egress: 'Secrets and egress' };
+const AREA_WORDS: Record<string, string> = { secrets_egress: 'Secrets and egress', mcp: 'MCP calls' };
 export const areaLabel = (area: string) => AREA_WORDS[area] ?? area.charAt(0).toUpperCase() + area.slice(1);
 export const actionLabel = (action: string) => action.charAt(0).toUpperCase() + action.slice(1);
 export const ACTION_ORDER = ['view', 'run', 'create', 'edit', 'publish', 'decide', 'delete', 'manage'];
