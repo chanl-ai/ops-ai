@@ -177,7 +177,7 @@ The console steps run in their own script, since a browser cannot run the code a
 | 3 | Documents tab, then the list | The manual is Indexed; the scan says "no text layer"; the list shows 1 document and the base Degraded |
 | 4 | Documents, Add page | The page shows as Indexed |
 | 5 | Playground: "What is the daily ATM withdrawal limit?" | A passage of the manual with its section, version and page |
-| 6a | Settings: piece size 500, pieces returned 3, a no-answer message, stale after 180 days, Offer as an MCP tool on; Save, reload; then a question nothing answers | Settings first show Precise's 5 pieces and 0.65 keyword floor; every change is kept; the Playground says the base's own no-answer message |
+| 6a | Settings: piece size 500, pieces returned 3, a no-answer message; Save, reload; then a question nothing answers | Settings first show Precise's 5 pieces and 0.65 keyword floor; Stale after and Offer as an MCP tool are not shown, since nothing reads them yet; every change is kept; the Playground says the base's own no-answer message |
 | 6 | Delete a base an agent cites | The dialog names the agent and keeps Delete off until the name is typed; the base leaves the list |
 
 ![The Documents tab with an indexed file and a failed scan, 1440 wide](media/uc-096-documents-1440.png)
