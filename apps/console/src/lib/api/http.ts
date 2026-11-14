@@ -180,8 +180,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'forms' | 'batches' | 'caseRecords' | 'activity' | 'overview'> {
-  const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, forms, batches, caseRecords, activity, overview } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'forms' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
+  const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, forms, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -197,6 +197,8 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     batches,
     caseRecords,
     activity,
+    // Suites, runs and publish checks are joined and counted on agents-service; sealed evidence and judges are not served.
+    assurance,
     // Counted on the server from the same review list Human Tasks reads and the team's cases.
     overview,
     skills: {

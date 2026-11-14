@@ -603,6 +603,96 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "assurance_agent_cases": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/eval-cases",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_list_gates": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/assurance/gates",
+    "pathParams": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "tier",
+      "result"
+    ],
+    "stream": false
+  },
+  "assurance_list_runs": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/assurance/runs",
+    "pathParams": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "kind",
+      "trigger"
+    ],
+    "stream": false
+  },
+  "assurance_list_suites": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/assurance/suites",
+    "pathParams": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "kind",
+      "tier",
+      "result"
+    ],
+    "stream": false
+  },
+  "assurance_save_agent_cases": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/agents/{agent_id}/eval-cases",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_save_skill_cases": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/skills/{skill_id}/eval-cases",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "assurance_skill_cases": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/skills/{skill_id}/eval-cases",
+    "pathParams": [
+      "skill_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "auth_sso_step_up": {
     "body": "json",
     "headers": [],
