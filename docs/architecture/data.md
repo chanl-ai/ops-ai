@@ -35,6 +35,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.channel_list` | `ChannelList` | none | none |
 | agents-service | `ops_agents.store.channels` | `ChannelStore` | CAS, TRANSACTION | `channel_cursors`, `channel_files`, `channel_messages`, `deployments`, `thread_inbox` |
 | agents-service | `ops_agents.store.chat_search` | none: no repository class | | `chat_search` |
+| agents-service | `ops_agents.store.evals` | `EvalStore` | TRANSACTION | `eval_cases`, `eval_runs` |
 | agents-service | `ops_agents.store.events` | `EventLog` | CAS | `thread_events` |
 | agents-service | `ops_agents.store.form_links` | `FormLinks` | none | `form_links` |
 | agents-service | `ops_agents.store.graphs` | `GraphStore` | CAS, TRANSACTION | `graph_runs`, `graph_threads`, `graph_versions` |
