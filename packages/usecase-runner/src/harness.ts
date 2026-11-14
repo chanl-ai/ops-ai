@@ -178,18 +178,28 @@ export async function invitePerson(adminEmail: string, email: string, role: stri
 }
 
 /** Signs `email` in on the console's login page in a fresh browser context and returns the page. */
+interface Issued {
+  token: string;
+  principal: { teamId: string | null; teamIds: string[] };
+}
+
+/** The role's seeded person signed in through platform-service's password sign-in: the session it issues. */
+async function signInRole(role: string): Promise<Issued> {
+  const seed = join(ROOT, 'services/platform-service/seed');
+  const email = (JSON.parse(readFileSync(join(seed, 'dev-roles.json'), 'utf8')) as Record<string, string>)[role];
+  if (!email || role.startsWith('_')) throw new Error(`asRole: ${role} is not a dev role (dev-roles.json)`);
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: DEMO_PASSWORD }) });
+  if (r.status !== 200) throw new Error(`asRole: ${email} could not sign in (${r.status})`);
+  return ((await r.json()) as { data: Issued }).data;
+}
+
 /**
  * A standard dev user's headers: the role's seeded person (services/platform-service/seed/dev-roles.json: admin,
  * builder, approver, viewer, security, platform) signed in through the password sign-in, acting in the team the sign-in
  * names unless `team` is given. The same map `make api AS=<role>` uses (scripts/api_as.py).
  */
 export async function asRole(role: string, team?: string): Promise<Record<string, string>> {
-  const seed = join(ROOT, 'services/platform-service/seed');
-  const email = (JSON.parse(readFileSync(join(seed, 'dev-roles.json'), 'utf8')) as Record<string, string>)[role];
-  if (!email || role.startsWith('_')) throw new Error(`asRole: ${role} is not a dev role (dev-roles.json)`);
-  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: DEMO_PASSWORD }) });
-  if (r.status !== 200) throw new Error(`asRole: ${email} could not sign in (${r.status})`);
-  const session = ((await r.json()) as { data: { token: string; principal: { teamId: string | null; teamIds: string[] } } }).data;
+  const session = await signInRole(role);
   const token = session.token;
   const acting = team ?? session.principal.teamId ?? session.principal.teamIds[0];
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(acting ? { 'X-Team-Id': acting } : {}) };
@@ -286,16 +296,77 @@ function watchContext(context: BrowserContext): BrowserContext {
   return context;
 }
 
+/**
+ * The dev role every browser context and every bare call to the run's services is signed in as, while a stack whose
+ * script left `platform` unset runs (resolveStack); null otherwise.
+ */
+let signedInRole: string | null = null;
+/** The console keeps its platform session here (apps/console/src/lib/auth/providers/platform.ts, STORAGE_KEY). */
+const CONSOLE_SESSION_KEY = 'ops-platform-session';
+
+/**
+ * Gives the context a session of its own, written to the console's storage before any page script runs and only when
+ * none is there, so the console's own refreshes are kept. One sign-in per context: a refresh token works once, and two
+ * contexts spending the same one would end both sessions.
+ */
+async function signInContext(context: BrowserContext): Promise<BrowserContext> {
+  if (!signedInRole) return context;
+  const session = JSON.stringify({ ...(await signInRole(signedInRole)), issuedAt: new Date().toISOString() });
+  await context.addInitScript(
+    ([key, value]) => {
+      try {
+        // Runs in the page, where localStorage is the page's own; the runner's tsconfig has no DOM types.
+        const store = (globalThis as unknown as { localStorage: { getItem(k: string): string | null; setItem(k: string, v: string): void } }).localStorage;
+        if (!store.getItem(key)) store.setItem(key, value);
+      } catch {
+        // about:blank and other opaque origins have no storage; the console's origin does.
+      }
+    },
+    [CONSOLE_SESSION_KEY, session] as const,
+  );
+  return context;
+}
+
 function watchBrowser(browser: Browser): Browser {
   const newContext = browser.newContext.bind(browser);
   const newPage = browser.newPage.bind(browser);
-  browser.newContext = async (...args) => watchContext(await newContext(...args));
+  browser.newContext = async (...args) => signInContext(watchContext(await newContext(...args)));
   browser.newPage = async (...args) => {
     const page = await newPage(...args);
-    watchContext(page.context());
+    await signInContext(watchContext(page.context()));
     return page;
   };
   return browser;
+}
+
+/**
+ * Signs every call the script makes to the run's services without credentials as `role`, the way dev sign-in answered
+ * such a call as its dev user. platform-service itself is left alone, since signing in is a call to it. Returns the undo.
+ */
+function signBareFetches(role: string): () => void {
+  const original = globalThis.fetch;
+  const ports = new Set([AGENTS_PORT, TOOLS_PORT, KB_PORT, FILES_PORT, DOCUMENTS_PORT, MODELS_PORT].map(String));
+  let signed: Promise<Record<string, string>> | undefined;
+  let signedAt = 0;
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+    const ours = (url.hostname === '127.0.0.1' || url.hostname === 'localhost') && ports.has(url.port);
+    if (!ours || headers.has('authorization') || headers.has('x-api-key')) return original(input, init);
+    // Access tokens last 15 minutes; a longer run signs in again rather than send one that lapsed.
+    if (!signed || Date.now() - signedAt > 10 * 60_000) {
+      signedAt = Date.now();
+      signed = asRole(role);
+    }
+    const as = await signed;
+    headers.set('Authorization', as.Authorization!);
+    if (!headers.has('x-team-id') && as['X-Team-Id']) headers.set('X-Team-Id', as['X-Team-Id']);
+    return original(input, { ...init, headers });
+  };
+  return () => {
+    globalThis.fetch = original;
+  };
 }
 
 /** Playwright's Chromium, with every browser it launches watched for pages that draw sample data. */
@@ -303,7 +374,7 @@ export const chromium: typeof playwrightChromium = new Proxy(playwrightChromium,
   get(target, key) {
     if (key === 'launch') return async (...args: Parameters<typeof target.launch>) => watchBrowser(await target.launch(...args));
     if (key === 'launchPersistentContext')
-      return async (...args: Parameters<typeof target.launchPersistentContext>) => watchContext(await target.launchPersistentContext(...args));
+      return async (...args: Parameters<typeof target.launchPersistentContext>) => signInContext(watchContext(await target.launchPersistentContext(...args)));
     const value: unknown = Reflect.get(target, key, target);
     return typeof value === 'function' ? value.bind(target) : value;
   },
@@ -465,8 +536,9 @@ export interface StackOptions {
    */
   kbEnv?: Record<string, string>;
   /**
-   * Also start platform-service on the run's database (its own migration chain, the dev seed of team_ops with Priya,
-   * James and Maya) and sign the console in through it, so every call carries a person's token.
+   * Start platform-service on the run's database (its own migration chain, the dev seed of team_ops with Priya,
+   * James and Maya) and sign the console in through it, so every call carries a person's token. On unless `false`,
+   * as on the real stack; see resolveStack for who is signed in when it is left unset.
    */
   platform?: boolean;
   /**
@@ -685,9 +757,24 @@ function withBank(bank: Record<string, string>, extra: Record<string, string>): 
 }
 
 /** The agents service on the scripted model plus a console whose chat calls it. Stops both when `body` returns. */
-export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) => Promise<T>, given: StackOptions = {}): Promise<T> {
+/**
+ * What a ui stack starts and who the harness signs in for the script. platform-service is on unless the script passes
+ * `platform: false`: the real stack always signs in through it, and a console without it answers sign-in and the team
+ * list from its mock, which the sample-data check fails. A script that left `platform` unset was written for the
+ * mock's signed-in builder, so the harness signs the dev builder (James, as dev sign-in named him) in for it: every
+ * browser context and every bare call to the run's services. A script that sets `platform: true`, `demo` or
+ * `sampleTeam` signs in on /login itself, where a stored session would send it past the form.
+ */
+export function resolveStack(given: StackOptions): { options: StackOptions; signedInAs: string | null } {
+  const signedInAs = given.platform === undefined && !given.demo && !given.sampleTeam ? 'builder' : null;
+  const base: StackOptions = { ...given, platform: given.platform ?? true };
   // The sample team's mailbox signs in to compose's mail servers, so it needs tools-service to reach them.
-  const options: StackOptions = given.demo || given.sampleTeam ? { ...given, demo: true, platform: true, tools: { ...given.tools, bank: true, gateway: true, ...(given.sampleTeam ? { mail: true } : {}) } } : given;
+  const options: StackOptions = base.demo || base.sampleTeam ? { ...base, demo: true, platform: true, tools: { ...base.tools, bank: true, gateway: true, ...(base.sampleTeam ? { mail: true } : {}) } } : base;
+  return { options, signedInAs };
+}
+
+export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) => Promise<T>, given: StackOptions = {}): Promise<T> {
+  const { options, signedInAs } = resolveStack(given);
   const stackStart = Date.now();
   const env = stackEnv(process.env);
   const consoleUrl = `http://localhost:${CONSOLE_PORT}`;
@@ -758,6 +845,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
   let committedTsconfig: string | undefined;
   let platformProc: ChildProcess | undefined;
   let idpProc: ChildProcess | undefined;
+  let unsignFetches: (() => void) | undefined;
   let toolsProc: ChildProcess | undefined;
   let runnerProc: ChildProcess | undefined;
   let kbProc: ChildProcess | undefined;
@@ -1070,8 +1158,14 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       stack.embedUrl = embedUrl;
     }
     console.log(`TIME stack-ready ${((Date.now() - stackStart) / 1000).toFixed(1)}`);
+    if (signedInAs) {
+      signedInRole = signedInAs;
+      unsignFetches = signBareFetches(signedInAs);
+    }
     return await timed('body', body(consoleUrl, stack));
   } finally {
+    signedInRole = null;
+    unsignFetches?.();
     for (const w of workers) if (w.exitCode === null) stop(w);
     if (embedProc) {
       stop(embedProc);
