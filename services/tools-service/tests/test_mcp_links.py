@@ -187,7 +187,9 @@ async def test_a_picked_workflow_starts_its_live_version_only_for_who_may_run_it
         )
         started = await c.call_tool("workflow__wf_claims", {"claim": "4471"})
     async with stack.app.router.lifespan_context(stack.app), _session(stack, "reader", path) as c:
+        unlisted = [t.name for t in (await c.list_tools()).tools]
         refused = await c.call_tool("workflow__wf_claims", {"claim": "4471"})
+    assert unlisted == [], "a person without workflows.run is not offered a workflow they cannot start"
     assert started.is_error is False and _content(started).get("runId") == "run_1", started
     agents: Any = stack.agents
     assert agents.started == [{"workflowId": "wf_claims", "input": {"claim": "4471"}, "mode": "live"}]
