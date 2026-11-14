@@ -3,6 +3,7 @@
 // tools-service as the gateway so the tool form lists real operations, publish requests left pending for a second
 // person, and workflow workers this script starts and stops. No model is called.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -14,6 +15,8 @@ const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFO
 
 await withUiStack(
   async (consoleUrl, stack) => {
+    // A new workspace publishes at once; Priya turns review on for the team's workflows before anyone signs in.
+    await publishReviewOn({ workflows: 'always' });
     const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
     const H = as(await tokenFor(JAMES));
     const M = as(await tokenFor(MAYA));
@@ -117,6 +120,8 @@ await withUiStack(
       const approved = await api(`/reviews/${review?.id}/decision`, { method: 'POST', body: JSON.stringify({ decision: 'approved' }) }, M);
       await page.goto(`${consoleUrl}/workflows/definitions/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('definition-stage').waitFor({ timeout: 60_000 });
+      // The editor may first paint the stage it read before the approval, then refetch.
+      await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'live', null, { timeout: 30_000 }).catch(() => undefined);
       check('7 Maya approves it (200) and version 2 is live', approved.status === 200 && (await stage()) === 'live', { approved: approved.status, stage: await stage() });
 
       // 6. A live run reaches the End step, and its output is the run's result.
@@ -127,7 +132,7 @@ await withUiStack(
       await page.getByTestId('run-input-json-tab').click();
       await page.getByTestId('definition-run-input').fill(JSON.stringify({ amount: 42 }));
       await page.getByTestId('definition-start-run-submit').click();
-      await page.waitForURL(/\/workflows\/runs\/[^/?]+/, { timeout: 60_000 });
+      await page.waitForURL(/\/build\/runs\/[^/?]+/, { timeout: 60_000 });
       const result = page.getByTestId('run-result');
       const shown = await result.waitFor({ timeout: 90_000 }).then(() => true, () => false);
       const resultText = shown ? await result.innerText() : '';
@@ -155,7 +160,7 @@ await withUiStack(
       await page.getByTestId('run-input-json-tab').click();
       await page.getByTestId('definition-run-input').fill(JSON.stringify({ amount: 7 }));
       await page.getByTestId('definition-start-run-submit').click();
-      await page.waitForURL(/\/workflows\/runs\/[^/?]+/, { timeout: 60_000 });
+      await page.waitForURL(/\/build\/runs\/[^/?]+/, { timeout: 60_000 });
       const runId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop());
       await page.getByTestId('run-cancel').click();
       await page.getByTestId('run-cancel-confirm').click();
