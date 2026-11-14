@@ -74,7 +74,9 @@ function useGroupFolds(): [(label: string) => boolean, (label: string, open: boo
 function FoldingGroup({ label, children }: { label: string; open?: boolean; onOpenChange?: (open: boolean) => void; children: React.ReactNode }) {
   return (
     <SidebarGroup data-nav-group={label}>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {/* Folded, the label fades and slides up over the previous section's last icon; without this it takes that
+          icon's clicks. */}
+      <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">{label}</SidebarGroupLabel>
       <SidebarGroupContent>{children}</SidebarGroupContent>
     </SidebarGroup>
   );
