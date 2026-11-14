@@ -149,6 +149,13 @@ class ApprovalInput(TypedDict, closed=True):
     stepUpToken: NotRequired[str | None]
 
 
+class AssetRef(TypedDict, closed=True):
+    href: str
+    id: str
+    kind: Literal["agent", "skill", "workflow"]
+    name: str
+
+
 class AssignInput(TypedDict, closed=True):
     assignee: NotRequired[str | None]
     ids: list[str]
@@ -156,6 +163,28 @@ class AssignInput(TypedDict, closed=True):
 
 class Assignee(TypedDict, closed=True):
     name: str
+
+
+class AssuranceRun(TypedDict, closed=True):
+    asset: AssetRef
+    costUsd: float
+    durationMs: int
+    id: str
+    passRate: float
+    passed: int
+    ranAt: str
+    regressions: int
+    reviewId: NotRequired[str | None]
+    total: int
+    trigger: str
+    version: int
+
+
+class AssuranceStats(TypedDict, closed=True):
+    failingSuites: int
+    gatesBlocked: int
+    liveUntested: int
+    notRun: int
 
 
 class AttachInput(TypedDict, closed=True):
@@ -810,6 +839,14 @@ class FormView(TypedDict, closed=True):
     token: NotRequired[str | None]
     url: str
     workflowId: str
+
+
+class GateStep(TypedDict, closed=True):
+    detail: str
+    label: str
+    mode: Literal["blocking", "advisory"]
+    result: Literal["pass", "fail", "pending"]
+    step: Literal["structural", "pass_rate", "regressions"]
 
 
 class GraphBody(TypedDict, closed=True):
@@ -1603,6 +1640,23 @@ class RunWaiting(TypedDict, closed=True):
     payload: dict[str, Any]
 
 
+class SavedCase(TypedDict, closed=True):
+    checks: list[dict[str, Any]]
+    context: dict[str, Any] | None
+    createdAt: str
+    createdBy: str
+    id: str
+    input: str
+    name: str
+    reason: str
+    source: str
+    status: str
+
+
+class SavedCases(TypedDict, closed=True):
+    cases: list[SavedCase]
+
+
 class Serves(TypedDict, closed=True):
     behind: int
     id: str
@@ -1825,6 +1879,33 @@ class StoryTask(TypedDict, closed=True):
 
 class SubmitIn(TypedDict):
     values: NotRequired[dict[str, Any]]
+
+
+class SuiteCaseResult(TypedDict, closed=True):
+    candidate: Literal["pass", "fail"]
+    caseId: str
+    humanVerdict: NotRequired[Literal["pass", "fail"] | None]
+    live: Literal["pass", "fail"] | None
+    name: str
+    regression: bool
+
+
+class SuiteDraftCase(TypedDict, closed=True):
+    createdAt: str
+    createdBy: str
+    id: str
+    input: str
+    name: str
+    reason: str
+    reviewId: str
+    source: Literal["review"]
+    status: Literal["draft"]
+
+
+class TabCounts(TypedDict, closed=True):
+    gates: int
+    runs: int
+    suites: int
 
 
 class TaskAction(TypedDict, closed=True):
@@ -2478,6 +2559,37 @@ class AgentTestTurn(TypedDict, closed=True):
     wouldPause: NotRequired[WouldPause | None]
 
 
+class AssuranceGate(TypedDict, closed=True):
+    asset: AssetRef
+    blocked: bool
+    fromVersion: int | None
+    requestedAt: str
+    requestedBy: str
+    reviewId: str
+    reviewStatus: Literal["pending", "approved", "rejected", "returned"]
+    steps: list[GateStep]
+    tier: str
+    toVersion: int
+
+
+class AssuranceSuite(TypedDict, closed=True):
+    asset: AssetRef
+    candidateVersion: int | None
+    cases: int
+    draftCases: int
+    drafts: list[SuiteDraftCase]
+    failing: bool
+    id: str
+    lastRunAt: str | None
+    livePassRate: float | None
+    liveVersion: int | None
+    owner: str
+    passRate: float | None
+    regressions: int | None
+    results: list[SuiteCaseResult]
+    tier: str
+
+
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
 
@@ -2845,6 +2957,11 @@ class EnvelopeRunStarted(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSavedCases(TypedDict, closed=True):
+    data: SavedCases
+    success: Literal[True]
+
+
 class EnvelopeSkillRendered(TypedDict, closed=True):
     data: SkillRendered
     success: Literal[True]
@@ -3001,8 +3118,12 @@ class EvalCaseResult(TypedDict, closed=True):
     regression: NotRequired[bool]
 
 
-class EvalRunInput(TypedDict, closed=True):
+class EvalCasesInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput]]
+
+
+class EvalRunInput(TypedDict, closed=True):
+    cases: NotRequired[list[EvalCaseInput] | None]
 
 
 class FieldRead(TypedDict, closed=True):
@@ -3014,6 +3135,14 @@ class FieldRead(TypedDict, closed=True):
     extractedValue: NotRequired[Any]
     needsReview: bool
     value: NotRequired[Any]
+
+
+class GateList(TypedDict, closed=True):
+    data: list[AssuranceGate]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+    stats: AssuranceStats
+    tabCounts: TabCounts
 
 
 class GraphInfo(TypedDict, closed=True):
@@ -3216,6 +3345,14 @@ class RunDecision(TypedDict, closed=True):
     reviewId: str
 
 
+class RunList(TypedDict, closed=True):
+    data: list[AssuranceRun]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+    stats: AssuranceStats
+    tabCounts: TabCounts
+
+
 class RunRow(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
@@ -3380,6 +3517,14 @@ StoryEmail = TypedDict(
     },
     closed=True,
 )
+
+
+class SuiteList(TypedDict, closed=True):
+    data: list[AssuranceSuite]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+    stats: AssuranceStats
+    tabCounts: TabCounts
 
 
 class TaskCreated(TypedDict, closed=True):
@@ -3647,6 +3792,11 @@ class EnvelopeChannelPage(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeGateList(TypedDict, closed=True):
+    data: GateList
+    success: Literal[True]
+
+
 class EnvelopeGuardrail(TypedDict, closed=True):
     data: Guardrail
     success: Literal[True]
@@ -3682,6 +3832,11 @@ class EnvelopePublishReview(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeRunList(TypedDict, closed=True):
+    data: RunList
+    success: Literal[True]
+
+
 class EnvelopeRunRow(TypedDict, closed=True):
     data: RunRow
     success: Literal[True]
@@ -3694,6 +3849,11 @@ class EnvelopeSkillList(TypedDict, closed=True):
 
 class EnvelopeSkillOptions(TypedDict, closed=True):
     data: SkillOptions
+    success: Literal[True]
+
+
+class EnvelopeSuiteList(TypedDict, closed=True):
+    data: SuiteList
     success: Literal[True]
 
 

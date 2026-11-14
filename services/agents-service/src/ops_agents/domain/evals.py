@@ -17,6 +17,38 @@ EVAL_RUN_PREFIX: Final = "evr"
 CHECK_UNKNOWN_CODE: Final = "unknown_check_type"
 CASES_EMPTY_CODE: Final = "empty_cases"
 
+# What a saved case set or a run belongs to. Workflows keep no cases: their runs are the structural test runs.
+ASSET_AGENT: Final = "agent"
+ASSET_SKILL: Final = "skill"
+ASSET_WORKFLOW: Final = "workflow"
+CASE_ASSET_KINDS: Final[frozenset[str]] = frozenset({ASSET_AGENT, ASSET_SKILL})
+CASE_ACTIVE: Final = "active"
+CASE_DRAFT: Final = "draft"
+TRIGGER_MANUAL: Final = "manual"
+TRIGGER_PUBLISH_REQUEST: Final = "publish_request"
+# Until the model inventory holds a record, every asset is in this tier.
+DEFAULT_TIER: Final = "medium"
+
+STEP_PASS: Final = "pass"
+STEP_FAIL: Final = "fail"
+STEP_PENDING: Final = "pending"
+MODE_BLOCKING: Final = "blocking"
+MODE_ADVISORY: Final = "advisory"
+# Which publish-check steps stop a publish at each risk tier; the rest need the approver's reason.
+BLOCKING_STEPS: Final[dict[str, frozenset[str]]] = {
+    "low": frozenset(),
+    "medium": frozenset({"structural", "pass_rate"}),
+    "high": frozenset({"structural", "pass_rate", "regressions"}),
+}
+
+
+def pass_rate(passed: int, total: int) -> float | None:
+    return round(passed / total, 4) if total else None
+
+
+def step_mode(tier: str, step: str) -> str:
+    return MODE_BLOCKING if step in BLOCKING_STEPS.get(tier, BLOCKING_STEPS[DEFAULT_TIER]) else MODE_ADVISORY
+
 
 @dataclass(frozen=True)
 class EvalCheck:

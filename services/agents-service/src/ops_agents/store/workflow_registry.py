@@ -167,6 +167,18 @@ class WorkflowRegistry:
         async with self.engine.begin() as c:
             await c.execute(registry_validations.insert().values(**row))
 
+    async def validations(self, workflow_ids: set[str]) -> list[dict[str, Any]]:
+        """Every test run of these workflows, newest first. The ids come from `rows()`: the acting team's."""
+        if not workflow_ids:
+            return []
+        q = (
+            sa.select(registry_validations)
+            .where(registry_validations.c.workflow_id.in_(sorted(workflow_ids)))
+            .order_by(registry_validations.c.ran_at.desc(), registry_validations.c.id.desc())
+        )
+        async with self.engine.connect() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
     async def last_validation(self, workflow_id: str) -> dict[str, Any] | None:
         q = (
             sa.select(registry_validations)

@@ -478,6 +478,69 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids", "granted"],
         "stream": False,
     },
+    "assurance_agent_cases": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/eval-cases",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
+    "assurance_list_gates": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/assurance/gates",
+        "pathParams": [],
+        "query": ["page", "pageSize", "search"],
+        "stream": False,
+    },
+    "assurance_list_runs": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/assurance/runs",
+        "pathParams": [],
+        "query": ["page", "pageSize", "search"],
+        "stream": False,
+    },
+    "assurance_list_suites": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/assurance/suites",
+        "pathParams": [],
+        "query": ["page", "pageSize", "search"],
+        "stream": False,
+    },
+    "assurance_save_agent_cases": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/agents/{agent_id}/eval-cases",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
+    "assurance_save_skill_cases": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/skills/{skill_id}/eval-cases",
+        "pathParams": ["skill_id"],
+        "query": [],
+        "stream": False,
+    },
+    "assurance_skill_cases": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/skills/{skill_id}/eval-cases",
+        "pathParams": ["skill_id"],
+        "query": [],
+        "stream": False,
+    },
     "auth_sso_step_up": {
         "body": "json",
         "headers": [],
@@ -1953,6 +2016,14 @@ class Operations:
         "Delete Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def assurance_agent_cases(self, agent_id: str) -> SavedCases:
+        "Agent Cases"
+        return self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def assurance_save_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
+        "Save Agent Cases"
+        return self._t.call(SERVICE, OPERATIONS["assurance_save_agent_cases"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
         "Create Eval Run"
         return self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -2038,6 +2109,45 @@ class Operations:
     def workflows_run_ai_step(self, step: str, body: AiStepIn) -> AiStepOut:
         "Run Ai Step"
         return self._t.call(SERVICE, OPERATIONS["workflows_run_ai_step"], {"step": step}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def assurance_list_gates(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> GateList:
+        "List Gates"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_list_gates"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def assurance_list_runs(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> RunList:
+        "List Runs"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_list_runs"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def assurance_list_suites(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> SuiteList:
+        "List Suites"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_list_suites"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def auth_step_up(self, body: StepUpInput) -> StepUpToken:
         "Step Up"
@@ -2573,6 +2683,14 @@ class Operations:
     def agents_save_skill_draft(self, skill_id: str, body: SkillDraftPatch) -> SkillDetail:
         "Save Skill Draft"
         return self._t.call(SERVICE, OPERATIONS["agents_save_skill_draft"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def assurance_skill_cases(self, skill_id: str) -> SavedCases:
+        "Skill Cases"
+        return self._t.call(SERVICE, OPERATIONS["assurance_skill_cases"], {"skill_id": skill_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def assurance_save_skill_cases(self, skill_id: str, body: EvalCasesInput) -> SavedCases:
+        "Save Skill Cases"
+        return self._t.call(SERVICE, OPERATIONS["assurance_save_skill_cases"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def agents_request_skill_publish(self, skill_id: str, body: ReviewInput) -> SkillDetail:
         "Request Skill Publish"
@@ -3227,6 +3345,16 @@ class AsyncOperations:
         "Delete Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def assurance_agent_cases(self, agent_id: str) -> SavedCases:
+        "Agent Cases"
+        return await self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def assurance_save_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
+        "Save Agent Cases"
+        return await self._t.call(
+            SERVICE, OPERATIONS["assurance_save_agent_cases"], {"agent_id": agent_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     async def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
         "Create Eval Run"
         return await self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -3312,6 +3440,45 @@ class AsyncOperations:
     async def workflows_run_ai_step(self, step: str, body: AiStepIn) -> AiStepOut:
         "Run Ai Step"
         return await self._t.call(SERVICE, OPERATIONS["workflows_run_ai_step"], {"step": step}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def assurance_list_gates(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> GateList:
+        "List Gates"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_list_gates"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def assurance_list_runs(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> RunList:
+        "List Runs"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_list_runs"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def assurance_list_suites(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> SuiteList:
+        "List Suites"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_list_suites"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def auth_step_up(self, body: StepUpInput) -> StepUpToken:
         "Step Up"
@@ -3867,6 +4034,16 @@ class AsyncOperations:
     async def agents_save_skill_draft(self, skill_id: str, body: SkillDraftPatch) -> SkillDetail:
         "Save Skill Draft"
         return await self._t.call(SERVICE, OPERATIONS["agents_save_skill_draft"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def assurance_skill_cases(self, skill_id: str) -> SavedCases:
+        "Skill Cases"
+        return await self._t.call(SERVICE, OPERATIONS["assurance_skill_cases"], {"skill_id": skill_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def assurance_save_skill_cases(self, skill_id: str, body: EvalCasesInput) -> SavedCases:
+        "Save Skill Cases"
+        return await self._t.call(
+            SERVICE, OPERATIONS["assurance_save_skill_cases"], {"skill_id": skill_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     async def agents_request_skill_publish(self, skill_id: str, body: ReviewInput) -> SkillDetail:
         "Request Skill Publish"
