@@ -14,8 +14,7 @@ from ops_store import isolation
 from ops_store.dialect import vector_distance_sql, vector_search_setup, vector_text
 from ops_store.team_scope import team_visible
 
-from ..retrieval import Search
-from .fulltext import scope_sql
+from .fulltext import Narrowing, scope_sql
 from .knowledge import ROLE, kb_chunks, kb_unit_vectors, kb_units
 
 # Units read per piece asked for, as the keyword lane reads them: a piece's text, children and questions can all be
@@ -162,11 +161,11 @@ class PgVectorStore:
         model: str,
         width: int,
         limit: int,
-        how: Search | None = None,
+        how: Narrowing | None = None,
     ) -> list[dict[str, Any]]:
         """The units nearest the question's vector within each base's scope, with their piece and similarity (1 is the
         same direction). The scope is in the query, so the nearest units out of scope never take the places."""
-        scope, scoped = scope_sql(kb_ids, how or Search())
+        scope, scoped = scope_sql(kb_ids, how)
         params = {
             **scoped,
             "tenant": tenant,

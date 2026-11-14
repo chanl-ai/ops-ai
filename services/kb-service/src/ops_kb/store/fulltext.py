@@ -4,15 +4,26 @@ full-text index on the units yet (kb_0016), so there the lane is not ready and e
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import isolation
 
-from ..retrieval import Search
 from .knowledge import ROLE
+
+
+class Narrowing(Protocol):
+    """What the lanes read of a search (retrieval.Search): each base's scope and the request's one collection. A
+    protocol, so the store never imports the retrieval layer above it."""
+
+    @property
+    def scopes(self) -> dict[str, Any]: ...
+
+    @property
+    def collection(self) -> str | None: ...
+
 
 # The bases' threshold is the least share of the question's terms a unit holds. At the default, half: "mortgage
 # brokers selling travel insurance" shares two of five terms with a rate sheet and is not answered by it. With at least
@@ -23,7 +34,7 @@ MIN_SHARED_TERMS = 2
 TERM_CAP = 6
 
 
-def scope_sql(kb_ids: list[str], how: Search) -> tuple[str, dict[str, Any]]:
+def scope_sql(kb_ids: list[str], how: Narrowing | None) -> tuple[str, dict[str, Any]]:
     """The SQL each lane adds to keep a base's pieces within its own scope (`Search.scopes`) and the request's
     collection, with its parameters. It reads the aliases both lanes use: `l` the base's link to a source, `s` the
     source, `i` the item and `c` the piece. Tags are the source's; metadata is the piece's, compared as text."""
@@ -41,7 +52,7 @@ def scope_sql(kb_ids: list[str], how: Search) -> tuple[str, dict[str, Any]]:
     untagged = f"jsonb_array_length({tags}) = 0"
     parts: list[str] = []
     for kb_id in kb_ids:
-        sc = how.scopes.get(kb_id)
+        sc = how.scopes.get(kb_id) if how is not None else None
         rule = [f"l.kb_id = {bind(kb_id)}"]
         if sc is not None and sc.narrows():
             if sc.collections:
@@ -60,7 +71,7 @@ def scope_sql(kb_ids: list[str], how: Search) -> tuple[str, dict[str, Any]]:
                 rule.append("(" + (" OR " if sc.match == "any" else " AND ").join(conditions) + ")")
         parts.append("(" + " AND ".join(rule) + ")")
     clause = "(" + " OR ".join(parts) + ")" if parts else "TRUE"
-    if how.collection:
+    if how is not None and how.collection:
         clause += f" AND s.collection = {bind(how.collection)}"
     return clause, params
 
@@ -126,11 +137,18 @@ class KeywordLane:
         return self.engine.dialect.name == "postgresql"
 
     async def hits(
-        self, tenant: str, kb_ids: list[str], question: str, *, threshold: float, limit: int, how: Search | None = None
+        self,
+        tenant: str,
+        kb_ids: list[str],
+        question: str,
+        *,
+        threshold: float,
+        limit: int,
+        how: Narrowing | None = None,
     ) -> list[dict[str, Any]]:
         if not kb_ids or not question.strip():
             return []
-        scope, scoped = scope_sql(kb_ids, how or Search())
+        scope, scoped = scope_sql(kb_ids, how)
         search = sa.text(_SEARCH.replace("{scope}", scope)).bindparams(sa.bindparam("kb_ids", expanding=True))
         params = {
             **scoped,
