@@ -2,6 +2,8 @@
 
 Status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
+Status: superseded where it describes approver tiers or approval tokens; the current rules are in [roles-and-permissions.md](../roles-and-permissions.md).
+
 ## Context
 
 The platform has grown to five kinds of asset that run or shape model behaviour: workflows (`01`),

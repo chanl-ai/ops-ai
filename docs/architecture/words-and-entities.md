@@ -47,7 +47,7 @@ Status: current, updated 2026-10-16. The decided design is [workflows and agents
 | Thread | Deployment (or none, for direct API use) | Version and digest, state, external key, parent thread | One active run at a time; keeps its version until it ends or is migrated |
 | Run | Thread | Input or decision, events, status, owner, generation | Holds the thread's lease while it runs |
 | Interrupt | Run, at one node | Payload, gated call, SLA block | Resumes once per decision |
-| Review | Interrupt, publish request or manual-handling item | Needs, eligible approvers, due time, decisions | The requester cannot decide |
+| Review | Interrupt, publish request or manual-handling item | Needs, eligible approvers, due time, decisions | The requester does not decide unless the team turns `requesterMayDecide` on |
 | Approval token | Review decision | Binding to one call's input hash | Expires in 15 minutes; any edit to the input invalidates it |
 | Timer | Interrupt and round | Kind, due time, claim | Fires at most once per interrupt and round |
 | Tool call | Run and step | Input hash, decision, reasons, outcome | One effect per `(thread, step, tool, inputHash)` |

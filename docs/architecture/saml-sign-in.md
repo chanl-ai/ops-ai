@@ -141,8 +141,7 @@ into `signin_group_rules`; and keeps both old keys readable for one release. Por
 SQL Server). Every table carries `tenant_id` under row-level security; the daily loop reads across tenants through a
 named tenant-wide reason. For one release an older console's PUT with `saml.certificate` replaces the provider's
 manual certificate (metadata ones stay) and its `groups.map` replaces the rules. When two rules map one person into
-one team, the higher role wins (chat_user < viewer < builder < approver); today the first match wins
-(`store/signin.py:666-704`).
+one team, the first match wins; the grid gives roles no order, because a role is a set of cells.
 
 ## Security rules
 
@@ -165,7 +164,7 @@ one team, the higher role wins (chat_user < viewer < builder < approver); today 
 | Metadata refresh | A daily refresh adds a certificate only when the entity ID is unchanged; it never changes entity ID or SSO URL without an admin save; every addition is audited and Security admins are told. A certificate the metadata stops listing stays trusted until it expires or an admin removes it | Designed, not built yet |
 | Test flows | Start no session, link or create nobody, change no membership; run while the provider is off; the result is read only by the admin who started it | Designed, not built yet |
 | Groups claim missing | A missing or empty groups attribute means the person is in no group, so with `onMissing` remove every membership groups gave ends (Keycloak drops the attribute once a person is in none). Only Entra's overage claim reads as unknown (`groups` None) and changes no membership | Built (`packages/ops_signin/src/ops_signin/saml.py:291`, `services/platform-service/src/ops_platform/store/signin.py:855`); the provider-row warning is not built |
-| Admins linked by email | A first SSO sign-in never links by email to a person who holds Admin anywhere or is on the break-glass list; they link from My security after a password sign-in | Designed, not built yet |
+| Admins linked by email | A first SSO sign-in never links by email to a person who holds `access.manage` in any team, by any role, or is on the break-glass list; they link from My security after a password sign-in | Designed, not built yet |
 | Email change at the provider | A returning person is found by subject; their email updates only to another verified domain of the same provider | Designed, not built yet. Today found by subject, email never updated |
 | Break-glass | With company sign-in required, a password signs in only a break-glass person; each use is audited and notifies Security admins; the lockout applies (`store/signin.py:283-325`); losing the Security admin role removes a person from the list; at most three people, at least one before the policy turns on | Designed, not built yet. Today a password works for everyone while the password provider is on (`store/signin.py:154`, `services/platform-service/src/ops_platform/passwords.py:84`) |
 
@@ -237,7 +236,7 @@ with it, audited `signin.provider_deleted`.
 | `POST /v1/auth/sso/start` with `{provider}` | Start from a portal tile | Designed, not built yet (`{email}` built, `app.py:348`) |
 
 Settings routes need `settings.manage` in the Security team (view for reads), and each target team of a rule also
-needs `access.create` (`signin_settings.py:185-192`).
+needs `access.create` (`services/platform-service/src/ops_platform/signin_settings.py`).
 
 ## Settings and limits
 
