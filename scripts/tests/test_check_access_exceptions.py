@@ -1,4 +1,5 @@
-"""The access checker's gaps, by failure mode: a refusal raised as a typed error goes unseen, a 409 that decides
+"""The access checker's gaps, by failure mode: a refusal raised as a typed error or returned as a (403, code) tuple
+goes unseen, a 409 that decides
 access goes unseen, an allowlist line names a row the register does not hold (or one already resolved), a line is
 added on a row the owner has not decided, and an exception line lands with no Standards-exception: trailer naming its
 approver."""
@@ -55,6 +56,17 @@ def test_a_typed_refusal_and_a_typed_conflict_are_found_where_they_are_raised() 
     conflicts = c._conflicts("services/x/src/x/routes.py", tree, lines)
     assert [(f.kind, f.key) for f in refusals] == [("refusal", "role_required")]
     assert sorted(f.key for f in conflicts) == ["conflict", "name_taken"]
+
+
+def test_a_refusal_returned_as_a_status_and_code_tuple_is_found() -> None:
+    """The tools gateway answers a call with `return 403, "CODE", message, details`, never a raised Forbidden."""
+    c = checker()
+    c.TYPED.clear()
+    source = (
+        'def refuse(m):\n    if m.off:\n        return 403, "APP_OFF", "off", {}\n    return 409, "STATE", "x", {}\n'
+    )
+    found = c._refusals("services/x/src/x/gateway.py", ast.parse(source), source.splitlines())
+    assert [(f.kind, f.key, f.line) for f in found] == [("refusal", "APP_OFF", 3)]
 
 
 def _run(

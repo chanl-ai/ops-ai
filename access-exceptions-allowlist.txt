@@ -1,4 +1,4 @@
-# 48 access exceptions: decisions taken outside can() and policy defaults that hold something back
+# 58 access exceptions: decisions taken outside can() and policy defaults that hold something back
 # (scripts/check_access_exceptions.py). This number may only go down. Each line is `path kind key count row`; row is
 # the line of the Exceptions register in docs/architecture/roles-and-permissions.md that records the decision.
 # When the code changes, lower the count or delete the line. A new line needs a register row and a Standards-exception:
@@ -39,6 +39,16 @@ services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06
 services/tools-service/src/ops_tools/gateway_calls.py lock system-claim 1 E06
 services/tools-service/src/ops_tools/gateway_calls.py refusal gateway_refused 1 E16
 services/tools-service/src/ops_tools/gateway_calls.py refusal system_workflow_only 1 E06
+services/tools-service/src/ops_tools/gateway_calls.py refusal ACCOUNT_CHOICE_NEEDED 1 E52
+services/tools-service/src/ops_tools/gateway_calls.py refusal ACCOUNT_NOT_YOURS 1 E52
+services/tools-service/src/ops_tools/gateway_calls.py refusal APP_OFF_FOR_TEAM 1 E53
+services/tools-service/src/ops_tools/gateway_calls.py refusal CONNECTION_NOT_LINKED 1 E53
+services/tools-service/src/ops_tools/gateway_calls.py refusal NOT_SIGNED_IN 1 E53
+services/tools-service/src/ops_tools/gateway_calls.py refusal PLUGIN_DISABLED 1 E53
+services/tools-service/src/ops_tools/gateway_calls.py refusal TOOL_NOT_ADDED 1 E53
+services/tools-service/src/ops_tools/gateway_calls.py refusal module_drifted 1 E16
+services/tools-service/src/ops_tools/gateway_calls.py refusal module_not_published 1 E16
+services/tools-service/src/ops_tools/gateway_calls.py refusal operation_hidden 1 E16
 services/tools-service/src/ops_tools/callers.py lock dev-caller 1 E09
 services/tools-service/src/ops_tools/limits.py refusal amount_over_limit 1 E16
 services/tools-service/src/ops_tools/mailboxes.py refusal egress_denied 2 E16
