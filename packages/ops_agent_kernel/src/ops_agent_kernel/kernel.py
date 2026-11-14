@@ -764,13 +764,14 @@ def _system_calls(state: _TurnState) -> list[ToolCallRecord]:
 
 
 def _base_withholds(state: _TurnState, block: int, asked: bool) -> str | None:
-    """The no-answer message that replaces the answer, or None. When the answer comes from knowledge only (the
-    block with no call, or calls that each brought passages), or knowledge was asked for and nothing was found or
-    called, and it cites no passage, the first searched base (kb_ids order) whose answer settings withhold an uncited
-    answer has its message said instead. Runs after the end check, so a correction that adds citations keeps the
-    answer, and whether or not the agent turns the end check on."""
+    """The no-answer message that replaces the answer, or None. An answer has a source when it cites a passage, when
+    a call to a system brought a result this turn, or when the person attached a file whose text the turn holds;
+    only an answer with none of these is withheld. Then, when it comes from knowledge (the block, calls that each
+    brought passages, or knowledge asked for and nothing found), the first searched base (kb_ids order) whose answer
+    settings withhold an uncited answer has its message said instead. Runs after the end check, so a correction that
+    adds citations keeps the answer, and whether or not the agent turns the end check on."""
     rule = next((a for a in state.kb_answers.values() if a.withholds and a.no_answer_message), None)
-    if rule is None or cited_numbers(state.text):
+    if rule is None or cited_numbers(state.text) or state.req.attached:
         return None
     systems = _system_calls(state)
     from_knowledge = all(r.tool_call_id in state.passage_calls for r in systems) if systems else block > 0 or asked
