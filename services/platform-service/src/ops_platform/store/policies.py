@@ -10,7 +10,6 @@ import sqlalchemy as sa
 
 from ops_access import BY_KEY, POLICIES, check_value
 from ops_access.platform_events import POLICY_CHANGED
-from ops_access.policies import PUBLISH_AREAS
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore
@@ -154,13 +153,13 @@ class PolicyStore:
 
 
 def new_workspace_values() -> dict[str, Any]:
-    """What a workspace starts with when it is created: publishes go live at once, an app may call any public address,
-    and a write its plugin or seed marked ask-first runs unless the team asks. Per-team values sit under `*`, the
-    workspace's own part, so a team added later starts the same. Written as the workspace's own rows, so a workspace
-    created before reads the catalogue default it always read; an admin turns each back on in Settings. Step-up needs
-    no row: the catalogue has it off."""
+    """What a workspace starts with when it is created: an app may call any public address, and a write its plugin or
+    seed marked ask-first runs unless the team asks. Per-team values sit under `*`, the workspace's own part, so a team
+    added later starts the same. Written as the workspace's own rows, so a workspace created before reads the catalogue
+    default it always read; an admin turns each back on in Settings. Step-up needs no row: the catalogue has it off.
+    publishReview has no row either: a first publish or a major change waits for a second person (the catalogue's
+    `major`, roles-and-permissions.md E01) from the workspace's first day."""
     return {
-        "publishReview": {"*": dict.fromkeys(PUBLISH_AREAS, "never")},
         "egressNewHosts": "any_public",
         "appChanges": {"*": {"makersAsk": False}},
     }

@@ -101,7 +101,7 @@ async def admin_headers(client: httpx.AsyncClient, admin: FirstAdmin) -> dict[st
     return {"Authorization": f"Bearer {r.json()['data']['token']}", "X-Team-Id": admin.team_id}
 
 
-async def test_a_new_workspace_publishes_without_review_and_calls_any_public_address(
+async def test_a_new_workspace_reviews_major_publishes_and_calls_any_public_address(
     production: httpx.AsyncClient, database_url: str
 ) -> None:
     admin = first_admin()
@@ -110,9 +110,9 @@ async def test_a_new_workspace_publishes_without_review_and_calls_any_public_add
     value = await policy_value(production, headers, "publishReview")
     assert isinstance(value, dict)
     reviews = cast(dict[str, Any], value)
-    # The first team and a team added later read the same: every area publishes at once.
+    # The first team and a team added later read the same: a first publish or a major change waits for review.
     for team in (admin.team_id, "team_added_later"):
-        assert {a: publish_mode(reviews, team, a) for a in PUBLISH_AREAS} == dict.fromkeys(PUBLISH_AREAS, "never")
+        assert {a: publish_mode(reviews, team, a) for a in PUBLISH_AREAS} == dict.fromkeys(PUBLISH_AREAS, "major")
     assert await policy_value(production, headers, "egressNewHosts") == "any_public"
     # Writes run without asking, a maker's ask-first included; step-up is off by the catalogue's own default.
     changes = await policy_value(production, headers, "appChanges")
