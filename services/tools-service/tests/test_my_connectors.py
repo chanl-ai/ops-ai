@@ -41,7 +41,8 @@ def id_token(email: str) -> str:
 
 
 async def _sites_on(c: httpx.AsyncClient, tenant: str) -> str:
-    on = await turn_on(c, tenant, "test.fields-sites", client=("multi-app", "app-secret"))
+    # Each person signs in, with the team as backup: an admin's choice, since a turn-on starts on the team account.
+    on = await turn_on(c, tenant, "test.fields-sites", client=("multi-app", "app-secret"), signIn="person_or_team")
     assert on.status_code == 200, on.text
     return str(on.json()["data"]["connectionId"])
 

@@ -7,6 +7,7 @@
  * templates per app.
  */
 import * as React from 'react';
+import Link from 'next/link';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LayoutTemplate, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -139,9 +140,17 @@ function TemplatesDialog({
         <QueryError what="templates" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching} />
       ) : rows.length === 0 ? (
         <p className="text-muted-foreground py-6 text-center text-sm" data-testid="templates-gallery-empty">
-          {search
-            ? 'No template matches this search.'
-            : `No ${noun} templates yet. A team admin turns on a pack or app on the Apps page to offer some.`}
+          {search ? (
+            'No template matches this search.'
+          ) : (
+            <>
+              {`No ${noun} templates yet. A team admin turns on an app or pack on `}
+              <Link href="/data/connectors" className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-connectors">
+                Connectors
+              </Link>
+              {' to offer some.'}
+            </>
+          )}
         </p>
       ) : (
         <Rows testId="templates-gallery">

@@ -206,6 +206,10 @@ class Auth:
             user, grant.id, grant.auth_method, now, audience=[grant.resource], team=grant.team_id,
             client_id=grant.client_id,
         )  # fmt: skip
+        # The name the person saw on the consent page and allowed, so a call log names the assistant, not its id.
+        client = await self.store.client(grant.client_id)
+        if client is not None:
+            claims["client_name"] = client.name
         return self._sign(claims, refresh_token, now)
 
     async def _issue(self, user: User, session_id: str, refresh_token: str, method: str, now: datetime) -> Issued:

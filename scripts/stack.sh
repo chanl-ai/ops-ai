@@ -181,14 +181,16 @@ cmd_of() {
     # Dev mode seeds team_ops (Priya Shah admin, James Richardson builder, Maya Okafor approver) on start. Sign-in:
     # identity providers send people back to platform-service's public URL and on to the console; reset links
     # go out through Mailpit like every other mail the stack sends (read them at http://localhost:$OPS_MAILPIT_HTTP_PORT).
-    platform) echo "env OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
+    # OPS_TOOLS_PUBLIC_URL is where a team's MCP address lives, so platform-service issues an assistant's token for it.
+    platform) echo "env OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_TOOLS_PUBLIC_URL=http://localhost:$TOOLS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
     # Agents call tools through tools-service's gateway and are seeded with agents granted its operations.
     # services/agents-service/scripts/send_levy_email.py emails the levy notice to levy@ on GreenMail.
     agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
     # A sign-in returns to the console (OPS_CONSOLE_URL); without it tools-service starts none.
     # Its own model key judges writes against a team's sending policy when the team has check before sending on.
-    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
+    # Both public addresses: an assistant pasting the MCP address gets a 401 naming platform-service as its sign-in.
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_TOOLS_PUBLIC_URL=http://localhost:$TOOLS_PORT OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
     # Code tools' functions: Python on WASM, calling back to tools-service. start fetches its Python build first.
     runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.

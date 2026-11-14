@@ -18,7 +18,7 @@ const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const PRIYA = 'p.shah@harborpine.example';
 const SHOTS = evidenceDir('625', 'uc');
-const PLUGINS = join(ROOT, '..', 'ops-ai-plugins/plugins');
+const PLUGINS = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins');
 const KINDS = join(ROOT, 'services/tools-service/tests/plugin_kinds');
 const LIB = join(ROOT, 'docs/usecases/lib');
 

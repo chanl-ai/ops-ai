@@ -421,7 +421,19 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/executions",
         "pathParams": [],
-        "query": ["page", "pageSize", "tool", "moduleId", "thread", "decision", "key", "call"],
+        "query": [
+            "page",
+            "pageSize",
+            "tool",
+            "moduleId",
+            "thread",
+            "decision",
+            "key",
+            "call",
+            "link",
+            "since",
+            "until",
+        ],
         "stream": False,
     },
     "expressions_evaluate_formulas": {
@@ -448,6 +460,51 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/health/background",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_create_mcp_link": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/mcp-links",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_delete_mcp_link": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/mcp-links/{link_id}",
+        "pathParams": ["link_id"],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_get_mcp_link": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/mcp-links/{link_id}",
+        "pathParams": ["link_id"],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_list_mcp_links": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/mcp-links",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "mcp_links_pause_mcp_link": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/mcp-links/{link_id}",
+        "pathParams": ["link_id"],
         "query": [],
         "stream": False,
     },
@@ -1020,6 +1077,9 @@ class Operations:
         decision: str | None = None,
         key: str | None = None,
         call: str | None = None,
+        link: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> ExecutionList:
         "List Executions"
         return self._t.call(
@@ -1035,6 +1095,9 @@ class Operations:
                 "decision": decision,
                 "key": key,
                 "call": call,
+                "link": link,
+                "since": since,
+                "until": until,
             },
             {},
             None,
@@ -1055,6 +1118,26 @@ class Operations:
     def apps_knowledge_source_hosts(self, body: SourceHostsIn) -> list[SourceHost]:
         "Knowledge Source Hosts"
         return self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def mcp_links_list_mcp_links(self) -> list[McpLinkView]:
+        "List Mcp Links"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_list_mcp_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def mcp_links_create_mcp_link(self, body: McpLinkIn) -> McpLinkView:
+        "Create Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_create_mcp_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def mcp_links_get_mcp_link(self, link_id: str) -> McpLinkView:
+        "Get Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_get_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def mcp_links_pause_mcp_link(self, link_id: str, body: McpLinkPatch) -> McpLinkView:
+        "Pause Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_pause_mcp_link"], {"link_id": link_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def mcp_links_delete_mcp_link(self, link_id: str) -> Any:
+        "Delete Mcp Link"
+        return self._t.call(SERVICE, OPERATIONS["mcp_links_delete_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
         "My Accounts"
@@ -1563,6 +1646,9 @@ class AsyncOperations:
         decision: str | None = None,
         key: str | None = None,
         call: str | None = None,
+        link: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> ExecutionList:
         "List Executions"
         return await self._t.call(
@@ -1578,6 +1664,9 @@ class AsyncOperations:
                 "decision": decision,
                 "key": key,
                 "call": call,
+                "link": link,
+                "since": since,
+                "until": until,
             },
             {},
             None,
@@ -1598,6 +1687,26 @@ class AsyncOperations:
     async def apps_knowledge_source_hosts(self, body: SourceHostsIn) -> list[SourceHost]:
         "Knowledge Source Hosts"
         return await self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def mcp_links_list_mcp_links(self) -> list[McpLinkView]:
+        "List Mcp Links"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_list_mcp_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def mcp_links_create_mcp_link(self, body: McpLinkIn) -> McpLinkView:
+        "Create Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_create_mcp_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def mcp_links_get_mcp_link(self, link_id: str) -> McpLinkView:
+        "Get Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_get_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def mcp_links_pause_mcp_link(self, link_id: str, body: McpLinkPatch) -> McpLinkView:
+        "Pause Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_pause_mcp_link"], {"link_id": link_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def mcp_links_delete_mcp_link(self, link_id: str) -> Any:
+        "Delete Mcp Link"
+        return await self._t.call(SERVICE, OPERATIONS["mcp_links_delete_mcp_link"], {"link_id": link_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
         "My Accounts"

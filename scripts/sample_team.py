@@ -165,6 +165,18 @@ def sign_in(urls: dict[str, str], email: str, password: str, team: str | None = 
     return Session(urls, str(data(r)["token"]), email, team, password)
 
 
+def settled(person: Session) -> Session:
+    """The person signed in again until their token outlives the role and permission writes the install just made: a
+    token issued before the last of them is refused as `permissions_changed` on a new database."""
+    for _ in range(int(WAIT_S / 1.5)):
+        r = person("kb").get("/v1/knowledge-bases", params={"pageSize": 1})
+        if r.status_code != 401 or "permissions_changed" not in r.text:
+            return person
+        time.sleep(1.5)
+        person.token = sign_in(person.urls, person.email, person.password, person.team).token
+    return person
+
+
 def until(probe: Any, seconds: float = WAIT_S, every: float = 1.5) -> Any:
     """`probe()` until it returns something truthy, or None after `seconds`."""
     end = time.monotonic() + seconds
@@ -974,6 +986,43 @@ def ensure_default_agent(admin: Session, agents: dict[str, str], key: str | None
         say("MADE", "default chat agent", agents[key])
 
 
+# A dispute the demo leaves at its approval step, so Overview, Human Tasks and Reviews show work a person decides.
+# Jordan Whitfield is a fake bank customer (agents-service seed/datasets.json).
+WAITING_DISPUTE = {
+    "cardholder": "Jordan Whitfield",
+    "ssnLast4": "5555",
+    "merchant": "Northline Electronics",
+    "amount": "482.10",
+    "cardType": "credit",
+    "reason": "Ordered a laptop dock on October 20; it never arrived and the merchant stopped answering.",
+}
+
+
+# The run list says `waiting`; one run read alone says `waiting_review`.
+WAITING = {"waiting", "waiting_review"}
+
+
+def ensure_waiting_dispute(lead: Session, workflow_id: str) -> None:
+    """One dispute run waiting at its approval step. A run already waiting there is left; once a person decides it,
+    the next install starts another, so the queue a demo opens on is never empty."""
+    api = lead("agents")
+    runs = items(data(api.get("/v1/runs", params={"workflowId": workflow_id})))
+    waiting = next((r for r in runs if r.get("status") in WAITING), None)
+    if waiting:
+        say("FOUND", "dispute waiting for approval", str(waiting["id"]))
+        return
+    started = data(api.post("/v1/runs", json={"workflowId": workflow_id, "mode": "live", "input": WAITING_DISPUTE}))
+    run = run_until(lead, str(started["runId"]), {*WAITING, "completed", "failed"})
+    if run and run["status"] in WAITING:
+        say("MADE", "dispute waiting for approval", str(run["id"]))
+    else:
+        say(
+            "FAIL",
+            "dispute waiting for approval",
+            f"run {started['runId']} ended {run and run['status']}, not at the approval",
+        )
+
+
 def ensure_assistant(lead: Session) -> None:
     """The team's assistant, which agents-service makes on the team's first chat: a chat started and removed as the
     lead, so the people's first chat, or a test of the assistant, finds it there."""
@@ -1054,6 +1103,8 @@ def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
         else:
             say("FOUND", f"model provider {FAKE_PROVIDER}", fake_url)
         provider = str(found["id"])
+        # The connections the dev stack itself points aliases at; any other one is an admin's choice.
+        own = {provider, *(str(p["id"]) for p in providers if p.get("name") == "openai-local")}
         aliases = [fakes["modelAlias"]]
         if model == "fake":
             aliases += fakes.get("modelAliases", [])
@@ -1067,6 +1118,10 @@ def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
                 say("MADE", f"model alias {alias}", f"on {FAKE_PROVIDER}")
                 continue
             current = data(versions)[-1]
+            if alias != fakes["modelAlias"] and current["providerId"] not in own:
+                # An admin pointed this alias at their own model (the console's model setup): it stays there.
+                say("SKIP", f"model alias {alias}", "left on the model an admin chose")
+                continue
             if (current["providerId"], current["modelId"]) == (provider, alias):
                 say("FOUND", f"model alias {alias}", f"v{current['version']} on {FAKE_PROVIDER}")
                 continue
@@ -1254,6 +1309,8 @@ def install(args: argparse.Namespace) -> int:
     if members:
         ensure_members(admin, team, [(e, r) for e, r in members], os.environ[args.member_password_env])
     people["admin"] = admin
+    people = {k: settled(v) for k, v in people.items()}
+    admin = people["admin"]
     ADMIN.append(admin)
     lead, builder, approver = people["lead"], people["builder"], people["approver"]
     ensure_templates(builder, spec["templates"])
@@ -1277,6 +1334,9 @@ def install(args: argparse.Namespace) -> int:
     names = {f"agent:{k}": v for k, v in agents.items()} | ids_by_key(spec)
     mailbox = ensure_mailbox(admin, lead, env, spec["mailbox"])
     ensure_workflows(builder, approver, team_workflows(spec, no_levy=args.no_levy), names, mailbox)
+    dispute = next(wf for wf in spec["workflows"] if wf["key"] == "dispute")
+    MODELS.scripted_now()
+    ensure_waiting_dispute(lead, dispute.get("id") or json.loads((WORKFLOWS / dispute["file"]).read_text())["id"])
     if args.tool_access:
         if not (args.tool_access_team and args.tool_approver and os.environ.get(args.tool_approver_password_env)):
             raise SystemExit("sample-team: --tool-access needs --tool-access-team, --tool-approver and its password")

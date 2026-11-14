@@ -1,11 +1,12 @@
 """The banker demo's two knowledge bases, seeded when a dev kb-service starts.
 
-Retail products (owned by James, the builder) holds the retail product sheet; Branch operations (owned by Nadia,
-Security's approver) holds the branch manual and the fee schedule. Each base has a stable id, which agents-service's
-seed names in Advisor's Helper and Branch Policy (`seed/chat_agents.json`), so a rebuilt database has both FAQ agents
-answering from their bases with no hand-run script. A base that exists is left as it is: people may have changed it.
-Its demo files are uploaded again when the store cannot read them, as after kb-service moved from its own store to
-files-service.
+Retail products (owned by James, the builder) holds the retail product sheet; Branch operations (owned by Priya,
+the operations team's admin) holds the branch manual and the fee schedule. Both are the operations team's, as are the
+agents that answer from them, since a turn searches only its own team's bases. Each base has a stable id, which
+agents-service's seed names in Advisor's Helper and Branch Policy (`seed/chat_agents.json`), so a rebuilt database has
+both FAQ agents answering from their bases with no hand-run script. A base that exists is left as it is: people may
+have changed it. Its demo files are uploaded again when the store cannot read them, as after kb-service moved from its
+own store to files-service.
 `scripts/seed_demo_knowledge.py` finds these bases by name and reuses them.
 """
 
@@ -23,7 +24,7 @@ from .service import KnowledgeService, Who
 log = get_logger(__name__)
 PDFS = Path(__file__).resolve().parents[2] / "seed" / "pdfs"
 TENANT = "local"
-JAMES, NADIA = "j.richardson@harborpine.example", "n.petrov@harborpine.example"
+JAMES, PRIYA = "j.richardson@harborpine.example", "p.shah@harborpine.example"
 
 
 @dataclass(frozen=True)
@@ -51,8 +52,8 @@ DEMO = (
     DemoBase(
         "kb_branch_operations",
         "Branch operations",
-        NADIA,
-        "team_security",
+        PRIYA,
+        "team_ops",
         "Operations",
         "The branch manual and the fee schedule tellers answer from.",
         {

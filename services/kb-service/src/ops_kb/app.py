@@ -396,7 +396,9 @@ def create_kb_app(
     async def search_knowledge(body: SearchIn, caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Passages for an agent's turn (agents-service sends only the bases the agent is granted) or for a person, who
         searches only bases they may read."""
-        return ok(await service.search(caller, body.kb_ids, body.question, limit=body.limit))
+        return ok(
+            await service.search(caller, body.kb_ids, body.question, limit=body.limit, collection=body.collection)
+        )
 
     @kbs.get("/{kb_id}", response_model=Envelope[KnowledgeBaseDetail])
     async def get_knowledge_base(kb_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -416,9 +418,33 @@ def create_kb_app(
 
     @kbs.get("/{kb_id}/documents", response_model=Envelope[ListResult[DocumentRow]])
     async def list_documents(  # pyright: ignore[reportUnusedFunction]
-        kb_id: str, who: Caller, page: Page = 1, page_size: PageSize = 25, search: str | None = None
+        kb_id: str,
+        who: Caller,
+        *,
+        page: Page = 1,
+        page_size: PageSize = 25,
+        search: str | None = None,
+        source_id: Annotated[list[str] | None, Query(alias="sourceId")] = None,
+        status: Annotated[list[str] | None, Query()] = None,
+        collection: Annotated[list[str] | None, Query()] = None,
+        doc_type: Annotated[list[str] | None, Query(alias="docType")] = None,
+        freshness: Annotated[list[str] | None, Query()] = None,
+        sensitivity: Annotated[list[str] | None, Query()] = None,
+        tags: Annotated[list[str] | None, Query()] = None,
     ) -> JSONResponse:
-        return ok(await service.documents(who, kb_id, page=page, page_size=page_size, search=search))
+        """A base's documents. Each filter keeps rows matching any of its values; each facet counts its values over
+        the rows the other filters keep, so a chip's counts say what choosing it would show."""
+        filters = {
+            "sourceId": source_id,
+            "status": status,
+            "collection": collection,
+            "docType": doc_type,
+            "freshness": freshness,
+            "sensitivity": sensitivity,
+            "tags": tags,
+        }
+        chosen = {k: set(v) for k, v in filters.items() if v}
+        return ok(await service.documents(who, kb_id, page=page, page_size=page_size, search=search, filters=chosen))
 
     @kbs.post("/{kb_id}/pages", status_code=201, response_model=Envelope[Item])
     async def add_page(kb_id: str, body: PageIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -431,7 +457,7 @@ def create_kb_app(
 
     @kbs.post("/{kb_id}/query", response_model=Envelope[PlaygroundAnswer])
     async def query_knowledge_base(kb_id: str, body: QueryIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.query(who, kb_id, body.question))
+        return ok(await service.query(who, kb_id, body.question, collection=body.collection))
 
     @kbs.delete("/{kb_id}/sources/{source_id}", response_model=Envelope[KnowledgeBase])
     async def detach_source(kb_id: str, source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

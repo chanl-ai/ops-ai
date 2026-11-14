@@ -1,6 +1,6 @@
 # A pick over the reply's budget is refused
 
-Status: draft. Service: `agents-service`. Layers: api, ui.
+Status: draft. Service: `agents-service`. Layers: api (no ui script yet).
 
 In this example we will pick a third part when two skills already fill the reply and see the send refused before the model is called. Design case sk-chat-6.
 
@@ -9,7 +9,7 @@ In this example we will pick a third part when two skills already fill the reply
 | Id | `uc-748` |
 | Area | Agents |
 | Design label | `sk-chat-6` |
-| Runs | api and ui in their own scripts |
+| Runs | api in its own script |
 | Run it | `make usecase-test UC=uc-748` |
 
 ## Who is in it

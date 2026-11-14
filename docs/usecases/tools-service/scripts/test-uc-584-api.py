@@ -21,6 +21,7 @@ from uuid import uuid4
 import httpx
 from fake_multi_auth import CLIENTS, SECRETS, SITE, digest, multi_auth
 from fake_salesforce import salesforce
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -43,7 +44,7 @@ AUTH = {
 FIELDS = REPO / "services/tools-service/tests/plugin_fields"
 SALESFORCE = Path(
     os.environ.get("OPS_SALESFORCE_PLUGIN")
-    or REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
+    or PLUGINS_REPO / "plugins/salesforce/src/ops_plugin_salesforce"
 )
 TENANT: dict[str, str] = {}
 SEEN: list[str] = []

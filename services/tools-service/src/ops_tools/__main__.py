@@ -44,6 +44,7 @@ from .graph_mailbox import cursor_key, graph_clients
 from .header_keys import move_at_start
 from .knowledge_tools import KnowledgeSearch
 from .mailboxes import MailboxSenders, mailboxes_router
+from .mcp_links import mcp_links_router
 from .mock_routes import mocks_router
 from .modules.directory import Directory
 from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WriteApprovals
@@ -68,6 +69,7 @@ from .store import CallLog
 from .store.connections import ConnectionStore
 from .store.egress import EgressStore
 from .store.event_relay import keep_relaying
+from .store.mcp_links import McpLinks
 from .store.mocks import MockStore
 from .store.modules import ModuleStore
 from .store.plugin_bindings import PluginBindings
@@ -220,9 +222,14 @@ def main() -> None:
         WriteApprovals(client("platform", settings.platform_url, ["settings:view"])) if settings.platform_url else None
     )
     apps.write_approvals = write_approvals
+    registry = ToolRegistry(catalog, store, plugins, connection_store)
+    mcp_links = McpLinks(engine)
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
-        registry=ToolRegistry(catalog, store, plugins, connection_store),
+        registry=registry,
+        # Each team's MCP links, served at /mcp/{team}/{link} beside the team's whole address.
+        links=mcp_links,
+        agents_url=agents_url,
         plugins=plugins,
         # A tool page's Real run goes through this gateway's checks.
         modules=modules,
@@ -305,6 +312,7 @@ def main() -> None:
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
+            mcp_links_router(mcp_links, calls, registry, directory, settings.tools_public_url),
             mocks_router(MockStore(engine), store, directory),
             *(
                 [
@@ -324,7 +332,7 @@ def main() -> None:
             platform_events_router(
                 {
                     **member_removed_handlers(connection_service.store, credentials),
-                    **team_created_handlers(store, TeamDefaults(engine)),
+                    **team_created_handlers(store, TeamDefaults(engine), plugins),
                 }
             ),
         ),

@@ -158,9 +158,12 @@ async def _check_kbs(rt: Runtime, agent: AgentDefinition, kb_ids: list[str]) -> 
 
 
 @router.get("/agents")
-async def agents(rt: Rt) -> JSONResponse:
+async def agents(rt: Rt, me: Me) -> JSONResponse:
     """The live agents the caller's team may chat with: the catalogue serves every team's, so it is narrowed to the
-    agents the team reads, and another team's agent is not offered."""
+    agents the team reads, and another team's agent is not offered. A person needs chat.run in the team, never
+    agents.view, so a Chat user still chats; an API key keeps its own path."""
+    if not me.is_key:
+        require_chat_use(me, team_id=me.team_id or None)
     ours = {r["id"] for r in await registry(rt).rows()}
     try:
         names = {k.id: k.name for k in await rt.kbs().bases()}

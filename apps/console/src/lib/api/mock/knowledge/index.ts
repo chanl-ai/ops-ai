@@ -509,11 +509,11 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const ids = new Set(k.sources.map((l) => l.sourceId));
           const rows: DocumentRow[] = items
             .filter((it) => ids.has(it.sourceId) && it.status !== 'excluded')
-            .map((it) => ({ ...it, sourceName: sources.find((s) => s.id === it.sourceId)?.name ?? it.sourceId, freshness: isStale(it) ? 'stale' : 'fresh' }));
+            .map((it) => ({ ...it, sourceName: sources.find((s) => s.id === it.sourceId)?.name ?? it.sourceId, freshness: isStale(it) ? 'stale' : 'fresh', docType: mockDocType(it.mimeType, sources.find((s) => s.id === it.sourceId)?.type) }));
           return list(rows, p, {
             text: (d) => `${d.title} ${d.path}`,
             value: (d, key) => (key === 'tags' ? d.tags : String((d as unknown as Record<string, unknown>)[key])),
-            facetKeys: ['sourceId', 'status', 'freshness', 'sensitivity', 'tags'],
+            facetKeys: ['sourceId', 'status', 'collection', 'docType', 'freshness', 'sensitivity', 'tags'],
           }, m);
         }),
       query: (kid, input) =>
@@ -895,4 +895,16 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       }
     },
   };
+}
+
+/** kb-service's `doc_type` rule (service.py), for the mock's Documents rows. */
+function mockDocType(mime: string, sourceType?: string): DocumentRow['docType'] {
+  if (sourceType === 'text') return 'typed';
+  if (sourceType === 'tool') return 'app';
+  if (mime === 'text/html' || sourceType === 'web') return 'web';
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime.includes('wordprocessing') || mime === 'application/msword') return 'word';
+  if (mime.includes('spreadsheet') || mime === 'text/csv' || mime === 'application/vnd.ms-excel') return 'spreadsheet';
+  if (mime.includes('presentation') || mime === 'application/vnd.ms-powerpoint') return 'slides';
+  return mime.startsWith('text/') ? 'text' : 'other';
 }

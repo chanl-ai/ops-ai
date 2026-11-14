@@ -19,6 +19,7 @@ from typing import Any
 from uuid import uuid4
 
 from apps_walk import apps_stack, ops_cli, target
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     LOG_DIR,
     PLATFORM_INTERNAL_PORT,
@@ -35,7 +36,7 @@ from usecase_harness import (
 )
 
 ROOT = Path(__file__).resolve().parents[4]
-PLUGIN = ROOT.parent / "ops-ai-plugins" / "plugins" / "salesforce"
+PLUGIN = PLUGINS_REPO / "plugins" / "salesforce"
 # Two plugins only this use case installs: one whose tool reaches an unlisted host, one whose manifest is broken.
 # Written to a temporary folder for the run, as tools-service reads plugin folders from OPS_PLUGIN_PATHS.
 FIXTURE_FILES = {

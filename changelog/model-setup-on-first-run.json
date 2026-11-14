@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "The overview asks a new workspace's admin for a model key",
+  "description": "When a workspace has no model key, its admins see a short setup card on the overview that leads to Model providers.",
+  "tag": "improved"
+}

@@ -72,11 +72,14 @@ export function AddSourceWizard({
   onOpenChange,
   kb,
   onCreated,
+  initialKind,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   kb: { id: string; name: string };
   onCreated: (source: Source, approval: AiApproval) => void;
+  /** Opens on step 2 with this kind chosen: `site` is the first website kind the team may add, `push` pushed by API. */
+  initialKind?: 'site' | 'push';
 }) {
   const kinds = useSourceKinds(open);
   const create = useCreateSource();
@@ -129,6 +132,20 @@ export function AddSourceWizard({
   const previewValues = useDebounced(values, PREVIEW_DEBOUNCE_MS);
   const previewing = !!kind?.previews && step >= 2 && valid && Object.keys(valueErrors(inputs, previewValues)).length === 0;
   const preview = useSourcePreview({ plugin: kind?.plugin, source: kind?.source, values: previewValues }, previewing);
+
+  // A menu item that names the kind skips step 1, once per opening; with no such kind the wizard stays on step 1.
+  const preset = React.useRef(false);
+  React.useEffect(() => {
+    if (!open) preset.current = false;
+  }, [open]);
+  React.useEffect(() => {
+    if (!open || !initialKind || preset.current || !kinds.data) return;
+    preset.current = true;
+    const k = kinds.data.find((o) => (initialKind === 'site' ? o.type === 'tool' && !!o.site && o.canCreate !== false : o.type === 'push'));
+    if (k) choose(k);
+    // choose is recreated each render; this runs once per opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialKind, kinds.data]);
 
   const dirty = !!key;
   const close = (o: boolean) => {

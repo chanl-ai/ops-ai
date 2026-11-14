@@ -40,6 +40,7 @@ from ops_tools.connections.routes import accounts_router
 from ops_tools.connections.service import ConnectionService
 from ops_tools.egress import EgressPolicy
 from ops_tools.egress_routes import egress_router
+from ops_tools.mcp_links import mcp_links_router
 from ops_tools.mock_routes import mocks_router
 from ops_tools.modules.directory import Directory
 from ops_tools.modules.routes import executions_router, modules_router
@@ -56,6 +57,7 @@ from ops_tools.send_policy_routes import send_policy_router
 from ops_tools.store import CallLog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
+from ops_tools.store.mcp_links import McpLinks
 from ops_tools.store.mocks import MockStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.secrets import SecretStore
@@ -361,9 +363,12 @@ def build_app(
     plugin_routes = (
         [plugins_router(apps.plugin_accounts, directory, users=users, hosts=service)] if apps.plugin_accounts else []
     )
+    registry = ToolRegistry(catalog, store, plugins, connections)
+    links = McpLinks(engine)
     return create_gateway_app(
         opa=OpaClient(opa or httpx.AsyncClient(base_url="http://opa.invalid")),
-        registry=ToolRegistry(catalog, store, plugins, connections),
+        registry=registry,
+        links=links,
         plugins=plugins,
         log=calls,
         runner=LocalToolRunner(catalog, MemorySender(), cases=cases, decisions=service),
@@ -375,6 +380,7 @@ def build_app(
             egress_router(EgressStore(engine)),
             secrets_router(resolver, modules=ModuleStore(engine), credentials=connections),
             send_policy_router(SendPolicies(engine), directory),
+            mcp_links_router(links, calls, registry, directory, settings.tools_public_url),
             mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(accounts, directory),
             apps_router(apps, directory),

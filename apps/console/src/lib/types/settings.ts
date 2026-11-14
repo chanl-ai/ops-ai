@@ -235,6 +235,8 @@ export interface ApiKey {
   lastUsedAt?: string;
   expiresAt?: string;
   team: string;
+  /** What the key is for: an agent or workflow it starts, or the one MCP link it opens. */
+  target?: { kind: 'agent' | 'workflow' | 'mcp_link'; id: string } | null;
 }
 
 export interface ApiKeyInput {
@@ -243,6 +245,8 @@ export interface ApiKeyInput {
   expiresInDays: number | null;
   /** Platform scope only: the team the key acts for. Ignored inside a team. */
   teamId?: string;
+  /** The one MCP link the key opens; such a key reads only. */
+  target?: { kind: 'mcp_link'; id: string };
 }
 
 // ── Usage ──────────────────────────────────────────────────────────────────

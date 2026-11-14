@@ -1,10 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { AlertCircle, Info, KeyRound, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertCircle, Info, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { BACKEND_LABEL, CREDENTIAL_KIND_LABEL, PURPOSE_LABEL, scanningText } from '@/components/files/file-meta';
+import { PageSaveActions } from '@/components/shared/page-save-actions';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { AddMenu } from '@/components/shared/add-menu';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -478,19 +479,14 @@ export default function StorageSettingsPage() {
             </Alert>
           )}
 
-          {dirty && (
-            <div data-unsaved-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
-              <span className="text-sm text-muted-foreground">Unsaved changes</span>
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant="ghost" onClick={() => (setDraft(saved && structuredClone(saved)), setError(null))} disabled={save.isPending}>
-                  <RotateCcw className="size-3.5" /> Discard
-                </Button>
-                <LoadingButton type="button" size="sm" isLoading={save.isPending} onClick={submit} data-testid="storage-save">
-                  Save as version {s.version + 1}
-                </LoadingButton>
-              </div>
-            </div>
-          )}
+          <PageSaveActions
+            dirty={dirty}
+            saving={save.isPending}
+            onSave={submit}
+            onDiscard={() => (setDraft(saved && structuredClone(saved)), setError(null))}
+            label={dirty ? `Save as version ${s.version + 1}` : 'Save'}
+            testId="storage-save"
+          />
         </div>
       ) : null}
       <CredentialDialog open={adding} onOpenChange={setAdding} />

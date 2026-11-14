@@ -202,6 +202,7 @@ class Identity:
             policies={str(k): v for k, v in policies.items()},
             security_team=str(claims["security_team"]) if claims.get("security_team") else None,
             client_id=str(claims["client_id"]) if claims.get("client_id") else None,
+            client_name=str(claims["client_name"])[:120] if claims.get("client_name") else None,
         )
 
     async def _require_current(self, tenant_id: str, version: int | None) -> None:

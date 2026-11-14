@@ -3,9 +3,9 @@
 Status: current. Id: `uc-552`. Service: `console` with `agents-service`. Layers: api, ui.
 
 A person signs in and lands on Chat: a greeting, the composer and up to three hints from their own work. One sidebar
-holds New chat, Overview, Cases and Human Tasks (with the count of tasks waiting for them) at the top, their
-chats grouped by day. The console's other pages sit in the header's area control (Work, Build, Data, Govern), one area at a time. Overview lists what is waiting from one
-request. When the session ends, a sign-in dialog keeps the page and the unsent draft.
+holds New chat, then a Work section with Overview, Cases, Human Tasks (with the count of tasks waiting for them) and
+Chat, then every other area as its own section. Their chats, grouped by day, are a column on the chat pages. Overview
+lists what is waiting from one request. When the session ends, a sign-in dialog keeps the page and the unsent draft.
 
 ## Preconditions
 
@@ -20,15 +20,15 @@ request. When the session ends, a sign-in dialog keeps the page and the unsent d
 | # | Step | Expected |
 |---|---|---|
 | 1 | Maya signs in | She lands on /chat with hints from her work (her task, the late case) and no general starts |
-| 2 | She looks at the sidebar | New chat, Overview, Cases and Human Tasks at the top with no heading and no Search row; the one count, on Human Tasks, equals Assigned to me and Overview has none; Chats open; no Agents, Data Hub or Govern group; the header's area control starts at Work |
+| 2 | She looks at the sidebar | New chat in its header; a Work section with Overview, Cases, Human Tasks and Chat, then Agent Builder, Data Gateway and Governance; no Search row; the one count, on Human Tasks, equals Assigned to me and Overview has none; no list of chats and no area control |
 | 2c | She looks at the header on Chat | The trail names no Work group, and the agent picker shows the agent's name without the Default mark |
-| 3 | She presses her task's hint | A chat starts and shows under Today in the sidebar, marked as the open one |
+| 3 | She presses her task's hint, then Show chats | A chat starts and shows under Today in the chats column, marked as the open one |
 | 3d | She opens Chat for one agent (`/chat?agent=`) and sends before the agent list has loaded | Send waits for the list; the chat starts on the agent she opened, not the team's default |
-| 4 | She opens Overview, searches and opens a task | Four widgets with counts, read from `/v1/overview` only; the search narrows to the case; the task row opens Human Tasks on that task |
-| 5 | She picks Build, folds the sidebar and reloads | The sidebar is still folded and Build still lit with its Agents row |
+| 4 | She opens Overview (`/overview`), searches and opens a task | Four widgets with counts, read from `/v1/overview` only; the search narrows to the case; the task row opens Human Tasks (`/work/tasks`) on that task |
+| 5 | On Cases she opens the sidebar and reloads, then folds it and reloads | Open after the first reload with Agents under Agent Builder, folded after the second |
 | 6 | She types a draft, then her session ends | A sign-in dialog over /chat; after signing in again she is back on /chat with the draft |
 | 7 | She signs out and in again | The draft is gone |
-| 8 | At 375 px she opens the sidebar | It opens as a sheet with her chats, and the page does not scroll sideways |
+| 8 | At 375 px on Chat she opens the sidebar, closes it, then presses Show chats | The sidebar opens as a sheet with Chat in Work; Show chats opens her chats as a sheet; the page does not scroll sideways |
 | 9 | Throughout | No page error |
 
 The non-vacuous checks are step 2 (the count is compared with the Human Tasks list, not with itself) and step 6 (the

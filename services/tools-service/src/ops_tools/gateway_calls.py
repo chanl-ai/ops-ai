@@ -339,6 +339,7 @@ class GatewayCalls:
         trial: Trial | None = None,
         secret_values: dict[str, str] | None = None,
         operation: tuple[Resolved, Run] | None = None,
+        link_id: str | None = None,
     ) -> Outcome:
         """One call for `caller`, the verified principal of whichever route took it. `generation` is a run's lease
         generation (writes are fenced on it); `channel` and `client_name` say where the call came from, for the log.
@@ -397,6 +398,9 @@ class GatewayCalls:
             "channel": channel,
             "client_name": client_name,
             "client_id": caller.client_id,
+            # The MCP link the call came through, so the link's page lists its own calls.
+            "link_id": link_id,
+            "caller_name": (caller.name or caller.email or None) if caller.kind in ("person", "api_key") else None,
             "acting_for": req.acting_for.email if req.acting_for else None,
         }
 

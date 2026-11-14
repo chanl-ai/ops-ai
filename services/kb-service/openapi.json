@@ -114,6 +114,37 @@
         "title": "AiEstimate",
         "type": "object"
       },
+      "AnswerSettings": {
+        "additionalProperties": false,
+        "description": "What the base gives back to an agent's turn: an answer with citations or the pieces alone, whether an answer\nciting none of its pieces is withheld, and what is said when nothing is found. The model, temperature, length and\ninstructions are the agent's.",
+        "properties": {
+          "noAnswerMessage": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Noanswermessage",
+            "type": "string"
+          },
+          "shape": {
+            "enum": [
+              "answer_with_citations",
+              "chunks"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "withholdUncited": {
+            "title": "Withholduncited",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shape",
+          "withholdUncited",
+          "noAnswerMessage"
+        ],
+        "title": "AnswerSettings",
+        "type": "object"
+      },
       "AttachIn": {
         "properties": {
           "sourceIds": {
@@ -383,6 +414,21 @@
             "title": "Digest",
             "type": "string"
           },
+          "docType": {
+            "enum": [
+              "pdf",
+              "word",
+              "spreadsheet",
+              "slides",
+              "web",
+              "text",
+              "typed",
+              "app",
+              "other"
+            ],
+            "title": "Doctype",
+            "type": "string"
+          },
           "duplicateOf": {
             "anyOf": [
               {
@@ -542,6 +588,17 @@
             "title": "Title",
             "type": "string"
           },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
           "verified": {
             "title": "Verified",
             "type": "boolean"
@@ -592,7 +649,8 @@
           "digest",
           "family",
           "versionStatus",
-          "sourceName"
+          "sourceName",
+          "docType"
         ],
         "title": "DocumentRow",
         "type": "object"
@@ -1655,6 +1713,17 @@
             "title": "Title",
             "type": "string"
           },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
           "verified": {
             "title": "Verified",
             "type": "boolean"
@@ -1923,6 +1992,17 @@
             "title": "Title",
             "type": "string"
           },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
           "verified": {
             "title": "Verified",
             "type": "boolean"
@@ -2053,6 +2133,11 @@
             "title": "Access",
             "type": "object"
           },
+          "answer": {
+            "additionalProperties": true,
+            "title": "Answer",
+            "type": "object"
+          },
           "automation": {
             "title": "Automation",
             "type": "string"
@@ -2178,6 +2263,11 @@
             "title": "Slug",
             "type": "string"
           },
+          "sourceDefaults": {
+            "additionalProperties": true,
+            "title": "Sourcedefaults",
+            "type": "object"
+          },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/KbSourceLink"
@@ -2188,6 +2278,11 @@
           "stats": {
             "additionalProperties": true,
             "title": "Stats",
+            "type": "object"
+          },
+          "sync": {
+            "additionalProperties": true,
+            "title": "Sync",
             "type": "object"
           },
           "templateId": {
@@ -2214,6 +2309,9 @@
           "precedence",
           "metadataProfile",
           "retrieval",
+          "answer",
+          "sync",
+          "sourceDefaults",
           "access",
           "automation",
           "stats",
@@ -2249,6 +2347,11 @@
             "default": true,
             "title": "Agentsknown",
             "type": "boolean"
+          },
+          "answer": {
+            "additionalProperties": true,
+            "title": "Answer",
+            "type": "object"
           },
           "attached": {
             "items": {
@@ -2436,6 +2539,11 @@
             "title": "Slug",
             "type": "string"
           },
+          "sourceDefaults": {
+            "additionalProperties": true,
+            "title": "Sourcedefaults",
+            "type": "object"
+          },
           "sourceNames": {
             "items": {
               "type": "string"
@@ -2462,6 +2570,11 @@
             "title": "Suggestedquestions",
             "type": "array"
           },
+          "sync": {
+            "additionalProperties": true,
+            "title": "Sync",
+            "type": "object"
+          },
           "templateId": {
             "anyOf": [
               {
@@ -2486,6 +2599,9 @@
           "precedence",
           "metadataProfile",
           "retrieval",
+          "answer",
+          "sync",
+          "sourceDefaults",
           "access",
           "automation",
           "stats",
@@ -2505,6 +2621,30 @@
       },
       "KnowledgeBaseIn": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
           "collections": {
             "default": [],
             "items": {
@@ -2575,6 +2715,30 @@
             ],
             "title": "Protection"
           },
+          "retrieval": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
+          },
+          "sourceDefaults": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcedefaults"
+          },
           "sourceIds": {
             "default": [],
             "items": {
@@ -2582,6 +2746,18 @@
             },
             "title": "Sourceids",
             "type": "array"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync"
           },
           "templateId": {
             "anyOf": [
@@ -2605,6 +2781,30 @@
       },
       "KnowledgeBasePatch": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
           "collections": {
             "anyOf": [
               {
@@ -2690,6 +2890,30 @@
             ],
             "title": "Retrieval"
           },
+          "sourceDefaults": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcedefaults"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync"
+          },
           "templateId": {
             "anyOf": [
               {
@@ -2731,6 +2955,11 @@
             "default": true,
             "title": "Agentsknown",
             "type": "boolean"
+          },
+          "answer": {
+            "additionalProperties": true,
+            "title": "Answer",
+            "type": "object"
           },
           "automation": {
             "title": "Automation",
@@ -2857,6 +3086,11 @@
             "title": "Slug",
             "type": "string"
           },
+          "sourceDefaults": {
+            "additionalProperties": true,
+            "title": "Sourcedefaults",
+            "type": "object"
+          },
           "sourceNames": {
             "items": {
               "type": "string"
@@ -2874,6 +3108,11 @@
           "stats": {
             "additionalProperties": true,
             "title": "Stats",
+            "type": "object"
+          },
+          "sync": {
+            "additionalProperties": true,
+            "title": "Sync",
             "type": "object"
           },
           "templateId": {
@@ -2900,6 +3139,9 @@
           "precedence",
           "metadataProfile",
           "retrieval",
+          "answer",
+          "sync",
+          "sourceDefaults",
           "access",
           "automation",
           "stats",
@@ -3758,6 +4000,19 @@
       },
       "QueryIn": {
         "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection"
+          },
           "question": {
             "title": "Question",
             "type": "string"
@@ -4029,6 +4284,19 @@
       },
       "SearchIn": {
         "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection"
+          },
           "kbIds": {
             "items": {
               "type": "string"
@@ -4064,6 +4332,13 @@
       "SearchOut": {
         "additionalProperties": false,
         "properties": {
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AnswerSettings"
+            },
+            "title": "Answers",
+            "type": "object"
+          },
           "cost": {
             "$ref": "#/components/schemas/SearchCost"
           },
@@ -5778,6 +6053,19 @@
               }
             ],
             "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "pattern": "^https?://\\S+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           }
         },
         "required": [
@@ -8076,6 +8364,7 @@
     },
     "/v1/knowledge-bases/{kb_id}/documents": {
       "get": {
+        "description": "A base's documents. Each filter keeps rows matching any of its values; each facet counts its values over\nthe rows the other filters keep, so a chip's counts say what choosing it would show.",
         "operationId": "knowledge_bases_list_documents",
         "parameters": [
           {
@@ -8124,6 +8413,139 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sourceid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "collection",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collection"
+            }
+          },
+          {
+            "in": "query",
+            "name": "docType",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Doctype"
+            }
+          },
+          {
+            "in": "query",
+            "name": "freshness",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Freshness"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sensitivity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sensitivity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tags",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tags"
             }
           },
           {

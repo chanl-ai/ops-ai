@@ -42,6 +42,9 @@ def call_row(
     """One call as the log shows it. `title` is the tool's display name (a plugin's manifest gives it); the row
     falls back to the tool's own name, so no reader shows a blank."""
     subject = _identity(r["sub"], SUBJECT_KINDS, names)
+    if r.get("caller_name"):
+        # The name the person or key had when the call was made; older rows keep showing the id.
+        subject = {**subject, "name": str(r["caller_name"])}
     workflow_id = subject["id"] if subject["kind"] == "workflow" else ""
     approval: dict[str, Any] = {"kind": "person" if r["approvers"] else "none"}
     if r["approval_token_id"]:
@@ -98,6 +101,9 @@ def call_row(
         row["channel"] = r["channel"]
     if r.get("client_name"):
         row["clientName"] = r["client_name"]
+    # The assistant a person allowed by name when they signed in (platform-service's client id).
+    if r.get("client_id"):
+        row["clientId"] = r["client_id"]
     # Whom the call acted for and whose sign-in signed it.
     if r.get("acting_for"):
         row["actingFor"] = r["acting_for"]

@@ -108,8 +108,9 @@ function MetricKind({ node }: { node: MetricNode }) {
   const good = node.goodWhen ? (node.goodWhen === 'up' ? delta > 0 : delta < 0) : undefined;
   const config = { v: { label: node.label, color: 'var(--chart-1)' } } satisfies ChartConfig;
   return (
-    <Card className={cn(ENTER, 'gap-2')} data-kind="metric">
-      <CardHeader>
+    <Card className={cn(ENTER, 'min-w-36 flex-1 gap-2')} data-kind="metric">
+      {/* The card has no padding of its own; without a trend below, the header carries the bottom space. */}
+      <CardHeader className={node.trend ? undefined : 'pb-6'}>
         <CardDescription>{node.label}</CardDescription>
         <CardTitle className="text-3xl tabular-nums">
           {typeof node.value === 'number' ? node.value.toLocaleString() : node.value}
@@ -190,7 +191,15 @@ function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: n
             ))}
         </dl>
       ) : (
-        <DataTableWithViews columns={columns} data={node.rows} hideViewSwitcher hidePaginationOnOnePage initialColumnVisibility={hidden} />
+        <DataTableWithViews
+          columns={columns}
+          data={node.rows}
+          hideViewSwitcher
+          hidePaginationOnOnePage
+          // Named columns have nothing behind View, so the table shows bare; inferred ones keep View for their ids.
+          hideToolbar={!!node.columns}
+          initialColumnVisibility={hidden}
+        />
       )}
       {truncatedFrom && truncatedFrom > node.rows.length && (
         <p className="px-2 pt-1 text-xs text-muted-foreground" data-testid="widget-truncated">

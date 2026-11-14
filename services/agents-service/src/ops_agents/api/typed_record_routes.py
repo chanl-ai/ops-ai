@@ -54,6 +54,12 @@ def team_of(me: Principal, noun: str) -> str:
     return team
 
 
+def store_team(me: Principal) -> str | None:
+    """The team whose types a route reads and writes. The dev header caller reads tenant-wide, so the request has no
+    acting team for the store to use; the team its X-Team-Id named is on the principal."""
+    return current_team() or me.team_id or None
+
+
 def by_of(me: Principal) -> str:
     return me.email or me.sub
 

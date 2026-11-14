@@ -47,7 +47,9 @@ await withUiStack(
       const first = rows.filter({ hasText: 'Intranet help (ui)' });
       const keys = await first.getByTestId('widget-embed-keys').innerText();
       const usage = await first.getByTestId('widget-embed-usage').innerText();
-      const sections = await Promise.all(['Chat', 'Embeds on other sites', 'Versions live'].map((t) => james.getByText(t, { exact: true }).first().isVisible()));
+      // The Chat section sits inside the live-places panel, drawn once its read answers; the embeds load on their own.
+      await james.getByTestId('versions-live').waitFor({ timeout: 60_000 });
+      const sections = await Promise.all(['Chat', 'Embeds on other sites', 'Versions live'].map(async (t) => (await james.getByText(t, { exact: true }).filter({ visible: true }).count()) > 0));
       check('1 Channels lists the chat default, the real embeds with keys and usage, and calling workflows', [one.id, two.id].every((id) => ids.includes(id)) && ids.every((id) => id?.startsWith('wd_')) && keys.trim() === '1' && /^1 conversation/.test(usage) && /Last used/.test(usage) && sections.every(Boolean), { ids, keys, usage, sections });
 
       // Step 2: a viewer gets no Retire or Pause.

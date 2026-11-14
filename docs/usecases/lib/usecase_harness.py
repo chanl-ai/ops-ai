@@ -68,6 +68,8 @@ def _stop(proc: subprocess.Popen[bytes], grace: float = 10) -> None:
 
 
 ROOT = Path(__file__).resolve().parents[3]
+# The plugins checkout every use case loads plugins from; nightly and worktree runs point it elsewhere.
+PLUGINS_REPO = Path(os.environ.get("OPS_PLUGINS_REPO") or ROOT.parent / "ops-ai-plugins")
 AGENTS_DIR = ROOT / "services" / "agents-service"
 AGENTS_PORT = int(os.environ.get("OPS_USECASE_AGENTS_PORT", "8790"))
 TOOLS_PORT = int(os.environ.get("OPS_USECASE_TOOLS_PORT", "8791"))
@@ -86,7 +88,8 @@ PLATFORM_INTERNAL_PORT = int(os.environ.get("OPS_USECASE_PLATFORM_INTERNAL_PORT"
 IDP_PORT = int(os.environ.get("OPS_USECASE_IDP_PORT", "8797"))
 DB = os.environ.get("OPS_USECASE_DB", "ops_usecase")
 LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", ROOT / ".logs")) / "usecase"
-TEAM = {"X-Team-Id": "team_all"}
+# The dev user's own team, where the dev seeds put the fixture knowledge; a thread runs in the team it was made in.
+TEAM = {"X-Team-Id": "team_ops"}
 
 
 def pg_url(db: str = DB, driver: str = "postgresql+asyncpg") -> str:
@@ -414,6 +417,10 @@ def files(
         env["OPS_AUTH_MODE"] = "platform"
         env["OPS_PLATFORM_URL"] = f"http://127.0.0.1:{PLATFORM_PORT}"
         env["OPS_PLATFORM_INTERNAL_PORT"] = str(PLATFORM_INTERNAL_PORT)
+    else:
+        # _env() drops OPS_PLATFORM_URL but keeps an inherited OPS_AUTH_MODE, so a use case that signs its other
+        # services in through platform-service would start this one in platform mode with no URL, and it exits.
+        env["OPS_AUTH_MODE"] = "dev"
     files_dir_svc = ROOT / "services" / "files-service"
     subprocess.run(
         ["uv", "run", "alembic", "upgrade", "head"], cwd=files_dir_svc, env=env, check=True, capture_output=True
@@ -449,6 +456,8 @@ def documents(
     # Its service events (extraction.corrected) are delivered there, and a type's delete asks it which workflows read
     # the type: this run's agents-service, never the shared stack's.
     env["OPS_AGENTS_URL"] = agents_url or f"http://127.0.0.1:{AGENTS_PORT}"
+    # Dev auth unless `env` names platform sign-in: an inherited OPS_AUTH_MODE comes without its URL (see files()).
+    env["OPS_AUTH_MODE"] = "dev"
     # `env` adds OPS_* values a use case needs, e.g. platform sign-in (OPS_AUTH_MODE) beside agents and tools.
     env.update(extra)
     svc = ROOT / "services" / "documents-service"

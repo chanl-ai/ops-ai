@@ -39,7 +39,7 @@ import type { FormsApi } from './forms-contract';
 import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
-import type { ConnectApi } from './connect-contract';
+import type { McpLinksApi } from './mcp-links-contract';
 import type { WikiApi } from './wiki-contract';
 import type {
   Agent,
@@ -131,7 +131,8 @@ export interface OpsApi {
     /** The tools any agent may be granted; a grant names their ids, and an unknown id is refused. */
     grantableTools(): Promise<GrantableTool[]>;
     /** The tools picker: grantable tools searched and paged on the server; `ids` labels stored grants. */
-    toolOptions(p: OptionsParams): Promise<ToolOptionsPage>;
+    /** `agents: false` leaves agents out (an MCP link's picker: its door runs tools and workflows only). */
+    toolOptions(p: OptionsParams & { agents?: boolean }): Promise<ToolOptionsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
     /** One kernel turn on the agent's newest version, nothing kept; a write tool stops at its gate. */
@@ -236,7 +237,8 @@ export interface OpsApi {
   activity: ActivityApi;
   guardrails: GuardrailsApi;
   assurance: AssuranceApi;
-  connect: ConnectApi;
+  /** The team's MCP links (tools-service): a named address for a chosen set of its tools. */
+  mcpLinks: McpLinksApi;
   wiki: WikiApi;
   tools: {
     list(params: ListParams<ToolFilters>): Promise<ListResult<Tool> & { stats: ToolStats }>;

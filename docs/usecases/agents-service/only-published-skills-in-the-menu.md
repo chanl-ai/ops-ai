@@ -1,6 +1,6 @@
 # Only published skills are offered
 
-Status: draft. Service: `agents-service`. Layers: api, mcp, ui.
+Status: draft. Service: `agents-service`. Layers: api, mcp (no ui script yet).
 
 In this example we will keep one skill as a draft and retire another, and see neither listed as a prompt nor served by name. Design case sk-chat-4; it fails today because the prompt list reads every skill and serves the newest draft.
 
@@ -9,7 +9,7 @@ In this example we will keep one skill as a draft and retire another, and see ne
 | Id | `uc-746` |
 | Area | Agents |
 | Design label | `sk-chat-4` |
-| Runs | MCP; api and ui in their own scripts |
+| Runs | MCP; api in its own script |
 | Run it | `make usecase-test UC=uc-746` |
 
 ## Who is in it

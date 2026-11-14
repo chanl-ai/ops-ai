@@ -18,7 +18,7 @@ services keep pytest and the console keeps its own checks.
 | `src/run.ts` | Spawns a script: Python in the agents-service uv project with `docs/usecases/lib` on `PYTHONPATH`, Node with the repo's node; removes model keys unless `APPROVED_REAL_CALLS=<n>` |
 | `src/coverage.ts` | Per service: script, missing, not required, or not available yet, per layer |
 | `src/scaffold.ts` | `new`: next id, doc from the template, registry row, docs index row, and an api script that fails until it is written |
-| `src/harness.ts` | For Node (ui) scripts: checks, and `withUiStack`, which starts the agents service on the scripted model and a console dev server pointed at it |
+| `src/harness.ts` | For Node (ui) scripts: checks, and `withUiStack`, which starts the agents service on the scripted model and a console dev server pointed at it. Its `chromium` fails the run when a page reads the console's mock beside real services, unless the script called `expectSampleData(path)` |
 | `src/cli.ts` | `list`, `show`, `test`, `coverage`, `new` |
 
 ## Verdict and exit codes

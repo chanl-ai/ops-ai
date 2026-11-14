@@ -1,5 +1,5 @@
 import type { Icon } from '@tabler/icons-react';
-import { PERSONAL_SETTINGS, SETTINGS_NAV } from './settings-tree';
+import { PERSONAL_SETTINGS, SETTINGS_NAV } from './settings-tree.ts';
 import { IconChecklist, IconCpu, IconGavel, IconDatabase, IconFileSearch, IconFileText, IconFolder, IconHeartbeat, IconHistory, IconHome, IconInbox, IconKey, IconLayoutDashboard, IconList, IconListDetails, IconMail, IconMessage, IconMessages, IconPlayerPlay, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShield, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck, IconUsers, IconUserShield } from '@tabler/icons-react';
 
 /** A page under its parent item: an indented row in the sidebar and an entry in the page-title switcher. */
@@ -58,12 +58,12 @@ export const BACKGROUND: NavNeed = { area: 'access', action: 'manage', everyTeam
 
 /**
  * Connectors (owner, 8 November): one word for an app that acts for the team or the person, in two views. Mine is each
- * person's own sign-ins, the user menu's "My connectors"; Team setup is where an admin turns apps on, the Data
- * row "Connectors".
+ * person's own sign-ins, the user menu's "My apps"; Team setup is where an admin turns apps on, the Data
+ * row "Apps".
  */
-export const CONNECTORS = 'Connectors';
+export const CONNECTORS = 'Apps';
 /** Mine's one name, on the sidebar row, its page title and the avatar menu. */
-export const MY_CONNECTORS = 'My connectors';
+export const MY_CONNECTORS = 'My apps';
 export const CONNECTOR_VIEWS: NavChild[] = [
   { title: 'Mine', url: '/settings/account/connectors', icon: IconUserCheck },
   { title: 'Team setup', url: '/data/connectors', icon: IconPlugConnected },
@@ -72,6 +72,8 @@ export const CONNECTOR_VIEWS: NavChild[] = [
 /** The four areas the sidebar shows one at a time, in the order the header offers them and ⌘1 to ⌘4 reach them. */
 export const AREAS = ['Work', 'Build', 'Data', 'Govern'] as const;
 export type AreaName = (typeof AREAS)[number];
+/** What each area is called on screen: the sidebar, the header trail, search and the area tabs. */
+export const AREA_LABEL: Record<AreaName, string> = { Work: 'Work', Build: 'Agent Builder', Data: 'Data Gateway', Govern: 'Governance' };
 
 export interface NavGroup {
   label: AreaName;
@@ -88,7 +90,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Work',
     items: [
-      { title: 'Overview', url: '/', icon: IconHome, needs: OVERVIEW_NEEDS[0], or: OVERVIEW_NEEDS.slice(1) },
+      { title: 'Overview', url: '/overview', icon: IconHome, needs: OVERVIEW_NEEDS[0], or: OVERVIEW_NEEDS.slice(1) },
       // The team's customer issues, with their deadlines and timelines; workflow runs are under Workflows.
       { title: 'Cases', url: '/work/cases', icon: IconMail, needs: cell('cases', 'view') },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
@@ -165,6 +167,32 @@ export function rowsOfArea(area: AreaName, allows: Allows): NavItem[] {
   return NAV.find((g) => g.label === area)!.items.filter((i) => !i.hidden && itemOffered(allows, i));
 }
 
+/** A heading in the one sidebar and the rows under it. */
+export interface SidebarSection {
+  label: string;
+  items: NavItem[];
+}
+
+// Titles that repeat their section's word read shorter in the one sidebar; the page itself keeps its full title.
+const SHORT: Record<string, string> = { 'Knowledge bases': 'Knowledge' };
+
+/**
+ * The one sidebar (owner, 12 November): every area as an always-open section, unless the install turns on the area tabs
+ * (flag `area_tabs`). One short link per page and no sub-rows: a page's child pages are tabs on the page itself
+ * (`SectionTabs`). Build is one section, Agent Builder, with Workflows under Agents and Channels after it. The areas
+ * themselves, and so the header trail and search, do not change. A section with no row the person may open is left out.
+ */
+export function sidebarSections(allows: Allows): SidebarSection[] {
+  const links = (area: AreaName) => rowsOfArea(area, allows).map((i) => ({ ...i, title: SHORT[i.title] ?? i.title, children: undefined }));
+  const sections: SidebarSection[] = [
+    { label: 'Work', items: links('Work') },
+    { label: AREA_LABEL.Build, items: links('Build') },
+    { label: AREA_LABEL.Data, items: links('Data') },
+    { label: AREA_LABEL.Govern, items: links('Govern') },
+  ];
+  return sections.filter((s) => s.items.length > 0);
+}
+
 /** The areas the person has a page in, in header order. */
 export function offeredAreas(allows: Allows): AreaName[] {
   return AREAS.filter((a) => rowsOfArea(a, allows).length > 0 || (a === 'Work' && allows(cell('chat', 'run')) === true));
@@ -231,7 +259,7 @@ export function crumbsFor(pathname: string): Crumb[] {
   const best = navMatch(pathname);
   if (!best) return [];
   // Work's pages are the everyday ones, so their trail names no area.
-  const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: best.group.label }];
+  const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: AREA_LABEL[best.group.label] }];
   // My connectors already names its view, so only the Data row's trail adds it (Team setup).
   const view = best.item.views && best.group !== NAV[0] && viewFor(best.item.views, pathname);
   const crumbs: Crumb[] = [

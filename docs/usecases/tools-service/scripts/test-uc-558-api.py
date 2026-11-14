@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from fake_salesforce import WRITE_SCOPE, salesforce
+from steps import required
 from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
@@ -240,7 +241,7 @@ with ExitStack() as stack:
         "connectionId": conn.get("id"),
         "http": http,
     }
-    created = data(gw.post("/v1/tool-modules", json=body)) or {}
+    created = required(gw.post("/v1/tool-modules", json=body), "create the module")
     op = (created.get("operations") or [{}])[0]
     gw.patch(f"/v1/tool-modules/{created.get('id')}/operations/{op.get('id')}", json={"requiresApproval": False})
     gw.post(f"/v1/tool-modules/{created.get('id')}/reviews", json={"note": "uc-558"})
@@ -448,7 +449,7 @@ with ExitStack() as stack:
     # 9b. An operation marked needsPerson never takes the team backup, even with it on.
     module_id = str(published.get("id"))
     marked = gw.patch(f"/v1/tool-modules/{module_id}/operations/{op.get('id')}", json={"needsPerson": True})
-    asked = data(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "uc-558 needs a person"})) or {}
+    asked = required(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "uc-558 needs a person"}), "request a security review")
     if any(v.get("status") == "in_review" for v in asked.get("versions") or []):
         approve_tool_review(gw, module_id, nadia)
     person_only = httpx.post(

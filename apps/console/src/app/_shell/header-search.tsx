@@ -7,12 +7,11 @@ import { IconShieldCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 
 import { CommandPalette, type PaletteAction, type PalettePage, SearchButton } from '@/components/header/command-palette';
-import { useConnectUrl } from '@/hooks/connect-queries';
 import { useFlagged } from '@/hooks/flag-queries';
 import { useNavAllows } from '@/hooks/me-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
 import { useTeam } from '@/hooks/use-team';
-import { childrenOffered, itemOffered, NAV, SETTINGS_VIEW } from '@/lib/nav';
+import { AREA_LABEL, childrenOffered, itemOffered, NAV, SETTINGS_VIEW } from '@/lib/nav';
 import type { NavNeed } from '@/lib/nav';
 import type { FlagName } from '@/lib/types/flags';
 import type { SearchHit } from '@/lib/types/search';
@@ -20,7 +19,7 @@ import type { SearchHit } from '@/lib/types/search';
 /** Sub-pages that are not in the sidebar but are worth jumping to; one with a `flag` shows only while the install turns it on. */
 const EXTRA_PAGES: (PalettePage & { flag?: FlagName; needs?: NavNeed })[] = [
   // Connecting an assistant is the MCP channel of Deployments, so the page entry opens that tab.
-  { title: 'Connect your assistant', href: '/build/channels/mcp', area: 'Build', section: 'Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway', needs: { area: 'deployments', action: 'view' } },
+  { title: 'MCP links', href: '/build/channels/mcp', area: 'Build', section: 'Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway', needs: { area: 'deployments', action: 'view' } },
   { title: 'Gate policies', href: '/settings/policies/gates', area: 'Govern', section: 'Policies', icon: IconShieldCheck, needs: SETTINGS_VIEW },
 ];
 
@@ -38,7 +37,6 @@ export function HeaderSearch() {
   const recents = useRecentSearches(open);
   const visit = useVisitSearchHit();
   const { teams, teamId, switchTeam } = useTeam();
-  const connectUrl = useConnectUrl();
   const extraPages = useFlagged(EXTRA_PAGES);
 
   React.useEffect(() => {
@@ -66,33 +64,17 @@ export function HeaderSearch() {
     g.items
       .filter((i) => i.url !== '/chat' && itemOffered(allows, i))
       .flatMap((i) => [
-        { title: i.title, href: i.url, area: g.label, icon: i.icon },
-        ...childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: g.label, section: i.title, icon: c.icon ?? i.icon })),
+        { title: i.title, href: i.url, area: AREA_LABEL[g.label], icon: i.icon },
+        ...childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: AREA_LABEL[g.label], section: i.title, icon: c.icon ?? i.icon })),
       ])
   );
-  const chatPages: PalettePage[] = NAV.flatMap((g) => g.items.filter((i) => i.url === '/chat' && itemOffered(allows, i)).flatMap((i) => childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: g.label, section: 'Chat', icon: c.icon ?? i.icon }))));
+  const chatPages: PalettePage[] = NAV.flatMap((g) => g.items.filter((i) => i.url === '/chat' && itemOffered(allows, i)).flatMap((i) => childrenOffered(allows, i).map((c) => ({ title: c.title, href: c.url, area: AREA_LABEL[g.label], section: 'Chat', icon: c.icon ?? i.icon }))));
   const allowedExtra = extraPages.filter((e) => allows(e.needs) === true);
   const pages: PalettePage[] = [...navPages, ...chatPages, ...allowedExtra.filter((e) => ![...navPages, ...chatPages].some((p) => p.href === e.href))];
   const newChat: PaletteAction = { id: 'new-chat', label: 'New chat', icon: MessageSquarePlus, keywords: 'ask conversation start', run: () => go('/chat') };
   const listed: (PaletteAction & { flag?: FlagName })[] = [
     ...(pathname.startsWith('/chat') ? [newChat] : []),
-    {
-      id: 'copy-mcp-url',
-      label: 'Copy MCP URL',
-      flag: 'mcp_gateway',
-      icon: Link2,
-      keywords: 'connect assistant claude cursor copilot chatgpt mcp url',
-      run: async () => {
-        setOpen(false);
-        try {
-          const url = await connectUrl();
-          await navigator.clipboard.writeText(url);
-          toast.success('Copied the MCP URL', { description: url });
-        } catch (e) {
-          toast.error('Couldn’t copy the MCP URL', { description: (e as Error).message });
-        }
-      },
-    },
+    { id: 'mcp-links', label: 'MCP links', flag: 'mcp_gateway', icon: Link2, keywords: 'connect assistant claude cursor copilot chatgpt mcp url address', run: () => go('/build/channels/mcp') },
     { id: 'new-workflow', label: 'New workflow', icon: Route, keywords: 'create add', run: () => go('/build/workflows?create=1') },
     { id: 'new-agent', label: 'New agent', icon: Bot, keywords: 'create add', run: () => go('/build/agents?create=1') },
     { id: 'generate-skill', label: 'Generate skill', icon: Sparkles, keywords: 'create add skill procedure sop draft ai', run: () => go('/build/skills?create=generate') },

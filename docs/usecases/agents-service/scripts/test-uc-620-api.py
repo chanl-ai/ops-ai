@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from steps import required
 from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
@@ -44,8 +45,20 @@ from usecase_harness import (
 
 RULES = AGENTS_DIR.parent / "models-service" / "seed" / "demo-fake-openai"
 NOTICE = (AGENTS_DIR / "tests" / "fixtures" / "mailbox" / "levy_notice.pdf").read_bytes()
-# An image-only scan with no text layer: documents-service reads no text from it without OCR.
-SCAN = (AGENTS_DIR.parent / "documents-service/tests/fixtures/restraining/TEST010.pdf").read_bytes()
+
+
+def _blank_scan() -> bytes:
+    """A scan of a blank page: an image-only PDF on which even OCR finds no text, since chat reads scans with OCR."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    out = BytesIO()
+    Image.new("RGB", (850, 1100), "white").save(out, "PDF", resolution=100.0)
+    return out.getvalue()
+
+
+SCAN = _blank_scan()
 SEED = AGENTS_DIR / "seed" / "engine_workflows.json"
 OPS = {"X-Team-Id": "team_ops"}
 RUN = uuid.uuid4().hex[:6]
@@ -267,7 +280,7 @@ def form_notice_finishes(api: httpx.Client) -> None:
     wid, cases = f"uc620_notice_{RUN}", f"uc620_case_{RUN}"
     live = {publish(api, case_flow(cases)), publish(api, notice_flow(wid, cases))}
     share = {"mode": "link", "expiresInDays": 30, "dailyCap": 50, "title": f"Send us a notice {RUN}"}
-    form = got(api.post(f"/v1/workflows/{wid}/forms", json=share, headers=OPS)) or {}
+    form = required(api.post(f"/v1/workflows/{wid}/forms", json=share, headers=OPS), "share the workflow form")
     slug, token = str(form.get("slug")), str(form.get("token"))
 
     # 3. A notice sent through the form with the sender and no mailbox opens its cases and ends with no reply.
@@ -316,7 +329,7 @@ def form_notice_finishes(api: httpx.Client) -> None:
 def attach(files: httpx.Client, name: str, body: bytes) -> dict[str, Any]:
     """The console's chat attach: an upload ticket for a chat attachment, the bytes, complete."""
     meta = {"name": name, "size": len(body), "mime": "application/pdf", "purpose": "chat_attachment"}
-    ticket = got(files.post("/v1/files/uploads", json=meta)) or {}
+    ticket = required(files.post("/v1/files/uploads", json=meta), "/v1/files/uploads")
     files.put(str(ticket.get("uploadUrl")), headers=ticket.get("headers") or {}, content=body)
     done = (got(files.post(f"/v1/files/uploads/{ticket.get('fileId')}/complete")) or {}).get("file") or {}
     return {"fileId": done.get("id"), "name": name, "size": len(body)}
@@ -342,7 +355,7 @@ def chat_reads_an_attached_pdf(api: httpx.Client, files: httpx.Client) -> None:
     )
     aid, version = (made or {}).get("id"), (made or {}).get("version")
     api.post(f"/v1/agents/{aid}/publish-requests", json={"version": version, "note": "uc-620"}, headers=OPS)
-    tid = str((got(api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=OPS)) or {}).get("id"))
+    tid = str((required(api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=OPS), "/chat/threads")).get("id"))
     res, reply = ask(api, tid, "uc620 who is the first debtor in this notice?", [notice])
     cited = reply.get("citations") or [{}]
     check(
@@ -364,19 +377,20 @@ def chat_reads_an_attached_pdf(api: httpx.Client, files: httpx.Client) -> None:
         "agent it is no longer in Files",
         row.get("purpose") == "chat_attachment"
         and deleted.status_code == 204
-        and f"{notice['name']} ({notice['fileId']}): could not be read: it is no longer in Files"
-        in str(reply.get("content")),
+        and f"{notice['name']} could not be read: it is no longer in Files" in str(reply.get("content"))
+        # The agent names the file by its name; a reply showing a record id is sent back to be written again.
+        and notice["fileId"] not in str(reply.get("content")),
         {"row": {k: row.get(k) for k in ("id", "name", "purpose")}, "delete": said(deleted),
          "reply": str(reply.get("content"))[:300]},
     )  # fmt: skip
 
-    # 8. A scan with no text layer is told plainly to the person and the agent, not answered as if read.
+    # 8. A scan with no text, even by OCR, is told plainly to the person and the agent, not answered as if read.
     scan = attach(files, f"scan-{RUN}.pdf", SCAN + f"\n% uc-620 scan {RUN}\n".encode())
     res, reply = ask(api, tid, "What does the scan say?", [scan])
     check(
         "8 a scan with no text says in the reply that it could not be read and why",
         res.status_code == 200
-        and f"scan-{RUN}.pdf could not be read: it has no text to read" in str(reply.get("content")),
+        and f"scan-{RUN}.pdf could not be read: it has no text to read, even by OCR" in str(reply.get("content")),
         {"file": scan, "status": res.status_code, "reply": str(reply.get("content"))[-300:]},
     )
 

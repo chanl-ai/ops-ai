@@ -207,7 +207,7 @@ try {
           const kept = await page.getByTestId(`system-${APP}`).count();
           check(
             '2 the catalog shows Person desk once with its tools and Connect, read in one call, and search finds it',
-            /Person desk/.test(text) && /\b1 tool\b/.test(text) && !/Plugin/.test(text) && (await page.getByRole('heading', { name: 'Connectors' }).count()) > 0 && (await page.getByTestId(`connect-${APP}`).isVisible()) && lists.join() === '/v1/apps' && shown >= 1 && kept === 1,
+            /Person desk/.test(text) && /\b1 tool\b/.test(text) && !/Plugin/.test(text) && (await page.getByRole('heading', { name: 'Apps' }).count()) > 0 && (await page.getByTestId(`connect-${APP}`).isVisible()) && lists.join() === '/v1/apps' && shown >= 1 && kept === 1,
             { text, lists, shown, kept },
           );
           await page.getByPlaceholder('Search apps').fill('');
@@ -472,11 +472,11 @@ try {
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // The four places are sidebar items under Data Hub, side by side; no page repeats them as a tab row.
           const sidebar = (await james.locator('[data-sidebar="menu-button"]').allInnerTexts()).map((t) => t.trim());
-          const at = sidebar.indexOf('Connectors');
+          const at = sidebar.indexOf('Apps');
           const menu = sidebar.slice(at, at + 3).join();
           // My connectors has no sidebar row; it is in the user menu.
           await james.getByRole('button', { name: /James Richardson/ }).click();
-          const myAccountsOnTop = await james.getByRole('menuitem', { name: 'My connectors' }).isVisible().catch(() => false);
+          const myAccountsOnTop = await james.getByRole('menuitem', { name: 'My apps' }).isVisible().catch(() => false);
           await james.keyboard.press('Escape');
           const tabRows = () => james.locator('[data-testid^="apps-tab-"]').count();
           const tabsOnApps = await tabRows();
@@ -1105,7 +1105,7 @@ try {
 // Salesforce's own app on each account against the fake Salesforce, whose sandbox signs in at its own address and lands
 // on its own instance: the live account in the Connect window, then a sandbox account added from the app page.
 const SF_LOGIN = 'login.salesforce.test';
-const SALESFORCE = join(ROOT, '..', 'ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce');
+const SALESFORCE = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 const sfProc = spawn('uv', ['run', '--quiet', '--directory', join(ROOT, 'services/agents-service'), 'python', join(ROOT, 'docs/usecases/lib/fake_salesforce.py')], {
   stdio: ['pipe', 'pipe', 'inherit'],
   env: { ...process.env, PYTHONPATH: join(ROOT, 'docs/usecases/lib') },

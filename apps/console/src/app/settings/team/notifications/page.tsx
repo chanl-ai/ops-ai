@@ -1,12 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { AlertCircle, CheckCircle2, Info, RotateCcw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
+import { PageSaveActions } from '@/components/shared/page-save-actions';
 import { holdEnter } from '@/components/shared/hold-enter';
-import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -61,7 +61,7 @@ export default function NotificationsPage() {
       ) : query.isError && !s ? (
         <QueryError what="notification settings" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : s && draft ? (
-        <form className="flex flex-col gap-4" onKeyDown={holdEnter} onSubmit={(e) => (e.preventDefault(), dirty && submit())}>
+        <form id="team-notifications-form" className="flex flex-col gap-4" onKeyDown={holdEnter} onSubmit={(e) => (e.preventDefault(), dirty && submit())}>
           <Alert>
             <Info />
             <AlertDescription>
@@ -152,19 +152,7 @@ export default function NotificationsPage() {
             </Rows>
           </Section>
 
-          {dirty && (
-            <div data-unsaved-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
-              <span className="text-sm text-muted-foreground">Unsaved changes</span>
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant="ghost" onClick={() => setDraft(saved)} disabled={save.isPending}>
-                  <RotateCcw className="size-3.5" /> Discard
-                </Button>
-                <LoadingButton type="submit" size="sm" isLoading={save.isPending}>
-                  Save changes
-                </LoadingButton>
-              </div>
-            </div>
-          )}
+          <PageSaveActions dirty={dirty} saving={save.isPending} form="team-notifications-form" onDiscard={() => setDraft(saved)} />
         </form>
       ) : null}
     </SettingsPageLayout>

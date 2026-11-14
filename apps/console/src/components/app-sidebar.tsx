@@ -31,11 +31,12 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { useFlag } from '@/hooks/flag-queries';
 import { useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useBrand, useLookups, useOverview } from '@/hooks/queries';
 import { usePreviewCheck } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
-import { type NavItem, childrenOffered, itemOffered, navMatch, rowsOfArea } from '@/lib/nav';
+import { type NavItem, childrenOffered, itemOffered, navMatch, rowsOfArea, sidebarSections } from '@/lib/nav';
 import { useAreas } from '@/components/shared/area-switcher';
 import { readOverview } from '@/lib/overview';
 
@@ -73,7 +74,9 @@ function useGroupFolds(): [(label: string) => boolean, (label: string, open: boo
 function FoldingGroup({ label, children }: { label: string; open?: boolean; onOpenChange?: (open: boolean) => void; children: React.ReactNode }) {
   return (
     <SidebarGroup data-nav-group={label}>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {/* Folded, the label fades and slides up over the previous section's last icon; without this it takes that
+          icon's clicks. */}
+      <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">{label}</SidebarGroupLabel>
       <SidebarGroupContent>{children}</SidebarGroupContent>
     </SidebarGroup>
   );
@@ -97,6 +100,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
   const allows = useNavAllows();
   const { current: area, ready: cellsReady, failed: cellsFailed, retry: retryCells } = useAreas();
+  // Area tabs on: the sidebar lists the area picked in the top bar. Off (the default): every area as a section.
+  const areaTabs = useFlag('area_tabs');
+  const chats = allows({ area: 'chat', action: 'run' }) === true;
+  const sections = sidebarSections(allows);
   const badges: Record<string, number | undefined> = { '/work/tasks': waiting };
 
   // One console page as a sidebar row, with its child pages as sub-rows under a fold.
@@ -149,6 +156,18 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
   };
 
+  const chatsGroup = (
+    <div className="group-data-[collapsible=icon]:hidden">
+      <FoldingGroup label="Chats" open={groupOpen('Chats')} onOpenChange={(o) => setGroupOpen('Chats', o)}>
+        <SidebarChats onNavigate={closeOnPhone} />
+      </FoldingGroup>
+    </div>
+  );
+
+  // Chat as one link (its child page, All chats, is reached from the chat pages' column).
+  const chatItem = navMatch('/chat')?.item;
+  const chatRow = chatItem ? navRow({ ...chatItem, children: undefined }) : null;
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -164,8 +183,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           isCreating={create.isPending}
         />
         <SidebarMenu>
-          {/* New chat leads Work; every other area is its rows alone. */}
-          {area === 'Work' && cellsReady && allows({ area: 'chat', action: 'run' }) === true && (
+          {/* New chat leads the sidebar; with area tabs on, only in Work, as every other area is its rows alone. */}
+          {(!areaTabs || area === 'Work') && cellsReady && chats && (
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="New chat" isActive={pathname === '/chat'}>
                 <Link href="/chat" onClick={closeOnPhone} data-testid="sidebar-new-chat">
@@ -201,20 +220,34 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           )
         ) : (
-          <>
-            <SidebarGroup className="pb-0">
-              <SidebarGroupContent>
-                <SidebarMenu>{rowsOfArea(area, allows).map(navRow)}</SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            {area === 'Work' && allows({ area: 'chat', action: 'run' }) === true && (
-              <div className="group-data-[collapsible=icon]:hidden">
-                <FoldingGroup label="Chats" open={groupOpen('Chats')} onOpenChange={(o) => setGroupOpen('Chats', o)}>
-                  <SidebarChats onNavigate={closeOnPhone} />
+          areaTabs ? (
+            <>
+              <SidebarGroup className="pb-0">
+                <SidebarGroupContent>
+                  <SidebarMenu>{rowsOfArea(area, allows).map(navRow)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+              {area === 'Work' && chats && chatsGroup}
+            </>
+          ) : (
+            // Each area as its own section, one link per page. Chat is a link in Work: its list of chats is a column on
+            // the chat pages. A person with no Work page (chat only) still gets a Work section holding Chat.
+            <>
+              {chats && !sections.some((s) => s.label === 'Work') && (
+                <FoldingGroup label="Work">
+                  <SidebarMenu>{chatRow}</SidebarMenu>
                 </FoldingGroup>
-              </div>
-            )}
-          </>
+              )}
+              {sections.map((section) => (
+                <FoldingGroup key={section.label} label={section.label}>
+                  <SidebarMenu>
+                    {section.items.map(navRow)}
+                    {section.label === 'Work' && chats && chatRow}
+                  </SidebarMenu>
+                </FoldingGroup>
+              ))}
+            </>
+          )
         )}
       </SidebarContent>
       <SidebarFooter>

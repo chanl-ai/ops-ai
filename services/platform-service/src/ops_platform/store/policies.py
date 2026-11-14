@@ -10,8 +10,10 @@ import sqlalchemy as sa
 
 from ops_access import BY_KEY, POLICIES, check_value
 from ops_access.platform_events import POLICY_CHANGED
+from ops_access.policies import PUBLISH_AREAS
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore
 from ops_store.outbox import add as add_event
 
 from .audit import record
@@ -149,3 +151,30 @@ class PolicyStore:
                 await c.execute(
                     policies.update().where(policies.c.key == old).values(value=whole, updated_by=by, updated_at=at)
                 )
+
+
+def new_workspace_values() -> dict[str, Any]:
+    """What a workspace starts with when it is created: publishes go live at once, an app may call any public address,
+    and a write its plugin or seed marked ask-first runs unless the team asks. Per-team values sit under `*`, the
+    workspace's own part, so a team added later starts the same. Written as the workspace's own rows, so a workspace
+    created before reads the catalogue default it always read; an admin turns each back on in Settings. Step-up needs
+    no row: the catalogue has it off."""
+    return {
+        "publishReview": {"*": dict.fromkeys(PUBLISH_AREAS, "never")},
+        "egressNewHosts": "any_public",
+        "appChanges": {"*": {"makersAsk": False}},
+    }
+
+
+async def write_new_workspace_policies(c: Any, tenant_id: str, *, at: str) -> None:
+    """Inside the transaction that inserted the tenant row, and only then, so a later seed run never overwrites what an
+    admin set since."""
+    for key, wanted in new_workspace_values().items():
+        # A per-team value is checked one team's part at a time, as a save through `set` checks it.
+        value = (
+            {team: check_value(key, part) for team, part in wanted.items()}
+            if BY_KEY[key].per_team
+            else check_value(key, wanted)
+        )
+        row = {"tenant_id": tenant_id, "key": key, "value": value, "updated_by": "workspace", "updated_at": at}
+        await c.execute(insert_ignore(c, policies, row, keys=["tenant_id", "key"]))

@@ -49,13 +49,15 @@ await withUiStack(
       await page.goto(`${consoleUrl}/chat/${tid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const box = page.getByRole('textbox', { name: 'Message' });
       await box.waitFor({ timeout: 120_000 });
-      const chips = page.getByTestId('chat-attach-items');
 
       await step('9 a PDF attached in the composer is stored in Files and the agent answers from it on the fake model', async () => {
         const uploads = [];
         page.on('response', (r) => /\/v1\/files\/uploads/.test(r.url()) && uploads.push(`${r.request().method()} ${new URL(r.url()).pathname.replace(/fil_\w+/, 'fil_…')} ${r.status()}`));
-        await page.locator('#chat-attach').setInputFiles({ name: NOTICE, mimeType: 'application/pdf', buffer: notice });
-        await chips.locator('[data-phase="ready"]').waitFor({ timeout: 60_000 });
+        await page.getByTestId('chat-attach').click();
+        await page.getByRole('dialog').locator('input[type="file"]').setInputFiles({ name: NOTICE, mimeType: 'application/pdf', buffer: notice });
+        await page.getByRole('dialog').locator('[data-phase="ready"]').first().waitFor({ timeout: 60_000 });
+        await page.getByTestId('add-documents-submit').click();
+        await page.getByTestId('chat-attached-file').first().waitFor({ timeout: 60_000 });
         await box.fill('uc620 who is the first debtor in this notice?');
         const sent = page.waitForResponse((r) => r.request().method() === 'POST' && MESSAGES.test(r.url()), { timeout: 120_000 });
         await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -73,13 +75,13 @@ await withUiStack(
         const link = page.getByTestId('chat-message-attachment').filter({ hasText: NOTICE }).first();
         const href = await link.getAttribute('href');
         await link.click();
-        await page.waitForURL((u) => u.pathname.startsWith('/files/'), { timeout: 60_000 });
+        await page.waitForURL((u) => /^(\/data)?\/files\//.test(u.pathname), { timeout: 60_000 });
         const opened = await page.getByText(NOTICE).first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
         // The Files list says what each file is for.
         await page.goto(`${consoleUrl}/files`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const row = page.getByRole('row').filter({ hasText: NOTICE }).first();
         const listed = await row.waitFor({ timeout: 60_000 }).then(async () => (await row.innerText()).replace(/\s+/g, ' '), () => '');
-        check('10 the message links the file into Files, where it is listed as a chat attachment', /^\/files\/fil_/.test(href ?? '') && opened && /Chat attachment/.test(listed), { href, opened, listed });
+        check('10 the message links the file into Files, where it is listed as a chat attachment', /^\/data\/files\/fil_/.test(href ?? '') && opened && /Chat attachment/.test(listed), { href, opened, listed });
       });
 
       await step('12 the file cited in the reply opens in Files from its source chip and its citation', async () => {
@@ -87,7 +89,7 @@ await withUiStack(
           await page.goto(`${consoleUrl}/chat/${tid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByText('is Marcus Bell, held for 3,250.00').last().waitFor({ timeout: 60_000 });
           await open();
-          const moved = await page.waitForURL((u) => u.pathname.startsWith('/files/fil_'), { timeout: 15_000 }).then(() => true, () => false);
+          const moved = await page.waitForURL((u) => /^(\/data)?\/files\/fil_/.test(u.pathname), { timeout: 15_000 }).then(() => true, () => false);
           const missing = await page.getByText(/not found/i).first().isVisible().catch(() => false);
           const shown = moved && (await page.getByText(NOTICE).first().waitFor({ timeout: 60_000 }).then(() => true, () => false));
           return { moved, shown, missing, url: page.url() };
@@ -101,16 +103,18 @@ await withUiStack(
       });
 
       await step('11 a type chat cannot read is refused on the chip in plain words', async () => {
-        // The composer refuses a type itself only once the upload limits have loaded; before that the server's refusal shows.
+        // Chat reads pictures with OCR, so the refused type is an archive. The composer refuses a type itself only once
+        // files-service's upload limits have loaded; before that the server's refusal shows.
         const limits = page.waitForResponse((r) => /\/v1\/files\/limits/.test(r.url()), { timeout: 60_000 }).catch(() => undefined);
         await page.goto(`${consoleUrl}/chat/${tid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await limits;
         await page.waitForTimeout(500);
-        await page.locator('#chat-attach').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('\x89PNG\r\n\x1a\n') });
-        const chip = chips.locator('[data-phase="error"]').first();
+        await page.getByTestId('chat-attach').click();
+        await page.getByRole('dialog').locator('input[type="file"]').setInputFiles({ name: 'bundle.zip', mimeType: 'application/zip', buffer: Buffer.from('PK\x03\x04') });
+        const chip = page.getByRole('dialog').locator('[data-phase="error"], [data-phase="blocked"]').first();
         await chip.waitFor({ timeout: 30_000 });
         const said = await chip.innerText();
-        check('11 a type chat cannot read is refused on the chip in plain words', /PNG is not accepted here\. Accepted: PDF/.test(said), said);
+        check('11 a type chat cannot read is refused on the chip in plain words', /ZIP is not accepted here\. Accepted: PDF/.test(said), said);
       });
 
       check('no page errors', errors.length === 0, errors);

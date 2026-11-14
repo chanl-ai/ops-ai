@@ -14,7 +14,7 @@ from ops_service_kit.http import Envelope, options_page, options_window, page_wi
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...store.tenancy import current_team
-from ..auth import Principal, principal
+from ..auth import Principal, principal, reader_of
 from ..child_runs import (
     EMAIL_SCHEMA,
     engine_input_schema,
@@ -176,7 +176,7 @@ def _facet(row: dict[str, Any], column: str) -> str | None:
 async def list_tools(
     rt: Rt,
     request: Request,
-    p: Annotated[Principal, Depends(principal)],
+    p: Annotated[Principal, Depends(reader_of("tools"))],
     *,
     page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
@@ -230,13 +230,16 @@ async def not_added(rt: Runtime, team: str | None, search: str) -> list[dict[str
     ]
 
 
-@router.get("/options", response_model=Envelope[ToolOptionsPage])
+@router.get("/options", response_model=Envelope[ToolOptionsPage], dependencies=[Depends(reader_of("tools"))])
 async def tool_options(
     rt: Rt,
+    *,
     search: str = "",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     ids: Annotated[list[str] | None, Query()] = None,
+    # `agents=false` leaves agents out: an MCP link's picker, whose door runs tools and workflows only.
+    agents: bool = True,
 ) -> JSONResponse:
     """The agent page's tools picker: grantable operations, then the team's workflows, searched by name, module and
     description and paged here, so the browser receives one page. Operations live inside each module's document in
@@ -252,7 +255,11 @@ async def tool_options(
         if team and w.get("team_id") not in (None, "", team)
     }
     # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
-    tools = [t for t in await known_tools(rt, fresh=True) if t["id"] not in others]
+    tools = [
+        t
+        for t in await known_tools(rt, fresh=True)
+        if t["id"] not in others and (agents or not str(t["id"]).startswith("agent:"))
+    ]
     if ids is not None:
         wanted = set(ids)
         hits = [t for t in tools if t["id"] in wanted]
@@ -264,7 +271,9 @@ async def tool_options(
     page = hits[offset : offset + limit + 1]
     # A plugin tool reads by its title; every other tool by its name.
     options = [
-        {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None} for t in page
+        {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None}
+        | ({} if agents else {"inputSchema": t.get("inputSchema"), "description": t.get("description")})
+        for t in page
     ]
     # Said once, above the first page of a search; labelling stored grants says nothing about the catalog.
     waiting = await not_added(rt, team, search) if ids is None and offset == 0 else []
@@ -272,7 +281,7 @@ async def tool_options(
 
 
 @router.get("/{tool_id}", response_model=Envelope[ToolRow])
-async def get_tool(rt: Rt, tool_id: str, p: Annotated[Principal, Depends(principal)]) -> JSONResponse:
+async def get_tool(rt: Rt, tool_id: str, p: Annotated[Principal, Depends(reader_of("tools"))]) -> JSONResponse:
     """One tool as its row on the Tools page reads; declared after /options so that path is not read as a tool."""
     row = next((r for r in await tool_rows(rt, _person(p), p.team_id) if r["id"] == tool_id), None)
     if row is None:

@@ -5,6 +5,7 @@ read counts as "always", so a failed read never lets a version go live unreviewe
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -57,7 +58,9 @@ class WriteApprovals:
         try:
             team = await self.platform.get("/v1/policies/appChanges", tenant=tenant_id)
             by_app = await self.platform.get("/v1/policies/appChangesByApp", tenant=tenant_id)
-            of_team = dict(team.get("value") or {}).get(team_id) if team_id else None
+            held = dict(team.get("value") or {})
+            # `*` is the workspace's own value (a new workspace's makersAsk off); a team's saved part wins over it.
+            of_team = {**dict(held.get("*") or {}), **dict(held.get(team_id) or {})} if team_id else None
             apps = dict(by_app.get("value") or {}).get(team_id) if team_id else None
             return (of_team or {}), dict(apps or {})
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
@@ -90,6 +93,10 @@ class WriteApprovals:
         # `setting` is the tool's own mode (see `tool_mode`). A bare True or False is a stored requires_approval, which
         # cannot be told from the old default, so it is no override: the app and the team decide.
         mode = setting if isinstance(setting, str) else None
+        # A new workspace turns makers' asks off (appChanges makersAsk false): a wait the manifest or seed declared
+        # stops being the tool's answer, so the app and team decide; an answer a person set on a tool still holds.
+        if isinstance(team, dict) and cast(dict[str, Any], team).get("makersAsk") is False and maker_asks(module, tool):
+            mode = None
         admin: Any = by_app.get(tool_key(tool)) if tool else None
         if isinstance(admin, dict):
             held = cast(dict[str, Any], admin)
@@ -103,6 +110,18 @@ class WriteApprovals:
             "draft": draft,
         }
         return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account)
+
+
+def maker_asks(module: dict[str, Any] | None, tool: str | None) -> bool:
+    """Whether the tool's reviewer answer is its maker's: a plugin's operation (its row has no editor, so the answer is
+    the manifest's) or a seeded one that declared the wait (requires_approval true beside it)."""
+    if not module or not tool:
+        return False
+    operations: list[dict[str, Any]] = module.get("operations") or []
+    op = next((o for o in operations if o.get("name") == tool), None)
+    if op is None or op.get("approval_mode") != "reviewer":
+        return False
+    return str(module.get("template_id") or "").startswith("plugin:") or op.get("requires_approval") is True
 
 
 def tool_key(tool: str) -> str:
@@ -133,23 +152,51 @@ def asker_refusal(
     """The refusal `can` gives when an approval names the person the call acts for and requesterMayDecide, read at the
     call (`may_decide`), does not let an asker decide; None when someone else approved or the policy allows it. Only
     the separation-of-duties part counts here: the approver's role was checked when the approval was given."""
-    if asker.email.casefold() not in {a.casefold() for a in approvers}:
+    return own_request_refusal(
+        access,
+        tenant_id,
+        asker.email,
+        approvers,
+        may_decide=may_decide,
+        sub=asker.sub,
+        name=asker.name,
+        team_id=asker.team_id,
+        what="this write",
+    )
+
+
+def own_request_refusal(
+    access: Access,
+    tenant_id: str,
+    asker: str,
+    deciders: Iterable[str | None],
+    *,
+    may_decide: bool,
+    sub: str | None = None,
+    name: str = "",
+    team_id: str | None = None,
+    what: str = "this",
+) -> Forbidden | None:
+    """`can(requested_by=)`'s own_request refusal when one of `deciders` is `asker` (an email) and requesterMayDecide,
+    read live by the caller (`may_decide`), does not let an asker decide; None otherwise. The decider's role is checked
+    where the decision is made, so any other refusal `can` gives here does not count."""
+    if not asker or asker.casefold() not in {str(d).casefold() for d in deciders if d}:
         return None
     person = Principal(
         kind="person",
-        sub=asker.sub,
-        email=asker.email,
-        name=asker.name,
+        sub=sub or asker,
+        email=asker,
+        name=name or asker,
         tenant_id=tenant_id,
-        team_id=asker.team_id,
-        team_ids=[asker.team_id] if asker.team_id else [],
+        team_id=team_id,
+        team_ids=[team_id] if team_id else [],
         roles={},
         scopes=[],
         auth_method="session",
         policies={"requesterMayDecide": may_decide},
     )
     try:
-        access.can(person, "reviews", "decide", team=asker.team_id, requested_by=[asker.email], what="this write")
+        access.can(person, "reviews", "decide", team=team_id, requested_by=[asker], what=what)
     except Forbidden as refused:
         return refused if refused.code == "own_request" else None
     return None

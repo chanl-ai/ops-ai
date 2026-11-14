@@ -22,6 +22,7 @@ from ops_service_kit.settings import Settings
 from ops_tools.app import MCP_OFF
 from ops_tools.modules.seed import load
 from ops_tools.store.calls import gateway_calls
+from ops_tools.store.mcp_links import McpLinks
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import Api, build_app, no_keys, opa_client
@@ -30,7 +31,9 @@ from .fake_upstream import ENDPOINT, HOST, fake_bank
 
 MCP_SOURCE = {"kind": "mcp", "url": f"{ENDPOINT}/mcp"}
 # Keys platform-service would introspect: one of the module's owning team, one of another team.
-KEYS = {"ok_lending": "team_lending", "ok_cards": "team_cards"}
+KEYS = {"ok_lending": "team_lending", "ok_cards": "team_cards", "ok_linked": "team_lending"}
+# The MCP link `ok_linked` was made for (platform-service's key target), set by the test that makes the link.
+LINK_TARGET: dict[str, str] = {}
 
 
 def _introspect(tenant: str) -> Any:
@@ -45,7 +48,7 @@ def _introspect(tenant: str) -> Any:
             "tenantId": tenant,
             "teamId": team,
             "scopes": ["read", "write"],
-            "apiKey": {"id": key},
+            "apiKey": {"id": key, "target": {"kind": "mcp_link", **LINK_TARGET} if key == "ok_linked" else None},
         }
 
     return introspect
@@ -219,3 +222,22 @@ async def test_with_the_flag_off_the_mcp_address_says_it_is_off(
     assert r.status_code == 404, r.text
     error = r.json()["error"]
     assert (error["code"], error["message"]) == ("feature_off", MCP_OFF), error
+
+
+async def test_a_key_made_for_one_link_opens_that_link_alone(stack: Stack) -> None:
+    """A key a link's Keys tab made is bound to that link: refused (401) on the team's whole address and on another
+    link."""
+    links = McpLinks(stack.engine)
+    tools = [{"name": "lookup_case", "title": "Look up a case", "kind": "tool", "access": "read"}]
+    own = await links.create(stack.api.tenant, "team_lending", slug="claims", name="Claims", tools=tools, by="Priya")
+    await links.create(stack.api.tenant, "team_lending", slug="other", name="Other", tools=tools, by="Priya")
+    LINK_TARGET.update(id=own["id"])
+    body: dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    accept = {"Accept": "application/json, text/event-stream"}
+    async with stack.running(), stack.http("ok_linked") as http:
+        mine = await http.post("/mcp/team_lending/claims", json=body, headers=accept)
+        team = await http.post("/mcp/team_lending", json=body, headers=accept)
+        other = await http.post("/mcp/team_lending/other", json=body, headers=accept)
+    assert mine.status_code == 200, mine.text
+    assert (team.status_code, other.status_code) == (401, 401), (team.text, other.text)
+    assert team.json()["error"]["code"] == "key_target"

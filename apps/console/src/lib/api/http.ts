@@ -43,7 +43,7 @@ import { createActivityHttp } from './activity-http';
 import { createCaseRecordsHttp } from './case-records-http';
 import { createWidgetsHttp } from './widgets-http';
 import { createAssuranceHttp } from './assurance-http';
-import { createConnectHttp } from './connect-http';
+import { createMcpLinksHttp } from './mcp-links-http';
 import { createWikiHttp } from './wiki-http';
 import { fetchWithIdentity } from './request-identity';
 
@@ -131,6 +131,12 @@ interface DirectoryTool {
  * to the server as `access`. Writing tools (create, update, test) has no route here: those stay on the mock and the
  * Tools page manages modules on tools-service instead.
  */
+/** The placeholders a run fills in instructions: agents-service owns them; generation and lint stay where they are. */
+export function createRegistryPromptVariables(baseUrl: string): OpsApi['prompts']['variables'] {
+  const { get } = createTransport(`${baseUrl}/v1`);
+  return () => get('/prompts/variables');
+}
+
 export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'] {
   const { get } = createTransport(`${baseUrl}/v1`);
   return async (p) => {
@@ -219,7 +225,7 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
 }
 
 /** Tool modules, the egress allow-list, secrets, connections and the gateway's call log (Activity) against tools-service under `/v1`. */
-export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets' | 'connections'> & { toolCalls: GovernanceApi['toolCalls'] } {
+export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets' | 'connections' | 'mcpLinks'> & { toolCalls: GovernanceApi['toolCalls'] } {
   const t = createTransport(`${baseUrl}/v1`);
   return {
     toolModules: createToolModulesHttp(t.get, t.send, t.qs),
@@ -227,6 +233,7 @@ export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules'
     secrets: createSecretsHttp(t.get, t.send, t.qs),
     connections: createConnectionsHttp(t.get, t.send),
     toolCalls: createExecutionsHttp(t.get),
+    mcpLinks: createMcpLinksHttp(t.get, t.send),
   };
 }
 
@@ -257,7 +264,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
       grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
-      toolOptions: (p) => get(`/tools/options?${optionsQs(p)}`),
+      toolOptions: (p) => get(`/tools/options?${optionsQs(p)}${p.agents === false ? '&agents=false' : ''}`),
       modelAliases: () => get('/model-aliases'),
       test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
       knowledgeUsage: () => get('/knowledge-usage'),
@@ -330,7 +337,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     activity: createActivityHttp(get),
     guardrails: createGuardrailsHttp(get, send, qs),
     assurance: createAssuranceHttp(get, send, qs),
-    connect: createConnectHttp(get, send),
+    mcpLinks: createMcpLinksHttp(get, send),
     wiki: createWikiHttp(get, send, qs),
     tools: {
       list: (p) => get(`/tools?${qs(p)}`),

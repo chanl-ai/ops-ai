@@ -75,8 +75,9 @@ export const useSourceScopes = (input: ScopesInput, enabled: boolean) =>
 export const useSourcePreview = (config: Record<string, unknown>, enabled: boolean) =>
   useTeamQuery({ queryKey: ['knowledge', 'source-preview', config], queryFn: () => api.knowledge.sources.preview(config), enabled, retry: false, staleTime: 60_000 });
 /** The caller's team's agents citing knowledge base `kbId`, from agents-service's knowledge usage. */
-export const useAgentsCiting = (kbId: string) =>
-  useTeamQuery({ queryKey: ['agents', 'knowledge-usage'], queryFn: api.agents.knowledgeUsage, staleTime: 60_000, select: (rows) => rows.find((r) => r.kbId === kbId)?.agents ?? [] });
+/** `enabled` false for someone who may not read agents (a member), so the page asks nothing it would be refused. */
+export const useAgentsCiting = (kbId: string, enabled = true) =>
+  useTeamQuery({ queryKey: ['agents', 'knowledge-usage'], queryFn: api.agents.knowledgeUsage, staleTime: 60_000, enabled, select: (rows) => rows.find((r) => r.kbId === kbId)?.agents ?? [] });
 /** One kernel turn of an agent, as the Playground's answer: what the agent would say, nothing kept. */
 export const useAgentTurn = () => useMutation({ mutationFn: ({ agentId, message }: { agentId: string; message: string }) => api.agents.test(agentId, message) });
 export const useKnowledgeLookups = () => useTeamQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
@@ -90,7 +91,16 @@ function useWrite<A, R>(fn: (a: A) => Promise<R>, alsoRoots: string[] = []) {
   });
 }
 
-export const useCreateKb = () => useWrite((i: KnowledgeBaseInput) => api.knowledge.kbs.create(i), ['lookups']);
+// Files chosen in the create dialog are added once the base exists, so they index at once with its settings.
+export const useCreateKb = () =>
+  useWrite(
+    async ({ input, fileIds = [] }: { input: KnowledgeBaseInput; fileIds?: string[] }) => {
+      const kb = await api.knowledge.kbs.create(input);
+      const added = fileIds.length ? await api.knowledge.kbs.addDocuments(kb.id, fileIds) : undefined;
+      return { kb, added };
+    },
+    ['lookups', 'files'],
+  );
 export const useUpdateKb = (id: string) => useWrite((p: KnowledgeBasePatch) => api.knowledge.kbs.update(id, p), ['lookups']);
 export const useDeleteKb = () => useWrite((id: string) => api.knowledge.kbs.remove(id), ['lookups']);
 export const useRefreshKb = () => useWrite((id: string) => api.knowledge.kbs.refresh(id));

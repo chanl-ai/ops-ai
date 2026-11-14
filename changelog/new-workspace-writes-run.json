@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "New workspaces run built-in app writes without a reviewer",
+  "description": "In a workspace created from now on, writes an app marks ask-first run unless the team asks, and teams added later skip publish reviews too. Admins turn either on in Settings.",
+  "tag": "improved"
+}

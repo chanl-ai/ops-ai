@@ -505,7 +505,10 @@ export const toolsOperations = {
       "thread",
       "decision",
       "key",
-      "call"
+      "call",
+      "link",
+      "since",
+      "until"
     ],
     "stream": false
   },
@@ -533,6 +536,57 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/health/background",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_create_mcp_link": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/mcp-links",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_delete_mcp_link": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/mcp-links/{link_id}",
+    "pathParams": [
+      "link_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_get_mcp_link": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/mcp-links/{link_id}",
+    "pathParams": [
+      "link_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_list_mcp_links": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/mcp-links",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "mcp_links_pause_mcp_link": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/mcp-links/{link_id}",
+    "pathParams": [
+      "link_id"
+    ],
     "query": [],
     "stream": false
   },

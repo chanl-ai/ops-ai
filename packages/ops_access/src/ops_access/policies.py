@@ -29,6 +29,9 @@ class Policy:
     changed_by: tuple[str, str] = ("settings", "manage")
     # A value per team ({team: value}): a change sets the acting team's part only, checked in that team.
     per_team: bool = False
+    # Where `changed_by` is held: "security" (the Security team, for a Security cell) or "team" (the acting team, so a
+    # team's Admin sets their own team's part).
+    held_in: str = "security"
     # Read live from platform-service on each decision (GET /v1/policies/{key}), never carried in a token, so a change
     # applies at once rather than at the next token refresh.
     live: bool = False
@@ -131,6 +134,7 @@ POLICIES: tuple[Policy, ...] = (
         # A team admin's: settings.manage in the team.
         changed_by=("settings", "manage"),
         per_team=True,
+        held_in="team",
         live=True,
         title="Ask before an agent changes anything in an app",
     ),
@@ -142,6 +146,7 @@ POLICIES: tuple[Policy, ...] = (
         kind="app_changes_by_app",
         changed_by=("settings", "manage"),
         per_team=True,
+        held_in="team",
         live=True,
         title="Approval by app",
     ),
@@ -176,6 +181,7 @@ POLICIES: tuple[Policy, ...] = (
         # A team admin's: settings.manage in the team, which builders and members do not hold.
         changed_by=("settings", "manage"),
         per_team=True,
+        held_in="team",
         live=True,
         title="Apps that change without asking",
     ),
@@ -313,13 +319,16 @@ def check_value(key: str, value: Any) -> Any:
             and (role is None or isinstance(role, str))
             and isinstance(held.get("testAccountsNeverAsk", True), bool)
             and isinstance(held.get("testRunsAsk", True), bool)
+            and isinstance(held.get("makersAsk", True), bool)
         ):
+            # makersAsk is kept only when given: off, a wait a plugin or seed declared is not the tool's answer.
             return {
                 "ask": held.get("ask", False),
                 "answer": answer,
                 "reviewerRole": role,
                 "testAccountsNeverAsk": held.get("testAccountsNeverAsk", True),
                 "testRunsAsk": held.get("testRunsAsk", True),
+                **({"makersAsk": held["makersAsk"]} if "makersAsk" in held else {}),
             }
     if policy.kind == "app_changes_by_app" and isinstance(value, dict):
         out: dict[str, Any] = {}
@@ -343,7 +352,8 @@ def check_value(key: str, value: Any) -> Any:
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
-        "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk, testRunsAsk}",
+        "app_changes": "{ask, answer (none, person or reviewer), reviewerRole, testAccountsNeverAsk, testRunsAsk, "
+        "makersAsk}",
         "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
@@ -384,7 +394,8 @@ def team_names(values: Any, team: str | None) -> list[str]:
 def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:
     """The publish review mode of `area` in `team`, from `publishReview` as GET /v1/policies/publishReview returns it
     (read live on each decision); `major` where the team set none."""
-    of_team: dict[str, Any] = dict(modes.get(team) or {})
+    # `*` is the workspace's own value, which a new workspace writes so a team added later starts the same.
+    of_team: dict[str, Any] = {**dict(modes.get("*") or {}), **dict(modes.get(team) or {})}
     return str(of_team.get(area, DEFAULT_PUBLISH_MODE))
 
 

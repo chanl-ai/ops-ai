@@ -1,30 +1,31 @@
 // uc-088 a builder sets the limits callers override within and publishes them with the agent, ui layer:
-// docs/usecases/agents-service/agent-limits-published.md. Headless Chromium against a console whose Agents call the
-// agents service on the scripted model. The agent page offers only controls the runtime acts on.
+// docs/usecases/agents-service/agent-limits-published.md. Headless Chromium against a console signed in through
+// platform-service, its Agents on the agents service on the scripted model. The agent page offers only controls the
+// runtime acts on. James requests each publish and Maya, the team's approver, approves it: a requester does not decide.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { AGENTS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, approvePublishRequest, asRole, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const TEAM = { 'X-Team-Id': 'team_ops' };
+let J = {};
 const armed = (p) => (p.catch(() => undefined), p);
 const NAME = `Limits Checker ${Math.random().toString(36).slice(2, 6)}`;
-const api = async (path, init = {}) => (await fetch(`${agents}${path}`, { ...init, headers: { ...TEAM, 'Content-Type': 'application/json', ...(init.headers ?? {}) } })).json();
+const api = async (path, init = {}) => (await fetch(`${agents}${path}`, { ...init, headers: { ...J, 'Content-Type': 'application/json', ...(init.headers ?? {}) } })).json();
 
 await withUiStack(async (consoleUrl) => {
+  J = await asRole('builder', 'team_ops');
+  const maya = await asRole('approver', 'team_ops');
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-    // The dev console works in team_platform until a team is picked; this script's rows are in team_ops.
-    await page.addInitScript(() => sessionStorage.setItem('ops-team', 'team_ops'));
     const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
+    const page = await consoleSignIn(browser, consoleUrl, 'j.richardson@harborpine.example', 'northfield-demo', errors);
+    await page.setViewportSize({ width: 1440, height: 900 });
 
     // A published agent granted a read and a write tool, made through the API so the page under test is the editor.
     const created = (await api('/v1/agents', { method: 'POST', body: JSON.stringify({ name: NAME, role: 'Checks wires before they leave' }) })).data;
     // Edits save into the one draft, so the version to publish is the one the edit answers with.
     const edited = (await api(`/v1/agents/${created.id}`, { method: 'PATCH', body: JSON.stringify({ toolIds: ['lookup_account', 'place_wire_hold'], note: 'tools' }) })).data;
-    await api(`/v1/agents/${created.id}/publish-requests`, { method: 'POST', body: JSON.stringify({ version: edited.version, note: 'first' }) });
+    await approvePublishRequest((await api(`/v1/agents/${created.id}/publish-requests`, { method: 'POST', body: JSON.stringify({ version: edited.version, note: 'first' }) })).data, maya);
 
     // Two chats with the agent, so Recent runs has rows to show from the API.
     const chats = [];
@@ -37,7 +38,8 @@ await withUiStack(async (consoleUrl) => {
     check('Can talk on offers Chat alone', JSON.stringify(channels.map((c) => c.trim())) === '["Chat"]', channels);
     // Masking is enforced, so its switch shows; When unsure is not enforced, so it does not.
     check('only enforced guardrail settings are shown', (await page.locator('#g-pii').count()) === 1 && (await page.locator('#g-unsure').count()) === 0 && (await page.locator('#g-max').count()) === 1);
-    check('no Evals tab is offered', (await page.getByTestId('agent-evals-tab-trigger').count()) === 0);
+    // Eval runs score a dataset on the newest version (agent_registry.CONTROLS), so the Evals tab is offered.
+    check('the Evals tab is offered', (await page.getByTestId('agent-evals-tab-trigger').count()) === 1);
     const runs = (await api(`/v1/agents/${created.id}/runs`)).data ?? [];
     // Recent runs sits in the test panel's Used in tab.
     await page.getByTestId('agent-test-panel').getByRole('tab', { name: 'Used in' }).click();
@@ -93,6 +95,7 @@ await withUiStack(async (consoleUrl) => {
     await publish.getByRole('button', { name: /^(Request publish|Publish)$/ }).click();
     const review = (await (await requested).json()).data;
     check('the publish review carries the limits', JSON.stringify(review?.agentPublish?.limits) === JSON.stringify(saved?.limits), review?.agentPublish?.limits);
+    await approvePublishRequest(review, maya);
     const live = (await api(`/v1/agents/${created.id}`)).data;
     check('the draft that was saved is the published version', live.publishedVersion === saved?.version && JSON.stringify(live.limits) === JSON.stringify(saved?.limits), { publishedVersion: live.publishedVersion, saved: saved?.version });
 
@@ -122,6 +125,6 @@ await withUiStack(async (consoleUrl) => {
   } finally {
     await browser.close();
   }
-});
+}, { platform: true });
 
 finish();

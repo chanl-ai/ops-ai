@@ -130,10 +130,10 @@ await withUiStack(
       // My connectors is the user menu's row; Connectors (Team setup) is the Data area's sidebar row (lib/nav.ts).
       await priya.goto(`${CONSOLE}/data/connectors`, { waitUntil: 'domcontentloaded' });
       const sidebar = priya.locator('[data-sidebar="sidebar"]').first();
-      await sidebar.getByRole('link', { name: 'Connectors', exact: true }).first().waitFor({ timeout: 30_000 }).catch(() => {});
-      const hub = await sidebar.getByRole('link', { name: 'Connectors', exact: true }).count();
+      await sidebar.getByRole('link', { name: 'Apps', exact: true }).first().waitFor({ timeout: 30_000 }).catch(() => {});
+      const hub = await sidebar.getByRole('link', { name: 'Apps', exact: true }).count();
       await sidebar.getByTestId('nav-user').click();
-      const top = await priya.getByTestId('nav-connections').filter({ hasText: 'My connectors' }).count();
+      const top = await priya.getByTestId('nav-connections').filter({ hasText: 'My apps' }).count();
       await priya.keyboard.press('Escape');
       check('8c at 1280 the user menu reads My connectors and the Data area row Connectors', top === 1 && hub === 1, { top, hub });
       await priya.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
@@ -178,9 +178,9 @@ await withUiStack(
       await p.getByRole('button', { name: 'Toggle Sidebar' }).first().click();
       const drawer = p.locator('[data-mobile="true"]').first();
       await drawer.waitFor({ timeout: 15_000 });
-      const hub390 = await drawer.getByRole('link', { name: 'Connectors', exact: true }).count();
+      const hub390 = await drawer.getByRole('link', { name: 'Apps', exact: true }).count();
       await drawer.getByTestId('nav-user').first().click();
-      const top390 = await p.getByTestId('nav-connections').filter({ hasText: 'My connectors' }).count();
+      const top390 = await p.getByTestId('nav-connections').filter({ hasText: 'My apps' }).count();
       await p.keyboard.press('Escape');
       check('10b at 390 the drawer\'s user menu reads My connectors and its Data area row Connectors', top390 === 1 && hub390 === 1, { top390, hub390 });
       const words = [];

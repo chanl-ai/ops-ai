@@ -146,7 +146,7 @@ async def test_the_requester_does_not_approve_their_own_request(gateway: Gateway
     asker = next(a for a in m["approvals"] if a["id"] == approval["id"])["requested_by_email"]
     assert asker, "the request keeps its asker's email"
     r = await apply_access(gateway.client, gateway.tenant, approval, approvers=[asker.upper()])
-    assert r.status_code == 200 and r.json()["data"]["output"]["code"] == "requester_decides", r.text
+    assert r.status_code == 200 and r.json()["data"]["output"]["code"] == "own_request", r.text
     assert (await _status(gateway, approval))["status"] == "requested"
 
 

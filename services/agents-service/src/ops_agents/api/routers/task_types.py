@@ -22,7 +22,7 @@ from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..task_type_seeds import task_type_store
-from ..typed_record_routes import RecordTypeView, RecordVersionView, by_of, detail, owned, team_of, view
+from ..typed_record_routes import RecordTypeView, RecordVersionView, by_of, detail, owned, store_team, team_of, view
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller_in("workflows"))]  # noqa: UP040
@@ -83,13 +83,13 @@ def _checked(content: dict[str, Any]) -> dict[str, Any]:
 @router.get("", response_model=Envelope[list[TaskTypeView]])
 async def list_task_types(rt: Rt, me: Me) -> JSONResponse:
     """Every type in the tenant: the seeded general types first, then the teams' own."""
-    return ok([view(r) for r in await (await task_type_store(rt)).rows()])
+    return ok([view(r) for r in await (await task_type_store(rt, store_team(me))).rows()])
 
 
 @router.get("/{type_id}", response_model=Envelope[TaskTypeDetail])
 async def get_task_type(rt: Rt, me: Me, type_id: str) -> JSONResponse:
     """A type with each of its versions, newest first."""
-    return ok(detail(await (await task_type_store(rt)).get(type_id)))
+    return ok(detail(await (await task_type_store(rt, store_team(me))).get(type_id)))
 
 
 @router.post("", response_model=Envelope[TaskTypeDetail], status_code=201)
@@ -99,7 +99,7 @@ async def create_task_type(rt: Rt, me: Me, body: TypeIn) -> JSONResponse:
     can(caller_of(me), "workflows", "create", team=team, what="a task type")
     if not tt.valid_id(body.id):
         raise Unprocessable("id: lowercase letters, digits and underscores, starting with a letter.", code="invalid_id")
-    store = await task_type_store(rt)
+    store = await task_type_store(rt, store_team(me))
     base: dict[str, Any] = {}
     copied: dict[str, Any] | None = None
     if body.copy_of is not None:
@@ -116,7 +116,7 @@ async def create_task_type(rt: Rt, me: Me, body: TypeIn) -> JSONResponse:
 @router.put("/{type_id}/draft", response_model=Envelope[TaskTypeDetail])
 async def save_task_type(rt: Rt, me: Me, type_id: str, body: Definition) -> JSONResponse:
     """Saves the draft: edits it in place, or opens the next version over a published one."""
-    store = await task_type_store(rt)
+    store = await task_type_store(rt, store_team(me))
     await owned(store, me, type_id, "edit")
     await store.save_draft(type_id, _checked(body.model_dump(exclude_none=True)), by=by_of(me))
     return ok(detail(await store.get(type_id)))
@@ -125,7 +125,7 @@ async def save_task_type(rt: Rt, me: Me, type_id: str, body: Definition) -> JSON
 @router.post("/{type_id}/publish", response_model=Envelope[TaskTypeDetail])
 async def publish_task_type(rt: Rt, me: Me, type_id: str, body: PublishIn) -> JSONResponse:
     """Publishes the newest draft. Tasks already open keep the version they were opened with."""
-    store = await task_type_store(rt)
+    store = await task_type_store(rt, store_team(me))
     await owned(store, me, type_id, "publish")
     await store.publish(type_id, body.version, by=by_of(me))
     return ok(detail(await store.get(type_id)))

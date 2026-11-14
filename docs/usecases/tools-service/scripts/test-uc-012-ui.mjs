@@ -1,20 +1,24 @@
 // uc-012 a builder imports tools from OpenAPI, ui layer: docs/usecases/tools-service/import-tools.md. Headless Chromium
-// against a console whose Tools pages call tools-service, which reads the fake bank's document at https://api.bank.test.
-import { TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+// against a console signed in through platform-service, its Tools pages on tools-service, which reads the fake bank's
+// document at https://api.bank.test. Sam (Security) lists the bank on Egress; James (builder, team_ops) imports.
+import { asRole, TOOLS_PORT, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
-const JSONH = { 'Content-Type': 'application/json' };
+let JSONH = {};
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 const post = (path, body) => fetch(`${tools}${path}`, { method: 'POST', headers: JSONH, body: JSON.stringify(body) });
 
 await withUiStack(
   async (consoleUrl, { bank }) => {
+    JSONH = await asRole('builder', 'team_ops');
     const browser = await chromium.launch();
     try {
-      const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
       const errors = [];
-      page.on('pageerror', (e) => errors.push(e.message));
+      // Egress is Security's to change; the import is the builder's.
+      const sam = await consoleSignIn(browser, consoleUrl, 's.adeyemi@harborpine.example', 'northfield-demo', errors);
+      const james = await consoleSignIn(browser, consoleUrl, 'j.richardson@harborpine.example', 'northfield-demo', errors);
+      let page = sam;
       const specUrl = `https://${bank.host}/v1/openapi.json`;
       // The admin lists the bank on the Egress page: its host, then the private range it resolves into.
       const addEntry = async (button, value, note) => {
@@ -39,6 +43,7 @@ await withUiStack(
       check('a range that may never be listed is refused (400) and the dialog shows why', loopback.res?.status() === 400 && reason.length > 10 && reason.includes('127'), { status: loopback.res?.status(), reason });
       await page.keyboard.press('Escape');
 
+      page = james;
       await page.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByRole('button', { name: 'Import operations' }).first().click({ timeout: 120_000 });
       const dialog = page.getByRole('dialog', { name: 'Import operations' });
@@ -66,19 +71,21 @@ await withUiStack(
       // Non-vacuous half: a caller-written method and path for a documented operation is replaced by the document's.
       // Tool names are unique across modules, so the module made above goes first. It names no connection: the module
       // gets its own, holding the document's address.
-      await fetch(`${tools}/v1/tool-modules/${module?.id}`, { method: 'DELETE' });
+      await fetch(`${tools}/v1/tool-modules/${module?.id}`, { method: 'DELETE', headers: JSONH });
       const forged = await post('/v1/tool-modules', { name: 'uc012-ui-forged', displayName: 'Forged', system: 'Forged', source: { kind: 'openapi', specUrl }, operations: [{ ...found.operations.find((o) => o.name === 'get_account'), method: 'DELETE', path: '/admin' }] });
       const forgedModule = forged.ok ? (await forged.json()).data : undefined;
       const forgedOp = forgedModule?.operations?.[0];
       check('a forged method and path are replaced by the document', forgedOp?.method === 'GET' && forgedOp?.path === '/accounts/{accountId}', { status: forged.status, op: forgedOp && [forgedOp.method, forgedOp.path], body: forged.ok ? undefined : (await forged.text()).slice(0, 200) });
 
       // The forged module calls the bank host, so removing the host is refused (409) and the toast names that module.
+      page = sam;
       await page.goto(`${consoleUrl}/settings/egress`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const hostRow = page.getByTestId('egress-hosts').getByRole('row', { name: new RegExp(bank.host.replace(/\./g, '\\.')) });
       await hostRow.waitFor({ timeout: 60_000 });
-      // The link reads the module's name and opens its page by id.
-      const moduleLink = hostRow.getByRole('link', { name: forgedModule?.displayName, exact: true });
-      check('the host links the module that calls it', (await moduleLink.count()) === 1 && (await moduleLink.getAttribute('href')) === `/tools/${forgedModule?.id}`, { row: await hostRow.innerText(), forged: forgedModule?.id, href: await moduleLink.getAttribute('href').catch(() => null) });
+      // Sam acts in Security, so the team_ops module that calls the host is named by its id, without a link: its name
+      // and page are that team's records. The list is read again on this visit, so the id is waited for.
+      const named = await hostRow.getByText(forgedModule?.id ?? '-', { exact: true }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      check('the host names the module that calls it', named && (await hostRow.locator(`a[href="/tools/${forgedModule?.id}"]`).count()) === 0, { row: await hostRow.innerText(), forged: forgedModule?.id });
       await hostRow.getByRole('button').last().click();
       await page.getByRole('menuitem', { name: 'Remove' }).click();
       const removed = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/egress/hosts/remove`, { timeout: 60_000 }));
@@ -92,7 +99,7 @@ await withUiStack(
       await browser.close();
     }
   },
-  { tools: { bank: true } },
+  { platform: true, tools: { bank: true } },
 );
 
 finish();

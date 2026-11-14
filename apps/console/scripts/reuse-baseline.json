@@ -13,8 +13,6 @@
     "src/components/assurance/suite-sheet.tsx",
     "src/components/chat/widgets.tsx",
     "src/components/chat/widgets/kind-view.tsx",
-    "src/components/deployments/mcp/assistants-panel.tsx",
-    "src/components/deployments/mcp/tools-panel.tsx",
     "src/components/deployments/widget-embed.tsx",
     "src/components/deployments/widget-mint-keys.tsx",
     "src/components/document-types/field-editor-dialog.tsx",
@@ -59,7 +57,6 @@
     "src/app/build/runs/[runId]/page.tsx",
     "src/components/chat/widgets.tsx",
     "src/components/deployments/deployment-sheet.tsx",
-    "src/components/deployments/mcp/endpoint-panel.tsx",
     "src/components/document-types/tests-panel.tsx",
     "src/components/skills/generate-skill-dialog.tsx"
   ]

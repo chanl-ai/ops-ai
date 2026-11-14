@@ -59,7 +59,8 @@ EXTRACTION_DEADLINE_SECONDS = 10.0
 # "Remember that ..." is saved as said up to this length; anything longer is pasted content, not a thing to remember.
 REMEMBER_MAX = 300
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
-_REMEMBER = re.compile(r"^\s*remember(?: that)?\s*[:,]?\s+(.+?)\s*$", re.I | re.S)
+# Matched against the stripped message, so no lazy group has to backtrack over trailing spaces.
+_REMEMBER = re.compile(r"remember(?: that)?\s*[:,]?\s+(.+)", re.I | re.S)
 # Words that make a preference or way of working a standing rule the person set, kept at once as if they had said
 # "remember": "always show cases as a table", "from now on reply in French".
 _STANDING = re.compile(r"\b(?:always|from now on|every time|each time|whenever)\b", re.I)
@@ -277,7 +278,7 @@ async def extract_memories(
         return Extraction()
     lines = _window(history, message)
     theirs = _own_words(message)
-    said = _REMEMBER.match(message)
+    said = _REMEMBER.match(message.strip())
     remember = said[1] if said and len(said[1]) <= REMEMBER_MAX else None
     marked = "\n".join(f"{who}: {' '.join(text.split())[:1000]}" for who, text in lines)
     saved = "\n".join(f"[{r['id']}] {r['kind']} {r['key'] or ''}: {r['value']}" for r in offered)

@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 
+from ops_access import reader_of
 from ops_identity import CurrentService
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Envelope, error_responses, ok
@@ -71,6 +72,11 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
         decision: Annotated[str | None, Query(pattern="^(allow|deny)$")] = None,
         key: Annotated[str | None, Query(max_length=200)] = None,
         call: Annotated[str | None, Query(max_length=200)] = None,
+        # The calls made through one MCP link (mcp_links.id).
+        link: Annotated[str | None, Query(max_length=64)] = None,
+        # A date range, ISO times compared as the log stores them: from `since`, before `until`.
+        since: Annotated[str | None, Query(max_length=40)] = None,
+        until: Annotated[str | None, Query(max_length=40)] = None,
     ) -> JSONResponse:
         data = await service.executions(
             who,
@@ -82,6 +88,9 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
             decision=decision,
             key=key,
             call_id=call,
+            link_id=link,
+            since=since,
+            until=until,
         )
         return ok(data)
 
@@ -100,7 +109,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
 
     r = APIRouter(prefix="/v1/tool-modules", tags=["tool-modules"], responses=ERRORS)
 
-    @r.get("", response_model=Envelope[ModuleList])
+    @r.get("", response_model=Envelope[ModuleList], dependencies=[Depends(reader_of("tools"))])
     async def list_modules(  # pyright: ignore[reportUnusedFunction]
         *,
         who: Annotated[Caller, Depends(caller)],
@@ -149,7 +158,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         return ok(await service.create(who, body.model_dump()), 201)
 
     # Before /{module_id}, which would otherwise read "grants" as a module id.
-    @r.get("/grants", response_model=Envelope[ToolGrantList])
+    @r.get("/grants", response_model=Envelope[ToolGrantList], dependencies=[Depends(reader_of("tools"))])
     async def list_grants(  # pyright: ignore[reportUnusedFunction]
         *,
         who: Annotated[Caller, Depends(caller)],
@@ -161,7 +170,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         """Every workflow's access to the modules the team sees: a page of one view, with each view's count."""
         return ok(await service.grants(who, view=view, search=search, page=page, page_size=page_size))
 
-    @r.get("/{module_id}", response_model=Envelope[ToolModuleDetail])
+    @r.get("/{module_id}", response_model=Envelope[ToolModuleDetail], dependencies=[Depends(reader_of("tools"))])
     async def get_module(module_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get(who, module_id))
 

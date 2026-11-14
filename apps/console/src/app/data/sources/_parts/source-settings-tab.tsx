@@ -2,10 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Layers, Plus, RotateCcw, ShieldCheck, Trash2 } from 'lucide-react';
+import { Layers, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { RULE_FIELDS, RULE_PLACEHOLDER } from '@/components/knowledge/knowledge-meta';
+import { PageSaveActions } from '@/components/shared/page-save-actions';
 import { MetadataMappingEditor } from '@/components/sources/metadata-mapping-editor';
 import { PRESET_LABEL } from '@/components/sources/ingest-meta';
 import { SchedulePicker } from '@/components/sources/schedule-picker';
@@ -399,19 +400,7 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
 
       <DangerZone items={[{ title: 'Delete this source', description: `Removes ${plural(source.itemCount, 'item')}, the sync history and their pieces from every knowledge base that reads it.`, action: 'Delete source', onClick: onDelete, destructive: true }]} />
 
-      {dirty && (
-        <div data-unsaved-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
-          <span className="text-sm text-muted-foreground">Unsaved changes</span>
-          <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={discard} disabled={update.isPending}>
-              <RotateCcw className="size-3.5" /> Discard
-            </Button>
-            <LoadingButton size="sm" isLoading={update.isPending} disabled={invalid} onClick={save} data-testid="save-source-settings">
-              Save changes
-            </LoadingButton>
-          </div>
-        </div>
-      )}
+      <PageSaveActions dirty={dirty} saving={update.isPending} invalid={invalid} onSave={save} onDiscard={discard} testId="save-source-settings" />
     </div>
   );
 }

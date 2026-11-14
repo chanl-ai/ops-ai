@@ -270,24 +270,24 @@ No model key is needed: with no `OPENAI_API_KEY`, every model alias runs on the 
 
 ```bash
 git clone <this repository> ops-ai && cd ops-ai
-make setup                               # optional: answer what you have; each answer is tested before it is written
 make install                             # pnpm install and uv sync, once per clone
-make install-cli                         # only the `opsai` command line (no developer workspace); behind a mirror or offline: docs/guide/install.md
-make plugins-sync                        # optional: the pinned plugins (GitHub, Salesforce) into plugins/
-make up                                  # PostgreSQL, OPA, every service and the console
-make health                              # each service, its port and whether it answers
-make review BRANCH=main                  # optional: run a branch from the review worktree, same ports
-make up                                  # back to your own checkout
-make test PKG=packages/ops_access        # one package's tests, on a throwaway database
+make up                                  # PostgreSQL, OPA, every service and the console; a new database gets the sample team
 ```
 
 Open http://localhost:3016 and sign in as the workspace admin `w.kamau@harborpine.example` with the development
-password `northfield-demo`. The development seed adds a few teams, agents and tools of its own; `make down KEEP_DB=1`
-stops the stack and keeps the data. Every service's API reference is on one page at http://localhost:8799 (a
-service that is not running shows its committed spec). These steps were run from a fresh clone on 2026-11-06, with
-`OPS_PORT_OFFSET=30000` because another stack held the default ports: every service answered `ok`, the admin signed in,
-`make review` moved the stack to the review worktree and `make up` moved it back, a commit touching kb-service restarted
-kb-service alone, and `make test PKG=packages/ops_access` passed 24 tests.
+password `northfield-demo`. Every app and template pack ships built in (`builtin-plugins/`) and is on for every team,
+so the template gallery and the Salesforce, GitHub, SharePoint, Confluence and website apps are there from the first
+`make up`, with nothing to download. The first `make up` on a new database also installs the sample team (people,
+knowledge, agents, tools and workflows); `SAMPLE=0 make up` skips it. `make down KEEP_DB=1` stops the stack and keeps
+the data. Every service's API reference is on one page at http://localhost:8799.
+These steps were run from a fresh clone on 2026-11-12 with `OPS_PORT_OFFSET=30000`: `make up` installed the sample team
+with nothing failed, and the Python SDK listed 37 templates (22 starter skills, 11 case and task types, the Salesforce
+and GitHub templates) and the Salesforce app's 18 tools, both as the workspace admin and as a team member.
+
+Other commands you may want: `make setup` asks what you have (a model key, a mail account) and tests each answer before
+writing it; `make install-cli` installs only the `opsai` command line (behind a mirror or offline:
+[docs/guide/install.md](docs/guide/install.md)); `make plugins-sync` adds outside plugins pinned in
+`deploy/plugins.json`.
 
 To answer with a real model instead, put `OPENAI_API_KEY` in a `.env` file at the root (git ignores it) and run
 `make up`.
@@ -334,6 +334,7 @@ The team in the screenshots, installed through the public API as its first admin
 
 ```bash
 make sample-team    # Customer Operations from scripts/sample-team/sample-team.json; a second run changes nothing
+make sample-library # a Policy library of 24 bank documents in team Platform; make up runs it once per database
 make demo-walk      # chat, a blocked topic, bank reads, an approved hold, then an emailed levy notice to the replies
 node docs/usecases/lib/capture_demo.mjs --origin http://localhost:3016 --env .run/dev-admin.env
 ```

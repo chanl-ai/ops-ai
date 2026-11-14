@@ -85,8 +85,13 @@ with ExitStack() as stack:
     api, _ = stack.enter_context(platform())
     bank = stack.enter_context(core_bank())
     gw_url = f"http://127.0.0.1:{TOOLS_PORT}"
-    # The MCP address is behind the install flag mcp_gateway.
-    flags = {"OPS_FLAGS": "mcp_gateway"}
+    # The MCP address is behind the install flag mcp_gateway; an install that serves it names its public address and
+    # sign-in issuer, without which a caller with no API key is told assistants cannot sign in (503).
+    flags = {
+        "OPS_FLAGS": "mcp_gateway",
+        "OPS_TOOLS_PUBLIC_URL": gw_url,
+        "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+    }
     stack.enter_context(
         tools({**bank["settings"], **AUTH, **flags, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"})
     )
@@ -193,10 +198,10 @@ with ExitStack() as stack:
         refused(OTHER_KEY, "/team_ops") == (403, "team_forbidden"),
     )
 
-    # 5. Production is refused until a team allows it; no key is 401; a viewer, who cannot run tools, is 403.
-    check("5 no credential is 401", refused(None, "/team_ops") == (401, "unauthorized"))
-    check(
-        "5 a viewer's token is refused (no tools.run)",
-        refused(ravi.get("token", ""), "/team_ops") == (403, "role_required"),
-    )
+    # 5. Production is refused until a team allows it; no key is 401; a person's console token is 401 too: the MCP
+    # address takes only a token issued for it (an assistant's sign-in), and a viewer's calls are refused per call.
+    nokey = refused(None, "/team_ops")
+    check("5 no credential is 401", nokey == (401, "unauthorized"), nokey)
+    console = refused(ravi.get("token", ""), "/team_ops")
+    check("5 a person's console token is not an MCP credential (401)", console == (401, "unauthorized"), console)
 finish()

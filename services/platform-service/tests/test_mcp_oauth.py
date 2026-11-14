@@ -561,3 +561,21 @@ async def test_a_person_in_two_teams_gets_a_token_for_the_addresses_team_only(si
     renewed = await a.renew(got["refresh_token"], client)
     assert renewed.status_code == 200, renewed.text
     assert claims_of(renewed.json()["access_token"])["team_ids"] == [team]
+
+
+async def test_a_link_address_gets_a_token_for_that_link_alone_and_a_deeper_path_is_no_address(
+    signin: SignInRig,
+) -> None:
+    """An MCP link (/mcp/<team>/<link>) is its team's address too: the token is issued for the link's exact address, so
+    tools-service refuses it on the team's whole address or another link; a path deeper than a link names no address."""
+    a = Assistant(signin)
+    client = await a.client()
+    who, team = await a.person()
+    link = a.params(client, team, resource=f"{MCP_URL}/mcp/{team}/claims-lookups")
+    got = await a.connect(who, link)
+    claims = claims_of(got["access_token"])
+    assert audiences(claims) == [f"{MCP_URL}/mcp/{team}/claims-lookups"]
+    assert claims["client_name"] == "Claude", "the call log names the assistant the person allowed"
+    deeper = a.params(client, team, resource=f"{MCP_URL}/mcp/{team}/claims-lookups/more")
+    r = await signin.public.get("/oauth/authorize", params=deeper, follow_redirects=False)
+    assert r.status_code == 400 and "location" not in r.headers, r.text

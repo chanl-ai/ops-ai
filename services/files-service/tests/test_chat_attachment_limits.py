@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""The limits files-service starts with for a chat attachment, by failure mode: a file documents-service cannot
-read is stored, so the agent it is attached for is told nothing; a file over chat's size limit is accepted."""
+"""The limits files-service starts with for a chat attachment, by failure mode: a file documents-service reads (a deck,
+a picture) is refused, or one it cannot read is stored, so the agent it is attached for is told nothing; a file over
+chat's size limit is accepted."""
 
 from __future__ import annotations
 
+import io
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +23,16 @@ from ops_storage.local import LocalObjectStore
 from tests.test_api import OPS, PDF, sign_in
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+def _deck() -> bytes:
+    """A zip named .pptx: the bytes prove a zip, and the name picks the presentation type among those a zip allows."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("ppt/presentation.xml", "<p:presentation/>")
+    return out.getvalue()
 
 
 def _client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> httpx.AsyncClient:
@@ -47,12 +60,18 @@ async def test_a_chat_attachment_documents_service_cannot_read_is_refused(
     engine: AsyncEngine, tenant: str, tmp_path: Path
 ) -> None:
     async with _client(engine, tenant, tmp_path) as c:
-        png = await _put(c, PNG, "screenshot.png", "image/png")
-        refused = await c.post(f"/v1/files/uploads/{png['fileId']}/complete", headers=OPS)
-        assert refused.status_code == 415 and "pdf" in refused.json()["error"]["message"], refused.text
-        pdf = await _put(c, PDF, "statement.pdf", "application/pdf")
-        done = await c.post(f"/v1/files/uploads/{pdf['fileId']}/complete", headers=OPS)
-        assert done.status_code == 200, done.text
+        for body, name, mime in [
+            (PDF, "statement.pdf", "application/pdf"),
+            (_deck(), "review.pptx", PPTX_MIME),
+            (PNG, "screenshot.png", "image/png"),
+            (JPEG, "receipt.jpg", "image/jpeg"),
+        ]:
+            ticket = await _put(c, body, name, mime)
+            done = await c.post(f"/v1/files/uploads/{ticket['fileId']}/complete", headers=OPS)
+            assert done.status_code == 200, (name, done.text)
+        zipped = await _put(c, b"PK\x05\x06" + b"\x00" * 18, "export.zip", "application/zip")
+        refused = await c.post(f"/v1/files/uploads/{zipped['fileId']}/complete", headers=OPS)
+        assert refused.status_code == 415 and "pptx" in refused.json()["error"]["message"], refused.text
 
 
 async def test_a_chat_attachment_over_ten_megabytes_is_refused_at_the_ticket(

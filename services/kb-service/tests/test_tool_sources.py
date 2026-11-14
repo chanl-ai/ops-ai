@@ -283,12 +283,15 @@ async def test_a_connection_that_signs_in_each_person_cannot_be_a_source(
 
 
 def test_on_an_install_without_plugins_kb_reaches_no_tool(tmp_path: Path) -> None:
-    # No plugin in the install's plugins folder: no gateway client, and no tools scope a kb token could claim.
-    off = Settings(plugins_dir=tmp_path, tools_url="http://tools.test")
+    # No plugin in the plugins folder and none built in: no gateway client, and no tools scope a kb token could claim.
+    dropped, builtin = tmp_path / "plugins", tmp_path / "builtin"
+    dropped.mkdir()
+    builtin.mkdir()
+    off = Settings(plugins_dir=dropped, builtin_plugins_dir=builtin, tools_url="http://tools.test")
     assert _tools_service(off) is None
     assert not {"tools:view", "tools:run"} & set(off.service_scopes["kb"])
-    (tmp_path / "ops_plugin_desk").mkdir()
-    on = Settings(plugins_dir=tmp_path, tools_url="http://tools.test")
+    (dropped / "ops_plugin_desk").mkdir()
+    on = Settings(plugins_dir=dropped, builtin_plugins_dir=builtin, tools_url="http://tools.test")
     assert _tools_service(on) is not None
     assert {"tools:view", "tools:run"} <= set(on.service_scopes["kb"])
 

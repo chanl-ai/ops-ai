@@ -1303,6 +1303,13 @@ class PortView(TypedDict, closed=True):
     name: str
 
 
+class PromptVariable(TypedDict, closed=True):
+    example: str
+    key: str
+    label: str
+    source: str
+
+
 class PublicForm(TypedDict, closed=True):
     afterText: str
     description: str
@@ -1926,6 +1933,7 @@ class TemplateView(TypedDict, closed=True):
     id: str
     installed: Installed
     kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
+    off: NotRequired[str | None]
     plugin: TemplatePlugin
     removeCell: NotRequired[RemoveCell | None]
     requires: TemplateRequires
@@ -2026,6 +2034,15 @@ class ToolModuleReviewRef(TypedDict, closed=True):
     diff: NotRequired[ToolModuleDiff | None]
     moduleId: str
     version: str
+
+
+class ToolOption(TypedDict, closed=True):
+    description: NotRequired[str | None]
+    disabled: NotRequired[str | None]
+    hint: NotRequired[str | None]
+    id: str
+    inputSchema: NotRequired[dict[str, Any] | None]
+    label: str
 
 
 class ToolUser(TypedDict, closed=True):
@@ -2928,6 +2945,11 @@ class EnvelopeListOptionView(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListPromptVariable(TypedDict, closed=True):
+    data: list[PromptVariable]
+    success: Literal[True]
+
+
 class EnvelopeListRunJournalEntry(TypedDict, closed=True):
     data: list[RunJournalEntry]
     success: Literal[True]
@@ -3419,7 +3441,7 @@ class ToolModuleReviewInput(TypedDict, closed=True):
 
 
 class ToolOptionsPage(TypedDict, closed=True):
-    data: list[Option]
+    data: list[ToolOption]
     nextCursor: NotRequired[str | None]
     notAdded: NotRequired[list[ToolsNotAdded]]
 

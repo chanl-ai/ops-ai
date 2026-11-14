@@ -18,6 +18,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useSaveSkillDraft, useSkillOptions } from '@/hooks/skill-queries';
 import { SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PageSaveActions } from '@/components/shared/page-save-actions';
 import type { SkillDetail, SkillEditClass, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
 import { PartsSection, partsError } from './parts-section';
@@ -43,6 +45,7 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) 
  */
 export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
   const save = useSaveSkillDraft(sk.id);
+  const [noting, setNoting] = React.useState(false);
   const options = useSkillOptions();
   const saved = React.useMemo(() => formOf(sk), [sk]);
   const [form, setForm] = React.useState<Form>(saved);
@@ -188,18 +191,32 @@ export function InstructionsTab({ skill: sk }: { skill: SkillDetail }) {
         </div>
       </SettingsSection>
 
-      {dirty && !locked && (
-        <div data-unsaved-bar className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-background/95 px-4 py-3 shadow-[0_-6px_16px_-10px_rgb(0_0_0/0.25)] backdrop-blur" role="status" data-testid="skill-unsaved-bar">
-          <EditClassBadge editClass={editClass} />
-          <span className="min-w-0 flex-1 text-sm">{errors.parts ?? EDIT_CLASS[editClass].hint}</span>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Add the joint account rule" className="h-8 w-56" aria-label="Version note" />
-          <Button variant="ghost" size="sm" onClick={() => setForm(saved)}>
-            Discard
-          </Button>
-          <Button size="sm" onClick={submit} disabled={!!errors.name || !!errors.useWhen || !!errors.parts || save.isPending} data-testid="save-skill-draft">
-            Save {target}
-          </Button>
-        </div>
+      {!locked && (
+        <PageSaveActions
+          dirty={dirty}
+          saving={save.isPending}
+          onDiscard={() => setForm(saved)}
+          save={
+            // Saving asks for a version note and says what this kind of edit needs before it goes live.
+            <Popover open={noting} onOpenChange={setNoting}>
+              <PopoverTrigger asChild>
+                <Button size="sm" disabled={!dirty || !!errors.name || !!errors.useWhen || !!errors.parts || save.isPending} data-testid="save-skill-draft">
+                  Save {target}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="flex w-80 flex-col gap-3">
+                <div className="flex items-start gap-2">
+                  <EditClassBadge editClass={editClass} />
+                  <p className="text-sm text-muted-foreground">{errors.parts ?? EDIT_CLASS[editClass].hint}</p>
+                </div>
+                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Add the joint account rule" aria-label="Version note" />
+                <Button size="sm" className="self-end" onClick={() => (setNoting(false), submit())} disabled={save.isPending} data-testid="save-skill-draft-confirm">
+                  Save {target}
+                </Button>
+              </PopoverContent>
+            </Popover>
+          }
+        />
       )}
     </div>
   );

@@ -334,16 +334,19 @@ export function PluginConnectForm({
           </div>
         )}
 
-        <AccountFields
-          draft={state.draft}
-          groups={groups}
-          busy={state.busy}
-          canTest={ready}
-          testLabel={kind.signsIn ? 'Sign in and test' : 'Run test'}
-          onSetting={(n, v) => ((typedSince.current = true), dispatch({ type: 'setting', name: n, value: v }))}
-          onSecret={(n, v) => ((typedSince.current = true), dispatch({ type: 'secret', name: n, value: v }))}
-          onTest={() => void sectionTest()}
-        />
+        {/* No sign-in and no account setting: nothing to type or test here. */}
+        {(kind.id !== 'none' || groups.main.length > 0) && (
+          <AccountFields
+            draft={state.draft}
+            groups={groups}
+            busy={state.busy}
+            canTest={ready}
+            testLabel={kind.signsIn ? 'Sign in and test' : 'Run test'}
+            onSetting={(n, v) => ((typedSince.current = true), dispatch({ type: 'setting', name: n, value: v }))}
+            onSecret={(n, v) => ((typedSince.current = true), dispatch({ type: 'secret', name: n, value: v }))}
+            onTest={() => void sectionTest()}
+          />
+        )}
 
         {state.phase === 'signing-in' && (
           <p className="rounded-md border p-3 text-sm" data-testid="connect-signing-in">

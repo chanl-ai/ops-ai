@@ -90,11 +90,14 @@ class Authorizer:
         if not CHALLENGE.match(challenge) or q.get("code_challenge_method") != "S256":
             raise OAuthError("invalid_request", "A PKCE challenge made with S256 is required.")
         resource = q.get("resource", "")
-        team_id = resource.removeprefix(f"{base}/mcp/") if resource.startswith(f"{base}/mcp/") else ""
-        found = await self.store.team_tenant(team_id) if TEAM_ID.match(team_id) else None
+        # A team's whole address (/mcp/<team>) or one of its MCP links (/mcp/<team>/<link>): the token is for that
+        # exact address, so a token for one link opens no other link and not the team's whole address.
+        path = resource.removeprefix(f"{base}/mcp/").split("/") if resource.startswith(f"{base}/mcp/") else []
+        team_id = path[0] if 1 <= len(path) <= 2 and all(TEAM_ID.match(p) for p in path) else ""
+        found = await self.store.team_tenant(team_id) if team_id else None
         if found is None:
             raise OAuthError("invalid_target", "That address is not a team's MCP address on this install.")
-        return Request(client, uri, challenge, f"{base}/mcp/{team_id}", team_id, found[0], q.get("state"))
+        return Request(client, uri, challenge, f"{base}/mcp/{'/'.join(path)}", team_id, found[0], q.get("state"))
 
     async def start(self, q: dict[str, str], *, address: str) -> str:
         """Where the browser goes to ask the person, once the request has checked out."""

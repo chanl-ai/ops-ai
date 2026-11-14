@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Database, Globe, KeyRound, Play, Plus, RefreshCw, Server, Trash2, Users } from 'lucide-react';
+import { Database, Globe, KeyRound, FlaskConical, Plus, RefreshCw, Server, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -163,7 +163,7 @@ function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; r
           <DataTableRowActions
             row={row}
             actions={[
-              { label: 'Open playground', icon: Play, onClick: (r) => actions.open(r.original, 'playground') },
+              { label: 'Test', icon: FlaskConical, onClick: (r) => actions.open(r.original, 'playground') },
               ...(actions.canBuild
                 ? [
                     { label: 'Refresh index', icon: RefreshCw, onClick: (r: { original: Row }) => actions.refresh(r.original) },
@@ -287,10 +287,13 @@ export default function KnowledgeBasesPage() {
         existingNames={(allKbs.data?.data ?? []).map((k) => k.name)}
         isPending={create.isPending}
         defaultOwner={session?.user.email ?? ''}
-        onSubmit={async (input) => {
-          const kb = await create.mutateAsync(input);
-          toast.success(`Created ${kb.name}`, { description: 'Attach a source on its Sources tab; the first index build starts then.' });
-          router.push(`/data/knowledge/${kb.id}?tab=sources`);
+        onSubmit={async (input, fileIds) => {
+          const { kb, added } = await create.mutateAsync({ input, fileIds });
+          const failed = added?.run.counts.failed ?? 0;
+          toast.success(`Created ${kb.name}`, {
+            description: added ? `${plural(added.files.length, 'file')} added${failed ? `; ${plural(failed, 'file')} could not be read` : ''}.` : 'Add documents or a source on its Sources tab; the first index build starts then.',
+          });
+          router.push(`/data/knowledge/${kb.id}?tab=${added ? 'documents' : 'sources'}`);
         }}
       />
 

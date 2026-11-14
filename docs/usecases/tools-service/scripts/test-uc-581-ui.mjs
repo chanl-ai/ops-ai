@@ -21,7 +21,7 @@ const PASSWORD = 'northfield-demo';
 const SHOTS = evidenceDir('581', 'uc');
 const PLUGIN = 'opsai.salesforce';
 const LOGIN_HOST = 'login.salesforce.test';
-const SALESFORCE = join(ROOT, '..', 'ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce');
+const SALESFORCE = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 // Plugins are off until their release; this walk turns them on for its own services, and kb-service reads a plugin's
 // knowledge source through this run's tools-service.
 process.env.OPS_PLUGINS = 'true';

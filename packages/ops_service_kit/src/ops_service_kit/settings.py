@@ -158,6 +158,10 @@ class Settings(BaseSettings):
     # install`. The repo's plugins/ locally; a mounted volume in Docker and Kubernetes (OPS_PLUGINS_DIR). tools-service
     # loads every plugin in it at start, and kb-service reads knowledge through them, whenever it holds any.
     plugins_dir: Path = _REPO_ROOT / "plugins"
+    # The plugins Ops AI ships built in (builtin-plugins/ in the checkout; the image sets OPS_BUILTIN_PLUGINS_DIR), so a
+    # fresh clone or image has every app and template pack with no fetch step. A folder of the same name in plugins_dir
+    # replaces the built-in one: loading both would refuse the plugin in both places.
+    builtin_plugins_dir: Path = _REPO_ROOT / "builtin-plugins"
     # Plugin package folders tools-service loads beside the plugins folder, for a developer trying a plugin on a
     # local stack before it is packaged: OPS_PLUGIN_PATHS='["/path/to/src/ops_plugin_x"]'. Empty everywhere else.
     plugin_paths: list[str] = Field(default_factory=list[str])
@@ -435,7 +439,8 @@ class Settings(BaseSettings):
             # tools, before a team admin turns it off. knowledge:view: search_knowledge searches the calling
             # team's knowledge bases through kb-service. skills:view and the create cells: the team MCP address
             # offers the team's skills as prompts and lists and installs templates, each token holding only the
-            # cells the person it calls for holds (mcp_tools.py).
+            # cells the person it calls for holds (mcp_tools.py). workflows:run: an MCP link starts a workflow's live
+            # version for the signed-in person, held only when that person holds it, with their acting-for token.
             "tools": [
                 "agents:view",
                 "knowledge:view",
@@ -454,6 +459,7 @@ class Settings(BaseSettings):
                 "skills:create",
                 "workflows:create",
                 "guardrails:create",
+                "workflows:run",
             ],
             # events:emit: it reports a deleted file as a service event, which purges what was derived from it.
             "files": ["events:emit"],
@@ -560,15 +566,13 @@ class Settings(BaseSettings):
 
     @property
     def plugin_folders(self) -> list[str]:
-        """Every plugin folder to load: each folder in plugins_dir (hidden ones and caches skipped), then
-        plugin_paths."""
-        d = self.plugins_dir
-        dropped = (
-            sorted(str(f) for f in d.iterdir() if f.is_dir() and not f.name.startswith((".", "_")))
-            if d.is_dir()
-            else []
-        )
-        return [*dropped, *self.plugin_paths]
+        """Every plugin folder to load: each built-in plugin not replaced by a folder of the same name in plugins_dir or
+        plugin_paths (a developer's working copy wins over the built-in one), then each folder in plugins_dir (hidden
+        ones and caches skipped), then plugin_paths."""
+        dropped = _folders(self.plugins_dir)
+        names = {_package_of(f) for f in dropped} | {_package_of(Path(p)) for p in self.plugin_paths}
+        builtin = [f for f in _folders(self.builtin_plugins_dir) if f.name not in names]
+        return [*(str(f) for f in builtin), *(str(f) for f in dropped), *self.plugin_paths]
 
     @property
     def plugins(self) -> bool:
@@ -585,6 +589,17 @@ class Settings(BaseSettings):
             extra = [s for s in ("tools:view", "tools:run") if s not in kb]
             self.service_scopes = {**self.service_scopes, "kb": [*kb, *extra]}
         return self
+
+
+def _folders(d: Path) -> list[Path]:
+    return sorted(f for f in d.iterdir() if f.is_dir() and not f.name.startswith((".", "_"))) if d.is_dir() else []
+
+
+def _package_of(folder: Path) -> str:
+    """A plugin folder's package name, which names its built-in copy: the folder itself, or the one src/<package> of a
+    whole project (a PLUGINS_DEV link to a working copy)."""
+    found = sorted(p.parent.name for p in folder.glob("src/*/plugin.yaml"))
+    return found[0] if not (folder / "plugin.yaml").exists() and len(found) == 1 else folder.name
 
 
 _PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_KEY}
@@ -604,8 +619,9 @@ def require_keys(settings: Settings, *names: str) -> None:
 
 # Addresses of running services that make exports for the stack it starts (make/env.mk). A test whose Settings picked
 # one up would call the shared stack, so its result would depend on whether that stack is up: an agents test read the
-# publish policy from a stopped platform-service and held a publish it meant to apply.
-STACK_SERVICE_ENV = ("OPS_PLATFORM_URL",)
+# publish policy from a stopped platform-service and held a publish it meant to apply, and a kb search test ranked by
+# the stack's embedding model found a page its keywords no longer held.
+STACK_SERVICE_ENV = ("OPS_PLATFORM_URL", "OPS_MODELS_URL", "OPS_MODELS_KEY")
 
 
 def isolate_from_stack() -> None:

@@ -131,6 +131,11 @@ def main() -> int:
             found = m.get(f"/v1/models/aliases/{alias}/versions")
         versions = data(found)
         current = next((v for v in reversed(versions) if v["status"] == "current"), versions[-1])
+        if os.environ.get("KEEP_ADMIN_CHOICE") == "1" and current.get("providerId") not in (None, provider):
+            # make up passes this: an alias an admin pointed at another connection (the console's model setup) stays
+            # there; only `make demo-model` itself moves it.
+            print(f"alias {alias}: left on the model an admin chose ({current['modelId']})")
+            return 0
         same = (before["baseUrl"], before["keyRef"], current["modelId"], current.get("providerId", provider))
         if same == (base_url, key_ref, model_id, provider):
             # make up runs this on every start; a version per start would bury the ones a person made.

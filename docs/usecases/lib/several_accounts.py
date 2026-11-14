@@ -11,7 +11,6 @@ Every tool call is a gateway call as agents-service makes it: a run in team_ops,
 from __future__ import annotations
 
 import json
-import os
 import time
 from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
@@ -22,6 +21,7 @@ from uuid import uuid4
 
 import httpx
 from fake_salesforce import salesforce
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -34,14 +34,13 @@ from usecase_harness import (
     signed_in,
     tools,
 )
-from usecase_harness import ROOT as REPO
 
 AUTH = {
     "OPS_AUTH_MODE": "platform",
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
     "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
 }
-PLUGINS = Path(os.environ.get("OPS_PLUGINS_REPO") or REPO.parent / "ops-ai-plugins") / "plugins"
+PLUGINS = PLUGINS_REPO / "plugins"
 SALESFORCE = PLUGINS / "salesforce/src/ops_plugin_salesforce"
 SF = "plugin:opsai.salesforce"
 LOAN_DESK = Path(__file__).parent / "plugins/loan_desk"

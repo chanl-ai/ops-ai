@@ -227,9 +227,13 @@ export interface Item {
 }
 
 /** A document as the knowledge base's Documents tab lists it. */
+/** What a document is, as kb-service names it for the Documents table's Type column and filter. */
+export type DocType = 'pdf' | 'word' | 'spreadsheet' | 'slides' | 'web' | 'text' | 'typed' | 'app' | 'other';
+
 export interface DocumentRow extends Item {
   sourceName: string;
   freshness: 'fresh' | 'stale' | 'no_schedule';
+  docType: DocType;
 }
 
 /** Heavy per-item content, fetched only when a document is opened. */
@@ -313,7 +317,12 @@ export interface RetrievalSettings {
   rerank: boolean;
   reranker: 'hosted' | 'cross-encoder';
   chunkLimit: number;
+  /** Keyword floor: the share of the question's words a piece must hold. */
   threshold: number;
+  /** Meaning floor: how close in meaning a piece must be. */
+  meaningThreshold?: number;
+  /** Collections this base searches; empty means every collection. */
+  scopeCollections?: string[];
   /** Date for `as_of`: only versions in force on it are searched. */
   asOf: string;
   rewrite: RewriteMode;
@@ -340,6 +349,30 @@ export interface RetrievalSettings {
 }
 
 export type RetrievalPreset = 'balanced' | 'precise' | 'raw';
+
+/** What a search of the base gives back to an agent's turn; the agents kernel applies it (kb-service `answer`). */
+export interface AnswerSettings {
+  shape: 'answer_with_citations' | 'chunks';
+  /** An answer citing none of the base's pieces is replaced by `noAnswerMessage`. */
+  withholdUncited: boolean;
+  noAnswerMessage: string;
+}
+
+/** How syncs of the base's sources treat what they find (kb-service `sync`). */
+export interface SyncSettings {
+  changes: 'apply' | 'review';
+  removedAtSource: 'remove' | 'keep';
+  staleAfterDays: number;
+  notifyOnFailure: boolean;
+}
+
+/** How a new source of the base splits; each source keeps its own copy (kb-service `sourceDefaults`). */
+export interface BaseSourceDefaults {
+  strategies: ('structure' | 'fixed' | 'context_headers' | 'parent_child' | 'table_rows' | 'clean')[];
+  size: number;
+  overlap: number;
+  childSize: number;
+}
 
 export type KbHealth = 'healthy' | 'indexing' | 'degraded' | 'failed' | 'never';
 
@@ -400,6 +433,12 @@ export interface KnowledgeBase {
   precedence: PrecedenceRule[];
   metadataProfile: MetadataProfile;
   retrieval: RetrievalSettings;
+  /** Served by kb-service; absent in the preview data. */
+  answer?: AnswerSettings;
+  sync?: SyncSettings;
+  sourceDefaults?: BaseSourceDefaults;
+  /** The person who answers for what it serves, by email. */
+  owner?: string;
   access: KbAccess;
   automation: 'act' | 'suggest';
   stats: {
@@ -589,8 +628,14 @@ export interface KnowledgeBaseInput {
   collections: string[];
 }
 
-export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'description' | 'color' | 'collections' | 'precedence' | 'metadataProfile'>> & {
+export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'description' | 'color' | 'collections' | 'precedence' | 'metadataProfile' | 'owner'>> & {
+  /** Each section merges over what is stored: the keys sent change, the rest stay. */
   retrieval?: Partial<RetrievalSettings>;
+  answer?: Partial<AnswerSettings>;
+  sync?: Partial<SyncSettings>;
+  sourceDefaults?: Partial<BaseSourceDefaults>;
+  /** Who may search a base is its whole team; only the MCP tool is set here. */
+  access?: { mcp: Partial<KbAccess['mcp']> };
 };
 
 /** A new source, as `POST /v1/sources` takes it; settings left out start from its kind's defaults. */
@@ -701,6 +746,8 @@ export interface SyncOptions {
 
 export interface QueryInput {
   question: string;
+  /** Only pieces of this collection (the Test sheet's filter). */
+  collection?: string;
   /** Full settings for this call; omitted uses each knowledge base's saved settings. */
   settings?: RetrievalSettings;
   /** Fields that override the saved settings for this call only (workflow steps, chat). */
@@ -720,7 +767,7 @@ export interface RetrieveInput extends Omit<QueryInput, 'alsoKbIds'> {
 
 export type KbFilters = { health?: string[]; access?: string[] };
 export type SourceFilters = { type?: string[]; status?: string[]; schedule?: string[]; usedBy?: string[]; connectionId?: string[] };
-export type DocumentFilters = { sourceId?: string[]; status?: string[]; freshness?: string[]; sensitivity?: string[]; tags?: string[] };
+export type DocumentFilters = { sourceId?: string[]; status?: string[]; collection?: string[]; docType?: string[]; freshness?: string[]; sensitivity?: string[]; tags?: string[] };
 export type ItemFilters = { status?: string[]; mime?: string[]; errorClass?: string[] };
 
 export type { HeldReason, IngestSettings, ItemVersionRow, VersionStatus } from './knowledge-ingest';

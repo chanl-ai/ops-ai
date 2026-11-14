@@ -28,7 +28,7 @@ export default function PublishReviewsPage() {
   const refusedRead = policies.error instanceof ApiError && policies.error.status === 403;
   const [stored, setStored] = React.useState<Record<string, string> | null>(null);
   const policy = policies.data?.find((p) => p.key === 'publishReview');
-  const saved = React.useMemo(() => stored ?? (((policy?.value as Record<string, Record<string, string>> | null | undefined)?.[teamId] ?? {}) as Record<string, string>), [policy, teamId, stored]);
+  const saved = React.useMemo(() => stored ?? (() => { const v = policy?.value as Record<string, Record<string, string>> | null | undefined; return { ...(v?.['*'] ?? {}), ...(v?.[teamId] ?? {}) } as Record<string, string>; })(), [policy, teamId, stored]);
   const [draft, setDraft] = React.useState<Record<string, string>>(saved);
   React.useEffect(() => {
     setDraft(saved);

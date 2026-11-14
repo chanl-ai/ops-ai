@@ -173,7 +173,7 @@ class ErrorEnvelope(TypedDict, closed=True):
 
 class FlagOut(TypedDict, closed=True):
     description: str
-    name: Literal["mcp_gateway", "tool_search", "plugin_updates"]
+    name: Literal["mcp_gateway", "tool_search", "plugin_updates", "area_tabs"]
     on: bool
 
 
@@ -296,13 +296,13 @@ class Jwks(TypedDict, closed=True):
 
 class KeyTarget(TypedDict, closed=True):
     id: str
-    kind: Literal["agent", "workflow"]
+    kind: Literal["agent", "workflow", "mcp_link"]
     version: NotRequired[int | None]
 
 
 class KeyTargetIn(TypedDict, closed=True):
     id: str
-    kind: Literal["agent", "workflow"]
+    kind: Literal["agent", "workflow", "mcp_link"]
     version: NotRequired[int | None]
 
 

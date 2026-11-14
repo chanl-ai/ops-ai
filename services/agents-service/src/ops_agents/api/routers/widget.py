@@ -44,7 +44,7 @@ from ops_store import isolation
 from ...store.widget_deployments import WidgetDeployments
 from ...store.widget_keys import WidgetKeys
 from ..agent_registry import pinned_definition, registry
-from ..auth import Principal, caller_of, principal, require_builder
+from ..auth import Principal, caller_of, principal, reader_of, require_builder
 from ..chat_threads import chat_row, update_meta
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -64,6 +64,7 @@ from . import chat_settings as chat_settings_routes
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+Deployments: TypeAlias = Annotated[Principal, Depends(reader_of("deployments"))]  # noqa: UP040
 
 deployments_router = APIRouter(prefix="/v1/widget-deployments", tags=["widget"], dependencies=[Depends(principal)])
 # The bank's server mints sessions here with a deployment's mint key, not a platform token, so no principal is read.
@@ -186,7 +187,7 @@ async def create_deployment(rt: Rt, me: Me, body: WidgetDeploymentInput) -> JSON
 
 @deployments_router.get("", deprecated=True)
 async def list_deployments(
-    rt: Rt, me: Me, agent_id: Annotated[str | None, Query(alias="agentId")] = None
+    rt: Rt, me: Deployments, agent_id: Annotated[str | None, Query(alias="agentId")] = None
 ) -> JSONResponse:
     """The team's widget deployments, newest first; `agentId` keeps one agent's."""
     rows = await _store(rt).for_team(me.team_id)
@@ -278,7 +279,7 @@ async def create_mint_key(rt: Rt, me: Me, deployment_id: str, body: MintKeyInput
 
 
 @deployments_router.get("/{deployment_id}/keys")
-async def list_mint_keys(rt: Rt, me: Me, deployment_id: str) -> JSONResponse:
+async def list_mint_keys(rt: Rt, me: Deployments, deployment_id: str) -> JSONResponse:
     await _owned(rt, me, deployment_id)
     return ok([_key_view(k) for k in await _key_store(rt).for_deployment(deployment_id)])
 
@@ -310,7 +311,7 @@ async def preview_session(rt: Rt, me: Me, caller: CurrentPrincipal, deployment_i
 
 
 @deployments_router.get("/{deployment_id}/keys/audit")
-async def mint_key_audit(rt: Rt, me: Me, deployment_id: str) -> JSONResponse:
+async def mint_key_audit(rt: Rt, me: Deployments, deployment_id: str) -> JSONResponse:
     """Who created and revoked this deployment's mint keys, newest first."""
     await _owned(rt, me, deployment_id)
     rows = await _key_store(rt).audit(deployment_id)

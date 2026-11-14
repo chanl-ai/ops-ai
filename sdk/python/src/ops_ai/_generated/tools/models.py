@@ -509,6 +509,20 @@ class KnowledgeSourceView(TypedDict, closed=True):
     title: str
 
 
+class LastCall(TypedDict, closed=True):
+    at: str
+    client: str | None
+    outcome: str
+    signedIn: bool
+
+
+class LinkTool(TypedDict, closed=True):
+    access: Literal["read", "write", "workflow"]
+    kind: Literal["tool", "workflow"]
+    name: str
+    title: str
+
+
 class ListedRange(TypedDict, closed=True):
     addedAt: str
     addedBy: str
@@ -516,6 +530,25 @@ class ListedRange(TypedDict, closed=True):
     note: str
     protection: NotRequired[Literal["system", "managed"] | None]
     templateId: NotRequired[str | None]
+
+
+class McpLinkPatch(TypedDict, closed=True):
+    paused: bool
+
+
+class McpLinkView(TypedDict, closed=True):
+    createdAt: str
+    createdBy: str
+    environment: Literal["test"]
+    id: str
+    lastCall: LastCall | None
+    name: str
+    paused: bool
+    slug: str
+    teamId: str
+    toolCount: int
+    tools: list[LinkTool]
+    url: str | None
 
 
 class MockAnswer(TypedDict, closed=True):
@@ -738,6 +771,13 @@ class PersonSignedIn(TypedDict, closed=True):
     personId: str
     scopes: list[str]
     since: NotRequired[str | None]
+
+
+class PickedTool(TypedDict, closed=True):
+    description: NotRequired[str | None]
+    id: str
+    inputSchema: NotRequired[dict[str, Any] | None]
+    label: str
 
 
 class PlatformEventIn(TypedDict, closed=True):
@@ -1052,6 +1092,7 @@ class ToolCallRow(TypedDict, closed=True):
     at: str
     caseId: NotRequired[str | None]
     channel: NotRequired[Literal["api", "mcp", "console"] | None]
+    clientId: NotRequired[str | None]
     clientName: NotRequired[str | None]
     connectionId: NotRequired[str | None]
     credential: NotRequired[Literal["person", "team"] | None]
@@ -1272,6 +1313,7 @@ class AppResource(TypedDict):
     service: str
     source: str
     state: Literal["available", "added", "update_available", "removed_upstream", "needs_sign_in"]
+    summary: NotRequired[str | None]
     title: str
     version: int
 
@@ -1427,6 +1469,11 @@ class EnvelopeHeldHost(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeMcpLinkView(TypedDict, closed=True):
+    data: McpLinkView
+    success: Literal[True]
+
+
 class EnvelopeMockAnswer(TypedDict, closed=True):
     data: MockAnswer
     success: Literal[True]
@@ -1517,6 +1564,11 @@ class EnvelopeListKnowledgeSourceView(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListMcpLinkView(TypedDict, closed=True):
+    data: list[McpLinkView]
+    success: Literal[True]
+
+
 class EnvelopeListMyAccount(TypedDict, closed=True):
     data: list[MyAccount]
     success: Literal[True]
@@ -1550,6 +1602,12 @@ class ListedHost(TypedDict, closed=True):
     note: str
     protection: NotRequired[Literal["system", "managed"] | None]
     templateId: NotRequired[str | None]
+
+
+class McpLinkIn(TypedDict, closed=True):
+    environment: NotRequired[Literal["test"]]
+    name: str
+    tools: list[PickedTool]
 
 
 class ModuleActivity(TypedDict, closed=True):
@@ -1765,6 +1823,7 @@ class PluginTemplate(TypedDict):
         "guardrail",
         "knowledge_source",
     ]
+    off: NotRequired[str | None]
     plugin: PluginRef
     requires: TemplateRequires
     source: str

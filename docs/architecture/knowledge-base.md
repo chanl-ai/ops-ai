@@ -13,7 +13,7 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 
 | Part | Built | Where |
 |---|---|---|
-| Bases, sources, items, versions, pieces, changes, runs; team isolation | Built | `services/kb-service/src/ops_kb/store/knowledge.py`; migrations kb_0001 to kb_0023 |
+| Bases, sources, items, versions, pieces, changes, runs; team isolation | Built | `services/kb-service/src/ops_kb/store/knowledge.py`; migrations kb_0001 to kb_0024 |
 | Source kinds file, text, push, tool; website sources as plugin sources | Built | `services/kb-service/src/ops_kb/service.py:101`; `source_settings.py:72-73` |
 | Source kinds listed by the API, so the console keeps no list of its own | Built | `services/kb-service/src/ops_kb/app.py:617` |
 | Settings per source for every stage, validated on save | Built | `source_settings.py`; migration `0015_source_settings.py` |
@@ -30,10 +30,19 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | Contract test any knowledge-source plugin must pass | Built | `packages/ops_plugin_sdk/src/ops_plugin_sdk/testing.py:179` |
 | Website, SharePoint and Confluence plugins | Built, not run against a real tenant | pinned in `deploy/plugins.json` |
 | An agent searches only its own bases, unless its "all team knowledge bases" option is on | Built | `packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py:83`, `:631-635` |
+| A base's settings in five sections, each patched alone and checked whole; presets fill them all | Built | `schemas.py` (`RetrievalSettings` to `SourceDefaults`); `service.py` (`settings_of`, `settled`, `PRESETS`); migration `0024_base_settings.py` |
+| A pushed item's `url`, cited by search | Built | `schemas.py` (`WrittenItemIn.url`); `service.py` (`put_item`) |
+| The base's answer settings read by the kernel | Built | every search answer carries each base's `answer` section; the kernel replaces an uncited answer, or a turn that found nothing, with the first withholding base's no-answer message (`packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py` `_base_withholds`); a pieces-only base never withholds |
+| The base's sync settings applied by syncs, the strictest of the bases a source feeds winning | Built: a changed version held for review, removed items kept and flagged, the failing alert turned off | `service.py` (`sync_rules`, `_hold`, `_apply_held`, `settle_run`); `tool_sources.py` (`_flag_removed`) |
+| Stale after a number of days read by freshness | Designed, not built yet | served on the source detail; freshness still follows the schedule |
+| A new source copies its base's source defaults | Built | `service.py` (`create_source`, `_base_split`) |
 | JavaScript pages rendered in a headless browser worker | Designed, not built yet | |
-| An answer with no cited passage withheld, on by default | Designed, not built yet | the kernel's optional end check corrects uncited knowledge once and is off by default (`packages/ops_agent_kernel/src/ops_agent_kernel/types.py:93-95`) |
-| Playground answer written by a kernel turn | Designed, not built yet | the query route returns passages only (`service.py:1834-1837`) |
-| Filters on source, tags and metadata applied to search | Designed, not built yet | stored in the base's retrieval settings (`service.py:90-93`); not read by `retrieval.py` or `search.py` |
+| An answer with no cited passage withheld, on by default | Built | on in the Balanced and Precise presets, off in Search only; applies whether or not the agent's own end check is on |
+| Test sheet: an agent's answer from a kernel turn, the pieces used with scores, the search trace, one collection, the base's no-answer message | Built | `apps/console/src/components/knowledge/test-sheet.tsx`; `schemas.py` (`QueryIn.collection`); the query route's passages carry no answer text of their own |
+| Documents table filtered and faceted by source, status, collection, type, freshness, sensitivity and tag | Built | `service.py` (`documents`, `doc_type`, `DOCUMENT_FACETS`); each facet counts over the rows the other filters keep |
+| Refresh one document | Built as a sync of its source | no per-document route; the row's Refresh syncs the source it came from |
+| Retire one document | Designed, not built yet | no route; a source's items leave with the source |
+| Filters on collection, source, tags and metadata applied to search, each base its own, in both lanes; a per-request collection | Built | `retrieval.py` (`Scope`); `store/fulltext.py` (`scope_sql`); `store/vectors.py` (`nearest`); `schemas.py` (`SearchIn.collection`) |
 | Filters from conversation variables; freshness and trust boosts | Designed, not built yet | |
 | Keyword lane on the shared `ops_store.dialect.full_text` | Designed, not built yet | the lane has its own PostgreSQL query (`store/fulltext.py:1-2`) |
 | Search on SQL Server | Designed, not built yet | |
@@ -82,6 +91,45 @@ Because every item has a snapshot, a re-index never fetches from the web or the 
 | `kb_runs` | Each sync or rebuild run with counts and model spend | Yes |
 | `kb_outbox` | Audit entries and events, delivered by a relay | Yes |
 | `kb_queries` | Each question, masked: rewrite, lanes run, top score, answered or withheld and why, pieces cited; kept 90 days | No |
+
+## Settings of a base
+
+A base's settings are five sections. `PATCH /v1/knowledge-bases/{id}` takes any of them; the keys sent change and the
+rest of that section and the other sections stay. A key a section does not keep, or a value out of range, is 400
+`invalid_settings`, so no caller saves a value nothing reads. Retrieval sits in the base's `retrieval` column, the
+other four in its `settings` column (kb_0024); null reads as the defaults.
+
+| Section | Holds | Default | Who reads it |
+|---|---|---|---|
+| `retrieval` | Mode, weight, rerank, rewrite and its instruction and model, pieces returned, keyword and meaning floors; the scope (`scopeCollections`, `scopeSourceIds`), `tagsInclude`, `tagsExclude`, `includeUntagged`, metadata `filters` | Hybrid, 0.6, 8 pieces, floors 0.5 and 0.38, no scope | The search: both lanes keep each base's pieces within its scope (`store/fulltext.py` `scope_sql`) |
+| `answer` | `shape` (`answer_with_citations` or `chunks`), `withholdUncited`, `noAnswerMessage` | An answer with citations, withheld when uncited | The query route's no-answer message; the agents kernel, from `answers` in each search answer |
+| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Syncs of every source the base reads; served as `automation` (`act` or `suggest`). `staleAfterDays` is served, not yet read by freshness |
+| `access` | `mcp.enabled`, `mcp.toolName` | Off, `search_<slug>` | Nothing yet; the MCP search tool is not built |
+| `sourceDefaults` | How a new source splits: `strategies`, `size`, `overlap`, `childSize`; AI steps are refused here and set per source with their estimate | At headings with context headers, 400 tokens, overlap 40 | A new source created into the base copies the values that differ from the defaults; each source keeps its own copy |
+
+A base is searchable by its whole team; no narrower list of people is kept, and `access.members` is always
+`{"mode": "all"}`. The model, temperature, length and instructions of an answer belong to the agent, so a base does not
+keep them, nor `reranker`, `expandCount`, `asOf`, `structuredTables`, `citationStyle` or `includeChunks`. A base saved
+before kb_0024 keeps those keys in its row until its next save; they are left out when read, and its answer shape and
+no-answer message carry over into `answer`.
+
+A preset given at create (`balanced`, `precise`, or `raw`, shown as "Search only") fills every section; the values a
+create sends override it, and any later patch wins. The base does not record which preset it started from.
+
+| Preset | Pieces | Keyword floor | Meaning floor | Gives back | Withholds uncited |
+|---|---|---|---|---|---|
+| `balanced` | 8 | 0.50 | 0.38 | Answer with citations | Yes |
+| `precise` | 5 | 0.65 | 0.45 | Answer with citations | Yes |
+| `raw` (Search only) | 10 | 0.40 | 0.30 | Pieces only | No |
+
+When a source feeds several bases, its syncs follow the strictest of their sync settings: review over apply, keep over
+remove, the fewest days to stale, and the failing alert sent when any base asks. A held version waits in Changes as a
+pending change from the source's sync; search serves the current version until it is approved
+(`POST /v1/knowledge-changes/decide`), and the same content found again, waiting or rejected, is not held twice. A
+removed item that is kept stays searchable and carries a warning saying its source removed it.
+
+A pushed item (`POST /v1/sources/{id}/items`) may carry the `url` it lives at, such as a web page's address; the item
+and every passage cut from it cite that `url`.
 
 ## Settings per stage
 
@@ -200,7 +248,7 @@ deletes and the schedule; a plugin owns only how to talk to its system.
 ## Retrieval
 
 One search in kb-service serves every caller: grounding on each turn, the `search_knowledge` tool, the workflow
-Knowledge step, the Playground and the query route. The base's retrieval settings decide how many pieces return; a
+Knowledge step, the console's Test sheet and the query route. The base's retrieval settings decide how many pieces return; a
 caller's `limit` only caps it (`service.py:2850-2866`).
 
 | Part | How it works | Default | Built |
@@ -213,7 +261,7 @@ caller's `limit` only caps it (`service.py:2850-2866`).
 | Lanes reported | Lanes asked, run and skipped with the reason (`no_embedding_model`, `no_vector_store`, `no_vectors`, `no_candidates`, `embedding_unavailable`, `no_full_text`); `/health` counts units not embedded | Always | Yes |
 | Rewrite | A model rewrites the question with the base's instruction; before and after returned | Off | Yes, with an instruction; templates with variables not built |
 | Rerank | A model scores the top 20 fused pieces from 0 to 10 | Off | Yes |
-| Filters | Source, tags and metadata, exact and typed; later from conversation variables | None | No |
+| Filters | Collection, source, tags in and out, untagged, metadata conditions (`is`, `is_not`, `one_of`, `before`, `after`, `exists`, compared as text), in both lanes, per base; a request may add one collection; later from conversation variables | None | Yes |
 | Freshness and trust | A verified item raised a little; an item from a source failing 7 days or more lowered a little; nothing excluded | On | No |
 
 Several bases in one search use every lane any asks for, the lowest thresholds, the mean weight and the largest limit.
@@ -260,6 +308,23 @@ Designed, not built yet.
 | Unanswered list | Questions withheld or below the threshold, grouped by meaning, with a count each | kb-service |
 | Gap job | Nightly, per group: a new item, an edit, a duplicate to merge, or a contradiction, each as a draft in the Changes queue | a job on the one schedule rule |
 | Evals | A question set per base with expected items: hit at 5, mean reciprocal rank and faithfulness per settings version; the judge sees each turn's question and the pieces used | the platform eval runner |
+
+## Adding data in the console
+
+A base opens on Documents. One Add data source menu, on Documents and on Sources, opens what exists for each kind
+(`apps/console/src/components/knowledge/add-data-source.tsx`):
+
+| Menu item | Opens |
+|---|---|
+| Files, A folder | Add files: FileUpload with its folder option; a file that cannot be read is listed and the rest go in |
+| Website or sitemap, Pushed by API | Add source at step 2 with that kind chosen |
+| From your apps | Add source at step 1 |
+| Typed text | Add page |
+| Attach an existing source | Attach sources |
+
+Files and folders dropped anywhere on the Documents tab open Add files with them listed
+(`components/shared/page-drop-target.tsx`); dropped folders are walked to the files inside. A member sees the table
+and Test only.
 
 ## Add source in the console
 

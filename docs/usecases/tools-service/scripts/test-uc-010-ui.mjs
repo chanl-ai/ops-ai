@@ -1,30 +1,40 @@
 // uc-010 a builder manages a tool module, ui layer: docs/usecases/tools-service/manage-tool-modules.md.
-// Headless Chromium against a console whose Tools pages call tools-service: edit a published operation's URL in the
-// operation workbench, see the change pending and the unused-input warning, publish, see the major version.
+// Headless Chromium against a console signed in through platform-service, its Tools pages on tools-service: James edits
+// a published operation's URL in the operation workbench, sees the change pending and the unused-input warning,
+// publishes, and sees the major version. Security (Sam lists the host, Nadia approves the first review) decides theirs.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ROOT, TOOLS_PORT, approveToolReview, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, asRole, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
-const JSONH = { 'Content-Type': 'application/json' };
-// A dev caller decides reviews only in the team it acts in, and the module's publish is Security's to decide.
-const SECURITY = { ...JSONH, 'X-Dev-User': 'Nadia Petrov', 'X-Team-Id': 'team_security' };
+// James builds in team_ops; the module's publish is Security's to decide (Nadia), and its hosts Security's to list (Sam).
+let JSONH = {};
+let SECURITY = {};
+let SAM = {};
+const signedIn = async (email, team) => {
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) });
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${(await r.json()).data.token}`, 'X-Team-Id': team };
+};
 const HOST = 'statements.bank.test';
 const TAG = Math.random().toString(36).slice(2, 6);
 const OP = `get_statement_${TAG}`;
 const SHOTS = evidenceDir('027');
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
-const api = async (method, path, body, headers = JSONH) => {
+const api = async (method, path, body, headers) => {
+  headers ??= JSONH;
   const r = await fetch(`${tools}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
   return { status: r.status, data: (await r.json().catch(() => ({}))).data };
 };
 
 await withUiStack(
   async (consoleUrl) => {
+    JSONH = await asRole('builder', 'team_ops');
+    SECURITY = await signedIn('n.petrov@harborpine.example', 'team_security');
+    SAM = await asRole('security', 'team_security');
     // A published module with one hand-built operation on the bank's statements API.
-    await api('POST', '/v1/egress/hosts', { value: HOST, note: 'uc-010 ui' });
+    await api('POST', '/v1/egress/hosts', { value: HOST, note: 'uc-010 ui' }, SAM);
     const made = await api('POST', '/v1/tool-modules/blank', { displayName: `Statements ${TAG}`, name: `uc010-statements-${TAG}`, type: 'http' });
     const id = made.data?.id;
     await api('POST', `/v1/tool-modules/${id}/operations`, { name: OP, description: 'Monthly statement', access: 'read', method: 'GET', url: `https://${HOST}/v1/accounts/{accountId}/statements`, headers: [] });
@@ -39,9 +49,8 @@ await withUiStack(
     mkdirSync(SHOTS, { recursive: true });
     const browser = await chromium.launch();
     try {
-      const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
       const errors = [];
-      page.on('pageerror', (e) => errors.push(e.message));
+      const page = await consoleSignIn(browser, consoleUrl, 'j.richardson@harborpine.example', 'northfield-demo', errors);
       await page.goto(`${consoleUrl}/tools/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       // The row opens the operation's workbench, where its call is edited.
       await page.getByRole('row', { name: new RegExp(OP) }).click({ timeout: 120_000 });
@@ -55,7 +64,7 @@ await withUiStack(
 
       // Non-vacuous pair with the edit below: another origin is refused before anything is sent.
       await url.fill('https://other.bank.test/v1/x');
-      const blocked = (await page.getByTestId('workbench-stage').isDisabled()) && (await http.getByText(/Keep the module endpoint/).count()) === 1;
+      const blocked = (await page.getByTestId('workbench-stage').isDisabled()) && (await http.getByText(/Keep the app’s address/).count()) === 1;
       check('a URL off the module endpoint is refused on the workbench and cannot be staged', blocked);
 
       await url.fill(`https://${HOST}/v2/statements/latest`);
@@ -67,9 +76,10 @@ await withUiStack(
       const sent = stageRes ? JSON.parse(stageRes.request().postData() ?? '{}') : {};
       const pending = stageRes ? (await stageRes.json()).data?.pendingChanges ?? [] : [];
       check('Stage change sends only the new path, staged as one major change', stageRes?.status() === 200 && JSON.stringify(sent) === JSON.stringify({ path: '/v2/statements/latest' }) && pending.length === 1 && pending[0].major === true && pending[0].kind === 'schema_changed', { status: stageRes?.status(), sent, pending });
-      const callLine = page.getByTestId('op-call');
-      await callLine.getByText(/staged; calls run the published call/).waitFor({ timeout: 10_000 }).catch(() => undefined);
-      check('the workbench labels the staged call as not yet what calls run', (await callLine.innerText()).includes('staged; calls run the published call'), await callLine.innerText());
+      // The page header says the saved call is not yet what Real runs.
+      const stagedNote = page.getByText('Saved; Real runs the published call until you publish.');
+      const noted = await stagedNote.waitFor({ timeout: 10_000 }).then(() => true, () => false);
+      check('the workbench labels the staged call as not yet what calls run', noted);
       await page.screenshot({ path: join(SHOTS, '2-pending-path-edit-unused-warning.png') });
       const live = await api('GET', `/v1/tool-modules/${id}`);
       check('the published version is unchanged until publish', live.data?.version === start && live.data?.pendingChanges?.length === 1, { version: live.data?.version });
@@ -97,7 +107,7 @@ await withUiStack(
       await browser.close();
     }
   },
-  { tools: {} },
+  { platform: true, tools: {} },
 );
 
 finish();

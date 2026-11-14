@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -30,6 +31,7 @@ from ops_engine.store import (
 )
 from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_files_client import FilesClient, FilesRefused
+from ops_identity.fastapi import ActingPerson
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -57,6 +59,7 @@ from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
     approves_own_writes,
+    caller,
     key_scope,
     principal,
     require_builder,
@@ -80,6 +83,22 @@ REGISTRY = default_registry()
 log = get_logger("ops_agents.api.routers.engine")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+
+
+async def starter(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
+    """Who starts a run on POST /v1/runs: a person or an API key as on every other route, or a service starting one for
+    the person its X-Acting-For token names (tools-service, for a person signed in to an MCP link). The run records
+    that person as its starter; every right is still decided by `can` on the service token, which carries only the cells
+    that person holds in the team, so a person without workflows.run starts nothing. A service acting for nobody holds
+    no right here: its scopes are dropped, so `can` refuses it as it refuses anyone without the cell."""
+    if me.identity is None or me.identity.kind != "service":
+        return me
+    if acting is None:
+        return replace(me, identity=me.identity.model_copy(update={"scopes": []}))
+    return replace(me, email=acting.email, name=acting.name or acting.email, sub=acting.sub)
+
+
+Starter: TypeAlias = Annotated[Principal, Depends(starter)]  # noqa: UP040
 
 
 class PortView(Out):
@@ -762,6 +781,9 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
 
 
 runs_router = APIRouter(prefix="/v1/runs", dependencies=[Depends(principal)])
+# POST /v1/runs alone: it also takes a service starting a run for a person (`starter`), which the router-wide
+# `principal` above refuses.
+run_start_router = APIRouter(prefix="/v1/runs")
 POLL_SECONDS = 0.25
 
 
@@ -1168,13 +1190,13 @@ async def start_by_hand(rt: Rt, me: Me, body: StartInput) -> JSONResponse:
     return ok(started_view(run, True), status=202)
 
 
-@runs_router.post(
+@run_start_router.post(
     "",
     response_model=Envelope[RunStarted],
     status_code=202,
     responses={200: {"model": Envelope[RunStarted], "description": "The run key had started a run already"}},
 )
-async def start_engine_run(rt: Rt, me: Me, body: EngineRunInput) -> JSONResponse:
+async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONResponse:
     """Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker
     running the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a
     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to

@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_access import Access, policy, require_provisioner
+from ops_access import Access, policy, reader_of, require_provisioner
 from ops_identity import Principal
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
@@ -262,7 +262,9 @@ def secrets_router(
         if who.principal is not None:
             may_write_secret(who.principal, action, owner, protection=protection)
 
-    @r.get("", response_model=Envelope[list[SecretMeta] | SecretList])
+    @r.get(
+        "", response_model=Envelope[list[SecretMeta] | SecretList], dependencies=[Depends(reader_of("secrets_egress"))]
+    )
     async def list_secrets(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Person, Depends(caller)],
         *,

@@ -20,10 +20,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+from pydantic import BaseModel, ValidationError
+
 from ops_access import can, require_provisioner
 from ops_documents_client import DocumentsRefused
 from ops_identity import Principal, ServiceUnreachable
-from ops_ingest import ParsedDocument, SplitResult, split
+from ops_ingest import InvalidIngestError, ParsedDocument, SplitResult, split, validate_settings
 from ops_ingest.metadata import resolve_metadata
 from ops_ingest.models import AI_STEPS, IngestApproval, IngestSettings
 from ops_ingest.rules import ItemFacts, evaluate_rules
@@ -44,7 +46,8 @@ from .origin import Origin, source_team
 from .query_steps import RERANK_POOL, REWRITE_MODES, QueryModel, QueryStepFailed, ms_since, steps_for
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .repeats import lines_of, repeated, without
-from .retrieval import Found, Lane, Passage, Retriever, Search
+from .retrieval import Found, Lane, Passage, Retriever, Scope, Search
+from .schemas import AccessSettings, AnswerSettings, RetrievalSettings, SourceDefaults, SyncSettings
 from .search import lanes_for
 from .source_settings import (
     WEB_SCHEDULE,
@@ -64,39 +67,55 @@ from .tool_sources import ToolReader, declared_source, refusal_of, source_config
 
 # A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and the thresholds decide every search
 # of it (retrieval.py); rerank, rewrite and rewriteInstructions turn on the steps around it (query_steps.py), on the
-# chat-model alias queryModel (empty: the environment's kb_query_alias); the rest are the console's.
+# chat-model alias queryModel (empty: the environment's kb_query_alias); the scope and filter fields narrow which of
+# its pieces a search may return. Keys a base stored before they were dropped (model, answerShape, ...) are ignored.
 DEFAULT_RETRIEVAL: dict[str, Any] = {
     "searchMode": "hybrid",
     "hybridWeight": 0.6,
     "rerank": False,
-    "reranker": "hosted",
     "chunkLimit": 8,
     "threshold": 0.5,
     "meaningThreshold": 0.38,
-    "asOf": "",
     "rewrite": "off",
-    "expandCount": 3,
     "rewriteInstructions": "",
     "queryModel": "",
+    "scopeCollections": [],
     "scopeSourceIds": [],
-    "answerShape": "answer_with_citations",
-    "model": "bank-standard",
-    "temperature": 0.1,
-    "maxTokens": 800,
-    "instructions": "Answer only from the provided context. If the context does not contain the answer, say so.",
-    "citationStyle": "inline",
-    "includeChunks": True,
-    "noAnswerMessage": "I could not find that in the knowledge base.",
-    "filters": {"match": "all", "conditions": []},
     "tagsInclude": [],
     "tagsExclude": [],
     "includeUntagged": True,
-    "structuredTables": False,
+    "filters": {"match": "all", "conditions": []},
 }
-PRESETS: dict[str, dict[str, Any]] = {
-    "balanced": {"chunkLimit": 8, "threshold": 0.5, "meaningThreshold": 0.38, "answerShape": "answer_with_citations"},
-    "precise": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.45, "answerShape": "answer_with_citations"},
-    "raw": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.3, "answerShape": "chunks"},
+NO_ANSWER = "I could not find that in the knowledge base."
+# The base's other settings sections, kept in its `settings` column; `access.mcp.toolName` defaults to search_<slug>.
+DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
+    "answer": {"shape": "answer_with_citations", "withholdUncited": True, "noAnswerMessage": NO_ANSWER},
+    "sync": {"changes": "apply", "removedAtSource": "remove", "staleAfterDays": 365, "notifyOnFailure": True},
+    "access": {"mcp": {"enabled": False}},
+    "sourceDefaults": {"strategies": ["structure", "context_headers"], "size": 400, "overlap": 40, "childSize": 120},
+}
+SECTIONS: dict[str, type[BaseModel]] = {
+    "retrieval": RetrievalSettings,
+    "answer": AnswerSettings,
+    "sync": SyncSettings,
+    "access": AccessSettings,
+    "sourceDefaults": SourceDefaults,
+}
+# What each preset fills over the defaults; every value stays editable afterwards, and the base does not remember
+# which preset it started from. `raw` is shown as "Search only": an agent or workflow answers from the pieces.
+PRESETS: dict[str, dict[str, dict[str, Any]]] = {
+    "balanced": {
+        "retrieval": {"chunkLimit": 8, "threshold": 0.5, "meaningThreshold": 0.38},
+        "answer": {"shape": "answer_with_citations", "withholdUncited": True},
+    },
+    "precise": {
+        "retrieval": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.45},
+        "answer": {"shape": "answer_with_citations", "withholdUncited": True},
+    },
+    "raw": {
+        "retrieval": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.3},
+        "answer": {"shape": "chunks", "withholdUncited": False},
+    },
 }
 SOURCE_TYPES_IN_PHASE = ("file", "text", "push", "tool")
 # Kinds whose items are written through the API (POST /v1/sources/{id}/items) and kept as files like uploads: typed
@@ -174,6 +193,42 @@ def _facet(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     for r in rows:
         out[str(r[key])] = out.get(str(r[key]), 0) + 1
     return out
+
+
+# The Documents table's filters that are facets, by the row field each counts.
+DOCUMENT_FACETS = ("sourceId", "status", "collection", "docType", "freshness", "sensitivity", "tags")
+WORD_MIMES = {"application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+SHEET_MIMES = {
+    "text/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+SLIDE_MIMES = {
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+
+def doc_type(mime: str, source_type: str, has_url: bool) -> str:
+    """What a document is, as the Documents table's Type names it: written in the console, from an app, a web page (a
+    pushed page with its address counts), or by its file type."""
+    if source_type == "text":
+        return "typed"
+    if source_type == "tool":
+        return "app"
+    if mime == "text/html" or source_type == "web" or has_url:
+        return "web"
+    if mime == "application/pdf":
+        return "pdf"
+    if mime in WORD_MIMES:
+        return "word"
+    if mime in SHEET_MIMES:
+        return "spreadsheet"
+    if mime in SLIDE_MIMES:
+        return "slides"
+    if mime.startswith("text/"):
+        return "text"
+    return "other"
 
 
 def _matches(search: str | None, *texts: str) -> bool:
@@ -480,6 +535,7 @@ class KnowledgeService:
             health, reasons = "degraded", [f"{failures} document{'s' if failures != 1 else ''} failed to index"]
         else:
             health, reasons = "healthy", []
+        settings = settings_of(b)
         return {
             "id": b["id"],
             "name": b["name"],
@@ -496,11 +552,12 @@ class KnowledgeService:
             "collections": b["collections"],
             "precedence": PRECEDENCE,
             "metadataProfile": {"required": []},
-            "retrieval": b["retrieval"],
+            **{k: v for k, v in settings.items() if k != "access"},
             "access": {
+                # Every base is searchable by its whole team; no narrower list is kept.
                 "members": {"mode": "all", "principals": []},
                 "anyApiKey": False,
-                "mcp": {"enabled": False, "toolName": f"search_{b['slug']}"},
+                "mcp": settings["access"]["mcp"],
                 "publicLink": {
                     "enabled": False,
                     "slug": b["slug"].replace("_", "-"),
@@ -510,7 +567,7 @@ class KnowledgeService:
                 },
                 "documentPermissions": "workspace",
             },
-            "automation": "suggest",
+            "automation": "suggest" if settings["sync"]["changes"] == "review" else "act",
             # Queries are not logged yet, so their counts are 0 and the console does not show them.
             "stats": {
                 "documents": documents,
@@ -630,17 +687,21 @@ class KnowledgeService:
         source_ids = list(dict.fromkeys(i.get("sourceIds") or []))
         await self._known_sources(who, source_ids)
         preset = PRESETS.get(str(i.get("preset") or "balanced"), PRESETS["balanced"])
+        slug = _slug(name)
+        start = {k: {**v, **preset.get(k, {})} for k, v in settings_of({"slug": slug}).items()}
+        chosen = settled(start, {k: i.get(k) for k in SECTIONS})
         row: dict[str, Any] = {
             "tenant_id": who.tenant_id,
             "id": i.get("id") or new_id("kb"),
             "team_id": who.team_id,
             "name": name,
-            "slug": _slug(name),
+            "slug": slug,
             "description": str(i.get("description") or ""),
             "color": str(i.get("color") or "blue"),
             "owner": owner,
             "collections": list(i.get("collections") or []),
-            "retrieval": {**DEFAULT_RETRIEVAL, **preset},
+            "retrieval": chosen["retrieval"],
+            "settings": {k: v for k, v in chosen.items() if k != "retrieval"},
             "created_by": who.email,
             "created_at": datetime.now(UTC),
             "last_refreshed_at": None,
@@ -705,8 +766,16 @@ class KnowledgeService:
         for key in ("description", "color", "collections"):
             if patch.get(key) is not None:
                 values[key] = patch[key]
-        if patch.get("retrieval") is not None:
-            values["retrieval"] = checked_retrieval({**b["retrieval"], **patch["retrieval"]})
+        # The route dumps the patch by field name, so the source defaults arrive as source_defaults.
+        sections = {k: patch.get(k, patch.get(re.sub(r"([A-Z])", r"_\1", k).lower())) for k in SECTIONS}
+        if any(v is not None for v in sections.values()):
+            current = settings_of(b)
+            after = settled(current, sections)
+            if after["retrieval"] != dict(b.get("retrieval") or {}):
+                values["retrieval"] = after["retrieval"]
+            rest = {k: v for k, v in after.items() if k != "retrieval"}
+            if rest != dict(b.get("settings") or {}):
+                values["settings"] = rest
         if values:
             entry = audit_entry(who, "knowledge.base.settings", "knowledge_base", kb_id, b["name"], b, values)
             await self.store.update_base(who.tenant_id, kb_id, values, audit=entry)
@@ -724,6 +793,29 @@ class KnowledgeService:
         await self._changeable(who, kb_id, "delete")
         if not await self.store.remove_base(who.tenant_id, kb_id, by=who.email):
             raise NotFound("No knowledge base with that id.")
+
+    async def _base_split(self, tenant: str, kb_id: str) -> dict[str, Any]:
+        """The splitting values a base's source defaults set apart from the defaults: what a new source copies."""
+        b = await self.store.base(tenant, kb_id)
+        if b is None:
+            return {}
+        default = DEFAULT_SETTINGS["sourceDefaults"]
+        return {k: v for k, v in settings_of(b)["sourceDefaults"].items() if default.get(k) != v}
+
+    async def sync_rules(self, tenant: str, source_id: str) -> dict[str, Any]:
+        """How syncs of a source treat what they find, from the bases it feeds: when they differ the strictest wins
+        (review over apply, keep over remove, the fewest days to stale, notify when any base asks)."""
+        by_kb, _ = await self._joined(tenant)
+        bases = {str(b["id"]): b for b in await self.store.bases(tenant)}
+        rules = [settings_of(bases[k])["sync"] for k, srcs in by_kb.items() if source_id in srcs and k in bases]
+        if not rules:
+            return dict(DEFAULT_SETTINGS["sync"])
+        return {
+            "changes": "review" if any(r["changes"] == "review" for r in rules) else "apply",
+            "removedAtSource": "keep" if any(r["removedAtSource"] == "keep" for r in rules) else "remove",
+            "staleAfterDays": min(int(r["staleAfterDays"]) for r in rules),
+            "notifyOnFailure": any(bool(r["notifyOnFailure"]) for r in rules),
+        }
 
     async def _known_sources(self, who: Who, source_ids: list[str]) -> None:
         found = {s["id"] for s in await self.store.sources(who.tenant_id, source_ids)}
@@ -779,8 +871,13 @@ class KnowledgeService:
         readers = [b for b in await self.store.bases(who.tenant_id) if b["id"] in by_source.get(source_id, [])]
         recent = [_run(r) for r in (await self.store.runs(who.tenant_id, source_id=source_id))[:5]]
         items = await self.store.items(who.tenant_id, source_ids=[source_id])
+        rules = await self.sync_rules(who.tenant_id, source_id)
         return {
             **self._source(s, by_source.get(source_id, [])),
+            # What its syncs apply, from the bases it feeds (the strictest wins).
+            "deletedAtSource": rules["removedAtSource"],
+            "staleAfterDays": rules["staleAfterDays"],
+            "notifyOnFailure": rules["notifyOnFailure"],
             "readers": [
                 {
                     "id": b["id"],
@@ -846,6 +943,10 @@ class KnowledgeService:
             # Read through a connection's tools: what tools-service declares for the team, checked now.
             row["config"] = await source_config(self.tools, who, i)
         given = {k: i[k] for k in SETTINGS_KEYS if i.get(k) is not None}
+        if kb_ids and (split := await self._base_split(who.tenant_id, kb_ids[0])):
+            # A new source of a base splits as the base says, where it says something other than the default; the
+            # source keeps its own copy, and what the create sends wins.
+            given["ingest"] = {**split, **dict(given.get("ingest") or {})}
         row["settings"] = wire(self._merged(self.settings_of(row), given)) if given else None
         # Files named at creation are checked and referenced like any added later, before the source exists.
         names = [await self._use_file(who, row, f) for f in dict.fromkeys(i.get("fileIds") or [])]
@@ -1145,6 +1246,9 @@ class KnowledgeService:
             await self.embed_now(who.tenant_id)
             return
         long_failing = isinstance(before, datetime) and datetime.now(UTC) - before >= FAILING_AFTER
+        if not (await self.sync_rules(who.tenant_id, str(s["id"])))["notifyOnFailure"]:
+            # Every base the source feeds turned the alert off; the run is still recorded as failed.
+            return
         if in_row == FAILING_AFTER_RUNS or (long_failing and in_row > FAILING_AFTER_RUNS and in_row % 24 == 0):
             payload = {
                 "sourceId": s["id"],
@@ -1510,9 +1614,13 @@ class KnowledgeService:
     ) -> list[dict[str, Any]]:
         """Approve, reject or edit FAQ drafts, each by the knowledge owner of its source. An approved pair is
         searchable at once (embedded with the rest of the tenant's units); an edit keeps it waiting for review."""
-        found = {c["id"]: c for c in await self.store.changes(who.tenant_id, ids=ids) if c["origin"] == "faq"}
+        found = {
+            c["id"]: c
+            for c in await self.store.changes(who.tenant_id, ids=ids)
+            if c["origin"] == "faq" or "held" in detail_of(c)
+        }
         if missing := [i for i in ids if i not in found]:
-            raise NotFound(f"No FAQ draft {missing[0]}.")
+            raise NotFound(f"No FAQ draft or held change {missing[0]}.")
         items: set[str] = set()
         for change_id in ids:
             d = found[change_id]
@@ -1520,6 +1628,15 @@ class KnowledgeService:
             if d["status"] not in DECIDABLE:
                 raise Conflict(f"That draft is {d['status']}; there is nothing to decide.", code="draft_decided")
             values: dict[str, Any] = {"decided_by": who.email, "decided_at": datetime.now(UTC)}
+            if d["origin"] == "sync":
+                # A version a sync held for review: approving indexes it; it cannot be edited.
+                if decision == "edit":
+                    raise Conflict("A synced version is approved or rejected, not edited.", code="draft_decided")
+                values["status"] = "rejected"
+                if decision == "approve":
+                    values["status"] = "approved" if await self._apply_held(who, d) else "superseded"
+                await self.store.update_change(who.tenant_id, change_id, values)
+                continue
             if decision == "edit":
                 detail = {**detail_of(d), **(edit or {})}
                 values = {"detail": detail, "after": f"Q: {detail['question']}\nA: {detail['answer']}"}
@@ -1818,9 +1935,55 @@ class KnowledgeService:
         if existing is not None and existing["version"] > 0:
             before = await self.store.chunks(who.tenant_id, item_id)
             change = _change(who, s, item, existing["version"], before, chunks, now)
+        if (
+            change is not None
+            and existing is not None
+            and not error
+            and existing.get("content_digest") != item["content_digest"]
+            and (await self.sync_rules(who.tenant_id, str(s["id"])))["changes"] == "review"
+        ):
+            return await self._hold(who, existing, item, version_row, chunks, change)
         await self.store.index_version(who.tenant_id, item, version_row, chunks, new=existing is None, change=change)
         await self._settle_drafts(who, s, item_id, chunks, result)
         return await self._duplicates(who, s, item)
+
+    async def _hold(  # noqa: PLR0917 - one call site, every argument a different part of the version
+        self,
+        who: Who,
+        existing: dict[str, Any],
+        item: dict[str, Any],
+        version_row: dict[str, Any],
+        chunks: list[dict[str, Any]],
+        change: dict[str, Any],
+    ) -> dict[str, Any]:
+        """A changed version a base feeding this source reviews: kept in Changes as a pending change with the version
+        built, while search keeps serving the current one. Approving it indexes the version as built. The same content
+        found again (still waiting, or rejected) is not held twice."""
+        held = [c for c in await self.store.changes(who.tenant_id) if c["item_id"] == existing["id"]]
+        digest = str(item["content_digest"])
+        if any(c["origin"] == "sync" and detail_of(c).get("digest") == digest for c in held):
+            return {**existing, "unchanged": True}
+        for c in held:
+            if c["origin"] == "sync" and c["status"] == "pending":
+                await self.store.update_change(who.tenant_id, str(c["id"]), {"status": "superseded"})
+        payload = {"item": item, "version": version_row, "chunks": chunks}
+        detail = {"digest": digest, "held": _json_safe(payload)}
+        # Written with the drafts' insert: one change row, waiting for a decision.
+        await self.store.add_drafts(who.tenant_id, [{**change, "status": "pending", "detail": detail}])
+        return {**existing, "unchanged": True}
+
+    async def _apply_held(self, who: Who, change: dict[str, Any]) -> bool:
+        """Indexes the version a held change carries, as a sync would have when it found it; False when the document
+        moved on since (its version is no longer the one the change started from), and nothing is indexed."""
+        held = cast(dict[str, Any], _from_json_safe(detail_of(change)["held"]))
+        current = await self.store.items(who.tenant_id, source_ids=[str(change["source_id"])])
+        now = next((i for i in current if i["id"] == change["item_id"]), None)
+        if now is None or int(now["version"]) != int(change["from_version"]):
+            return False
+        await self.store.index_version(
+            who.tenant_id, held["item"], held["version"], held["chunks"], new=False, change=None
+        )
+        return True
 
     async def _duplicates(self, who: Who, s: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
         """An item whose cleaned text another indexed item in the same knowledge base already holds. Flagged (the
@@ -1856,7 +2019,9 @@ class KnowledgeService:
             return await self.store.bases(who.tenant_id)
         return await self.store.team_bases(who.tenant_id, who.team_id)
 
-    async def search(self, who: Who, kb_ids: list[str], question: str, *, limit: int | None = None) -> dict[str, Any]:
+    async def search(
+        self, who: Who, kb_ids: list[str], question: str, *, limit: int | None = None, collection: str | None = None
+    ) -> dict[str, Any]:
         """Passages for `question` across `kb_ids` in the caller's tenant, best first, by the bases' own retrieval
         settings; empty when nothing reaches the threshold. Unknown ids are refused, never silently searched as empty,
         and a base a person may not read is unknown to them; a retired base is skipped, so an agent that still names it
@@ -1867,15 +2032,21 @@ class KnowledgeService:
         if missing := [k for k in kb_ids if k not in readable and k not in retired]:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
         live = [k for k in dict.fromkeys(kb_ids) if k in readable]
-        found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit)
-        return found_out(found)
+        found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit, collection=collection)
+        return {**found_out(found), "answers": {k: settings_of(readable[k])["answer"] for k in live}}
 
     async def _retrieve(
-        self, tenant: str, bases: list[dict[str, Any]], question: str, *, limit: int | None = None
+        self,
+        tenant: str,
+        bases: list[dict[str, Any]],
+        question: str,
+        *,
+        limit: int | None = None,
+        collection: str | None = None,
     ) -> Found:
         """The one search every caller goes through: the question rewritten when a base asks, the lanes, then the best
         fused pieces reranked when a base asks. A step that fails leaves the search as it was and says why."""
-        how = search_settings(bases, limit=limit)
+        how = search_settings(bases, limit=limit, collection=collection)
         steps = steps_for([{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases], self.query_alias)
         searched: str = question
         rewrite: dict[str, Any] | None = None
@@ -1921,7 +2092,7 @@ class KnowledgeService:
         rerank["ms"] = ms_since(started)
         return dataclasses.replace(found, passages=passages, rerank=rerank)
 
-    async def query(self, who: Who, kb_id: str, question: str) -> dict[str, Any]:
+    async def query(self, who: Who, kb_id: str, question: str, *, collection: str | None = None) -> dict[str, Any]:
         """The query route and the console's Playground: the passages one knowledge base returns for a question, with
         each lane's score, which lanes ran, and the embedding tokens the question cost. No model writes an answer here;
         an answer is a kernel turn (agents-service), where the rule that withholds an uncited answer lives."""
@@ -1931,7 +2102,7 @@ class KnowledgeService:
         if b["last_refreshed_at"] is None:
             raise Conflict("This knowledge base has not indexed anything yet; sync a source first.", code="not_indexed")
         started = datetime.now(UTC)
-        found = await self._retrieve(who.tenant_id, [b], question)
+        found = await self._retrieve(who.tenant_id, [b], question, collection=collection)
         passages = found.passages
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
         items = {i["id"]: i for i in await self.store.items(who.tenant_id)}
@@ -1944,7 +2115,7 @@ class KnowledgeService:
             "id": new_id("qry"),
             "question": question,
             "matchers": [],
-            "answer": passages[0].snippet if passages else b["retrieval"]["noAnswerMessage"],
+            "answer": passages[0].snippet if passages else settings_of(b)["answer"]["noAnswerMessage"],
             "citations": [
                 {
                     "n": n + 1,
@@ -2249,12 +2420,18 @@ class KnowledgeService:
             allowed = s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"]
             draft = _draft_out(ch, s, kbs)
             return {**draft, **self.review_state(s), "canDecide": allowed and ch["status"] in DECIDABLE}
+        held = "held" in detail_of(ch)
+        waiting = held and ch["status"] in DECIDABLE
         return {
             "id": ch["id"],
             "summary": f"{ch['title']} changed from v{ch['from_version']} to v{ch['to_version']}",
             "origin": SHOWN_ORIGIN["sync"],
             "proposedBy": ch["changed_by"],
-            "rationale": "A newer file replaced the document when its source was synced.",
+            "rationale": (
+                "A sync found a newer version; it is searched once approved."
+                if held
+                else "A newer file replaced the document when its source was synced."
+            ),
             "documentId": ch["item_id"],
             "documentTitle": ch["title"],
             "sourceId": ch["source_id"],
@@ -2269,12 +2446,18 @@ class KnowledgeService:
             **self.review_state(s),
             "citedBy": [],
             "owner": s["owner"] if s else "",
-            # A sync applies the change when it runs; there is nothing left to decide.
-            "canDecide": False,
-            "status": "approved",
+            # A sync applies its change when it runs, unless a base it feeds holds changes for review.
+            "canDecide": waiting and s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"],
+            "status": ch["status"] if held else "approved",
             "createdAt": _iso(ch["changed_at"]),
-            "decidedAt": _iso(ch["changed_at"]),
-            "decidedBy": ch["changed_by"],
+            **(
+                {
+                    "decidedAt": _iso(ch["decided_at"] or ch["changed_at"]),
+                    "decidedBy": ch["decided_by"] or ch["changed_by"],
+                }
+                if not waiting
+                else {}
+            ),
         }
 
     async def list_changes(
@@ -2327,6 +2510,7 @@ class KnowledgeService:
             "title": i["title"],
             "mimeType": i["mime"],
             "path": i["path"],
+            **({"url": i["url"]} if i.get("url") else {}),
             "modifiedAt": _iso(i["processed_at"] or i["created_at"]),
             **({"processedAt": _iso(i["processed_at"])} if i["processed_at"] else {}),
             "sizeBytes": i["size"],
@@ -2422,6 +2606,10 @@ class KnowledgeService:
             await self._held_sync(who, await self._source_row(who, source_id), full=False, retry=False, only=name)
         found = (await self.store.sources(who.tenant_id, [source_id]))[0]
         item = next(x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name)
+        url = str(i.get("url") or "").strip() or None
+        if url and item.get("url") != url:
+            await self.store.update_item(who.tenant_id, str(item["id"]), {"url": url})
+            item = {**item, "url": url}
         outcome = "unchanged" if same else "created" if before is None else "updated"
         return {"outcome": outcome, "item": self._item(item, found)}
 
@@ -2459,7 +2647,16 @@ class KnowledgeService:
         run = await self.sync(who, str(source["id"]))
         return {"sourceId": source["id"], "files": added, "run": run}
 
-    async def documents(self, who: Who, kb_id: str, *, page: int, page_size: int, search: str | None) -> dict[str, Any]:
+    async def documents(
+        self,
+        who: Who,
+        kb_id: str,
+        *,
+        page: int,
+        page_size: int,
+        search: str | None,
+        filters: dict[str, set[str]] | None = None,
+    ) -> dict[str, Any]:
         if await self.store.base(who.tenant_id, kb_id) is None:
             raise NotFound("No knowledge base with that id.")
         by_kb, _ = await self._joined(who.tenant_id)
@@ -2468,11 +2665,33 @@ class KnowledgeService:
             {
                 **self._item(i, sources[i["source_id"]]),
                 "sourceName": sources[i["source_id"]]["name"],
+                "docType": doc_type(i["mime"], sources[i["source_id"]]["type"], bool(i.get("url"))),
             }
             for i in await self.store.items(who.tenant_id, source_ids=list(sources))
             if _matches(search, i["title"], i["path"])
         ]
-        return page_of(rows, page=page, page_size=page_size, facets={"status": _facet(rows, "status")})
+        chosen = filters or {}
+
+        def keeps(r: dict[str, Any], skip: str | None = None) -> bool:
+            for key, values in chosen.items():
+                if key == skip:
+                    continue
+                have = set(r["tags"]) if key == "tags" else {str(r.get(key) or "")}
+                if not have & values:
+                    return False
+            return True
+
+        facets: dict[str, dict[str, int]] = {}
+        for key in DOCUMENT_FACETS:
+            # Each facet counts over the rows the other filters keep, so its counts say what choosing a value shows.
+            counted: dict[str, int] = {}
+            for r in rows:
+                if keeps(r, skip=key):
+                    for v in r["tags"] if key == "tags" else [str(r.get(key) or "")]:
+                        if v:
+                            counted[v] = counted.get(v, 0) + 1
+            facets[key] = counted
+        return page_of([r for r in rows if keeps(r)], page=page, page_size=page_size, facets=facets)
 
     async def _reading_summary(self, who: Who, s: dict[str, Any], i: dict[str, Any]) -> dict[str, Any] | None:
         """How the item's file was read and what cleaning removed, page by page, from its stored reading; None for an
@@ -2939,11 +3158,27 @@ def ai_steps_on(settings: IngestSettings) -> bool:
     return any(step in AI_STEPS and ai_step_allowed(settings, step, preview=False) for step in settings.strategies)
 
 
-def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None) -> Search:
+def scope_of(r: dict[str, Any]) -> Scope:
+    """A base's scope from its retrieval settings: the pieces its search may return."""
+    filters = dict(r.get("filters") or {})
+    conditions = cast(list[dict[str, Any]], filters.get("conditions") or [])
+    return Scope(
+        collections=tuple(r.get("scopeCollections") or ()),
+        source_ids=tuple(r.get("scopeSourceIds") or ()),
+        tags_include=tuple(r.get("tagsInclude") or ()),
+        tags_exclude=tuple(r.get("tagsExclude") or ()),
+        include_untagged=bool(r.get("includeUntagged", True)),
+        match=str(filters.get("match") or "all"),
+        conditions=tuple((str(c["key"]), str(c["op"]), str(c.get("value") or "")) for c in conditions),
+    )
+
+
+def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None, collection: str | None = None) -> Search:
     """One search over several bases: the lanes any of them asks for, the lowest threshold, the mean weight toward
-    meaning and the largest piece limit, so no base gets less than it asks; `limit` caps the pieces further."""
+    meaning and the largest piece limit, so no base gets less than it asks; `limit` caps the pieces further. Scopes do
+    not merge: each base keeps its own, and `collection` narrows them all."""
     if not bases:
-        return Search(limit=limit or int(DEFAULT_RETRIEVAL["chunkLimit"]))
+        return Search(limit=limit or int(DEFAULT_RETRIEVAL["chunkLimit"]), collection=collection)
     settings = [{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases]
     lanes: tuple[Lane, ...] = tuple(dict.fromkeys(lane for r in settings for lane in lanes_for(str(r["searchMode"]))))
     most = max(int(r["chunkLimit"]) for r in settings)
@@ -2953,6 +3188,8 @@ def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None) ->
         meaning_threshold=min(float(r["meaningThreshold"]) for r in settings),
         weight=sum(float(r["hybridWeight"]) for r in settings) / len(settings),
         limit=min(most, limit) if limit else most,
+        scopes={str(b["id"]): scope_of(r) for b, r in zip(bases, settings, strict=True)},
+        collection=collection,
     )
 
 
@@ -2978,6 +3215,92 @@ def checked_retrieval(r: dict[str, Any]) -> dict[str, Any]:
     if len(str(r.get("rewriteInstructions") or "")) > 1000:
         raise ValidationFailed("Keep the rewrite instruction under 1,000 characters.", code="invalid_retrieval")
     return r
+
+
+def _json_safe(value: Any) -> Any:
+    """A held version as JSON: datetimes kept as {"$at": iso} so they come back as datetimes."""
+    if isinstance(value, datetime):
+        return {"$at": value.isoformat()}
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in cast(dict[str, Any], value).items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(v) for v in cast(list[Any], value)]
+    return value
+
+
+def _from_json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        d = cast(dict[str, Any], value)
+        if set(d) == {"$at"}:
+            return datetime.fromisoformat(str(d["$at"]))
+        return {k: _from_json_safe(v) for k, v in d.items()}
+    if isinstance(value, list):
+        return [_from_json_safe(v) for v in cast(list[Any], value)]
+    return value
+
+
+def _keys(model: type[BaseModel]) -> set[str]:
+    return {f.alias or name for name, f in model.model_fields.items()}
+
+
+def tool_name(slug: str) -> str:
+    """The MCP tool a base is offered as until someone names it: search_<slug>, cut to the 64 characters allowed."""
+    return f"search_{slug}"[:64].rstrip("_") or "search_knowledge"
+
+
+def settings_of(b: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Every settings section of a base as it applies: the defaults under what the base stored, with keys it no longer
+    keeps left out. A base saved before the answer section existed keeps the answer shape and no-answer message it held
+    in its retrieval settings."""
+    stored = dict(b.get("settings") or {})
+    held = dict(b.get("retrieval") or {})
+    out = {"retrieval": {k: v for k, v in {**DEFAULT_RETRIEVAL, **held}.items() if k in _keys(RetrievalSettings)}}
+    earlier: dict[str, Any] = {}
+    if held.get("answerShape") == "chunks":
+        earlier["shape"] = "chunks"
+    if held.get("noAnswerMessage"):
+        earlier["noAnswerMessage"] = str(held["noAnswerMessage"])
+    for name, default in DEFAULT_SETTINGS.items():
+        given = {**(earlier if name == "answer" else {}), **dict(stored.get(name) or {})}
+        out[name] = {k: v for k, v in {**default, **given}.items() if k in _keys(SECTIONS[name])}
+    out["access"] = {"mcp": {"toolName": tool_name(str(b["slug"])), **dict(out["access"].get("mcp") or {})}}
+    return out
+
+
+def settled(current: dict[str, dict[str, Any]], given: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The sections after a change: each section sent merges over the stored one (the keys sent change, the rest stay)
+    and is checked whole. A key a section does not keep, or a value out of range, is 400 `invalid_settings`."""
+    out = dict(current)
+    for name, model in SECTIONS.items():
+        sent = given.get(name)
+        if sent is None:
+            continue
+        if not isinstance(sent, dict):
+            raise ValidationFailed(f"{name} is an object of settings.", code="invalid_settings")
+        patch = cast(dict[str, Any], sent)
+        merged: dict[str, Any] = {**current[name], **patch}
+        if name == "access" and isinstance(patch.get("mcp"), dict):
+            merged["mcp"] = {**current["access"]["mcp"], **cast(dict[str, Any], patch["mcp"])}
+        if name == "retrieval":
+            checked_retrieval(merged)
+        try:
+            out[name] = model.model_validate(merged).model_dump(by_alias=True, mode="json")
+        except ValidationError as e:
+            raise ValidationFailed(_refusal(name, e), code="invalid_settings") from e
+        if name == "sourceDefaults":
+            try:
+                validate_settings(IngestSettings.model_validate(out[name]))
+            except InvalidIngestError as e:
+                raise ValidationFailed(str(e), code="invalid_settings") from e
+    return out
+
+
+def _refusal(section: str, e: ValidationError) -> str:
+    first = e.errors()[0]
+    where = ".".join(str(p) for p in first["loc"])
+    if first["type"] == "extra_forbidden":
+        return f"A knowledge base's {section} settings have no {where}."
+    return f"{section}.{where}: {first['msg']}"
 
 
 def passage_out(p: Passage) -> dict[str, Any]:

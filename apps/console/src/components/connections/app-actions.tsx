@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/button';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { NewAppCredentialDialog } from '@/components/connections/new-app-credential-dialog';
 import { type SystemCard, useSetTeamApp } from '@/hooks/systems-queries';
+import { asksNothing } from '@/lib/connect-plan';
 
 /**
  * Turn on (appState off): an app the team turned off before goes back on as it was, with its accounts and settings,
- * and nothing signs in; one never turned on opens the Turn on window (`onFirstTurnOn`), which saves and stops.
+ * and nothing signs in; so does one that asks nothing (no sign-in and no setting: a template pack, the website
+ * reader). Any other one never turned on opens the Turn on window (`onFirstTurnOn`), which saves and stops.
  */
 export function TurnOnButton({
   card,
@@ -31,7 +33,7 @@ export function TurnOnButton({
       { onSuccess: () => toast.success(`${card.name} is on for this team`), onError: (e) => toast.error(`Couldn’t turn on ${card.name}`, { description: e.message }) },
     );
   return (
-    <LoadingButton size="sm" variant={variant} isLoading={setTeamApp.isPending} onClick={(e) => (e.stopPropagation(), card.connectionId ? again() : onFirstTurnOn())} data-testid={testId}>
+    <LoadingButton size="sm" variant={variant} isLoading={setTeamApp.isPending} onClick={(e) => (e.stopPropagation(), card.connectionId || (card.plugin && asksNothing(card.plugin)) ? again() : onFirstTurnOn())} data-testid={testId}>
       <Power />
       Turn on
     </LoadingButton>

@@ -184,6 +184,19 @@ async def test_a_template_not_listed_for_the_team_or_a_version_it_does_not_ship_
     assert old.status_code == 404 and old.json()["error"]["code"] == "template_version_not_found", old.text
 
 
+async def test_a_template_of_an_app_off_for_the_team_that_needs_its_tools_is_refused_saying_why(
+    client: AsyncClient,
+) -> None:
+    why = "Case desk is off for this team; a team admin turns it on."
+    wire(client, [AGENT | {"off": why}])
+    listed = ok(await client.get("/v1/templates", params={"source": SOURCE}, headers=OPS))
+    assert [(t["id"], t["canAdd"], t["off"]) for t in listed] == [("case-helper", False, why)]
+    r = await install(client)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "app_off", r.text
+    assert why in r.json()["error"]["message"]
+    assert ok(await client.get("/v1/agents", params={"search": "Case helper"}, headers=OPS))["data"] == []
+
+
 async def test_a_viewer_cannot_install(client: AsyncClient) -> None:
     wire(client, [AGENT])
     r = await client.post(f"/v1/resources/{SOURCE}:case-helper/copies", json={}, headers=VIEWER)

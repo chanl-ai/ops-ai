@@ -1,7 +1,10 @@
 // Signs in to a deployed console and clicks through it the way a person does: every sidebar link, then the first
 // row link on each list page. Reports every 4xx/5xx response (pages, RSC payloads and API calls), page errors and any
 // "not found" text, per click. STG_ORIGIN, STG_EMAIL and STG_PASSWORD come from the environment.
-import { chromium } from '@ops-ai/usecase-runner/harness';
+import { chromium, expectSampleData } from '@ops-ai/usecase-runner/harness';
+
+// Evals draws preview data until the evals service ships (owner's call); every other page must be real.
+expectSampleData('/govern/evals');
 
 const origin = process.env.STG_ORIGIN;
 const browser = await chromium.launch();

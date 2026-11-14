@@ -513,6 +513,18 @@ def create_public_app(
         note_caller(str(claims["tenant_id"]), x_team_id)
         return Actor(str(claims["tenant_id"]), x_team_id, str(claims["sub"]), new_id("req"))
 
+    async def reading(
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        x_team_id: Annotated[str | None, Header()] = None,
+    ) -> Actor:
+        """Where a read of a workspace-wide record (the roles) is decided: the team X-Team-Id names, else the token's
+        only team, else every team (`*`), so a workspace admin with several teams reads without naming one."""
+        team_ids: list[Any] = claims.get("team_ids") or []
+        named = [str(t) for t in team_ids]
+        if x_team_id is None and len(named) != 1:
+            return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
+        return await acting(claims, x_team_id)
+
     policy_store = PolicyStore(store.db)
 
     async def everywhere(tenant: str, user: str) -> bool:
@@ -611,16 +623,21 @@ def create_public_app(
     roles = Roles(RoleStore(store.db))
 
     @app.get("/v1/roles", tags=["roles"], response_model=Envelope[list[RoleOut]], responses=ERRORS)
-    async def list_roles(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """Every role in the tenant, built-in first, with how many permissions it grants and how many hold it."""
-        return ok(await roles.list(str(claims["tenant_id"])))
+    async def list_roles(actor: Annotated[Actor, Depends(reading)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs
+        access.view in the acting team: 403 `admin_required`."""
+        await people.require_admin(actor, "access", "view")
+        return ok(await roles.list(actor.tenant_id))
 
     @app.get("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def read_role(  # pyright: ignore[reportUnusedFunction]
-        role_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        acting_actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """One role and its grid: every area and action in the catalogue, with the scope it grants or null, and
         whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin)."""
+        await people.require_admin(acting_actor, "access", "view")
         role = await roles.get(str(claims["tenant_id"]), role_id)
         actor = Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
         locked: str | None = None
@@ -1401,8 +1418,14 @@ def create_public_app(
     keys = ApiKeys(KeyStore(store.db), people)
 
     @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[list[ApiKeyOut]], responses=ERRORS)
-    async def list_api_keys(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        return ok(await keys.list(actor))
+    async def list_api_keys(  # pyright: ignore[reportUnusedFunction]
+        actor: Annotated[Actor, Depends(acting)],
+        target_kind: Annotated[Literal["agent", "workflow", "mcp_link"] | None, Query(alias="targetKind")] = None,
+        target_id: Annotated[str | None, Query(alias="targetId", max_length=64)] = None,
+    ) -> Any:
+        """The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab
+        lists them."""
+        return ok(await keys.list(actor, target_kind, target_id))
 
     @app.post(
         "/v1/api-keys", tags=["api-keys"], status_code=201, response_model=Envelope[ApiKeyCreated], responses=ERRORS

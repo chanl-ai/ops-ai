@@ -47,6 +47,12 @@ export function createExecutionsHttp(get: Get): GovernanceApi['toolCalls'] {
       if (tool) q.set('tool', tool);
       // The route takes one tool set; an app with several sends each, for the route to take them all once it does.
       for (const m of p.filters?.moduleId ?? []) q.append('moduleId', m);
+      const link = p.filters?.link?.[0];
+      if (link) q.set('link', link);
+      const since = p.filters?.since?.[0];
+      if (since) q.set('since', since);
+      const until = p.filters?.until?.[0];
+      if (until) q.set('until', until);
       return get(`/executions?${q}`);
     },
     get: () => Promise.reject(new ApiError('tools-service does not serve one call’s request and response yet.', 501)),

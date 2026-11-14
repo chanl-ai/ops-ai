@@ -1,16 +1,18 @@
 import type { OpsApi } from './contract';
 import { DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, USERS } from './mock/auth/seed';
 import { createCasesOnlyHttp, createChatOnlyHttp, createHttpApi, createKnowledgeOnlyHttp, createRegistryOnlyHttp,
-  createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
+  createRegistryPromptVariables, createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
 import { createMockApi } from './mock';
+import { withServedAgents } from './mock/evals';
 import { createMockAuthProvider } from './mock/auth';
 import { createNoNotifications } from './notifications-none';
+import { recordMockReads } from './sample-reads';
 import type { AuthProvider } from '@/lib/auth/provider';
 import { createFirebaseProvider } from '@/lib/auth/providers/firebase';
 import { createOidcProvider } from '@/lib/auth/providers/oidc';
 import { createPlatformProvider } from '@/lib/auth/providers/platform';
 import { createPlatformAccessHttp } from './platform-access-http';
-import { createPlatformOAuthHttp, createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
+import { createPlatformApiKeysHttp, createPlatformOAuthHttp, createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
 import { createDocumentsHttp, createExtractionsHttp, createLayoutsHttp } from './documents-http';
 import { createFilesServiceHttp } from './files-service-http';
 import { createModelsHttp } from './models-http';
@@ -48,7 +50,8 @@ const onRealService = Boolean(chatUrl || casesUrl || registryUrl || toolsUrl || 
  * NEXT_PUBLIC_OPS_EMBED_URL for the embed app that serves the chat loader in snippets.
  */
 function createApi(): OpsApi {
-  let api = baseUrl ? createHttpApi(baseUrl) : createMockApi();
+  const mock = baseUrl ? null : createMockApi();
+  let api = mock ?? createHttpApi(baseUrl!);
   if (chatUrl) api = { ...api, chat: createChatOnlyHttp(chatUrl) };
   if (casesUrl) {
     const { runs, run, runState, startRun, startable, reviews } = createCasesOnlyHttp(casesUrl);
@@ -56,6 +59,13 @@ function createApi(): OpsApi {
   }
   // The tool list is the registry's directory; tool writes have no route there and stay on the mock (createRegistryToolsList).
   if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl), ...createRegistryToolsDirectory(registryUrl) } };
+  // The instruction placeholders a run can fill come from agents-service; generation and lint stay on the mock.
+  if (registryUrl) api = { ...api, prompts: { ...api.prompts, variables: createRegistryPromptVariables(registryUrl) } };
+  // Evals stay sample data; their stand-ins for the registry's agents take each agent's name and versions from it.
+  if (registryUrl && !baseUrl) {
+    const agents = api.agents;
+    api = { ...api, evals: withServedAgents(api.evals, (aid) => agents.get(aid)) };
+  }
   // The chat loader and the iframe it opens are served by the embed app.
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
   // A link form's page is the embed app's too.
@@ -83,8 +93,12 @@ function createApi(): OpsApi {
       },
       (email) => authProvider.signInOptions(email),
     );
-    api = { ...api, settings: { ...api.settings, members: access.members }, invites: access.invites, governance: { ...api.governance, audit: access.audit } };
+    // The team's API keys are platform-service's, the one issuer of every key.
+    api = { ...api, settings: { ...api.settings, members: access.members, apiKeys: createPlatformApiKeysHttp(platformUrl!) }, invites: access.invites, governance: { ...api.governance, audit: access.audit } };
   }
+  // Beside real services, every read still answered by the mock is recorded with the page it was made on, so the
+  // page says it shows sample data even when the table below calls its prefix served (lib/api/sample-reads.ts).
+  if (mock && onRealService) api = recordMockReads(api, mock);
   return api;
 }
 export const api: OpsApi = createApi();
@@ -106,6 +120,8 @@ const AREAS: { prefix: string; served: boolean }[] = [
   // Cases are agents-service's /v1/cases.
   { prefix: '/work/cases', served: Boolean(registryUrl) },
   { prefix: '/build/channels', served: Boolean(registryUrl) },
+  // MCP links are tools-service's /v1/mcp-links.
+  { prefix: '/build/channels/mcp', served: Boolean(toolsUrl) },
   { prefix: '/build/skills', served: Boolean(registryUrl) },
   { prefix: '/build/guardrails', served: Boolean(registryUrl) },
   { prefix: '/build/widgets', served: Boolean(registryUrl) },
@@ -157,8 +173,12 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/account', served: false },
   { prefix: '/settings', served: false },
 ];
+/** The team's API keys are platform-service's; without it the keys page draws sample ones and says so. */
+export const apiKeysOnService = onPlatform || Boolean(baseUrl);
 /** Workspace policies are platform-service's; without it the page draws sample ones and says so. */
 export const policiesOnService = onPlatform || Boolean(baseUrl);
+/** Agent evals have no service yet: beside real services the Evals tab draws sample cases and runs and says so. */
+export const evalsArePreview = !baseUrl && onRealService;
 /** Sources and their settings are kb-service's once its URL (or the all-HTTP URL) is set; otherwise the mock's. */
 export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 /** Files on files-service, which does not set retention or export evidence yet; the Files page hides those actions. */

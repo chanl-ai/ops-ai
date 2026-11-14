@@ -32,3 +32,18 @@ async def test_turning_on_offers_the_place_as_a_default_on_ops_ais_config_and_ad
     detail = (await client.get(f"/v1/apps/{APP}/accounts/{account}", headers=admin(tenant))).json()["data"]
     assert (detail["signIn"], detail["teamBackup"]) == ("person_or_team", True), detail
     assert card["toolsAdded"] == len(page["tools"]) > 0 and all(t["added"] for t in page["tools"]), page["tools"]
+
+
+async def test_turning_on_with_no_choice_runs_every_call_as_the_team_account(
+    client: httpx.AsyncClient,  # noqa: F811
+    tenant: str,
+) -> None:
+    # A first turn-on that names no sign-in must not ask each person for their own account before their first call;
+    # per-person sign-in stays a choice an admin makes on the app's settings.
+    on = await client.put(
+        f"/v1/apps/{APP}/team", json={"enabled": True, "settings": {"login_url": ACME}}, headers=admin(tenant)
+    )
+    assert on.status_code == 200, on.text
+    account = str(on.json()["data"]["connectionId"])
+    detail = (await client.get(f"/v1/apps/{APP}/accounts/{account}", headers=admin(tenant))).json()["data"]
+    assert detail["signIn"] == "team", detail

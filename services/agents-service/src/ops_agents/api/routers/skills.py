@@ -19,7 +19,7 @@ from ops_service_kit.logging import get_logger
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
-from ..auth import Principal, caller_in, caller_of, principal, require_builder
+from ..auth import Principal, caller_in, caller_of, principal, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..hitl_facade import page
@@ -150,20 +150,16 @@ async def list_skills(
     page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
-    caller: Annotated[Principal, Depends(caller_in("skills"))],
+    caller: Annotated[Principal, Depends(reader_of("skills"))],
     usable_by: Annotated[Literal["agent"] | None, Query(alias="usableBy")] = None,
     agent_id: Annotated[str | None, Query(alias="agentId")] = None,
 ) -> JSONResponse:
     """The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
     what chat and the MCP prompts use; every other view describes the newest version an editor sees.
 
-    `usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what
-    that agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base
-    the agent lacks as `locked`, naming them in `needs`."""
-    if usable_by is not None and caller.identity is not None and caller.identity.kind != "service":
-        can(
-            caller_of(caller), "skills", "view", team=caller.team_id or None, what="the team's skills", code="forbidden"
-        )
+    Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
+    With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
+    a tool or knowledge base the agent lacks as `locked`, naming them in `needs`."""
     pins = await _pinning(rt)
     raw = await skills(rt).rows()
     spec: dict[str, Any] | None = None
@@ -206,7 +202,7 @@ async def list_skills(
 
 
 @router.get("/v1/skills/options", response_model=Envelope[SkillOptions])
-async def skill_options(rt: Rt) -> JSONResponse:
+async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skills"))]) -> JSONResponse:
     """What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams."""
     reg = agent_registry(rt)
     specs = [(await reg.version(r["id"], int(r["version"])))["spec"] for r in await reg.rows()]
@@ -358,7 +354,9 @@ async def delete_skill(rt: Rt, me: Me, skill_id: str) -> Response:
 
 
 @router.get("/v1/agents/{agent_id}/skills", response_model=Envelope[AgentSkills])
-async def get_agent_skills(rt: Rt, agent_id: str) -> JSONResponse:
+async def get_agent_skills(
+    rt: Rt, agent_id: str, _: Annotated[Principal, Depends(reader_of("skills"))]
+) -> JSONResponse:
     return ok(await agent_skills(rt, agent_id))
 
 
@@ -366,6 +364,7 @@ async def get_agent_skills(rt: Rt, agent_id: str) -> JSONResponse:
 async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query parameter from the signature
     rt: Rt,
     agent_id: str,
+    _: Annotated[Principal, Depends(reader_of("skills"))],
     search: str = "",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,

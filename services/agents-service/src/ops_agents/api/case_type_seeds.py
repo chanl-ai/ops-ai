@@ -40,5 +40,5 @@ async def seeded_case_types(db: AsyncEngine, team: str | None = None) -> CaseTyp
     return store
 
 
-async def case_type_store(rt: Runtime) -> CaseTypeStore:
-    return await seeded_case_types(rt.db)
+async def case_type_store(rt: Runtime, team: str | None = None) -> CaseTypeStore:
+    return await seeded_case_types(rt.db, team)

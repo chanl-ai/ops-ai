@@ -364,13 +364,13 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-740 | agents-service | Start a skill from a template | sdk, cli | page |
 | uc-741 | agents-service | List and install templates from an assistant | mcp | page |
 | uc-742 | agents-service | A team's skill is an assistant's prompt | mcp | page |
-| uc-743 | agents-service | Prepare a client meeting from the slash menu | api, sdk, mcp, ui | page |
+| uc-743 | agents-service | Prepare a client meeting from the slash menu | api, sdk, cli, mcp, ui | page |
 | uc-744 | agents-service | Update an opportunity from the same skill | api, sdk, mcp, ui | page |
-| uc-745 | agents-service | Skills stay out of reach without the right | api, mcp, ui | page |
-| uc-746 | agents-service | Only published skills are offered | api, mcp, ui | page |
-| uc-747 | agents-service | A required input must be filled | api, mcp, ui | page |
-| uc-748 | agents-service | A pick over the reply's budget is refused | api, ui | page |
-| uc-749 | agents-service | A part needing a tool the agent lacks is locked | api, ui | page |
-| uc-750 | agents-service | An admin limits what the menu offers | api, ui | page |
-| uc-723 | console | The console shows one area of pages at a time, chosen from the top bar and offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams, on a desktop and a phone | ui | failing |
+| uc-745 | agents-service | Skills stay out of reach without the right | api, mcp | page |
+| uc-746 | agents-service | Only published skills are offered | api, mcp | page |
+| uc-747 | agents-service | A required input must be filled | api, mcp | page |
+| uc-748 | agents-service | A pick over the reply's budget is refused | api | page |
+| uc-749 | agents-service | A part needing a tool the agent lacks is locked | api | page |
+| uc-750 | agents-service | An admin limits what the menu offers | api | page |
+| uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | passing |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |

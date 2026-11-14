@@ -310,6 +310,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_list_prompt_variables": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/prompts/variables",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_list_skills": {
     "body": null,
     "headers": [],
@@ -552,7 +561,8 @@ export const agentsOperations = {
       "search",
       "cursor",
       "limit",
-      "ids"
+      "ids",
+      "agents"
     ],
     "stream": false
   },
@@ -2095,7 +2105,9 @@ export const agentsOperations = {
   },
   "workflows_start_engine_run": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/runs",
     "pathParams": [],

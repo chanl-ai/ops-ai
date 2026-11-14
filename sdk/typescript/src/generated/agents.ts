@@ -1590,6 +1590,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/prompts/variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Prompt Variables */
+        get: operations["agents_list_prompt_variables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/publish-requests": {
         parameters: {
             query?: never;
@@ -1959,9 +1976,9 @@ export interface paths {
          * @description The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
          *     what chat and the MCP prompts use; every other view describes the newest version an editor sees.
          *
-         *     `usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what
-         *     that agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base
-         *     the agent lacks as `locked`, naming them in `needs`.
+         *     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
+         *     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
+         *     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`.
          */
         get: operations["agents_list_skills"];
         put?: never;
@@ -6260,6 +6277,16 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[list[PromptVariable]] */
+        Envelope_list_PromptVariable__: {
+            /** Data */
+            data: components["schemas"]["PromptVariable"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[RunJournalEntry]] */
         Envelope_list_RunJournalEntry__: {
             /** Data */
@@ -7811,6 +7838,20 @@ export interface components {
             label: string;
             /** Name */
             name: string;
+        };
+        /**
+         * PromptVariable
+         * @description A `{key}` an agent's instructions may name, filled at run time from the turn's variables.
+         */
+        PromptVariable: {
+            /** Example */
+            example: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Source */
+            source: string;
         };
         /**
          * PublicForm
@@ -9629,6 +9670,8 @@ export interface components {
              * @enum {string}
              */
             kind: "agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type";
+            /** Off */
+            off?: string | null;
             plugin: components["schemas"]["TemplatePlugin"];
             removeCell?: components["schemas"]["RemoveCell"] | null;
             requires: components["schemas"]["TemplateRequires"];
@@ -10012,10 +10055,31 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * ToolOption
+         * @description A tool in a picker; an MCP link's picker (`agents=false`) also gets what the tool takes and what it does, which
+         *     the link keeps so an assistant reads a workflow's inputs in tools/list.
+         */
+        ToolOption: {
+            /** Description */
+            description?: string | null;
+            /** Disabled */
+            disabled?: string | null;
+            /** Hint */
+            hint?: string | null;
+            /** Id */
+            id: string;
+            /** Inputschema */
+            inputSchema?: {
+                [key: string]: unknown;
+            } | null;
+            /** Label */
+            label: string;
+        };
         /** ToolOptionsPage */
         ToolOptionsPage: {
             /** Data */
-            data: components["schemas"]["Option"][];
+            data: components["schemas"]["ToolOption"][];
             /** Nextcursor */
             nextCursor?: string | null;
             /** Notadded */
@@ -20843,6 +20907,107 @@ export interface operations {
             };
         };
     };
+    agents_list_prompt_variables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_PromptVariable__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     reviews_open_publish_request: {
         parameters: {
             query?: never;
@@ -21925,7 +22090,9 @@ export interface operations {
     workflows_start_engine_run: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -26363,6 +26530,7 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number;
                 ids?: string[] | null;
+                agents?: boolean;
             };
             header?: never;
             path?: never;

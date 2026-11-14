@@ -1,0 +1,336 @@
+# The Salesforce plugin: a connection whose org address comes from the token answer, record and query tools, and a
+# Knowledge source.
+# Every tool is data: tools-service checks each input, writes it into the query by its format, and pages.
+schema: ops-ai/plugin@2
+id: opsai.salesforce
+title: Salesforce
+version: 0.4.0
+sdk: "1"
+
+# What the console's Connections card shows: a mark, a category, one line, and where an admin sets up the app.
+display:
+  logo: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2300A1E0'/><path fill='white' d='M13.3 10.5a4.6 4.6 0 0 1 7.7 1.2 5 5 0 0 1 6 4.9 5 5 0 0 1-5 5H10.5a4.2 4.2 0 0 1-.8-8.3 4.6 4.6 0 0 1 3.6-2.8z'/></svg>"
+  category: CRM
+  description: Cases, accounts, contacts and Knowledge articles in your Salesforce org.
+  docs_url: "https://help.salesforce.com/s/articleView?id=sf.connected_app_create.htm"
+
+connection:
+  kinds: [oauth2_auth_code]
+  authorize_url: "{login_url}/authorize"
+  token_url: "{login_url}/token"
+  revoke_url: "{login_url}/revoke"
+  scopes:
+    - { id: openid, label: "Know which account signed in", required: true }
+    - { id: api, label: "Records, with the signed-in user's permissions", required: true }
+    - { id: refresh_token, label: "Stay signed in", required: true }
+  sign_in: [team, person, person_or_team]
+  # Salesforce names the org's address (its My Domain, https://acme.my.salesforce.com) as instance_url in every token
+  # answer, whichever address the person signed in at; it must be under My Domain. `.test` can never be registered
+  # (RFC 2606), so the fake Salesforce's host is safe to accept.
+  from_token: { instance_url: instance_url }
+  token_hosts: [.my.salesforce.com, .my.salesforce.test]
+  # What a refused sign-in says, by the code Salesforce sends back on the redirect or the token exchange. Its own screen
+  # reads OAUTH_APPROVAL_ERROR_GENERIC whatever the cause; the redirect carries the real one.
+  sign_in_errors:
+    - error: invalid_client
+      description_contains: must be installed
+      say: Your Salesforce admin needs to install Ops AI's app in your org first.
+      who: admin
+    - error: OAUTH_APP_BLOCKED
+      say: Your Salesforce admin has blocked Ops AI's app. Ask them to allow it.
+      who: admin
+    - error: invalid_app_access
+      say: Your Salesforce admin needs to give you access to Ops AI's app (Manage Connected Apps, then your profile or permission set).
+      who: admin
+    # The org's edition has no API (Professional without the add-on), or the user lacks API Enabled.
+    - error: API_DISABLED_FOR_ORG
+      say: This Salesforce user cannot use the API. It needs the API Enabled permission, which Professional edition does not include.
+      who: admin
+    - error: API_CURRENTLY_DISABLED
+      say: This Salesforce user cannot use the API. It needs the API Enabled permission, which Professional edition does not include.
+      who: admin
+    - error: access_denied
+      say: Access was not given in Salesforce. Connect again to retry.
+      who: person
+  health_check: { path: "/services/data/v{api_version}/limits" }
+
+settings:
+  login_url:
+    type: string
+    title: Where do you sign in to Salesforce?
+    # The org is the app registration's: every account on one auth config signs in at the same place.
+    asked: config
+    default: "https://login.salesforce.com/services/oauth2"
+    choices:
+      - { value: "https://login.salesforce.com/services/oauth2", label: login.salesforce.com, hint: Production and developer orgs }
+      - { value: "https://test.salesforce.com/services/oauth2", label: test.salesforce.com, hint: Orgs used for testing, test_account: true }
+    # A company's My Domain. `.test` can never be registered (RFC 2606), so the fake Salesforce's host is safe to take.
+    other:
+      label: Your company's address
+      hint: Your Salesforce My Domain
+      placeholder: acme.my.salesforce.com
+      value: "https://{host}/services/oauth2"
+      hosts: [.my.salesforce.com, .my.salesforce.test]
+      test_account_hosts: [.sandbox.my.salesforce.com]
+  instance_url: { type: string, title: Org address, from_token: true }
+  api_version: { type: string, default: "61.0", title: API version, lockable: true }
+  article_body_field: { type: string, default: Body__c, title: Article body field }
+  query_batch_size: { type: integer, default: 2000, title: Records per query page }
+
+egress: ["{instance_url}", "{login_url}"]
+endpoint: "{instance_url}/services/data/v{api_version}"
+
+tools:
+  - name: query
+    title: Run a SOQL query
+    description: Records matching a SOQL query, such as SELECT Id, CaseNumber, Status FROM Case WHERE CaseNumber = '00044818'
+    access: read
+    input: { q: { type: string, description: "The SOQL query" } }
+    request: { method: GET, path: /query }
+  - name: find_cases
+    title: Find cases
+    description: Cases in a status changed after a time, oldest change first, a page at a time
+    access: read
+    input:
+      status: { type: string, enum: [New, Working, Escalated, Closed], description: "The cases' status" }
+      since:
+        { type: string, format: date-time, required: false, default: "1970-01-01T00:00:00Z", description: "Only cases changed after this time" }
+    request:
+      method: GET
+      path: /query
+      query:
+        q: >-
+          SELECT Id, CaseNumber, Subject, Status, AccountId, LastModifiedDate FROM Case
+          WHERE Status = '{{status}}' AND LastModifiedDate > {{since}} ORDER BY LastModifiedDate, Id
+      paging: { rule: link, next: nextRecordsUrl }
+  - name: find_cases_with_deleted
+    title: Find cases, deleted too
+    description: As Find cases, with cases deleted into the recycle bin, each marked IsDeleted
+    access: read
+    input:
+      status: { type: string, enum: [New, Working, Escalated, Closed], description: "The cases' status" }
+      since:
+        { type: string, format: date-time, required: false, default: "1970-01-01T00:00:00Z", description: "Only cases changed after this time" }
+    # How many records Salesforce answers per page of a query-all (200 to 2000).
+    headers: { Sforce-Query-Options: "batchSize={query_batch_size}" }
+    request:
+      method: GET
+      path: /queryAll
+      query:
+        q: >-
+          SELECT Id, CaseNumber, Subject, Status, IsDeleted, LastModifiedDate FROM Case
+          WHERE Status = '{{status}}' AND LastModifiedDate > {{since}} ORDER BY LastModifiedDate, Id
+      paging: { rule: link, next: nextRecordsUrl }
+  - name: search
+    title: Search records
+    description: Accounts, contacts and cases holding a word or phrase in any field
+    access: read
+    input: { term: { type: string, format: sosl_term, description: "The word or phrase to find" } }
+    request:
+      method: GET
+      path: /search
+      query:
+        q: "FIND {{{term}}} IN ALL FIELDS RETURNING Account(Id, Name), Contact(Id, Name, Email), Case(Id, CaseNumber, Subject)"
+  - name: search_by_fields
+    title: Search by fields
+    description: Cases in a status holding a word or phrase, with only the fields asked for, a page at a time
+    access: read
+    input:
+      term: { type: string, format: sosl_term, description: "The word or phrase to find" }
+      status: { type: string, enum: [New, Working, Escalated, Closed], description: "The cases' status" }
+      fields:
+        type: array
+        description: The case fields to return
+        items: { type: string, enum: [Id, CaseNumber, Subject, Status, Priority] }
+    request:
+      method: GET
+      path: /parameterizedSearch
+      query:
+        q: "{{term}}"
+        sobject: Case
+        Case.where: "Status = '{{status}}'"
+        Case.fields: "{{fields}}"
+      paging: { rule: offset, items: searchRecords, limit: 25, limit_param: overallLimit }
+  - name: account_cases
+    title: An account's cases
+    description: The cases of one account, a page at a time
+    access: read
+    input: { account_id: { type: string, format: salesforce_id, description: "The account's id" } }
+    request:
+      method: GET
+      path: "/sobjects/Account/{account_id}/Cases"
+      paging: { rule: link, next: nextRecordsUrl }
+  - name: cases_changed
+    title: Cases changed between dates
+    description: The ids of cases changed between two times, at most 30 days apart
+    access: read
+    input:
+      start: { type: string, format: date-time, description: "From this time" }
+      end: { type: string, format: date-time, description: "Up to this time" }
+    request:
+      method: GET
+      path: /sobjects/Case/updated/
+      query: { start: "{{start}}", end: "{{end}}" }
+  - name: list_view
+    title: Records in a list view
+    description: The records a Salesforce list view shows, a page at a time
+    access: read
+    input: { list_view: { type: string, format: salesforce_id, description: "The list view's id" } }
+    request:
+      method: GET
+      path: "/ui-api/list-records/{list_view}"
+      paging: { rule: token, next: nextPageToken, param: pageToken }
+    transform: >-
+      {%- set rows = [] -%}
+      {%- for r in data.records -%}
+      {%- set f = {} -%}
+      {%- for k, v in r.fields.items() -%}{%- set _ = f.update({k: v.value}) -%}{%- endfor -%}
+      {%- set _ = rows.append({"id": r.id, "fields": f}) -%}
+      {%- endfor -%}
+      {{ {"records": rows} | tojson }}
+  - name: get_record
+    title: Get a record
+    description: One record by its object and id
+    access: read
+    input:
+      object: { type: string, description: "The object, such as Case" }
+      id: { type: string, description: "The record id" }
+    request: { method: GET, path: "/sobjects/{object}/{id}" }
+  - name: describe
+    title: An object's fields
+    description: The field names of an object
+    access: read
+    input: { object: { type: string, description: "The object, such as Case" } }
+    request: { method: GET, path: "/sobjects/{object}/describe" }
+    transform: "{{ data.fields | map(attribute='name') | list | tojson }}"
+  - name: field_values
+    title: An object's allowed values
+    description: The values each picklist field of an object allows, such as an opportunity's stages
+    access: read
+    input: { object: { type: string, description: "The object, such as Opportunity" } }
+    request: { method: GET, path: "/sobjects/{object}/describe" }
+    transform: >-
+      {%- set out = {} -%}
+      {%- for f in data.fields if f.type == "picklist" -%}
+      {%- set _ = out.update({f.name: f.picklistValues | selectattr("active") | map(attribute="value") | list}) -%}
+      {%- endfor -%}
+      {{ out | tojson }}
+  - name: save_records
+    title: Save records together
+    description: >-
+      Creates and changes records in one save that applies all of them in order or none: each step is an object,
+      its fields, the id of a record to change (none to create one) and a ref a later step can use as @{ref.id}
+    access: write
+    # The agent shows what changed with its own card, so chat draws no table of the saved ids.
+    shape: none
+    function: ops_plugin_salesforce.tools:save_records
+    input:
+      records:
+        type: array
+        description: "The steps, in order: {object, fields, id?, ref?}"
+        items: { type: object }
+  - name: create_record
+    title: Create a record
+    description: Creates a record of an object with the given fields
+    access: write
+    input:
+      object: { type: string, description: "The object, such as Case" }
+      fields: { type: object, description: "Field names and values" }
+    request: { method: POST, path: "/sobjects/{object}", body: "{{fields}}" }
+  - name: update_record
+    title: Update a record
+    description: Changes fields of one record
+    access: write
+    input:
+      object: { type: string, description: "The object, such as Case" }
+      id: { type: string, description: "The record id" }
+      fields: { type: object, description: "Field names and their new values" }
+    request: { method: PATCH, path: "/sobjects/{object}/{id}", body: "{{fields}}" }
+  - name: delete_record
+    title: Delete a record
+    description: Deletes one record; Salesforce keeps it in its recycle bin, and deleting an account deletes its contacts, opportunities and activities with it
+    access: write
+    input:
+      object: { type: string, description: "The object, such as Account" }
+      id: { type: string, description: "The record id" }
+    request: { method: DELETE, path: "/sobjects/{object}/{id}" }
+  - name: upsert_record
+    title: Create or update by key
+    description: Creates or changes the record whose external key field holds the key
+    access: write
+    input:
+      object: { type: string, description: "The object, such as Case" }
+      key_field: { type: string, description: "The external id field" }
+      key: { type: string, description: "Its value" }
+      fields: { type: object, description: "Field names and values" }
+    request: { method: PATCH, path: "/sobjects/{object}/{key_field}/{key}", body: "{{fields}}" }
+  - name: list_articles
+    title: List Knowledge articles
+    description: Published Knowledge articles changed since a time, a page at a time
+    access: read
+    knowledge: list_items
+    rate_limit_per_min: 60
+    input:
+      since:
+        { type: string, format: date-time, required: false, default: "1970-01-01T00:00:00Z", description: "Only articles changed after this time" }
+      cursor: { type: string, required: false, description: "The page after the one that gave it" }
+    request:
+      method: GET
+      path: /query
+      query:
+        q: >-
+          SELECT Id, Title, LastModifiedDate FROM Knowledge__kav
+          WHERE PublishStatus = 'Online' AND LastModifiedDate > {{since}} ORDER BY LastModifiedDate, Id
+      paging: { rule: link, next: nextRecordsUrl }
+    transform: >-
+      {%- set items = [] -%}
+      {%- for a in data.records -%}
+      {%- set _ = items.append({"id": a.Id, "title": a.Title, "updated_at": a.LastModifiedDate}) -%}
+      {%- endfor -%}
+      {%- if data.done and items -%}{{ {"items": items, "watermark": items[-1].updated_at} | tojson }}
+      {%- else -%}{{ {"items": items} | tojson }}{%- endif -%}
+  - name: get_article
+    title: Get a Knowledge article
+    description: One Knowledge article or attachment, as a knowledge item
+    access: read
+    knowledge: get_item
+    rate_limit_per_min: 60
+    input: { id: { type: string, description: "The article or attachment id" } }
+    request: { method: GET, path: "/sobjects/Knowledge__kav/{id}" }
+    transform: >-
+      {%- set kids = [] -%}
+      {%- for a in data.attachments -%}
+      {%- set _ = kids.append({"id": a.Id, "title": a.Title, "updated_at": a.LastModifiedDate}) -%}
+      {%- endfor -%}
+      {{ {"id": data.Id, "title": data.Title, "updated_at": data.LastModifiedDate,
+          "mime": data.Mime__c | default("text/html"), "encoding": "text",
+          "content": data[settings.article_body_field], "url": settings.instance_url ~ "/" ~ data.Id,
+          "children": kids} | tojson }}
+
+knowledge_sources:
+  - name: articles
+    title: Salesforce Knowledge articles
+    list: list_articles
+    get: get_article
+    schedule: { kind: daily, time: "02:00" }
+
+templates:
+  # How the assistant uses Salesforce, loaded when an ask fits; each names the tools it reads and writes with.
+  - kind: skill
+    id: salesforce
+    version: 1
+    path: templates/skills/salesforce.yaml
+    requires: { tools: [search, query, get_record, field_values, save_records] }
+  - kind: agent
+    id: case-helper
+    version: 1
+    path: templates/case-helper.yaml
+    requires:
+      tools: [query, get_record, update_record]
+      bind: [{ knowledge_base: "Salesforce articles" }, { model_alias: chat }]
+  - kind: workflow
+    id: triage-case
+    version: 1
+    path: templates/triage-case.yaml
+    requires:
+      tools: [query, update_record]

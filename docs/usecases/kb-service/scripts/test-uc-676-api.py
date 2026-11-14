@@ -97,6 +97,28 @@ def main() -> None:
             sheet and sheet["item"]["status"] == "indexed" and sheet["item"].get("pageCount", 0) >= 1,
             sheet,
         )
+        address = "https://help.harborpine.example/chequing/questions"
+        web = data(
+            k.post(
+                f"/v1/sources/{push['id']}/items",
+                json={
+                    "name": "everyday-chequing-questions",
+                    "text": "<h1>Everyday chequing</h1><p>A cheque deposited before noon clears the next business day.</p>",
+                    "mime": "text/html",
+                    "url": address,
+                },
+            )
+        )
+        found = search(k, base["id"], "cheque deposited before noon clears")
+        check(
+            "17 a pushed web page keeps its address: the item is text/html with its url, and search cites the url",
+            bool(web)
+            and web["item"]["mimeType"] == "text/html"
+            and web["item"].get("url") == address
+            and bool(found)
+            and found[0].get("url") == address,
+            {"item": (web or {}).get("item", {}).get("url"), "found": [(p["title"], p.get("url")) for p in found[:2]]},
+        )
         fid = put_in_files(k.files_url, "policy.pdf", pdf)
         files_src = data(k.post("/v1/sources", json={"type": "file", "name": "Policy PDFs", "fileIds": [fid]}))
         refused = k.post(f"/v1/sources/{files_src['id']}/items", json=rate)

@@ -1,6 +1,6 @@
 // uc-100 the console matches the page plan, ui layer: docs/usecases/console/console-matches-page-plan.md. James on
 // the mock-backed console: the Overview shows only what waits on a person, Agents has no Templates entry, Chat reaches
-// All chats from the sidebar, and the fourth role is called reviewer.
+// All chats from the chats column on /chat (the main sidebar holds only a Chat link), and the fourth role is a reviewer.
 import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 await withUiStack(async (consoleUrl) => {
@@ -13,7 +13,7 @@ await withUiStack(async (consoleUrl) => {
     // Each part reports its own failure, so one stale part cannot hide the others.
     try {
       // Overview: the Reviews count and the Cases "Needs a person" view; no performance tiles, chart or health table.
-      await page.goto(`${consoleUrl}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.goto(`${consoleUrl}/overview`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByText('Human Tasks waiting for you').waitFor({ timeout: 120_000 });
       const overview = {
         reviews: await page.getByText(/^Human Tasks waiting for you/).count(),
@@ -23,9 +23,9 @@ await withUiStack(async (consoleUrl) => {
         health: await page.getByText('Workflow health').count(),
       };
       check('the Overview shows the Human Tasks waiting and Cases due, and no performance tiles, chart or health table', overview.reviews === 1 && overview.cases === 1 && overview.tasks === 0 && overview.chart === 0 && overview.health === 0, overview);
-      await page.locator('a[href="/cases"]', { hasText: 'Open all' }).click();
-      await page.waitForURL((u) => u.pathname === '/cases', { timeout: 30_000 });
-      check('Open all on Cases due opens Cases', new URL(page.url()).pathname === '/cases', page.url());
+      await page.getByTestId('overview-cases').getByRole('link', { name: 'Open all' }).click();
+      await page.waitForURL((u) => u.pathname === '/work/cases', { timeout: 30_000 });
+      check('Open all on Cases due opens Cases', new URL(page.url()).pathname === '/work/cases', page.url());
     } catch (e) {
       check('the Overview shows the Human Tasks waiting and Cases due, and no performance tiles, chart or health table', false, String(e).slice(0, 300));
     }
@@ -40,17 +40,18 @@ await withUiStack(async (consoleUrl) => {
       check('Agents offers no Templates tab and no Start from template', false, String(e).slice(0, 300));
     }
 
-    // Chat reaches All chats from the sidebar, which lists the Work area only (no Agents row beside it).
-    // New chat has no area of its own and shows the one last used (Build, from Agents), so Work is picked before the sidebar is read.
+    // Chat reaches All chats from the chats column beside the conversation; the main sidebar has a Chat link and no
+    // list of chats. The column starts folded, so it is opened first.
     await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    await page.getByRole('group', { name: 'Area' }).getByText('Work', { exact: true }).click({ timeout: 30_000 }).catch(() => undefined);
     const sidebar = page.locator('[data-sidebar="sidebar"]').first();
-    const link = sidebar.getByRole('link', { name: 'All chats' });
+    await sidebar.getByTestId('sidebar-new-chat').waitFor({ timeout: 60_000 }).catch(() => undefined);
+    const inSidebar = await sidebar.getByRole('link', { name: 'All chats' }).count();
+    await page.getByTestId('chat-list-open').click({ timeout: 30_000 }).catch(() => undefined);
+    const link = page.getByTestId('chat-list-column').getByRole('link', { name: 'All chats' });
     const listed = await link.waitFor({ timeout: 30_000 }).then(() => true, () => false);
-    const alsoAgents = await sidebar.getByRole('link', { name: 'Agents', exact: true }).count();
     if (listed) await link.click();
     await page.waitForURL((u) => u.pathname === '/chat/conversations', { timeout: 60_000 }).catch(() => undefined);
-    check('All chats is reached from Chat in the sidebar, which lists one area', listed && alsoAgents === 0 && new URL(page.url()).pathname === '/chat/conversations', { listed, alsoAgents, url: page.url() });
+    check('All chats is reached from the chats column on Chat, not from the main sidebar', listed && inSidebar === 0 && new URL(page.url()).pathname === '/chat/conversations', { listed, inSidebar, url: page.url() });
 
     // The fourth role is a reviewer: the members' role filter and badges say Reviewer, never Approver.
     await page.goto(`${consoleUrl}/settings/members`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

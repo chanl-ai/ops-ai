@@ -3,7 +3,7 @@
 // service (scripted model, no provider) takes its tools from tools-service. Each step is checked on its own, so one
 // failing step still lets the later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
-import { PEOPLE, allowBank, authHeaders, securityAdminOn, setTestRunsDoNotAsk, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
+import { PEOPLE, allowBank, authHeaders, securityAdminOn, setTestRunsDoNotAsk, setWriteApprovals, setup, signInAs } from '@ops-ai/usecase-runner/steps';
 import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -107,12 +107,12 @@ await withUiStack(
       await step('4 Nadia approves the module in Human Tasks and it publishes', async () => {
         const nadia = await signIn(browser, consoleUrl, NADIA, errors);
         const J = await headers(JAMES);
-        const waiting = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data.versions.find((v) => v.status === 'in_review');
+        const waiting = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J }))).versions.find((v) => v.status === 'in_review');
         await nadia.goto(`${consoleUrl}/reviews?review=${waiting.reviewId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const decided = armed(nadia.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/reviews/${waiting.reviewId}/decision`), { timeout: 60_000 }));
         await nadia.getByRole('button', { name: 'Approve and publish' }).click({ timeout: 120_000 });
         const res = await decided;
-        const after = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
+        const after = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })));
         check('4 Nadia approves the module in Human Tasks and it publishes', res?.status() === 200 && after?.status === 'published', { status: res?.status(), state: after?.status });
       });
 
@@ -176,7 +176,7 @@ await withUiStack(
       // and 9 count the writes sent after it.
       let heldThread;
       let before = 0;
-      const sentWrites = async () => ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: await headers(JAMES) })).json()).data?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok').length;
+      const sentWrites = async () => ((await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: await headers(JAMES) })))?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok').length;
       await step('8 a chat write holds for approval', async () => {
         before = await sentWrites();
         await chat(james, consoleUrl, 'call place_hold {"accountId": "CHQ-2219"}');
@@ -217,7 +217,7 @@ await withUiStack(
       // 11. An operation that stops being offered shows on the agent as no longer offered, with Remove.
       await step('11 a hidden operation shows as no longer offered on the agent, with Remove', async () => {
         const J = await headers(JAMES);
-        const detail = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
+        const detail = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })));
         const op = detail.operations.find((o) => o.name === 'get_account');
         const hid = await fetch(`${tools}/v1/tool-modules/${moduleId}/operations/${op.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ enabled: false }) });
         const pub = await fetch(`${tools}/v1/tool-modules/${moduleId}/versions`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'get_account hidden' }) });
@@ -225,7 +225,7 @@ await withUiStack(
         // operation until Nadia approves (tools-service served_operations). The module is read as its owner, since
         // Security's own team does not see Operations' modules.
         const N = await headers(NADIA, 'team_security');
-        const waitingAgain = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data?.versions ?? []).find((v) => v.status === 'in_review');
+        const waitingAgain = ((await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })))?.versions ?? []).find((v) => v.status === 'in_review');
         const approved = waitingAgain ? ((await approveToolReview(moduleId, N, J)).status === 'published' ? 200 : 'not published') : 'no review';
         // agents-service keeps each tenant's tool directory for 30 s (activities/tool_directory.py, ttl_s), so the hidden
         // operation is offered until that answer expires; the page is reopened until it is not, for at most 45 s.
@@ -239,9 +239,9 @@ await withUiStack(
         }
         const remove = stale && (await grant.getByRole('button', { name: /Remove/ }).count()) > 0;
         // What agents-service holds, so a failure says which side kept offering the operation.
-        const viewAgent = (await (await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })).json()).data;
-        const offered = ((await (await fetch(`${agents}/v1/tools?pageSize=200`, { headers: J })).json()).data?.data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
-        const opsNow = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
+        const viewAgent = (await setup(await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })));
+        const offered = ((await setup(await fetch(`${agents}/v1/tools?pageSize=200`, { headers: J })))?.data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
+        const opsNow = (await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })));
         check('11 a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
       });
 

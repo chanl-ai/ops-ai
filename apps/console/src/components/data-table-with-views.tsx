@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { DataTablePagination, ServerPaginationProps } from './data-table-pagination';
 import { EdgeFade, useMoreToTheRight } from '@/components/shared/edge-fade';
 import { RowOpen } from '@/components/shared/row-open';
@@ -107,6 +108,8 @@ interface DataTableWithViewsProps<TData, TValue> {
   hideViewSwitcher?: boolean;
   /** Leaves out the paging bar when every row fits on one page (a short result in chat). */
   hidePaginationOnOnePage?: boolean;
+  /** No search, filter or View row, and no space around the table: for a small table inside a card. */
+  hideToolbar?: boolean;
   /** What the list holds, for the pager's count ("2 connectors"); rows by default. */
   rowNoun?: string;
   // Selection callback
@@ -220,6 +223,7 @@ export function DataTableWithViews<TData, TValue>({
   defaultView = 'table',
   hideViewSwitcher = false,
   hidePaginationOnOnePage = false,
+  hideToolbar = false,
   rowNoun,
   onSelectionChange,
   selectionResetKey,
@@ -445,8 +449,8 @@ export function DataTableWithViews<TData, TValue>({
     : undefined;
 
   return (
-    <div className="space-y-4 py-4" data-testid="data-table-container">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className={hideToolbar ? 'space-y-2' : 'space-y-4 py-4'} data-testid="data-table-container">
+      <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2', hideToolbar && 'hidden')}>
         {renderGridItem && !hideViewSwitcher && (
           <div
             className="flex items-center gap-1 border rounded-md shrink-0 bg-card"

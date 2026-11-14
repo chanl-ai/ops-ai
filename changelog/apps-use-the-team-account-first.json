@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-12",
+  "title": "Apps use the team's account first",
+  "description": "Turning an app on now runs every call as the team's account, so nobody is asked to sign in before their first call. An admin can still let each person use their own account on the app's settings, and accounts set up before keep their choice.",
+  "tag": "improved"
+}

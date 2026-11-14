@@ -57,7 +57,7 @@ from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError
 from . import openapi
 from .directory import Directory, Team
 from .executions import call_row
-from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, tool_mode
+from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
 from .seed import blank, kind_of, major_of, open_connection, tool_title
@@ -129,16 +129,14 @@ MAX_STUB_BYTES = 64_000
 
 @dataclass(frozen=True)
 class Caller:
-    """Who is asking and in which team, from ops_identity's principal. `roles` maps team id to role; `verified` is
-    False only for the dev-header principal, which carries no roles, so role rules apply to anyone with a token."""
+    """Who is asking and in which team, from ops_identity's principal; what they may do is `can` on `principal`.
+    `verified` is False only for the dev-header principal, which carries no roles, so role rules apply to anyone with
+    a token."""
 
     tenant_id: str
     name: str
     team: Team
-    roles: dict[str, str] = field(default_factory=dict[str, str])
     verified: bool = False
-    # The caller's role in the team the request acts in (the token's team, before any fallback to an all-scope team).
-    team_role: str | None = None
     # The verified principal, which `ops_access.can` decides on; None for a caller made in code (the seed).
     principal: Principal | None = None
     # The identity headers the caller sent, lower-cased, passed through when tools-service asks agents-service on their
@@ -973,6 +971,9 @@ class ModuleService:
         decision: str | None,
         key: str | None = None,
         call_id: str | None = None,
+        link_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> dict[str, Any]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
         sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
@@ -983,6 +984,9 @@ class ModuleService:
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_ids is not None:
             scope = [m for m in module_ids if scope is None or m in scope]
+        if link_id is not None:
+            # A link's calls are the team's own already, and a workflow started through one has no module.
+            scope = None
         if key is not None:
             # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
             await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
@@ -995,6 +999,9 @@ class ModuleService:
             decision=decision,
             key=key,
             call_id=call_id,
+            link_id=link_id,
+            since=since,
+            until=until,
             offset=(page - 1) * page_size,
             limit=page_size,
         )
@@ -2224,13 +2231,22 @@ class ModuleService:
         if team_id is not None and a.get("decider_team") not in (None, team_id):
             # The system workflow runs in the deciding team; a run in another team decides nothing here.
             raise Forbidden("This request is decided by another team.", code="team_forbidden")
-        asker = str(a.get("requested_by_email") or "").lower()
-        if asker and asker in {str(d).lower() for d in (*deciders, by or "")}:
-            # Separation of duties follows the tenant's requesterMayDecide, as every other decision does: the
-            # asker decides their own request only while it is on.
-            allowed = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
-            if not allowed:
-                raise Forbidden("The person who asked for this access cannot decide it.", code="requester_decides")
+        asker = str(a.get("requested_by_email") or "")
+        if asker and asker.casefold() in {str(d).casefold() for d in (*deciders, by or "")}:
+            # Separation of duties through can(requested_by=), with requesterMayDecide read now rather than from a
+            # token: the asker decides their own request only while it is on.
+            may_decide = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
+            refused = own_request_refusal(
+                Access(),
+                tenant_id,
+                asker,
+                (*deciders, by),
+                may_decide=may_decide,
+                team_id=a.get("decider_team"),
+                what="this access",
+            )
+            if refused is not None:
+                raise refused
         status = "approved" if decision == "approved" else "rejected"
         if a["status"] == status:
             return self._approval_out(a)

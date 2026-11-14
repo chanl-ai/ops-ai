@@ -5,7 +5,7 @@
  * docs/usecases/README.md ("Shared steps").
  */
 import { OpsAI } from '@chanl-ai/ops-ai';
-import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, INVITED_PASSWORD, KB_PORT, PLATFORM_PORT, TOOLS_PORT } from './harness.ts';
+import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, INVITED_PASSWORD, KB_PORT, PLATFORM_PORT, TOOLS_PORT, required } from './harness.ts';
 
 export const PASSWORD = 'northfield-demo';
 /** The dev seed's people (services/platform-service/seed), all in team_ops. */
@@ -135,6 +135,22 @@ export async function runWorkflow(ops: OpsAI, workflowId: string, input: Record<
 export async function authHeaders(email: string, { team = 'team_ops' }: { team?: string | null } = {}): Promise<Record<string, string>> {
   const ops = await signInAs(email, { team });
   return { Authorization: `Bearer ${ops.config.session?.accessToken ?? ops.config.accessToken}`, ...(team ? { 'X-Team-Id': team } : {}), 'Content-Type': 'application/json' };
+}
+
+/**
+ * The data of a setup `fetch` that must succeed: a refusal throws with its status, code and message, so the script
+ * stops as setup instead of reading an empty body and failing later on a page that was never set up.
+ */
+export async function setup<T = any>(res: Response, what = new URL(res.url).pathname): Promise<T> {
+  const text = await res.text();
+  let data: unknown;
+  try {
+    data = (JSON.parse(text) as { data?: unknown }).data;
+  } catch {
+    // a non-JSON body is only acceptable on a refusal, which `required` reports below
+  }
+  if (res.ok && data === undefined && text) throw new Error(`setup request answered ${res.status} without data, ${what}: ${text.slice(0, 300)}`);
+  return required<T>({ status: res.status, data, text }, what);
 }
 
 /** The Security team's admin allows the fake bank's host and the private range it serves on. */

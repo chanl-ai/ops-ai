@@ -8596,6 +8596,29 @@
         "title": "Envelope[list[OptionView]]",
         "type": "object"
       },
+      "Envelope_list_PromptVariable__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PromptVariable"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[PromptVariable]]",
+        "type": "object"
+      },
       "Envelope_list_RunJournalEntry__": {
         "additionalProperties": false,
         "properties": {
@@ -13192,6 +13215,36 @@
           "label"
         ],
         "title": "PortView",
+        "type": "object"
+      },
+      "PromptVariable": {
+        "additionalProperties": false,
+        "description": "A `{key}` an agent's instructions may name, filled at run time from the turn's variables.",
+        "properties": {
+          "example": {
+            "title": "Example",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "example",
+          "source"
+        ],
+        "title": "PromptVariable",
         "type": "object"
       },
       "PublicForm": {
@@ -18773,6 +18826,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "off": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Off"
+          },
           "plugin": {
             "$ref": "#/components/schemas/TemplatePlugin"
           },
@@ -20070,12 +20134,77 @@
         "title": "ToolModuleReviewRef",
         "type": "object"
       },
+      "ToolOption": {
+        "additionalProperties": false,
+        "description": "A tool in a picker; an MCP link's picker (`agents=false`) also gets what the tool takes and what it does, which\nthe link keeps so an assistant reads a workflow's inputs in tools/list.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputSchema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputschema"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ToolOption",
+        "type": "object"
+      },
       "ToolOptionsPage": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/Option"
+              "$ref": "#/components/schemas/ToolOption"
             },
             "title": "Data",
             "type": "array"
@@ -41488,6 +41617,184 @@
         "x-ops-public": "internal"
       }
     },
+    "/v1/prompts/variables": {
+      "get": {
+        "operationId": "agents_list_prompt_variables",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_PromptVariable__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "List Prompt Variables",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/publish-requests": {
       "post": {
         "description": "A tool module review. Opened by tools-service for the person publishing: their credentials name who\nasked and the team, and tools-service's token in `X-Service-Authorization` vouches for the version and changes. Or\nopened by tools-service alone with its token scoped to the module's team, naming in `requestedBy` the person who\nasked (its seed); the review then says tools-service opened it on their behalf.",
@@ -43622,6 +43929,22 @@
               ],
               "title": "X-Dev-User"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
+            }
           }
         ],
         "requestBody": {
@@ -45076,7 +45399,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.\n\n`usableBy=agent` is the chat / menu's list and needs skills: view (403 otherwise). With `agentId` it keeps what\nthat agent's skill menu setting offers (its newest version) and marks a skill needing a tool or knowledge base\nthe agent lacks as `locked`, naming them in `needs`.",
+        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -51811,6 +52134,16 @@
                 }
               ],
               "title": "Ids"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agents",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Agents",
+              "type": "boolean"
             }
           },
           {

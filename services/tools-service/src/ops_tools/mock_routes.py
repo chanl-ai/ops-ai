@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_access import Access
+from ops_access import Access, reader_of
 from ops_service_kit.errors import NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
 from ops_service_kit.ids import new_id
@@ -128,7 +128,11 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
         if i.get("body") is not None and len(str(i["body"])) > MAX_BODY_CHARS:
             raise ValidationFailed(f"A mock's body is at most {MAX_BODY_CHARS} characters.")
 
-    @r.get("/{module_id}/operations/{op_id}/mocks", response_model=Envelope[MockList])
+    @r.get(
+        "/{module_id}/operations/{op_id}/mocks",
+        response_model=Envelope[MockList],
+        dependencies=[Depends(reader_of("tools"))],
+    )
     async def list_mocks(  # pyright: ignore[reportUnusedFunction]
         module_id: str,
         op_id: str,

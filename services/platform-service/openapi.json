@@ -2314,7 +2314,8 @@
             "enum": [
               "mcp_gateway",
               "tool_search",
-              "plugin_updates"
+              "plugin_updates",
+              "area_tabs"
             ],
             "title": "Name",
             "type": "string"
@@ -3000,7 +3001,7 @@
       },
       "KeyTarget": {
         "additionalProperties": false,
-        "description": "What an API key may start. `version` pins a workflow version; null runs the live one.",
+        "description": "What an API key may start, or the one MCP link it opens (`mcp_link`, read only). `version` pins a workflow\nversion; null runs the live one.",
         "properties": {
           "id": {
             "maxLength": 64,
@@ -3011,7 +3012,8 @@
           "kind": {
             "enum": [
               "agent",
-              "workflow"
+              "workflow",
+              "mcp_link"
             ],
             "title": "Kind",
             "type": "string"
@@ -3048,7 +3050,8 @@
           "kind": {
             "enum": [
               "agent",
-              "workflow"
+              "workflow",
+              "mcp_link"
             ],
             "title": "Kind",
             "type": "string"
@@ -6482,8 +6485,47 @@
     },
     "/v1/api-keys": {
       "get": {
+        "description": "The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab\nlists them.",
         "operationId": "api_keys_list_api_keys",
         "parameters": [
+          {
+            "in": "query",
+            "name": "targetKind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "agent",
+                    "workflow",
+                    "mcp_link"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Targetkind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "targetId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Targetid"
+            }
+          },
           {
             "in": "header",
             "name": "x-team-id",
@@ -12227,9 +12269,25 @@
     },
     "/v1/roles": {
       "get": {
-        "description": "Every role in the tenant, built-in first, with how many permissions it grants and how many hold it.",
+        "description": "Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs\naccess.view in the acting team: 403 `admin_required`.",
         "operationId": "roles_list_roles",
         "parameters": [
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -12673,6 +12731,22 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
             }
           }
         ],

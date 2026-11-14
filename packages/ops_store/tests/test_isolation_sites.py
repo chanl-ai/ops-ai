@@ -128,6 +128,9 @@ ENTRIES: dict[str, set[str]] = {
         "services/tools-service/src/ops_tools/secrets/routes.py",
         # The start-up move of sign-in header keys acts on each module in the module's own team.
         "services/tools-service/src/ops_tools/header_keys.py",
+        # An MCP link is read and changed in the team its caller names, the MCP door included, which has no request
+        # team of its own.
+        "services/tools-service/src/ops_tools/store/mcp_links.py",
         # The sign-in keep-alive refreshes each team's sign-ins in that team's own scope.
         "services/tools-service/src/ops_tools/connections/keepalive.py",
         # A model call reads its tenant's provider key, or the deployment's when it names none.

@@ -15,11 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from steps import required
+from usecase_harness import PLUGINS_REPO
 from usecase_harness import (
     AGENTS_PORT,
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
-    ROOT,
     TOOLS_PORT,
     agents,
     assistant_sign_in,
@@ -38,13 +39,13 @@ SKILL = "doc-coauthoring"
 SALESFORCE_PLUGIN = Path(
     os.environ.get(
         "OPS_USECASE_SALESFORCE_PLUGIN",
-        str(ROOT.parent / "ops-ai-plugins" / "plugins" / "salesforce" / "src" / "ops_plugin_salesforce"),
+        str(PLUGINS_REPO / "plugins" / "salesforce" / "src" / "ops_plugin_salesforce"),
     )
 )
 STARTERS = Path(
     os.environ.get(
         "OPS_USECASE_STARTERS_PACK",
-        str(ROOT.parent / "ops-ai-plugins" / "plugins" / "starters" / "src" / "ops_plugin_starters"),
+        str(PLUGINS_REPO / "plugins" / "starters" / "src" / "ops_plugin_starters"),
     )
 )
 # The public addresses the company sign-in names: this stack has no proxy, so they are the services' own ports.
@@ -69,7 +70,7 @@ def salesforce_on(gw: Any, accounts: Any, admin: dict[str, str], sf: dict[str, A
         gw.post("/v1/egress/hosts", json={"value": host, "note": "stack"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "stack"}, headers=sam)
     own = {"app": SALESFORCE_APP, "clientId": "ops-ai-kestrel", "clientSecret": "kestrel-connected-app-secret"}
-    credential = data(gw.post("/v1/app-credentials", json=own, headers=admin)) or {}
+    credential = required(gw.post("/v1/app-credentials", json=own, headers=admin), "/v1/app-credentials")
     team = {
         "enabled": True,
         "signIn": "team",

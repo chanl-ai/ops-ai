@@ -7,8 +7,9 @@ import { Briefcase, ChevronDown, Database, Hammer, ShieldCheck, type LucideIcon 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useFlag } from '@/hooks/flag-queries';
 import { useMyPermissions, useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
-import { areaOf, type AreaName, firstPageOf, offeredAreas, rowsOfArea } from '@/lib/nav';
+import { AREA_LABEL, areaOf, type AreaName, firstPageOf, offeredAreas, rowsOfArea } from '@/lib/nav';
 
 const ICONS: Record<AreaName, LucideIcon> = { Work: Briefcase, Build: Hammer, Data: Database, Govern: ShieldCheck };
 
@@ -62,10 +63,10 @@ export function useAreas() {
   const lit = here ?? (pathArea === null || pathname === '/chat' ? current : null);
 
   // The Overview is for people with work to look at; a chat-only person who once had it in another team must not be sent back.
-  const overview = rowsOfArea('Work', allows).some((i) => i.url === '/');
+  const overview = rowsOfArea('Work', allows).some((i) => i.url === '/overview');
   const pageFor = (area: AreaName) => {
     const last = memory.pages[area];
-    return last && areaOf(last) === area && (last !== '/' || overview) ? last : firstPageOf(area, allows);
+    return last && areaOf(last) === area && (last !== '/overview' || overview) ? last : firstPageOf(area, allows);
   };
   const select = (area: AreaName) => {
     writeMemory(person, { ...memory, area });
@@ -98,11 +99,30 @@ function typing(e: KeyboardEvent): boolean {
 }
 
 /**
- * The area control in the top bar: four buttons beside the trail, one dropdown on a phone. Nothing is drawn for a person
- * with a single area, or while their cells load. ⌘1 to ⌘4 reach the offered areas in order; the page the person last
- * visited in an area is where it opens. It also keeps the memory and sends `/` to where the person left off.
+ * The area control in the top bar, drawn only when the install turns on `area_tabs`. Off, the sidebar lists every area
+ * as a section and nothing here remembers areas or moves the person, except that `/` still sends a person with no
+ * Overview (chat only) to their first page.
  */
 export function AreaSwitcher() {
+  return useFlag('area_tabs') ? <AreaTabs /> : <HomeWithoutOverview />;
+}
+
+function HomeWithoutOverview() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { areas, ready, overview, pageFor } = useAreas();
+  React.useEffect(() => {
+    if (pathname === '/overview' && ready && areas.length && !overview) router.replace(pageFor(areas[0]));
+  }, [pathname, ready, overview, areas.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/**
+ * The area tabs: four buttons beside the trail, one dropdown on a phone. Nothing is drawn for a person with a single
+ * area, or while their cells load. ⌘1 to ⌘4 reach the offered areas in order; the page the person last visited in an
+ * area is where it opens. It also keeps the memory and sends `/` to where the person left off.
+ */
+function AreaTabs() {
   const pathname = usePathname();
   const router = useRouter();
   const { areas, current, lit, ready, select, person, memory, pageFor, bump, overview } = useAreas();
@@ -116,7 +136,7 @@ export function AreaSwitcher() {
   React.useEffect(() => {
     if (!person || !ready || !here || pathname === '/chat' || !areas.includes(here) || recorded.current === pathname) return;
     // The home page is about to send the person back to the area they left; recording Work here would erase it.
-    if (pathname === '/' && memory.area && memory.area !== 'Work') return;
+    if (pathname === '/overview' && memory.area && memory.area !== 'Work') return;
     recorded.current = pathname;
     writeMemory(person, { area: here, pages: { ...memory.pages, [here]: pathname } });
     bump();
@@ -160,16 +180,16 @@ export function AreaSwitcher() {
           return (
             <ToggleGroupItem key={a} value={a} className="gap-1.5 px-2.5">
               <Icon />
-              {a}
+              {AREA_LABEL[a]}
             </ToggleGroupItem>
           );
         })}
       </ToggleGroup>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-11 shrink-0 gap-1.5 px-3 md:hidden" aria-label={`Area: ${current}. Switch area`}>
+          <Button variant="outline" className="h-11 shrink-0 gap-1.5 px-3 md:hidden" aria-label={`Area: ${current && AREA_LABEL[current]}. Switch area`}>
             {React.createElement(ICONS[current], { className: 'size-4' })}
-            {current}
+            {current && AREA_LABEL[current]}
             <ChevronDown className="size-4 text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
@@ -179,7 +199,7 @@ export function AreaSwitcher() {
             return (
               <DropdownMenuItem key={a} onSelect={() => select(a)} aria-current={a === lit ? 'true' : undefined}>
                 <Icon className="size-4" />
-                {a}
+                {AREA_LABEL[a]}
                 <DropdownMenuShortcut>⌘{i + 1}</DropdownMenuShortcut>
               </DropdownMenuItem>
             );

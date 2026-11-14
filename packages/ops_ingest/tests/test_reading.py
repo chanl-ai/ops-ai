@@ -171,13 +171,21 @@ def test_ocr_needed_but_missing_fails_loudly(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize(
-    ("data", "filename", "code"),
-    [(b"PK\x03\x04", "slides.pptx", "unsupported_format"), (b"%PDF-1.4 not really", "broken.pdf", "unreadable_file")],
+    ("data", "filename", "mime", "code", "says"),
+    [
+        (b"PK\x03\x04", "slides.pptx", None, "unreadable_file", "slides.pptx"),
+        (b"%PDF-1.4 not really", "broken.pdf", None, "unreadable_file", ""),
+        (b"\xd0\xcf\x11\xe0", "legacy.ppt", None, "legacy_format", "Save it as .pptx"),
+        (b"\xd0\xcf\x11\xe0", "rates.bin", "application/vnd.ms-excel", "legacy_format", "Save it as .xlsx"),
+        (b"PK\x03\x04", "board.key", None, "legacy_format", "Save it as .pptx"),
+    ],
 )
-def test_file_without_a_reader_fails_with_a_reason(data: bytes, filename: str, code: str) -> None:
+def test_file_without_a_reader_fails_with_a_reason(
+    data: bytes, filename: str, mime: str | None, code: str, says: str
+) -> None:
     with pytest.raises(ReadingError) as caught:
-        read(data, filename=filename, settings=OFF)
-    assert caught.value.code == code
+        read(data, filename=filename, mime_type=mime, settings=OFF)
+    assert caught.value.code == code and says in str(caught.value)
 
 
 @pytest.mark.parametrize("name", ["procedures.docx", "fees.xlsx", "help.html"])

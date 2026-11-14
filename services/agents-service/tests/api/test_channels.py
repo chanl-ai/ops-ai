@@ -134,13 +134,13 @@ async def test_a_pinned_chat_channel_says_how_far_behind_it_is(stack: Stack) -> 
 async def test_the_gallery_lists_every_type_built_or_not(stack: Stack) -> None:  # noqa: F811
     c, _ = stack
     kinds = {k["type"]: k for k in (await channels(c, BUILDER))["kinds"]}
-    assert [t for t, k in kinds.items() if not k["built"]] == ["mcp", "slack", "teams"]
+    assert [t for t, k in kinds.items() if not k["built"]] == ["slack", "teams"]
     assert kinds["email"]["total"] == 0 and kinds["email"]["health"] is None
 
 
 async def test_a_kind_not_built_yet_lists_nothing_instead_of_failing(stack: Stack) -> None:  # noqa: F811
     c, _ = stack
-    for kind in ("mcp", "slack", "teams"):
+    for kind in ("slack", "teams"):
         page = await channels(c, BUILDER, type=kind)
         found = next(k for k in page["kinds"] if k["type"] == kind)
         assert (page["data"], found["built"]) == ([], False), (kind, page)

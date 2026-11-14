@@ -68,7 +68,7 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
   const kind = kindOf(policy);
   const unit = UNITS[kind];
   // publishReview's value is { team: { area: mode } }; the card edits the acting team's part.
-  const teamModes = React.useMemo(() => (isMap(policy.value) ? ((policy.value[teamId] as Record<string, string> | undefined) ?? {}) : {}), [policy.value, teamId]);
+  const teamModes = React.useMemo(() => (isMap(policy.value) ? { ...((policy.value['*'] as Record<string, string> | undefined) ?? {}), ...((policy.value[teamId] as Record<string, string> | undefined) ?? {}) } : {}), [policy.value, teamId]);
   const teamSwitch = isTeamSwitch(policy);
   // A per-team switch shows the acting team's own setting.
   const current = teamSwitch ? String(isMap(policy.value) && policy.value[teamId] === true) : asChoice(policy.value);

@@ -53,10 +53,10 @@ def test_rendering_is_byte_identical_across_runs() -> None:
 
 def test_a_harness_gets_owner_headers_from_one_token_or_dev() -> None:
     seed = seed_module()
-    assert seed.owner_headers(token="t")[seed.NADIA] == {"Authorization": "Bearer t"}
+    assert seed.owner_headers(token="t")[seed.PRIYA] == {"Authorization": "Bearer t"}
     # Dev headers name each base's team, so its files go into the Files of the team that owns the source.
     dev = seed.owner_headers(dev=True)
-    assert dev[seed.NADIA] == {"X-Dev-User": seed.NADIA, "X-Team-Id": "team_security"}, dev
+    assert dev[seed.PRIYA] == {"X-Dev-User": seed.PRIYA, "X-Team-Id": "team_ops"}, dev
     with pytest.raises(ValueError, match="token or dev"):
         seed.owner_headers()
 
@@ -75,31 +75,31 @@ async def test_the_seed_indexes_both_bases_for_their_owners_and_clears_the_floor
     files = KnowledgeFiles(tmp_path)
     async with (
         kb_client(engine, tenant, email=seed.JAMES, files=files) as james,
-        kb_client(engine, tenant, email=seed.NADIA, files=files) as nadia,
+        kb_client(engine, tenant, email=seed.PRIYA, files=files) as priya,
     ):
 
         async def store(_kb: httpx.AsyncClient, name: str, body: bytes) -> str:
             return (await files.put(tenant, DEV_TEAM, body, name=name, mime="application/pdf", actor="seed")).file_id
 
-        seeded = await seed.seed({seed.JAMES: james, seed.NADIA: nadia}, store, pdfs)
+        seeded = await seed.seed({seed.JAMES: james, seed.PRIYA: priya}, store, pdfs)
         retail = (await james.get(f"/v1/knowledge-bases/{seeded.retail_kb}")).json()["data"]
-        branch = (await nadia.get(f"/v1/knowledge-bases/{seeded.branch_kb}")).json()["data"]
-        assert (retail["owner"], branch["owner"]) == (seed.JAMES, seed.NADIA)
+        branch = (await priya.get(f"/v1/knowledge-bases/{seeded.branch_kb}")).json()["data"]
+        assert (retail["owner"], branch["owner"]) == (seed.JAMES, seed.PRIYA)
         assert retail["health"] == "healthy" and branch["health"] == "healthy"
         # Sections became pages: a fee answer cites the fee schedule's page and section.
-        answers = await seed.ask({seed.JAMES: james, seed.NADIA: nadia}, seeded)
+        answers = await seed.ask({seed.JAMES: james, seed.PRIYA: priya}, seeded)
         assert all(a["ok"] for a in answers), answers
         # A question no base covers finds nothing; every covered one (the rate, minimum balance and fee too) is cited.
         assert [a["score"] is None for a in answers] == [not covered for _, _, covered in seed.QUESTIONS]
         wire = next(a for a in answers if "wire" in a["question"])
         assert wire["cites"] and wire["cites"].startswith("Fee Schedule p.")
         # A second run reuses the bases and sources: nothing new, and the sync says unchanged.
-        again = await seed.seed({seed.JAMES: james, seed.NADIA: nadia}, store, pdfs)
+        again = await seed.seed({seed.JAMES: james, seed.PRIYA: priya}, store, pdfs)
         assert (again.retail_kb, again.branch_kb) == (seeded.retail_kb, seeded.branch_kb)
         listed = (await james.get("/v1/knowledge-bases", params={"pageSize": 50})).json()["data"]["data"]
         assert sorted(b["name"] for b in listed) == ["Branch operations", "Retail products"]
         # Version 2 replaces version 1 under the same file name, and the fee answer moves to it.
-        run = await seed.replace_fee_schedule(nadia, store, seeded, pdfs["fee-schedule-v2"].read_bytes())
+        run = await seed.replace_fee_schedule(priya, store, seeded, pdfs["fee-schedule-v2"].read_bytes())
         assert run["status"] == "success" and run["counts"]["upserted"] == 1, run
         after = (
             await james.post(
@@ -107,15 +107,14 @@ async def test_the_seed_indexes_both_bases_for_their_owners_and_clears_the_floor
             )
         ).json()["data"]
         assert "35.00" in after["answer"] and "30.00" not in after["answer"], after["answer"]
-        changes = (await nadia.get("/v1/knowledge-changes")).json()["data"]["data"]
+        changes = (await priya.get("/v1/knowledge-changes")).json()["data"]["data"]
         assert any("Fee Schedule changed from v1 to v2" in c["summary"] for c in changes), changes
 
 
 async def test_each_question_is_asked_by_the_team_that_owns_its_base() -> None:
-    """Under platform sign-in a person reads only their team's bases: asking every question as James, in the
-    operations team, answered 404 on Security's Branch operations and stopped uc-248 and uc-249 in setup."""
+    """Each question is asked by its base's owner, who writes and reads that base."""
     seed = seed_module()
-    asked: dict[str, set[str]] = {seed.JAMES: set(), seed.NADIA: set()}
+    asked: dict[str, set[str]] = {seed.JAMES: set(), seed.PRIYA: set()}
 
     def owner_of(email: str) -> httpx.AsyncClient:
         def answer(request: httpx.Request) -> httpx.Response:
@@ -125,9 +124,9 @@ async def test_each_question_is_asked_by_the_team_that_owns_its_base() -> None:
         return httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://kb")
 
     seeded = seed.Seeded("kb_retail", "kb_branch", "src_retail", "src_manual", "src_fees")
-    async with owner_of(seed.JAMES) as james, owner_of(seed.NADIA) as nadia:
-        await seed.ask({seed.JAMES: james, seed.NADIA: nadia}, seeded)
-    assert asked == {seed.JAMES: {"kb_retail"}, seed.NADIA: {"kb_branch"}}, asked
+    async with owner_of(seed.JAMES) as james, owner_of(seed.PRIYA) as priya:
+        await seed.ask({seed.JAMES: james, seed.PRIYA: priya}, seeded)
+    assert asked == {seed.JAMES: {"kb_retail"}, seed.PRIYA: {"kb_branch"}}, asked
 
 
 async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
@@ -162,11 +161,11 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     assert named == {"ag_advisor": ["kb_retail_products"], "ag_policy": ["kb_branch_operations"]}
     async with kb_client(engine, tenant, email="j.richardson@harborpine.example", files=KnowledgeFiles(tmp_path)) as c:
         answer = (
-            # The base is team_security's; a person reads it acting in that team.
+            # The base is the operations team's, as ag_policy is: a turn searches only its own team's bases.
             await c.post(
                 "/v1/knowledge-bases/kb_branch_operations/query",
                 json={"question": "fee for an outgoing wire transfer"},
-                headers={"X-Team-Id": "team_security"},
+                headers={"X-Team-Id": "team_ops"},
             )
         ).json()["data"]
     assert answer["citations"] and answer["citations"][0]["page"], answer
@@ -212,4 +211,4 @@ async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
         sources = await store.sources(tenant)
     for s in sources:
         assert len(s["file_ids"]) == 1, s
-        await after.files.read(tenant, "team_ops" if "Retail" in s["name"] else "team_security", s["file_ids"][0])
+        await after.files.read(tenant, "team_ops", s["file_ids"][0])

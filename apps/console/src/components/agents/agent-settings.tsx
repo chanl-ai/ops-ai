@@ -112,8 +112,15 @@ const SECTION: Record<keyof AgentDraft, string> = {
 };
 
 /** Section names whose values differ between the saved agent and the draft. */
+/** Key order aside: the API answers an object's keys in its own order, so a key-order difference is no edit. */
+const canonical = (v: unknown): string =>
+  JSON.stringify(v, (_k, x: unknown) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
+
+/** Whether two values of a draft field are the same value. */
+export const sameValue = (a: unknown, b: unknown): boolean => canonical(a) === canonical(b);
+
 export function changedSections(saved: AgentDraft, draft: AgentDraft) {
-  const keys = (Object.keys(draft) as (keyof AgentDraft)[]).filter((k) => JSON.stringify(saved[k]) !== JSON.stringify(draft[k]));
+  const keys = (Object.keys(draft) as (keyof AgentDraft)[]).filter((k) => !sameValue(saved[k], draft[k]));
   return [...new Set(keys.map((k) => SECTION[k]))];
 }
 

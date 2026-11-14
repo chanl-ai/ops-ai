@@ -169,7 +169,18 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/knowledge-bases/{kb_id}/documents",
         "pathParams": ["kb_id"],
-        "query": ["page", "pageSize", "search"],
+        "query": [
+            "page",
+            "pageSize",
+            "search",
+            "sourceId",
+            "status",
+            "collection",
+            "docType",
+            "freshness",
+            "sensitivity",
+            "tags",
+        ],
         "stream": False,
     },
     "knowledge_bases_list_knowledge_bases": {
@@ -536,14 +547,37 @@ class Operations:
         )  # type: ignore[no-any-return]
 
     def knowledge_bases_list_documents(
-        self, kb_id: str, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        kb_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        source_id: list[str] | None = None,
+        status: list[str] | None = None,
+        collection: list[str] | None = None,
+        doc_type: list[str] | None = None,
+        freshness: list[str] | None = None,
+        sensitivity: list[str] | None = None,
+        tags: list[str] | None = None,
     ) -> ListResultDocumentRow:
         "List Documents"
         return self._t.call(
             SERVICE,
             OPERATIONS["knowledge_bases_list_documents"],
             {"kb_id": kb_id},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sourceId": source_id,
+                "status": status,
+                "collection": collection,
+                "docType": doc_type,
+                "freshness": freshness,
+                "sensitivity": sensitivity,
+                "tags": tags,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -825,14 +859,37 @@ class AsyncOperations:
         )  # type: ignore[no-any-return]
 
     async def knowledge_bases_list_documents(
-        self, kb_id: str, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        kb_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        source_id: list[str] | None = None,
+        status: list[str] | None = None,
+        collection: list[str] | None = None,
+        doc_type: list[str] | None = None,
+        freshness: list[str] | None = None,
+        sensitivity: list[str] | None = None,
+        tags: list[str] | None = None,
     ) -> ListResultDocumentRow:
         "List Documents"
         return await self._t.call(
             SERVICE,
             OPERATIONS["knowledge_bases_list_documents"],
             {"kb_id": kb_id},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sourceId": source_id,
+                "status": status,
+                "collection": collection,
+                "docType": doc_type,
+                "freshness": freshness,
+                "sensitivity": sensitivity,
+                "tags": tags,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

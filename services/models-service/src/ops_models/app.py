@@ -17,7 +17,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query
@@ -31,14 +31,16 @@ from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal,
 from ops_metering import Price, Usage, cost
 from ops_policy import CredentialStore
 from ops_service_kit.credentials import credential_store
-from ops_service_kit.errors import Conflict, NotFound
+from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, error_body, error_responses, install_error_handlers, ok, operation_id
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.database import Database
 
 from .connection_settings import azure_openai_problem
+from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
 from .providers import AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
 from .schemas import (
@@ -107,6 +109,48 @@ class ProviderRebind(_Wire):
 
 class ProviderKeyIn(_Wire):
     value: str = Field(min_length=1, max_length=4000)
+
+
+class KeyCheckIn(_Wire):
+    """Which provider the key is for, and for Azure OpenAI the resource's endpoint and API version."""
+
+    provider: Literal["openai", "azure-openai", "anthropic"]
+    # Azure OpenAI only: the resource's address under openai.azure.com. OpenAI and Anthropic use their own.
+    endpoint: str | None = Field(default=None, max_length=500)
+    api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
+
+
+class KeyCheckOut(_Wire):
+    ok: bool
+    reason: str | None = None
+    models: int = 0
+
+
+class ProviderModelOut(_Wire):
+    id: str
+    model: str | None = None
+
+
+class ChatModelIn(_Wire):
+    """The model chat answers with: a provider, the saved key it signs in with, and one of the models (or Azure
+    deployments) that key lists."""
+
+    provider: Literal["openai", "azure-openai", "anthropic"]
+    key_name: str = Field(pattern="^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$")
+    model: str = Field(min_length=1, max_length=200)
+    endpoint: str | None = Field(default=None, max_length=500)
+    api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
+
+
+class ChatModelOut(_Wire):
+    provider_id: str
+    model: str
+    aliases: list[str]
+
+
+# Where each provider's chat calls go. Anthropic is served through its OpenAI-compatible endpoint, which takes the key
+# as a bearer token, so the OpenAI-compatible client serves it with no client of its own.
+CHAT_BASES = {"openai": "https://api.openai.com/v1", "anthropic": "https://api.anthropic.com/v1"}
 
 
 # The name a provider connection's `key_ref` gives: `OPENAI`, or `openai` as the dev stack names it.
@@ -248,12 +292,16 @@ def create_models_app(
     overlap_seconds: int = 900,
     upstream: httpx.AsyncClient | None = None,
     credentials: CredentialStore | None = None,
+    key_fetch: PublicFetch | None = None,
+    chat_aliases: tuple[str, ...] = ("default", "assistant"),
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
     Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
     default); `provider_secrets` are the dev stack's keys from settings, behind them."""
     http = upstream or httpx.AsyncClient(timeout=60)
+    # Testing a key sends it out: only to a public address, never following a redirect with it.
+    key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -398,6 +446,111 @@ def create_models_app(
         saved, _ = await key_vault.save(p.tenant_id, name, body.value, by=by)
         keys.forget(p.tenant_id, name)
         return ok(_provider_key_view(saved))
+
+    async def saved_key(p: Principal, name: str) -> str:
+        account_admin(p)
+        value = await keys.get(name, p.tenant_id)
+        if value is None:
+            raise NotFound(f"Model provider key {name}")
+        return value
+
+    @app.post(
+        "/v1/provider-keys/{name}/check",
+        tags=["provider-keys"],
+        response_model=Envelope[KeyCheckOut],
+        responses=error_responses({403: "Not an account admin", 404: "No key saved under that name"}),
+    )
+    async def check_provider_key(  # pyright: ignore[reportUnusedFunction]
+        name: Annotated[str, KEY_NAME], body: KeyCheckIn, p: CurrentPrincipal
+    ) -> JSONResponse:
+        """Asks the provider for what the saved key reaches: ok with how many models or deployments, or not ok with
+        the provider's reason. Nothing is called with the key otherwise."""
+        value = await saved_key(p, name)
+        try:
+            found = await listed_models(
+                http, key_fetch, body.provider, value, endpoint=body.endpoint, api_version=body.api_version
+            )
+        except KeyRefused as e:
+            return ok(KeyCheckOut(ok=False, reason=str(e)).model_dump(by_alias=True))
+        except EndpointRefused as e:
+            raise Unprocessable(str(e), code="endpoint_refused") from e
+        return ok(KeyCheckOut(ok=True, models=len(found)).model_dump(by_alias=True))
+
+    @app.get(
+        "/v1/provider-keys/{name}/models",
+        tags=["provider-keys"],
+        response_model=Envelope[list[ProviderModelOut]],
+        responses=error_responses({403: "Not an account admin", 422: "The provider refused the key"}),
+    )
+    async def list_provider_models(  # pyright: ignore[reportUnusedFunction]
+        name: Annotated[str, KEY_NAME],
+        p: CurrentPrincipal,
+        provider: Annotated[Literal["openai", "azure-openai", "anthropic"], Query()],
+        endpoint: Annotated[str | None, Query(max_length=500)] = None,
+        api_version: Annotated[str | None, Query(alias="apiVersion", max_length=40, pattern=r"^[0-9a-z-]+$")] = None,
+    ) -> JSONResponse:
+        """The models (OpenAI, Anthropic) or deployments (Azure OpenAI) the saved key reaches, for choosing which one
+        chat uses; 422 key_refused with the provider's reason."""
+        value = await saved_key(p, name)
+        try:
+            found = await listed_models(http, key_fetch, provider, value, endpoint=endpoint, api_version=api_version)
+        except KeyRefused as e:
+            raise Unprocessable(str(e), code="key_refused") from e
+        except EndpointRefused as e:
+            raise Unprocessable(str(e), code="endpoint_refused") from e
+        return ok(found)
+
+    @app.put(
+        "/v1/models/chat-model",
+        tags=["providers"],
+        response_model=Envelope[ChatModelOut],
+        responses=error_responses(
+            {403: "Not an account admin", 404: "No key saved under that name", 422: "The endpoint is refused"}
+        ),
+    )
+    async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key
+        belongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or
+        version 1 on a fresh install, where no chat alias exists yet."""
+        await saved_key(p, body.key_name)
+        if body.provider == "azure-openai":
+            try:
+                base = azure_host(body.endpoint)
+            except EndpointRefused as e:
+                raise Unprocessable(str(e), code="endpoint_refused") from e
+            version = body.api_version or "v1"
+            fields = {"type": "azure-openai", "base_url": base, "api_version": version, "key_ref": body.key_name}
+        else:
+            fields = {"type": "openai-compatible", "base_url": CHAT_BASES[body.provider], "api_version": None}
+            fields["key_ref"] = body.key_name
+        name = f"{chat_aliases[0]}-{body.provider}"
+        held = next((r for r in await providers.all() if r["name"] == name), None)
+        pid = new_id("prov") if held is None else str(held["id"])
+        if held is None and not await providers.create(
+            {"id": pid, "name": name, **fields, "region": None, "created_at": now_iso()}
+        ):
+            held = next(r for r in await providers.all() if r["name"] == name)
+        if held is not None:
+            pid = str(held["id"])
+            await providers.rebind(pid, {**fields, "region": None})
+        version_fields = {
+            "provider_id": pid,
+            "model_id": body.model,
+            "cleared_sensitivity": "confidential",
+            "input_per_million": Decimal(0),
+            "output_per_million": Decimal(0),
+            "reasoning_effort": None,
+            "images": False,
+        }
+        for alias in chat_aliases:
+            # A new model keeps the alias's prices: zero would let every budget pass. A fresh alias starts at zero
+            # until an admin prices it on the Models page.
+            held_version = await aliases.current(alias)
+            prices = ("input_per_million", "output_per_million")
+            priced = {k: held_version[k] for k in prices if held_version and k in held_version}
+            if await aliases.add_version(alias, {**version_fields, **priced}) is None:
+                await aliases.create(alias, "chat", version_fields)
+        return ok(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)).model_dump(by_alias=True))
 
     @app.delete(
         "/v1/provider-keys/{name}",

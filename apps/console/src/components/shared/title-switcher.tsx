@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation';
 import { Check, ChevronsUpDown } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useFlagState } from '@/hooks/flag-queries';
 import { useNavAllows } from '@/hooks/me-queries';
 import { sectionFor } from '@/lib/nav';
 
@@ -13,15 +15,50 @@ import { sectionFor } from '@/lib/nav';
  * The page title as a menu of the other pages in its sidebar section (Brain: Knowledge bases, Sources, Changes,
  * Files). Renders the plain title when the route's sidebar item has no child pages.
  */
-export function TitleSwitcher({ title }: { title: string }) {
+/** The pages of the route's sidebar item the person may open, and which one is showing. */
+function useSection() {
   const pathname = usePathname();
   const allows = useNavAllows();
   const found = sectionFor(pathname);
   // Only pages the person may open; a page whose answer is still loading waits for it rather than flashing in.
   const section = found && { ...found, pages: found.pages.filter((p) => allows(p.needs) === true) };
-  if (!section || section.pages.length < 2) return <>{title}</>;
+  if (!section || section.pages.length < 2) return null;
   // The longest matching href wins, so /knowledge/changes is not also read as /knowledge.
   const current = [...section.pages].sort((a, b) => b.href.length - a.href.length).find((p) => pathname === p.href || pathname.startsWith(`${p.href}/`))?.href;
+  return { section, current };
+}
+
+/**
+ * With the one sidebar (area tabs off), a page's sibling pages are tabs under its title, each its own address
+ * (Workflows | Runs, Members | Roles | Tool access), since the sidebar lists one link per page. Nothing with area tabs on,
+ * where the title menu and the sidebar's sub-rows offer them.
+ */
+export function SectionTabs() {
+  const found = useSection();
+  if (useFlagState('area_tabs') !== 'off' || !found) return null;
+  const { section, current } = found;
+  return (
+    <Tabs value={current ?? ''}>
+      <TabsList aria-label={section.label} data-testid="section-tabs">
+        {section.pages.map((p) => (
+          <TabsTrigger key={p.href} value={p.href} asChild>
+            <Link href={p.href} aria-current={p.href === current ? 'page' : undefined} data-testid={`section-tab-${p.href.replace(/\//g, '-').slice(1)}`}>
+              {p.icon ? <p.icon className="size-4" /> : null}
+              {p.label}
+            </Link>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+}
+
+export function TitleSwitcher({ title }: { title: string }) {
+  const found = useSection();
+  // The one sidebar shows the sibling pages as tabs instead (SectionTabs).
+  const single = useFlagState('area_tabs') !== 'on';
+  if (!found || single) return <>{title}</>;
+  const { section, current } = found;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

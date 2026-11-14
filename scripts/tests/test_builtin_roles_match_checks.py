@@ -25,7 +25,9 @@ from ops_access import (
     SECURITY_TEAM_ACTIONS,
     Access,
     Assignment,
+    Grids,
     Scope,
+    active,
     builtin_roles_for,
     can,
     scope_in,
@@ -214,8 +216,6 @@ def tools_caller(p: Principal) -> Caller:
         tenant_id=p.tenant_id,
         name=p.name,
         team=Team(id=str(p.team_id), name="Ops", owner_groups=(), scope="owned"),
-        roles=dict(p.roles),
-        team_role=p.role,
         verified=True,
         principal=p,
     )
@@ -299,6 +299,29 @@ class _Roles:
 
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Any]]:
         return {}
+
+    async def live(self, tenant_id: str, user_id: str, *, team: str | None = None) -> tuple[Principal, Access]:
+        """RoleStore.live from the fake's holdings: the person as `can` sees them, with no token."""
+        held = await self.holdings(tenant_id, user_id)
+        live = active(held.assignments, NOW)
+        version = await self.version(tenant_id)
+        p = Principal(
+            kind="person",
+            sub=user_id,
+            email="",
+            name="",
+            roles={},
+            scopes=[],
+            tenant_id=tenant_id,
+            team_id=team,
+            team_ids=list(held.teams),
+            access={t: [a.role_id for a in live if a.team_id == t] for t in {a.team_id for a in live}},
+            permission_version=version,
+            auth_method="session",
+        )
+        access = Access(security_team=SECURITY, grids=Grids(fetch=lambda t, _v, ids: self.grids(t, ids)))
+        await access.grids.load(tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
+        return p, access
 
 
 def platform_admin(area: str, action: str) -> Verdict:

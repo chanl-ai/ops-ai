@@ -1,6 +1,6 @@
 # A part needing a tool the agent lacks is locked
 
-Status: draft. Service: `agents-service`. Layers: api, ui.
+Status: draft. Service: `agents-service`. Layers: api (no ui script yet).
 
 In this example we will list the menu for an agent that does not hold the tool a part names and see the row locked, then try to send it. Design case sk-chat-7.
 
@@ -9,7 +9,7 @@ In this example we will list the menu for an agent that does not hold the tool a
 | Id | `uc-749` |
 | Area | Agents |
 | Design label | `sk-chat-7` |
-| Runs | api and ui in their own scripts |
+| Runs | api in its own script |
 | Run it | `make usecase-test UC=uc-749` |
 
 ## Who is in it

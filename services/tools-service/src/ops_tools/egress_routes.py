@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_access import Access, require_provisioner
+from ops_access import Access, reader_of, require_provisioner
 from ops_identity import CurrentService
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
@@ -147,12 +147,12 @@ def egress_router(store: EgressStore) -> APIRouter:
         )
         return ok({"kind": "host", "value": host, "changed": added})
 
-    @r.get("", response_model=Envelope[AllowList])
+    @r.get("", response_model=Envelope[AllowList], dependencies=[Depends(reader_of("secrets_egress"))])
     async def allow_list(who: Annotated[Person, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         hosts, ranges = await _listed(who)
         return ok({"hosts": hosts, "ranges": ranges})
 
-    @r.get("/hosts", response_model=Envelope[HostList])
+    @r.get("/hosts", response_model=Envelope[HostList], dependencies=[Depends(reader_of("secrets_egress"))])
     async def list_hosts(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Person, Depends(caller)],
         page: Annotated[int, Query(ge=1)] = 1,

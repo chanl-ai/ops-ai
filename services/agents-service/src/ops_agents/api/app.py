@@ -92,6 +92,7 @@ from .routers import (
     health,
     model_alias_catalog,
     overview,
+    prompt_variables,
     publish_requests,
     reviews,
     service_events,
@@ -524,6 +525,7 @@ def create_app(
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")
     mount(engine_routes.runs_router, "Workflows")
+    mount(engine_routes.run_start_router, "Workflows")
     # An outside system resumes the step it was handed, by the step's own token; no person's.
     mount(run_resume_routes.router, "Workflows")
     mount(workflows.router, "Workflows")
@@ -539,6 +541,7 @@ def create_app(
     mount(skill_routes.router, "Agents")
     mount(widget_routes.router, "Agents")
     mount(model_alias_catalog.router, "Agents")
+    mount(prompt_variables.router, "Agents")
     mount(publish_requests.router, "Reviews")
     mount(publish_requests.open_router, "Reviews")
     mount(graphs.versions_router, "Graphs")

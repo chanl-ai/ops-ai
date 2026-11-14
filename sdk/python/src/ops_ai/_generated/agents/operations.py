@@ -253,6 +253,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_list_prompt_variables": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/prompts/variables",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_list_skills": {
         "body": None,
         "headers": [],
@@ -439,7 +448,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/tools/options",
         "pathParams": [],
-        "query": ["search", "cursor", "limit", "ids"],
+        "query": ["search", "cursor", "limit", "ids", "agents"],
         "stream": False,
     },
     "agents_update_agent": {
@@ -1677,7 +1686,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "workflows_start_engine_run": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/runs",
         "pathParams": [],
@@ -2376,6 +2385,10 @@ class Operations:
         "Overview"
         return self._t.call(SERVICE, OPERATIONS["cases_overview"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_list_prompt_variables(self) -> list[PromptVariable]:
+        "List Prompt Variables"
+        return self._t.call(SERVICE, OPERATIONS["agents_list_prompt_variables"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     def reviews_open_publish_request(
         self, body: ToolModuleReviewInput, *, x_service_authorization: str | None = None
     ) -> PublishReview:
@@ -2467,9 +2480,11 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
-    def workflows_start_engine_run(self, body: EngineRunInput) -> RunStarted:
+    def workflows_start_engine_run(self, body: EngineRunInput, *, x_acting_for: str | None = None) -> RunStarted:
         "Start Engine Run"
-        return self._t.call(SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
         "Run Set Aside Email"
@@ -2696,13 +2711,14 @@ class Operations:
         cursor: str | None = None,
         limit: int | None = None,
         ids: list[str] | None = None,
+        agents: bool | None = None,
     ) -> ToolOptionsPage:
         "Tool Options"
         return self._t.call(
             SERVICE,
             OPERATIONS["agents_tool_options"],
             {},
-            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids, "agents": agents},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3659,6 +3675,10 @@ class AsyncOperations:
         "Overview"
         return await self._t.call(SERVICE, OPERATIONS["cases_overview"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def agents_list_prompt_variables(self) -> list[PromptVariable]:
+        "List Prompt Variables"
+        return await self._t.call(SERVICE, OPERATIONS["agents_list_prompt_variables"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def reviews_open_publish_request(
         self, body: ToolModuleReviewInput, *, x_service_authorization: str | None = None
     ) -> PublishReview:
@@ -3750,9 +3770,11 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
-    async def workflows_start_engine_run(self, body: EngineRunInput) -> RunStarted:
+    async def workflows_start_engine_run(self, body: EngineRunInput, *, x_acting_for: str | None = None) -> RunStarted:
         "Start Engine Run"
-        return await self._t.call(SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     async def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
         "Run Set Aside Email"
@@ -3989,13 +4011,14 @@ class AsyncOperations:
         cursor: str | None = None,
         limit: int | None = None,
         ids: list[str] | None = None,
+        agents: bool | None = None,
     ) -> ToolOptionsPage:
         "Tool Options"
         return await self._t.call(
             SERVICE,
             OPERATIONS["agents_tool_options"],
             {},
-            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids, "agents": agents},
             {},
             None,
         )  # type: ignore[no-any-return]

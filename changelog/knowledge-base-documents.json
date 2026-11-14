@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-13",
+  "title": "Knowledge base documents filter by collection and type",
+  "description": "A knowledge base's Documents tab now filters by source, status, collection, type, freshness, sensitivity and tag, and each filter counts what choosing it would show. A test question can be narrowed to one collection.",
+  "tag": "new"
+}

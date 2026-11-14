@@ -19,7 +19,7 @@ from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, OptionsPage, options_page, options_window, page_window, paged
 
 from ..agent_registry import registry as agent_registry
-from ..auth import Principal, principal, require_builder, teams_of
+from ..auth import Principal, principal, reader_of, require_builder, teams_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..publish_policy import decide
@@ -31,6 +31,7 @@ from ..widgets import check_content, listed, publish, seeded_widgets, view, widg
 router = APIRouter(dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("widgets"))]  # noqa: UP040
 
 
 class WidgetInput(WireModel):
@@ -68,7 +69,7 @@ async def _mine(rt: Runtime, me: Principal, widget_id: str, what: str) -> dict[s
 @router.get("/v1/widgets", response_model=Envelope[list[WidgetTemplateOut] | WidgetTemplateList])
 async def list_widgets(
     rt: Rt,
-    me: Me,
+    me: Reader,
     page: Annotated[int | None, Query(ge=1)] = None,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str = "",
@@ -92,7 +93,7 @@ async def list_widgets(
 @router.get("/v1/widgets/options", response_model=Envelope[OptionsPage])
 async def widget_options(  # noqa: PLR0917 - FastAPI reads each query parameter from the signature
     rt: Rt,
-    me: Me,
+    me: Reader,
     search: str = "",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -145,7 +146,7 @@ async def widget_options(  # noqa: PLR0917 - FastAPI reads each query parameter 
 
 
 @router.get("/v1/widgets/{widget_id}", response_model=Envelope[WidgetTemplateOut])
-async def get_widget(rt: Rt, me: Me, widget_id: str) -> JSONResponse:
+async def get_widget(rt: Rt, me: Reader, widget_id: str) -> JSONResponse:
     found = next((w for w in await listed(rt, teams_of(me)) if w["widgetId"] == widget_id), None)
     if found is None:
         raise NotFound(f"Widget {widget_id}")

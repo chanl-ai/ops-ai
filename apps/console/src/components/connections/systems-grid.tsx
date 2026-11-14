@@ -196,7 +196,7 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
   return (
     <PageLayout
       icon={Plug}
-      title="Connectors"
+      title="Apps"
       switcher
       description="Team setup: turn on the apps your agents and workflows use, and choose whose account their tools use."
       contentClassName="flex flex-col gap-4"

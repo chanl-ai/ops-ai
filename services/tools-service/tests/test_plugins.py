@@ -272,13 +272,28 @@ def test_plugins_load_from_the_install_folder_with_no_switch(
     parts = (store, PluginBindings(engine))
     folder = tmp_path / "plugins"
     folder.mkdir()
-    assert PluginHost.when_on(Settings(plugins_dir=folder), *parts) is None
+    # No built-in plugins either, so the empty folder is all this install has.
+    none = tmp_path / "no-builtin"
+    assert PluginHost.when_on(Settings(plugins_dir=folder, builtin_plugins_dir=none), *parts) is None
     copytree(Path(__file__).parent / "plugin_desk", folder / "plugin_desk", ignore=ignore_patterns("__pycache__"))
     (folder / "broken_desk").mkdir()
     (folder / "broken_desk" / "plugin.yaml").write_text("id: [")
-    on = PluginHost.when_on(Settings(plugins_dir=folder), *parts)
+    on = PluginHost.when_on(Settings(plugins_dir=folder, builtin_plugins_dir=none), *parts)
     assert on is not None and "test.desk" in on.plugins
     assert [(x.name, x.ok) for x in on.loaded] == [("broken_desk", False), ("plugin_desk", True)]
+
+
+def test_a_developer_plugin_path_replaces_the_built_in_copy(tmp_path: Path) -> None:
+    # Use case runs point OPS_PLUGIN_PATHS at the plugins repo; the same plugin also ships built in. Both loading
+    # would refuse the plugin in both places, so the developer's copy wins and the built-in one is left out.
+    source = Path(__file__).parent / "plugin_desk"
+    builtin, dev = tmp_path / "builtin", tmp_path / "dev"
+    copytree(source, builtin / "plugin_desk", ignore=ignore_patterns("__pycache__"))
+    copytree(source, dev / "plugin_desk", ignore=ignore_patterns("__pycache__"))
+    settings = Settings(
+        plugins_dir=tmp_path / "none", builtin_plugins_dir=builtin, plugin_paths=[str(dev / "plugin_desk")]
+    )
+    assert settings.plugin_folders == [str(dev / "plugin_desk")]
 
 
 def test_settings_name_the_plugin_kits_entry_point_group() -> None:

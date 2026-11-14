@@ -309,3 +309,8 @@ async def test_models_service_aliases_are_its_chat_aliases_and_an_outage_is_503(
     down = HttpModelAliases(models(outage))
     with pytest.raises(ModelsUnavailable):
         await chat_aliases(down)
+
+
+async def test_the_instructions_editor_offers_only_placeholders_a_run_fills(client: AsyncClient) -> None:
+    """A placeholder no turn fills fails the turn (ops_agent_kernel/context.py), so the editor lists none."""
+    assert _ok(await client.get("/v1/prompts/variables")) == []

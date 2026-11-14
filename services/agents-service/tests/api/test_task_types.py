@@ -202,3 +202,12 @@ def test_the_document_region_reads_boxes_from_an_extract_steps_fields() -> None:
     bound = tt.bind(record, {"title": "Check the read", "document": "fil_1", "fields": read})
     doc = next(r for r in bound["regions"] if r["region"] == "document")["data"]
     assert doc["boxes"] == [{"key": "amount", "page": 1, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04, "check": True}]
+
+
+async def test_dev_header_caller_reads_the_types_of_the_team_it_names(client: AsyncClient) -> None:
+    """The dev header caller reads tenant-wide, yet a type belongs to one team: its X-Team-Id names the team whose
+    seeded types it lists and opens."""
+    team = {"X-Team-Id": "team_all", "X-Dev-User": "lee@harborpine.example"}
+    listed = ok(await client.get("/v1/task-types", headers=team))
+    assert "write_approval" in {t["id"] for t in listed}
+    assert ok(await client.get("/v1/task-types/write_approval", headers=team))["id"] == "write_approval"

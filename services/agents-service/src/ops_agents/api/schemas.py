@@ -22,6 +22,7 @@ from ops_service_kit.http import (
     ErrorBody,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ErrorEnvelope,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ListResult,
+    Option,
     OptionsPage,
     Out,
     Pagination,  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -403,9 +404,27 @@ class ToolsNotAdded(Out):
     count: int
 
 
+class ToolOption(Option):
+    """A tool in a picker; an MCP link's picker (`agents=false`) also gets what the tool takes and what it does, which
+    the link keeps so an assistant reads a workflow's inputs in tools/list."""
+
+    input_schema: dict[str, Any] | None = None
+    description: str | None = None
+
+
 class ToolOptionsPage(OptionsPage):
+    data: list[ToolOption]  # pyright: ignore[reportIncompatibleVariableOverride]
     # The apps matching the search with tools not added, on a first page only; empty when the tools service is down.
     not_added: list[ToolsNotAdded] = Field(default_factory=list[ToolsNotAdded])
+
+
+class PromptVariable(Out):
+    """A `{key}` an agent's instructions may name, filled at run time from the turn's variables."""
+
+    key: str
+    label: str
+    example: str
+    source: str
 
 
 class ModelAlias(Out):

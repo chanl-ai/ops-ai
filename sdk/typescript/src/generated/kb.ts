@@ -199,7 +199,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Documents */
+        /**
+         * List Documents
+         * @description A base's documents. Each filter keeps rows matching any of its values; each facet counts its values over
+         *     the rows the other filters keep, so a chip's counts say what choosing it would show.
+         */
         get: operations["knowledge_bases_list_documents"];
         put?: never;
         /**
@@ -787,6 +791,23 @@ export interface components {
             /** Totalitems */
             totalItems: number;
         };
+        /**
+         * AnswerSettings
+         * @description What the base gives back to an agent's turn: an answer with citations or the pieces alone, whether an answer
+         *     citing none of its pieces is withheld, and what is said when nothing is found. The model, temperature, length and
+         *     instructions are the agent's.
+         */
+        AnswerSettings: {
+            /** Noanswermessage */
+            noAnswerMessage: string;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "answer_with_citations" | "chunks";
+            /** Withholduncited */
+            withholdUncited: boolean;
+        };
         /** AttachIn */
         AttachIn: {
             /** Sourceids */
@@ -873,6 +894,11 @@ export interface components {
             collection: string;
             /** Digest */
             digest: string;
+            /**
+             * Doctype
+             * @enum {string}
+             */
+            docType: "pdf" | "word" | "spreadsheet" | "slides" | "web" | "text" | "typed" | "app" | "other";
             /** Duplicateof */
             duplicateOf?: string | null;
             /** Effectivedate */
@@ -927,6 +953,8 @@ export interface components {
             tags: string[];
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
             /** Verified */
             verified: boolean;
             /** Version */
@@ -1378,6 +1406,8 @@ export interface components {
             tags: string[];
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
             /** Verified */
             verified: boolean;
             /** Version */
@@ -1465,6 +1495,8 @@ export interface components {
             tags: string[];
             /** Title */
             title: string;
+            /** Url */
+            url?: string | null;
             /** Verified */
             verified: boolean;
             /** Version */
@@ -1506,6 +1538,10 @@ export interface components {
         KnowledgeBase: {
             /** Access */
             access: {
+                [key: string]: unknown;
+            };
+            /** Answer */
+            answer: {
                 [key: string]: unknown;
             };
             /** Automation */
@@ -1556,10 +1592,18 @@ export interface components {
             };
             /** Slug */
             slug: string;
+            /** Sourcedefaults */
+            sourceDefaults: {
+                [key: string]: unknown;
+            };
             /** Sources */
             sources: components["schemas"]["KbSourceLink"][];
             /** Stats */
             stats: {
+                [key: string]: unknown;
+            };
+            /** Sync */
+            sync: {
                 [key: string]: unknown;
             };
             /** Templateid */
@@ -1583,6 +1627,10 @@ export interface components {
              * @default true
              */
             agentsKnown: boolean;
+            /** Answer */
+            answer: {
+                [key: string]: unknown;
+            };
             /** Attached */
             attached: components["schemas"]["KbSourceView"][];
             /** Automation */
@@ -1644,6 +1692,10 @@ export interface components {
             };
             /** Slug */
             slug: string;
+            /** Sourcedefaults */
+            sourceDefaults: {
+                [key: string]: unknown;
+            };
             /** Sourcenames */
             sourceNames: string[];
             /** Sources */
@@ -1654,11 +1706,23 @@ export interface components {
             };
             /** Suggestedquestions */
             suggestedQuestions: string[];
+            /** Sync */
+            sync: {
+                [key: string]: unknown;
+            };
             /** Templateid */
             templateId?: string | null;
         };
         /** KnowledgeBaseIn */
         KnowledgeBaseIn: {
+            /** Access */
+            access?: {
+                [key: string]: unknown;
+            } | null;
+            /** Answer */
+            answer?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Collections
              * @default []
@@ -1688,16 +1752,36 @@ export interface components {
             preset: "balanced" | "precise" | "raw";
             /** Protection */
             protection?: ("system" | "managed") | null;
+            /** Retrieval */
+            retrieval?: {
+                [key: string]: unknown;
+            } | null;
+            /** Sourcedefaults */
+            sourceDefaults?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Sourceids
              * @default []
              */
             sourceIds: string[];
+            /** Sync */
+            sync?: {
+                [key: string]: unknown;
+            } | null;
             /** Templateid */
             templateId?: string | null;
         };
         /** KnowledgeBasePatch */
         KnowledgeBasePatch: {
+            /** Access */
+            access?: {
+                [key: string]: unknown;
+            } | null;
+            /** Answer */
+            answer?: {
+                [key: string]: unknown;
+            } | null;
             /** Collections */
             collections?: string[] | null;
             /** Color */
@@ -1712,6 +1796,14 @@ export interface components {
             protection?: ("system" | "managed") | null;
             /** Retrieval */
             retrieval?: {
+                [key: string]: unknown;
+            } | null;
+            /** Sourcedefaults */
+            sourceDefaults?: {
+                [key: string]: unknown;
+            } | null;
+            /** Sync */
+            sync?: {
                 [key: string]: unknown;
             } | null;
             /** Templateid */
@@ -1735,6 +1827,10 @@ export interface components {
              * @default true
              */
             agentsKnown: boolean;
+            /** Answer */
+            answer: {
+                [key: string]: unknown;
+            };
             /** Automation */
             automation: string;
             /** Collections */
@@ -1783,12 +1879,20 @@ export interface components {
             };
             /** Slug */
             slug: string;
+            /** Sourcedefaults */
+            sourceDefaults: {
+                [key: string]: unknown;
+            };
             /** Sourcenames */
             sourceNames: string[];
             /** Sources */
             sources: components["schemas"]["KbSourceLink"][];
             /** Stats */
             stats: {
+                [key: string]: unknown;
+            };
+            /** Sync */
+            sync: {
                 [key: string]: unknown;
             };
             /** Templateid */
@@ -2091,6 +2195,8 @@ export interface components {
         };
         /** QueryIn */
         QueryIn: {
+            /** Collection */
+            collection?: string | null;
             /** Question */
             question: string;
         };
@@ -2193,6 +2299,8 @@ export interface components {
         };
         /** SearchIn */
         SearchIn: {
+            /** Collection */
+            collection?: string | null;
             /** Kbids */
             kbIds: string[];
             /** Limit */
@@ -2202,6 +2310,10 @@ export interface components {
         };
         /** SearchOut */
         SearchOut: {
+            /** Answers */
+            answers?: {
+                [key: string]: components["schemas"]["AnswerSettings"];
+            };
             cost: components["schemas"]["SearchCost"];
             lanes: components["schemas"]["Lanes"];
             /** Passages */
@@ -2842,6 +2954,8 @@ export interface components {
             text?: string | null;
             /** Title */
             title?: string | null;
+            /** Url */
+            url?: string | null;
         };
     };
     responses: never;
@@ -4058,6 +4172,13 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 search?: string | null;
+                sourceId?: string[] | null;
+                status?: string[] | null;
+                collection?: string[] | null;
+                docType?: string[] | null;
+                freshness?: string[] | null;
+                sensitivity?: string[] | null;
+                tags?: string[] | null;
             };
             header?: never;
             path: {

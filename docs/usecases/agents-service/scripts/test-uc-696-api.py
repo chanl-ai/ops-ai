@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 from several_accounts import QUERY, SF, add_org, flow, retail_on, rig, save_and_publish
+from steps import required
 from usecase_harness import check, data, finish
 
 FLOW = "uc696_retail"
@@ -55,7 +56,7 @@ with rig("uc-696", with_agents=True) as r:
     eu, retail = sf["eu_base"].removeprefix("https://"), sf["api_base"].removeprefix("https://")
     # The workflow the agent may start: one salesforce_query step naming Retail org.
     _, flow_live = save_and_publish(r, flow(FLOW, {SF: "Retail org"}))
-    agent = data(r.api.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=r.priya)) or {}
+    agent = required(r.api.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=r.priya), "/v1/agents")
     aid = str(agent.get("id"))
     draft = r.api.patch(
         f"/v1/agents/{aid}",
@@ -65,7 +66,7 @@ with rig("uc-696", with_agents=True) as r:
     published = r.api.post(
         f"/v1/agents/{aid}/publish-requests", json={"version": (data(draft) or {}).get("version")}, headers=r.priya
     )
-    thread = str((data(r.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=r.priya)) or {})["id"])
+    thread = str((required(r.api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=r.priya), "/chat/threads"))["id"])
 
     # 1. The agent's chat query runs in the agent's account, EU org, and its log row names that account.
     before, rows_before = r.calls_so_far(), seen(r)

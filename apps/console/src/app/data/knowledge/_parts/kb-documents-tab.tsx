@@ -3,37 +3,54 @@
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { FilePlus2, FileText } from 'lucide-react';
+import { ExternalLink, FileText, RefreshCw, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
+import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { FreshnessBadge, ITEM_STATUS_LABEL, ItemStatusBadge, MimeIcon, SENSITIVITY_LABEL, SensitivityBadge } from '@/components/knowledge/knowledge-meta';
+import { DOC_TYPE_LABEL, FreshnessBadge, ITEM_STATUS_LABEL, ItemStatusBadge, MimeIcon, SensitivityBadge } from '@/components/knowledge/knowledge-meta';
+import { useAddDataSource } from '@/components/knowledge/add-data-source';
+import { DropZone, uploadRule } from '@/components/shared/file-upload';
+import { StopRowClick } from '@/components/shared/form-field';
+import { PageDropTarget } from '@/components/shared/page-drop-target';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useAddPage, useKbDocuments } from '@/hooks/knowledge-queries';
+import { useKbDocuments, useSyncSource } from '@/hooks/knowledge-queries';
+import { useUploadLimits } from '@/hooks/file-queries';
 import { useCreatedRows } from '@/hooks/use-created-rows';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
-import { count, shortDate, dateOnly } from '@/lib/format';
-import type { DocumentFilters, DocumentRow, ItemStatus, KnowledgeBaseDetail, Sensitivity } from '@/lib/types/knowledge';
+import { count, relativeTime } from '@/lib/format';
+import type { DocType, DocumentFilters, DocumentRow, ItemStatus, KnowledgeBaseDetail } from '@/lib/types/knowledge';
 
 import { DocumentPanel } from '@/components/knowledge/document-panel';
-import { AddPageDialog } from '@/components/knowledge/add-page-dialog';
-import { Button } from '@/components/ui/button';
 import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = DocumentRow & { onRowClick: (d: DocumentRow) => void };
 
-/** Every document the knowledge base indexes. `?status=` and `?freshness=` preset the filters; `?doc=` opens one. */
+/** Where a document came from, under its title: a web page's address, who typed a page, else its source. */
+function origin(d: DocumentRow) {
+  if (d.docType === 'web' && d.url) return d.url.replace(/^https?:\/\//, '');
+  if (d.docType === 'typed') return `Typed by ${d.owner}`;
+  return d.sourceName;
+}
+
+/**
+ * The base's one data sources table: every document with its type, source, status, pieces, freshness, collection and
+ * last refresh, filtered by kb-service. Builders add data from the Add data source menu or by dropping files or folders
+ * anywhere on the tab. `?status=` and `?freshness=` preset the filters; `?doc=` opens one.
+ */
 export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBuild: boolean }) {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const addPage = useAddPage(kb.id);
   const created = useCreatedRows<Row>();
-  const [pageOpen, setPageOpen] = React.useState(false);
+  const sync = useSyncSource();
+  const limits = useUploadLimits();
+  const limit = limits.data?.perPurpose.find((l) => l.purpose === 'knowledge_source');
+  const add = useAddDataSource(kb, { pageAdded: (d) => created.show({ ...d, onRowClick: (x: DocumentRow) => setDoc(x.id) }) });
   const initialFilters = React.useMemo(
     () => (['status', 'freshness'] as const).flatMap((k) => (params.get(k) ? [{ id: k, value: [params.get(k)!] }] : [])),
     // Only the URL at mount presets filters; later changes come from the toolbar.
@@ -55,6 +72,13 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
   const idx = docs.findIndex((d) => d.id === docId);
   const facets = query.data?.facets ?? {};
 
+  const refresh = React.useCallback(
+    (d: DocumentRow) =>
+      // A document is refreshed by syncing the source it came from; kb-service has no per-document refresh.
+      sync.mutate({ id: d.sourceId }, { onSuccess: () => toast.success(`Refreshing ${d.sourceName}`, { description: `${d.title} is read again with the rest of its source.` }), onError: (e) => toast.error(`Couldn’t refresh ${d.title}`, { description: e.message }) }),
+    [sync],
+  );
+
   const columns = React.useMemo<ColumnDef<Row>[]>(
     () => [
       {
@@ -65,18 +89,17 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
             <MimeIcon mime={row.original.mimeType} />
             <div className="min-w-0">
               <div className="truncate font-medium">{row.original.title}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {row.original.owner} · <span className="font-mono">{row.original.version}</span> · effective {dateOnly(row.original.effectiveDate)}
-              </div>
+              <div className="truncate text-xs text-muted-foreground">{origin(row.original)}</div>
             </div>
           </div>
         ),
         enableHiding: false,
       },
-      { accessorKey: 'sourceId', header: ({ column }) => <DataTableColumnHeader column={column} title="Source" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.sourceName}</span>, filterFn: facetFilterFn },
+      { accessorKey: 'docType', header: 'Type', cell: ({ row }) => <span className="whitespace-nowrap">{DOC_TYPE_LABEL[row.original.docType] ?? row.original.docType}</span>, filterFn: facetFilterFn },
+      { accessorKey: 'sourceId', header: 'Source', cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.sourceName}</span>, filterFn: facetFilterFn },
       {
         accessorKey: 'status',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        header: 'Status',
         cell: ({ row }) =>
           row.original.status === 'failed' ? (
             // The reason shows in the row, so a document that never indexed says why without a hover.
@@ -108,9 +131,19 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
         filterFn: facetFilterFn,
       },
       { accessorKey: 'chunkCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Chunks" />, cell: ({ row }) => (row.original.status === 'held' ? <span className="text-muted-foreground">Not indexed</span> : <span className="tabular-nums">{count(row.original.chunkCount)}</span>) },
-      { accessorKey: 'modifiedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Modified" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{shortDate(row.original.modifiedAt)}</span> },
-      { accessorKey: 'freshness', header: ({ column }) => <DataTableColumnHeader column={column} title="Freshness" />, cell: ({ row }) => <FreshnessBadge reviewBy={row.original.reviewBy} freshness={row.original.freshness} />, filterFn: facetFilterFn },
-      { accessorKey: 'sensitivity', header: ({ column }) => <DataTableColumnHeader column={column} title="Sensitivity" />, cell: ({ row }) => <SensitivityBadge level={row.original.sensitivity} />, filterFn: facetFilterFn },
+      { accessorKey: 'freshness', header: 'Freshness', cell: ({ row }) => <FreshnessBadge reviewBy={row.original.reviewBy} freshness={row.original.freshness} />, filterFn: facetFilterFn },
+      {
+        accessorKey: 'collection',
+        header: 'Collection',
+        cell: ({ row }) => (
+          <Badge variant="secondary" className="font-normal whitespace-nowrap">
+            {row.original.collection || 'All'}
+          </Badge>
+        ),
+        filterFn: facetFilterFn,
+      },
+      { id: 'refreshed', accessorFn: (r) => r.processedAt ?? r.modifiedAt, header: ({ column }) => <DataTableColumnHeader column={column} title="Last refreshed" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{relativeTime(row.original.processedAt ?? row.original.modifiedAt)}</span> },
+      { accessorKey: 'sensitivity', header: 'Sensitivity', cell: ({ row }) => <SensitivityBadge level={row.original.sensitivity} />, filterFn: facetFilterFn },
       {
         id: 'tags',
         accessorFn: (r) => r.tags.join(','),
@@ -126,38 +159,59 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
         ),
         filterFn: () => true,
       },
+      {
+        id: 'actions',
+        meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
+        cell: ({ row }) => (
+          <StopRowClick>
+            <DataTableRowActions
+              row={row}
+              actions={[
+                { label: 'Open', icon: ExternalLink, onClick: (r) => r.original.onRowClick(r.original) },
+                ...(canBuild
+                  ? [
+                      { label: 'Refresh', icon: RefreshCw, onClick: (r: { original: Row }) => refresh(r.original) },
+                      { label: 'Settings', icon: Settings2, onClick: (r: { original: Row }) => router.push(`/data/sources/${r.original.sourceId}?tab=settings`) },
+                    ]
+                  : []),
+              ]}
+            />
+          </StopRowClick>
+        ),
+        enableHiding: false,
+      },
     ],
-    [],
+    [canBuild, refresh, router],
   );
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={8} />;
   if (query.isError && !query.data) return <QueryError what="documents" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
 
+  const rule = limits.isPending ? 'Loading limits…' : uploadRule(limit);
+  const facet = (key: keyof DocumentFilters, value: string) => facets[key]?.[value] ?? 0;
+  const types = Object.keys(facets.docType ?? {}).sort() as DocType[];
+
   return (
-    <>
+    <PageDropTarget onFiles={add.addFiles} label={`Drop to add to ${kb.name}`} disabled={!canBuild} className="flex flex-col gap-3">
+      {canBuild && <DropZone title="Drop files or a folder here to add them" rule={rule} scanning={limits.data?.scanning} onChoose={() => add.show('files')} onFiles={add.addFiles} testId="kb-documents-drop" />}
       <DataTableWithViews
         columns={columns}
         data={rows}
         getRowId={(r) => r.id}
         created={created}
         searchColumn="title"
-        searchPlaceholder="Search by title or path…"
+        searchPlaceholder="Search documents…"
         hideViewSwitcher
-        toolbarExtra={
-          canBuild && (
-            <Button size="sm" variant="outline" onClick={() => setPageOpen(true)}>
-              <FilePlus2 className="size-4" /> Add page
-            </Button>
-          )
-        }
+        rowNoun="document"
+        toolbarExtra={canBuild && add.menu}
         initialColumnFilters={initialFilters}
-        initialColumnVisibility={{ sensitivity: false }}
+        initialColumnVisibility={{ docType: true, sourceId: true, status: true, chunkCount: true, freshness: true, collection: true, refreshed: true, sensitivity: false, tags: false }}
         filters={[
-          { column: 'sourceId', title: 'Source', options: kb.attached.map((a) => ({ label: a.source.name, value: a.sourceId, count: facets.sourceId?.[a.sourceId] ?? 0 })) },
-          { column: 'status', title: 'Status', options: (['indexed', 'pending', 'processing', 'failed', 'partial'] as ItemStatus[]).map((s) => ({ label: ITEM_STATUS_LABEL[s], value: s, count: facets.status?.[s] ?? 0 })) },
-          { column: 'freshness', title: 'Freshness', options: [{ label: 'Fresh', value: 'fresh', count: facets.freshness?.fresh ?? 0 }, { label: 'Stale', value: 'stale', count: facets.freshness?.stale ?? 0 }, { label: 'No schedule', value: 'no_schedule', count: facets.freshness?.no_schedule ?? 0 }] },
-          { column: 'sensitivity', title: 'Sensitivity', options: (['internal', 'confidential', 'restricted'] as Sensitivity[]).map((s) => ({ label: SENSITIVITY_LABEL[s], value: s, count: facets.sensitivity?.[s] ?? 0 })) },
-          { column: 'tags', title: 'Tag', options: Object.keys(facets.tags ?? {}).sort().map((t) => ({ label: t, value: t, count: facets.tags?.[t] ?? 0 })) },
+          { column: 'docType', title: 'Type', options: types.map((t) => ({ label: DOC_TYPE_LABEL[t] ?? t, value: t, count: facet('docType', t) })) },
+          { column: 'status', title: 'Status', options: (['indexed', 'pending', 'processing', 'failed', 'partial'] as ItemStatus[]).map((s) => ({ label: ITEM_STATUS_LABEL[s], value: s, count: facet('status', s) })) },
+          { column: 'sourceId', title: 'Source', options: kb.attached.map((a) => ({ label: a.source.name, value: a.sourceId, count: facet('sourceId', a.sourceId) })) },
+          { column: 'collection', title: 'Collection', options: Object.keys(facets.collection ?? {}).sort().map((c) => ({ label: c, value: c, count: facet('collection', c) })) },
+          { column: 'freshness', title: 'Freshness', options: [{ label: 'Fresh', value: 'fresh', count: facet('freshness', 'fresh') }, { label: 'Stale', value: 'stale', count: facet('freshness', 'stale') }, { label: 'No schedule', value: 'no_schedule', count: facet('freshness', 'no_schedule') }] },
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
         serverPagination={serverPagination(list, query)}
@@ -166,7 +220,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
             icon={FileText}
             noun="documents"
             filtered={list.isFiltered}
-            description={kb.health === 'never' ? 'Documents appear here once the first index build finishes. Start it from the Overview tab.' : 'A document is one item a source produced: a file, a page or a set of rows.'}
+            description={canBuild ? 'Drop files or a folder above, or choose Add data source to add a website, an app or typed text.' : 'A document is one item a source produced: a file, a page or a set of rows.'}
           />
         }
       />
@@ -186,17 +240,7 @@ export function KbDocumentsTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canB
             : undefined
         }
       />
-      <AddPageDialog
-        open={pageOpen}
-        onOpenChange={setPageOpen}
-        saving={addPage.isPending}
-        onSubmit={(input) =>
-          addPage.mutateAsync(input).then((d) => {
-            created.show({ ...d, onRowClick: (x: DocumentRow) => setDoc(x.id) });
-            toast.success(`Added ${d.title}`, { description: d.status === 'indexed' ? 'Indexed; agents can cite it now.' : d.error });
-          })
-        }
-      />
-    </>
+      {add.dialogs}
+    </PageDropTarget>
   );
 }

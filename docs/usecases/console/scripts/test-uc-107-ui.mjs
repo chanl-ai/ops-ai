@@ -3,7 +3,7 @@
 // the fake core bank's query-key route is set up through the API; Operations' secret starts with a wrong value, so a
 // live run fails until the rotation. Each step is checked on its own.
 import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, required, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { PEOPLE, allowBank, authHeaders, setWriteApprovals, signInAs } from '@ops-ai/usecase-runner/steps';
+import { PEOPLE, allowBank, authHeaders, setWriteApprovals, setup, signInAs } from '@ops-ai/usecase-runner/steps';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -17,11 +17,6 @@ const BANK_KEY = 'dev-bank-key';
 const JAMES = 'j.richardson@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
 const as = (email, team = 'team_ops') => authHeaders(email, { team });
-const json = async (r) => {
-  const body = await r.json();
-  if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
-  return body.data;
-};
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 
@@ -52,12 +47,12 @@ await withUiStack(
     const N = await as('n.petrov@harborpine.example', 'team_security');
     await allowBank(await signInAs(SAM, { team: 'team_security' }), stack.bank, 'uc-107');
     // Operations' own secret: James, a builder there, adds it in the team his module belongs to.
-    await json(await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: KEY, value: 'not-the-key' }) }));
-    const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc107-stmt-${TAG}`, type: 'http' }) }))).id;
+    await setup(await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: KEY, value: 'not-the-key' }) }));
+    const id = (await setup(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc107-stmt-${TAG}`, type: 'http' }) }))).id;
     for (const name of [...OPS, ...MORE]) {
-      await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name, description: 'The latest statement', access: 'read', method: 'GET', url: `https://${stack.bank.host}/accounts/{account_id}/statement?api_key={{${KEY}}}`, headers: [] }) }));
+      await setup(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name, description: 'The latest statement', access: 'read', method: 'GET', url: `https://${stack.bank.host}/accounts/{account_id}/statement?api_key={{${KEY}}}`, headers: [] }) }));
     }
-    await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-107' }) }));
+    await setup(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-107' }) }));
     await approveToolReview(id, N, J);
 
     const browser = await chromium.launch();

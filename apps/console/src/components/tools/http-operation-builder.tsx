@@ -65,7 +65,7 @@ export function RequestLine({ value, onChange, error, trailing, bare }: { value:
               ))}
             </SelectContent>
           </Select>
-          <Input id="http-url" value={value.url} onChange={(e) => onChange({ ...value, url: e.target.value })} placeholder="e.g. https://deposits.api.example.internal/v1/accounts/{accountId}/statements" className="min-w-0 flex-1 rounded-l-none font-mono text-sm" aria-invalid={!!error} />
+          <Input id="http-url" value={value.url} onChange={(e) => onChange({ ...value, url: e.target.value })} placeholder="e.g. https://deposits.api.example.internal/v1/accounts/{accountId}/statements" className="min-w-0 flex-1 rounded-l-none font-mono text-sm" aria-invalid={!!error} aria-label={bare ? 'Request' : undefined} />
         </div>
         {trailing && <div className="flex items-center gap-2">{trailing}</div>}
       </div>

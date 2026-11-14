@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { ensureConsoleBuild, materializeConsoleBuild } from './console-build.ts';
 import { pgUrl } from './isolation.ts';
 
-export { chromium } from 'playwright';
+import { chromium as playwrightChromium, type Browser, type BrowserContext } from 'playwright';
 
 /** The tree the runner was invoked from (OPS_USECASE_ROOT, set by the runner), else the one this package sits in. */
 export const ROOT = process.env.OPS_USECASE_ROOT ?? resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
@@ -82,13 +82,24 @@ export function check(name: string, ok: boolean, detail: unknown = ''): boolean 
   return ok;
 }
 
+/** A refusal as the platform words it: the error envelope's code and message when the body has them, else the raw text. */
+export function refusalText(text: string): string {
+  try {
+    const error = (JSON.parse(text) as { error?: { code?: string; message?: string } }).error;
+    if (error?.code || error?.message) return [error.code, error.message].filter(Boolean).join(': ');
+  } catch {
+    // not JSON: the raw text is the best description
+  }
+  return text.slice(0, 300);
+}
+
 /**
  * The body of a setup request that must succeed. `res` is a `{ status, data, text }` result of a script's `call`; a
- * non-2xx status throws with the status and body, so a refused create fails as setup instead of leaving an undefined
- * id for a later product step to trip on.
+ * non-2xx status throws with the status, the refusal's code and message, so a refused create fails as setup instead
+ * of leaving an undefined id for a later product step to trip on.
  */
 export function required<T = Record<string, any>>(res: { status: number; data?: unknown; text?: string }, what: string): T {
-  if (res.status < 200 || res.status > 299) throw new Error(`setup request refused, ${what}: ${res.status} ${res.text ?? ''}`);
+  if (res.status < 200 || res.status > 299) throw new Error(`setup request refused, ${what}: ${res.status} ${refusalText(res.text ?? '')}`);
   return (res.data ?? {}) as T;
 }
 
@@ -110,6 +121,25 @@ export async function approveToolReview(moduleId: string, headers: Record<string
   });
   if (!r.ok) throw new Error(`approving ${waiting.reviewId}: ${r.status} ${await r.text()}`);
   return read();
+}
+
+/**
+ * Approves a publish request as `approver`, a second person of the team: on a platform stack the requester may not
+ * decide their own request. Takes what the publish call answered: an agent's or workflow's review, or a guardrail
+ * naming its `pendingRequestId` (none when the team's rule approved it at once). Returns the decided record; throws on
+ * a refusal.
+ */
+export async function approvePublishRequest(answered: { id: string; status?: string; pendingRequestId?: string | null }, approver: Record<string, string>): Promise<Record<string, unknown>> {
+  const guardrail = answered.id.startsWith('gr_');
+  if (guardrail ? !answered.pendingRequestId : answered.status === 'approved') return answered;
+  const path = guardrail ? `/v1/guardrails/${answered.id}/publish-requests/${answered.pendingRequestId}/decision` : `/v1/publish-requests/${answered.id}/decision`;
+  const r = await fetch(`http://127.0.0.1:${AGENTS_PORT}${path}`, {
+    method: 'POST',
+    headers: { ...approver, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision: 'approved' }),
+  });
+  if (!r.ok) throw new Error(`approving ${answered.id}: ${r.status} ${await r.text()}`);
+  return ((await r.json()) as { data: Record<string, unknown> }).data;
 }
 
 /**
@@ -221,6 +251,63 @@ export function videoToGif(videoDir: string, area: string, name: string, skipMs:
   check(`clip ${name} is under 15 s and 2 MB`, durationMs < 15_000 && size < 2_000_000, { seconds: durationMs / 1000, bytes: size });
   return gif;
 }
+
+/**
+ * The console writes `[ops-ai sample data] <area> on <path>` when a page reads an area still answered by its mock
+ * beside real services (apps/console/src/lib/api/sample-reads.ts). On the use-case stack every area a script reaches
+ * should be real, so such a read fails the run unless the script said it expects sample data on that page. Reads the
+ * app shell makes on every page are written `on *` and are listed in the sample-data report instead.
+ */
+const SAMPLE_READ = /^\[ops-ai sample data\] (\S+) on (\S+)$/;
+const expectedSample: string[] = [];
+const sampleReported = new Set<string>();
+const watched = new WeakSet<BrowserContext>();
+
+/** Declares that the pages under each path (all pages when none is given) are meant to draw sample data. */
+export function expectSampleData(...paths: string[]): void {
+  expectedSample.push(...(paths.length ? paths : ['/']));
+}
+
+function sampleExpected(path: string): boolean {
+  return expectedSample.some((p) => p === '/' || path === p || path.startsWith(`${p.replace(/\/$/, '')}/`));
+}
+
+function watchContext(context: BrowserContext): BrowserContext {
+  if (watched.has(context)) return context;
+  watched.add(context);
+  context.on('console', (message) => {
+    const hit = SAMPLE_READ.exec(message.text());
+    if (!hit || hit[2] === '*' || sampleExpected(hit[2])) return;
+    const key = `${hit[2]} ${hit[1]}`;
+    if (sampleReported.has(key)) return;
+    sampleReported.add(key);
+    check(`the page draws no sample data: ${hit[2]}`, false, `${hit[1]} was answered by the console's mock; call expectSampleData('${hit[2]}') if the use case means it`);
+  });
+  return context;
+}
+
+function watchBrowser(browser: Browser): Browser {
+  const newContext = browser.newContext.bind(browser);
+  const newPage = browser.newPage.bind(browser);
+  browser.newContext = async (...args) => watchContext(await newContext(...args));
+  browser.newPage = async (...args) => {
+    const page = await newPage(...args);
+    watchContext(page.context());
+    return page;
+  };
+  return browser;
+}
+
+/** Playwright's Chromium, with every browser it launches watched for pages that draw sample data. */
+export const chromium: typeof playwrightChromium = new Proxy(playwrightChromium, {
+  get(target, key) {
+    if (key === 'launch') return async (...args: Parameters<typeof target.launch>) => watchBrowser(await target.launch(...args));
+    if (key === 'launchPersistentContext')
+      return async (...args: Parameters<typeof target.launchPersistentContext>) => watchContext(await target.launchPersistentContext(...args));
+    const value: unknown = Reflect.get(target, key, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  },
+});
 
 export function finish(): never {
   if (!checked) console.log('FAIL no checks ran');

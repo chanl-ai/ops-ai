@@ -15,7 +15,7 @@ from ops_service_kit.logging import get_logger
 
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
-from ..auth import Principal, principal, require_builder
+from ..auth import Principal, principal, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..guardrails import check_config, decide, guardrails, pinned_by, publish, view
@@ -26,6 +26,7 @@ log = get_logger("ops_agents.guardrails")
 router = APIRouter(prefix="/v1/guardrails", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("guardrails"))]  # noqa: UP040
 
 
 class GuardrailInput(WireModel):
@@ -66,6 +67,7 @@ class GuardrailStatusInput(WireModel):
 @router.get("", response_model=Envelope[list[Guardrail] | GuardrailList])
 async def list_guardrails(
     rt: Rt,
+    _: Reader,
     page: Annotated[int | None, Query(ge=1)] = None,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str = "",
@@ -84,6 +86,7 @@ async def list_guardrails(
 @router.get("/options", response_model=Envelope[OptionsPage])
 async def guardrail_options(
     rt: Rt,
+    _: Reader,
     search: str = "",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -101,7 +104,7 @@ async def guardrail_options(
 
 
 @router.get("/{guardrail_id}", response_model=Envelope[Guardrail])
-async def get_guardrail(rt: Rt, guardrail_id: str) -> JSONResponse:
+async def get_guardrail(rt: Rt, _: Reader, guardrail_id: str) -> JSONResponse:
     return ok(await view(rt, guardrail_id))
 
 

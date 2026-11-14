@@ -29,7 +29,7 @@ class HybridRetriever:
         if "keyword" in how.lanes:
             if self.keyword.ready():
                 ran["keyword"] = await self.keyword.hits(
-                    tenant, kb_ids, question, threshold=how.threshold, limit=how.limit
+                    tenant, kb_ids, question, threshold=how.threshold, limit=how.limit, how=how
                 )
             else:
                 skipped["keyword"] = "no_full_text"
@@ -58,7 +58,7 @@ class HybridRetriever:
         except EmbedFailed as e:
             return f"embedding_unavailable: {e.code}", [], 0
         rows = await self.vectors.nearest(
-            tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit
+            tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit, how=how
         )
         if not rows:
             # The index answered no candidate in these bases at all: the lane did not run in any useful sense.

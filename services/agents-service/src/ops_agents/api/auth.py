@@ -12,7 +12,10 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from fastapi import Depends
+
 from ops_access import Scope, can, policy
+from ops_access import reader_of as shared_reader_of
 from ops_access.check import DEFAULT as ACCESS
 from ops_identity import CurrentCaller, CurrentPrincipal, CurrentService
 from ops_identity import Principal as Caller
@@ -65,6 +68,18 @@ def caller_in(area: str) -> Callable[..., Awaitable[Principal]]:
     async def dependency(p: CurrentCaller) -> Principal:
         if p.kind == "service":
             can(p, area, "view")
+        return _principal(p)
+
+    return dependency
+
+
+def reader_of(area: str) -> Callable[..., Awaitable[Principal]]:
+    """`caller` for a router's reads, checked by `ops_access.reader_of` (the view cell), adapted to this service's
+    Principal."""
+    read = shared_reader_of(area)
+
+    # A default, not Annotated: annotations are strings here and `read` is local, so FastAPI could not resolve it.
+    async def dependency(p: Caller = Depends(read)) -> Principal:  # noqa: B008
         return _principal(p)
 
     return dependency
@@ -201,14 +216,11 @@ def _held(who: Caller, area: str, action: str, team: str) -> Scope | None:
         return None
 
 
-def require_reviews_decide(
-    approver_teams: list[str], team_id: str, what: str, *, role: str | None = None, held: Iterable[str | None] = ()
-) -> None:
+def require_reviews_decide(approver_teams: list[str], team_id: str, what: str) -> None:
     """reviews.decide in the team that reviews it: `approver_teams` is `review_teams`, the teams where `can` grants it,
-    from whatever team the request acts in. When the review names a `role` (a reviewer answer), the caller must hold
-    that role in the team too (`held`). Separation of duties and step-up are checked where the decision is
-    recorded."""
-    if team_id in approver_teams and (role is None or role in held):
+    from whatever team the request acts in. A review that names a role is checked by `can(role=)`. Separation of
+    duties and step-up are checked where the decision is recorded."""
+    if team_id in approver_teams:
         return
     raise Forbidden(
         f"Only a reviewer or admin of {team_id} decides {what}.",

@@ -46,7 +46,10 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/api-keys",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "targetKind",
+      "targetId"
+    ],
     "stream": false
   },
   "api_keys_revoke_api_key": {
