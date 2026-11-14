@@ -42,7 +42,7 @@ EXTERNAL_DB=0
 # ---- packages and the four stand-ins ---------------------------------------------------------------------------
 step "system packages"
 need=()
-for p in postgresql netcat-openbsd; do dpkg -s "$p" >/dev/null 2>&1 || need+=("$p"); done
+for p in postgresql postgresql-18-pgvector netcat-openbsd; do dpkg -s "$p" >/dev/null 2>&1 || need+=("$p"); done
 if [ "${#need[@]}" -gt 0 ]; then
   sudo apt-get update -qq
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${need[@]}" >/dev/null
@@ -204,11 +204,16 @@ export OPS_INFRA=external
 export OPS_CONSOLE_MODE=prod OPS_READY_TIMEOUT=900
 cd "$REPO"
 # make/env.mk includes .env on every make run, so a later `make restart`, `make up` or health check on the box uses the
-# production console too. Only these three lines are managed (the public address is baked into the console build); anything else in the file stays.
+# production console too. Only these lines are managed (the public address is baked into the console build); anything else in the file stays.
 touch .env
-sed -i '/^OPS_CONSOLE_MODE=/d;/^OPS_READY_TIMEOUT=/d;/^OPS_PUBLIC_ORIGIN=/d' .env
+sed -i '/^OPS_CONSOLE_MODE=/d;/^OPS_READY_TIMEOUT=/d;/^OPS_PUBLIC_ORIGIN=/d;/^OPS_PG_PORT=/d' .env
 printf 'OPS_CONSOLE_MODE=prod\nOPS_READY_TIMEOUT=900\nOPS_PUBLIC_ORIGIN=%s\n' "$OPS_PUBLIC_ORIGIN" >>.env
+# The box's PostgreSQL listens on 5432, not the laptop's compose port; use cases make their own databases there.
+printf 'OPS_PG_PORT=5432\n' >>.env
 [ "${BOX_RESET:-}" = 1 ] && rm -f apps/console/.next/.ops-built
+# The box runs the production console. Route types left in .next/dev by an earlier dev-mode run name pages that a
+# later branch moved, and `next build` type-checks them and fails.
+rm -rf apps/console/.next/dev
 if [ "${BOX_RESET:-}" = 1 ] || [ "$SERVICES_CHANGED" = 1 ]; then
   make -s down KEEP_DB=1 >/dev/null 2>&1 || true
 fi
