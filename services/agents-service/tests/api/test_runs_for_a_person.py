@@ -67,3 +67,13 @@ async def test_a_service_acting_for_nobody_starts_nothing(client: AsyncClient) -
     r = await client.post("/v1/runs", json=BODY, headers=await _as_tools(["workflows:run"], acting=False))
     # Refused by can() for the missing cell, not by the route turning every service away.
     assert (r.status_code, r.json()["error"].get("details")) == (403, {"scope": "workflows:run"}), r.text
+
+
+async def test_the_tools_service_cannot_hold_the_right_to_approve_writes(client: AsyncClient) -> None:
+    # An MCP run must never approve its own writes: tools-service may not carry reviews:decide, so a token asking for
+    # it is refused outright instead of starting a run that could approve itself.
+    await _published(client)
+    r = await client.post(
+        "/v1/runs", json=BODY, headers=await _as_tools(["workflows:run", "reviews:decide"], acting=True)
+    )
+    assert r.status_code == 401, r.text
