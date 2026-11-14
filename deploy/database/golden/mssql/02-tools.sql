@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0076_account_owner_key
+-- tools-service, stamped at tools_0078_call_caller_name
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -34,8 +34,12 @@ CREATE TABLE gateway_calls (
 	channel VARCHAR(16) NULL, 
 	client_name VARCHAR(120) NULL, 
 	client_id VARCHAR(64) NULL, 
+	link_id VARCHAR(64) NULL, 
+	caller_name VARCHAR(320) NULL, 
 	CONSTRAINT gateway_calls_pkey PRIMARY KEY (id)
 );
+GO
+CREATE INDEX ix_gateway_calls_link_created ON gateway_calls (link_id, created_at);
 GO
 CREATE INDEX ix_gateway_calls_module_created ON gateway_calls (module_id, created_at);
 GO
@@ -300,6 +304,22 @@ CREATE TABLE secret_audit (
 GO
 CREATE INDEX ix_secret_audit_tenant_id ON secret_audit (tenant_id);
 GO
+CREATE TABLE mcp_links (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	slug VARCHAR(64) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	environment VARCHAR(16) NOT NULL, 
+	tools NVARCHAR(max) NOT NULL, 
+	paused BIT NOT NULL, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT mcp_links_pkey PRIMARY KEY (id), 
+	CONSTRAINT uq_mcp_links_team_slug UNIQUE (tenant_id, team_id, slug)
+);
+GO
 CREATE TABLE plugin_bindings (
 	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -555,5 +575,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0076_account_owner_key');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0078_call_caller_name');
 GO

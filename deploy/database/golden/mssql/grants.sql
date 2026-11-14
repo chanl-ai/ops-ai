@@ -107,6 +107,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_audit TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.operation_rate_windows TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_secrets TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.secret_audit TO ops_tools_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.mcp_links TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.plugin_bindings TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.send_policies TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.send_checks TO ops_tools_runtime;
