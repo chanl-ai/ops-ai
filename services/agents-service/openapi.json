@@ -51077,7 +51077,7 @@
     },
     "/v1/threads/{thread_id}/runs/{run_id}/events": {
       "get": {
-        "description": "The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from.",
+        "description": "The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not\nfound for a run of a thread the caller may not read (`may_read_thread`).",
         "operationId": "threads_reattach",
         "parameters": [
           {

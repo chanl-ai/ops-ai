@@ -64,7 +64,7 @@ erDiagram
     string team_id FK
     string user_id FK "empty while invited"
     string email UK "unique per team"
-    string role "admin, builder, approver, viewer"
+    string role "admin, builder, approver, viewer, chat_user"
     string status "active, invited, removed"
   }
   api_keys {
@@ -314,7 +314,7 @@ erDiagram
 | `case_type_versions` | Each saved version of a case type: its fields, each with a key, label and type (the extraction field types, file or link). A case pins the published version it opened with (migration 0069) | built |
 | `task_assists` | What task assist wrote for a typed task when its step paused, one row per review step (`step_id` = run:node:iteration). A second write for the same step is refused, so a task costs one model call (migration 0064) | built |
 | `registry_workflows, registry_workflow_versions, registry_validations` | The first workflow registry, replaced by engine_definitions | retiring |
-| `deployments, channel_messages, channel_cursors, channel_files` | The first mailbox channel, replaced by trigger bindings. A deployment records the team that owns it, so only a builder or administrator of that team can create, pause or poll it; deployments made before this existed have no owner until an administrator sets one | retiring |
+| `deployments, channel_messages, channel_cursors, channel_files` | The first mailbox channel, replaced by trigger bindings. A deployment records the team that owns it, so only a builder or administrator of that team can create, pause or poll it; deployments made before this existed have no owner team, and no permission cell covers them | retiring |
 
 Today these tables are migrated with agents-service; they move to the workflows engine's own migration chain.
 
@@ -481,7 +481,7 @@ erDiagram
 |---|---|---|
 | `tool_modules` | A connected business system | built |
 | `module_operations, module_versions` | Its operations and their versions, each with an approval policy. An operation imported from OpenAPI keeps the JSON Schema of its first success response, so a workflow step shows its output fields before it runs | built |
-| `security_reviews, module_approvals` | The security team's review and approvals before publish | built |
+| `security_reviews, module_approvals` | A module's review before publish, decided by the Security team for a security change and by the module's team otherwise, and its approvals | built |
 | `module_egress_hosts, egress_hosts, egress_ranges, egress_audit` | The hosts and address ranges a module may reach, and each check made | built |
 | `gateway_calls, gateway_fences` | Every call with its verified caller and outcome, the kind of run (test or live) and the account it used, the route that took it (the API or MCP) and the name an MCP client gives itself, reconciled by key; fences reject stale approvals | built |
 | `connections, app_credentials, connection_audit` | An app's accounts, one row each: how the platform signs in to one system, its credentials bound to the system's address, and whether it is a sandbox account (which test runs use); a team's own OAuth client, kept once; secret parts are rows of `tool_secrets` | built |
@@ -602,7 +602,7 @@ erDiagram
     string status
     string scan_status
     string retention_class_id
-    string storage_key "admins only"
+    string storage_key "files.manage only"
   }
   file_versions {
     string file_id PK
@@ -663,7 +663,7 @@ erDiagram
 | `kb_items, kb_item_versions, kb_chunks` | Documents, their versions and the passages retrieval returns | built |
 | `kb_changes, kb_runs` | What changed on each sync, and each sync run | built |
 | `kb_retired_bases` | The id of a deleted knowledge base, so a search that names it skips it and an agent keeps its other bases | built |
-| `files` | One row per file: type, digest, purpose, scan result, sensitivity, retention class and storage location. The storage location is shown to admins of the file's team only. The file list searches name, uploader and digest, filters by upload date, purpose, scan result and sensitivity, and counts each view (quarantined, under legal hold, unused for 30 days, expiring within 30 days) and each filter value with grouped queries, so no page counts rows it did not load | built |
+| `files` | One row per file: type, digest, purpose, scan result, sensitivity, retention class and storage location. The storage location is shown only to people who hold `files.manage` in the file's team, which Admin and Builder do. The file list searches name, uploader and digest, filters by upload date, purpose, scan result and sensitivity, and counts each view (quarantined, under legal hold, unused for 30 days, expiring within 30 days) and each filter value with grouped queries, so no page counts rows it did not load | built |
 | `file_blobs` | One row per digest in a team, so two uploads of the same bytes share one stored file, even when they finish together | built |
 | `file_versions, file_references, file_legal_holds` | Each version is its own stored object; a reference blocks deletion; a legal hold keeps its history after release | built |
 | `file_idempotency` | The key of an upload request, so a retried upload returns the first file | built |

@@ -42,7 +42,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-055 | console | A bank API goes from import to a governed agent call | ui | `console/tool-lifecycle-end-to-end.md` |
 | uc-056 | console | A grant no longer offered shows as stale and can be removed | ui | `console/stale-grants-removed.md` |
 | uc-057 | console | A write held in a chat is listed in Reviews and approved there | ui | `console/chat-holds-in-reviews.md` |
-| uc-058 | console | Another person's chat stays private: a teammate gets 404 | ui | `console/chat-read-only-for-others.md` |
+| uc-058 | console | Another person's chat stays private: a teammate gets 404 | api, ui | `console/chat-read-only-for-others.md` |
 | uc-059 | console | A builder sets a write's approval policy on the module page | ui | `console/write-approval-policy.md` |
 | uc-060 | models-service | An alias reaches the fake OpenAI or the real one by its connection's base URL | api | `models-service/an-alias-reaches-the-fake-openai.md` |
 | uc-073 | console | Chat widgets draw by shape on the dev widget page | ui | `console/widgets-by-shape.md` |

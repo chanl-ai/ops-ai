@@ -154,7 +154,7 @@ this commit.
 | Rate | 1 request a second per host, 0.2 to 5; a slower `Crawl-delay` wins; 429 and 503 back off with `Retry-After` | Yes (one a second, crawl delay, resume after a rate limit) |
 | Render JavaScript | Off by default, on per source, in a separate browser worker used only by this plugin | No; the preview flags pages that show their text only with JavaScript |
 | Sign-in | None, or a header or cookie from the team's connection; secrets stay in tools-service | In the plugin |
-| Allowed hosts | The start URLs' hosts only; a new host waits for an admin under the account's new-hosts policy (409 `host_waiting`); private and link-local addresses refused unless allowed by name | Yes for host approval (`service.py:1008`); address refusal in the plugin |
+| Allowed hosts | The start URLs' hosts only; a new host waits for the Security team under the account's `egressNewHosts` policy (register row E48) (409 `host_waiting`); private and link-local addresses refused unless allowed by name | Yes for host approval (`service.py:1008`); address refusal in the plugin |
 | Preview | First 50 matched URLs, pages skipped and why, page count; nothing stored | Yes (`app.py:477`) |
 
 ### Read, clean, split, enrich
@@ -175,7 +175,7 @@ this commit.
 | Enrich | Model | The `bank-standard` alias |
 | Enrich | Ceiling | $5 per run (`aiCeiling`, 0.1 to 500); $50 per environment per day (`kb_ai_daily_cap`) |
 
-AI steps write nothing until the base's owner approves them as chosen; an AI step added later is pending again. The
+AI steps write nothing until a person holding `knowledge.decide` in the base's team (Admin and Builder) approves them as chosen; an AI step added later is pending again. The
 estimate splits up to 20 items with no model call and scales calls and tokens to the source. Past a ceiling, or with
 the model down, the remaining pieces are indexed without questions and the run says why. Only pieces whose digest
 changed are enriched again.

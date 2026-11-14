@@ -61,9 +61,9 @@ async def test_accounts_sit_under_the_config_they_sign_in_with_and_only_an_admin
     assert {"rename", "delete", "move", "sign_in"} <= set(rows[second]["actions"]), rows[second]
     assert rows[first]["owner"]["kind"] == "team" and rows[first]["owner"]["name"], rows[first]
 
+    # Auth configs are an admin's to see (D59): a builder and a viewer are told none, by name or by count.
     builder = await _page(world, person(tenant, *BUILDER))
-    assert any(c["id"] == eu for c in builder["authConfigs"]), builder["authConfigs"]
-    # Auth configs are a builder's and an admin's to see: a viewer is told none, by name or by count.
+    assert builder["authConfigs"] == [], builder["authConfigs"]
     seen = await _page(world, person(tenant, *VIEWER))
     assert seen["authConfigs"] == [], seen["authConfigs"]
     assert all(a["configId"] is None and a["configName"] is None for a in seen["accounts"]), seen["accounts"]

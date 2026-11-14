@@ -40,7 +40,6 @@ from ..agent_registry import refuse_new_turns
 from ..auth import (
     Principal,
     graph_target,
-    key_scope,
     principal,
     require_builder,
     require_key_reaches,
@@ -51,6 +50,7 @@ from ..auth import (
     started_by,
 )
 from ..chat_budget import cap_at_agent, run_api_answer
+from ..chat_threads import may_read_thread
 from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -240,23 +240,18 @@ async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
     return ok(data, status=201 if created else 200)
 
 
-def _reachable(me: Principal, row: dict[str, Any]) -> bool:
-    """A scoped API key sees threads of its own target only."""
-    scope = key_scope(me)
-    return scope is None or graph_target(str(row["graph"])) == scope
-
-
 async def _thread_for(rt: Runtime, me: Principal, thread_id: str) -> tuple[dict[str, Any], Any]:
-    """The thread and its graph, not found for a scoped key outside its target, so the id reveals nothing."""
+    """The thread and its graph, not found for a caller who may not read it (`may_read_thread`: a scoped key outside
+    its target, a teammate's chat), so the id reveals nothing."""
     row, graph = await _thread(rt, thread_id)
-    if not _reachable(me, row):
+    if not may_read_thread(row, me):
         raise NotFound(f"Thread {thread_id}")
     return row, graph
 
 
 @router.get("", response_model=Envelope[list[ThreadView]])
 async def list_threads(rt: Rt, me: Me, graph: str | None = None) -> JSONResponse:
-    return ok([_thread_view(r) for r in await _store(rt).threads(graph) if _reachable(me, r)])
+    return ok([_thread_view(r) for r in await _store(rt).threads(graph) if may_read_thread(r, me)])
 
 
 async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]:

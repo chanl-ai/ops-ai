@@ -172,9 +172,9 @@ and the names of the workflows and agents (`connections/service.py:676-700`).
 | Code | Status | When |
 |---|---|---|
 | `ACCOUNT_NOT_FOUND` | 404 | A named account does not exist in the team |
-| `ACCOUNT_NOT_YOURS` | 403 | A named account is another person's own |
+| `ACCOUNT_NOT_YOURS` | 403 | A named account is another person's own, or the call acts for nobody (register row E52) |
 | `SANDBOX_REQUIRED` | 409 | A test run names a live account and the team has no test account |
-| `ACCOUNT_CHOICE_NEEDED` | 403 | A person holds two or more accounts of the app and chose no default |
+| `ACCOUNT_CHOICE_NEEDED` | 403 | A person holds two or more accounts of the app and chose no default (register row E52) |
 | `account_name_taken` | 409 | Another account of the app with the same owner (the team, or the person) holds the name |
 | `account_name_unknown` | 422 | Publishing a definition that names an account the team does not have |
 | `account_in_use` | 409 | Deleting an account a draft or published version names |
@@ -187,8 +187,8 @@ The console shows each in words (`apps/console/src/lib/failure-words.ts:13`,
 | Part | Rule |
 |---|---|
 | Share an account with other teams | An account belongs to the team that added it. Its managers may share it with other teams in the same tenant for use only: the other team sees it in pickers and on the Accounts tab marked "Shared by" the owning team, and cannot edit, rename or delete it. Sharing and stopping a share are audited, and stopping is blocked while that team's steps or agents name the account. `for_call` accepts an account owned by or shared with the caller's team |
-| Limit an account to roles | Optional "Who in the team may use it": everyone, or chosen roles. Others do not see it in pickers and the server refuses a call that names it, checked in `for_call` against the caller's roles |
-| Read-only account | A switch on each account, "Allow changes in this org", on by default. Off, every write tool through the account is refused with "This org is read-only in Ops AI. An admin can allow changes in the account's settings." Write approval still applies on top |
+| Limit an account to roles | Optional "Who in the team may use it": everyone, or chosen people. Others do not see it in pickers and the server refuses a call that names it, checked in `for_call` against the caller. A role is a set of grid cells with no name list to check against (roles page D22) |
+| Read-only account | A switch on each account, "Allow changes in this org", on by default. Off, every write tool through the account is refused with "This org is read-only in Ops AI. A person who holds `connections.manage` can allow changes in the account's settings." Write approval still applies on top |
 | Delete blocked by shares | Once sharing exists, delete is also blocked while a share names the account |
 
 Not covered by this design: moving an existing account to another org (add a new account, then delete the old one),

@@ -114,16 +114,16 @@ Every request passes the same checks in order. Access is granted per team, and a
 1. **Authentication**A short-lived token from `platform-service`, or a team API key. Federation with an enterprise IdP (Entra ID, Okta, Keycloak) over OIDC is planned.
 2. **Tenant isolation**Each tenant sees only its own records; a request for another tenant's record returns 404, which keeps its existence private. Row-level security protects run, checkpoint, workflow and identity tables; the data gateway and knowledge filter by tenant in each query.
 3. **Team scoping**The token lists the caller's teams. A record in another team of the same tenant answers 403 and names the owning team.
-4. **Authorization (RBAC)**One role per team, from the table below. API keys are `read` or `write`; a read key is limited to reads.
+4. **Authorization (RBAC)**A person's rights in a team are the union of their role assignments, from the table below. An API key holds three fixed cells (`KEY_GRANTS`: start a live run, cancel its own runs, run the team's tools; register row E28).
 5. **Policy and approval**A write to a system of record also needs an approval token for that exact input, checked by OPA at the data gateway.
 
 | Role | May | Enforced today |
 |---|---|---|
 | `admin` | Manage members, invites, API keys and access for the team; read the audit log. An admin of the Security team also manages tool secrets, the egress allow list and storage settings | built (yes) in platform-service, kb-service and for the Security team's settings |
 | `builder` | Edit agents, workflows, skills, guardrails, widgets, knowledge and tool modules; create, pause and poll channel deployments; request a publish | built (yes) every write to these in agents, knowledge and tools needs a builder or admin of the owning team; a channel deployment belongs to a team, and a builder of another team is refused |
-| `approver` (shown as reviewer in the console) | Decide reviews and drafted actions. Approval always comes from someone other than the requester | partial (partly) approvals come from a second person; a tool module review needs the security team's approver or admin |
-| `viewer` | Read everything in the team | partial (partly) refused on every definition write; starting runs, chatting and deciding reviews do not check the role yet |
-| API key | Act for one team with `read` or `write` scope | built (yes) in every service, from the HTTP method |
+| `approver` (shown as reviewer in the console) | Decide reviews and drafted actions. Approval always comes from someone other than the requester | partial (partly) approvals come from a second person; a tool module review is decided by the Security team for a security change and by the module's team otherwise |
+| `viewer` | Read everything in the team | built (yes) every definition write, run and decision goes through `can()` |
+| API key | Act for one team through three fixed cells (register row E28) | built (yes) `KEY_GRANTS` in `packages/ops_access/src/ops_access/check.py` |
 
 A refused write answers 403 with the code `role_required` and names the role it needs; a builder acting in another team's records gets 403 `team_forbidden` naming the owning team. Mapping IdP groups to these roles, and platform roles such as model risk and security held through IdP groups, are planned.
 
@@ -132,11 +132,11 @@ A refused write answers 403 with the code `role_required` and names the role it 
 
 ## 8 Data gateway
 
-`tools-service` is the only way an agent or a workflow reads from or writes to a business system. Each system is a tool module: imported from an OpenAPI description or an MCP server, reviewed by the security team, then published.
+`tools-service` is the only way an agent or a workflow reads from or writes to a business system. Each system is a tool module: imported from an OpenAPI description or an MCP server, reviewed (by the Security team for a security change, by the module's team otherwise), then published.
 
 <!-- site: cards -->
 - **Connections**: REST APIs, from an OpenAPI description. MCP servers, through the gateway's MCP client over streamable HTTP: tools are discovered with `tools/list` and called with `tools/call`. MCP servers are reached over HTTP only. Credentials are stored encrypted and stay in the gateway; agents and workflows receive results, with masked fields redacted. Agents and workflow tool steps call the gateway over HTTP with a service token. An MCP server that offers platform tools to outside clients is planned.
-- **Controls on every call**: An approval policy per operation, with step-up sign-in where the policy asks for it. Rate and amount limits held in the database, so they apply across every gateway process. The security team's approver or admin reviews each module before it is published. A write carries an approval token bound to its input hash and the run's lease generation; OPA accepts it once, for that input, from the current run. Calls reach only allow-listed hosts at checked addresses. Every call is logged with its verified caller and reconciled by key. Each secret lists the operations that read it, can be limited to chosen teams, and cannot be deleted while an operation uses it. A call from a team the secret does not allow is refused before anything is sent.
+- **Controls on every call**: An approval policy per operation, with step-up sign-in where the policy asks for it. Rate and amount limits held in the database, so they apply across every gateway process. Each module is reviewed before it is published: by the Security team for a security change, by the module's team otherwise. A write carries an approval token bound to its input hash and the run's lease generation; OPA accepts it once, for that input, from the current run. Calls reach only allow-listed hosts at checked addresses. Every call is logged with its verified caller and reconciled by key. Each secret lists the operations that read it, belongs to one team, and cannot be deleted while an operation uses it. A call from a team the secret does not allow is refused before anything is sent.
 - **Tool workbench**: A builder opens one operation on its own page, edits the call and its input, and runs it against the mock or the test environment. A draft mock response and a draft response transform are tried without being saved, so agents keep calling the published version until the change goes through review. A secret can be typed for a single run; it is not stored, logged or returned, and the request shown has it masked. The page lists the gateway's steps in order.
 
 > [!NOTE]

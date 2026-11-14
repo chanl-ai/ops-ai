@@ -112,9 +112,9 @@ _MEMBER: list[Grant] = [
     *_all("cases", "create", "edit"),
 ]
 # Builders do everything in their team except people and access, the workspace's settings, and the team's webhooks and
-# usage, which stay team-admin data (D59):
-# connections, secrets and auth configs included. What agents remember about a person stays that person's to edit.
-_NOT_BUILDERS = ("access", "settings", "workspace", "webhooks", "usage")
+# usage, which stay team-admin data (D59): connections, secrets and auth configs included, which builders read
+# (`_READS`) and admins change. What agents remember about a person stays that person's to edit.
+_NOT_BUILDERS = ("access", "settings", "workspace", "webhooks", "usage", "connections", "secrets_egress")
 _BUILDS: list[Grant] = [
     (area, action, "own" if (area, action) == ("memory", "edit") else "all")
     for area in AREAS

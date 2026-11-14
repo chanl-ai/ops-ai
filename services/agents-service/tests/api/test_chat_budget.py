@@ -141,11 +141,12 @@ async def test_the_run_api_never_answers_a_chats_budget_pause(dev_platform: Asyn
     tid, _ = await paused(dev_platform)
     url = f"/v1/threads/{tid}/runs/stream"
     raised = await dev_platform.post(
-        url, json={"resume": {"decision": "approved", "budget": {"maxCalls": 100000}}}, headers=VIEWER
+        url, json={"resume": {"decision": "approved", "budget": {"maxCalls": 100000}}}, headers=OWNER
     )
     ended = await dev_platform.post(url, json={"resume": {"decision": "rejected"}}, headers=OTHER)
-    for res in (raised, ended):
-        assert res.status_code == 409 and res.json()["error"]["code"] == "resume_via_budget", res.text
+    assert raised.status_code == 409 and raised.json()["error"]["code"] == "resume_via_budget", raised.text
+    # A teammate does not reach someone else's chat through the run API at all.
+    assert ended.status_code == 404, ended.text
     rt = rt_of(dev_platform)
     assert rt.usage is not None
     budget = await rt.usage.budget(tid)

@@ -78,7 +78,7 @@ lessons on public endpoints.
 | Where apps come from | Only from tool modules registered at the data gateway. A module's `ui://` resources are part of the module version, reviewed with it and pinned by the workflow, so an app cannot change under a published workflow |
 | Who serves them | The data gateway serves the MCP servers and their UI resources; the browser never connects to a module directly |
 | Sandbox | Rendered in an iframe on a dedicated sandbox origin separate from the console, the pattern LibreChat also uses ([PR 13831][librechat-apps]); apps are bundled into one file, and the host's CSP allows no external origins unless the module's approval lists them |
-| App-initiated tool calls | Forwarded by the host to the data gateway under the user's delegation token and the workflow's scope; an app can call only tools in its own module version, and write tools still need an approval token |
+| App-initiated tool calls | Forwarded by the host to the data gateway under the user's delegation token and the workflow's scope; an app can call only tools in its own module version, and a write tool asks only where the team or the operation's policy asks (register row E49) |
 | Host capabilities | Open-link, file and other host capabilities off by default; `window.openai` extensions are not provided |
 | Data shown | Only what the tool returned under the user's entitlement; nothing is fetched by the app directly |
 | Logging | Every app-initiated call is logged at the gateway with `origin = app` and the UI resource version |

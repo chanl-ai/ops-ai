@@ -143,21 +143,21 @@ role holds are left out.
 | tools | decide | all | all | all | no | no | no | no |
 | tools | manage | all | all | no | no | no | no | no |
 | secrets_egress | view | all | all | all | all | all | no | no |
-| secrets_egress | create | all | all | no | no | all | no | no |
-| secrets_egress | edit | all | all | no | no | all | no | no |
-| secrets_egress | publish | all | all | no | no | no | no | no |
-| secrets_egress | delete | all | all | no | no | all | no | no |
-| secrets_egress | run | all | all | no | no | no | no | no |
-| secrets_egress | decide (Security team) | all | all | all | no | all | no | no |
-| secrets_egress | manage (Security team) | all | all | no | no | all | no | no |
+| secrets_egress | create | all | no | no | no | all | no | no |
+| secrets_egress | edit | all | no | no | no | all | no | no |
+| secrets_egress | publish | all | no | no | no | no | no | no |
+| secrets_egress | delete | all | no | no | no | all | no | no |
+| secrets_egress | run | all | no | no | no | no | no | no |
+| secrets_egress | decide (Security team) | all | no | all | no | all | no | no |
+| secrets_egress | manage (Security team) | all | no | no | no | all | no | no |
 | connections | view | all | all | all | all | no | no | no |
-| connections | create | all | all | no | no | no | no | no |
-| connections | edit | all | all | no | no | no | no | no |
-| connections | publish | all | all | no | no | no | no | no |
-| connections | delete | all | all | no | no | no | no | no |
-| connections | run | all | all | no | no | no | no | no |
-| connections | decide | all | all | no | no | no | no | no |
-| connections | manage | all | all | no | no | no | no | no |
+| connections | create | all | no | no | no | no | no | no |
+| connections | edit | all | no | no | no | no | no | no |
+| connections | publish | all | no | no | no | no | no | no |
+| connections | delete | all | no | no | no | no | no | no |
+| connections | run | all | no | no | no | no | no | no |
+| connections | decide | all | no | no | no | no | no | no |
+| connections | manage | all | no | no | no | no | no | no |
 | files | view | all | all | all | all | no | no | no |
 | files | create | all | all | all | all | no | no | no |
 | files | edit | all | all | no | no | no | no | no |
@@ -274,6 +274,11 @@ role holds are left out.
 
 <!-- roles-matrix:end -->
 
+Some cells are listed so the matrix is complete but no code checks them: `settings` create, edit, publish, delete,
+run and decide; every `activity` action but view; `access` publish, run and decide; every `workspace` action but
+manage. Ticking or clearing one has no effect. `memory.view` is unserved as well: no route returns another person's
+memories (`GET /v1/me/memories` returns the caller's own), so the Admin and Builder cell grants nothing today.
+
 Every role's cells, built-in or custom, are the `role_permissions` rows platform-service stores. The grid above is
 the seed: platform-service writes it for a new workspace and **Reset to default** puts a built-in role back to it.
 A workspace admin edits any role but Admin on Access › Roles (`PUT /v1/roles/{id}/permissions`,
@@ -370,6 +375,29 @@ One owner decides whether a write waits: `effective_answer`, called through the 
 | Widget session | 15 minutes, bound to its deployment, origin and person; chats as that person; approves for no team | — |
 | Dev header caller | Dev only; passes every role rule, on its own records only where a record has an owner; still bound by separation of duties. Acts in the one team its request names inside agents-service; at the request level elsewhere | `check.py:158` (row E09) |
 
+### Surfaces checked with another area's cell
+
+Pages and routes with no area of their own. Each row names the cell the code checks, so a question about one is
+answered here. Defaults follow the grid above for that cell.
+
+| Surface | Cell the code checks | Who holds it by default | Source |
+|---|---|---|---|
+| Thread routes (`GET /v1/threads`, a thread's `state` and `runs`, a run's `events`, `GET /v1/events`) | A chat thread, or a call an agent made for a person: `chat.view` with that person as owner, so only they read it while `chatThreadsOwnerOnly` is on, admins included; any other thread: the team rule; a scoped API key: its own target only | Every role, its own chats | `services/agents-service/src/ops_agents/api/chat_threads.py` (`may_read_thread`) |
+| Background processes (`/govern/activity/background`, `GET /v1/background`) | `access.manage` in every team (`*`) | Workspace admins only | `services/agents-service/src/ops_agents/api/routers/background.py` |
+| Plugins per team (turning a plugin on, its team settings and updates, `PUT /v1/apps/{id}/team`) | `connections.manage` | Admin | `services/tools-service/src/ops_tools/plugins/routes.py`; refusals in E53 |
+| A person's own app sign-ins (Settings › My apps, CLI `connectors connect` and `disconnect`) | `chat.run`, own accounts only | Admin, Builder, Reviewer, Viewer and Chat user, each their own | `services/tools-service/src/ops_tools/connections/service.py`; E52 |
+| Batches (`/build/runs/batches`) | Read: the team rule only, no cell; started: `workflows.run`; retried: `workflows.edit` | Read by every member of the team; to move to `workflows.view` | `services/agents-service/src/ops_agents/api/routers/batches.py` |
+| Evals (`/govern/evals`, `POST /v1/agents/{id}/eval-runs`) | Run: `agents.edit` (E32); the console's menu entry asks `agents.decide` | Run by Admin and Builder; the page is offered to Admin, Builder and Reviewer | `services/agents-service/src/ops_agents/api/routers/agents.py`; `apps/console/src/lib/nav.ts` |
+| Models (`/govern/models`, Settings › Model providers) | Alias list: `agents.view`; providers and provider keys: `settings.manage` in the Security team; alias versions, model keys and the call log: the install's service token only (E24) | Alias list: every role but Security admin and Chat user; providers: Security admin and Admin of the Security team | `services/agents-service/src/ops_agents/api/routers/model_alias_catalog.py`; `services/models-service/src/ops_models/app.py` |
+| Templates (`GET /v1/templates`, install, MCP `list_templates` and `install_template`, CLI `templates`) | List: `agents.view`; install: `<area>.create` for the template's kind | List: every role but Security admin and Chat user; install: Admin and Builder | `services/agents-service/src/ops_agents/api/routers/templates.py` |
+| Task and case types (`GET /v1/task-types`, case types) | Read: no cell, every member of the workspace reads every type, a team's own included; created with `workflows.create`, changed with `workflows.edit` and `workflows.publish` | Read by everyone; changed by Admin and Builder | `services/agents-service/src/ops_agents/api/routers/task_types.py`, `case_types.py`; a team's own types reading tenant-wide is to fix |
+| Hosted forms (`/forms/{slug}`) | Built with `workflows.edit`; a public form is submitted by anyone; a members-only form by the sharing team's members (E47) | Built by Admin and Builder | `services/agents-service/src/ops_agents/api/routers/forms.py` |
+| Usage (`/settings/workspace/usage`) | Runs in progress: `workflows.view`; cost and chargeback: `usage.view`, unserved until the page reads a service | Runs: every role but Security admin and Chat user; cost: Admin | `services/agents-service/src/ops_agents/api/routers/team_usage.py` |
+| Webhooks (`/settings/team/webhooks`) | Unserved: no service has a webhooks route; the page is console mock data | The `webhooks` rows above describe no feature yet | `apps/console/src/lib/api/mock/` |
+| Template submission reviews | Unserved: the kind exists only in the console mock. When built, decided with `reviews.decide` in the platform team, never by the submitter (`requested_by`, E51) | None yet | `apps/console/src/components/reviews/review-detail.tsx` |
+| MCP masking on a link | No cell is checked when masking is turned off; to fix | Whoever may edit the link (`deployments.edit`) changes it today | `services/tools-service/src/ops_tools/mcp_links.py` |
+| A deployment no person owns | No owner rule: changed by whoever holds the `deployments` cell | Admin and Builder | `services/agents-service/src/ops_agents/api/routers/widget.py` |
+
 API keys are created only by an admin of the team they are bound to (`access.create`), stored as a SHA-256 hash, and
 shown once.
 
@@ -393,9 +421,9 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E11 | tools-service reads `requesterMayDecide` itself instead of `can(requested_by=)` | `modules/service.py` `apply_access_decision`, `modules/policy.py` `own_request_refusal` | The access request's asker is refused through `can(requested_by=)` with the policy read live, code `own_request`, the same helper a write's approval uses | 2026-10-17 | resolved |
 | E12 | Step-up is required for an operation that asks for it or needs two approvers, whatever `stepUp` says | `registry.py:39` | Every money decision verifies a step-up from the same person within five minutes | 2026-10-11 | decided |
 | E13 | A refusal raised from a `can()` answer computed earlier (review teams, legal hold, and the `edits`, `manages` and `deletes` flags documents-service and files-service compute once per request and raise as typed errors) | `auth.py:202`; `services/files-service/src/ops_files/app.py:328`; `services/documents-service/src/ops_documents/app.py:127,278`, `document_types.py:162,233`; `services/files-service/src/ops_files/tenant_files.py:229,262,686` | Consistent with the grid (`reviews.decide`, `files.manage`); the legal hold answers `forbidden` where `role_required` is the code | 2026-10-17 | decided |
-| E14 | Budget continue and stop: the thread's owner or `chat.manage`; raise: `chat.manage` | `services/agents-service/src/ops_agents/api/chat_budget.py:109,200,207,219` | Owner continues, a team admin raises; both now through `can()`, with codes `not_owner` and `admin_only` | 2026-10-17 | decided |
+| E14 | Budget continue and stop: the thread's owner or `chat.manage`; raise: `chat.manage` | `services/agents-service/src/ops_agents/api/chat_budget.py:109,200,207,219` | Owner continues, `chat.manage` (Builder and Admin by default) raises; both through `can()`, with codes `not_owner` and `admin_only` | 2026-10-17 | decided |
 | E15 | Team isolation and key refusals raised without a baseline code | `services/tools-service/src/ops_tools/modules/directory.py:103`; `send_policy_routes.py:54` | Team isolation (baseline); an API key holds no sending-policy cell. The codes should be `team_forbidden` and `role_required` | 2026-10-17 | decided; codes to fix |
-| E16 | Gateway refusals from a record's settings: approval token (OPA), amount limit, egress allow list, model alias sensitivity and image clearance | `services/tools-service/src/ops_tools/app.py:456`; `limits.py:38`; `mailboxes.py:269,300`; `services/models-service/src/ops_models/app.py:650` | Each comes from data an admin or builder edits through `can()`: the operation, the egress list, the alias version | 2026-10-11 to 2026-10-17 | decided |
+| E16 | Gateway refusals from a record's settings: approval token (OPA), amount limit, egress allow list, model alias sensitivity and image clearance, and a module's hidden operation, unpublished module or tool list that drifted from its review (403 `operation_hidden`, `module_not_published`, `module_drifted`) | `services/tools-service/src/ops_tools/app.py:456`; `limits.py:38`; `mailboxes.py:269,300`; `gateway_calls.py` (`refusal`); `services/models-service/src/ops_models/app.py:650` | Each comes from data an admin or builder edits through `can()`: the operation, the egress list, the alias version | 2026-10-11 to 2026-10-17 | decided |
 | E17 | Store queries that read `members.role == "admin"`: the admin count shown per team, and re-mirroring Security admins when the Security team moves | `services/platform-service/src/ops_platform/store/teams.py:57`; `store/workspace.py:107` | Membership roles map to built-in assignments in the same transaction | 2026-10-17 | decided |
 | E18 | An invite from an email domain outside the workspace's allowed domains is refused | `services/platform-service/src/ops_platform/teams.py:133` | `allowedDomains` is a sign-in policy setting; empty means any | 2026-10-16 | decided |
 | E19 | The console decides by role name on the mock only (`useCanCheck` without `GET /v1/me/permissions`); nav pages name the grid cell they need (`lib/nav.ts` `needs`) | `apps/console/src/hooks/me-queries.ts:47` | The behaviour is decided; the mechanism goes to `GET /v1/me/permissions` | 2026-10-18 | to fix |
@@ -403,7 +431,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E21 | `GET /v1/api-key-summaries` refused every person, workspace admins included | `services/platform-service/src/ops_platform/api/app.py` | Resolved 2026-10-19: a person with `can('access', 'manage')` in every team reads it; a service still needs `settings:view` (test_workspace_admin) | | **resolved** |
 | E22 | The console maps team roles to a session role `admin`, `member` or `viewer` | `apps/console/src/lib/auth/providers/platform.ts:70` | No rule yet | | **no decision** |
 | E23 | A tool write runs without approval unless the team turns approval on: every write (`toolWritesNeedApproval`), the apps it lists (`appWritesNeedApproval`) or one tool (its operation's switch); when on, a person holding reviews.decide in the team is not asked | `services/tools-service/src/ops_tools/gateway_calls.py` (`self_approved`); `modules/policy.py` `approves_own_writes` | Owner, 2026-11-01: approvals are off by default and role-based when on; superseded the 2026-10-17 default where every write waited. Superseded 2026-11-10 by E49 | 2026-11-01 | superseded |
-| E24 | Models-service admin routes take a service token only; no person reaches them | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | to fix |
+| E24 | Models-service alias versions, model keys and the call log take a service token only; no person reaches them. Providers and provider keys take a person with `settings.manage` in the Security team | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | to fix |
 | E25 | Writes before a first publish: a draft test uses the draft, a live run needs the live version | `services/agents-service/src/ops_agents/api/auth.py:256-262` | A test run is a draft activity (`workflows.edit`); a live run is `workflows.run` | 2026-10-17 | decided |
 | E26 | A team admin outside the Security team does not change egress, another team's secrets, storage settings or security reviews | `SECURITY_TEAM_ACTIONS` `catalogue.py:55` | These decide what every team may reach, so they are held in the Security team | 2026-10-17 | decided |
 | E27 | An admin edits only their own memory (`memory.edit` own) | `catalogue.py:135` | What agents remember about a person is that person's to correct or forget | 2026-10-17 | decided |
@@ -425,12 +453,14 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E43 | A team's last active admin cannot leave it (409 `last_admin`) | `services/platform-service/src/ops_platform/workspace_lifecycle.py` (`leave_team`) | A team never exists without an admin, as the member routes already keep for a removal or demotion | 2026-10-23 | decided |
 | E44 | A closed workspace refuses sign-in, sessions and service tokens to everyone but its owner (403 `workspace_closed`), whatever their roles | `services/platform-service/src/ops_platform/auth.py` (`start_session`); `workspace_lifecycle.py` (`closed`) | A deleted workspace stays restorable by its owner for the restore window and is closed to everyone else; the owner reaches only `/v1/me`, sign-in and Restore | 2026-10-23 | decided |
 | E45 | A plugin's tool module answers 403 `plugin_module` to every edit, publish, delete, review request and access request, whoever asks: its tools change only when the installed plugin is upgraded | `services/tools-service/src/ops_tools/modules/service.py` (`_not_a_plugin`) | The module is system-held, as the platform's tools are; teams turn the plugin on or off instead | 2026-10-29 | prototype |
-| E46 | The `plugins` policy (the install switch) | — | Superseded 2026-11-03: the policy is gone; an installed plugin is available to every team, which turns it on for itself, and settings fixed for every team come from the install config (`OPS_PLUGIN_LOCKED`) | 2026-11-03 | superseded |
+| E46 | The `plugins` policy (the install switch) | — | Superseded 2026-11-03: the policy is gone; an installed plugin is available to every team, which turns it on for itself, and settings fixed for every team come from the install config (`OPS_PLUGIN_LOCKED`); the refusals that follow are E53 | 2026-11-03 | superseded |
 | E47 | A members-only hosted form refuses anyone signed in outside the team that shares it, and answers the same for a form that does not exist (403 `form_members_only`) | `services/agents-service/src/ops_agents/api/routers/forms.py` (`_member_form`) | The form is the team's own start form shared with its members; reading it in another team would cross the team boundary, so a person outside it learns nothing about it | 2026-10-30 | prototype |
 | E48 | `egressNewHosts` defaults to `ask_security`: a host the account has not listed waits for the Security team, unless the policy says builders, any public host or block; an unreadable policy counts as `ask_security` | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/egress.py` (`NewHosts`) | Reaching a new outside address is a security decision, so the default asks Security; private, loopback, link-local and metadata addresses are refused under every value | 2026-11-03 | prototype |
 | E49 | `appsChangeWithoutAsking` defaults to no app listed, so a write in a chat runs without asking. When a team turns asking on, the person in the chat answers Allow, Deny or Allow for this chat; a write on a test account never asks, and a workflow or an agent run with nobody in it is not asked | `packages/ops_access/src/ops_access/policies.py`; `services/tools-service/src/ops_tools/gateway_calls.py` (`needs`, loosened by `app_changes_quietly`); `services/tools-service/src/ops_tools/app.py` (grantable operations carry the same answer in `requiresApproval`); `services/agents-service/src/ops_agents/graphs/agent_wrapper.py` | Writes run by default; asking is one team switch, designed and not yet built (the code keeps the separate fields). An unreadable list counts as off | 2026-11-10 | decided |
 | E50 | A write whose app asks before changes is answered (Allow, Deny, Allow for this chat) only by the person who asked in the chat, whatever their role; an admin or reviewer cannot answer it for them, and a write any reviewer approval holds is decided as before | `services/agents-service/src/ops_agents/api/auth.py` (`require_asker`); `api/hitl_facade.py` (`_check_thread_decider`); `api/routers/reviews.py` (`record_approval`) | The answer is the person's consent to their own change, not an approval, so no grid cell grants it to anyone else | 2026-11-10 | decided |
 | E51 | `requesterMayDecide` is off by default, so the person who asked for, saved or started a decision does not take it (403 `own_request`); a team loosens it by turning `requesterMayDecide` on | `packages/ops_access/src/ops_access/policies.py` (`requesterMayDecide`); `asker_refusal` in `services/tools-service/src/ops_tools/modules/policy.py`, through `can()`: an approval the asker gave themselves is checked against today's policy when the write is sent | Once review is on, nobody approves their own request, because a self-approval defeats the review | 2026-11-10 | decided |
+| E52 | A person's own app account is used only by that person: a call that names it without acting for them (a workflow step, a schedule, someone else) is refused (403 `ACCOUNT_NOT_YOURS`), and a person with two accounts of an app and no default is asked which (403 `ACCOUNT_CHOICE_NEEDED`) | `services/tools-service/src/ops_tools/gateway_calls.py` (`refusal`), from the account's owner in `connections/service.py` | The account and its sign-in are the person's; nobody acts on them in their name | 2026-11-14 | decided |
+| E53 | A tool call is refused when the team has not set the app up: the app is off for the team (403 `APP_OFF_FOR_TEAM`), the install does not load the plugin (`PLUGIN_DISABLED`), the tool is not added to the team (`TOOL_NOT_ADDED`), or the account it needs is not signed in (`CONNECTION_NOT_LINKED`, `NOT_SIGNED_IN`) | `services/tools-service/src/ops_tools/gateway_calls.py` (`refusal`); the team switch is `PUT /v1/apps/{id}/team` (`connections.manage`), the install config is `OPS_PLUGIN_LOCKED` | Each comes from the team's own set-up, changed through `can()` (`connections.manage`), or from the install; replaces E46 | 2026-11-14 | decided |
 
 ## Access rules
 
@@ -442,13 +472,13 @@ retired id is not reused.
 | D01 | People read the stored `approver` role as Reviewer. The stored and wire value is `approver` |
 | D02 | Each team has one role model; built-in roles are data |
 | D03 | A role comes from the verified token only (the `access` claim for the `X-Team-Id` team), never from a body, query or header the caller sets |
-| D04 | A builder or admin of the owning team writes definitions; a reviewer decides; a viewer reads. Other callers get 403 `role_required` |
-| D05 | Another team's record is refused with 403 `team_forbidden` naming the owning team; another tenant's record is 404 |
+| D04 | A builder or admin of the owning team writes definitions; a reviewer, builder or admin decides; a viewer reads. Other callers get 403 `role_required` |
+| D05 | Acting in a team the caller is not in (the `X-Team-Id` header) is refused with 403 `team_forbidden` naming that team; reading a record of another team answers 404 with no team named, as one that does not exist; another tenant's record is 404 |
 | D06 | Every record belongs to one team ([identity and tenancy](identity-and-tenancy.md#the-team-is-the-workspace)); whoever the grid lets change it in that team changes it |
 | D07 | A builder or admin pauses an agent, as for workflows |
 | D08 | A builder or admin starts a run, test or live; an API key of the team starts live runs only |
 | D09 | Whoever started a run cancels it, or a reviewer or admin of the run's team |
-| D10 | A reviewer or admin of the reviewing team decides a review, with separation of duties and step-up |
+| D10 | Whoever holds the decide cell in the reviewing team (Reviewer, Builder and Admin by default) decides a review, with separation of duties and step-up |
 | D11 | Every role in an agent's team may chat with it; every agent belongs to one team |
 | D12 | The console shows Decide or Cancel from the server: `canDecide` and `canCancel` on each record, filled by `can()` |
 | D13 | Whoever holds `access.view` in a team checks another person's access there; a workspace admin does so in every team. The check runs the same `can()`, so policies show as reasons |
@@ -472,7 +502,7 @@ retired id is not reused.
 | D31 | `redactPii` masks what people see; it defaults on and the model sees real values |
 | D32 | Only a person enters credentials, in the console. Root signing keys stay in the deployment's environment |
 | D33 | Every tool secret belongs to a team and no service reads one; model provider keys are in an account-level store in models-service that account admins edit |
-| D34 | A team owns its secrets: its builders add, change and remove them, unless `securityTeamAddsSecrets` is on |
+| D34 | A team owns its secrets: its admins add, change and remove them and its builders read them (D59), unless `securityTeamAddsSecrets` is on |
 | D35 | Knowledge is shared by the team: any builder changes or deletes its bases and sources |
 | D36 | Chats are private by default (`chatThreadsOwnerOnly`); turned off, the team's admins read them |
 | D37 | Only the person edits what agents remember about them |
@@ -488,7 +518,7 @@ retired id is not reused.
 | D47 | A builder or admin of the agent's team makes a widget deployment; a person reaches it with a 15-minute session from the customer's SSO token or a team key, bound to deployment, origin and person |
 | D48 | A widget session does not approve; the decision is made in Reviews |
 | D49 | A team admin creates API keys; tokens live 15 minutes, sessions 8 hours; revocation reaches other services within 15 minutes |
-| D50 | The thread's owner continues a spent chat budget; a team admin raises it |
+| D50 | The thread's owner continues a spent chat budget; whoever holds `chat.manage` (Builder and Admin by default) raises it |
 | D51 | Whoever holds `files.create` in the team changes document types; others see those pages read only |
 | D52 | An admin of the Security team changes storage settings; every save is audited |
 | D53 | A secret's team scope is enforced in the gateway: a call reads only its own team's secret (one team per secret, no scopes); a secret in use cannot be deleted |

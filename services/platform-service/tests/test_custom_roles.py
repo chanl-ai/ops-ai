@@ -54,7 +54,7 @@ async def test_a_custom_role_never_holds_secrets_egress_or_security_team_cells(p
     builder = next(r for r in BUILTIN_ROLES if r.id == "builder")
     kept = {(p["area"], p["action"]) for p in data["permissions"]}
     assert not any(a == "secrets_egress" for a, _ in kept)
-    assert "secrets_egress.create" in data["leftOut"] and len(kept) == len(builder.grants) - len(data["leftOut"])
+    assert "secrets_egress.view" in data["leftOut"] and len(kept) == len(builder.grants) - len(data["leftOut"])
     given = [*CASE_DESK, {"area": "settings", "action": "manage", "scope": "all"}]
     r = await platform.public.post("/v1/roles", headers=ah, json={"name": "Too wide", "permissions": given})
     assert (r.status_code, r.json()["error"]["code"]) == (400, "not_for_custom_roles"), r.text

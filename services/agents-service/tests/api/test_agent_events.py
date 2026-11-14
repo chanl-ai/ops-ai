@@ -62,7 +62,11 @@ async def strict() -> AsyncIterator[AsyncClient]:
 
 
 async def agent_run(client: AsyncClient, message: str) -> str:
-    tid = (await client.post("/v1/threads", json={"graph": "agent_wrapper", "metadata": {}})).json()["data"]["threadId"]
+    # The asker starts the thread they run: an agent's conversation is read by the person it is for.
+    made = await client.post(
+        "/v1/threads", json={"graph": "agent_wrapper", "metadata": {}}, headers={"X-Dev-User": ASKER}
+    )
+    tid = made.json()["data"]["threadId"]
     body = {"input": {"agent_id": "ag_fraud", "message": message, "kb_ids": ["kb_people"], "requested_by": ASKER}}
     res = await client.post(f"/v1/threads/{tid}/runs/stream", json=body, headers={"X-Dev-User": ASKER})
     assert res.status_code == 200, res.text
