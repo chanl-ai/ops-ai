@@ -11,6 +11,10 @@ PRIYA = "p.shah@harborpine.example"
 
 with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, agents):
     priya = bearer(signed_in(api, PRIYA), "team_ops")
+    # Reviews are optional: a new workspace publishes at once until an admin turns review on in Settings › Policies.
+    r = api.put("/v1/policies/publishReview", json={"value": {"agents": "always"}}, headers=priya)
+    check("Priya turns publish review on for the team's agents", r.status_code == 200, r.text[:200])
+    priya = bearer(signed_in(api, PRIYA), "team_ops")  # a policy change refreshes every token
     builder_email = f"b.{secrets.token_hex(3)}@harborpine.example"
     invited(api, priya, builder_email, "builder")
     reviewer = bearer(invited(api, priya, f"r.{secrets.token_hex(3)}@harborpine.example", "approver"), "team_ops")

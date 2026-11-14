@@ -13,6 +13,10 @@ PRIYA = "p.shah@harborpine.example"
 # Publish requests wait for a reviewer instead of going live at once.
 with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, agents):
     priya = bearer(signed_in(api, PRIYA), "team_ops")
+    # Reviews are optional: a new workspace publishes at once until an admin turns review on in Settings › Policies.
+    r = api.put("/v1/policies/publishReview", json={"value": {"agents": "always"}}, headers=priya)
+    check("Priya turns publish review on for the team's agents", r.status_code == 200, r.text[:200])
+    priya = bearer(signed_in(api, PRIYA), "team_ops")  # a policy change refreshes every token
     me = invited(api, priya, f"builder.{secrets.token_hex(3)}@harborpine.example", "builder")
     h = bearer(me, "team_ops")
 
