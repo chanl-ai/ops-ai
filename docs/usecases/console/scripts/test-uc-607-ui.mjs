@@ -238,6 +238,9 @@ try {
           let early = 0;
           const count = () => (early += 1);
           page.on('popup', count);
+          // Turning on starts with the shared team login; Person desk is the app each person signs in to, with the team
+          // account for runs nobody started, so Priya picks Each person signs in.
+          await page.getByTestId('connect-window-whose').locator('label[for="who-each"]').click();
           await page.getByTestId('connect-window-authorize').click();
           const saved = ((await page.getByTestId('connect-window-result').innerText({ timeout: 60_000 })) ?? '').replace(/\s+/g, ' ');
           await page.waitForTimeout(1500);
