@@ -246,6 +246,14 @@ role holds are left out.
 | activity | run | all | all | no | no | no | no | no |
 | activity | decide | all | all | no | no | no | no | no |
 | activity | manage | all | all | no | no | no | no | no |
+| mcp | view | all | all | own | own | no | no | no |
+| mcp | create | all | all | no | no | no | no | no |
+| mcp | edit | all | all | no | no | no | no | no |
+| mcp | publish | all | all | no | no | no | no | no |
+| mcp | delete | all | all | no | no | no | no | no |
+| mcp | run | all | all | no | no | no | no | no |
+| mcp | decide | all | all | no | no | no | no | no |
+| mcp | manage | all | all | no | no | no | no | no |
 | webhooks | view | all | no | no | no | no | no | no |
 | webhooks | create | all | no | no | no | no | no | no |
 | webhooks | edit | all | no | no | no | no | no | no |
@@ -357,7 +365,7 @@ One owner decides whether a write waits: `effective_answer`, called through the 
 | API key | Bound to one team; read-scoped keys only read; holds `workflows.run` (live runs, never test runs), `cases.manage` own and `tools.run` (the team's read tools over MCP); optionally pinned to one agent or workflow (`key_target`) | `KEY_GRANTS` `check.py:54` |
 | Service token | Ed25519 signed, subject `service:<name>`; exactly the `area:action` scopes it lists; a team record needs the team in the token; a person's token passed through is checked as that person | `check.py:212`; [identity and tenancy](identity-and-tenancy.md) |
 | tools-service starting a run for a person | `POST /v1/runs` takes tools-service's token with `X-Acting-For` (an MCP link's workflow): the run records that person as its starter, `can` decides on the token's cells, which tools-service sends only when the person holds them (`workflows.run`), and the run never approves its own writes. A token acting for nobody holds no cell there. Default on; changed by nobody; owner approved 2026-11-13 | `services/agents-service/src/ops_agents/api/routers/engine.py` (`starter`); `packages/ops_service_kit/src/ops_service_kit/settings.py` (the tools scope list) |
-| MCP links | Read with `deployments.view`, made with `deployments.create`, paused with `deployments.edit`, in the team they belong to; their calls read with `activity.view` | `services/tools-service/src/ops_tools/mcp_links.py` |
+| MCP links | Read with `deployments.view`, made with `deployments.create`, paused with `deployments.edit`, in the team they belong to; their calls read with `mcp.view`: one's own calls by default, everyone's for builders and admins (`services/tools-service/src/ops_tools/modules/service.py` `link_calls_of`) | `services/tools-service/src/ops_tools/mcp_links.py` |
 | Provisioning service | Holds `<area>:provision`; the only caller that sets `templateId` or `protection` | `require_provisioner`, `check.py:281` |
 | Widget session | 15 minutes, bound to its deployment, origin and person; chats as that person; approves for no team | — |
 | Dev header caller | Dev only; passes every role rule, on its own records only where a record has an owner; still bound by separation of duties. Acts in the one team its request names inside agents-service; at the request level elsewhere | `check.py:158` (row E09) |

@@ -45,6 +45,9 @@ AREAS = (
     # The team's activity log of tool calls: who called which tool, as whom, and what came back (tools-service
     # GET /v1/executions). It names people, so viewers do not read it; reviewers, builders and admins do.
     "activity",
+    # The calls made through the team's MCP links (a link's Calls tab, tools-service GET /v1/executions?link=): every
+    # member reads the calls they made themselves (`own`); builders and admins read everyone's.
+    "mcp",
     # The team's webhooks (endpoint addresses and delivery history) and its usage and cost: team-admin data, held by
     # admins only by default.
     "webhooks",
@@ -86,7 +89,7 @@ def _all(area: str, *actions: str) -> list[Grant]:
 _READS: list[Grant] = [
     (area, "view", "all")
     for area in AREAS
-    if area not in ("settings", "audit", "activity", "webhooks", "usage", "chat", "memory", "workspace")
+    if area not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace")
 ]
 _DEFINITIONS = ("agents", "workflows", "skills", "guardrails", "widgets", "tools")
 # Decided by a reviewer or admin of the reviewing team; a module access approval by an approver or admin of the
@@ -101,6 +104,7 @@ _MEMBER: list[Grant] = [
     ("chat", "run", "all"),
     ("chat", "view", "own"),
     ("memory", "edit", "own"),
+    ("mcp", "view", "own"),
     ("skills", "delete", "own"),
     ("guardrails", "delete", "own"),
     ("cases", "manage", "own"),

@@ -167,7 +167,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-395 | tools-service | A tool presents a client certificate from its connection to a system that requires one | api, ui | `tools-service/connections-certificate.md` |
 | uc-396 | tools-service | A builder adds an MCP server behind OAuth by its address, signs in once, and its tools run through the same executor | api, ui | `tools-service/mcp-sign-in.md` |
 | uc-397 | tools-service | A workflow's tool step reaches its error and timeout ports on mock answers in a test run, and live reaches the system | api | `tools-service/mock-answers.md` |
-| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api | `tools-service/mcp-server.md` |
+| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | `tools-service/mcp-server.md` |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | `console/access-roles-and-checks.md` |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | `console/run-with-files.md` |
 | uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | `console/human-task-page.md` |

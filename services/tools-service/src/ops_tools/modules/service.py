@@ -162,6 +162,14 @@ def _can(
     Access().can(who.principal, area, action, what=what, code=code, protection=protection, requested_by=requested_by)
 
 
+def link_calls_of(who: Caller) -> str | None:
+    """mcp.view, for a link's calls: None reads everyone's, a subject reads only the calls that caller made."""
+    if who.principal is None:
+        return None
+    scope = Access().can(who.principal, "mcp", "view", what="the link's calls")
+    return who.principal.sub if scope == "own" else None
+
+
 def _not_a_plugin(m: Aggregate) -> None:
     """A plugin's module changes only with its installed package: no route edits, publishes, deletes or asks
     access for it, whoever asks, admins included."""
@@ -978,8 +986,11 @@ class ModuleService:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
         sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
         call, so a chat's Open call link shows the call it was made from. The log names who called what, so it is read
-        under activity.view."""
-        _can(who, "activity", "view", what="the tool-call log")
+        under activity.view. A link's calls are read under mcp.view instead, so a member with `own` sees only the calls
+        they made through it."""
+        mine = link_calls_of(who) if link_id is not None else None
+        if link_id is None:
+            _can(who, "activity", "view", what="the tool-call log")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_ids is not None:
@@ -1000,6 +1011,7 @@ class ModuleService:
             key=key,
             call_id=call_id,
             link_id=link_id,
+            sub=mine,
             since=since,
             until=until,
             offset=(page - 1) * page_size,

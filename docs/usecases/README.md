@@ -252,7 +252,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-395 | tools-service | A tool presents a client certificate from its connection to a system that requires one | api, ui | current |
 | uc-396 | tools-service | A builder adds an MCP server behind OAuth by its address, signs in once, and its tools run through the same executor | api, ui | current |
 | uc-397 | tools-service | A workflow's tool step reaches its error and timeout ports on mock answers in a test run, and live reaches the system | api | current |
-| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api | current |
+| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | current |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | current |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | passing |
 | uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | passing |

@@ -321,6 +321,7 @@ class CallLog:
         key: str | None = None,
         call_id: str | None = None,
         link_id: str | None = None,
+        sub: str | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[dict[str, Any]], int]:
@@ -345,6 +346,8 @@ class CallLog:
             where.append(gateway_calls.c.id == call_id)
         if link_id:
             where.append(gateway_calls.c.link_id == link_id)
+        if sub is not None:
+            where.append(gateway_calls.c.sub == sub)
         if since:
             where.append(gateway_calls.c.created_at >= since)
         if until:
