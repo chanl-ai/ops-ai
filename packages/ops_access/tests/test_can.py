@@ -319,17 +319,20 @@ def test_a_publish_mode_is_read_per_team_and_defaults_to_major() -> None:
 
 
 async def test_a_builder_holds_every_cell_but_people_access_and_workspace_settings() -> None:
-    """Owner, 5 November: builders do everything in their team except people and access and the workspace's
-    settings, connections and secrets included."""
+    """D59: builders do everything in their team except people and access and the workspace's settings, connections and
+    secrets included, which they read and admins change."""
     builder = await person(access={"team_a": ["builder"]})
-    for area, action in (
-        ("connections", "manage"),
-        ("connections", "delete"),
-        ("secrets_egress", "edit"),
-        ("tools", "manage"),
-    ):
+    for area, action in (("tools", "manage"), ("connections", "view"), ("secrets_egress", "view")):
         assert ACCESS.can(builder, area, action, team="team_a") == "all", (area, action)
-    for area, action in (("access", "edit"), ("access", "manage"), ("settings", "edit"), ("workspace", "manage")):
+    for area, action in (
+        ("access", "edit"),
+        ("access", "manage"),
+        ("settings", "edit"),
+        ("workspace", "manage"),
+        ("connections", "manage"),
+        ("connections", "run"),
+        ("secrets_egress", "edit"),
+    ):
         refused("role_required", ACCESS.can, builder, area, action, team="team_a")
 
 

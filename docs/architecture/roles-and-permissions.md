@@ -143,21 +143,21 @@ role holds are left out.
 | tools | decide | all | all | all | no | no | no | no |
 | tools | manage | all | all | no | no | no | no | no |
 | secrets_egress | view | all | all | all | all | all | no | no |
-| secrets_egress | create | all | all | no | no | all | no | no |
-| secrets_egress | edit | all | all | no | no | all | no | no |
-| secrets_egress | publish | all | all | no | no | no | no | no |
-| secrets_egress | delete | all | all | no | no | all | no | no |
-| secrets_egress | run | all | all | no | no | no | no | no |
-| secrets_egress | decide (Security team) | all | all | all | no | all | no | no |
-| secrets_egress | manage (Security team) | all | all | no | no | all | no | no |
+| secrets_egress | create | all | no | no | no | all | no | no |
+| secrets_egress | edit | all | no | no | no | all | no | no |
+| secrets_egress | publish | all | no | no | no | no | no | no |
+| secrets_egress | delete | all | no | no | no | all | no | no |
+| secrets_egress | run | all | no | no | no | no | no | no |
+| secrets_egress | decide (Security team) | all | no | all | no | all | no | no |
+| secrets_egress | manage (Security team) | all | no | no | no | all | no | no |
 | connections | view | all | all | all | all | no | no | no |
-| connections | create | all | all | no | no | no | no | no |
-| connections | edit | all | all | no | no | no | no | no |
-| connections | publish | all | all | no | no | no | no | no |
-| connections | delete | all | all | no | no | no | no | no |
-| connections | run | all | all | no | no | no | no | no |
-| connections | decide | all | all | no | no | no | no | no |
-| connections | manage | all | all | no | no | no | no | no |
+| connections | create | all | no | no | no | no | no | no |
+| connections | edit | all | no | no | no | no | no | no |
+| connections | publish | all | no | no | no | no | no | no |
+| connections | delete | all | no | no | no | no | no | no |
+| connections | run | all | no | no | no | no | no | no |
+| connections | decide | all | no | no | no | no | no | no |
+| connections | manage | all | no | no | no | no | no | no |
 | files | view | all | all | all | all | no | no | no |
 | files | create | all | all | all | all | no | no | no |
 | files | edit | all | all | no | no | no | no | no |
@@ -464,7 +464,7 @@ retired id is not reused.
 | D31 | `redactPii` masks what people see; it defaults on and the model sees real values |
 | D32 | Only a person enters credentials, in the console. Root signing keys stay in the deployment's environment |
 | D33 | Every tool secret belongs to a team and no service reads one; model provider keys are in an account-level store in models-service that account admins edit |
-| D34 | A team owns its secrets: its builders add, change and remove them, unless `securityTeamAddsSecrets` is on |
+| D34 | A team owns its secrets: its admins add, change and remove them and its builders read them (D59), unless `securityTeamAddsSecrets` is on |
 | D35 | Knowledge is shared by the team: any builder changes or deletes its bases and sources |
 | D36 | Chats are private by default (`chatThreadsOwnerOnly`); turned off, the team's admins read them |
 | D37 | Only the person edits what agents remember about them |
