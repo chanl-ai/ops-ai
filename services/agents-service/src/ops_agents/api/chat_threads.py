@@ -58,12 +58,13 @@ from ..store.chat_search import index_thread, indexed_ids, matching_threads
 from ..store.events import EventLog
 from ..store.reviews import ReviewStore
 from ..store.tenancy import current_team
-from .auth import Principal, caller_of
+from .auth import Principal, caller_of, graph_target, key_scope
 from .chat_history import PLAN_PART
 from .deps import Runtime
 from .event_log import designed_type
 from .memory import fill_remembered
 from .review_text import call_label, input_rows, tool_titles
+from .run_person import person_of_thread
 from .runs import graph_store
 
 CHAT_GRAPH = "agent_wrapper"
@@ -539,6 +540,21 @@ def may_read(meta: dict[str, Any], me: Principal) -> bool:
     except Forbidden:
         return False
     return True
+
+
+def may_read_thread(row: dict[str, Any], me: Principal) -> bool:
+    """Any graph thread, for the thread and event routes: a scoped API key reaches its own target only; an agent's chat
+    or a call it made for a person (the chat graph) is read under `may_read`, with the person it ran for as owner; any
+    other thread by the team rule the store already applies."""
+    scope = key_scope(me)
+    if scope is not None and graph_target(str(row["graph"])) != scope:
+        return False
+    person = person_of_thread(row)
+    meta = _d(row["meta"])
+    # A run-API thread of the chat graph that names no person (no chat, no owner, started for nobody) is the team's.
+    if person is None or not (person.email or meta.get("chat") or meta.get("owner")):
+        return True
+    return may_read({**meta, "ownerEmail": person.email} if person.email else meta, me)
 
 
 async def chat_rows(rt: Runtime, me: Principal) -> list[dict[str, Any]]:

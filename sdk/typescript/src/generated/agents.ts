@@ -2470,7 +2470,8 @@ export interface paths {
         };
         /**
          * Reattach
-         * @description The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from.
+         * @description The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not
+         *     found for a run of a thread the caller may not read (`may_read_thread`).
          */
         get: operations["threads_reattach"];
         put?: never;
