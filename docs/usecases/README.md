@@ -376,3 +376,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
+| uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |

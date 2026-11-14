@@ -163,7 +163,8 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/', served: Boolean(registryUrl) },
   // No service owns these yet.
   { prefix: '/deployments', served: false },
-  { prefix: '/govern/evals', served: false },
+  // Evals are agents-service's /v1/assurance; the agent page's own Evals tab is still sample data.
+  { prefix: '/govern/evals', served: Boolean(registryUrl) },
   { prefix: '/govern/models', served: false },
   { prefix: '/data/connectors', served: false },
   { prefix: '/sources', served: false },

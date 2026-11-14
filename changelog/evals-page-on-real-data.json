@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-14",
+  "title": "Evals page shows your team's real suites and runs",
+  "description": "Govern > Evals lists saved test cases, their runs and publish checks for your team instead of sample data. Evidence and Judges appear once there is something to show, and the Gates tab is now Publish checks.",
+  "tag": "improved"
+}
