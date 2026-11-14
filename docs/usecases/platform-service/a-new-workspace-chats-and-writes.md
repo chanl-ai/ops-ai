@@ -5,15 +5,15 @@ Status: passing at api, sdk and ui (steps 1 to 5, 10 and 11), on a fresh databas
 
 An admin creates a workspace (bootstrap on an install, or the dev seed on an empty database), signs in, adds the
 company's model key, and an agent in chat answers and changes a record in a connected app. Nothing else is set first:
-an app may call any public address, writes do not wait for a reviewer and approving asks for no password. Each of
-those is a setting an admin turns on in Settings › Policies. Publishes keep the catalogue's review mode, `major`: a
-first publish or a major change waits for a second person. A workspace created before keeps the values it had.
+publishes go live at once, an app may call any public address, writes do not wait for a reviewer and approving asks
+for no password. Each of those is a setting an admin turns on in Settings › Policies. A workspace created before keeps
+the values it had.
 
 ## Stories
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | A new workspace reads publish review `major` (no row of its own) for its first team and new addresses `any_public` | sdk | 1 | 1 |
+| S1 | A new workspace reads publish review `never` for its first team and new addresses `any_public` | sdk | 1 | 1 |
 | S2 | Approvals and step-up read off in a new workspace | sdk | 2 | 2 |
 | S3 | The first admin, with no model key, sees the setup card on the overview and it leads to Model providers | ui | 3 | 3 |
 | S4 | After a key is saved the card is gone, and a chat answers and a write runs without waiting | sdk, ui | 4, 5 | 4, 5 |

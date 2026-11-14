@@ -53,13 +53,12 @@ def main() -> int:
     # The account admin: an admin of the Security team, where settings.manage is held, as a new workspace's first admin.
     owner = api_as.token("local", "security", urls)
     with OpsAI(base_url=urls["platform"], services=urls, access_token=session["token"], team=team) as ops:
-        # Steps 1 and 2: a new workspace keeps publish review at the catalogue's major; approvals and step-up are off.
+        # Steps 1 and 2: a new workspace starts with reviews, approvals and step-up off.
         policies: dict[str, Any] = {}
         for name in ("publishReview", "egressNewHosts", "appChanges", "stepUp"):
             policies[name] = ops.raw.platform.policies_get_policy(name).get("value")
-        modes = policies["publishReview"] or {}
-        never = [area for part in modes.values() for area, mode in dict(part).items() if mode == "never"]
-        check("publish review is major: no area publishes at once", never == [], policies)
+        first = next(iter((policies["publishReview"] or {}).values()), {})
+        check("publish review is never for the first team", bool(first) and set(first.values()) == {"never"}, policies)
         check("new addresses are any_public", policies["egressNewHosts"] == "any_public", policies)
         check("makers' ask-first writes are off workspace-wide", (policies["appChanges"] or {}).get("*", {}).get("makersAsk") is False, policies)
         check("step-up is off", policies["stepUp"] is False, policies)

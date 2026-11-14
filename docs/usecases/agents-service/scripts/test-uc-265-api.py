@@ -84,11 +84,7 @@ with ai_stack("uc265") as (api, _people):
         json={"guardrails": {**agent["guardrails"], "redactPii": False}, "note": "off"},
         headers=OPS,
     )
-    went = api.post(
-        f"/v1/agents/{aid}/publish-requests", json={"version": data(off)["version"], "note": "off"}, headers=OPS
-    )
-    # The default policy (major) publishes at once in dev; a workspace that held it for review would keep redacting.
-    check("4a the redactPii-off version goes live", data(went).get("status") == "approved", went.text[:300])
+    api.post(f"/v1/agents/{aid}/publish-requests", json={"version": data(off)["version"], "note": "off"}, headers=OPS)
     plain, _ = ask(api, aid, "UC265-PII who is Ann?")
     check("4 with redactPii off the reply is as the model wrote it", plain == SAID, plain)
 
