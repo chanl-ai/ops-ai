@@ -623,7 +623,9 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "tier",
+      "result"
     ],
     "stream": false
   },
@@ -636,7 +638,9 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "kind",
+      "trigger"
     ],
     "stream": false
   },
@@ -649,7 +653,10 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "kind",
+      "tier",
+      "result"
     ],
     "stream": false
   },

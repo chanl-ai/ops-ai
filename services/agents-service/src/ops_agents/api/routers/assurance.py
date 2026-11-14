@@ -31,6 +31,8 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 Reader: TypeAlias = Annotated[Principal, Depends(reader_of("evals"))]  # noqa: UP040
 PageNo: TypeAlias = Annotated[int, Query(alias="page", ge=1)]  # noqa: UP040
 PageSize: TypeAlias = Annotated[int, Query(alias="pageSize", ge=1, le=200)]  # noqa: UP040
+# A repeated filter; `_answer` reads them from the request, these declare them in the API document.
+Filter: TypeAlias = Annotated[list[str] | None, Query()]  # noqa: UP040
 
 SUITE_FACETS = ("kind", "tier", "result")
 RUN_FACETS = ("kind", "trigger")
@@ -83,7 +85,16 @@ def _answer(
 
 @router.get("/v1/assurance/suites", response_model=Envelope[SuiteList])
 async def list_suites(
-    request: Request, rt: Rt, _: Reader, page_no: PageNo = 1, page_size: PageSize = 25, search: str | None = None
+    request: Request,
+    rt: Rt,
+    _: Reader,
+    *,
+    page_no: PageNo = 1,
+    page_size: PageSize = 25,
+    search: str | None = None,
+    kind: Filter = None,
+    tier: Filter = None,
+    result: Filter = None,
 ) -> JSONResponse:
     """One suite per agent, skill or workflow in the acting team that has saved cases or a run, with the latest
     result of each case. Filters: `kind`, `tier`, `result` (failing, passing, not_run)."""
@@ -94,7 +105,15 @@ async def list_suites(
 
 @router.get("/v1/assurance/runs", response_model=Envelope[RunList])
 async def list_runs(
-    request: Request, rt: Rt, _: Reader, page_no: PageNo = 1, page_size: PageSize = 25, search: str | None = None
+    request: Request,
+    rt: Rt,
+    _: Reader,
+    *,
+    page_no: PageNo = 1,
+    page_size: PageSize = 25,
+    search: str | None = None,
+    kind: Filter = None,
+    trigger: Filter = None,
 ) -> JSONResponse:
     """Every stored run of the team's agents and skills and every test run of its workflows, newest first."""
     return _answer(
@@ -104,7 +123,15 @@ async def list_runs(
 
 @router.get("/v1/assurance/gates", response_model=Envelope[GateList])
 async def list_gates(
-    request: Request, rt: Rt, _: Reader, page_no: PageNo = 1, page_size: PageSize = 25, search: str | None = None
+    request: Request,
+    rt: Rt,
+    _: Reader,
+    *,
+    page_no: PageNo = 1,
+    page_size: PageSize = 25,
+    search: str | None = None,
+    tier: Filter = None,
+    result: Filter = None,
 ) -> JSONResponse:
     """The publish checks of the team's publish requests: each step's result and whether the request is blocked."""
     return _answer(

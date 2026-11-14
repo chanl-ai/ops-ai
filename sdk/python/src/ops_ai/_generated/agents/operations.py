@@ -493,7 +493,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/assurance/gates",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "tier", "result"],
         "stream": False,
     },
     "assurance_list_runs": {
@@ -502,7 +502,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/assurance/runs",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "kind", "trigger"],
         "stream": False,
     },
     "assurance_list_suites": {
@@ -511,7 +511,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/assurance/suites",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "kind", "tier", "result"],
         "stream": False,
     },
     "assurance_save_agent_cases": {
@@ -2111,40 +2111,59 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["workflows_run_ai_step"], {"step": step}, {}, {}, body)  # type: ignore[no-any-return]
 
     def assurance_list_gates(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        tier: list[str] | None = None,
+        result: list[str] | None = None,
     ) -> GateList:
         "List Gates"
         return self._t.call(
             SERVICE,
             OPERATIONS["assurance_list_gates"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {"page": page, "pageSize": page_size, "search": search, "tier": tier, "result": result},
             {},
             None,
         )  # type: ignore[no-any-return]
 
     def assurance_list_runs(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        kind: list[str] | None = None,
+        trigger: list[str] | None = None,
     ) -> RunList:
         "List Runs"
         return self._t.call(
             SERVICE,
             OPERATIONS["assurance_list_runs"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {"page": page, "pageSize": page_size, "search": search, "kind": kind, "trigger": trigger},
             {},
             None,
         )  # type: ignore[no-any-return]
 
     def assurance_list_suites(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        kind: list[str] | None = None,
+        tier: list[str] | None = None,
+        result: list[str] | None = None,
     ) -> SuiteList:
         "List Suites"
         return self._t.call(
             SERVICE,
             OPERATIONS["assurance_list_suites"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {"page": page, "pageSize": page_size, "search": search, "kind": kind, "tier": tier, "result": result},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3442,40 +3461,59 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["workflows_run_ai_step"], {"step": step}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def assurance_list_gates(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        tier: list[str] | None = None,
+        result: list[str] | None = None,
     ) -> GateList:
         "List Gates"
         return await self._t.call(
             SERVICE,
             OPERATIONS["assurance_list_gates"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {"page": page, "pageSize": page_size, "search": search, "tier": tier, "result": result},
             {},
             None,
         )  # type: ignore[no-any-return]
 
     async def assurance_list_runs(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        kind: list[str] | None = None,
+        trigger: list[str] | None = None,
     ) -> RunList:
         "List Runs"
         return await self._t.call(
             SERVICE,
             OPERATIONS["assurance_list_runs"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {"page": page, "pageSize": page_size, "search": search, "kind": kind, "trigger": trigger},
             {},
             None,
         )  # type: ignore[no-any-return]
 
     async def assurance_list_suites(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        kind: list[str] | None = None,
+        tier: list[str] | None = None,
+        result: list[str] | None = None,
     ) -> SuiteList:
         "List Suites"
         return await self._t.call(
             SERVICE,
             OPERATIONS["assurance_list_suites"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {"page": page, "pageSize": page_size, "search": search, "kind": kind, "tier": tier, "result": result},
             {},
             None,
         )  # type: ignore[no-any-return]

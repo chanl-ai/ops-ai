@@ -15141,6 +15141,8 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 search?: string | null;
+                tier?: string[] | null;
+                result?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -15246,6 +15248,8 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 search?: string | null;
+                kind?: string[] | null;
+                trigger?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -15351,6 +15355,9 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 search?: string | null;
+                kind?: string[] | null;
+                tier?: string[] | null;
+                result?: string[] | null;
             };
             header?: never;
             path?: never;
