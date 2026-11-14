@@ -1,10 +1,20 @@
 // uc-002 write tool pauses and approval resumes with step-up, ui layer:
 // docs/usecases/agents-service/write-tool-approval-step-up.md. Headless Chromium against a console whose chat
 // calls the agents service on the scripted model; the mock signs in the default user.
-import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const PASSWORD = 'northfield-demo';
 const TOTP = '123456';
+const ADMIN = 'w.kamau@harborpine.example';
+
+// requesterMayDecide is a workspace policy, off by default: the person who asked may not decide their own request. A
+// workspace admin turns it on for this run, as the doc's precondition says.
+async function requesterMayDecide(value) {
+  const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
+  const signIn = await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ADMIN, password: PASSWORD }) });
+  const token = (await signIn.json()).data.token;
+  return (await fetch(`${platform}/v1/policies/requesterMayDecide`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_platform', 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) })).status;
+}
 
 await withUiStack(async (consoleUrl) => {
   const browser = await chromium.launch();
@@ -24,6 +34,11 @@ await withUiStack(async (consoleUrl) => {
     await page.getByRole('button', { name: 'Send' }).click();
 
     const approve = page.getByRole('button', { name: 'Approve', exact: true });
+    // Non-vacuous: with the policy off the server answers canDecide false for the asker, so the card offers no Approve.
+    await page.getByTestId('approval-waiting-on').first().waitFor({ timeout: 60_000 });
+    check('with requesterMayDecide off the asker is offered no Approve', (await approve.count()) === 0);
+    check('the workspace admin turns requesterMayDecide on', (await requesterMayDecide(true)) === 200);
+    await page.reload({ waitUntil: 'domcontentloaded' });
     check('approval widget with an Approve button rendered', await approve.waitFor({ timeout: 60_000 }).then(() => true, () => false));
     check('widget names the wire', (await page.getByText('W-88213').count()) > 0);
     await approve.click();
