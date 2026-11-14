@@ -70,7 +70,9 @@ def test_a_service_change_runs_that_service_and_no_repo_job(tmp_path: Path) -> N
 
 def _ci_ok() -> tuple[dict[str, Any], set[str]]:
     jobs: dict[str, Any] = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
-    return jobs["ci-ok"], set(jobs) - {"ci-ok"}
+    # A job that needs ci-ok (the staging deploy) runs after the gate, so the gate cannot wait for it.
+    after = {name for name, j in jobs.items() if "ci-ok" in (j.get("needs") or [])}
+    return jobs["ci-ok"], set(jobs) - {"ci-ok"} - after
 
 
 def _gate(needs: dict[str, str]) -> int:
