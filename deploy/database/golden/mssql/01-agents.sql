@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0102_guardrail_names_per_team
+-- agents-service, stamped at 0103_eval_cases_runs
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -584,6 +584,49 @@ GO
 CREATE INDEX ix_chat_search_team_id ON chat_search (team_id);
 GO
 CREATE INDEX ix_chat_search_tenant_id ON chat_search (tenant_id);
+GO
+CREATE TABLE eval_cases (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	asset_id VARCHAR(64) NOT NULL, 
+	position INTEGER NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	source VARCHAR(16) NOT NULL, 
+	review_id VARCHAR(64) NULL, 
+	reason VARCHAR(max) NOT NULL, 
+	body NVARCHAR(max) NOT NULL, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT eval_cases_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_eval_cases_asset ON eval_cases (tenant_id, team_id, kind, asset_id);
+GO
+CREATE TABLE eval_runs (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	asset_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	live_version INTEGER NULL, 
+	[trigger] VARCHAR(24) NOT NULL, 
+	passed INTEGER NOT NULL, 
+	total INTEGER NOT NULL, 
+	live_passed INTEGER NULL, 
+	regressions INTEGER NOT NULL, 
+	duration_ms INTEGER NOT NULL, 
+	cost_usd FLOAT NOT NULL, 
+	results NVARCHAR(max) NOT NULL, 
+	started_by VARCHAR(320) NOT NULL, 
+	ran_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT eval_runs_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
 GO
 CREATE TABLE registry_guardrails (
 	id VARCHAR(64) NOT NULL, 
@@ -1183,6 +1226,18 @@ CREATE SECURITY POLICY ops_security.chat_search_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_search AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.eval_cases_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.eval_cases,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_cases AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_cases AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.eval_runs_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.eval_runs,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.agent_memories_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.agent_memories,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_memories AFTER INSERT,
@@ -1280,5 +1335,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0102_guardrail_names_per_team');
+INSERT INTO alembic_version (version_num) VALUES ('0103_eval_cases_runs');
 GO

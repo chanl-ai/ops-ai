@@ -5,7 +5,7 @@ admins hold every cell, so they save cases and run them. Adds each missing cell 
 version; the downgrade removes the area's cells.
 
 Revision ID: 0037_evals_cells
-Revises: 0036_oauth_address_counts
+Revises: 0037_builder_connections
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0037_evals_cells"
-down_revision = "0036_oauth_address_counts"
+down_revision = "0037_builder_connections"
 branch_labels = None
 depends_on = None
 

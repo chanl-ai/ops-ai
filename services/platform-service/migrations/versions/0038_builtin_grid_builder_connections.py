@@ -6,7 +6,7 @@ reading them stays (`view`, which every member holds). Removes every other build
 what changed, and raises each tenant's permission version. The downgrade puts back the cells 0028 gave.
 
 Revision ID: 0037_builder_connections
-Revises: 0036_oauth_address_counts
+Revises: 0037_mcp_cells
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0037_builder_connections"
-down_revision = "0036_oauth_address_counts"
+down_revision = "0037_mcp_cells"
 branch_labels = None
 depends_on = None
 

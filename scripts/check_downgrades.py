@@ -15,23 +15,17 @@ import sys
 from pathlib import Path
 
 
-def _empty(node: ast.FunctionDef) -> bool:
-    body = [
-        s
-        for s in node.body
-        if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))  # docstring or ...
-    ]
-    return all(isinstance(s, ast.Pass) for s in body)
-
-
 def empty_downgrade(source: str) -> bool:
-    """True when `downgrade()` holds nothing but a docstring, `pass` or `...` while `upgrade()` does something.
-
-    A revision whose upgrade is empty too (a merge revision joining two heads) has nothing to undo."""
-    funcs = {n.name: n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef)}
-    if "downgrade" not in funcs:
-        return False  # no downgrade at all is alembic's own error, not this check's
-    return _empty(funcs["downgrade"]) and not ("upgrade" in funcs and _empty(funcs["upgrade"]))
+    """True when `downgrade()` holds nothing but a docstring, `pass` or `...`."""
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef) and node.name == "downgrade":
+            body = [
+                s
+                for s in node.body
+                if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))  # docstring or ...
+            ]
+            return all(isinstance(s, ast.Pass) for s in body)
+    return False  # no downgrade at all is alembic's own error, not this check's
 
 
 def main(argv: list[str]) -> int:
