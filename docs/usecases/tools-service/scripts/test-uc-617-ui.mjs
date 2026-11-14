@@ -58,6 +58,10 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
+      // A new workspace takes any public host (egressNewHosts any_public); Sam, a Security admin, turns asking on for
+      // this story before anyone signs in, since a policy change refuses every token issued before it.
+      const asking = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/egressNewHosts`, { method: 'PUT', headers: { ...(await as(SAM, 'team_security')), 'Content-Type': 'application/json' }, body: JSON.stringify({ value: 'ask_security' }) });
+      check('6 setup: Sam sets new addresses to ask Security first', asking.status === 200, (await asking.text()).slice(0, 200));
       await step('6 James saves a tool on an unlisted host: the dialog says it waits for Security, and nothing is saved', async () => {
         const page = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
         await page.setViewportSize({ width: 1280, height: 900 });

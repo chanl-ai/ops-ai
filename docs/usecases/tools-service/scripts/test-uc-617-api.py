@@ -96,8 +96,8 @@ with (
         and task.get("dueAt") is None,
         {k: task.get(k) for k in ("id", "kind", "title", "connect", "dueAt")},
     )
-    # 3c. Run as the team account: a Builder may (roles-and-permissions.md), so James and Priya both get the desk's
-    # answer, which has no team account to run as.
+    # 3c. Run as the team account: only an Admin runs a team account (roles-and-permissions.md), so James (builder)
+    # is refused for his role, and Priya (admin) gets the desk's answer, which has no team account to run as.
     as_team = f"/reviews/{task.get('id') or run_id}/team-account"
     by_james = api.post(as_team, headers=w.who["builder"])
     by_priya = api.post(as_team, headers=w.who["admin"])
@@ -105,9 +105,10 @@ with (
         f"/reviews/{task.get('id') or run_id}/decision", json={"decision": "approve"}, headers=w.who["admin"]
     )
     check(
-        "3c Run as the team account is refused on a desk with no team account, to a builder and an admin alike",
-        by_james.status_code == 409
-        and "no team account" in by_james.text
+        "3c Run as the team account is refused to a builder for his role, and to an admin on a desk with no team account",
+        by_james.status_code == 403
+        and "role_required" in by_james.text
+        and "an Admin can" in by_james.text
         and by_priya.status_code == 409
         and "no team account" in by_priya.text
         and decided.status_code == 409

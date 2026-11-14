@@ -1,5 +1,5 @@
 // uc-013 a tool's credential is a secret that never comes back, ui layer: docs/usecases/tools-service/secrets.md.
-// Headless Chromium on Settings > Secrets, against tools-service's /v1/secrets.
+// Headless Chromium on Settings > Secrets as the team's admin, against tools-service's /v1/secrets.
 import { TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -74,7 +74,8 @@ await withUiStack(
       await browser.close();
     }
   },
-  { tools: {} },
+  // Adding, rotating and deleting a secret is an admin's (D34); builders read secrets only, so the admin signs in.
+  { tools: {}, signedInAs: 'admin' },
 );
 
 finish();
