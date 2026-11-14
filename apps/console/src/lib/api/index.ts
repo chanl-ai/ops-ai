@@ -271,3 +271,6 @@ export const serviceUrls = {
  * reference; scripts/changelog-check.mjs keeps the same names. Empty: a shipped feature has no switch.
  */
 export const releaseSwitches: Readonly<Record<string, boolean>> = {};
+
+/** A demo's accent colour from .env (OPS_BRAND_PRIMARY, OPS_BRAND_PRIMARY_DARK), read when the console starts. */
+export const brandColours = { light: process.env.OPS_BRAND_PRIMARY, dark: process.env.OPS_BRAND_PRIMARY_DARK };
