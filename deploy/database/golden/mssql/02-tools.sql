@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0078_call_caller_name
+-- tools-service, stamped at tools_0079_mcp_link_isolation
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -558,6 +558,12 @@ CREATE SECURITY POLICY ops_security.secret_audit_isolation
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.secret_audit AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.mcp_links_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.mcp_links,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.mcp_links AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.mcp_links AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.connection_tokens_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_tokens,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_tokens AFTER INSERT,
@@ -575,5 +581,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0078_call_caller_name');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0079_mcp_link_isolation');
 GO

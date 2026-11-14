@@ -15,10 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.ids import new_id, now_iso
-from ops_store import Guarantee
-from ops_store.schema import TEAM_OWNED
-from ops_store.team_scope import acting_as, team_visible
+from ops_store import Guarantee, isolation
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
+from .connections import ROLE
 from .modules import metadata
 
 mcp_links = sa.Table(
@@ -39,7 +40,8 @@ mcp_links = sa.Table(
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.UniqueConstraint("tenant_id", "team_id", "slug", name="uq_mcp_links_team_slug"),
-    info=TEAM_OWNED,
+    # Held to its team by the database (tools_0079): only a transaction run as ROLE in the link's team sees it.
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -56,27 +58,27 @@ class McpLinks:
 
     async def list(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
         t = mcp_links
-        with acting_as(team_id):
+        with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.team_id == team_id)
-        async with self.engine.connect() as c:
-            return [_row(r) for r in await c.execute(q.order_by(t.c.name))]
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                return [_row(r) for r in await c.execute(q.order_by(t.c.name))]
 
     async def get(self, tenant_id: str, team_id: str, link_id: str) -> dict[str, Any] | None:
         t = mcp_links
-        with acting_as(team_id):
+        with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
-        async with self.engine.connect() as c:
-            found = (await c.execute(q)).first()
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                found = (await c.execute(q)).first()
         return _row(found) if found else None
 
     async def by_slug(self, tenant_id: str, team_id: str, slug: str) -> dict[str, Any] | None:
         t = mcp_links
-        with acting_as(team_id):
+        with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(
                 t.c.tenant_id == tenant_id, team_visible(t), t.c.team_id == team_id, t.c.slug == slug
             )
-        async with self.engine.connect() as c:
-            found = (await c.execute(q)).first()
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                found = (await c.execute(q)).first()
         return _row(found) if found else None
 
     async def create(
@@ -97,8 +99,9 @@ class McpLinks:
             "updated_at": at,
         }
         try:
-            async with self.engine.begin() as c:
-                await c.execute(sa.insert(mcp_links).values(**row))
+            with isolation.scope(tenant_id, team_id):
+                async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                    await c.execute(sa.insert(mcp_links).values(**row))
         except IntegrityError as e:
             raise Unprocessable(f"This team already has a link named {name}.", code="link_name_taken") from e
         return row
@@ -106,19 +109,19 @@ class McpLinks:
     async def delete(self, tenant_id: str, team_id: str, link_id: str) -> bool:
         """Removes the link; its address answers 404 from then on. Its calls stay in the call log with its id."""
         t = mcp_links
-        with acting_as(team_id):
+        with isolation.scope(tenant_id, team_id):
             q = sa.delete(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
-        async with self.engine.begin() as c:
-            return (await c.execute(q)).rowcount > 0
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                return (await c.execute(q)).rowcount > 0
 
     async def set_paused(self, tenant_id: str, team_id: str, link_id: str, paused: bool) -> dict[str, Any] | None:
         t = mcp_links
-        with acting_as(team_id):
+        with isolation.scope(tenant_id, team_id):
             q = (
                 sa.update(t)
                 .where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
                 .values(paused=paused, updated_at=now_iso())
             )
-        async with self.engine.begin() as c:
-            await c.execute(q)
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                await c.execute(q)
         return await self.get(tenant_id, team_id, link_id)
