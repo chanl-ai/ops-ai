@@ -22,9 +22,10 @@ await withUiStack(async (consoleUrl) => {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    // An approval card's decision goes to Reviews' route (components/chat/use-thread-actions.tsx), not the widget route.
     const decisions = [];
     page.on('response', (r) => {
-      if (r.request().method() === 'POST' && /\/widgets\/[^/]+\/actions$/.test(r.url())) decisions.push(r.status());
+      if (r.request().method() === 'POST' && /\/reviews\/[^/]+\/decision$/.test(r.url())) decisions.push(r.status());
     });
 
     await page.goto(`${consoleUrl}/chat?agent=ag_fraud`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
