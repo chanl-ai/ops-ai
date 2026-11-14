@@ -26,6 +26,7 @@ from ops_ai import OpsAI
 from ops_ai.errors import OpsError
 
 JAMES, MAYA, PASSWORD = "j.richardson@harborpine.example", "m.okafor@harborpine.example", "northfield-demo"
+PRIYA = "p.shah@harborpine.example"
 AUTH = {
     "OPS_AUTH_MODE": "platform",
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
@@ -64,6 +65,15 @@ def refused(call: Any) -> OpsError | None:
 
 
 with platform(), agents(env=AUTH):
+    # Publish review is optional and a new workspace publishes at once: Priya, the team's admin, turns it on for
+    # workflows first. A policy change refreshes every token, so James and Maya sign in after it.
+    priya = OpsAI.sign_in(PRIYA, PASSWORD, team="team_ops", **CONN)
+    on = priya.raw.platform.policies_set_policy("publishReview", {"value": {"workflows": "always"}})
+    check(
+        "0 Priya turns publish review on for the team's workflows",
+        "'workflows': 'always'" in str(on.get("value")),
+        on,
+    )
     james = OpsAI.sign_in(JAMES, PASSWORD, team="team_ops", **CONN)
     maya = OpsAI.sign_in(MAYA, PASSWORD, team="team_ops", **CONN)
     wf = DEFINITION["id"]
