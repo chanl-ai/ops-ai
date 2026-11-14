@@ -108,20 +108,26 @@ def main() -> None:
         gw.post(f"/v1/apps/plugin:{PLUGIN}/tools", json={"tools": ["templates_close_case"]}, headers=OPS)
         check("1 the plugin is on for team_ops", on.status_code == 200, {"team": said(on)})
 
-        # 2. team_ops sees the four templates, none installed; team_platform sees none.
-        mine = listed(api, OPS) + listed(docs, OPS)
-        theirs = listed(api, OTHER) + listed(docs, OTHER)
+        # 2. Every installed pack's templates list for every team; the team switch decides what runs. team_ops sees
+        # the desk's four, none installed and none off; team_platform sees the same four, each needing a tool marked off.
+        def desk_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            return [t for t in rows if t.get("source") == SOURCE or "error" in t]
+
+        mine = desk_rows(listed(api, OPS) + listed(docs, OPS))
+        theirs = desk_rows(listed(api, OTHER) + listed(docs, OTHER))
+        kinds = sorted((str(t.get("kind")), str(t.get("id"))) for t in mine)
         check(
-            "2 team_ops sees the agent, skill, workflow and document type, none installed, and team_platform none",
-            sorted((str(t.get("kind")), str(t.get("id"))) for t in mine)
+            "2 both teams see the desk's agent, skill, workflow and document type; none installed, off for team_platform",
+            kinds
             == [
                 ("agent", "case-helper"),
                 ("document_type", "case-letter"),
                 ("skill", "close-politely"),
                 ("workflow", "case-review"),
             ]
-            and all((t.get("installed") or {}).get("copies") == 0 for t in mine)
-            and theirs == [],
+            and all((t.get("installed") or {}).get("copies") == 0 and not t.get("off") for t in mine)
+            and sorted((str(t.get("kind")), str(t.get("id"))) for t in theirs) == kinds
+            and all(t.get("off") for t in theirs if (t.get("requires") or {}).get("tools")),
             {"mine": mine, "theirs": theirs},
         )
 
@@ -202,11 +208,11 @@ def main() -> None:
             {"made": [fresh_id, sid, wid, tid], "seen": seen},
         )
 
-        # 9. A team with the plugin off cannot install its templates.
+        # 9. A team with the plugin off cannot copy a template that grants the app's tools.
         off = install(api, "case-helper", OTHER)
         check(
-            "9 a team with the plugin off is told the template is not found",
-            off.status_code == 404 and code(off) == "template_not_found",
+            "9 a team with the plugin off is told the app is off for it",
+            off.status_code == 422 and code(off) == "app_off",
             said(off),
         )
 
@@ -232,7 +238,7 @@ def main() -> None:
         # 30-31 (group E): an app's resources, and Add to team.
         offered = gw.get("/v1/plugin-templates", headers=OPS)
         ids = (
-            sorted(f"{r.get('source')}:{r.get('id')}" for r in data(offered) or [])
+            sorted(f"{r.get('source')}:{r.get('id')}" for r in data(offered) or [] if r.get("source") == SOURCE)
             if offered.status_code == 200
             else []
         )
