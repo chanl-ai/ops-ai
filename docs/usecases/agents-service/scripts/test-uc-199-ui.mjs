@@ -186,7 +186,7 @@ await withUiStack(
         await fetch(`${agents}/v1/channels/${levy.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ paused: false }) });
         check(
           '3b the trigger shows the picked mailbox with its state and a link to it, and warns while it is paused',
-          row.includes(`Levies ${RUN}`) && href === `/channels/email/${levy.id}` && warnedBefore === 0 && paused.status < 300 && warned === 1,
+          row.includes(`Levies ${RUN}`) && href === `/build/channels/email/${levy.id}` && warnedBefore === 0 && paused.status < 300 && warned === 1,
           { row, href, warnedBefore, paused: paused.status, warned },
         );
       });
