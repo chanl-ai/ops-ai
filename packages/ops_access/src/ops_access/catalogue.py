@@ -23,6 +23,9 @@ AREAS = (
     "skills",
     "guardrails",
     "widgets",
+    # Saved test cases and their runs on agents, skills and workflows, and the Evals page that reads them: every team
+    # role but chat user reads; `run` (save cases, run them) is the builders' and admins'.
+    "evals",
     "knowledge",
     "tools",
     "secrets_egress",

@@ -126,6 +126,14 @@ role holds are left out.
 | widgets | run | all | all | no | no | no | no | no |
 | widgets | decide | all | all | all | no | no | no | no |
 | widgets | manage | all | all | no | no | no | no | no |
+| evals | view | all | all | all | all | no | no | no |
+| evals | create | all | all | no | no | no | no | no |
+| evals | edit | all | all | no | no | no | no | no |
+| evals | publish | all | all | no | no | no | no | no |
+| evals | delete | all | all | no | no | no | no | no |
+| evals | run | all | all | no | no | no | no | no |
+| evals | decide | all | all | no | no | no | no | no |
+| evals | manage | all | all | no | no | no | no | no |
 | knowledge | view | all | all | all | all | no | no | no |
 | knowledge | create | all | all | no | no | no | no | no |
 | knowledge | edit | all | all | no | no | no | no | no |
