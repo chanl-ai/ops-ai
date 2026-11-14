@@ -169,6 +169,31 @@ async def test_idle_starts_the_run_within_seconds_without_waiting_for_the_poll(
         await asyncio.wait_for(task, 30)
 
 
+async def test_mail_arriving_after_a_pause_starts_no_run_through_the_waiting_idle(
+    imap: tuple[Env, FakeTools, str],
+) -> None:
+    env, _, address = imap
+    await publish_on(env, address)
+    stop = asyncio.Event()
+    # The poll comes round every 120 seconds, so the next binding pass never drops the IDLE task inside this test.
+    task = asyncio.create_task(env.listener().run_forever(stop, 120))
+    try:
+        await asyncio.sleep(2)  # the IDLE task is waiting with the mailbox as it was before the pause
+        from ops_agents.store.mailboxes import MailboxStore  # noqa: PLC0415
+        from ops_agents.store.tenancy import tenant_scope  # noqa: PLC0415
+
+        with tenant_scope(TENANT):
+            await MailboxStore(env.db).update(
+                f"mbx_{address.split('@', maxsplit=1)[0]}", {"paused": True, "updated_at": "p"}
+            )
+        deliver(address, 1)
+        await asyncio.sleep(4)
+        assert await env.runs() == []
+    finally:
+        stop.set()
+        await asyncio.wait_for(task, 30)
+
+
 async def test_a_failing_idle_falls_back_to_the_poll(imap: tuple[Env, FakeTools, str]) -> None:
     env, tools, address = imap
     tools.fail_wait = True
