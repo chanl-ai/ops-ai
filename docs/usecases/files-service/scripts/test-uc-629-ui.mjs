@@ -79,7 +79,7 @@ await withUiStack(
             const banner = await page.getByTestId('services-down').count();
             await page.screenshot({ path: join(SHOTS, `file-${tag}.png`), fullPage: true });
             const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-            check(`${tag}: ${f.shows === 'pages' ? 'its pages show' : f.shows === 'download' ? 'it says to download it' : 'the preview says its content is missing'}, with no outage banner, no failed request and no layout 404`, shown && banner === 0 && page.problems.length === 0 && !wide, { shown, banner, wide, problems: page.problems.slice(0, 3) });
+            check(`${FILES.indexOf(f) + 1} ${tag}: ${f.shows === 'pages' ? 'its pages show' : f.shows === 'download' ? 'it says to download it' : 'the preview says its content is missing'}, with no outage banner, no failed request and no layout 404`, shown && banner === 0 && page.problems.length === 0 && !wide, { shown, banner, wide, problems: page.problems.slice(0, 3) });
           }
           await page.context().close();
         }
