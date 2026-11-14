@@ -82,6 +82,6 @@ await withUiStack(
       await browser.close();
     }
   },
-  { platform: true },
+  { platform: true, tools: {} },
 );
 finish();

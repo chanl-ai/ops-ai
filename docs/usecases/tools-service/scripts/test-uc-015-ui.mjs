@@ -1,10 +1,14 @@
 // uc-015 tool module details page, ui layer: docs/usecases/tools-service/tool-module-details-page.md. Headless
-// Chromium against the console; tool modules come from the mock until tools-service serves /v1/tool-modules.
+// Chromium against the console; the module and its operations come from tools-service, run against the core-banking fake.
 import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { allowBank } from '../../lib/connection_ui.mjs';
 
 const MODULE = 'mod_core_banking';
 
-await withUiStack(async (consoleUrl) => {
+// The core banking module is the Platform team's in tools-service's seed, so its admin opens it; Security allows the
+// fake bank's host, as on the shared stack.
+await withUiStack(async (consoleUrl, stack) => {
+  await allowBank(stack.bank);
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -59,6 +63,6 @@ await withUiStack(async (consoleUrl) => {
   } finally {
     await browser.close();
   }
-});
+}, { tools: { bank: 'core' }, signedInAs: 'platform' });
 
 finish();
