@@ -124,7 +124,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-055 | console | A bank API goes from import to a governed agent call | ui | passing |
 | uc-056 | console | A grant no longer offered shows as stale and can be removed | ui | passing |
 | uc-057 | console | A write held in a chat is listed in Reviews and approved there | ui | passing |
-| uc-058 | console | Another person's chat stays private: a teammate gets 404 | ui | passing |
+| uc-058 | console | Another person's chat stays private: a teammate gets 404 | api, ui | passing |
 | uc-059 | console | A builder sets a write's approval policy on the module page | ui | passing |
 | uc-060 | models-service | An alias reaches the fake OpenAI or the real one by its connection's base URL | api | passing |
 | uc-073 | console | Chat widgets draw by shape on the dev widget page | ui | passing |
