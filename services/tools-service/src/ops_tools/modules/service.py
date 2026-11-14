@@ -1324,17 +1324,20 @@ class ModuleService:
 
     async def hold_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
         """An app's address on a host the tenant has not listed, decided by the account's egressNewHosts policy before
-        anything is saved. Under `any_public` the host passes as it is. A caller who may manage the egress list, or
-        any builder under `builders`, lists it in their own name, audited. Under `block` it is refused. Otherwise it
-        asks the Security team: HostHeld with the task's run key while it waits, its reason once refused.
+        anything is saved. A host the call-time check passes (`EgressPolicy.host_passes`: any public name under
+        `any_public`), a caller who may manage the egress list, or any builder under `builders`, lists it in the
+        caller's name, audited: a module's hosts are rows of the list (the store's foreign key), so a host that passes
+        unlisted would still be refused on save. Under `block` it is refused. Otherwise it asks the Security team:
+        HostHeld with the task's run key while it waits, its reason once refused.
         Without Reviews or an egress policy the call-time check refuses the host."""
         if not host or self.egress is None or self.reviews is None:
             return
-        if await self.egress.host_passes(who.tenant_id, host):
+        if await self.egress.store.host_allowed(who.tenant_id, host):
             return
+        passes = await self.egress.host_passes(who.tenant_id, host)
         mode = await self.egress.new_hosts.mode(who.tenant_id) if self.egress.new_hosts else "ask_security"
         manages = who.principal is not None and self._manages_egress(who)
-        if manages or (mode == "builders" and who.principal is not None):
+        if passes or manages or (mode == "builders" and who.principal is not None):
             note = f"Listed when {app} first named it"
             await self.egress.store.add(who.tenant_id, "host", host, actor=who.name, note=note, at=self.clock())
             return

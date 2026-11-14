@@ -7,8 +7,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from apps_walk import AUTH, account_path, app_path, apps_stack, target
-from usecase_harness import TOOLS_PORT, agents, check, data, engine_worker, finish, until
+from apps_walk import AUTH, ROLES, TEAM_OF, account_path, app_path, apps_stack, target
+from usecase_harness import TOOLS_PORT, agents, as_role, check, data, engine_worker, finish, until
 
 APP = "plugin:test.client"
 
@@ -220,6 +220,11 @@ with (
         rows = listed.get("data") if isinstance(listed, dict) else listed
         return next((r for r in rows or [] if r.get("id") == run_key), {})
 
+    # A new workspace takes any public host (egressNewHosts any_public); Security turns asking on for this story.
+    asking = w.api.put("/v1/policies/egressNewHosts", json={"value": "ask_security"}, headers=w.who["security"])
+    check("4 setup: Security sets new addresses to ask Security first", asking.status_code == 200, asking.text[:200])
+    # A policy change marks every token issued before it as stale (permissions_changed), so each role signs in again.
+    w.who.update({role: as_role(w.api, role, TEAM_OF[role]) for role in ROLES})
     base = "https://unlisted.multi.test"
     unlisted = None
     held = add_tool(unlisted, "Unlisted desk", base)

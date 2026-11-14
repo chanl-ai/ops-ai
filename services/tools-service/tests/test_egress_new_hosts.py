@@ -181,3 +181,15 @@ async def test_ask_security_holds_a_new_host(builder_app: Any, tenant: str) -> N
     async for c in builder_app("ask_security"):
         held = await _add_operation(c, tenant, "nh-ask")
         assert held.status_code == 202 and held.json()["data"]["heldFor"] == "security", held.text
+
+
+async def test_any_public_saves_a_new_public_host_listed_in_the_builders_name(
+    builder_app: Any, engine: AsyncEngine, tenant: str
+) -> None:
+    REVIEWS.hosts.clear()
+    async for c in builder_app("any_public"):
+        added = await _add_operation(c, tenant, "nh-any")
+        assert added.status_code == 200, added.text
+        assert not REVIEWS.hosts, "any_public asks nobody"
+        trail = [(a["value"], a["actor"]) for a in await EgressStore(engine).audit(tenant)]
+        assert ("new-statements.example.com", "James Richardson") in trail
