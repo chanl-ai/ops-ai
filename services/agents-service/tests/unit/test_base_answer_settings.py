@@ -1,10 +1,11 @@
 """A knowledge base's answer settings applied to the turn's answer: an uncited answer from a base that withholds one
-is replaced by the base's no-answer message, also when nothing is found; a cited answer, and a base that gives back
-pieces only, are left alone. The agent's own end check is off, as it is for most agents."""
+is replaced by the base's no-answer message, also when nothing is found; a cited answer, an answer from a file
+attached in the turn, and a base that gives back pieces only, are left alone. The agent's own end check is off, as it
+is for most agents."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -13,7 +14,9 @@ from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import (
+    ATTACHMENT_KB,
     AgentSettings,
+    AttachedFile,
     BaseAnswer,
     KnowledgeFound,
     Passage,
@@ -54,8 +57,18 @@ def writer(text: str) -> FunctionModel:
     return FunctionModel(respond, stream_function=stream)
 
 
-async def turn(answer: str, base: BaseAnswer, passages: list[Passage]) -> TurnResult:
-    req = TurnRequest("t1", "th1", SETTINGS, [], user_turn="What does a wire cost?", kb_ids=["kb_fees"])
+async def turn(answer: str, base: BaseAnswer, passages: list[Passage], attached: Sequence[Passage] = ()) -> TurnResult:
+    files = [AttachedFile("fil_scan", "fees-scan.pdf")] if attached else []
+    req = TurnRequest(
+        "t1",
+        "th1",
+        SETTINGS,
+        [],
+        user_turn="What does a wire cost?",
+        kb_ids=["kb_fees"],
+        attachments=files,
+        attached=list(attached),
+    )
     ports = KernelPorts(model=writer(answer), tools=Tools(), knowledge=Knowledge(passages, base))
     events = [e async for e in run_turn(req, ports)]
     last = events[-1]
@@ -82,3 +95,10 @@ async def test_a_base_that_gives_back_pieces_only_never_withholds() -> None:
 async def test_nothing_found_says_the_bases_no_answer_message() -> None:
     result = await turn("Wires usually cost 30.00 at most banks.", WITHHOLDS, [])
     assert result.text == MESSAGE
+
+
+async def test_an_answer_from_a_file_attached_in_the_turn_is_kept_when_the_bases_find_nothing() -> None:
+    pages = [Passage("fil_scan", "fees-scan.pdf", "", "", f"Page {n} text.", ATTACHMENT_KB, n) for n in (1, 2)]
+    result = await turn("2 pages.", WITHHOLDS, [], attached=pages)
+    assert result.text == "2 pages."
+    assert not result.no_answer
