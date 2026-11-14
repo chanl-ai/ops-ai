@@ -10,6 +10,9 @@ test('platform-service starts unless a script opts out, and only a script that l
   assert.equal(left.options.platform, true);
   assert.equal(left.signedInAs, 'builder');
 
+  // A page whose rows belong to another team is opened by that team's dev person.
+  assert.equal(resolveStack({ signedInAs: 'platform' }).signedInAs, 'platform');
+
   const tools = resolveStack({ tools: {} });
   assert.deepEqual([tools.options.platform, tools.signedInAs, tools.options.tools], [true, 'builder', {}]);
 

@@ -542,6 +542,11 @@ export interface StackOptions {
    */
   platform?: boolean;
   /**
+   * With `platform` left unset: the dev role (services/platform-service/seed/dev-roles.json) the harness signs in for
+   * the script, `builder` (James, in Operations) by default. A page whose rows another team owns names that team's.
+   */
+  signedInAs?: string;
+  /**
    * Also start tools-service on the run's database (its migration chain and dev seed), deciding with a private OPA,
    * and point the console's Tools pages at it. `bank` adds the https fake bank on this machine's private address
    * (docs/usecases/lib/fake_bank_https.py), which tools-service reaches as `https://api.bank.test`; `'core'` serves the
@@ -766,7 +771,7 @@ function withBank(bank: Record<string, string>, extra: Record<string, string>): 
  * `sampleTeam` signs in on /login itself, where a stored session would send it past the form.
  */
 export function resolveStack(given: StackOptions): { options: StackOptions; signedInAs: string | null } {
-  const signedInAs = given.platform === undefined && !given.demo && !given.sampleTeam ? 'builder' : null;
+  const signedInAs = given.platform === undefined && !given.demo && !given.sampleTeam ? (given.signedInAs ?? 'builder') : null;
   const base: StackOptions = { ...given, platform: given.platform ?? true };
   // The sample team's mailbox signs in to compose's mail servers, so it needs tools-service to reach them.
   const options: StackOptions = base.demo || base.sampleTeam ? { ...base, demo: true, platform: true, tools: { ...base.tools, bank: true, gateway: true, ...(base.sampleTeam ? { mail: true } : {}) } } : base;
