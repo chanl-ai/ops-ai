@@ -56,7 +56,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 1 | Priya opens Connections | a card for Person desk with 1 tool, Plugin and Connect; the page read `GET /v1/apps` and no other list |
 | 2 | She searches "person" | the count reads 1 of N and only Person desk shows |
 | 3 | She presses Connect on Person desk, then Connect in the window, and the system sends her back refused (error=access_denied) | the window offers the auth config, Add your own app, Test account, Team account and More options folded; the sign-in window opens on the console's connect page; both windows say access was not given, and Connect works again |
-| 4 | She opens More options, names the account Person desk, presses Connect and allows access as harbor.ops in the system's window | the window closes, the app's page opens on Accounts reading Connected, with Person desk as Default |
+| 4 | She picks Each person signs in (turning on starts with the shared team login), opens More options, names the account Person desk, presses Connect and allows access as harbor.ops in the system's window | the window closes, the app's page opens on Accounts reading Connected, with Person desk as Default |
 | 5 | James opens My accounts | Person desk with Connect |
 | 6 | He presses Connect and allows access as james.person | the row reads Connected as james.person |
 | 7 | He asks the agent in chat for a record, then opens the app's Logs tab | the chat answers with the record read as james.person; Logs lists Read a record as James, Succeeded |
