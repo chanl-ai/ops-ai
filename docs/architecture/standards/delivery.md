@@ -51,15 +51,16 @@ Rule: each merge to the trunk deploys to staging, which runs every migration cha
 and walks the console headless; a failed smoke stops promotion.
 Why: staging tests the real combination before people do.
 
-Today (`.github/workflows/ci.yml:232`): the staging job's `if:` lacks `!cancelled()`, so GitHub skips it whenever the
-plan skipped any job it depends on; it has never run from CI. `deploy/fly/stg_deploy.sh` does everything the rule
-asks when it runs.
+Today (`.github/workflows/deploy-staging.yml`): ci.yml's `staging` job calls it after `ci-ok` on every push to
+develop (`!cancelled()` keeps it from being skipped when the plan skipped a job), and it runs by hand for any ref.
+`deploy/fly/stg_deploy.sh` does everything the rule asks; a failed check after the machine changed rolls back to the
+release before. Not yet run on GitHub.
 
 Pattern (`deploy/fly/stg_deploy.sh:1`): build from `git archive`, migrate as the release command, apply grants, check
-processes, OCR, plugins, then the click walk.
+processes, OCR, plugins, a signed-in request, then the click walk.
 
-Check: `.github/actions/stg-deploy` running `make stg-deploy`; `make stg-health`. Needed: add `!cancelled() &&` to the
-staging job's `if:` and confirm the `staging` environment holds its secrets.
+Check: `.github/workflows/deploy-staging.yml` running `make stg-deploy`; `make stg-health`. Needed: the first run after
+merge, which proves the `staging` environment's secrets and the rollback.
 
 ## DL5 Production gets a tagged commit staging ran
 

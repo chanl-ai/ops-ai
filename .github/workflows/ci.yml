@@ -1,19 +1,21 @@
 # Checks on GitHub-hosted runners only, since a fork's pull request runs its own code. A push to develop that passes
-# ci-ok is then deployed to staging (job `staging`).
+# ci-ok is then deployed to staging (job `staging`, which calls deploy-staging.yml).
 name: ci
 
 on:
   pull_request:
-  # develop and main run the same checks after a merge: the staging deploy (stg-deploy-develop.yml) waits on this run.
+  # develop and main run the same checks after a merge; the staging job at the end deploys develop.
   push:
     branches: [develop, main]
 
 permissions:
   contents: read
 
+# A newer push to a pull request cancels its older run. A push to develop or main never cancels one: that run may be
+# deploying staging, and a deploy stopped halfway leaves the machine between two releases.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # The suites reach PostgreSQL, OPA and the mail servers as side containers on localhost.
@@ -230,49 +232,14 @@ jobs:
 
   staging:
     # Every merge to develop goes to staging once ci-ok passed for that commit, so the owner tests the real combination.
-    # Pull requests and pushes to main never reach this job (main deploys through release-tag.yml).
+    # Pull requests and pushes to main never reach this job. deploy-staging.yml holds the deploy, the pin rules
+    # (an open release PR or STAGING_HOLD skip it with a notice), the checks, the rollback and the summary.
     needs: ci-ok
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    environment: staging
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success' }}
     permissions:
       contents: read
       pull-requests: read # to see an open release PR
-    # One deploy at a time. A newer merge replaces a deploy that is still waiting; one already running finishes first.
-    concurrency:
-      group: staging-deploy
-      cancel-in-progress: false
-    env:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      STG_APP: ${{ vars.STG_APP }}
-      STG_DB_APP: ${{ vars.STG_DB_APP }}
-      STG_APP_PREFIX: ${{ vars.STG_APP_PREFIX }}
-      STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
-      STAGING_ADMIN_ENV: ${{ secrets.STAGING_ADMIN_ENV }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Is staging pinned?
-        id: pin
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HOLD: ${{ vars.STAGING_HOLD }}
-        run: |
-          # An open release PR (develop into main) pins staging to the build being tested; the owner's hold does too.
-          # The pin file stg_deploy.sh reads lives on the owner's machine, so the runner asks GitHub instead.
-          release=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head develop --state open --json number --jq '.[0].number // empty')
-          if [ -n "$release" ]; then
-            echo "::notice title=Staging not deployed::Release PR #$release is open, so staging stays on the build being tested. Merge or close it, then the next merge to develop deploys."
-            echo "pinned=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$HOLD" ]; then
-            echo "::notice title=Staging not deployed::Staging is held: $HOLD. Clear the repository variable STAGING_HOLD to deploy develop again."
-            echo "pinned=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "pinned=false" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.pin.outputs.pinned == 'false'
-        uses: ./.github/actions/stg-deploy
-        with:
-          sha: ${{ github.sha }}
+    uses: ./.github/workflows/deploy-staging.yml
+    with:
+      ref: ${{ github.sha }}
+    secrets: inherit

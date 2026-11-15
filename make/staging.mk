@@ -1,12 +1,15 @@
 # Staging on one Fly app from one image (docs/deploy/fly-staging.md): build, deploy, migrate, grants, health, click walk.
 # App names come from ~/.config/ops-ai/staging.env (deploy/fly/staging.env.example); each recipe loads it with stg_env.sh
 # and stops with a message when it is missing.
-.PHONY: stg-deploy stg-health stg-rollback
+.PHONY: stg-deploy stg-deploy-ci stg-health stg-rollback
 
 ##@ Staging
 
 stg-deploy: ## Build and deploy REF (default HEAD) to your staging app (STG_APP), apply grants, check every process, walk the console
 	sh $(ROOT)/deploy/fly/stg_deploy.sh
+
+stg-deploy-ci: ## Deploy REF (default develop) to staging on GitHub (deploy-staging.yml) and watch the run; SKIP_WALK=1, REASON=; changes the live app
+	sh $(ROOT)/deploy/fly/stg_deploy_ci.sh
 
 stg-rollback: ## Redeploy the image of the release before the current one (or TO=<sha> of an earlier deploy), no build
 	@. $(ROOT)/deploy/fly/stg_env.sh; ref="$(TO)"; [ -n "$$ref" ] || ref=$$(fly releases -a "$$STG_APP" --json | python3 -c \
