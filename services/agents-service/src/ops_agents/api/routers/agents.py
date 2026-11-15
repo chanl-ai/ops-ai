@@ -6,22 +6,25 @@ are not served.
 
 from __future__ import annotations
 
+import time
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
-from ops_access import require_provisioner
+from ops_access import can, require_provisioner
 from ops_agent_kernel.layout import required_tools
 from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits_of
 from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app.evals import parse_cases, run_eval
+from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult
 from ops_service_kit.ids import new_id, now_iso
 
+from ...store.evals import EvalStore
 from ...store.template_copies import TemplateCopies
 from ..account_names import require_team_accounts
 from ..agent_registry import (
@@ -38,7 +41,7 @@ from ..agent_registry import (
     version_state,
 )
 from ..agent_test import one_test_turn
-from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder
+from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder, started_by
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -186,7 +189,8 @@ class EvalCaseInput(WireModel):
 
 class EvalRunInput(WireModel):
     # Empty is 422 from the use case, not Pydantic 400.
-    cases: list[EvalCaseInput] = Field(default_factory=list[EvalCaseInput])
+    # Omitted: run the cases saved on the agent and keep the run. Given: score these and keep nothing.
+    cases: list[EvalCaseInput] | None = None
 
 
 class JobInput(WireModel):
@@ -728,16 +732,59 @@ async def test_agent(rt: Rt, me: Me, agent_id: str, body: TestInput) -> JSONResp
 
 
 @router.post("/{agent_id}/eval-runs", response_model=Envelope[AgentEvalRun])
-async def create_eval_run(rt: Rt, me: Me, agent_id: str, body: EvalRunInput) -> JSONResponse:
-    """Score a dataset of cases on the newest version through the same one-turn test path. live is null and
-    regression is false until a compare subject ships. Empty cases and an unknown check type are 422."""
-    row = await changeable(rt, me, agent_id, "test")
-    cases = parse_cases([item.model_dump(by_alias=True) for item in body.cases])
+async def create_eval_run(rt: Rt, me: Me, agent_id: str, body: EvalRunInput | None = None) -> JSONResponse:
+    """Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the
+    agent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a
+    second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
+    422."""
+    row = await registry(rt).row(agent_id)
+    can(caller_of(me), "evals", "run", team=row["team_id"], what=f"agent {row['slug']}")
+    saved = body is None or body.cases is None
+    raw = (
+        [x["body"] for x in await EvalStore(rt.db).cases("agent", agent_id) if x["status"] == "active"]
+        if saved
+        else [item.model_dump(by_alias=True) for item in cast(list[EvalCaseInput], body.cases if body else [])]
+    )
+    cases = parse_cases(raw)
 
-    async def turn(message: str, collections: tuple[str, ...]) -> dict[str, Any]:
-        return await one_test_turn(rt, agent_id, message, row=row, collections=collections or None)
+    def turn_on(version: int) -> Any:
+        async def turn(message: str, collections: tuple[str, ...]) -> dict[str, Any]:
+            return await one_test_turn(
+                rt, agent_id, message, row={**row, "version": version}, collections=collections or None
+            )
 
-    return ok(await run_eval(agent_id, cases, turn))
+        return turn
+
+    published = row["published_version"]
+    live = int(published) if published is not None else None
+    compare = saved and live is not None and live != int(row["version"])
+    started = time.perf_counter()
+    run = await run_eval(
+        agent_id, cases, turn_on(int(row["version"])), turn_on(live) if compare and live is not None else None
+    )
+    if saved:
+        results = run["results"]
+        await EvalStore(rt.db).add_run(
+            {
+                "id": run["id"],
+                "team_id": row["team_id"],
+                "kind": "agent",
+                "asset_id": agent_id,
+                "version": int(row["version"]),
+                "live_version": live if compare else None,
+                "trigger": TRIGGER_MANUAL,
+                "passed": run["summary"]["passed"],
+                "total": run["summary"]["total"],
+                "live_passed": sum(1 for r in results if r["live"]["status"] == "pass") if compare else None,
+                "regressions": run["summary"]["regressions"],
+                "duration_ms": round((time.perf_counter() - started) * 1000),
+                "cost_usd": 0.0,
+                "results": results,
+                "started_by": started_by(me),
+                "ran_at": now_iso(),
+            }
+        )
+    return ok(run)
 
 
 @router.post("/{agent_id}/jobs", response_model=Envelope[JobArmed], response_model_exclude_none=True)

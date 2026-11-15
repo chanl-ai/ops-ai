@@ -286,6 +286,9 @@ class Settings(BaseSettings):
     # own (its retrieval's queryModel). Both steps are off on a base until its owner turns them on.
     kb_query_alias: str = "bank-standard"
     embedding_width: int = 1536
+    # The share of saved eval cases a version must pass before a publish check passes (0-1); the check blocks the
+    # publish at the risk tiers whose steps are blocking (agents-service domain.evals).
+    eval_min_pass_rate: float = 0.8
     # Dev only: provider credentials by the name a provider connection's `keyRef` gives, as JSON in
     # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key
     # here stops models-service's start-up.

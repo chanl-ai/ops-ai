@@ -519,21 +519,6 @@ export const MODULE_SEEDS: ModuleSeed[] = [
   },
 ];
 
-/** Sample case contexts per workflow for the test console; bound fields are what a platform step resolved. */
-export const RUN_CONTEXTS: Record<string, { caseId: string; label: string; bindings: Partial<Record<BindingSource, string>> }[]> = {
-  wf_lending_inbox: [
-    { caseId: 'CASE-4112', label: 'Hardship request · Marcus Webb', bindings: { 'case.id': 'CASE-4112', 'case.account': 'LN-0048213', 'case.customerId': 'CUS-118842', 'case.requesterEmail': 'marcus.webb@example.com', 'case.queue': 'Lending servicing' } },
-    { caseId: 'CASE-4127', label: 'Unverified sender · account not resolved', bindings: { 'case.id': 'CASE-4127', 'case.queue': 'Lending servicing' } },
-  ],
-  wf_card_inbox: [{ caseId: 'CASE-4103', label: 'Fee complaint · Grace Kim', bindings: { 'case.id': 'CASE-4103', 'case.account': '4519-••••-2231', 'case.customerId': 'CUS-220917', 'case.requesterEmail': 'grace.kim@example.com', 'case.queue': 'Card services' } }],
-  wf_dispute: [{ caseId: 'CASE-D-7781', label: 'Duplicate charge · Sarah Chen', bindings: { 'case.id': 'CASE-D-7781', 'case.account': '4519-••••-8840', 'case.customerId': 'CUS-301455' } }],
-  wf_wire: [{ caseId: 'CASE-W-88213', label: 'New-payee wire · Hartwell Dental Corp', bindings: { 'case.id': 'CASE-W-88213', 'case.account': '8821-004417', 'case.customerId': 'CUS-004417' } }],
-  wf_mortgage: [{ caseId: 'CASE-M-40912', label: 'Application APP-40912 · Priya Natarajan', bindings: { 'case.id': 'CASE-M-40912', 'case.customerId': 'CUS-409120' } }],
-  wf_kyb: [{ caseId: 'CASE-K-1293', label: 'Aurelia Holdings onboarding', bindings: { 'case.id': 'CASE-K-1293', 'case.customerId': 'CUS-129388' } }],
-  wf_branch_chat: [{ caseId: 'CASE-C-5521', label: 'Chat · anonymous visitor', bindings: { 'case.id': 'CASE-C-5521' } }],
-  wf_advisor: [{ caseId: 'CASE-A-0091', label: 'Q3 review · Lin & Moreau LLP', bindings: { 'case.id': 'CASE-A-0091', 'case.customerId': 'CUS-700912' } }],
-};
-
 const op = (name: string, description: string, access: ToolAccess, group: string, input: SchemaField[], method?: HttpMethod, path?: string): DiscoveredOperation => ({ name, description, access, group, input, method, path });
 
 /** What discovery returns for a connection's catalog system, or the generic MCP or OpenAPI sources. */

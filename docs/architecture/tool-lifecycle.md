@@ -20,15 +20,15 @@ around a connection (plugins, sign-in providers, triggers, MCP): [integrations i
 
 | Step | Who | Today | Target |
 |---|---|---|---|
-| Connect: egress host and range | Admin | Built (Egress page) | Unchanged |
+| Connect: egress host and range | Security team admin (register row E26) | Built (Egress page) | Unchanged |
 | Connect: credential | Builder | Built (Secrets page) | Unchanged |
 | Connect: connection record | Builder | Console mock; import makes you pick one | Superseded: a custom app is a connection record, which holds the base address and the key; a module on it names paths only, and a sign-in header on it is refused. The Connections page lists modules by endpoint from the registry |
 | Import | Builder | Built for OpenAPI and MCP. Every operation comes in as Write. A spec with no auth imports silently | Access is pre-set from the method (GET is Read, everything else is Write; HEAD is skipped because it answers no body), and the builder confirms each one in the dialog. A spec with no security scheme shows a warning naming the missing header. Each operation's example response becomes its stub |
 | Create, edit, delete | Builder | Built (call shape, transform, timeout; staged until publish) | Unchanged |
 | Access classes | Builder | Read, Write and "Moves money" | **Read and Write only.** How many approvers a write needs is set on the operation (see "Write approval"), not implied by a class |
 | Security review | Owner requests, Security decides | Built | Unchanged |
-| Try an operation | Module owner | Refused (`no_approval`) unless a workflow holds an approval | The maintainers tries any operation of their own module without a workflow approval, in Mock or for real on a published module; a real write is logged under them |
-| Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team except the requester decides |
+| Try an operation | Module owner | The module's own team runs it with no workflow approval; a workflow's context without that workflow's approval is refused (`no_approval`) | The module's team tries any operation of its own module without a workflow approval, in Mock or for real on a published module; a real write is logged under them |
+| Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team who holds `tools.decide` (Admin, Builder and Reviewer, not Viewer) decides, except the requester while `requesterMayDecide` is off |
 | Grant to an agent | Builder | Built: the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
 | Call: read | Agent | Built: runs through `/v1/calls` on the real model | Unchanged |
 | Call: write | Agent | Drafts an approval card. On the shared stack the approved call is refused (the token is not accepted) | The approved call runs once, with the token bound to its input |
@@ -43,7 +43,7 @@ to the call shape it goes through security review.
 | Field | Values | Default |
 |---|---|---|
 | `approvers` | 1 or 2 distinct people | 1 |
-| `selfApproval` | Whether the person whose chat drafted the call may approve it | Off. Dev may turn it on (`OPS_ALLOW_SELF_APPROVAL_IN_CHAT`) |
+| `requesterMayDecide` | Whether the person who asked for a decision may also take it | Off (register row E51); a team turns it on in Settings |
 
 The approvers come from the run's (or chat's) team: a held write is decided by people with `reviews.decide` there,
 whatever module the operation is on. An `approverTeam` an older caller still sends is accepted and ignored.
@@ -54,7 +54,7 @@ money" carried today becomes `approvers: 2`.
 
 | Item | Raised by | Decided by |
 |---|---|---|
-| Security review of a module | Module owner | Security team |
+| Security review of a module | Module owner | Security team for a security change, the module's team otherwise |
 | Workflow access to a module | Workflow owner | Module's team, not the requester |
 | Write approval, from a workflow run or a chat | The agent's call | The run's or chat's team, under the operation's policy |
 | Agent or workflow publish | Builder | Another publisher (dev auto-approval is off on walk stacks) |
@@ -71,7 +71,7 @@ The chat widget and the Reviews row decide the same review through the same deci
 | The maintainers can try a module without a workflow approval | Testing your own module is not a workflow's call, and writes stay on the stub |
 | Chat approvals appear in Reviews | A second approver should not need the requester to send them a chat link |
 | Adding a `{{SECRET}}` header is a major change and goes to Security | A new secret widens what the module can reach; only Security reviews that |
-| Self-approval is off outside dev | One person placing and approving a hold is no review. Dev keeps it on so a single builder can walk the path |
+| Self-approval is off by default | One person placing and approving a hold is no review. A team that wants a single builder to walk the path turns `requesterMayDecide` on |
 
 ## Not in this design
 

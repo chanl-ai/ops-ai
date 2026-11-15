@@ -238,7 +238,7 @@ export function TestConsole({
             </Select>
           </FormField>
           )}
-          <FormField id="t-ctx" label="Run as" hint={published ? 'A sample case from a workflow that requested these tools. Its bound fields fill record inputs.' : 'Not published yet: only the mock runs, as the owner.'}>
+          <FormField id="t-ctx" label="Run as" hint={published ? 'The module’s owner, which needs no workflow approval. Type the record a bound input reads.' : 'Not published yet: only the mock runs, as the owner.'}>
             <Select value={contextId} onValueChange={setContextId} disabled={!published || !contexts.length}>
               <SelectTrigger id="t-ctx" className="w-full">
                 <SelectValue />
@@ -247,7 +247,7 @@ export function TestConsole({
                 {!published || !contexts.length ? <SelectItem value={NO_CONTEXT}>Owner, no case</SelectItem> : null}
                 {contexts.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.workflowName ? `${c.workflowName} · ${c.label}` : c.label}
+                    {c.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -406,7 +406,7 @@ export function ResultBody({ result, op, running, onSimulate, badge, labels, bri
             Bound:{' '}
             {result.bound.map((b) => (
               <span key={b.arg} className="mr-2">
-                <code className="font-mono text-foreground">{b.arg}</code> = <code className="font-mono text-foreground">{b.value}</code> from the {BINDING_LABEL[b.source].toLowerCase()}
+                <code className="font-mono text-foreground">{b.arg}</code> = <code className="font-mono text-foreground">{b.value}</code> {b.source === 'sample' ? 'as typed' : `from the ${BINDING_LABEL[b.source].toLowerCase()}`}
               </span>
             ))}
           </p>

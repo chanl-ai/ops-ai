@@ -2,7 +2,7 @@
 
 Status: draft for review.
 
-In this example we will connect a logistics team's parcel carrier with an API key, track a parcel through it, rotate the key, and read the call log, checking that the key reaches the carrier and never comes back to a person or an agent. It assumes a signed-in builder and the carrier's address, which the run provides as a fake that repeats headers back, as a careless API might.
+In this example we will connect a logistics team's parcel carrier with an API key, track a parcel through it, rotate the key, and read the call log, checking that the key reaches the carrier and never comes back to a person or an agent. It assumes a signed-in admin (adding an app is an Admin's) and the carrier's address, which the run provides as a fake that repeats headers back, as a careless API might.
 
 | Use case | |
 |---|---|
@@ -15,7 +15,7 @@ In this example we will connect a logistics team's parcel carrier with an API ke
 
 | Person | Role | Signs in as |
 |---|---|---|
-| The operations builder who connects the carrier | Builder | the `builder` profile |
+| The operations admin who connects the carrier | Admin | the `admin` profile |
 
 The carrier is a fake the run starts. It answers 401 without a key, returns a fingerprint of the key it received, and
 repeats the request's headers in its answer, as a careless API might. Its address is in `CARRIER_URL`.
@@ -27,7 +27,7 @@ import json
 import os
 from ops_ai import OpsAI
 
-ops = OpsAI(profile="builder")
+ops = OpsAI(profile="admin")
 CARRIER_URL = os.environ["CARRIER_URL"]
 ```
 
@@ -35,13 +35,13 @@ CARRIER_URL = os.environ["CARRIER_URL"]
 import assert from 'node:assert/strict';
 import { OpsAI } from '@chanl-ai/ops-ai';
 
-const ops = new OpsAI({ profile: 'builder' });
+const ops = new OpsAI({ profile: 'admin' });
 const CARRIER_URL = process.env.CARRIER_URL!;
 ```
 
 ```bash tab="CLI"
 set -euo pipefail
-export OPS_PROFILE=builder
+export OPS_PROFILE=admin
 ```
 
 ## Steps

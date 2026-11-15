@@ -4,6 +4,10 @@ import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
+// The console opens with the sidebar folded and keeps what the person chose (components/shell/sidebar-open.ts): a person
+// who opened it has the workspace line in view. The checks below read it, so each browser context starts as that person.
+const SIDEBAR_OPEN = () => window.localStorage.setItem('ops.sidebar.open', 'true');
+const RENAMED = 'Harbor & Pine Group';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 
 await withUiStack(
@@ -14,7 +18,9 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
-      const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await context.addInitScript(SIDEBAR_OPEN);
+      const page = await context.newPage();
       page.setDefaultTimeout(60_000);
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -48,16 +54,19 @@ await withUiStack(
           body: JSON.stringify({ name }),
         });
       const refused = (await rename(JAMES, 'team_ops', 'Not Allowed')).status;
-      const renamed = await rename('w.kamau@harborpine.example', 'team_platform', 'Harbor & Pine Bank');
+      const renamed = await rename('w.kamau@harborpine.example', 'team_platform', RENAMED);
       await page.reload({ waitUntil: 'domcontentloaded' });
       const after = page.getByTestId('sidebar-workspace');
-      const shows = await after.filter({ hasText: 'Harbor & Pine Bank' }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      // The seeded name is Harbor & Pine Bank, so the new one must differ for the sidebar to prove it follows.
+      const shows = await after.filter({ hasText: RENAMED }).waitFor({ state: 'visible', timeout: 30_000 }).then(() => true, () => false);
       check('3 the workspace admin names the workspace through the platform API, a builder is refused, and the sidebar shows the new name', renamed.status === 200 && refused === 403 && shows, { renamed: renamed.status, refused, shows });
 
       // 4 On Settings › Workspace the builder sees the name locked; Wanjiru renames it there and the sidebar follows.
       await page.goto(`${consoleUrl}/settings/workspace`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const builderLocked = await page.getByTestId('workspace-name').isDisabled({ timeout: 30_000 });
-      const admin = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+      const adminContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await adminContext.addInitScript(SIDEBAR_OPEN);
+      const admin = await adminContext.newPage();
       admin.on('pageerror', (e) => errors.push(e.message));
       await admin.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await admin.getByLabel('Email').fill('w.kamau@harborpine.example');
@@ -68,13 +77,13 @@ await withUiStack(
       const field = admin.getByTestId('workspace-name');
       await field.waitFor({ timeout: 30_000 });
       for (let i = 0; i < 30 && (await field.isDisabled()); i++) await admin.waitForTimeout(500);
-      await field.fill('Harbor & Pine Bank Operations');
+      await field.fill(`${RENAMED} Operations`);
       const saved = admin.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith('/v1/settings/workspace'), { timeout: 30_000 }).catch(() => null);
       await admin.locator('#name').getByRole('button', { name: 'Save' }).click();
       const answer = await saved;
       // Settings has its own sidebar; the team switcher is on every work page.
       await admin.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const sidebarShows = await admin.getByTestId('sidebar-workspace').filter({ hasText: 'Harbor & Pine Bank Operations' }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      const sidebarShows = await admin.getByTestId('sidebar-workspace').filter({ hasText: `${RENAMED} Operations` }).waitFor({ state: 'visible', timeout: 30_000 }).then(() => true, () => false);
       check('4 Settings › Workspace saves the name for a workspace admin, and is locked for a builder', builderLocked && answer?.status() === 200 && sidebarShows, { builderLocked, status: answer?.status(), sidebarShows });
 
       check('no page errors', errors.length === 0, errors.slice(0, 3));
@@ -82,6 +91,6 @@ await withUiStack(
       await browser.close();
     }
   },
-  { platform: true },
+  { platform: true, tools: {} },
 );
 finish();

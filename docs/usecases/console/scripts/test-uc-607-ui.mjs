@@ -238,6 +238,9 @@ try {
           let early = 0;
           const count = () => (early += 1);
           page.on('popup', count);
+          // Turning on starts with the shared team login; Person desk is the app each person signs in to, with the team
+          // account for runs nobody started, so Priya picks Each person signs in.
+          await page.getByTestId('connect-window-whose').locator('label[for="who-each"]').click();
           await page.getByTestId('connect-window-authorize').click();
           const saved = ((await page.getByTestId('connect-window-result').innerText({ timeout: 60_000 })) ?? '').replace(/\s+/g, ' ');
           await page.waitForTimeout(1500);
@@ -521,8 +524,8 @@ try {
           await shoot(james, 'creds-secrets');
           check(
             '7b the Apps menu: Apps, Secrets and Tools in the sidebar with My accounts in its top rows, no tab row; the old My connections, Secrets and call log addresses land in it',
-            menu === 'Connectors,Tools,Secrets' && myAccountsOnTop && /Connected/.test(views) && /Available/.test(views) &&
-              /My connectors/.test(mine) && /Person desk/.test(mine) && moved &&
+            menu === 'Apps,Tools,Secrets' && myAccountsOnTop && /Connected/.test(views) && /Available/.test(views) &&
+              /My apps/.test(mine) && /Person desk/.test(mine) && moved &&
               credsState !== 'blank' && secretsMoved && secretsShown && tabsOnApps + tabsOnCalls + tabsOnTools + tabsOnCredentials === 0,
             { sidebar, menu, myAccountsOnTop, views, mine: mine.slice(0, 400), moved, credsState, secretsMoved, secretsShown, tabsOnApps, tabsOnCalls, tabsOnTools, tabsOnCredentials },
           );
@@ -558,7 +561,7 @@ try {
           }
           await james.getByPlaceholder('Search apps').fill('');
           // No dead Connect button: each card James may not connect says why instead. Whether he may is his role's
-          // (builders manage apps since D59), read from his own answer.
+          // (admins manage the team's apps; builders read them), read from his own answer.
           const his = cards;
           out.blocked = his.filter((c) => !c.mayManage && c.kind !== 'builtin' && c.appState !== 'connected' && c.appState !== 'removed').length;
           out.connectOff = await james.locator('main button[data-testid^="connect-"]:disabled').count();
@@ -591,17 +594,21 @@ try {
           await james.waitForTimeout(1500);
           james.off('response', seen);
           out.updateNotFound = notFound.length;
-          // At 375 the app page's tab row scrolls rather than clipping Settings.
-          await james.setViewportSize({ width: 375, height: 812 });
-          out.tabsScroll = await james.getByTestId('app-tabs-row').evaluate((e) => {
+          // At 375 the app page's tab row scrolls rather than clipping Settings. Settings is for whoever manages the
+          // team's apps (connections.manage, admins only), so the narrow row is read on Priya's page.
+          out.jamesTabs = await james.getByTestId('app-tab-settings').count();
+          await page.goto(`${consoleUrl}/data/connectors/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId('app-tabs-row').waitFor({ timeout: 60_000 });
+          await page.setViewportSize({ width: 375, height: 812 });
+          out.tabsScroll = await page.getByTestId('app-tabs-row').evaluate((e) => {
             const box = e.getBoundingClientRect();
             const list = e.querySelector('[role="tablist"]')?.getBoundingClientRect();
             return box.right <= window.innerWidth && Boolean(list) && list.width > box.width && document.documentElement.scrollWidth <= window.innerWidth;
           });
-          await james.getByTestId('app-tab-settings').scrollIntoViewIfNeeded();
-          await james.getByTestId('app-tab-settings').click();
-          out.settingsReached = await james.getByTestId('app-tab-settings').getAttribute('data-state');
-          await james.setViewportSize({ width: 1280, height: 900 });
+          await page.getByTestId('app-tab-settings').scrollIntoViewIfNeeded();
+          await page.getByTestId('app-tab-settings').click();
+          out.settingsReached = await page.getByTestId('app-tab-settings').getAttribute('data-state');
+          await page.setViewportSize({ width: 1280, height: 900 });
           // The console follows the system's dark setting.
           const dark = await james.context().browser().newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 900 } });
           const dp = await dark.newPage();
@@ -610,7 +617,7 @@ try {
           await dark.close();
           check(
             '7c the grid and app page agree on Connected; errors offer Try again; no old words, no 404s, dark follows the system, tabs scroll',
-            out.disagree.length === 0 && out.connectOff === 0 && (out.blocked === 0 || out.connectWhy >= 1) && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.dark,
+            out.disagree.length === 0 && out.connectOff === 0 && (out.blocked === 0 || out.connectWhy >= 1) && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.jamesTabs === 0 && out.dark,
             out,
           );
         }, james);

@@ -159,6 +159,10 @@ class PlatformTools:
             else None
         )
 
+    def may_start_workflow(self, who: Principal, team: str) -> bool:
+        """Whether `start_workflow` carries workflows:run for `who`, the cell agents-service starts a run on."""
+        return all(ACCESS.may(who, *c.split(":", 1), team=team) for c in RUN_WORKFLOW)
+
     def _headers(self, who: Principal, team: str, service: str, cells: tuple[str, ...]) -> dict[str, str]:
         """A service token for one call, naming the team and only the cells the person holds there."""
         assert self.client is not None

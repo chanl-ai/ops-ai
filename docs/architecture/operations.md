@@ -40,7 +40,6 @@ settings class in `ops_service_kit`. Locally a gitignored `.env` (contract: `.en
 | `OPS_MODEL_ALIAS` | `gpt-5.5` | Chat model; a `claude-*` alias selects Anthropic |
 | `OPS_TURN_DEADLINE_SECONDS` | 120 | Upper bound on one chat turn |
 | `OPS_PRICES` | `{}` | Model prices per million tokens by alias, as JSON (`{"gpt-5.5": {"input": "1.25", "output": "10"}}`). An alias with no entry costs zero |
-| `OPS_ALLOW_SELF_APPROVAL_IN_CHAT` | `true` | Whether the person who asked a chat agent may approve its write; owner decision pending ([delivery.md](delivery.md)) |
 
 ## Health and logs
 

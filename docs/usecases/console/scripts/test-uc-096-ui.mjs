@@ -174,14 +174,14 @@ await withUiStack(
         await page.locator('#set-size').fill('500');
         await page.locator('#set-limit').fill('3');
         await page.locator('#set-no-answer').fill('Ask a teller lead about that.');
-        await page.locator('#set-stale').fill('180');
-        await page.getByTestId('kb-settings-mcp').click();
+        // Stale after and Offer as an MCP tool are not shown until freshness and an MCP search tool read them.
+        const unread = await page.locator('#set-stale, #set-tool-name, [data-testid="kb-settings-mcp"]').count();
         const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/knowledge-bases/${kbId}`), { timeout: 60_000 }));
         await page.getByTestId('kb-settings-save').click();
         const res = await saved;
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.getByTestId('kb-settings').waitFor({ timeout: 60_000 });
-        const kept = [await page.locator('#set-size').inputValue(), await page.locator('#set-limit').inputValue(), await page.locator('#set-no-answer').inputValue(), await page.locator('#set-stale').inputValue(), await page.getByTestId('kb-settings-mcp').getAttribute('data-state')];
+        const kept = [await page.locator('#set-size').inputValue(), await page.locator('#set-limit').inputValue(), await page.locator('#set-no-answer').inputValue()];
         await page.goto(`${consoleUrl}/data/knowledge/${kbId}?tab=playground`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByLabel('Question').fill('What colour is the vault door?');
         const asked = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/query$/.test(r.url()), { timeout: 60_000 }));
@@ -189,8 +189,8 @@ await withUiStack(
         const answer = (await (await asked)?.json())?.data?.answer;
         check(
           '6a Settings keep a change in each section and the search uses them',
-          JSON.stringify(preset) === JSON.stringify(['5', '0.65']) && res?.status() === 200 && JSON.stringify(kept) === JSON.stringify(['500', '3', 'Ask a teller lead about that.', '180', 'checked']) && answer === 'Ask a teller lead about that.',
-          { preset, status: res?.status(), kept, answer },
+          JSON.stringify(preset) === JSON.stringify(['5', '0.65']) && res?.status() === 200 && JSON.stringify(kept) === JSON.stringify(['500', '3', 'Ask a teller lead about that.']) && unread === 0 && answer === 'Ask a teller lead about that.',
+          { preset, status: res?.status(), kept, unread, answer },
         );
       });
 

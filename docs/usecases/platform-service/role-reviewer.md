@@ -8,6 +8,7 @@ Status: current. Id: `uc-218`. Service: `platform-service`, agents-service, cons
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
 | Free use-case ports | the runner picks free ports and its own database |
+| Publish review on for team_ops: a new workspace publishes at once | Priya, `PUT /v1/policies/publishReview` (`publishReviewOn` in `docs/usecases/lib/workflow_ui.mjs` for the ui scripts) |
 
 platform-service runs with the dev seed's own roles (`OPS_SEED_EVERYONE_ADMIN` off) and agents-service verifies its
 tokens. The person checked is never a seeded one: an admin invites them through the product and they accept with a

@@ -47,6 +47,7 @@ This folder holds docs and their scripts together, so its agent guidance lives h
 | A pass needs evidence | A script prints one `PASS <name>` or `FAIL <name>: <detail>` line per check. The runner passes a use case only when the script exits 0, printed no FAIL line and printed at least one PASS line |
 | Every use case names its non-vacuous check | The check that fails when the behaviour breaks, often a refusal paired with the success it guards. Each doc says which check that is |
 | The status column is not evidence | It records the last state someone saw; only `make usecase-test` decides |
+| A ui stack runs the real stack's sign-in | `withUiStack` starts platform-service unless the script passes `platform: false`, so the console signs in and lists teams through it as on the shared stack (`resolveStack` in `packages/usecase-runner/src/harness.ts`). A script that leaves `platform` unset gets the dev builder (James) signed in for it: each browser context starts with his session, and each call to the run's services that carries no `Authorization` or `X-Api-Key` is sent as him. `signedInAs: '<dev role>'` names another seeded person, for a page whose rows another team owns. A script that sets `platform: true` signs in on `/login` itself. A page that reads tool modules also needs `tools` |
 | The console is a production build | A ui run serves the console with `next start` on a build made once per source hash and stack shape (`packages/usecase-runner/src/console-build.ts`, cached in `apps/console/node_modules/.cache/console-build-<hash>`, pruned after three days). A run copies the build and swaps its placeholder service URLs for its own ports, so a cold build costs one run and later runs start in seconds. `OPS_USECASE_CONSOLE=dev` runs `next dev` instead. Dev-only pages (`/dev`, `/preview`) answer because the run sets `OPS_ALLOW_PREVIEW_PAGES=1` |
 | Layers | `sdk` scripts call the SDK in `sdk/python` or `sdk/typescript`; `cli` scripts run a command a person runs, today the sample team installer (`scripts/sample_team.py`) and later `ops` from `packages/ops_plugins`. A layer whose provider is missing reports "not available yet; run LAYER=api" and exits 3 when nothing else ran |
 | Stories | Each doc opens with a `## Stories` table (`# \| Story \| Layer \| Steps \| Proved by`), four or five plain stories; checks are named by their step number, so a run reports each story as works or broken with the step that failed. `make usecase-report UC=<id>` prints the stories from the latest runs |
@@ -124,7 +125,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-055 | console | A bank API goes from import to a governed agent call | ui | passing |
 | uc-056 | console | A grant no longer offered shows as stale and can be removed | ui | passing |
 | uc-057 | console | A write held in a chat is listed in Reviews and approved there | ui | passing |
-| uc-058 | console | Another person's chat stays private: a teammate gets 404 | ui | passing |
+| uc-058 | console | Another person's chat stays private: a teammate gets 404 | api, ui | passing |
 | uc-059 | console | A builder sets a write's approval policy on the module page | ui | passing |
 | uc-060 | models-service | An alias reaches the fake OpenAI or the real one by its connection's base URL | api | passing |
 | uc-073 | console | Chat widgets draw by shape on the dev widget page | ui | passing |
@@ -252,7 +253,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-395 | tools-service | A tool presents a client certificate from its connection to a system that requires one | api, ui | current |
 | uc-396 | tools-service | A builder adds an MCP server behind OAuth by its address, signs in once, and its tools run through the same executor | api, ui | current |
 | uc-397 | tools-service | A workflow's tool step reaches its error and timeout ports on mock answers in a test run, and live reaches the system | api | current |
-| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api | current |
+| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | current |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | current |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | passing |
 | uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | passing |
@@ -376,3 +377,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
+| uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |

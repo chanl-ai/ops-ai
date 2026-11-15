@@ -2,6 +2,8 @@
 
 Status: superseded by ADR-0012 and spec 11: shared text is an always-on skill, 2026-10-08. Instructions staying on the agent version still holds; the prompt block entity below does not.
 
+Status: superseded where it describes approver tiers or approval tokens; the current rules are in [roles-and-permissions.md](../roles-and-permissions.md).
+
 ## Context
 
 An agent's instructions are its prompt. Spec `01` 4.5 stores them on the agent version as ordered

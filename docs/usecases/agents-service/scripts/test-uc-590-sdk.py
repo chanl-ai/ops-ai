@@ -70,7 +70,9 @@ def main() -> None:
         again = ops.raw.agents.resources_copy_resource(f"{SOURCE}:case-helper", {})
         check(
             "21 the SDK lists the same templates as the API and installs one copy, then answers the same copy",
-            [t["id"] for t in through_sdk] == [t["id"] for t in through_api] == ["case-helper"]
+            # Every installed pack's agent templates list (built-in apps too); the desk's is the one copied.
+            [t["id"] for t in through_sdk] == [t["id"] for t in through_api]
+            and [t["id"] for t in through_sdk if t.get("source") == SOURCE] == ["case-helper"]
             and first["created"] is True
             and again["created"] is False
             and first["copy"]["recordId"] == again["copy"]["recordId"],

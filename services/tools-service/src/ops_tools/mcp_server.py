@@ -184,7 +184,8 @@ class McpAdapter:
         who = _caller(ctx)
         rows = await self.registry.grantable(who.principal.tenant_id, self._sees(who.team))
         if who.link is not None:
-            return types.ListToolsResult(tools=_link_tools(who.link, rows))
+            starts = self.platform.may_start_workflow(who.principal, who.team.id)
+            return types.ListToolsResult(tools=_link_tools(who.link, rows, workflows=starts))
         tools = [
             types.Tool(
                 name=r["name"],
@@ -302,14 +303,17 @@ def _key_reaches(principal: Principal, link: dict[str, Any] | None) -> None:
         raise Unauthorized("This key opens only the MCP link it was made for.", code="key_target")
 
 
-def _link_tools(link: dict[str, Any], rows: list[dict[str, Any]]) -> list[types.Tool]:
-    """The link's picked tools that the team may still run, in the order picked, and its picked workflows. A tool the
-    team can no longer run (its module unpublished or drifted) is left out, as the gateway would refuse it."""
+def _link_tools(link: dict[str, Any], rows: list[dict[str, Any]], *, workflows: bool) -> list[types.Tool]:
+    """The link's picked tools that the team may still run, in the order picked, and its picked workflows when the
+    caller may start them (`workflows`). A tool the team can no longer run (its module unpublished or drifted) is left
+    out, as the gateway would refuse it; a workflow is left out for a caller agents-service would refuse."""
     by_name = {str(r["name"]): r for r in rows}
     out: list[types.Tool] = []
     for t in cast(list[dict[str, Any]], link["tools"]):
         name = str(t["name"])
         if t.get("kind") == "workflow":
+            if not workflows:
+                continue
             title = str(t.get("title") or name.removeprefix(WORKFLOW_PREFIX))
             out.append(
                 types.Tool(

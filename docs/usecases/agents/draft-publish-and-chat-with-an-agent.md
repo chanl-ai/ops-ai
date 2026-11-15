@@ -2,7 +2,7 @@
 
 Status: draft for review.
 
-In this example we will draft an IT help desk agent, give it a laptop lookup tool, test it, publish it, and have a colleague chat with it. It assumes a signed-in builder and a signed-in member in the same team, and a model that calls the lookup when asked about a device.
+In this example we will draft an IT help desk agent, give it a laptop lookup tool, test it, publish it, and have a colleague chat with it. It assumes a signed-in builder and a signed-in viewer in the same team, and a model that calls the lookup when asked about a device.
 
 | Use case | |
 |---|---|
@@ -16,7 +16,7 @@ In this example we will draft an IT help desk agent, give it a laptop lookup too
 | Person | Role | Signs in as |
 |---|---|---|
 | The help desk lead who builds the agent | Builder | the `builder` profile |
-| A colleague who asks it about a laptop | Member | the `member` profile |
+| A colleague who asks it about a laptop | Viewer | the `viewer` profile |
 
 The run starts the agents service on a scripted model: it calls `lookup_device` when asked about a device and answers
 "I could not find that." when it has no tool to call. No model provider is called.
@@ -29,7 +29,7 @@ from ops_ai.errors import BadRequest
 import pytest
 
 builder = OpsAI(profile="builder")
-colleague = OpsAI(profile="member")
+colleague = OpsAI(profile="viewer")
 ```
 
 ```ts tab="TypeScript"
@@ -37,7 +37,7 @@ import assert from 'node:assert/strict';
 import { OpsAI } from '@chanl-ai/ops-ai';
 
 const builder = new OpsAI({ profile: 'builder' });
-const colleague = new OpsAI({ profile: 'member' });
+const colleague = new OpsAI({ profile: 'viewer' });
 ```
 
 ```bash tab="CLI"
@@ -97,7 +97,7 @@ await assert.rejects(colleague.agents.chat(agent.id, 'Is laptop LT-2291 under wa
 ```
 
 ```bash tab="CLI"
-if refused=$(opsai agents --profile member chat "$AGENT" --message "Is laptop LT-2291 under warranty?" 2>&1); then exit 1; fi
+if refused=$(opsai agents --profile viewer chat "$AGENT" --message "Is laptop LT-2291 under warranty?" 2>&1); then exit 1; fi
 grep -q '^agent_not_published:' <<<"$refused"
 ```
 
@@ -168,7 +168,7 @@ assert.equal(reply.text, 'Here is what I found.');
 ```
 
 ```bash tab="CLI"
-opsai agents --profile member --json chat "$AGENT" --message "Is laptop LT-2291 under warranty?" \
+opsai agents --profile viewer --json chat "$AGENT" --message "Is laptop LT-2291 under warranty?" \
   | jq -e '[.toolCalls[].name] == ["lookup_device"] and .text == "Here is what I found."'
 ```
 

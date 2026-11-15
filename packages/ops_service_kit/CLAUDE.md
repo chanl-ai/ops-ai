@@ -22,7 +22,7 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 | `model_calls` | `ModelCalls`: one structured model call through models-service for a service that is not an agent | documents-service |
 | `background` | The `/health/background` answer shape | services |
 | `contract` | `response_checker(app)`: an httpx hook that checks every test response against the app's own OpenAPI document | service tests (`testing` extra) |
-| `openapi` | `report(...)`: the OpenAPI gate each service's `scripts/check_openapi.py` runs | service scripts (`testing` extra) |
+| `openapi` | `report(...)`: the OpenAPI gate each `services/<x>/scripts/check_openapi.py` runs | service scripts (`testing` extra) |
 | `testdb` | `refusal` and `isolate_from_stack`: a test refuses any PostgreSQL database except `OPS_TEST_DATABASE_URL` | service conftests |
 | `opa_server`, `harness_containers` | A private OPA container per test session, and container cleanup for killed runs | tests and use cases only |
 | `testapps` | Frees the FastAPI app a test built | tests |

@@ -27,8 +27,9 @@ with apps_stack() as w:
         through_sdk is not None
         and page_sdk is not None
         and APP in [a["id"] for a in through_sdk]
-        # Connected is the team account's state; a card's `status` is the account's display status.
-        and all(a.get("state") == "connected" or a.get("kind") == "builtin" for a in through_sdk)
+        # A card's appState is what the Connected view filters on; built-in packs with no sign-in (Core case and task
+        # types, Starter skills) have no account, so their account `state` is empty while they read connected.
+        and all(a.get("appState") == "connected" for a in through_sdk)
         and page_sdk["card"]["name"] == page_api["card"]["name"],
         {"sdk": through_sdk},
     )

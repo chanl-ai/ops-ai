@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { FlaskConical, Gavel, History, Scale, ShieldAlert, ShieldCheck, ShieldX, TestTubes } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { FlaskConical, Gavel, History, PlayCircle, Scale, ShieldAlert, ShieldCheck, ShieldX, TestTubes } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { evidenceColumns, gateColumns, judgeColumns, runColumns, suiteColumns, type Clickable } from '@/components/assurance/assurance-columns';
@@ -21,11 +22,13 @@ import { useAssurance, useExportBundle } from '@/hooks/assurance-queries';
 import { useDownloadFile } from '@/hooks/file-queries';
 import { useListParams } from '@/hooks/use-list-params';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { pct, plural } from '@/lib/format';
+import { plural } from '@/lib/format';
 import type { AssuranceFilters, AssuranceJudge, AssuranceRow, AssuranceSuite, AssuranceTab, EvidenceBundleRow } from '@/lib/types/assurance';
 
 const TABS = ['suites', 'runs', 'gates', 'evidence', 'judges'] as const satisfies readonly AssuranceTab[];
-const TAB_LABEL: Record<AssuranceTab, string> = { suites: 'Suites', runs: 'Runs', gates: 'Gates', evidence: 'Evidence', judges: 'Judges' };
+const TAB_LABEL: Record<AssuranceTab, string> = { suites: 'Suites', runs: 'Runs', gates: 'Publish checks', evidence: 'Evidence', judges: 'Judges' };
+/** What every service answers; evidence and judges show only once the answer counts them. */
+const CORE_TABS: readonly AssuranceTab[] = ['suites', 'runs', 'gates'];
 const RESULT_OPTIONS: Record<'suites' | 'gates', { value: string; label: string }[]> = {
   suites: [
     { value: 'failing', label: 'Failing' },
@@ -39,14 +42,15 @@ const RESULT_OPTIONS: Record<'suites' | 'gates', { value: string; label: string 
   ],
 };
 const EMPTY: Record<AssuranceTab, { icon: typeof Scale; noun: string; description: string }> = {
-  suites: { icon: TestTubes, noun: 'suites', description: 'Every agent, skill and workflow gets a suite when it is created. Add cases from its page.' },
-  runs: { icon: FlaskConical, noun: 'eval runs', description: 'Runs appear when a version is saved, a publish is requested, a model updates or knowledge changes.' },
-  gates: { icon: ShieldCheck, noun: 'publish gates', description: 'A gate is evaluated for each publish request. Request a publish from a workflow to see one here.' },
+  suites: { icon: TestTubes, noun: 'suites', description: 'No suites yet. A suite is made when someone adds a test case to an agent, skill or workflow.' },
+  runs: { icon: FlaskConical, noun: 'eval runs', description: 'A run is stored each time saved test cases are run on an agent, or a workflow is tested.' },
+  gates: { icon: ShieldCheck, noun: 'publish checks', description: 'A publish check is shown for each publish request. Request a publish from an agent or workflow to see one here.' },
   evidence: { icon: History, noun: 'evidence bundles', description: 'A bundle is sealed each time a publish request is approved.' },
   judges: { icon: Gavel, noun: 'judges', description: 'Judges score rubric checks. The platform team adds and calibrates them.' },
 };
 
 export default function AssurancePage() {
+  const router = useRouter();
   const [tab, setTab] = useTabParam(TABS, 'suites');
   const list = useListParams<AssuranceFilters>('name');
   const query = useAssurance({ ...list.params, tab });
@@ -55,12 +59,18 @@ export default function AssurancePage() {
   const [exportingId, setExportingId] = React.useState<string | null>(null);
   const [openId, setOpenId] = React.useState<string | null>(null);
 
+  // A service that has no evidence or judges answers 404 for them: fall back to the first tab.
+  React.useEffect(() => {
+    if (query.isError && !CORE_TABS.includes(tab)) setTab('suites');
+  }, [query.isError, tab, setTab]);
+
   const data = query.data;
   const rows = (data?.data ?? []) as AssuranceRow[];
   const facets = data?.facets ?? {};
   const withCounts = (column: string, options: { value: string; label: string }[]) => options.map((o) => ({ ...o, count: facets[column]?.[o.value] ?? 0 }));
   const stats = data?.stats;
   const counts = data?.tabCounts;
+  const shownTabs = counts ? TABS.filter((t) => counts[t] !== undefined) : CORE_TABS;
 
   const changeTab = (t: AssuranceTab) => {
     setOpenId(null);
@@ -148,15 +158,15 @@ export default function AssurancePage() {
         switcher
         icon={ShieldCheck}
         title="Evals"
-        description="Suites, runs, gates and evidence for every agent, skill and workflow"
+        description="Saved test cases, their runs and publish checks for every agent, skill and workflow"
         tabs={
           <div className="flex flex-col gap-2">
             <>
               <TabsList>
-                {TABS.map((t) => (
+                {shownTabs.map((t) => (
                   <TabsTrigger key={t} value={t} data-testid={`assurance-tab-${t}`}>
                     {TAB_LABEL[t]}
-                    {counts && <span className="ml-1 text-muted-foreground tabular-nums">{counts[t]}</span>}
+                    {counts?.[t] !== undefined && <span className="ml-1 text-muted-foreground tabular-nums">{counts[t]}</span>}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -168,19 +178,14 @@ export default function AssurancePage() {
           {query.isPending ? (
             <PageSkeleton statCards={4} tableRows={8} />
           ) : query.isError && !data ? (
-            <QueryError what="assurance" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
+            <QueryError what="evals" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
           ) : (
             <div className="flex flex-col gap-4">
               <StatCardGrid columns={4}>
                 <StatCard label="Failing suites" value={stats?.failingSuites} icon={ShieldX} footer={{ text: 'Latest run has a failing case', subtext: 'Agents, skills and workflows' }} />
-                <StatCard label="Gates blocked" value={stats?.gatesBlocked} icon={ShieldAlert} footer={{ text: 'Open publish requests', subtext: 'A blocking step failed' }} />
-                <StatCard label="Live without evidence" value={stats?.liveUnsealed} icon={History} footer={{ text: 'Live versions with no sealed bundle', subtext: 'Published before sealing' }} />
-                <StatCard
-                  label="Lowest judge agreement"
-                  value={stats?.lowestJudge ? pct(stats.lowestJudge.agreement) : '—'}
-                  icon={Gavel}
-                  footer={{ text: stats?.lowestJudge?.name ?? 'No judges yet', subtext: 'Agreement with reviewer labels' }}
-                />
+                <StatCard label="Publish checks blocked" value={stats?.gatesBlocked} icon={ShieldAlert} footer={{ text: 'Open publish requests', subtext: 'A blocking check failed' }} />
+                <StatCard label="Live without a passing run" value={stats?.liveUntested} icon={History} footer={{ text: 'Live versions never tested or failing', subtext: 'Agents, skills and workflows' }} />
+                <StatCard label="Not run" value={stats?.notRun} icon={PlayCircle} footer={{ text: 'Suites with saved cases and no run', subtext: 'Run them from the asset' }} />
               </StatCardGrid>
 
               <DataTableWithViews
@@ -202,9 +207,9 @@ export default function AssurancePage() {
                   onPaginationChange: list.setPagination,
                   isLoading: query.isFetching && query.isPlaceholderData,
                 }}
-                emptyState={<ListEmpty icon={empty.icon} noun={empty.noun} filtered={list.isFiltered} description={empty.description} />}
+                emptyState={<ListEmpty icon={empty.icon} noun={empty.noun} filtered={list.isFiltered} description={empty.description} createLabel={tab === 'suites' ? 'Open agents' : undefined} onCreate={tab === 'suites' ? () => router.push('/build/agents') : undefined} />}
               />
-              {tab === 'suites' && counts && counts.suites > 0 && <p className="text-xs text-muted-foreground">{plural(stats?.failingSuites ?? 0, 'suite')} failing. Draft cases from rejected reviews wait for their owner before the gate runs them.</p>}
+              {tab === 'suites' && counts && (counts.suites ?? 0) > 0 && <p className="text-xs text-muted-foreground">{plural(stats?.failingSuites ?? 0, 'suite')} failing. Draft cases from rejected reviews wait for their owner before the gate runs them.</p>}
             </div>
           )}
 

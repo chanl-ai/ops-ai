@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
+from ops_agents.api.auth import Principal
 from ops_agents.api.deps import Runtime
 from ops_agents.api.routers.events import team_frames
 from ops_agents.graphs.models import Grade
@@ -31,6 +32,8 @@ from tests.api.test_graphs import EMAILS, run
 from tests.conftest import SEED, FakeGraphModels, decide, fixture_knowledge, last_run, scripted_model, sse_events
 
 ROOT = Path(__file__).parents[2]
+# The team stream leaves out threads its reader may not read; these are workflow threads every member reads.
+READER = Principal(name="dev", email="dev@harborpine.example", team_id=DEV_TEAM, tenant_id="local", dev=True)
 SHAPE = {"id", "seq", "type", "threadId", "runId", "node", "at", "data"}
 
 
@@ -160,18 +163,18 @@ async def test_team_stream_carries_only_that_teams_lifecycle(stack: tuple[AsyncC
     client, rt, _ = stack
     await paused(client, team="team_cards")
     await paused(client, team="team_lending")
-    frames = [f async for f in team_frames(rt, "team_cards", 0, follow=False)]
+    frames = [f async for f in team_frames(rt, READER, "team_cards", 0, follow=False)]
     events = [json.loads(f["data"]) for f in frames]
     assert [f["event"] for f in frames] == ["thread.started", "thread.waiting_review"]
     assert len({e["threadId"] for e in events}) == 1
-    after = [f async for f in team_frames(rt, "team_cards", int(frames[0]["id"]), follow=False)]
+    after = [f async for f in team_frames(rt, READER, "team_cards", int(frames[0]["id"]), follow=False)]
     assert [f["event"] for f in after] == ["thread.waiting_review"]
-    assert [f async for f in team_frames(rt, "team_none", 0, follow=False)] == []
+    assert [f async for f in team_frames(rt, READER, "team_none", 0, follow=False)] == []
 
 
 async def test_team_stream_follows_new_events(stack: tuple[AsyncClient, Runtime, Spy]) -> None:
     client, rt, _ = stack
-    stream = team_frames(rt, DEV_TEAM, 0, follow=True)  # paused() names no team: the dev user's default
+    stream = team_frames(rt, READER, DEV_TEAM, 0, follow=True)  # paused() names no team: the dev user's default
     await paused(client)
     seen = [(await anext(stream))["event"], (await anext(stream))["event"]]
     await stream.aclose()

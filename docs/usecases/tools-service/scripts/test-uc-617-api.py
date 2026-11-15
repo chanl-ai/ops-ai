@@ -7,8 +7,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from apps_walk import AUTH, account_path, app_path, apps_stack, target
-from usecase_harness import TOOLS_PORT, agents, check, data, engine_worker, finish, until
+from apps_walk import AUTH, ROLES, TEAM_OF, account_path, app_path, apps_stack, target
+from usecase_harness import TOOLS_PORT, agents, as_role, check, data, engine_worker, finish, until
 
 APP = "plugin:test.client"
 
@@ -96,8 +96,8 @@ with (
         and task.get("dueAt") is None,
         {k: task.get(k) for k in ("id", "kind", "title", "connect", "dueAt")},
     )
-    # 3c. Run as the team account: a Builder may (roles-and-permissions.md), so James and Priya both get the desk's
-    # answer, which has no team account to run as.
+    # 3c. Run as the team account: only an Admin runs a team account (roles-and-permissions.md), so James (builder)
+    # is refused for his role, and Priya (admin) gets the desk's answer, which has no team account to run as.
     as_team = f"/reviews/{task.get('id') or run_id}/team-account"
     by_james = api.post(as_team, headers=w.who["builder"])
     by_priya = api.post(as_team, headers=w.who["admin"])
@@ -105,9 +105,10 @@ with (
         f"/reviews/{task.get('id') or run_id}/decision", json={"decision": "approve"}, headers=w.who["admin"]
     )
     check(
-        "3c Run as the team account is refused on a desk with no team account, to a builder and an admin alike",
-        by_james.status_code == 409
-        and "no team account" in by_james.text
+        "3c Run as the team account is refused to a builder for his role, and to an admin on a desk with no team account",
+        by_james.status_code == 403
+        and "role_required" in by_james.text
+        and "an Admin can" in by_james.text
         and by_priya.status_code == 409
         and "no team account" in by_priya.text
         and decided.status_code == 409
@@ -220,6 +221,11 @@ with (
         rows = listed.get("data") if isinstance(listed, dict) else listed
         return next((r for r in rows or [] if r.get("id") == run_key), {})
 
+    # A new workspace takes any public host (egressNewHosts any_public); Security turns asking on for this story.
+    asking = w.api.put("/v1/policies/egressNewHosts", json={"value": "ask_security"}, headers=w.who["security"])
+    check("4 setup: Security sets new addresses to ask Security first", asking.status_code == 200, asking.text[:200])
+    # A policy change marks every token issued before it as stale (permissions_changed), so each role signs in again.
+    w.who.update({role: as_role(w.api, role, TEAM_OF[role]) for role in ROLES})
     base = "https://unlisted.multi.test"
     unlisted = None
     held = add_tool(unlisted, "Unlisted desk", base)

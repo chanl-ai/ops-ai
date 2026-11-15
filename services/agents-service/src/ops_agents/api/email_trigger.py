@@ -197,6 +197,8 @@ class PollResult:
     skipped: int = 0
     first_sync: bool = False
     busy: bool = False
+    # The mailbox was paused, removed or changed after the binding was read; nothing was read.
+    stale: bool = False
 
 
 @dataclass(frozen=True)
@@ -518,7 +520,12 @@ class EmailTriggers:
                     continue
                 try:
                     changed = await source.wait(at.cursor, self.idle_seconds)
-                    if changed and (await self.poll(b)).busy:
+                    if not changed:
+                        continue
+                    polled = await self.poll(b)
+                    if polled.stale:
+                        return  # the next binding pass starts a task for the mailbox as it is now, if it runs
+                    if polled.busy:
                         await _pause(stop, 1.0)
                 except asyncio.CancelledError:
                     raise
@@ -531,7 +538,9 @@ class EmailTriggers:
                     await _pause(stop, every)
 
     async def poll(self, b: Bound) -> PollResult:
-        """One pass over one binding, under the binding's lease so two workers never read it at once."""
+        """One pass over one binding, under the binding's lease so two workers never read it at once. The mailbox is
+        read again first: an IDLE task holds the binding it started with, and mail landing just after a pause would
+        otherwise start a run before the next binding pass drops that task."""
         result = PollResult(b.workflow)
         lease = POLL_LEASE_PREFIX + hashlib.sha256(f"{b.tenant}:{b.workflow}".encode()).hexdigest()[:32]
         try:
@@ -540,6 +549,10 @@ class EmailTriggers:
             result.busy = True
             return result
         try:
+            now = await self.mailboxes.get(b.mailbox.id)
+            if now is None or now.paused or now.updated_at != b.mailbox.updated_at:
+                result.stale = True
+                return result
             await self._poll(b, result)
         finally:
             await self.leases.release(lease, self.LEASE_RUN)

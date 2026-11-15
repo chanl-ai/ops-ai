@@ -61,12 +61,6 @@ async def test_a_sign_in_header_is_refused_whatever_it_holds(api: Api) -> None:
     assert detail["egressHosts"] == ["statements.example.com"]
 
 
-async def test_an_expired_approval_lets_no_call_through(api: Api) -> None:
-    body = {"operation": "search_sites", "contextId": "wf_advisor", "target": "stub", "input": {"query": "x"}}
-    result = await _ok(await api.call("POST", "/mod_sharepoint/test", json=body))
-    assert (result["decision"], result["denyReason"]) == ("deny", "approval_expired")
-
-
 async def test_a_major_change_opens_a_security_review_and_a_minor_one_does_not(api: Api) -> None:
     detail = await _ok(await api.call("GET", "/mod_core_banking"))
     write = next(o for o in detail["operations"] if o["access"] == "write" and o["requiresApproval"])

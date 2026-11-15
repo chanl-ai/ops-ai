@@ -61,7 +61,7 @@ every dependant's suite under `make test` with no `PKG`.
 
 | Gotcha | Rule |
 |---|---|
-| `backends()` names only PostgreSQL, so the conformance suites never run on SQL Server here | SQL Server DDL and model parity are checked in `deploy/database/tests` (`make test PKG=deploy/database`, the `pool-deploy` job of `make verify`; at this working tree `tests/test_mssql_ddl.py` and `tests/test_offline.py` fail on agents and tools DDL that differs from the reviewed golden files) |
+| `backends()` names only PostgreSQL, so the conformance suites never run on SQL Server here | SQL Server DDL and model parity are checked in `deploy/database/tests` (`make test PKG=deploy/database`, the `pool-deploy` job of `make verify`) |
 | The conformance database is `<test database>_conformance`, created on first use | Two sessions with different test databases never migrate each other's |
 | Importing `ops_store` installs the connect retry on every SQLAlchemy engine in the process (`src/ops_store/__init__.py:11`) | Engines made in scripts and tests get it without passing anything |
 

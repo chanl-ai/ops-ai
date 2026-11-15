@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.store.modules import ModuleStore
 
-from .test_apply_tool_access import apply_access
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 BASE = f"/v1/tool-modules/{MODULE}"
@@ -36,21 +35,10 @@ TEAM = {"X-Team-Id": "team_platform"}
 
 
 async def _context(g: Gateway) -> dict[str, Any]:
-    """A run context to test as: a workflow approved for the bank module's operations, decided by a second person."""
-    request = {
-        "workflowId": "wf_dispute",
-        "environment": "production",
-        "operations": [g.tool("get_account"), g.tool("place_hold"), g.tool("limited")],
-        "expiresInDays": 30,
-        "justification": "Reads for the test console",
-    }
-    approval = await g.client.post(f"{BASE}/approvals", json=request)
-    assert approval.status_code == 201, approval.text
-    decided = await apply_access(g.client, g.tenant, {**approval.json()["data"], "moduleId": MODULE})
-    assert decided.status_code == 200 and decided.json()["data"]["ok"], decided.text
+    """The only run context the panel offers: the module's owner, which needs no workflow approval."""
     contexts: list[dict[str, Any]] = (await g.client.get(BASE)).json()["data"]["runContexts"]
-    # The owner's context is listed first; the workflow's is the one this asks for.
-    return next(c for c in contexts if c["id"] != "owner")
+    assert [c["id"] for c in contexts] == ["owner"], contexts
+    return contexts[0]
 
 
 async def _test(g: Gateway, base: str, args: dict[str, Any], **extra: Any) -> dict[str, Any]:
@@ -66,13 +54,6 @@ async def test_a_sandbox_read_is_the_real_call(g: Gateway) -> None:
     assert out["decision"] == "allow" and out["stubbed"] is False and out["reachedHost"]
     assert [x["path"] for x in g.received] == ["/v1/accounts/CHQ-2219"], "the system was called"
     assert out["output"]["accountId"] == "CHQ-2219" and out["output"]["holder"]["sin"] == "[redacted]", "masked"
-
-
-async def test_a_real_write_in_a_workflows_context_needs_a_real_approval(g: Gateway) -> None:
-    """simulateApproval stands in for an approval on Mock only: a real write never runs on a made-up one (ADR-0005)."""
-    out = await _test(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24}, simulateApproval=True)
-    assert (out["decision"], out.get("denyReason")) == ("deny", "approval_token_missing"), out
-    assert g.received == [], "nothing reached the system"
 
 
 async def test_a_mock_write_sends_nothing(g: Gateway) -> None:

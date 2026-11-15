@@ -86,7 +86,9 @@ def changed_lines(root: Path, base: str, paths: list[str] | None) -> dict[str, s
         if raw.startswith("+++ "):
             path = raw[4:].strip()
             path = path[2:] if path.startswith("b/") else path
-            if path != "/dev/null":
+            # A deleted file's new side is /dev/null and has no lines to score.
+            path = "" if path == "/dev/null" else path
+            if path:
                 out.setdefault(path, set())
         elif raw.startswith("@@") and path:
             m = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", raw)

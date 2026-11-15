@@ -1,6 +1,6 @@
 // uc-058 another person's chat stays private, ui layer: docs/usecases/console/chat-read-only-for-others.md.
 // Scripted model only; signed in through platform-service. James chats with an agent; Maya, a teammate following a link
-// to that thread, gets 404 and sees none of it, since chat reads are owner only (owner decision, c7ebccb); James can type.
+// to that thread, reads only that it is not theirs and sees none of it, since chat reads are owner only (owner decision, c7ebccb); James can type.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -41,14 +41,22 @@ await withUiStack(
       };
 
       const M = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
-      const mayaApi = (await fetch(`${agentsUrl}/chat/threads/${thread}`, { headers: M })).status;
+      // The chat route tells a teammate only that the chat is not theirs: no message, title or owner.
+      const mayaApi = await (await fetch(`${agentsUrl}/chat/threads/${thread}`, { headers: M })).json();
       const maya = await open('m.okafor@harborpine.example', false);
       const mayaReads = await maya.getByText(`Hello from James ${TAG}`).count();
-      check("a teammate gets 404 on the owner's chat and sees none of it", mayaApi === 404 && mayaReads === 0, { mayaApi, mayaReads });
+      const sealed = JSON.stringify(mayaApi.data) === JSON.stringify({ id: thread, readable: false });
+      check("a teammate reads only that the owner's chat is not theirs and sees none of it", sealed && mayaReads === 0, { mayaApi, mayaReads });
+      // The thread routes the console's case pages read: a teammate reaches the chat through none of them.
+      const mayaState = (await fetch(`${agentsUrl}/v1/threads/${thread}/state`, { headers: M })).status;
+      const mayaListed = (await json(await fetch(`${agentsUrl}/v1/threads`, { headers: M }))).some((t) => t.threadId === thread);
+      check("a teammate gets 404 on the chat's thread state and the thread list leaves it out", mayaState === 404 && !mayaListed, { mayaState, mayaListed });
 
       const james = await open('j.richardson@harborpine.example', true);
       const jamesBox = await james.locator('textarea').count();
       check('the owner reads the chat and has the message box', jamesBox === 1, { jamesBox });
+      const jamesState = (await fetch(`${agentsUrl}/v1/threads/${thread}/state`, { headers: J })).status;
+      check("the owner reads the chat's thread state", jamesState === 200, { jamesState });
 
       check('no page errors', errors.length === 0, errors);
     } finally {

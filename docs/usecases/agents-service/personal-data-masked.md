@@ -21,6 +21,7 @@ tool calls and a workflow Agent step's output. The model still reads the real va
 |---|---|
 | platform-service, models-service on the fake OpenAI, the agents service and a worker | `scripts/ai_steps_stack.py` |
 | The fake model's answers | `services/agents-service/tests/fixtures/ai-steps-fake-openai/script.json` (UC265 markers) |
+| Publish review on for team_ops: a new workspace publishes at once | Priya, `PUT /v1/policies/publishReview` (`publishReviewOn` in `docs/usecases/lib/workflow_ui.mjs` for the ui scripts) |
 
 ## Steps and expected results
 
@@ -29,7 +30,7 @@ tool calls and a workflow Agent step's output. The model still reads the real va
 | 1 | Create and publish an agent; ask it about Ann | The reply streams with the SSN's last four, email, phone and account masked; "Ann Lee" stays |
 | 2 | Read the thread | The stored reply is the masked one |
 | 3 | Run a workflow whose Agent step summarises Priya | The step's summary is masked and names Priya |
-| 4 | Turn redactPii off, publish, ask again | The reply is as the model wrote it |
+| 4 | Turn redactPii off, publish, Priya approves (a security change waits for review in every mode), ask again | The reply is as the model wrote it |
 
 ## Acceptance layers
 

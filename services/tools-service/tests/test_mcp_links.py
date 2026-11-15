@@ -44,6 +44,9 @@ GRIDS["linker"] = [
     ("activity", "view", "all"),
 ]
 GRIDS["reader"] = [*RUN, ("deployments", "view", "all")]
+# A member as the built-in grid has them: their own MCP calls, nobody else's, and not the team's tool-call log.
+GRIDS["member"] = [*RUN, ("deployments", "view", "all"), ("mcp", "view", "own")]
+GRIDS["linker"].append(("mcp", "view", "all"))
 
 
 SCHEMA = {"type": "object", "required": ["claim"], "properties": {"claim": {"type": "string"}}}
@@ -187,7 +190,9 @@ async def test_a_picked_workflow_starts_its_live_version_only_for_who_may_run_it
         )
         started = await c.call_tool("workflow__wf_claims", {"claim": "4471"})
     async with stack.app.router.lifespan_context(stack.app), _session(stack, "reader", path) as c:
+        unlisted = [t.name for t in (await c.list_tools()).tools]
         refused = await c.call_tool("workflow__wf_claims", {"claim": "4471"})
+    assert unlisted == [], "a person without workflows.run is not offered a workflow they cannot start"
     assert started.is_error is False and _content(started).get("runId") == "run_1", started
     agents: Any = stack.agents
     assert agents.started == [{"workflowId": "wf_claims", "input": {"claim": "4471"}, "mode": "live"}]
@@ -215,3 +220,21 @@ async def test_a_deleted_link_stops_answering_and_a_reader_cannot_delete(stack: 
             f"/mcp/{TEAM}/claims-lookups", json=body, headers={"Accept": "application/json, text/event-stream"}
         )
     assert r.status_code == 404, r.text
+
+
+async def test_a_member_reads_only_their_own_calls_on_a_link(stack: Stack) -> None:
+    link = await _link(stack, [{"id": "lookup_case", "label": "Look up a case"}])
+    path = f"/mcp/{TEAM}/claims-lookups"
+    for who in ("linker", "member"):
+        async with stack.app.router.lifespan_context(stack.app), _session(stack, who, path) as c:
+            assert (await c.call_tool("lookup_case", {"caseId": "CASE-4112"})).is_error is False
+    seen: dict[str, Any] = {}
+    for who in ("linker", "member"):
+        async with _rest(stack, who) as rest:
+            r = await rest.get("/v1/executions", params={"link": link["id"]})
+        assert r.status_code == 200, r.text
+        seen[who] = sorted(x["subject"]["name"] for x in r.json()["data"]["data"])
+    assert seen == {"linker": ["linker", "member"], "member": ["member"]}
+    async with _rest(stack, "member") as rest:
+        team_log = await rest.get("/v1/executions")
+    assert team_log.status_code == 403, "mcp.view opens a link's calls, not the team's whole tool-call log"

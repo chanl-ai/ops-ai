@@ -123,12 +123,21 @@ async def test_each_tenant_asks_for_its_own_workflows_and_is_cached_briefly(agen
     assert agents.asked == ["ten_a", "ten_b", "ten_a"], "the cache lasts 30 seconds"
 
 
-async def test_the_test_panel_runs_as_an_approval_workflow_with_typed_sample_values(api: Api) -> None:
+async def test_the_test_panel_offers_the_owner_only_even_with_a_workflow_approved(api: Api) -> None:
+    """Run as lists the module's owner and nothing else: a workflow context ran with typed sample values, not a case."""
+    request = {
+        "workflowId": "dispute_email",
+        "environment": "production",
+        "operations": ["get_account"],
+        "expiresInDays": 30,
+        "justification": "Reads for the dispute email",
+    }
     detail = (await api.call("GET", "/mod_core_banking")).json()["data"]
-    owner, *contexts = detail["runContexts"]
-    assert owner["id"] == "owner", "the owner's try comes first, so the panel's default needs no approval"
-    assert contexts and all(c["caseId"] == "sample" and c["bindings"] == {} for c in contexts), contexts
-    assert {c["id"] for c in contexts} == {c["workflowId"] for c in contexts}, "one context per workflow, no case"
+    assert [c["id"] for c in detail["runContexts"]] == ["owner"], detail["runContexts"]
+    assert (await api.call("POST", "/mod_core_banking/approvals", json=request)).status_code == 201
+    contexts = (await api.call("GET", "/mod_core_banking")).json()["data"]["runContexts"]
+    assert [c["id"] for c in contexts] == ["owner"], "a workflow that asked for access adds no run context"
+    assert not any("sample values" in c["label"] for c in contexts), contexts
 
 
 def test_no_settings_default_points_into_tests() -> None:

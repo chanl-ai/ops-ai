@@ -18,7 +18,6 @@ Fly, the release package). Deploy-wide rules: [../CLAUDE.md](../CLAUDE.md).
 | `prune_build_cache.sh` | Prunes Docker's build cache past `OPS_BUILD_CACHE_CAP` GB after image builds |
 
 Tests: `bake_plugins.py` is covered by `scripts/tests/test_bake_plugins.py` (`uv run pytest -q scripts/tests/test_bake_plugins.py`);
-the rest is proved by the compose and kind proofs (`../compose/proof.sh`, `../k8s/proof.sh`). The `service_keys.py`
-docstring names `deploy/k8s/secrets.py`; the file is `../k8s/write_secrets.py`.
+the rest is proved by the compose and kind proofs (`../compose/proof.sh`, `../k8s/proof.sh`).
 
 Docs: [docs/deploy/compose.md](../../docs/deploy/compose.md), [docs/deploy/install.md](../../docs/deploy/install.md).

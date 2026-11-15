@@ -35,6 +35,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.channel_list` | `ChannelList` | none | none |
 | agents-service | `ops_agents.store.channels` | `ChannelStore` | CAS, TRANSACTION | `channel_cursors`, `channel_files`, `channel_messages`, `deployments`, `thread_inbox` |
 | agents-service | `ops_agents.store.chat_search` | none: no repository class | | `chat_search` |
+| agents-service | `ops_agents.store.evals` | `EvalStore` | TRANSACTION | `eval_cases`, `eval_runs` |
 | agents-service | `ops_agents.store.events` | `EventLog` | CAS | `thread_events` |
 | agents-service | `ops_agents.store.form_links` | `FormLinks` | none | `form_links` |
 | agents-service | `ops_agents.store.graphs` | `GraphStore` | CAS, TRANSACTION | `graph_runs`, `graph_threads`, `graph_versions` |
@@ -136,7 +137,7 @@ The columns those chains added that change a guarantee:
 | `ops_checkpoint_fences` | agents-service, `ops_checkpointer` | Highest lease generation seen per thread; RLS forced | 0008 |
 | `thread_leases` | agents-service | Lease per thread with generation; released rows kept so the count never restarts | 0005, 0008 |
 | `timers` | agents-service | SLA timers with fenced claims, attempts and failure | 0007, 0009 |
-| `deployments` | agents-service | Graph, channel, paused, multitask, default `budget` (JSON) for new threads, and `team_id`, the team that owns the deployment (empty for rows made earlier, which only an admin changes) | 0010, 0013, 0037 |
+| `deployments` | agents-service | Graph, channel, paused, multitask, default `budget` (JSON) for new threads, and `team_id`, the team that owns the deployment (empty for rows made earlier; no permission cell covers a row with no team) | 0010, 0013, 0037 |
 | `channel_messages` | agents-service | Ledger of handled channel messages per deployment and message key | 0010 |
 | `channel_cursors` | agents-service | Mailbox delta link per deployment, saved after the last page | 0010 |
 | `thread_inbox` | agents-service | Input queued for a busy thread, unique per message key, with `seq` and delivery time | 0010 |

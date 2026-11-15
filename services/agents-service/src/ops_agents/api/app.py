@@ -102,6 +102,7 @@ from .routers import (
     workflows,
 )
 from .routers import ai_steps as ai_step_routes
+from .routers import assurance as assurance_routes
 from .routers import case_types as case_type_routes
 from .routers import channels as channel_routes
 from .routers import chat_connectors as chat_connectors_routes
@@ -537,6 +538,7 @@ def create_app(
     mount(tool_uses_routes.account_router, "Workflows")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
+    mount(assurance_routes.router, "Assurance")
     mount(guardrail_routes.router, "Agents")
     mount(skill_routes.router, "Agents")
     mount(widget_routes.router, "Agents")

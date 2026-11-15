@@ -32,9 +32,9 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | An agent searches only its own bases, unless its "all team knowledge bases" option is on | Built | `packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py:83`, `:631-635` |
 | A base's settings in five sections, each patched alone and checked whole; presets fill them all | Built | `schemas.py` (`RetrievalSettings` to `SourceDefaults`); `service.py` (`settings_of`, `settled`, `PRESETS`); migration `0024_base_settings.py` |
 | A pushed item's `url`, cited by search | Built | `schemas.py` (`WrittenItemIn.url`); `service.py` (`put_item`) |
-| The base's answer settings read by the kernel | Built | every search answer carries each base's `answer` section; the kernel replaces an uncited answer, or a turn that found nothing, with the first withholding base's no-answer message (`packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py` `_base_withholds`); a pieces-only base never withholds |
+| The base's answer settings read by the kernel | Built | every search answer carries each base's `answer` section; the kernel replaces an uncited answer, or a turn that found nothing, with the first withholding base's no-answer message, unless a system call brought a result in the same turn or the person attached a file whose text the turn holds (`packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py` `_base_withholds`); a pieces-only base never withholds |
 | The base's sync settings applied by syncs, the strictest of the bases a source feeds winning | Built: a changed version held for review, removed items kept and flagged, the failing alert turned off | `service.py` (`sync_rules`, `_hold`, `_apply_held`, `settle_run`); `tool_sources.py` (`_flag_removed`) |
-| Stale after a number of days read by freshness | Designed, not built yet | served on the source detail; freshness still follows the schedule |
+| Stale after a number of days read by freshness | Designed, not built yet | stored and served, but not shown in Settings until freshness reads it; freshness still follows the schedule |
 | A new source copies its base's source defaults | Built | `service.py` (`create_source`, `_base_split`) |
 | JavaScript pages rendered in a headless browser worker | Designed, not built yet | |
 | An answer with no cited passage withheld, on by default | Built | on in the Balanced and Precise presets, off in Search only; applies whether or not the agent's own end check is on |
@@ -103,8 +103,8 @@ other four in its `settings` column (kb_0024); null reads as the defaults.
 |---|---|---|---|
 | `retrieval` | Mode, weight, rerank, rewrite and its instruction and model, pieces returned, keyword and meaning floors; the scope (`scopeCollections`, `scopeSourceIds`), `tagsInclude`, `tagsExclude`, `includeUntagged`, metadata `filters` | Hybrid, 0.6, 8 pieces, floors 0.5 and 0.38, no scope | The search: both lanes keep each base's pieces within its scope (`store/fulltext.py` `scope_sql`) |
 | `answer` | `shape` (`answer_with_citations` or `chunks`), `withholdUncited`, `noAnswerMessage` | An answer with citations, withheld when uncited | The query route's no-answer message; the agents kernel, from `answers` in each search answer |
-| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Syncs of every source the base reads; served as `automation` (`act` or `suggest`). `staleAfterDays` is served, not yet read by freshness |
-| `access` | `mcp.enabled`, `mcp.toolName` | Off, `search_<slug>` | Nothing yet; the MCP search tool is not built |
+| `sync` | `changes` (`apply` or `review`), `removedAtSource` (`remove` or `keep`), `staleAfterDays`, `notifyOnFailure` | Apply, remove, 365 days, notify | Syncs of every source the base reads; served as `automation` (`act` or `suggest`). `staleAfterDays` is served, not yet read by freshness, so Settings does not show it |
+| `access` | `mcp.enabled`, `mcp.toolName` | Off, `search_<slug>` | Nothing yet; the MCP search tool is not built, so Settings does not show either field |
 | `sourceDefaults` | How a new source splits: `strategies`, `size`, `overlap`, `childSize`; AI steps are refused here and set per source with their estimate | At headings with context headers, 400 tokens, overlap 40 | A new source created into the base copies the values that differ from the defaults; each source keeps its own copy |
 
 A base is searchable by its whole team; no narrower list of people is kept, and `access.members` is always
@@ -154,7 +154,7 @@ this commit.
 | Rate | 1 request a second per host, 0.2 to 5; a slower `Crawl-delay` wins; 429 and 503 back off with `Retry-After` | Yes (one a second, crawl delay, resume after a rate limit) |
 | Render JavaScript | Off by default, on per source, in a separate browser worker used only by this plugin | No; the preview flags pages that show their text only with JavaScript |
 | Sign-in | None, or a header or cookie from the team's connection; secrets stay in tools-service | In the plugin |
-| Allowed hosts | The start URLs' hosts only; a new host waits for an admin under the account's new-hosts policy (409 `host_waiting`); private and link-local addresses refused unless allowed by name | Yes for host approval (`service.py:1008`); address refusal in the plugin |
+| Allowed hosts | The start URLs' hosts only; a new host waits for the Security team under the account's `egressNewHosts` policy (register row E48) (409 `host_waiting`); private and link-local addresses refused unless allowed by name | Yes for host approval (`service.py:1008`); address refusal in the plugin |
 | Preview | First 50 matched URLs, pages skipped and why, page count; nothing stored | Yes (`app.py:477`) |
 
 ### Read, clean, split, enrich
@@ -175,7 +175,7 @@ this commit.
 | Enrich | Model | The `bank-standard` alias |
 | Enrich | Ceiling | $5 per run (`aiCeiling`, 0.1 to 500); $50 per environment per day (`kb_ai_daily_cap`) |
 
-AI steps write nothing until the base's owner approves them as chosen; an AI step added later is pending again. The
+AI steps write nothing until a person holding `knowledge.decide` in the base's team (Admin and Builder) approves them as chosen; an AI step added later is pending again. The
 estimate splits up to 20 items with no model call and scales calls and tokens to the source. Past a ceiling, or with
 the model down, the remaining pieces are indexed without questions and the run says why. Only pieces whose digest
 changed are enriched again.

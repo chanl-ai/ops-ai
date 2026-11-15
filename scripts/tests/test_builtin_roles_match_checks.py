@@ -51,7 +51,7 @@ from ops_service_kit.errors import Forbidden
 from ops_tools.callers import security_admin
 from ops_tools.connections.service import connection_rights
 from ops_tools.modules.directory import Team
-from ops_tools.modules.service import Caller
+from ops_tools.modules.service import Caller, link_calls_of
 from ops_tools.modules.service import _can as tools_can  # pyright: ignore[reportPrivateUsage]
 from ops_tools.secrets.routes import may_write_secret
 
@@ -228,6 +228,15 @@ def tools_step(area: str, action: str) -> Verdict:
     return verdict
 
 
+def tools_mcp_calls(p: Principal) -> Scope | None:
+    """A link's Calls tab reads with mcp.view (modules/service.py `executions`, link given)."""
+    try:
+        mine = link_calls_of(tools_caller(p))
+    except Forbidden:
+        return None
+    return "all" if mine is None else "own"
+
+
 def tools_system_edit(p: Principal) -> Scope | None:
     """Editing a tool module provisioned as `system` needs tools.manage as well as the edit."""
     caller = tools_caller(p)
@@ -357,7 +366,7 @@ TODAY: dict[tuple[str, str], Verdict] = {
     **{
         (area, "view"): open_to_members
         for area in AREAS
-        if area not in ("settings", "audit", "activity", "webhooks", "usage", "chat", "memory", "workspace")
+        if area not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace")
     },
     ("chat", "view"): chat_owner,
     ("memory", "edit"): memory_editor,
@@ -410,6 +419,8 @@ TODAY: dict[tuple[str, str], Verdict] = {
     ("audit", "view"): platform_admin("audit", "view"),
     # tools-service's call log (GET /v1/executions).
     ("activity", "view"): tools_step("activity", "view"),
+    # A link's calls (GET /v1/executions?link=): one's own, or everyone's.
+    ("mcp", "view"): tools_mcp_calls,
 }
 
 CELLS = [(area, action) for area in AREAS for action in ACTIONS]

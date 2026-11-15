@@ -130,7 +130,7 @@ A manifest capability may name only an existing roles-grid area and action; it n
 | Dependencies | `depends_on: [plugin ids]` generalises `runs_on`. Turning a plugin on turns on what it depends on, with one confirmation listing them. Turning off a plugin others depend on is refused with their names. A cycle fails validation |
 | Plugin update | New scopes put accounts into `needs_reconnect`; new triggers arrive paused and are never turned on by an update; a trigger whose event the update removed stays, marked "no longer declared", and starts nothing; capabilities the team had off stay off |
 | Failed install | Every step is idempotent by name; the order is binding, tools, sources, template copies, then triggers, created paused; the console names the failed step and running the installer again converges |
-| Locked setting | Changing an install-locked setting through `PUT /v1/apps/{app}/team` is refused 403 naming the setting, whatever the caller's role |
+| Locked setting | Changing an install-locked setting through `PUT /v1/apps/{app}/team` is refused 400 `setting_locked` naming the setting, whatever the caller's role; the install config (`OPS_PLUGIN_LOCKED`) fixes it for every team (`plugins/routes.py`) |
 
 ## Triggers and schedules
 
@@ -231,9 +231,9 @@ is designed, not built yet; the base design is in [MCP server](../design/tools/m
 | Audit | Every call is a `gateway_calls` row with `channel = mcp` (`store/calls.py:67`), client name, person, endpoint and account |
 | Annotations | `readOnlyHint` from the access class, `destructiveHint` from the operation's approval policy, title always set |
 | Rate limit | Per token, in the database |
-| Personal data | Masked in everything an MCP client receives (`masked`, default true); turning it off needs `connections.manage` and is audited |
-| Held writes | A pending result with a review link that lives 24 hours; approvers are the team's people with `reviews.decide`, never the requester; on approval the call runs once as the requesting person, endpoint and account; an expired hold never runs |
-| API keys | Run reads only; a write answers 403 `insufficient_scope` and opens no hold |
+| Personal data | Masked in everything an MCP client receives (`masked`, default true); no route in `mcp_links.py` sets it, so no permission cell covers turning it off |
+| Held writes | A pending result with a review link that lives 24 hours; approvers are the team's people with `reviews.decide`, not the requester unless the team turns `requesterMayDecide` on; on approval the call runs once as the requesting person, endpoint and account; an expired hold never runs |
+| API keys | Run reads only; a write waits for a person (register row E28) |
 | Paused endpoint, revoked key | 401 on the next call; held writes in flight are cancelled |
 | Production | Test only for outside assistants; production comes through its own URL and token with every write waiting for a person |
 | Single server | tools-service is the only MCP server; agents-service's `mcp` deployment channel becomes a pointer to a curated endpoint |
@@ -287,19 +287,19 @@ Designed routes. Every new route is generated into the Python and TypeScript SDK
 | `GET`, `POST /v1/triggers`; `GET`, `PATCH`, `DELETE /v1/triggers/{id}`; `POST …/pause`, `/resume`, `/test`; `GET …/deliveries`; `POST …/deliveries/{key}/run-again` | `webhooks` view, create, edit, run, delete, plus run access on the target | agents |
 | `POST /v1/hooks` (URL and secret shown once), `POST /v1/hooks/{id}/rotate-secret`, `DELETE /v1/hooks/{id}` (409 while a trigger names it), `GET /v1/hooks/{id}/refusals` | `webhooks.create`; `.manage` for rotate and delete | tools |
 | `POST /v1/hooks/{id}` (receiver) | The outside app, by signature | tools |
-| `GET`, `POST /v1/mcp-endpoints`; `/{id}`, `/{id}/pause`, `/{id}/keys`, `/{id}/connections`, `/{id}/calls` | `tools.run` for one's own key; `connections.manage` to curate, pause, unmask, disconnect others | tools |
+| `GET`, `POST /v1/mcp-endpoints`; `/{id}`, `/{id}/pause`, `/{id}/keys`, `/{id}/connections`, `/{id}/calls` | `tools.run` for one's own key; `deployments.view`, `.create`, `.edit` and `.delete` to list, create, pause and remove links (`mcp_links.py`) | tools |
 
 ## Errors and refusals
 
 | Code | Status | When | Built |
 |---|---|---|---|
 | `SCOPE_MISSING` | 403 | A plugin's tool runs on an account whose token lacks its scopes | Designed, not built yet (today `insufficient_scope`, `auth/__init__.py:40`) |
-| `insufficient_scope` | 403 | An MCP write over a read-scoped token or an API key | Designed for MCP |
+| none | none | An API key's write over MCP waits for a person; it returns no error code (register row E28) | Built |
 | Hook refusal | 401 | Unknown, deleted, bad signature or stale | Designed, not built yet |
 | Rate | 429 | Hook or team arrival rate exceeded | Designed, not built yet |
 | Hook in use | 409 | Deleting a hook a trigger names | Designed, not built yet |
 | Dependency in use | 409 | Turning off a plugin others depend on | Designed, not built yet |
-| Locked setting | 403 | Changing an install-locked plugin setting | Designed, not built yet |
+| `setting_locked` | 400 | Changing a plugin setting the install config fixes for every team | Built |
 | Missing auth config | 4xx | Turning on a Google plugin with no team auth config; nothing is written | Designed, not built yet |
 
 ## Build order

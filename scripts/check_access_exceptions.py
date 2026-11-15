@@ -36,7 +36,9 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -79,6 +81,8 @@ BASELINE = {
     "widget_key_other_deployment": "scoped API key",
     "not_the_invitee": "token identity",
     "key_not_registered": "token identity",
+    "key_revoked": "token identity",
+    "key_expired": "token identity",
     "origin_required": "embed origin from config",
     "origin_mismatch": "embed origin from config",
     "origin_not_allowed": "embed origin from config",
@@ -93,7 +97,8 @@ PY_ROLE = [
     re.compile(rf"([\w.\[\]\"']+)\s*(?:==|!=)\s*[\"']({ROLES})[\"']"),
     re.compile(rf"[\"']({ROLES})[\"']\s*(?:==|!=)\s*([\w.]+)"),
 ]
-PY_SUB = re.compile(r"\b\w+\.sub\s*(?:==|!=)\s*([\w\"':.-]+)")
+# A caller's subject compared with a service's; a table's `sub` column (`<table>.c.sub`) filtered by it is not one.
+PY_SUB = re.compile(r"\b(?!c\.sub)\w+\.sub\s*(?:==|!=)\s*([\w\"':.-]+)")
 TS_ROLE = re.compile(rf"([\w.?]+)\s*(?:===|!==|==|!=)\s*['\"]({ROLES})['\"]")
 LOCKS = [
     ("protection-system", re.compile(r"protection\"?\)?\s*(?:==|!=)\s*[\"']system[\"']")),
@@ -240,6 +245,20 @@ def _refusals(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
                 code = TYPED[_name(call)][1]
                 if code not in BASELINE:
                     out.append(Finding(rel, call.lineno, "refusal", code, lines[call.lineno - 1].strip()))
+            continue
+        # A refusal returned as a (403, "CODE", ...) tuple, which the gateway turns into its answer.
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Tuple) and len(node.value.elts) >= 2:
+            status, code = node.value.elts[0], node.value.elts[1]
+            if (
+                isinstance(status, ast.Constant)
+                and status.value == 403
+                and isinstance(code, ast.Constant)
+                and isinstance(code.value, str)
+                and node.lineno not in seen
+            ):
+                seen.add(node.lineno)
+                if code.value not in BASELINE:
+                    out.append(Finding(rel, node.lineno, "refusal", code.value, lines[node.lineno - 1].strip()))
             continue
         # A raised Forbidden, or a response built with status 403 (an exception handler, a gateway refusal).
         if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
@@ -471,5 +490,21 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+def _repo_python() -> None:
+    """The scanned sources use the repository's Python (3.12 syntax, `type X = ...`), which an older interpreter's
+    parser refuses: run again under the repository's environment, or say which Python it needs."""
+    if sys.version_info >= (3, 12):  # noqa: UP036 - a hook or a person may run it with an older python3
+        return
+    venv = ROOT / ".venv" / "bin" / "python"
+    if venv.exists():
+        os.execv(venv, [str(venv), __file__, *sys.argv[1:]])
+    if shutil.which("uv"):
+        os.execvp("uv", ["uv", "run", "--project", str(ROOT), "python", __file__, *sys.argv[1:]])
+    sys.exit(
+        f"check_access_exceptions needs Python 3.12 (this is {sys.version.split()[0]}); run `uv run python {__file__}`"
+    )
+
+
 if __name__ == "__main__":
+    _repo_python()
     sys.exit(main(sys.argv[1:]))

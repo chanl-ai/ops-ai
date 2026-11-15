@@ -578,3 +578,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/an-admin-limits-the-menu.md` | uc-750: An agent's menu setting limits which skills a member can pick |
 | `usecases/agents-service/a-schedule-starts-a-run-once.md` | uc-workflows-1: A Schedule trigger starts one run per tick key |
 | `usecases/platform-service/team-usage-guards-team-deletion.md` | uc-platform-1: A team's running work is counted for that team only and stops its deletion |
+| `usecases/agents-service/evals-keep-saved-cases-and-runs.md` | uc-751: Evals keep saved cases and runs for the team |

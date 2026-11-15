@@ -18,13 +18,13 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-010 | tools-service | A builder manages a tool module | api, ui | `tools-service/manage-tool-modules.md` |
 | uc-011 | tools-service | A tool call runs through the registry and is logged with its caller | api | `tools-service/calls-through-the-registry.md` |
 | uc-012 | tools-service | A builder imports tools from OpenAPI and MCP and calls them on allowed hosts only | api, ui | `tools-service/import-tools.md` |
-| uc-013 | tools-service | A tool's credential is a secret that never comes back | api, ui | `tools-service/secrets.md` |
+| uc-013 | tools-service | Connect an app with an API key | api, ui | `tools-service/secrets.md` |
 | uc-015 | tools-service | Tool module details page | ui | `tools-service/tool-module-details-page.md` |
-| uc-018 | agents-service | Create, edit, publish an agent and chat with it | api, ui | `agents-service/agent-create-publish-chat.md` |
+| uc-018 | agents-service | Chat with an agent | api, ui | `agents-service/agent-create-publish-chat.md` |
 | uc-019 | agents-service | Create a workflow from draft JSON, validate, test, publish and start it | api | `agents-service/workflow-draft-publish-start.md` |
 | uc-020 | agents-service | Chat starts a workflow | api | `agents-service/chat-starts-a-workflow.md` |
 | uc-021 | platform-service | Sign in, session, refresh, sign out | api, ui | `platform-service/sign-in-and-sessions.md` |
-| uc-023 | platform-service | Members and roles | api, ui | `platform-service/members-and-roles.md` |
+| uc-023 | platform-service | Invite people and change their roles | api, ui | `platform-service/members-and-roles.md` |
 | uc-025 | platform-service | Audit | api, ui | `platform-service/audit-log.md` |
 | uc-026 | platform-service | Anonymous and dev boundary | api | `platform-service/anonymous-and-dev-boundary.md` |
 | uc-027 | agents-service | An approval outlives its token | api | `agents-service/approval-outlives-its-token.md` |
@@ -42,7 +42,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-055 | console | A bank API goes from import to a governed agent call | ui | `console/tool-lifecycle-end-to-end.md` |
 | uc-056 | console | A grant no longer offered shows as stale and can be removed | ui | `console/stale-grants-removed.md` |
 | uc-057 | console | A write held in a chat is listed in Reviews and approved there | ui | `console/chat-holds-in-reviews.md` |
-| uc-058 | console | Another person's chat stays private: a teammate gets 404 | ui | `console/chat-read-only-for-others.md` |
+| uc-058 | console | Another person's chat stays private: a teammate gets 404 | api, ui | `console/chat-read-only-for-others.md` |
 | uc-059 | console | A builder sets a write's approval policy on the module page | ui | `console/write-approval-policy.md` |
 | uc-060 | models-service | An alias reaches the fake OpenAI or the real one by its connection's base URL | api | `models-service/an-alias-reaches-the-fake-openai.md` |
 | uc-073 | console | Chat widgets draw by shape on the dev widget page | ui | `console/widgets-by-shape.md` |
@@ -56,7 +56,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-084 | agents-service | An agent finds a workflow with search_tools and runs it; its agent step answers by schema | api, ui | `agents-service/agent-runs-a-workflow-by-search.md` |
 | uc-081 | agents-service | Basic workflow nodes run through the queue, and a worker killed after the tool step leaves the tool called once | api, ui | `agents-service/workflow-runner-basic-nodes.md` |
 | uc-085 | agents-service | An agent refuses a blocked topic before answering, through a guardrail it pins by version | api, ui | `agents-service/agent-guardrails-blocked-topics.md` |
-| uc-086 | console | A builder takes a bank API from import to a governed agent call | ui, sdk, cli | `agents/an-agent-with-three-tools.md` |
+| uc-086 | console | An agent with three tools | ui | `(no doc)` |
 | uc-087 | console | A banker finds, starts and continues chats: suggested prompt, regenerate, stop, retry, server search and paging | ui | `console/chat-find-start-continue.md` |
 | uc-088 | agents-service | A builder sets the limits callers override within and publishes them with the agent | ui | `agents-service/agent-limits-published.md` |
 | uc-089 | console | An agent shows a table and a figure in chat with no tool behind them | ui | `console/agent-presents-widgets.md` |
@@ -66,7 +66,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-095 | console | An agent fills a pinned widget and lays out its own in chat | ui | `console/agent-fills-widgets.md` |
 | uc-093 | files-service | A member stores a file once and it is downloaded, held and deleted under its rules | api | `files-service/file-lifecycle.md` |
 | uc-094 | files-service | Another team's file is missing on every files-service route | api, ui | `files-service/file-team-boundary.md` |
-| uc-096 | console | Knowledge bases work end to end from the console: create, add files and a page, watch ingestion, test a question, retire | ui | `knowledge/knowledge-base-end-to-end.md` |
+| uc-096 | console | Make, fill, ask and retire a knowledge base | ui | `(no doc)` |
 | uc-097 | console | A builder saves create dialogs and account settings with Enter, and Cancel never saves | ui | `console/forms-save-on-enter.md` |
 | uc-098 | console | A builder pages and searches a growing list on the server | ui | `console/lists-page-on-the-server.md` |
 | uc-099 | console | A viewer sees the team's records read-only | api, ui | `console/viewer-sees-read-only-pages.md` |
@@ -111,10 +111,13 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-141 | console | The one Activity page lists a run by name, filters by kind on the server, narrows to a source, and opens the run | ui | `console/activity-page.md` |
 | uc-142 | console | Channels on real data: the hub, tab dots and an email landing match /v1/channels; Deployments lands on Channels; an embed's version changes in its row | ui | `console/channels-real.md` |
 | uc-143 | console | Access › Tool access lists every workflow's tool access by view, counted on the server | ui | `console/tool-access.md` |
-| uc-129 | kb-service | A builder adds documents to a knowledge base by uploading them or picking them from Files | ui | `knowledge/add-documents-from-files.md` |
+| uc-129 | kb-service | Add files from Files to a knowledge base | ui | `(no doc)` |
 | uc-160 | platform-service | A person resets their password by a mailed link and signs in with it; the demo password stops working for them | api, ui | `platform-service/password-sign-in-and-reset.md` |
 | uc-161 | platform-service | A first OIDC sign-in creates a chat-only member once, and the console offers SSO for that email | api, ui | `platform-service/oidc-sign-in-creates-a-chat-user.md` |
 | uc-162 | platform-service | A person signs in through SAML and steps up at the same provider, which must ask again | api | `platform-service/saml-sign-in-and-step-up.md` |
+| uc-711 | platform-service | Leaving a group at the identity provider ends only the membership that group gave | api | `platform-service/saml-group-grants-and-removal.md` |
+| uc-712 | platform-service | Company sign-in required: passwords refused on company domains except for break-glass Security admins | api | `platform-service/company-sign-in-required-and-break-glass.md` |
+| uc-713 | platform-service | An admin tests a company provider, turned off, and sees what it sent; nobody is signed in or made | api | `platform-service/saml-test-sign-in.md` |
 | uc-163 | platform-service | A password in an SSO-only workspace, another provider's answer and a reused code are refused | api | `platform-service/wrong-sign-in-provider-refused.md` |
 | uc-164 | platform-service | Workspace admins create a team with its first admin, rename, archive and restore it; others cannot | api, ui | `platform-service/workspace-admins-manage-teams.md` |
 | uc-212 | platform-service | A workspace sets its security and default teams, and SSO groups put new people in mapped teams | api | `platform-service/workspace-security-default-teams-and-groups.md` |
@@ -167,7 +170,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-395 | tools-service | A tool presents a client certificate from its connection to a system that requires one | api, ui | `tools-service/connections-certificate.md` |
 | uc-396 | tools-service | A builder adds an MCP server behind OAuth by its address, signs in once, and its tools run through the same executor | api, ui | `tools-service/mcp-sign-in.md` |
 | uc-397 | tools-service | A workflow's tool step reaches its error and timeout ports on mock answers in a test run, and live reaches the system | api | `tools-service/mock-answers.md` |
-| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api | `tools-service/mcp-server.md` |
+| uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | `tools-service/mcp-server.md` |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | `console/access-roles-and-checks.md` |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | `console/run-with-files.md` |
 | uc-234 | console | A Human Task opens as its own page: the question, the document beside the read values, Details folded, and the decision in a footer row that never covers the body | ui | `console/human-task-page.md` |
@@ -204,7 +207,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-532 | models-service | An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one | ui | `models-service/an-account-admin-saves-a-model.md` |
 | uc-552 | console | A person works from one Chat, with Overview, their chats and the pages of one area in a folding sidebar, and an ended session keeps their draft | api, ui | `console/chat-first.md` |
 | uc-560 | console | Screens open from saved data, and every request logs its time and returns Server-Timing, with one request id across services | api, ui | `console/screen-speed.md` |
-| uc-558 | tools-service | People connect their own Salesforce account: a call acts as the person who asked, an unconnected person gets a connect link made for them alone, and the body never chooses a token | api, sdk, cli, ui | `tools-service/per-person-sign-in.md` |
+| uc-558 | tools-service | Connect your own Salesforce account | api, ui | `(no doc)` |
 | uc-561 | agents-service | Memory follows a person across a team's agents and they take it back | api | `agents-service/memory-follows-a-person-across-a.md` |
 | uc-562 | console | Every list, record and settings page reads well on a phone and on a desktop: no preselected decision, phone lists show the name, search boxes and descriptions read in full, tab strips scroll with a cue, a way back on record pages | ui | `console/phone-and-desktop.md` |
 | uc-563 | platform-service | A developer installs the sample team with one command, and a second run makes nothing | cli | `platform-service/a-developer-installs-the-sample-team.md` |
@@ -235,7 +238,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-620 | agents-service | Any file a workflow or chat reads ends read or with a reason | api, ui | `agents-service/any-file-a-workflow-or-chat.md` |
 | uc-621 | agents-service | A builder runs the three foundation Examples | sdk | `agents-service/a-builder-runs-the-three.md` |
 | uc-622 | agents-service | A builder asks the first three published agents | sdk | `agents-service/a-builder-asks-the-first-three.md` |
-| uc-623 | agents-service | A builder validates, applies and test-runs the three-node workflow | sdk, cli | `agents-service/a-builder-validates-applies-and-test.md` |
+| uc-623 | agents-service | Test-run a workflow from a file | none | `agents-service/a-builder-validates-applies-and-test.md` |
 | uc-624 | agents-service | A builder runs the two composition Examples | sdk | `agents-service/a-builder-runs-the-two-composition.md` |
 | uc-625 | tools-service | Connect comes back Connected in any window, for every sign-in app | ui | `tools-service/sign-in-return-any-window.md` |
 | uc-626 | tools-service | Apps screens offer only what you may do, in plain words | api, ui | `tools-service/apps-screens-for-each-role.md` |
@@ -248,9 +251,9 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | `agents-service/scanned-chat-attachment.md` |
 | uc-674 | tools-service | An app's page shows one state and its next action | ui | `tools-service/app-page-one-state.md` |
 | uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | `kb-service/a-website-source-keeps-a-knowledge.md` |
-| uc-676 | kb-service | Typed text and pushed items become cited knowledge, kept as files and idempotent by name | api, sdk, cli, ui | `kb-service/typed-text-and-pushed-items.md` |
-| uc-677 | kb-service | A knowledge owner turns on rerank and query rewrite, and every search shows what they did | api, sdk, ui | `knowledge/rerank-and-rewrite.md` |
-| uc-678 | kb-service | A team takes in SharePoint libraries and Confluence spaces picked by name | api, sdk, ui | `knowledge/sharepoint-and-confluence.md` |
+| uc-676 | kb-service | Push knowledge from another system | api, ui | `kb-service/typed-text-and-pushed-items.md` |
+| uc-677 | kb-service | Turn on rerank and query rewrite | api, ui | `(no doc)` |
+| uc-678 | kb-service | Take in SharePoint libraries and Confluence spaces | api, ui | `(no doc)` |
 | uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | `tools-service/a-second-org-signs-in-at-its-own-address.md` |
 | uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | `tools-service/a-second-server-signs-in-at-its-own-address.md` |
 | uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | `tools-service/every-account-says-what-it-points-at.md` |
@@ -275,5 +278,20 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-721 | tools-service | A connected app writes at once: every tool on and writes run without asking until a team admin turns asking on, per team or per app; a turned-off tool says how to turn it on | api, sdk, ui | `tools-service/a-connected-app-writes-at-once.md` |
 | uc-730 | console | A team admin decides whether agents ask before changing an app with one switch on Approvals, who answers once it is on, and a test-account checkbox under Advanced | ui | `console/an-admin-decides-approvals-with-one-switch.md` |
 | uc-731 | agents-service | A team that makes a second guardrail of the same name is refused with name_taken, and the first keeps the plain slug | api | `agents-service/guardrail-names-per-team.md` |
+| uc-733 | platform-service | A person connects an assistant to a team's MCP address with their company sign-in; a console token, another address and a person who left the team are refused | api, ui | `platform-service/mcp-company-sign-in.md` |
+| uc-740 | agents-service | Start a skill from a template | none | `(no doc)` |
+| uc-741 | agents-service | List and install templates from an assistant | none | `(no doc)` |
+| uc-742 | agents-service | A team's skill is an assistant's prompt | none | `(no doc)` |
+| uc-743 | agents-service | Prepare a client meeting from the slash menu | api, ui | `(no doc)` |
+| uc-744 | agents-service | Update an opportunity from the same skill | api, ui | `(no doc)` |
+| uc-745 | agents-service | Skills stay out of reach without the right | api | `(no doc)` |
+| uc-746 | agents-service | Only published skills are offered | api | `(no doc)` |
+| uc-747 | agents-service | A required input must be filled | api | `(no doc)` |
+| uc-748 | agents-service | A pick over the reply's budget is refused | api | `(no doc)` |
+| uc-749 | agents-service | A part needing a tool the agent lacks is locked | api | `(no doc)` |
+| uc-750 | agents-service | An admin limits what the menu offers | api | `(no doc)` |
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | `console/console-areas.md` |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | `console/console-areas-server-facts.md` |
+| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | `(no doc)` |
+| uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | `(no doc)` |
+| uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | `agents-service/evals-keep-saved-cases-and-runs.md` |

@@ -162,6 +162,14 @@ def _can(
     Access().can(who.principal, area, action, what=what, code=code, protection=protection, requested_by=requested_by)
 
 
+def link_calls_of(who: Caller) -> str | None:
+    """mcp.view, for a link's calls: None reads everyone's, a subject reads only the calls that caller made."""
+    if who.principal is None:
+        return None
+    scope = Access().can(who.principal, "mcp", "view", what="the link's calls")
+    return who.principal.sub if scope == "own" else None
+
+
 def _not_a_plugin(m: Aggregate) -> None:
     """A plugin's module changes only with its installed package: no route edits, publishes, deletes or asks
     access for it, whoever asks, admins included."""
@@ -394,10 +402,6 @@ class ModuleService:
         recorded them when it was requested (the workflow's team comes from agents-service)."""
         return self.dir.owners(m)
 
-    def _workflow_groups(self, a: dict[str, Any]) -> list[str | None]:
-        team = self.dir.team_by_id(a.get("workflow_team_id"))
-        return list(team.owner_groups) if team else []
-
     def _since(self, delta: timedelta) -> str:
         """`delta` before now, in the call log's created_at format, so the two compare as text."""
         return (self.clock() - delta).astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -534,34 +538,18 @@ class ModuleService:
             return r["approvalState"] != "expired" and nxt is not None and datetime.fromisoformat(nxt) - now < EXPIRING
         return r["errorRate"] >= FAILING_RATE or not r["reachable"]
 
-    def _run_contexts(self, m: Aggregate, team: Team) -> list[dict[str, Any]]:
-        """The module owner first, which needs no workflow approval, so the run panel's default is a try
-        the owner can always make; then one context per workflow this module is approved for or asked for, with no
-        case: the builder types the bound values, which the panel marks as a sample. Only the caller's team's
-        workflows: running as another team's workflow would borrow its approval."""
-        seen: dict[str, dict[str, Any]] = {}
-        for a in m["approvals"]:
-            ours = a.get("workflow_team_id") == team.id or self.dir.sees(team, self._workflow_groups(a))
-            if a["workflow_id"] not in seen and ours:
-                seen[a["workflow_id"]] = a
-        owner: dict[str, Any] = {
-            "id": OWNER_CONTEXT,
-            "label": "Owner, no case",
-            "workflowId": "",
-            "workflowName": "",
-            "caseId": SAMPLE_CASE,
-            "bindings": {},
-        }
-        return [owner] + [
+    def _run_contexts(self) -> list[dict[str, Any]]:
+        """The module owner only, who needs no workflow approval. The test panel's Run as lists it alone: a
+        workflow's context ran with typed sample values rather than a case, so it proved nothing a real run would."""
+        return [
             {
-                "id": w,
-                "label": f"{a['workflow_name']} · sample values",
-                "workflowId": w,
-                "workflowName": a["workflow_name"],
+                "id": OWNER_CONTEXT,
+                "label": "Owner, no case",
+                "workflowId": "",
+                "workflowName": "",
                 "caseId": SAMPLE_CASE,
                 "bindings": {},
             }
-            for w, a in seen.items()
         ]
 
     def _operation(
@@ -672,7 +660,7 @@ class ModuleService:
             "pendingChanges": m["pending"],
             "approvals": [self._approval_out(a) for a in ordered],
             "versions": [self._version_out(v) for v in reversed(m["versions"])],
-            "runContexts": self._run_contexts(m, team),
+            "runContexts": self._run_contexts(),
             **(self._rights(who, m) if who is not None else {}),
         }
 
@@ -978,8 +966,11 @@ class ModuleService:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
         sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
         call, so a chat's Open call link shows the call it was made from. The log names who called what, so it is read
-        under activity.view."""
-        _can(who, "activity", "view", what="the tool-call log")
+        under activity.view. A link's calls are read under mcp.view instead, so a member with `own` sees only the calls
+        they made through it."""
+        mine = link_calls_of(who) if link_id is not None else None
+        if link_id is None:
+            _can(who, "activity", "view", what="the tool-call log")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_ids is not None:
@@ -1000,6 +991,7 @@ class ModuleService:
             key=key,
             call_id=call_id,
             link_id=link_id,
+            sub=mine,
             since=since,
             until=until,
             offset=(page - 1) * page_size,
@@ -1312,17 +1304,20 @@ class ModuleService:
 
     async def hold_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
         """An app's address on a host the tenant has not listed, decided by the account's egressNewHosts policy before
-        anything is saved. Under `any_public` the host passes as it is. A caller who may manage the egress list, or
-        any builder under `builders`, lists it in their own name, audited. Under `block` it is refused. Otherwise it
-        asks the Security team: HostHeld with the task's run key while it waits, its reason once refused.
+        anything is saved. A host the call-time check passes (`EgressPolicy.host_passes`: any public name under
+        `any_public`), a caller who may manage the egress list, or any builder under `builders`, lists it in the
+        caller's name, audited: a module's hosts are rows of the list (the store's foreign key), so a host that passes
+        unlisted would still be refused on save. Under `block` it is refused. Otherwise it asks the Security team:
+        HostHeld with the task's run key while it waits, its reason once refused.
         Without Reviews or an egress policy the call-time check refuses the host."""
         if not host or self.egress is None or self.reviews is None:
             return
-        if await self.egress.host_passes(who.tenant_id, host):
+        if await self.egress.store.host_allowed(who.tenant_id, host):
             return
+        passes = await self.egress.host_passes(who.tenant_id, host)
         mode = await self.egress.new_hosts.mode(who.tenant_id) if self.egress.new_hosts else "ask_security"
         manages = who.principal is not None and self._manages_egress(who)
-        if manages or (mode == "builders" and who.principal is not None):
+        if passes or manages or (mode == "builders" and who.principal is not None):
             note = f"Listed when {app} first named it"
             await self.egress.store.add(who.tenant_id, "host", host, actor=who.name, note=note, at=self.clock())
             return
@@ -2324,7 +2319,7 @@ class ModuleService:
         if o is None:
             raise NotFound("Operation")
         owner = i["context_id"] == OWNER_CONTEXT
-        ctx = None if owner else next((c for c in self._run_contexts(m, who.team) if c["id"] == i["context_id"]), None)
+        ctx = None if owner else next((c for c in self._run_contexts() if c["id"] == i["context_id"]), None)
         if ctx is None and not owner:
             raise ValidationFailed("Choose a run context.")
         call_id = new_id("test")

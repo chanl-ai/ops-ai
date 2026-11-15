@@ -21,6 +21,7 @@ from usecase_harness import (
     PLATFORM_PORT,
     TOOLS_PORT,
     agents,
+    assistant_sign_in,
     bearer,
     check,
     core_bank,
@@ -82,9 +83,10 @@ def refused(credential: str | None, path: str) -> tuple[int, str]:
 
 
 with ExitStack() as stack:
-    api, _ = stack.enter_context(platform())
-    bank = stack.enter_context(core_bank())
     gw_url = f"http://127.0.0.1:{TOOLS_PORT}"
+    # platform-service names the MCP address an assistant signs in for (step 6).
+    api, _ = stack.enter_context(platform(env={"OPS_TOOLS_PUBLIC_URL": gw_url}))
+    bank = stack.enter_context(core_bank())
     # The MCP address is behind the install flag mcp_gateway; an install that serves it names its public address and
     # sign-in issuer, without which a caller with no API key is told assistants cannot sign in (503).
     flags = {
@@ -204,4 +206,30 @@ with ExitStack() as stack:
     check("5 no credential is 401", nokey == (401, "unauthorized"), nokey)
     console = refused(ravi.get("token", ""), "/team_ops")
     check("5 a person's console token is not an MCP credential (401)", console == (401, "unauthorized"), console)
+
+    # 6. A link's calls are read with mcp.view: James (builder) calls through Priya's link with his own assistant
+    # sign-in; Priya (admin) reads every call on it, Ravi (viewer) reads only his own, which is none, and still not
+    # the team's whole tool-call log.
+    made = ops.post("/v1/mcp-links", json={"name": "uc410 lookups", "tools": [{"id": "uc410_get_account", "label": "x"}]})
+    link = data(made)
+    james_mcp = assistant_sign_in(api, "j.richardson@harborpine.example", f"{gw_url}/mcp/team_ops/uc410-lookups")
+    via_link = asyncio.run(
+        called(james_mcp["access_token"], "/team_ops/uc410-lookups", "uc410_get_account", {"account_id": "CHQ-2219"})
+    )
+    check("6 James's call through the link runs", via_link.is_error is False, via_link)
+    viewer = httpx.Client(base_url=gw_url, headers=bearer(ravi, "team_ops"), timeout=30)
+    on_link = {"link": link.get("id", "")}
+    admin_rows = data(ops.get("/v1/executions", params=on_link))["data"]
+    ravi_read = viewer.get("/v1/executions", params=on_link)
+    check(
+        "6 Priya reads James's call on the link",
+        [r.get("subject", {}).get("name") for r in admin_rows] == ["James Richardson"],
+        admin_rows,
+    )
+    check(
+        "6 Ravi reads the link's calls (200) and sees only his own, so none",
+        ravi_read.status_code == 200 and ravi_read.json()["data"]["data"] == [],
+        ravi_read.text[:300],
+    )
+    check("6 Ravi still cannot read the team's tool-call log (403)", viewer.get("/v1/executions").status_code == 403)
 finish()

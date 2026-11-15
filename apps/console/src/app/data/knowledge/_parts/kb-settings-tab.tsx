@@ -376,7 +376,7 @@ export function KbSettingsTab({ kb }: { kb: KnowledgeBaseDetail }) {
                 </Select>
               )} />
             </FormField>
-            <NumberInput control={control} name="sync.staleAfterDays" id="set-stale" label="Stale after (days)" hint="A document not changed or verified for this long is marked Stale." error={err('sync.staleAfterDays')?.message} />
+            {/* Stale after (sync.staleAfterDays) is kept and saved but not shown: freshness does not read it yet. */}
             <SwitchField control={control} name="sync.notifyOnFailure" id="set-notify" label="Tell the owner when a sync fails" description="An email and a Human Tasks item to the base’s owner after a failing sync." />
           </div>
         </SettingsSection>
@@ -388,10 +388,7 @@ export function KbSettingsTab({ kb }: { kb: KnowledgeBaseDetail }) {
                 <EntityPicker source={peopleOptions} multiple={false} value={field.value ? [field.value] : []} onChange={(next) => field.onChange(next[0] ?? '')} addLabel="Choose the owner" searchPlaceholder="Search people…" testId="kb-settings-owner" />
               )} />
             </FormField>
-            <SwitchField control={control} name="access.mcpEnabled" id="set-mcp" label="Offer as an MCP tool" description="Agents and tools outside Ops AI can search it through the team’s MCP address." />
-            <FormField id="set-tool-name" label="Tool name" hint="Lowercase letters, digits and underscores." error={err('access.toolName')?.message}>
-              <Controller control={control} name="access.toolName" render={({ field }) => <Input id="set-tool-name" className="bg-background font-mono text-sm" {...field} aria-invalid={!!err('access.toolName')} />} />
-            </FormField>
+            {/* Offer as an MCP tool and its tool name (access.mcp) are kept but not shown: no MCP search tool reads them yet. */}
           </div>
         </SettingsSection>
       </div>

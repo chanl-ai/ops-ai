@@ -1,12 +1,15 @@
 // uc-218 a person invited as a reviewer, ui layer: docs/usecases/platform-service/role-reviewer.md. A builder's
 // publish request opens with the decision form, Approve publishes it, and the agent page says View only.
 import { AGENTS_PORT, INVITED_PASSWORD, check, chromium, consoleSignIn, finish, invitePerson, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const TAG = Math.random().toString(36).slice(2, 7);
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 
 await withUiStack(
   async (consoleUrl) => {
+    // A new workspace publishes at once; Priya turns review on for the team's agents, so the request stays pending.
+    await publishReviewOn({ agents: 'always' });
     // The builder is invited last: each accept raises the permission version (D62), and a token older than it is refused.
     await invitePerson('p.shah@harborpine.example', `reviewer.${TAG}@harborpine.example`, 'approver');
     const builder = await invitePerson('p.shah@harborpine.example', `builder.${TAG}@harborpine.example`, 'builder');
