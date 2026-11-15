@@ -736,7 +736,7 @@ export function stackEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> 
   const inherited = { ...base };
   // The shared stack's fake bank CA and name map stay with it, as in usecase_harness._env: a use case's bank passes its own.
   // So does the shell's model endpoint (OPENAI_API_BASE and the rest), which would move openai-local off the fake.
-  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE', ...MODEL_ENDPOINT_ENV]) delete inherited[key];
+  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_PLATFORM_INTERNAL_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE', ...MODEL_ENDPOINT_ENV]) delete inherited[key];
   // A run loads only the plugins its use case names (OPS_PLUGIN_PATHS); the repo's plugins/ folder holds whatever was
   // installed there last, and a plugin in both places loads from neither.
   // A service signs callers in unless told otherwise (its default is platform), so a run without platform-service

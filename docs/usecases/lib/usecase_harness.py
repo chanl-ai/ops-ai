@@ -219,6 +219,9 @@ def _env() -> dict[str, str]:
     # A run loads only the plugins its use case names (OPS_PLUGIN_PATHS); the repo's plugins/ folder holds whatever was
     # installed there last, and a plugin in both places loads from neither.
     env.setdefault("OPS_PLUGINS_DIR", _EMPTY_PLUGINS)
+    # Where the run's platform-service keeps its internal port, for every process a use case starts with sign-in on:
+    # the address make exports is the shared stack's.
+    env["OPS_PLATFORM_INTERNAL_URL"] = f"http://127.0.0.1:{PLATFORM_INTERNAL_PORT}"
     return env
 
 
