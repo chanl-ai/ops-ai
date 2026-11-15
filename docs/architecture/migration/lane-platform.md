@@ -111,6 +111,7 @@ limit = policy(p, "chat.daily_budget")      # never a default read inline
 | Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions; `__main__` exits naming an unset required endpoint |
 | Typed boundaries | 24 store functions return models; every body an `In`, every reply an `Out`; zero bare tasks; `signin.py`'s string SQL resolved |
 | Relay and loops | `event_relay.py` gone; every `PROCESSES` key has a `loop_reports_failure` test |
+| Relay and loop baselines | `packages/ops_store/tests/relay_sites/platform-service.txt` deleted; `packages/ops_store/tests/loop_health/platform.txt` emptied (`platform_relay`, `signin_watch`, `workspace_lifecycle`) |
 | Budgets | 41 GET routes green at 5 and 50 rows on both databases |
 | Behaviour and staging | Tests, the 27 use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; Access, Teams, Sign-in and Security screens opened by hand |
 

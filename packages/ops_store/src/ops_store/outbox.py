@@ -7,8 +7,11 @@ agents-service returns the run the first delivery started, by the event's key.
 
   events = outbox_table(metadata)             # in the service's own store, with a migration
   await add(conn, events, tenant_id=..., team_id=..., name="file.deleted", key=file_id, payload={...})
-  relay = Relay(engine, events, send)         # send POSTs one event, raising on any failure
-  await relay.once()                          # or: await relay.run(stop), which also prunes
+  r = relay(engine, events, routes={"*": ("agents",)}, targets={"agents": client}, role=SYSTEM_ROLE)
+  await run_relay(r, key="files_relay", stop=stop)     # delivers, retries and prunes until stop
+
+`relay()` is the one place a `Relay` is built (tests/test_relay_sites.py): a service passes which services hear each
+event and the clients that reach them, and never writes its own send function or loop.
 """
 
 from __future__ import annotations
@@ -16,8 +19,8 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any, Protocol
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -34,6 +37,21 @@ OUTBOX = system("service event outbox, read by its relay across tenants")
 RELAY = "outbox_relay"
 
 Send = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+class Poster(Protocol):
+    """What the relay needs of a client to another service; `ops_identity.ServiceClient` is one. `post` raises on
+    any answer but success, and mints its token for the tenant and team it is given."""
+
+    async def post(self, path: str, body: Any, /, *, tenant: str, team: str) -> Any: ...
+
+
+# Event name -> the services that hear it. "*" is every event with no row of its own; an event with neither is
+# delivered by doing nothing.
+Routes = Mapping[str, tuple[str, ...]]
+# Called after each delivery with the event's body, the service it went to and that service's answer, inside the
+# event's tenant and team; raising leaves the event unsent.
+Enrich = Callable[[dict[str, Any], str, Any], Awaitable[None]]
 
 # The longest wait between two tries of one event, so a long outage is retried within a minute of its end.
 MAX_BACKOFF_S = 60.0
@@ -189,10 +207,11 @@ class Relay:
         *,
         key: str,
         store: background.HeartbeatStore,
-        every_s: float = 2.0,
+        every_s: float | None = None,
     ) -> None:
-        """Delivers until `stop` is set, waking every `every_s` seconds, and prunes once every PRUNE_EVERY_S, as the
-        listed background process `key`: a failed pass is retried with a growing wait and shows in its heartbeat."""
+        """Delivers until `stop` is set, waking every `every_s` seconds (the listed interval of `key` by default), and
+        prunes once every PRUNE_EVERY_S, as the listed background process `key`: a failed pass is retried with a
+        growing wait and shows in its heartbeat."""
         pruned = float("-inf")
 
         async def once() -> int:
@@ -203,3 +222,46 @@ class Relay:
             return await self.once()
 
         await background.run(key, once, stop=stop, store=store, every_s=every_s, waiting=self.waiting)
+
+
+def relay(
+    engine: AsyncEngine,
+    table: sa.Table,
+    *,
+    routes: Routes,
+    targets: Mapping[str, Poster],
+    role: str | None,
+    path: str = "/v1/events",
+    team_in_token: frozenset[str] = frozenset(),
+    enrich: Enrich | None = None,
+    path_by_target: Mapping[str, str] | None = None,
+) -> Relay:
+    """The relay of a service's outbox: each event is posted to every service `routes` names for it, at `path` (or
+    that service's own in `path_by_target`), as the event's tenant and team.
+
+    A service named in `routes` and absent from `targets` is one this installation does not run: nobody would read
+    the event, so it is skipped. A delivery that raises leaves the event unsent and the relay sends it to all of its
+    services again later, so a receiver dedupes on the event's key. A service in `team_in_token` takes the team from
+    the token alone and its body carries no `teamId`."""
+    paths = path_by_target or {}
+
+    async def send(item: dict[str, Any]) -> None:
+        body: dict[str, Any] = item["body"]
+        tenant, team = str(item["tenantId"]), str(body["teamId"])
+        for service in routes.get(str(body["name"]), routes.get("*", ())):
+            if (poster := targets.get(service)) is None:
+                continue
+            sent = {k: v for k, v in body.items() if k != "teamId"} if service in team_in_token else body
+            answer = await poster.post(paths.get(service, path), sent, tenant=tenant, team=team)
+            if enrich is not None:
+                await enrich(body, service, answer)
+
+    return Relay(engine, table, send, role=role)
+
+
+async def run_relay(
+    r: Relay, *, key: str, stop: asyncio.Event, store: background.HeartbeatStore = background.LOCAL
+) -> None:
+    """Delivers and prunes until `stop` is set, as the listed background process `key`, at that process's listed
+    interval; a failed pass is retried and shows on /health/background."""
+    await r.run(stop, key=key, store=store)

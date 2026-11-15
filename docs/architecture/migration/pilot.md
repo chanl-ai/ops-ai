@@ -128,6 +128,7 @@ run_relay(relay(engine, outbox, routes={"*": ("agents",), "file.read_requested":
 | Lists | No list slice under the four services' `api/` or `app` modules; files' pickers answer `ids=` |
 | Clients and settings | Zero loopback fallbacks; zero literal timeouts; zero `httpx.AsyncClient` outside the listed clients; each `__main__` exits naming an unset required endpoint |
 | Relay and loops | Both `event_relay.py` files gone; every key on `PROCESSES` has a `loop_reports_failure` test |
+| Relay and loop baselines | `packages/ops_store/tests/relay_sites/documents-service.txt` and `files-service.txt` deleted; `packages/ops_store/tests/loop_health/documents.txt` and `files.txt` emptied (`document_reading`, `documents_relay`, `files_relay`, `files_retention`) |
 | Typed boundaries | 33 store functions return models; `Passthrough` on the one forwarded body; zero `gather` and `create_task` outside `ops_store.background`; runner's sleeps gone |
 | Budgets | The budget fixture is green for all 35 GET routes at 5 and 50 rows on both databases, with the streaming and fan-out routes listed |
 | Behaviour | Service tests, the eleven use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; the screens opened by hand |

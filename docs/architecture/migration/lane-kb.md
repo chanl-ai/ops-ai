@@ -112,6 +112,7 @@ run_relay(relay(engine, outbox, routes={"kb.audit": ("platform",), "*": ("agents
 | Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions; `__main__` exits naming an unset required endpoint |
 | Typed boundaries | 14 store functions return models; the local `In` gone; zero bare tasks |
 | Relay, event and loops | `event_relay.py` gone; `kb.changed` on the outbox and received by agents-service's `/v1/events`; every `PROCESSES` key has a `loop_reports_failure` test |
+| Relay and loop baselines | `packages/ops_store/tests/relay_sites/kb-service.txt` deleted; `packages/ops_store/tests/loop_health/kb.txt` emptied (`kb_embed`, `kb_relay`, `knowledge_schedule`) |
 | Budgets | 20 GET routes green at 5 and 50 rows on both databases |
 | Behaviour and staging | Tests, the seven use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; the Knowledge screens opened by hand, a sync run |
 

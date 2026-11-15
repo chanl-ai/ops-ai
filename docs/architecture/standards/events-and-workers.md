@@ -42,8 +42,8 @@ await Relay(engine, service_outbox, sender(agents, kb), role=SYSTEM_ROLE).run(as
 Pattern (`packages/ops_store/src/ops_store/outbox.py:115`): `Relay` itself, which takes the table, the send function and
 the role, is the one owner of delivery, retry and backoff.
 
-Check: no check yet. Needed: a duplicate-code ratchet over `services/*/src` (`LY7`) with the five files as today's
-ceiling, and the wiring moved into `ops_service_kit`.
+Check: `packages/ops_store/tests/test_relay_sites.py` fails on a `Relay(` built outside `ops_store.outbox`; the five
+files are listed under `packages/ops_store/tests/relay_sites/` until each service calls `ops_store.outbox.relay()`.
 
 ## EV3 A receiver tolerates a repeat
 
@@ -78,8 +78,9 @@ Pattern (`services/documents-service/src/ops_documents/store/event_relay.py:41` 
 ```
 
 Check: `packages/ops_service_kit/src/ops_service_kit/background.py` defines the shape;
-`services/agents-service/src/ops_agents/api/routers/background.py` reads it. Needed: a test per loop that a raised
-exception turns its row unhealthy.
+`services/agents-service/src/ops_agents/api/routers/background.py` reads it.
+`packages/ops_store/tests/test_loop_health.py` fails on a process with no `ops_store.testing.loop_reports_failure`
+test in its service; the 20 with none today are listed under `packages/ops_store/tests/loop_health/`.
 
 ## EV5 Workers claim with the dialect and lease what they hold
 

@@ -1,0 +1,2 @@
+# files-service: builds its own Relay until it moves onto ops_store.outbox.relay() (packages/ops_store/tests/test_relay_sites.py). A row may only go.
+services/files-service/src/ops_files/store/event_relay.py

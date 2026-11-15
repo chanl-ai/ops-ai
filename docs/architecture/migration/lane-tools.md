@@ -127,6 +127,7 @@ PROCESSES.append(retention(secret_audit, secret_audit.c.at, keep_s=90 * 86400, k
 | Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions outside the gateway's own egress client; `__main__` exits naming an unset required endpoint |
 | Typed boundaries | 21 store functions return models; every body an `In`, every reply an `Out`; zero bare tasks |
 | Relay, events and loops | `event_relay.py` gone; the three catalogue events on the outbox and received by agents-service; every `PROCESSES` key has a `loop_reports_failure` test |
+| Relay and loop baselines | `packages/ops_store/tests/relay_sites/tools-service.txt` deleted; `packages/ops_store/tests/loop_health/tools.txt` emptied (`sign_in_keepalive`, `tools_relay`) |
 | Budgets | 33 GET routes green at 5 and 50 rows on both databases |
 | Behaviour and staging | Tests, the 56 use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; Apps, Connections, Egress and MCP screens opened by hand, one tool run through the gateway |
 

@@ -4,14 +4,18 @@ process still looks alive; heartbeat writes slow the loop they report on; a proc
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_store import background
 from ops_store.background import BY_KEY, Beat, Heartbeat, MemoryHeartbeats, state
 from ops_store.outbox import Relay
+from ops_store.testing import loop_reports_failure
 
 
 async def _until(cond: Any, *, tries: int = 300) -> None:
@@ -138,3 +142,79 @@ def test_the_knowledge_schedule_is_listed_only_when_the_install_has_plugins(
     (dropped / "ops_plugin_desk").mkdir()
     assert "knowledge_schedule" in keys()
     background.plugins_on.cache_clear()
+
+
+class Health:
+    """A service's GET /health/background as a test client reaches it, answered from the loops' heartbeats."""
+
+    def __init__(self, beats: MemoryHeartbeats, service: str) -> None:
+        self.beats, self.service = beats, service
+
+    async def get(self, url: str, /) -> Health:
+        assert url == "/health/background"
+        self.body = {"processes": background.report(await self.beats.read(), self.service, time.time())}
+        return self
+
+    def json(self) -> Any:
+        return self.body
+
+
+async def test_the_loop_check_passes_on_a_tripped_loop_and_fails_on_one_whose_error_is_old(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A process that failed once and recovered still carries that error on its row; a trip that breaks nothing
+    must not pass on it."""
+    monkeypatch.setattr(background, "BACKOFF_START_S", 0.01)
+    beats, stop, fail = MemoryHeartbeats(), asyncio.Event(), [True]
+
+    async def once() -> int:
+        if fail[0]:
+            fail[0] = False
+            raise ConnectionError("database connection refused")
+        return 0
+
+    task = asyncio.create_task(background.run("files_retention", once, stop=stop, store=beats, every_s=0.01))
+    try:
+        client = Health(beats, "files")
+        await _until(lambda: any((b.last_ok_at or 0) > (b.last_error_at or float("inf")) for b in beats.beats.values()))
+        with pytest.raises(AssertionError, match="did not report a failed pass"):
+            await loop_reports_failure(client, "files_retention", lambda: None, within_s=0.2)
+        await loop_reports_failure(client, "files_retention", lambda: fail.__setitem__(0, True), within_s=2.0)
+    finally:
+        stop.set()
+        await asyncio.wait_for(task, timeout=5)
+
+
+async def test_a_retention_sweep_deletes_only_rows_past_their_date_and_reports_as_a_listed_process(
+    tmp_path: Path,
+) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'audit.db'}")
+    table = sa.Table(
+        "call_audit",
+        sa.MetaData(),
+        sa.Column[int]("id", sa.Integer, primary_key=True),
+        sa.Column[float]("at", sa.Float),
+    )
+    async with engine.begin() as c:
+        await c.run_sync(table.create)
+        await c.execute(table.insert(), [{"id": 1, "at": 100.0}, {"id": 2, "at": 900.0}])
+    sweep = background.retention(table, table.c.at, 500.0, key="call_audit_retention", service="tools")
+    with pytest.raises(ValueError, match="not a registered retention process"):
+        await background.run_sweep(sweep.key, engine.begin, stop=asyncio.Event())
+    background.register(sweep)
+    beats, stop = MemoryHeartbeats(), asyncio.Event()
+    try:
+        task = asyncio.create_task(
+            background.run_sweep(sweep.key, engine.begin, stop=stop, store=beats, clock=lambda: 1000.0)
+        )
+        await _until(lambda: any(b.last_ok_at for b in beats.beats.values()))
+        stop.set()
+        await asyncio.wait_for(task, timeout=5)
+        async with engine.connect() as c:
+            assert list((await c.execute(sa.select(table.c.id))).scalars()) == [2]
+        (row,) = [p for p in background.report(await beats.read(), "tools", 1000.0) if p["key"] == sweep.key]
+        assert row["state"] == "running" and row["doneHour"] == 1 and row["everySeconds"] == 3600.0
+    finally:
+        background.PROCESSES.remove(sweep)
+        del background.BY_KEY[sweep.key]
+        await engine.dispose()

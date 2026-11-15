@@ -8,6 +8,9 @@ process that runs on events instead of a timer reports through `Beat` directly.
   beats = MemoryHeartbeats()                     # or DbHeartbeats(engine, heartbeats_table(metadata))
   await run("files_relay", relay.once, stop=stop, store=beats, every_s=2.0, waiting=relay.waiting)
   beats.read()  -> the rows `/health/background` answers from
+
+A table that only grows gets a sweep the same way: `register(retention(table, table.c.at, keep_s, key=...,
+service=...))` lists it, and `run_sweep(key, tx, stop=stop)` runs it.
 """
 
 from __future__ import annotations
@@ -18,13 +21,13 @@ import socket
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
+from contextlib import AbstractAsyncContextManager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from functools import cache
 from typing import Any, Literal, Protocol
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
@@ -33,6 +36,10 @@ from . import isolation
 from .schema import system
 
 log = get_logger(__name__)
+
+# One pass of a retention sweep: deletes what is past its date as of `now` on the caller's connection and returns
+# how many rows went.
+Sweep = Callable[[AsyncConnection, float], Awaitable[int]]
 
 
 @dataclass(frozen=True)
@@ -48,6 +55,8 @@ class Process:
     across_teams: str
     # Listed only while this answers true: a process behind a switch is neither started nor reported late while off.
     only_if: Callable[[], bool] | None = None
+    # A retention process's one pass (`retention`); None for a process whose service supplies its own.
+    sweep: Sweep | None = None
 
 
 @cache
@@ -56,7 +65,7 @@ def plugins_on() -> bool:
     return Settings().plugins
 
 
-PROCESSES: tuple[Process, ...] = (
+PROCESSES: list[Process] = [
     Process(
         "workflow_worker",
         "agents",
@@ -219,8 +228,47 @@ PROCESSES: tuple[Process, ...] = (
         2.0,
         "It delivers every team's people and team events, each as its own team.",
     ),
-)
+]
 BY_KEY: dict[str, Process] = {p.key: p for p in PROCESSES}
+
+# How often a retention sweep runs: what it deletes is days old, so an hour's delay is not seen.
+RETENTION_EVERY_S = 3600.0
+
+
+def register(process: Process) -> Process:
+    """Lists a process a service defines beside its own tables (a retention sweep), so it may start and shows on
+    that service's /health/background. Listing the same process again changes nothing; a key already taken by a
+    different one is refused."""
+    listed = BY_KEY.get(process.key)
+    if listed is not None:
+        if (listed.service, listed.title) != (process.service, process.title):
+            raise ValueError(f"{process.key!r} is already on ops_store.background.PROCESSES for {listed.service}")
+        return listed
+    PROCESSES.append(process)
+    BY_KEY[process.key] = process
+    return process
+
+
+def retention(table: sa.Table, at: sa.Column[float], keep_s: float, *, key: str, service: str) -> Process:
+    """The process that keeps an append-only table from growing without end: each pass deletes the rows whose `at`
+    (Unix seconds) is more than `keep_s` old. A pass that finds nothing writes nothing. Not listed until
+    `register`ed; `run_sweep` runs it."""
+
+    async def sweep(conn: AsyncConnection, now: float) -> int:
+        gone = await conn.execute(table.delete().where(at < now - keep_s))
+        return int(gone.rowcount or 0)
+
+    days = keep_s / 86400.0
+    return Process(
+        key,
+        service,
+        f"Retention of {table.name}",
+        f"Deletes rows of {table.name} older than {days:g} days.",
+        RETENTION_EVERY_S,
+        "Rows of every team pass their date on one clock; the sweep deletes them as the service's system role.",
+        sweep=sweep,
+    )
+
 
 # A listed process whose loop cannot go through `run` (it runs passes concurrently, or holds IDLE connections beside
 # its poll) and reports through a `Beat` instead: its function, by dotted name, and its process key.
@@ -483,6 +531,29 @@ async def run(
 # The heartbeats of loops running inside this one process (files, documents and tools run theirs beside their web
 # server); `/health/background` answers from it.
 LOCAL = MemoryHeartbeats()
+
+
+async def run_sweep(
+    key: str,
+    tx: Callable[[], AbstractAsyncContextManager[AsyncConnection]],
+    *,
+    stop: asyncio.Event,
+    store: HeartbeatStore = LOCAL,
+    clock: Callable[[], float] = time.time,
+    every_s: float | None = None,
+) -> None:
+    """Runs the registered retention process `key` until `stop` is set, one pass per listed interval. `tx` opens the
+    transaction a pass deletes in: the service's own `system_tx` with its reason and role, since the rows are every
+    tenant's."""
+    sweep = BY_KEY[key].sweep if key in BY_KEY else None
+    if sweep is None:
+        raise ValueError(f"{key!r} is not a registered retention process; register(retention(...)) it first")
+
+    async def once() -> int:
+        async with tx() as conn:
+            return await sweep(conn, clock())
+
+    await run(key, once, stop=stop, store=store, every_s=every_s, clock=clock)
 
 
 def report(beats: list[Heartbeat], service: str, now: float, *, detail: bool = False) -> list[dict[str, Any]]:
