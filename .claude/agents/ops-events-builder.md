@@ -71,6 +71,19 @@ tables); `LY7` (one owner: extend `Relay`, never copy it); `CF2` (poll intervals
 | `ops-console-builder` | the Background page shows the new loop |
 | `ops-ci-builder` | a per-loop health test that the standards page marks "no check yet" |
 
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
+
 ## Report (at most 10 lines)
 Commits; the events, loops or workers added with their heartbeat keys; the reason for any wider read; tests seen failing
 and what they printed; what `/health/background` showed; anything not run.

@@ -74,6 +74,19 @@ model, no real host).
 | `ops-ci-builder` | `ops_plugin_sdk` should join `.importlinter`'s `root_packages`, or a plugin proof should run in CI |
 | `ops-store-builder` | a plugin needs a new table in tools-service |
 
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
+
 ## Report (at most 10 lines)
 Commits; the plugins or tools added or changed with their manifest versions; the pin changes; tests seen failing and what
 they printed; `make plugins-check` output; anything not run.

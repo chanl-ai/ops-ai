@@ -73,6 +73,19 @@ through `useCan`, never a role name); `MD2` (types from the SDK, never hand-writ
 | `ops-access-builder` | a screen needs a cell the grid does not have |
 | `ops-mock-designer` | the plan has no mock for a state the screen now has |
 
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
+
 ## Report (at most 10 lines)
 Commits; the routes and components changed; the screenshots per role and width in the evidence folder; `pnpm verify`
 output; each new test's first failure; anything the API does not return yet and who it was handed to.

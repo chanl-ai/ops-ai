@@ -76,6 +76,19 @@ request line, typed errors, timeouts from settings); `TN4` (tenant from the toke
 | `ops-access-builder` | a new permission cell, policy or approval |
 | `ops-events-builder` | a new event, relay subscriber or background loop |
 
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
+
 ## Report (at most 10 lines)
 Commits; the routes added or changed with their operation ids; the settings added; tests and use cases run per layer
 with what they printed; each new test's first failure; anything not run.

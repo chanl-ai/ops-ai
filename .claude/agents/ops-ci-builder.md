@@ -76,6 +76,19 @@ check's name goes on that rule's "Check" line in the same change (`DL8`).
 | `ops-store-builder` | a database proof needs a migration or a marking |
 | `ops-service-builder` | a check needs a hook in the kit (the request timing listener, the OpenAPI gate) |
 
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
+
 ## Report (at most 10 lines)
 Commits; the checks added with the rule ids they enforce and the red output of each self-test; what moved into the
 `checks` job; `make verify` output; the baseline counts; anything not run.
