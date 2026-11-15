@@ -13,11 +13,11 @@ Why: configuration read in one place can be listed, validated and documented; a 
 
 Today: no breach in Python; the console has four files outside the entry module that read `process.env` (see `CF6`).
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:64`):
+Pattern (`Settings` in `packages/ops_service_kit/src/ops_service_kit/settings.py`):
 
 ```python
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="OPS_", extra="ignore", secrets_dir=_secrets_dir(), env_ignore_empty=True)
+    model_config = SettingsConfigDict(env_prefix="OPS_", env_nested_delimiter="__", extra="ignore", ...)
     environment: Literal["dev", "test", "production"] = "dev"
 ```
 
@@ -50,7 +50,8 @@ Also `services/agents-service/src/ops_agents/api/worker.py` (`timeout=10`) and
 `packages/ops_identity/src/ops_identity/fastapi.py`, and the check counts 59 literal timeouts and 50 clients built
 outside `ops_identity.client`.
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:76`): the value is a named setting with its reason.
+Pattern (`Settings.database_connect_timeout_s` in `packages/ops_service_kit/src/ops_service_kit/settings.py`): the value
+is a named setting with its reason.
 
 ```python
 database_connect_timeout_s: float = 30.0
@@ -96,7 +97,7 @@ Why: the repository is public, and a secret in a log or fixture leaks through ev
 Today: no known breach; the leak scan is required on `main` only, so a red scan does not stop a merge to the
 development trunk.
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:91`):
+Pattern (`Settings.anthropic_api_key` in `packages/ops_service_kit/src/ops_service_kit/settings.py`):
 
 ```python
 anthropic_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY"))
