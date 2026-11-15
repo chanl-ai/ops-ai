@@ -314,18 +314,9 @@ check green; open the pull request.
 
 ## Branches and pull requests
 
-One branch and one pull request per component, from `origin/develop` into `develop`:
-
-| Component | Branch |
-|---|---|
-| C1 | `feat/store-request-transaction` |
-| C2 | `feat/kit-list-contract` |
-| C3 | `feat/kit-endpoint-settings-and-clients` |
-| C4 | `feat/store-relay-and-loop-health` |
-| C5 | `feat/kit-typed-boundaries` |
-| C6 | `feat/ci-one-gate` |
-| C7 | `feat/access-decisions-register` |
-| C8 | `feat/store-local-copies` |
+Every component and every service lands on the single branch `refactor/services-onto-shared-components`, in one pull
+request, in this order: the components, the small services (documents, files, models, runner), platform, kb, tools,
+agents, console. Each component is one or more commits on that branch, committed by path.
 
 Commit subject at most 72 characters, body at most three lines: what was wrong and what ran to prove the fix. A
 reviewer who did not write the component approves it against this page and the standards before merge.

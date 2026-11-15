@@ -71,6 +71,8 @@ def build(settings: Settings) -> FastAPI:
 
 def main() -> None:
     settings = Settings()
+    # files-service keeps the bytes it reads; agents-service says which workflows read a document type.
+    settings.require("agents", "files", *settings.identity_endpoints)
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="documents-service")
     uvicorn.run(

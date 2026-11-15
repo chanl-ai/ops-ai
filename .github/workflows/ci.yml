@@ -90,6 +90,8 @@ jobs:
       - run: uv run python deploy/k8s/generate.py --check
       - run: uv run lint-imports --no-logo
       - run: uv run python scripts/check_portable_store.py --strict
+      # A loopback fallback, or a literal timeout or HTTP client beyond its member's baseline.
+      - run: uv run python scripts/check_config_literals.py --strict
       - run: node scripts/changelog-check.mjs --entries
       - name: Script tests
         if: needs.plan.outputs.scripts == 'true'

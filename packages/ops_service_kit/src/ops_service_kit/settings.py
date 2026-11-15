@@ -12,9 +12,9 @@ import os
 from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
-from pydantic import AliasChoices, BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from .flags import Flags
@@ -61,15 +61,61 @@ class PluginClient(BaseModel):
     secret: SecretStr
 
 
+class Endpoint(BaseModel):
+    """Another service as this process reaches it: where it is, how long one call may take, and how many more times
+    a read that failed in transport is tried."""
+
+    url: HttpUrl
+    timeout_s: float = Field(default=10.0, gt=0)
+    retries: int = Field(default=2, ge=0)
+
+    @property
+    def base(self) -> str:
+        """The address as a base URL, with no trailing slash."""
+        return str(self.url).rstrip("/")
+
+
+class PoolSettings(BaseModel):
+    """The database connection pool of one process: connections kept, connections opened beyond those under load, and
+    how long a request waits for one."""
+
+    size: int = Field(default=5, ge=1)
+    overflow: int = Field(default=10, ge=0)
+    wait_s: float = Field(default=30.0, gt=0)
+
+
+# The services a process reaches through an Endpoint. Each is set whole as OPS_<NAME>__URL (with __TIMEOUT_S and
+# __RETRIES beside it), or by its address alone as OPS_<NAME>_URL.
+ENDPOINTS = ("agents", "tools", "kb", "files", "documents", "platform_internal")
+
+
 class Settings(BaseSettings):
     # An empty value is unset, so a compose file can name every setting and leave the ones a site does not use blank.
     model_config = SettingsConfigDict(
-        env_prefix="OPS_", extra="ignore", secrets_dir=_secrets_dir(), env_ignore_empty=True
+        env_prefix="OPS_",
+        env_nested_delimiter="__",
+        extra="ignore",
+        secrets_dir=_secrets_dir(),
+        env_ignore_empty=True,
     )
 
     environment: Literal["dev", "test", "production"] = "dev"
-    # dev: a fixed user, no sign-in. platform: every caller is resolved from a platform-service token or API key.
-    auth_mode: Literal["dev", "platform"] = "dev"
+    # dev: a fixed user, no sign-in, and only when a development stack or a test names it. platform: every caller is
+    # resolved from a platform-service token or API key. An unset value never opens a service.
+    auth_mode: Literal["dev", "platform"] = "platform"
+    # The database pool (OPS_DB__SIZE, OPS_DB__OVERFLOW, OPS_DB__WAIT_S).
+    db: PoolSettings = PoolSettings()
+    # Each service this process calls. None: this install does not run that service, or this process does not call it.
+    # A process names the ones it cannot run without in `require`, first thing in its __main__.
+    agents: Endpoint | None = None
+    tools: Endpoint | None = None
+    kb: Endpoint | None = None
+    files: Endpoint | None = None
+    documents: Endpoint | None = None
+    # platform-service's internal port, which introspects API keys, mints acting-for tokens and keeps the audit log.
+    platform_internal: Endpoint | None = None
+    page_size_default: int = Field(default=20, ge=1)
+    page_size_max: int = Field(default=50, ge=1)
     database_url: str = "postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime"
     # How long one attempt to open a database connection may take, and how many attempts are made before the connect
     # fails (ops_store.database). On a loaded host the first attempt has stalled for a minute with no reply.
@@ -507,6 +553,56 @@ class Settings(BaseSettings):
     # OPS_DEV_POLICIES='{"requesterMayDecide": true}'. Empty: every policy at its default.
     dev_policies: dict[str, Any] = Field(default_factory=dict[str, Any])
 
+    @model_validator(mode="before")
+    @classmethod
+    def _endpoints_from_addresses(cls, data: Any) -> Any:
+        # OPS_AGENTS_URL alone makes the agents endpoint, so a deploy that names only addresses keeps working; an
+        # endpoint's own URL wins when both are given.
+        if not isinstance(data, dict):
+            return data
+        values = cast(dict[str, Any], data)
+        for name in ENDPOINTS:
+            address, endpoint = values.get(f"{name}_url"), values.get(name)
+            if address and endpoint is None:
+                values[name] = {"url": address}
+            elif address and isinstance(endpoint, dict) and "url" not in endpoint:
+                values[name] = {**cast(dict[str, Any], endpoint), "url": address}
+        return values
+
+    @model_validator(mode="after")
+    def _addresses_from_endpoints(self) -> Settings:
+        # Code that still reads `<name>_url` sees an endpoint set the other way.
+        for name in ENDPOINTS:
+            endpoint: Endpoint | None = getattr(self, name)
+            if endpoint is not None and getattr(self, f"{name}_url") is None:
+                setattr(self, f"{name}_url", endpoint.base)
+        return self
+
+    def endpoint(self, name: str) -> Endpoint:
+        """The endpoint of a service this process calls. ValueError naming its setting when it is unset: an address
+        never falls back to this machine."""
+        if name not in ENDPOINTS:
+            raise ValueError(f"Settings has no endpoint {name!r}; the endpoints are {', '.join(ENDPOINTS)}")
+        found: Endpoint | None = getattr(self, name)
+        if found is None:
+            raise ValueError(f"{endpoint_env(name)} is not set")
+        return found
+
+    @property
+    def identity_endpoints(self) -> tuple[str, ...]:
+        """The endpoints a process needs to resolve its callers: platform-service's internal port when callers sign
+        in, none with the fixed dev user."""
+        return ("platform_internal",) if self.auth_mode == "platform" else ()
+
+    def require(self, *names: str) -> None:
+        """First call in every __main__: exits naming each endpoint that is unset, before anything opens."""
+        unknown = [n for n in names if n not in ENDPOINTS]
+        if unknown:
+            raise ValueError(f"Settings has no endpoint {', '.join(unknown)}")
+        missing = [endpoint_env(n) for n in names if getattr(self, n) is None]
+        if missing:
+            raise SystemExit(f"{', '.join(missing)} must be set: this process cannot run without the service it names")
+
     @field_validator("embedding_width")
     @classmethod
     def _indexable_width(cls, v: int) -> int:
@@ -605,6 +701,11 @@ def _package_of(folder: Path) -> str:
     return found[0] if not (folder / "plugin.yaml").exists() and len(found) == 1 else folder.name
 
 
+def endpoint_env(name: str) -> str:
+    """The environment name that sets an endpoint's address."""
+    return f"OPS_{name.upper()}_URL"
+
+
 _PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_KEY}
 
 
@@ -624,11 +725,21 @@ def require_keys(settings: Settings, *names: str) -> None:
 # one up would call the shared stack, so its result would depend on whether that stack is up: an agents test read the
 # publish policy from a stopped platform-service and held a publish it meant to apply, and a kb search test ranked by
 # the stack's embedding model found a page its keywords no longer held.
-STACK_SERVICE_ENV = ("OPS_PLATFORM_URL", "OPS_MODELS_URL", "OPS_MODELS_KEY")
+STACK_SERVICE_ENV = ("OPS_PLATFORM_URL", "OPS_PLATFORM_INTERNAL_URL", "OPS_MODELS_URL", "OPS_MODELS_KEY")
+
+
+def unanswered_endpoints(*names: str) -> None:
+    """Gives each named endpoint an address nothing answers on, for a test run or a script that builds an app to read
+    its routes: the app builds as it does on a stack, and a call it should never make fails at once instead of
+    reaching a service that happens to run on this machine."""
+    for name in names:
+        os.environ[endpoint_env(name)] = "http://127.0.0.1:1"
 
 
 def isolate_from_stack() -> None:
-    """Drops the running stack's service addresses from the environment before a test run builds any Settings. Here
-    because this module is the one place the environment is read or written (check_standards rule 4)."""
+    """Drops the running stack's service addresses from the environment before a test run builds any Settings, and
+    names the fixed dev user for the run: no service takes it unless told to, and a test of sign-in asks for platform
+    itself. Here because this module is the one place the environment is read or written (check_standards rule 4)."""
     for name in STACK_SERVICE_ENV:
         os.environ.pop(name, None)
+    os.environ.setdefault("OPS_AUTH_MODE", "dev")

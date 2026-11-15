@@ -20,7 +20,7 @@ from ops_agents.activities.catalog import load_catalog
 from ops_email import UnconfiguredSender
 from ops_service_kit import openapi
 from ops_service_kit.credentials import credential_store
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import Settings, isolate_from_stack
 from ops_tools.app import create_gateway_app
 from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Tokens
@@ -58,6 +58,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCUMENT = ROOT / "openapi.json"
 ALLOWLIST = ROOT / "openapi-untyped.txt"
 REPO_ALLOWLIST = "services/tools-service/openapi-untyped.txt"
+
+
+# The app is built to read its routes: the fixed dev user, and none of a running stack's addresses.
+isolate_from_stack()
 
 
 def document() -> dict[str, Any]:

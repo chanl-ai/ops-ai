@@ -138,11 +138,11 @@ class FilesClient:
     def from_settings(
         cls, settings: Settings, *, service: str, timeout: float = 30, scopes: list[str] | None = None
     ) -> FilesClient:
-        """files-service at `settings.files_url`, or the local port, with this service's signing key. `scopes` are
+        """files-service at the files endpoint, with this service's signing key. `scopes` are
         the `area:action` grants the token claims, `files:view`, `files:create` and `files:edit` unless given; a scanner
         claims `files:decide` for `report_scan`. files-service accepts only the scopes its Settings.service_scopes
         gives the calling service."""
-        base = settings.files_url or f"http://127.0.0.1:{settings.files_port}"
+        base = settings.endpoint("files").base
         return cls(
             ServiceClient.for_settings(
                 settings,

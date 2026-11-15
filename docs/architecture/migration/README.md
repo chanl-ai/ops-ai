@@ -64,7 +64,7 @@ retyped. In the small services it is `app.py` and the client modules.
 | Rule | Detail |
 |---|---|
 | Freeze | Until phase 3 merges, no pull request into `develop` touches `services/`, `packages/` or `apps/console/` unless it is a component, the pilot or a lane. A production fix lands on `develop` first and every open lane rebases on it the same day |
-| One lane, one branch, one pull request | Branch names are on each page. A lane rebases once, on a known tree, in the merge order: pilot, platform, kb, tools, agents, console |
+| One branch, one pull request | Every component and every service lands on the single branch `refactor/services-onto-shared-components`, in one pull request, in this order: the components, the small services, platform, kb, tools, agents, console. Each step is its own commits, by path |
 | Tests first, per failure mode | Before a lane rewrites, it lists the routes and store functions a use case or test does not reach and writes one api-layer test per uncovered route a screen uses (`TS1`, `TS3`); the pilot page gives the method |
 | Baselines shrink in the lane | Each check has a file per service (`portable-baseline.txt` today; the raw-site, savepoint, config-literal and typed-boundary lists the components add). A lane takes its own file to zero and edits no other lane's file |
 | No new breach anywhere | Each component's check is red on a new site from the day it merges, so the freeze is enforced by the gate, not by asking |

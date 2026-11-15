@@ -61,9 +61,9 @@ class DocumentsClient:
     def from_settings(
         cls, settings: Settings, *, service: str, timeout: float = 30, scopes: list[str] | None = None
     ) -> DocumentsClient:
-        """documents-service at `settings.documents_url`, or the local port, with this service's signing key; `scopes`
+        """documents-service at the documents endpoint, with this service's signing key; `scopes`
         are the `documents:<action>` grants the token claims, `documents:view` and `documents:run` unless given."""
-        base = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"
+        base = settings.endpoint("documents").base
         return cls(
             ServiceClient.for_settings(
                 settings,

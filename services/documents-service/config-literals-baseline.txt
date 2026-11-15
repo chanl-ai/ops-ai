@@ -1,0 +1,11 @@
+# 14 literal timeouts and HTTP clients built in services/documents-service (scripts/check_config_literals.py). A row may only fall.
+2 client services/documents-service/src/ops_documents/__main__.py
+2 timeout services/documents-service/src/ops_documents/__main__.py
+1 client services/documents-service/src/ops_documents/agents_client.py
+1 timeout services/documents-service/src/ops_documents/agents_client.py
+1 client services/documents-service/src/ops_documents/document_types.py
+1 timeout services/documents-service/src/ops_documents/document_types.py
+2 client services/documents-service/src/ops_documents/extraction.py
+2 timeout services/documents-service/src/ops_documents/extraction.py
+1 client services/documents-service/src/ops_documents/tools_client.py
+1 timeout services/documents-service/src/ops_documents/tools_client.py

@@ -102,6 +102,10 @@ gate cross-service '^services/[^/]+/(src|tests)/' \
 gate standards '^(services|packages)/.*\.py$' \
   "a code rule in services/agents-service/scripts/check_standards.py fails (above); fix the code" \
   bash -c 'cd services/agents-service && "$0" scripts/check_standards.py' "$root/.venv/bin/python"
+# An address that falls back to this machine, or a literal timeout or HTTP client beyond the member's baseline.
+gate config-literals '^(services|packages)/[^/]+/(src/.*\.py|config-literals-baseline\.txt)$|^scripts/check_config_literals\.py$' \
+  "configuration is written into code (above); read it from Settings, or use ServiceClient.for_settings" \
+  "$root/.venv/bin/python" scripts/check_config_literals.py --strict
 # Python files in the commit are linted and format-checked; a second each.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
 if [ "${#py[@]}" -gt 0 ]; then

@@ -1,0 +1,12 @@
+# 20 literal timeouts and HTTP clients built in services/tools-service (scripts/check_config_literals.py). A row may only fall.
+4 client services/tools-service/src/ops_tools/__main__.py
+6 timeout services/tools-service/src/ops_tools/__main__.py
+1 client services/tools-service/src/ops_tools/app.py
+1 client services/tools-service/src/ops_tools/egress.py
+1 client services/tools-service/src/ops_tools/graph_mailbox.py
+1 timeout services/tools-service/src/ops_tools/graph_mailbox.py
+1 client services/tools-service/src/ops_tools/mcp_server.py
+1 timeout services/tools-service/src/ops_tools/mcp_server.py
+2 client services/tools-service/src/ops_tools/mcp_tools.py
+1 timeout services/tools-service/src/ops_tools/modules/service.py
+1 timeout services/tools-service/src/ops_tools/transform.py

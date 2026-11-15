@@ -26,7 +26,7 @@ from ops_kb.readings import Readings
 from ops_kb.service import Who
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
-from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_service_kit.testdb import isolate_from_stack, refusal, unanswered_endpoints
 
 from .readings_fake import LocalReadings
 
@@ -35,6 +35,9 @@ ROOT = Path(__file__).parents[1]
 
 def pytest_configure(config: pytest.Config) -> None:
     isolate_from_stack()
+    # The app asks agents-service who uses a knowledge base and sends it events; a test that needs an answer passes
+    # its own `agents` or `events_to`, and the rest get an address nothing answers on.
+    unanswered_endpoints("agents")
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
         pytest.exit(why, returncode=4)

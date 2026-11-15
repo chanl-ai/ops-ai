@@ -1,0 +1,3 @@
+# 2 literal timeouts and HTTP clients built in packages/ops_identity (scripts/check_config_literals.py). A row may only fall.
+1 client packages/ops_identity/src/ops_identity/fastapi.py
+1 timeout packages/ops_identity/src/ops_identity/fastapi.py

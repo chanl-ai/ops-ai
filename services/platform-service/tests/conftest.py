@@ -43,7 +43,7 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_service_kit.testdb import isolate_from_stack, refusal, unanswered_endpoints
 from ops_signin.dns import TxtResolver
 from ops_signin.fake_idp import FakeDns, self_signed
 from ops_signin.fake_idp import create_app as create_idp
@@ -64,6 +64,9 @@ SERVICE = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
 
 def pytest_configure(config: pytest.Config) -> None:
     isolate_from_stack()
+    # The app asks agents-service what a team still runs; a test that needs an answer passes its own `usage`, and the
+    # rest get an address nothing answers on.
+    unanswered_endpoints("agents")
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
         pytest.exit(why, returncode=4)

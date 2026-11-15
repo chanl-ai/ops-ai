@@ -394,7 +394,7 @@ def _acting_for(settings: Settings, signer: Any) -> ActingForTokens | None:
         return None
     if settings.auth_mode != "platform":
         return ActingForTokens.for_dev(signer, service="tools", audience="agents")
-    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+    internal = settings.endpoint("platform_internal").base
     platform = httpx.AsyncClient(base_url=internal, timeout=10)
     return ActingForTokens.from_platform(
         ServiceClient.for_settings(settings, platform, service="tools", audience="platform")

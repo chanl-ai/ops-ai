@@ -46,6 +46,12 @@ def _start(
     argv: list[str], *, cwd: Path, env: dict[str, str], stdin: Any = None, stdout: Any = None, stderr: Any = None
 ) -> subprocess.Popen[bytes]:
     """A process in its own group, so stopping it reaches what its wrapper (uv) started."""
+    # A service signs callers in unless told otherwise, so a run that names no sign-in gets the fixed dev user; and one
+    # given platform-service's internal port is given its address, as every service here runs on this machine.
+    env = {"OPS_AUTH_MODE": "dev", **env}
+    # Whatever address the shell exported is the shared stack's, so the run's own port decides.
+    if internal_port := env.get("OPS_PLATFORM_INTERNAL_PORT"):
+        env["OPS_PLATFORM_INTERNAL_URL"] = f"http://127.0.0.1:{internal_port}"
     return subprocess.Popen(argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True)
 
 
@@ -539,9 +545,10 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     env["OPS_GATEWAY_PORT"] = str(TOOLS_PORT)
     # A tool module review opens in agents-service's Reviews; a stack that publishes modules runs agents too.
     env.setdefault("OPS_AGENTS_URL", f"http://127.0.0.1:{AGENTS_PORT}")
-    # An app's resources join the copies documents-service keeps, on this run's port when the run names one.
-    if DOCUMENTS_PORT:
-        env.setdefault("OPS_DOCUMENTS_URL", f"http://127.0.0.1:{DOCUMENTS_PORT}")
+    # An app's resources join the copies documents-service keeps, and the file tools read through it and
+    # files-service: on this run's ports, or on a port nothing answers when the run starts neither.
+    env.setdefault("OPS_DOCUMENTS_URL", f"http://127.0.0.1:{DOCUMENTS_PORT or free_port()}")
+    env.setdefault("OPS_FILES_URL", f"http://127.0.0.1:{FILES_PORT or free_port()}")
     # and the knowledge sources the team made from a plugin, from this run's kb-service.
     env.setdefault("OPS_KB_URL", f"http://127.0.0.1:{KB_PORT}")
     # send_reply sends through the provider settings pick and fails with none: the dev fake writes each mail
@@ -581,6 +588,8 @@ def platform(
     # Its events (a removed member's accounts) go to the run's own tools-service, never the shared stack's
     # that make exports; the relay keeps an event until that service answers.
     settings["OPS_TOOLS_URL"] = f"http://127.0.0.1:{TOOLS_PORT}"
+    # What a team still runs is asked of the run's own agents-service before the team is deleted.
+    settings["OPS_AGENTS_URL"] = f"http://127.0.0.1:{AGENTS_PORT}"
     settings |= env or {}
     platform_dir = ROOT / "services" / "platform-service"
     subprocess.run(
@@ -636,6 +645,7 @@ def fake_idp() -> Generator[str]:
     path (`/oidc/<name>`, `/saml/<name>`)."""
     port = str(IDP_PORT)
     argv = ["uv", "run", "python", "-m", "ops_signin.fake_idp", "--port", port, "--dns-port", port]
+    argv += ["--base", f"http://127.0.0.1:{port}"]
     with _serve("fake-idp", argv, IDP_PORT, _env(), health="/health", cwd=ROOT) as base:
         yield base
 

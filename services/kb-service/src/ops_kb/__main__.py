@@ -90,6 +90,9 @@ async def _files_ready(settings: Settings) -> None:
 
 def main() -> None:
     settings = Settings()
+    # agents-service says which agents use a knowledge base and runs the workflows that listen to its events.
+    # With platform-service on the stack, its internal port also keeps the audit log of settings changes.
+    settings.require("agents", *(("platform_internal",) if settings.platform_url else settings.identity_endpoints))
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="kb-service")
     if settings.environment == "dev":

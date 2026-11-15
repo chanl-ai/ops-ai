@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from urllib.parse import urlsplit
 
-from .settings import STACK_SERVICE_ENV, isolate_from_stack
+from .settings import STACK_SERVICE_ENV, isolate_from_stack, unanswered_endpoints
 
-__all__ = ["LIVE", "STACK_SERVICE_ENV", "isolate_from_stack", "refusal"]
+__all__ = ["LIVE", "STACK_SERVICE_ENV", "isolate_from_stack", "refusal", "unanswered_endpoints"]
 
 LIVE = "ops_runtime"
 

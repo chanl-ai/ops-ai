@@ -14,14 +14,13 @@ from .dns import FakeDns
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fake OIDC and SAML identity provider (tests and dev only)")
     parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--base", help="public origin; defaults to http://127.0.0.1:<port>")
+    parser.add_argument("--base", required=True, help="the origin callers reach it at, e.g. http://127.0.0.1:<port>")
     parser.add_argument("--dns-port", type=int, help="also answer DNS TXT queries on this UDP port")
     args = parser.parse_args()
-    base = args.base or f"http://127.0.0.1:{args.port}"
     fake_dns = FakeDns()
     if args.dns_port:
         fake_dns.serve(args.dns_port)
-    uvicorn.run(create_app(base, fake_dns), host="127.0.0.1", port=args.port, log_level="warning")
+    uvicorn.run(create_app(args.base, fake_dns), host="127.0.0.1", port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

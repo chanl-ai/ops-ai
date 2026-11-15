@@ -13,12 +13,16 @@ from typing import Any
 from ops_files.__main__ import build
 from ops_files.app import create_files_app
 from ops_service_kit import openapi
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import Settings, isolate_from_stack
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCUMENT = ROOT / "openapi.json"
 ALLOWLIST = ROOT / "openapi-untyped.txt"
 REPO_ALLOWLIST = "services/files-service/openapi-untyped.txt"
+
+
+# The app is built to read its routes: the fixed dev user, and none of a running stack's addresses.
+isolate_from_stack()
 
 
 def document() -> dict[str, Any]:

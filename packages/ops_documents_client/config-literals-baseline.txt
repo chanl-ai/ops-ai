@@ -1,0 +1,4 @@
+# 4 literal timeouts and HTTP clients built in packages/ops_documents_client (scripts/check_config_literals.py). A row may only fall.
+1 client packages/ops_documents_client/src/ops_documents_client/__init__.py
+2 timeout packages/ops_documents_client/src/ops_documents_client/__init__.py
+1 client packages/ops_documents_client/src/ops_documents_client/testing.py

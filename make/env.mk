@@ -96,6 +96,7 @@ export OPS_PORT ?= $(OPS_AGENTS_PORT)
 export OPS_GATEWAY_PORT ?= $(OPS_TOOLS_PORT)
 # Where the other services find platform-service's key set and introspection; the internal port binds to localhost.
 export OPS_PLATFORM_URL ?= http://127.0.0.1:$(OPS_PLATFORM_PORT)
+export OPS_PLATFORM_INTERNAL_URL ?= http://127.0.0.1:$(OPS_PLATFORM_INTERNAL_PORT)
 # OPS_INFRA=external: postgres, opa, greenmail and mailpit already run as side containers (the
 # devcontainer compose project). Skip db-up/db-down and use those service names. Every other default stays.
 # Tests run on their own database, never the live ops_runtime: the live service's timer poller claims timers on any

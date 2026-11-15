@@ -36,8 +36,8 @@ class TypeUses:
 
 
 def type_uses(settings: Settings) -> TypeUses | None:
-    """On settings.agents_url, or agents-service's own port; None when there is no service signing key."""
-    base = settings.agents_url or f"http://127.0.0.1:{settings.port}"
+    """On the agents endpoint; None when there is no service signing key."""
+    base = settings.endpoint("agents").base
     http = httpx.AsyncClient(base_url=base, timeout=5)
     try:
         return TypeUses(

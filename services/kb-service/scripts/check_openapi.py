@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_kb.app import create_kb_app
 from ops_service_kit import openapi
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import Settings, isolate_from_stack, unanswered_endpoints
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCUMENT = ROOT / "openapi.json"
@@ -22,8 +22,13 @@ ALLOWLIST = ROOT / "openapi-untyped.txt"
 REPO_ALLOWLIST = "services/kb-service/openapi-untyped.txt"
 
 
+# The app is built to read its routes: the fixed dev user, and none of a running stack's addresses.
+isolate_from_stack()
+
+
 def document() -> dict[str, Any]:
     """The app's document; building the app opens no connection, so nothing here needs a database."""
+    unanswered_endpoints("agents")
     return create_kb_app(create_async_engine(Settings().database_url)).openapi()
 
 

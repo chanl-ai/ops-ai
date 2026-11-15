@@ -149,7 +149,7 @@ PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
 
 
 def _agents_service(settings: Settings) -> AgentsUsage:
-    http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=5)
+    http = httpx.AsyncClient(base_url=settings.endpoint("agents").base, timeout=5)
     return AgentsUsage(
         ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["agents:view"], timeout=5)
     )
@@ -171,7 +171,7 @@ def _platform_service(settings: Settings) -> ServiceClient | None:
     """platform-service's internal port, which keeps the account's audit log; None on a stack without it."""
     if not settings.platform_url:
         return None
-    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+    internal = settings.endpoint("platform_internal").base
     http = httpx.AsyncClient(base_url=internal, timeout=10)
     return ServiceClient.for_settings(settings, http, service="kb", audience="platform", scopes=[AUDIT_SCOPE])
 
@@ -204,7 +204,7 @@ def _ai_clients(settings: Settings) -> AiClients | None:
 
 def _events_service(settings: Settings) -> ServiceClient:
     """agents-service, which runs the workflows that listen to kb-service's events (a source that keeps failing)."""
-    http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=10)
+    http = httpx.AsyncClient(base_url=settings.endpoint("agents").base, timeout=10)
     return ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["events:emit"])
 
 

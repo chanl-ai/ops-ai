@@ -1,20 +1,25 @@
 """The one way a service calls another service's API. Every caller builds a `ServiceClient` for its callee and
 asks it for `get`, `post`, `delete` or `pages`; no service writes its own token minting, envelope reading or retry.
 
-  kb = ServiceClient.for_settings(settings, http, service="agents", audience="kb", scopes=["knowledge:view"],
+  kb = ServiceClient.for_settings(settings, service="agents", audience="kb", scopes=["knowledge:view"],
                                   tenant=current_tenant, team=current_team)
   refs = await kb.get("/v1/knowledge-bases/refs")
+
+The client owns its `httpx.AsyncClient`, built from the callee's `Settings` endpoint: its address, its timeout and how
+many more times a read is tried. No other code builds one (scripts/check_config_literals.py). A callee whose endpoint
+is unset is a ValueError naming the setting, raised when the client is built.
 
 Each call mints a short service token naming the tenant (and team) the caller acts for, so a token never outlives
 the request it was made for. An answer is the `{success, data, error}` envelope: `data` is returned, and an error
 comes back as `ServiceCallError` carrying the callee's status and `error.code`, so the caller can pass a 404 or a
 409 on to the person unchanged. A read that fails in transport (a refused or reset connection, a timeout) is tried
-once more; a write never is, because the callee may have acted before the connection broke.
+again, as many times as the endpoint's `retries`; a write never is, because the callee may have acted before the
+connection broke.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.parse import quote
@@ -70,21 +75,36 @@ class ServiceClient:
     tenant: Callable[[], str | None] = _none
     team: Callable[[], str | None] = _none
     timeout: float = 10.0
+    # How many more times a read that failed in transport is tried.
+    retries: int = 1
 
     @classmethod
     def for_settings(
         cls,
         settings: Settings,
-        http: httpx.AsyncClient,
+        http: httpx.AsyncClient | None = None,
         *,
         service: str,
         audience: str,
-        scopes: list[str] | None = None,
+        scopes: Sequence[str] | None = None,
         tenant: Callable[[], str | None] = _none,
         team: Callable[[], str | None] = _none,
-        timeout: float = 10.0,
+        timeout: float | None = None,
+        endpoint: str | None = None,
     ) -> ServiceClient:
-        return cls(http, service_signer(settings), service, audience, list(scopes or []), tenant, team, timeout)
+        """The client for `audience`, on the Settings endpoint of that name (`endpoint` names another: platform-service
+        is called on `platform_internal`). It owns its HTTP client, with the endpoint's timeout and retries.
+
+        A caller that still passes its own `http` keeps that client and its own timeout; the endpoint is not read."""
+        signer = service_signer(settings)
+        if http is not None:
+            return cls(http, signer, service, audience, list(scopes or []), tenant, team, timeout or cls.timeout)
+        callee = settings.endpoint(endpoint or audience)
+        owned = httpx.AsyncClient(base_url=callee.base, timeout=callee.timeout_s)
+        return cls(owned, signer, service, audience, list(scopes or []), tenant, team, callee.timeout_s, callee.retries)
+
+    async def aclose(self) -> None:
+        await self.http.aclose()
 
     def headers(
         self, *, team: str | None = None, tenant: str | None = None, token_header: str = "Authorization"
@@ -120,7 +140,7 @@ class ServiceClient:
         timeout: float | None = None,
     ) -> Any:
         """The callee's `data`, or ServiceCallError / ServiceUnreachable."""
-        tries = 2 if method.upper() == "GET" else 1
+        tries = 1 + self.retries if method.upper() == "GET" else 1
         for attempt in range(tries):
             try:
                 r = await self.http.request(

@@ -70,7 +70,7 @@ Before adding anything that does one of these jobs, use the owner (`LY7`).
 
 Yes: a check in this repository fails when the rule is broken. Partial: a check exists for some services, some shapes,
 or runs only on a full CI plan or nightly. No: nothing fails today; the page says what the check should be. Counts:
-91 rules, 36 yes, 27 partial, 28 no.
+91 rules, 37 yes, 29 partial, 25 no.
 
 | Id | Rule | Check |
 |---|---|---|
@@ -84,10 +84,10 @@ or runs only on a full CI plan or nightly. No: nothing fails today; the page say
 | `LY8` | Names say what the module does | no |
 | `LY9` | Outside systems sit behind a port | no |
 | `CF1` | One settings object per process | partial |
-| `CF2` | No literal host, port, URL, model or timeout | no |
-| `CF3` | A missing required setting stops the process | no |
+| `CF2` | No literal host, port, URL, model or timeout | partial |
+| `CF3` | A missing required setting stops the process | yes |
 | `CF4` | Secrets come only from the secret store | yes |
-| `CF5` | The default is the safe production value | no |
+| `CF5` | The default is the safe production value | partial |
 | `CF6` | The console reads the environment in one file | yes |
 | `TN1` | Every tenant table is marked and policed | yes |
 | `TN2` | Every read and write runs inside an isolated transaction | partial |

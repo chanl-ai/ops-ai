@@ -121,6 +121,8 @@ async def serve(settings: Settings) -> None:
 def main() -> None:
     configure_logging(service="platform-service")
     settings = Settings()
+    # agents-service says what a team still runs before the team is deleted or its workspace closed.
+    settings.require("agents")
     # The workspaces' sign-in secrets are sealed under it (store/signin_secrets.py).
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)

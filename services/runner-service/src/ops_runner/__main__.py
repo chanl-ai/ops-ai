@@ -16,6 +16,7 @@ from .wasm import WasmPython
 
 def main() -> None:
     settings = Settings()
+    settings.require(*settings.identity_endpoints)
     configure_logging(service="runner-service")
     runtime = WasmPython(wasm_path(settings), sha256=settings.runner_wasm_sha256, compiled_dir=compiled_dir(settings))
     url = settings.tools_url or settings.gateway_url

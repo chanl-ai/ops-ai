@@ -93,6 +93,7 @@ def build(settings: Settings) -> TenantFiles:
 
 def main() -> None:
     settings = Settings()
+    settings.require(*settings.identity_endpoints)
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="files-service")

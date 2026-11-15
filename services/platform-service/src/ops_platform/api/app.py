@@ -478,7 +478,7 @@ def create_public_app(
         team_delete_after_days=settings.team_delete_after_days,
     )
     if usage is None:
-        agents_http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=5)
+        agents_http = httpx.AsyncClient(base_url=settings.endpoint("agents").base, timeout=5)
         agents = ServiceClient.for_settings(
             settings, agents_http, service="platform", audience="agents", scopes=["workflows:view"], timeout=5
         )

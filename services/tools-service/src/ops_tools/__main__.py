@@ -95,6 +95,8 @@ async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str
 
 def main() -> None:
     settings = Settings()
+    # agents-service says who uses a tool; files-service and documents-service are read by the file tools.
+    settings.require("agents", "documents", "files", *settings.identity_endpoints)
     require_keys(settings, "review_key", "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="tools-service")
@@ -130,7 +132,7 @@ def main() -> None:
     # A call acting for someone who has not signed in hands back a link to the console page that asks them.
     links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
     authenticator = Authenticator(connection_store, secrets, tokens, links)
-    agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
+    agents_url = settings.endpoint("agents").base
 
     # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is logged
     # (plugin_failed) and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
@@ -209,7 +211,7 @@ def main() -> None:
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
     modules.users = tool_users
     # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.
-    documents_url = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"
+    documents_url = settings.endpoint("documents").base
     resource_copies = ServiceCopies(
         client("agents", agents_url, ["agents:view"]),
         client("documents", documents_url, ["documents:view"]),

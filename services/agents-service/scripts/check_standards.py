@@ -22,7 +22,7 @@ from ops_agents.api.auth import principal, service_principal
 from ops_agents.api.routers.run_resume import resume_caller
 from ops_agents.api.routers.widget import mint_key_caller, widget_caller
 from ops_identity import current_caller, current_principal, current_service, current_tenant_caller
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import Settings, isolate_from_stack
 
 ROOT = Path(__file__).resolve().parents[3]
 # Source trees of the Python workspace: reusable libraries and the services built from them.
@@ -88,6 +88,10 @@ PUBLIC_ROUTES = {
     "/v1/forms/public/{slug}/submit",
     "/v1/forms/public/{slug}/files",
 }
+
+
+# The app is built to read its routes: the fixed dev user, and none of a running stack's addresses.
+isolate_from_stack()
 
 
 def sources() -> list[Path]:

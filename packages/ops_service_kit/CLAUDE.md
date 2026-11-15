@@ -11,7 +11,7 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 
 | Module | What it is | Used by |
 |---|---|---|
-| `settings` | `Settings` (pydantic-settings, prefix `OPS_`, secrets as files from `/run/secrets` or `OPS_SECRETS_DIR`, empty values unset) | every service and most packages |
+| `settings` | `Settings` (pydantic-settings, prefix `OPS_`, secrets as files from `/run/secrets` or `OPS_SECRETS_DIR`, empty values unset); `Endpoint` (another service's address, timeout and retries), `PoolSettings` (`OPS_DB__*`), `Settings.require(...)` and `Settings.endpoint(name)` | every service and most packages |
 | `http` | `Envelope`, `ErrorEnvelope`, `ListResult`, `Pagination`, `ok()`, `paged()`, `page_window()`, `options_page()`, `install_error_handlers()`, `mark_public()`, `operation_id()` | every service's routes |
 | `errors` | `ApiError` and its subclasses (`ValidationFailed`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Unprocessable`, `TooManyRequests`, `ServiceUnavailable`, `StepUpRequired`), turned into `{success: false, error: {code, message, status}}` | services and packages |
 | `ids` | `new_id`, `now_iso`, `canonical_json`, `input_hash`, `action_id` | kernel and services |
@@ -33,7 +33,14 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 - Read configuration only through `Settings`; add a new setting there with a default and a validator, never an
   `os.environ` read elsewhere. `grep -rln "os.environ" packages/*/src` lists only `settings.py`.
 - `Settings` refuses unsafe combinations at start: `auth_mode` `dev` outside `environment=dev`, and the in-memory
-  credential store outside dev and test (`src/ops_service_kit/settings.py:454`).
+  credential store outside dev and test (`_refuse_dev_auth_outside_dev` in `src/ops_service_kit/settings.py`).
+- `auth_mode` defaults to `platform`. The fixed dev user is asked for by name: `scripts/stack.sh` and the use-case
+  harnesses set `OPS_AUTH_MODE=dev`, and a test run gets it from `isolate_from_stack()` in its conftest.
+- Another service is an `Endpoint` on `Settings` (`agents`, `tools`, `kb`, `files`, `documents`,
+  `platform_internal`), set by its address alone (`OPS_AGENTS_URL`) or whole (`OPS_AGENTS__URL`,
+  `OPS_AGENTS__TIMEOUT_S`, `OPS_AGENTS__RETRIES`). A process names the ones it cannot run without in
+  `settings.require(...)`, first in its `__main__`, and exits naming each unset one; `settings.endpoint(name)` raises
+  the same name later. No address falls back to this machine (`scripts/check_config_literals.py`).
 - Routes return hand-built JSON through `ok()`, which FastAPI does not validate. `contract.response_checker` closes the
   gap in each service's tests, and `openapi.report` keeps every operation typed, named `<tag>_<handler>` and marked
   `x-ops-public`.
@@ -47,7 +54,8 @@ packages depend on it, so a change here runs nearly every suite under `make test
 
 | Task | Command |
 |---|---|
-| Its own tests (flags, embedding settings, logging) | `make test PKG=packages/ops_service_kit` |
+| Its own tests (flags, embedding and endpoint settings, logging) | `make test PKG=packages/ops_service_kit` |
+| The configuration ratchet and the boot test of every service process | `uv run python scripts/check_config_literals.py --strict`, `uv run pytest -q scripts/tests/test_boot_requires_endpoints.py` |
 | One file | `make test PKG=packages/ops_service_kit T=tests/test_flags.py` |
 | Lint, format, types | `uv run ruff check packages/ops_service_kit`, `uv run ruff format --check packages/ops_service_kit`, `uv run pyright packages/ops_service_kit` |
 | The OpenAPI gate on one service | `make -C services/files-service openapi-check` (each service with a committed `openapi.json` has the target) |
