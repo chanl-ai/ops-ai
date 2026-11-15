@@ -138,7 +138,7 @@ async def receive(p: CurrentPrincipal, _: Tx, event: Event, rt: Rt) -> JSONRespo
 | Lists and labels | The 7 lists and `/v1/tools` paged, filtered and faceted in SQL; publish requests filtered by team in SQL; the agent read's tool, knowledge-base and guardrail labels from the copies and local tables; the overview tiles counted in SQL; `owner_team()` gone |
 | Copies | A published module appears in `/v1/tools` after one relay pass; a renamed knowledge base appears on the agent page; the resyncs on `PROCESSES` with health tests |
 | Access | The import route gone with its two lines; zero role-name compares; the kept lines carry their reason; the 403 use cases pass |
-| Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions; the entry point exits naming an unset required endpoint |
+| Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions; the entry point exits naming an unset required endpoint; the `ops_agents` and `ops_email` lines of the `httpx` waiting list in `.importlinter` (contract `http-clients-in-their-owners`) are deleted, and `services/agents-service/config-literals-baseline.txt` is empty |
 | Typed boundaries | 89 store functions return models; zero `extra="allow"` outside `Passthrough`; every reply an `Out`; zero bare tasks |
 | Budgets | 102 GET routes green at 5 and 50 rows on both databases |
 | Behaviour and staging | Tests, the 93 use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; the agent page, a chat, a run with its events, Reviews and Cases opened by hand |
