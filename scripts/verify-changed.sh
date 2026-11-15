@@ -89,6 +89,8 @@ want=$(( ${#services[@]} + ${#tested[@]} ))
 [ "$docs" = 1 ] && make -s docs-verify
 uv run python scripts/store_inventory.py --check
 uv run python scripts/roles_matrix.py --check
+uv run python scripts/check_access_exceptions.py
+uv run python scripts/check_access_exceptions.py --commits
 uv run python deploy/k8s/generate.py --check
 uv run lint-imports --no-logo
 uv run python scripts/check_portable_store.py --strict
