@@ -76,7 +76,7 @@ every folder, and the folder guides link here instead of repeating them.
 A change moves inside out and lands in one change across the layers it touches: service, then its OpenAPI document,
 then the SDKs, then the CLI and console, which are thin peers over the SDK. Inside a service the order is `domain` →
 `app` → `adapters` → `api`. A lower layer never imports a higher one: packages never import a service, and services
-never import each other's code (the one departure is listed under [Service map](#service-map)). `.importlinter`
+never import each other's code (the departures are listed in [services/CLAUDE.md](services/CLAUDE.md#cross-service-rules)). `.importlinter`
 (`uv run lint-imports`) and `services/agents-service/scripts/check_standards.py` enforce part of this.
 
 | Layer | Folder | After changing it |
