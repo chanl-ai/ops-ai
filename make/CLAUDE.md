@@ -77,7 +77,7 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | `python.mk` | `test` (T= honoured by every service), `test-impacted` (BASE=, PLAN=1), `agent-guard`, `python-install`, `python-verify`, `sbom` |
 | `git.mk` | `commit`, `commit-hunks`, `my-hunks`, `whats-mine`, `unstage`, `git-rules`, `review` ([Commits](../CLAUDE.md#commits)) |
 | `usecase.mk` | `usecase-test`, `usecase-report`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-reset`, `usecase-runner-test` |
-| `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify` |
+| `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify`, `docs-guides-check` |
 | `db.mk`, `db-scripts.mk` | `db-up`, `db-down`, `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)) |
 | `release.mk`, `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
 | `services.mk` | The generated `<verb>-<svc>` pass-throughs, for example `test-tools` runs `make -C services/tools-service test` |

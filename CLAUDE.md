@@ -53,6 +53,7 @@ Every fragment, target and variable: [make/CLAUDE.md](make/CLAUDE.md) and
 | Console gate | `pnpm verify` |
 | Everything a commit must pass (CI runs it on every pull request) | `make verify` |
 | Regenerate OpenAPI documents and SDKs after a route change | `make openapi`, then `make sdk-verify` |
+| Check every guide's links, paths and make targets | `make docs-guides-check` |
 
 Python is one uv workspace at the root (`pyproject.toml`, `uv.lock`) with ruff and strict pyright. Settings use the
 `OPS_` prefix and are read only by the settings class in `packages/ops_service_kit`; keys come from the environment or
