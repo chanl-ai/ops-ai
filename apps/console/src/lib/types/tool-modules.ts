@@ -247,7 +247,7 @@ export interface ModuleVersion {
 /** A connection's auth kind (tools-service auth/kinds.py); a client certificate is not a kind but rides on any. */
 export type CredentialKind = 'oauth2_client_credentials' | 'oauth2_auth_code' | 'api_key' | 'basic' | 'bearer';
 
-/** A sample run context the test console can act as: the workflow whose approval applies and the case's bound fields. */
+/** A context the test console can run as: today only the module owner, which needs no workflow approval. */
 export interface RunContextOption {
   id: string;
   label: string;

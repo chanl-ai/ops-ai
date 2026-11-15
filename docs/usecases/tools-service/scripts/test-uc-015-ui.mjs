@@ -24,7 +24,14 @@ await withUiStack(async (consoleUrl) => {
     check('a row opens the operation with its run beside its definition', sidePanel === 0 && !!panelBox && !!benchBox && panelBox.x > benchBox.x + 400, { sidePanel, panelBox, benchBox });
     check('there is no Test console tab', (await page.getByRole('tab', { name: 'Test console' }).count()) === 0);
 
-    // Allow: get_loan_account run as the lending inbox case, which is approved for it; the case binds the account.
+    // Run as offers the module's owner and nothing else: no workflow's "sample values" context.
+    await panel.getByLabel('Run as').click();
+    const options = await page.getByRole('option').allInnerTexts();
+    await page.keyboard.press('Escape');
+    check('Run as offers the owner only, with no sample-values context', options.length === 1 && /^Owner/.test(options[0]) && !options.some((o) => /sample values/i.test(o)), options);
+
+    // Allow: get_loan_account run as the owner, who needs no workflow approval; the account is typed, not bound.
+    await panel.getByLabel('loanAccountId').fill('LN-0048213');
     await panel.getByRole('button', { name: 'Run', exact: true }).click();
     const allowed = await panel.getByText('Allowed').waitFor({ timeout: 30_000 }).then(() => true, () => false);
     check('an approved operation run against the stub is allowed', allowed && (await panel.getByText('HTTP 200').count()) === 1);

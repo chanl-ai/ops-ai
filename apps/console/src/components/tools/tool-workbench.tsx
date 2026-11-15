@@ -136,7 +136,7 @@ export interface ToolWorkbenchProps extends ToolRunProps {
   staging: boolean;
   /** What staging would change; the Stage button is off when it is empty. */
   dirty: boolean;
-  /** Run contexts: the workflows approved for the module, each with a sample case. */
+  /** Run contexts the panel offers: the module owner only. */
   contexts: RunContextOption[];
   /** More header actions, before Stage changes (the operation's access and approval policy). */
   extraActions?: React.ReactNode;
