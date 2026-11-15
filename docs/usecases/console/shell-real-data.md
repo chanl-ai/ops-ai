@@ -11,7 +11,7 @@ under the team, the header does not repeat either, and the Tools page's workflow
 |---|---|---|
 | 1 | James signs in and reads the sidebar's team switcher and the header | The switcher shows Operations over platform-service's `tenantName` from `/v1/me` and Ops AI, with no sample environment; the header names neither |
 | 2 | He opens Tools › Workflows | The rows are the workflow tools `GET /v1/tools?kind=workflow` lists |
-| 3 | The workspace admin names the workspace Harbor & Pine Bank through `PATCH /v1/settings/workspace`; James tries the same | The admin's rename is saved and James is refused (403); James's sidebar shows Harbor & Pine Bank after a reload |
+| 3 | The workspace admin names the workspace Harbor & Pine Group through `PATCH /v1/settings/workspace`; James tries the same | The admin's rename is saved and James is refused (403); James's sidebar shows Harbor & Pine Group after a reload; the console opens with the sidebar folded, so the script starts as a person who opened it |
 | 4 | James opens Settings › Workspace; Wanjiru opens it, renames the workspace and saves | James sees the name locked; Wanjiru's save answers 200 and her sidebar shows the new name |
 
 ## Acceptance layers
