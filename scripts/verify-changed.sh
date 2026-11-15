@@ -95,4 +95,5 @@ uv run python deploy/k8s/generate.py --check
 uv run lint-imports --no-logo
 uv run python scripts/check_portable_store.py --strict
 uv run python scripts/check_config_literals.py --strict
+uv run python scripts/check_typed_boundaries.py --strict
 echo "verify-changed: green"

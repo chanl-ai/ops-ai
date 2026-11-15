@@ -75,7 +75,7 @@ async def procs(tmp_path: Path) -> AsyncIterator[tuple[Proc, Proc]]:
         yield out[0], out[1]
 
 
-async def until(condition: Callable[[], Awaitable[bool]], timeout: float = 10.0) -> None:
+async def until(condition: Callable[[], Awaitable[bool]], timeout: float = 10.0) -> None:  # noqa: ASYNC109
     """Waits for `condition` instead of a fixed sleep, so a slow machine waits longer rather than failing."""
     deadline = time.monotonic() + timeout
     while not await condition():

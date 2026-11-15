@@ -106,6 +106,10 @@ gate standards '^(services|packages)/.*\.py$' \
 gate config-literals '^(services|packages)/[^/]+/(src/.*\.py|config-literals-baseline\.txt)$|^scripts/check_config_literals\.py$' \
   "configuration is written into code (above); read it from Settings, or use ServiceClient.for_settings" \
   "$root/.venv/bin/python" scripts/check_config_literals.py --strict
+# A boundary crossed without a model (a dict, a gather, a bare task, a loose body or reply) beyond the member's baseline.
+gate typed-boundaries '^(services|packages)/[^/]+/(src/.*\.py|typed-boundaries-baseline\.txt)$|^scripts/check_typed_boundaries\.py$' \
+  "a boundary is crossed without a model (above); use In, Out, ops_store.rows, a TaskGroup or background.start" \
+  "$root/.venv/bin/python" scripts/check_typed_boundaries.py --strict
 # Python files in the commit are linted and format-checked; a second each.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
 if [ "${#py[@]}" -gt 0 ]; then

@@ -164,10 +164,10 @@ async def _count(url: URL, login: str, role: str | None, *, tenant: str, team: s
     try:
         if role is None:
             async with engine.connect() as c:
-                return int((await c.execute(sa.text(f"SELECT count(*) FROM {table}"))).scalar_one())
+                return int((await c.execute(sa.text(f"SELECT count(*) FROM {table}"))).scalar_one())  # noqa: S608
         with isolation.scope(tenant, team):
             async with isolation.isolated_tx(engine, role=role) as c:
-                return int((await c.execute(sa.text(f"SELECT count(*) FROM {table}"))).scalar_one())
+                return int((await c.execute(sa.text(f"SELECT count(*) FROM {table}"))).scalar_one())  # noqa: S608
     finally:
         await engine.dispose()
 

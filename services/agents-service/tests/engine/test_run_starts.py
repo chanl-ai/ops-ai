@@ -132,7 +132,7 @@ async def by_mailbox(engine: AsyncEngine, tenant: str, row: dict[str, Any], file
     bound = Bound(row, binding, mailbox)
     with tenant_scope(tenant):
         assert (await listener.poll(bound)).first_sync
-        inbox.mkdir(parents=True, exist_ok=True)
+        inbox.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
         (inbox / "msg-1.json").write_text(json.dumps(mail(1)))
         [run_id] = (await listener.poll(bound)).started
     return run_id

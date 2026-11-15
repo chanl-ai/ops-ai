@@ -103,10 +103,11 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
         async with isolation.isolated_tx(engine, role=ROLE) as c:
             for t in SIGN_IN_TABLES:
                 # Only the tenant is named: the team must come from the policy.
-                seen = await c.execute(sa.text(f"SELECT count(*) FROM {t.name} WHERE tenant_id = :t"), {"t": tenant})
+                seen = await c.execute(sa.text(f"SELECT count(*) FROM {t.name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
                 assert seen.scalar_one() == 0, f"team B read {t.name}"
                 changed = await c.execute(
-                    sa.text(f"UPDATE {t.name} SET team_id = team_id WHERE tenant_id = :t"), {"t": tenant}
+                    sa.text(f"UPDATE {t.name} SET team_id = team_id WHERE tenant_id = :t"),  # noqa: S608
+                    {"t": tenant},
                 )
                 assert changed.rowcount == 0, f"team B changed {t.name}"
     with isolation.scope(tenant, TEAM_A):

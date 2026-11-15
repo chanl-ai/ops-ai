@@ -342,11 +342,11 @@ async def test_s3_uploads_get_a_presigned_put_and_complete_through_obstore(
         )
         assert ticket["uploadUrl"].startswith(f"{moto_endpoint}/{bucket}/") and "X-Amz-Signature" in ticket["uploadUrl"]
         headers = {k: v for k, v in ticket["headers"].items() if k.lower() != "content-length"}
-        assert httpx.put(ticket["uploadUrl"], content=PDF, headers=headers).status_code == 200
+        assert httpx.put(ticket["uploadUrl"], content=PDF, headers=headers).status_code == 200  # noqa: ASYNC210
         done = _data(await c.post(f"/v1/files/uploads/{ticket['fileId']}/complete", headers=OPS))
         assert done["file"]["digest"] == hashlib.sha256(PDF).hexdigest()
         link = _data(await c.post(f"/v1/files/{done['file']['id']}/download-url", headers=OPS))
-        assert link["url"].startswith(moto_endpoint) and httpx.get(link["url"]).content == PDF
+        assert link["url"].startswith(moto_endpoint) and httpx.get(link["url"]).content == PDF  # noqa: ASYNC210
 
 
 async def test_azure_uploads_get_a_create_only_sas(client: Client) -> None:

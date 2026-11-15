@@ -58,7 +58,7 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
     with isolation.scope(tenant, TEAM_B):
         async with isolation.isolated_tx(engine, role=ROLE) as c:
             for name in ("tool_secrets", "secret_audit", "app_credentials"):
-                seen = await c.execute(sa.text(f"SELECT count(*) FROM {name} WHERE tenant_id = :t"), {"t": tenant})
+                seen = await c.execute(sa.text(f"SELECT count(*) FROM {name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
                 assert seen.scalar_one() == 0, f"team B read {name}"
             changed = await c.execute(
                 sa.text("UPDATE tool_secrets SET version = version WHERE tenant_id = :t"), {"t": tenant}
@@ -71,5 +71,5 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
     with isolation.scope(tenant, TEAM_A):
         async with isolation.isolated_tx(engine, role=ROLE) as c:
             for name, rows in (("tool_secrets", 1), ("secret_audit", 1), ("app_credentials", 1)):
-                seen = await c.execute(sa.text(f"SELECT count(*) FROM {name} WHERE tenant_id = :t"), {"t": tenant})
+                seen = await c.execute(sa.text(f"SELECT count(*) FROM {name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
                 assert seen.scalar_one() == rows, name

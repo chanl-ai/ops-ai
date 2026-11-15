@@ -12,7 +12,7 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 | Module | What it is | Used by |
 |---|---|---|
 | `settings` | `Settings` (pydantic-settings, prefix `OPS_`, secrets as files from `/run/secrets` or `OPS_SECRETS_DIR`, empty values unset); `Endpoint` (another service's address, timeout and retries), `PoolSettings` (`OPS_DB__*`), `Settings.require(...)` and `Settings.endpoint(name)` | every service and most packages |
-| `http` | `Envelope`, `ErrorEnvelope`, `ListResult`, `Pagination`, `ok()`, `paged()`, `page_window()`, `options_page()`, `install_error_handlers()`, `mark_public()`, `operation_id()` | every service's routes |
+| `http` | `In` (every request body: refuses unknown fields), `Out` (every reply and store row: frozen, refuses unknown fields), `Passthrough` (a body forwarded whole), `Envelope`, `ErrorEnvelope`, `ListResult`, `Pagination`, `ok()`, `paged()`, `page_window()`, `options_page()`, `install_error_handlers()`, `mark_public()`, `operation_id()` | every service's routes |
 | `listing` | `ListQuery` (`ListParams`, `list_params`): the query every list route takes; page size capped at `OPS_PAGE_SIZE_MAX`, every other query key a filter | every list route, with `ops_store.listing.list_page` |
 | `errors` | `ApiError` and its subclasses (`ValidationFailed`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Unprocessable`, `TooManyRequests`, `ServiceUnavailable`, `StepUpRequired`), turned into `{success: false, error: {code, message, status}}` | services and packages |
 | `ids` | `new_id`, `now_iso`, `canonical_json`, `input_hash`, `action_id` | kernel and services |
@@ -23,7 +23,7 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 | `credentials` | `credential_store(settings)`: picks the `ops_policy` credential store from settings | services that keep secrets |
 | `model_calls` | `ModelCalls`: one structured model call through models-service for a service that is not an agent | documents-service |
 | `background` | The `/health/background` answer shape | services |
-| `contract` | `response_checker(app)`: an httpx hook that checks every test response against the app's own OpenAPI document | service tests (`testing` extra) |
+| `contract` | `response_checker(app)`: an httpx hook that checks every test response against the app's own OpenAPI document; `boundaries(app)`: each route whose body is not an `In` or reply not an `Out` (`scripts/check_typed_boundaries.py`) | service tests (`testing` extra) |
 | `openapi` | `report(...)`: the OpenAPI gate each `services/<x>/scripts/check_openapi.py` runs | service scripts (`testing` extra) |
 | `testdb` | `refusal` and `isolate_from_stack`: a test refuses any PostgreSQL database except `OPS_TEST_DATABASE_URL` | service conftests |
 | `opa_server`, `harness_containers` | A private OPA container per test session, and container cleanup for killed runs | tests and use cases only |

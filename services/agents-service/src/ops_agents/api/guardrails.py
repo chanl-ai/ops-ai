@@ -144,10 +144,10 @@ async def load_seed(rt: Runtime, path: Path) -> None:
     """Seeds each guardrail in `path` that has no row yet, published at v1, and pins it on the agents it names
     (`seed_agent_version`: published in dev, reviewed elsewhere, never over a person's draft). An existing guardrail
     is left as it is, so an unpin or a later version made in the console survives a restart."""
-    if not path.is_file():
+    if not path.is_file():  # noqa: ASYNC240
         return
     reg = guardrails(rt)
-    seeds: list[dict[str, Any]] = json.loads(path.read_text())
+    seeds: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for g in seeds:
         if await reg.find(g["id"]) is not None:
             continue

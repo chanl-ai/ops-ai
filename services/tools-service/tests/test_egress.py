@@ -185,7 +185,7 @@ class RecordingNetwork(httpcore.AsyncNetworkBackend):
         self,
         host: str,
         port: int,
-        timeout: float | None = None,
+        timeout: float | None = None,  # noqa: ASYNC109
         local_address: str | None = None,
         socket_options: Iterable[Any] | None = None,
     ) -> httpcore.AsyncNetworkStream:

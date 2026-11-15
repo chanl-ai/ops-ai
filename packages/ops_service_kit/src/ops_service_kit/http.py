@@ -29,8 +29,26 @@ from .settings import Settings
 log = get_logger("ops_service_kit.http")
 
 
-class Out(BaseModel):
+class In(BaseModel):
+    """The base of every request body: an unknown field answers 400 (`MD1`). Not `strict`: FastAPI validates the
+    parsed JSON in Python mode, where strict refuses an ISO date string, an enum's value and a UUID string."""
+
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+
+class Out(BaseModel):
+    """The base of every reply and every row a store returns (`MD4`). It refuses a field it does not name, so its
+    schema says `additionalProperties: false` and a row with a column the model lacks fails in `ops_store.rows`."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="forbid", frozen=True, from_attributes=True
+    )
+
+
+class Passthrough(In):
+    """A body forwarded whole to an outside system: the one reviewed exception to extra="forbid"."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="allow")
 
 
 class Envelope[T](Out):

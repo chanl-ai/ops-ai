@@ -137,7 +137,7 @@ class ServiceClient:
         team: str | None = None,
         tenant: str | None = None,
         token_header: str = "Authorization",
-        timeout: float | None = None,
+        timeout: float | None = None,  # noqa: ASYNC109
     ) -> Any:
         """The callee's `data`, or ServiceCallError / ServiceUnreachable."""
         tries = 1 + self.retries if method.upper() == "GET" else 1

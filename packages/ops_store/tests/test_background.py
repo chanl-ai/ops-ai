@@ -70,7 +70,7 @@ async def test_a_failing_pass_waits_longer_each_time_up_to_a_minute() -> None:
 
     real = asyncio.wait_for
 
-    async def fake_wait_for(aw: Any, timeout: float) -> Any:
+    async def fake_wait_for(aw: Any, timeout: float) -> Any:  # noqa: ASYNC109
         waits.append(timeout)
         if len(waits) >= 8:
             stop.set()

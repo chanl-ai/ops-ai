@@ -1,0 +1,6 @@
+# 18 boundaries crossed without a model in packages/ops_email (scripts/check_typed_boundaries.py). A row may only fall.
+7 dict-any packages/ops_email/src/ops_email/graph.py
+2 dict-any packages/ops_email/src/ops_email/imap.py
+4 dict-any packages/ops_email/src/ops_email/inbound.py
+1 dict-any packages/ops_email/src/ops_email/outbound.py
+4 dict-any packages/ops_email/src/ops_email/testing.py

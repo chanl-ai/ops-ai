@@ -643,10 +643,10 @@ async def load_seed(rt: Runtime, path: Path) -> None:
     """Seeds each skill in `path` with no row yet, published at v1, and attaches it to the agents it names
     (`seed_agent_version`: published in dev, reviewed elsewhere, never over a person's draft). An existing skill is
     left as it is, so console edits survive a restart."""
-    if not path.is_file():
+    if not path.is_file():  # noqa: ASYNC240
         return
     reg = skills(rt)
-    seeds: list[dict[str, Any]] = json.loads(path.read_text())
+    seeds: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for s in seeds:
         if await reg.find(s["id"]) is not None:
             continue

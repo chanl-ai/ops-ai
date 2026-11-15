@@ -5,6 +5,7 @@ is never claimed; and a child that runs past its time limit keeps its parent wai
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -246,7 +247,7 @@ async def test_a_lapsed_claim_counts_and_a_busy_release_does_not(engine: AsyncEn
     with tenant_scope(tenant):
         await queue.release(first, 0.0)  # a busy lease: given back, not lost
     _, again = await claim("dying", 0.2)
-    time.sleep(0.4)  # its worker died: the claim lapses
+    await asyncio.sleep(0.4)  # its worker died: the claim lapses
     await claim("next", 6.0)
     async with engine.connect() as c:
         lapses = await c.scalar(sa.select(engine_work.c.lapses).where(engine_work.c.run_id == run_id))

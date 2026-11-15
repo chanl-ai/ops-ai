@@ -88,8 +88,9 @@ force-exclude = true
 
 [tool.ruff.lint]
 # T20 no print, G no f-string or % log messages, LOG standard-library logging mistakes (check_standards rule 6b
-# checks the rest of the logging rules).
-select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF", "PL", "N", "T20", "G", "LOG"]
+# checks the rest of the logging rules). S608 no SQL built from strings, ASYNC no blocking call in a coroutine
+# (api-and-models.md, observability.md); the lines that predate them carry a `noqa`, which RUF100 drops once fixed.
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF", "PL", "N", "T20", "G", "LOG", "S608", "ASYNC"]
 ignore = ["PLR0913", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "N818"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -101,8 +102,18 @@ ignore = ["PLR0913", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "N818"]
 "sdk/generate.py" = ["T20"]
 "sdk/python/examples/**" = ["T20"]
 "services/*/scripts/**" = ["T20"]
-"**/experiments/**" = ["T20"]
-"**/migrations/**" = ["T20"]
+# Experiments measure one thing once and are never deployed.
+"**/experiments/**" = ["T20", "S608", "ASYNC"]
+# A migration builds its DDL from the chain's own table and role names, never from input.
+"**/migrations/**" = ["T20", "S608"]
+# Held by another change while it lands; its one blocking read moves with it.
+"packages/ops_service_kit/src/ops_service_kit/testing.py" = ["ASYNC240"]
+# SQL Server statements built from the module's own identifiers; another change owns these files now.
+"packages/ops_store/src/ops_store/dialect.py" = ["S608"]
+"packages/ops_store/src/ops_store/schema.py" = ["S608"]
+"deploy/database/mssql.py" = ["S608"]
+# The published SDK's client takes a per-call timeout, which is its public signature.
+"sdk/python/src/ops_ai/_client.py" = ["ASYNC109"]
 # Code the sandbox runner executes; its print is the output a test reads.
 "services/runner-service/tests/fixtures/**" = ["T20"]
 
@@ -128,5 +139,7 @@ executionEnvironments = [
 ]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
+# Strict already reports it; named so a change of mode cannot drop it (MD3: no Pydantic v1 API).
+reportDeprecated = "error"
 venvPath = "."
 venv = ".venv"

@@ -154,7 +154,7 @@ async def seed_deployments(channels: ChannelStore, path: Path | None) -> None:
     is not checked here: a deployment can name a definition that is published later, and a poll reports the gap."""
     if path is None:
         return
-    rows: list[dict[str, Any]] = json.loads(path.read_text())
+    rows: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for row in rows:
         await channels.put_deployment(
             Deployment(
@@ -176,7 +176,7 @@ async def seed_mailboxes(db: Database, path: Path | None) -> None:
     is connected. A password is a Secrets-page secret by name; the seed sets no secret."""
     if path is None:
         return
-    rows: list[dict[str, Any]] = json.loads(path.read_text())
+    rows: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     now = now_iso()
     with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
         await MailboxStore(db).drop_seeded_except([str(r["id"]) for r in rows])

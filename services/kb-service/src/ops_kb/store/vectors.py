@@ -39,7 +39,7 @@ def _search_sql(width: int, scope: str = "TRUE") -> sa.TextClause:
         WHERE v.tenant_id = :tenant AND l.kb_id IN :kb_ids AND v.model = :model AND v.width = :width AND {scope}
         ORDER BY {distance}
         LIMIT :limit
-        """
+        """  # noqa: S608
     ).bindparams(sa.bindparam("kb_ids", expanding=True))
 
 

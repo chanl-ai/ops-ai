@@ -214,7 +214,7 @@ def test_search_finds_the_new_clients_by_name(rig: Rig) -> None:
 
 def test_a_case_query_on_a_new_account_reaches_the_org(rig: Rig) -> None:
     sf = rig.sf
-    q = f"SELECT Id, Subject FROM Case WHERE AccountId = '{sf.OKAFOR_ID}' AND IsClosed = false"
+    q = f"SELECT Id, Subject FROM Case WHERE AccountId = '{sf.OKAFOR_ID}' AND IsClosed = false"  # noqa: S608
     assert rig.ids(q) == [sf.BENEFICIARY_CASE_ID]
 
 

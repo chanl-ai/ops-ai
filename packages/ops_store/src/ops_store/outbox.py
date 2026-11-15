@@ -7,6 +7,8 @@ agents-service returns the run the first delivery started, by the event's key.
 
   events = outbox_table(metadata)             # in the service's own store, with a migration
   await add(conn, events, tenant_id=..., team_id=..., name="file.deleted", key=file_id, payload={...})
+  await add(conn, events, Event(name="kb.changed", tenant_id=..., team_id=team, revision=row.revision,
+                                payload=KbChanged(id=row.id, name=row.name, colour=row.colour)))
   r = relay(engine, events, routes={"*": ("agents",)}, targets={"agents": client}, role=SYSTEM_ROLE)
   await run_relay(r, key="files_relay", stop=stop)     # delivers, retries and prunes until stop
 
@@ -20,10 +22,13 @@ import asyncio
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, Protocol
+from typing import Annotated, Any, Literal, Protocol, Self
 
 import sqlalchemy as sa
+from pydantic import Field, JsonValue, StringConstraints, model_validator
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+from ops_service_kit.http import Out
 
 from . import background, isolation
 from .dialect import claim
@@ -61,6 +66,58 @@ KEEP_S = 7 * 86400.0
 PRUNE_EVERY_S = 3600.0
 
 
+# A tenant's or a team's id, as the outbox columns hold it.
+TeamId = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+
+
+class Step(Out):
+    """An event a system workflow listens for: its input becomes the run's input on agents-service."""
+
+    kind: Literal["step"] = "step"
+    input: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+
+
+class ToolPublished(Out):
+    """A tool module published in tools-service, for the catalogue copy other services list tools from."""
+
+    kind: Literal["tool.module.published"] = "tool.module.published"
+    id: str
+    name: str
+
+
+class KbChanged(Out):
+    """A knowledge base created, renamed, recoloured or deleted, for the label copy other services show."""
+
+    kind: Literal["kb.changed"] = "kb.changed"
+    id: str
+    name: str
+    colour: str | None = None
+
+
+class Event(Out):
+    """A typed event a service reports through its outbox. Its payload is one of the kinds above, chosen by `kind`;
+    a payload other than `Step` is about the event its name says, so the two must agree."""
+
+    name: str = Field(min_length=1, max_length=120)
+    tenant_id: TeamId
+    team_id: TeamId | None
+    revision: int = Field(ge=0)
+    payload: Annotated[Step | ToolPublished | KbChanged, Field(discriminator="kind")]
+
+    @model_validator(mode="after")
+    def _kind_is_name(self) -> Self:
+        if self.payload.kind not in ("step", self.name):
+            raise ValueError(f"a {self.payload.kind} payload cannot travel as {self.name}")
+        return self
+
+    def key(self) -> str:
+        """The event's idempotency key: the record and its revision, so a replayed write is the same event."""
+        about = getattr(self.payload, "id", None)
+        if about is None:
+            raise ValueError(f"{self.name}: a step event names its own key")
+        return f"{about}@{self.revision}"
+
+
 def outbox_table(metadata: sa.MetaData, name: str = "service_outbox", *, info: dict[str, Any] = OUTBOX) -> sa.Table:
     """The outbox's columns. Read by the relay across tenants through `isolation.system_tx`; `info` is its
     isolation marking."""
@@ -88,18 +145,30 @@ def outbox_table(metadata: sa.MetaData, name: str = "service_outbox", *, info: d
 async def add(
     conn: AsyncConnection,
     table: sa.Table,
+    event: Event | None = None,
     *,
-    tenant_id: str,
-    team_id: str,
-    name: str,
-    key: str,
-    payload: dict[str, Any],
+    tenant_id: str | None = None,
+    team_id: str | None = None,
+    name: str | None = None,
+    key: str | None = None,
+    payload: dict[str, Any] | None = None,
     actor: str | None = None,
     now: float | None = None,
     due_at: float | None = None,
 ) -> None:
     """Writes the event on the caller's connection, inside the transaction that makes the change it reports. `due_at`
-    holds it back until then, so a later event about the same thing can replace it before it is sent."""
+    holds it back until then, so a later event about the same thing can replace it before it is sent.
+
+    A typed `Event` supplies the tenant, team, name and payload (with its revision), and its key unless one is given;
+    the keyword form is the untyped one each service's lane replaces."""
+    if event is not None:
+        if event.team_id is None:
+            raise ValueError(f"{event.name}: an outbox event belongs to a team")
+        tenant_id, team_id, name = event.tenant_id, event.team_id, event.name
+        payload = event.payload.model_dump(by_alias=True, mode="json") | {"revision": event.revision}
+        key = key or event.key()
+    if tenant_id is None or team_id is None or name is None or key is None or payload is None:
+        raise TypeError("add() takes an Event, or tenant_id, team_id, name, key and payload")
     at = time.time() if now is None else now
     await conn.execute(
         table.insert().values(

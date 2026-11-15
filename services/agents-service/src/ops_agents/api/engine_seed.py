@@ -30,10 +30,10 @@ def seed_path(seed_dir: Path, agents_seed_file: Path | None) -> Path:
 
 
 async def load_seed(rt: Runtime, path: Path) -> None:
-    if not path.is_file():
+    if not path.is_file():  # noqa: ASYNC240
         return
     store = DefinitionStore(EngineTransactions(rt.db))
-    raw: list[dict[str, Any]] = json.loads(path.read_text())
+    raw: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for item in raw:
         team = cast(str | None, item.get("teamId"))
         d = parse({k: v for k, v in item.items() if k != "teamId"})

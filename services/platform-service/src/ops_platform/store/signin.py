@@ -666,7 +666,7 @@ class SignInStore:
 
     async def _flow(self, function: str, value: str) -> Flow | None:
         async with self.db.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(sa.text(f"SELECT id, tenant_id FROM {function}(:v)"), {"v": value})).first()
+            row = (await c.execute(sa.text(f"SELECT id, tenant_id FROM {function}(:v)"), {"v": value})).first()  # noqa: S608
         if row is None:
             return None
         cols = signin_flows.c

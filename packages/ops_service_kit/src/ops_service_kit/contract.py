@@ -6,17 +6,29 @@ document a generated SDK would read: a JSON response must be a status the operat
 match that status's schema. The models refuse unknown fields (`additionalProperties: false`), so a field a route adds
 and its model lacks fails here. Undocumented operations are skipped; each service's scripts/check_openapi.py keeps
 that set from growing.
+
+`boundaries(app)` walks the routes themselves, where the document cannot tell: each request body must be an `In`
+and each reply an `Out` all the way down (`MD1`, `MD4`). scripts/check_typed_boundaries.py runs it on every service
+against that service's shrink-only list.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Any
+import types
+from collections.abc import Iterator
+from typing import Any, Literal, Union, get_args, get_origin
 
 import httpx
-from fastapi import FastAPI
-from fastapi.routing import APIRoute
+from fastapi import FastAPI, params
+from fastapi.datastructures import DefaultPlaceholder
+from fastapi.dependencies.models import Dependant
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute, iter_route_contexts
 from jsonschema import Draft202012Validator
+from pydantic import BaseModel
+
+from .http import In, Out
 
 
 class Contract:
@@ -103,3 +115,59 @@ def response_checker(app: FastAPI) -> Any:
         contract[0].check(request.method, request.url.path, response.status_code, response.json())
 
     return check
+
+
+# A reply part that is typed without being a model.
+_SCALARS: tuple[type, ...] = (str, int, float, bool, type(None))
+
+
+def _out(t: Any) -> bool:
+    """Whether a reply type is an `Out` all the way down: an Out whose generic arguments (Envelope[T], ListResult[T])
+    are Outs or scalars, or a list, tuple, union or Literal of those."""
+    if t in _SCALARS or get_origin(t) is Literal:
+        return True
+    if isinstance(t, type) and issubclass(t, BaseModel):
+        if not issubclass(t, Out):
+            return False
+        meta: dict[str, Any] = getattr(t, "__pydantic_generic_metadata__", {}) or {}
+        return all(_out(a) for a in meta.get("args", ()))
+    origin = get_origin(t)
+    if origin in (list, tuple, set, frozenset, Union, types.UnionType):
+        return all(_out(a) for a in get_args(t) if a is not Ellipsis)
+    return False
+
+
+def _bodies(dependant: Dependant) -> Iterator[Any]:
+    """Every JSON body parameter of a route and of the dependencies it takes; a form or a file is not a JSON body."""
+    for field in dependant.body_params:
+        if not isinstance(field.field_info, params.Form):  # File is a Form
+            yield field.field_info.annotation
+    for sub in dependant.dependencies:
+        yield from _bodies(sub)
+
+
+def _json_reply(route: APIRoute) -> bool:
+    """Whether the route answers JSON in the body: not a 204, a redirect, a stream or a page."""
+    cls: Any = route.response_class
+    cls = cls.value if isinstance(cls, DefaultPlaceholder) else cls
+    return route.status_code not in (204, 301, 302, 303, 307, 308) and issubclass(cls, JSONResponse)
+
+
+def boundaries(app: FastAPI) -> list[tuple[str, str]]:
+    """Each (kind, operation id) of `app` that breaks the model rule: `body` for a JSON request body that is not an
+    `In`, `reply` for a JSON reply whose model is missing or is not an `Out` all the way down. A route outside the
+    document is skipped; a route with two bad bodies is one finding. Operation ids are the document's."""
+    paths: dict[str, dict[str, Any]] = app.openapi()["paths"]
+    found: set[tuple[str, str]] = set()
+    for ctx in iter_route_contexts(app.routes):
+        route = ctx.original_route
+        if not isinstance(route, APIRoute) or not ctx.include_in_schema:
+            continue
+        ops = paths.get(ctx.path_format or "", {})
+        for op in {str(ops[m.lower()]["operationId"]) for m in ctx.methods or () if m.lower() in ops}:
+            for body in _bodies(ctx.dependant):
+                if not (isinstance(body, type) and issubclass(body, In)):
+                    found.add(("body", op))
+            if _json_reply(route) and (route.response_model is None or not _out(route.response_model)):
+                found.add(("reply", op))
+    return sorted(found)

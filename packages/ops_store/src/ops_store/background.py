@@ -9,6 +9,12 @@ process that runs on events instead of a timer reports through `Beat` directly.
   await run("files_relay", relay.once, stop=stop, store=beats, every_s=2.0, waiting=relay.waiting)
   beats.read()  -> the rows `/health/background` answers from
 
+A task that outlives the request that starts it goes on the lifespan's TaskGroup, never a bare `create_task`:
+
+  async with background.supervisor():           # in the lifespan, around `yield`
+      ...
+  await background.start(retry_hand_off(item), key="tools_review_handoff")
+
 A table that only grows gets a sweep the same way: `register(retention(table, table.c.at, keep_s, key=...,
 service=...))` lists it, and `run_sweep(key, tx, stop=stop)` runs it.
 """
@@ -20,8 +26,8 @@ import os
 import socket
 import time
 from collections import deque
-from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager, suppress
+from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from functools import cache
 from typing import Any, Literal, Protocol
@@ -531,6 +537,56 @@ async def run(
 # The heartbeats of loops running inside this one process (files, documents and tools run theirs beside their web
 # server); `/health/background` answers from it.
 LOCAL = MemoryHeartbeats()
+
+
+class NoSupervisor(RuntimeError):
+    """`start` was called outside a lifespan that holds `supervisor()`."""
+
+
+# The TaskGroups of the lifespans running in this process, innermost last; `start` puts a task on the last.
+_GROUPS: list[tuple[asyncio.TaskGroup, set[asyncio.Task[None]]]] = []
+
+
+@asynccontextmanager
+async def supervisor() -> AsyncGenerator[None]:
+    """Held by a service's lifespan around its `yield`: the TaskGroup every `start`ed task runs on. Leaving it cancels
+    the tasks still running and waits for them, so nothing a request started outlives the process's shutdown."""
+    async with asyncio.TaskGroup() as group:
+        tasks: set[asyncio.Task[None]] = set()
+        _GROUPS.append((group, tasks))
+        try:
+            yield
+        finally:
+            _GROUPS.remove((group, tasks))
+            for task in tasks:
+                task.cancel()
+
+
+async def start(coro: Coroutine[Any, Any, None], *, key: str, store: HeartbeatStore = LOCAL) -> None:
+    """A task that outlives the request: on the lifespan's TaskGroup, cancelled at shutdown, its failure on
+    /health/background under key. Its own asyncio task, so its own transaction.
+
+    A failure is caught and recorded rather than raised, so one failed task never cancels the group's others."""
+    if not _GROUPS:
+        coro.close()
+        raise NoSupervisor("background.start needs the lifespan to hold background.supervisor()")
+    beat = Beat(key, store)
+    group, tasks = _GROUPS[-1]
+
+    async def supervised() -> None:
+        try:
+            await coro
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning("background_task_failed", process=key, error=f"{type(e).__name__}: {e}"[:500])
+            await beat.failed(e)
+        else:
+            await beat.ok(1)
+
+    task = group.create_task(supervised(), name=key)
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
 
 
 async def run_sweep(

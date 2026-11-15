@@ -39,7 +39,7 @@ class GatewayMailSource:
         self.mailbox = mailbox
         self.folder = folder
 
-    async def _post(self, path: str, body: dict[str, Any], timeout: float = 60) -> dict[str, Any]:
+    async def _post(self, path: str, body: dict[str, Any], timeout: float = 60) -> dict[str, Any]:  # noqa: ASYNC109
         payload = {"connection": connection(self.mailbox), "folder": self.folder, **body}
         try:
             data = await self.mail.post(f"/v1/mailboxes/{path}", payload, team=self.mailbox.team_id, timeout=timeout)

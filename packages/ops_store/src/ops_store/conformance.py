@@ -80,7 +80,7 @@ def _guarantees(repo: object, backend: Backend) -> None:
     assert not missing, f"{type(repo).__name__} needs {names}, which {backend.name} does not provide"
 
 
-async def _until[T](attempt: Callable[[], Awaitable[T | None]], timeout: float = 10.0) -> T:
+async def _until[T](attempt: Callable[[], Awaitable[T | None]], timeout: float = 10.0) -> T:  # noqa: ASYNC109
     deadline = time.monotonic() + timeout
     while (result := await attempt()) is None:
         assert time.monotonic() < deadline, "the condition did not hold in time"

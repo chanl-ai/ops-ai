@@ -153,8 +153,9 @@ class Out(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 ```
 
-Check: no check yet. Needed: a grep ratchet on `extra="allow"` in `services/*/src` with the reviewed sites listed, and a
-test that walks every route's body model and asserts `extra == "forbid"`.
+Check: `uv run python scripts/check_typed_boundaries.py --strict`: `extra="allow"` outside the kit's `Passthrough`, and
+every route whose JSON body is not an `In` (`ops_service_kit.contract.boundaries`), beyond the service's
+`typed-boundaries-baseline.txt`.
 
 ### MD2 One model per contract, generated everywhere else
 
@@ -183,8 +184,8 @@ Why: `model_construct` skips validation (Pydantic v2 docs), so a bad value reach
 
 Today: none found; nothing stops the next one.
 
-Check: no check yet. Needed: a ruff banned-API entry for `model_construct` outside `domain`, and pyright
-`reportDeprecated = "error"` to keep Pydantic v1 APIs at zero.
+Check: pyright `reportDeprecated = "error"` (`pyproject.toml`) keeps Pydantic v1 APIs at zero. No check yet for
+`model_construct`; needed: a ruff banned-API entry outside `domain`.
 
 ### MD4 A value that crosses a layer is a model
 
@@ -197,5 +198,7 @@ Today (`services/agents-service/src/ops_agents/api/hitl_facade.py:320`): the fac
 Pattern (`services/agents-service/src/ops_agents/api/routers/cases.py:35`): `Envelope[CaseRunList]` types the route's
 answer.
 
-Check: `services/<x>/scripts/check_openapi.py` (untyped routes on the shrink-only list). Needed: a per-service count of
-`dict[str, Any]` across layer boundaries, tracked as a ratchet.
+Check: `services/<x>/scripts/check_openapi.py` (untyped routes on the shrink-only list), and
+`uv run python scripts/check_typed_boundaries.py --strict`: `dict[str, Any]` per file, store functions returning a dict,
+and replies that are not an `Out` all the way down, each on a shrink-only `typed-boundaries-baseline.txt` per member.
+A row leaves a store through `ops_store.rows.rows()` or `one()`.

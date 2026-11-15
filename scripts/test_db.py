@@ -66,7 +66,7 @@ async def migrate(url: str) -> None:
         async with admin.connect() as c:
             await c.execute(text("select pg_advisory_lock(:k)"), {"k": MIGRATE_LOCK})
             for chain in CHAINS:
-                run = subprocess.run(
+                run = subprocess.run(  # noqa: ASYNC221
                     ["uv", "run", "alembic", "upgrade", "head"],
                     cwd=ROOT / chain,
                     env=env,

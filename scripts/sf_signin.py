@@ -179,7 +179,7 @@ async def sign_in_with_jwt(  # noqa: PLR0917
     from ops_service_kit.credentials import credential_store  # noqa: PLC0415
     from ops_tools.auth.tokens import Tokens  # noqa: PLC0415
 
-    key_file = Path(values["SF_TEST_JWT_KEY_FILE"]).expanduser()
+    key_file = Path(values["SF_TEST_JWT_KEY_FILE"]).expanduser()  # noqa: ASYNC240
     if not key_file.is_file():
         raise Refused(f"SF_TEST_JWT_KEY_FILE names no file ({key_file})")
     login = (values.get("SF_TEST_LOGIN_URL") or LOGIN_DEFAULT).rstrip("/")
