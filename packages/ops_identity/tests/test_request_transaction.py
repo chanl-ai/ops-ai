@@ -84,7 +84,8 @@ class RoleNotes(Notes):
 
 async def carried(c: AsyncConnection) -> dict[str, str]:
     if dialect_of(c) == "mssql":
-        cols = ", ".join(f"CAST(SESSION_CONTEXT(N'{name}') AS nvarchar(64))" for name in isolation.SETTINGS.values())
+        # SQL Server's session context keys are SETTINGS' keys, the names its security predicates read.
+        cols = ", ".join(f"CAST(SESSION_CONTEXT(N'{key}') AS nvarchar(64))" for key in isolation.SETTINGS)
         row = (await c.execute(sa.text(f"SELECT {cols}, N'-'"))).one()
     else:
         cols = ", ".join(f"current_setting('{name}', true)" for name in isolation.SETTINGS.values())
