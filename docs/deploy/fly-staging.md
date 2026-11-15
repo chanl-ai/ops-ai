@@ -137,7 +137,9 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 | Test a release on staging | Open the release PR from `develop` into `main`; while it is open, merges to `develop` skip the deploy with a notice. Merge or close it to resume |
 | Go back to `develop` | Clear `STAGING_HOLD`, or merge the release PR; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
 
-`REF` is what is deployed; the workflow file itself always runs from `develop` (`WORKFLOW_REF=` changes that). A commit
+`REF` is what is deployed; the workflow file runs from `develop` (`WORKFLOW_REF=` changes that). GitHub offers a
+hand-started run only for a workflow that is also on the default branch, `main`, so the button and `make stg-deploy-ci`
+work once `deploy-staging.yml` has reached `main` in a release; until then use `make stg-deploy` from a machine. A commit
 whose image an earlier release pushed is not built again (`SKIP_BUILD=1`). After the deploy the job checks every
 process, OCR, plugins and one signed-in request (the first admin signs in and lists agents), then the click walk, which
 `skip_walk` leaves out. If a step fails after the machine was replaced, the job runs `make stg-rollback TO=<the release

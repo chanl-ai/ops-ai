@@ -127,9 +127,11 @@ def call(path, body=None, headers=None):
                                  headers={"Content-Type": "application/json", **(headers or {})})
     return json.load(urllib.request.urlopen(req, timeout=120))["data"]
 s = call("/api/platform/v1/auth/sign-in", {"email": os.environ["STG_EMAIL"], "password": os.environ["STG_PASSWORD"]})
-agents = call("/api/agents/v1/agents", headers={"Authorization": "Bearer " + s["token"], "X-Team-Id": s["principal"]["teamId"]})
+# A person in several teams signs in with no current team (teamId null); the request names the first of teamIds.
+team = s["principal"].get("teamId") or s["principal"]["teamIds"][0]
+agents = call("/api/agents/v1/agents", headers={"Authorization": "Bearer " + s["token"], "X-Team-Id": team})
 assert isinstance(agents.get("data"), list), agents
-print("ok signed in as", s["principal"]["teamId"], "and listed", len(agents["data"]), "agents")
+print("ok signed in to", team, "and listed", len(agents["data"]), "agents")
 PY
 step "signed-in request"
 
