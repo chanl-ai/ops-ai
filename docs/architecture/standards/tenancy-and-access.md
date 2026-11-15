@@ -135,7 +135,7 @@ Why: one decision point is what an access review can audit (SOC 2 CC6.1); a role
 can change without a release.
 
 Today (`apps/console/src/lib/auth/providers/platform.ts:70` and
-`apps/console/src/components/access/members-panel.tsx`, rows E22 and E20 of `access-exceptions-allowlist.txt`): the
+`apps/console/src/components/access/members-panel.tsx:42`, rows E22 and E20 of `access-exceptions-allowlist.txt`): the
 console compares role names, and E22 is recorded as "no decision" yet still passes.
 
 ```ts

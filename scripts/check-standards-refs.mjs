@@ -82,8 +82,9 @@ else {
   if (ids.size === 0) { console.error(`check-standards-refs: no rule ids found under ${STANDARDS_DIR}`); process.exit(1); }
   const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '*.md'], { encoding: 'utf8' })
     .split('\n').filter((f) => f && existsSync(f) && (REQUIRED.test(f) || CITING.test(f)));
-  // The agents folder may sit on a local exclude list, so a new agent is read from disk rather than from git. The folder
-  // is not in the public export, and check-public-paths reads path literals, so its name is assembled here.
+  // The agents folder is absent from the public export and may sit on a local git exclude, so a new agent is read from
+  // disk rather than from git, and the folder's absence is tolerated. Its name is assembled so the public export, which
+  // has no such folder, carries no path literal pointing at it.
   const agentsDir = ['.claude', 'agents'].join('/');
   if (existsSync(agentsDir)) for (const f of readdirSync(agentsDir)) if (f.endsWith('.md') && !files.includes(`${agentsDir}/${f}`)) files.push(`${agentsDir}/${f}`);
   let n = 0;
