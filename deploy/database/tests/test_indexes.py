@@ -98,3 +98,19 @@ def test_the_scan_names_an_unindexed_foreign_key_and_listed_column_and_passes_an
         sa.Index("ix_children_kind", "kind"),
     )
     assert unindexed(child) == {"children.other_id", "children.status"}
+
+
+def test_the_waiting_list_only_falls_in_the_history() -> None:
+    """An entry added to WAITING in a commit with no `Standards-exception:` trailer: the list and the schema change
+    together, so the working tree alone cannot show it."""
+    root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(root / "scripts"))
+    import baseline_history  # noqa: PLC0415
+
+    problems = baseline_history.problems(
+        root,
+        "583fbae33c53c028d7a20873eeb72db811888084",
+        ["deploy/database/tests/test_indexes.py"],
+        baseline_history.waiting_dict("WAITING"),
+    )
+    assert problems == []

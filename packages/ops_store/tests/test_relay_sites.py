@@ -8,6 +8,7 @@ until its row is deleted. Tests are not scanned: they build a `Relay` to drive o
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -68,3 +69,17 @@ def test_the_scan_finds_both_call_forms_and_ignores_other_uses_of_the_name() -> 
         "    return outbox.relay(e, t, routes={}, targets={}, role=None)\n"
     )
     assert constructions(source) == [4, 6]
+
+
+def test_a_baseline_only_falls_in_the_history() -> None:
+    """A row raised, or a file added, in a commit with no `Standards-exception:` trailer: the working tree alone
+    cannot show it, since the baseline and the code are changed together."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import baseline_history  # noqa: PLC0415
+
+    assert (
+        baseline_history.problems(
+            ROOT, "fb7c75814504a9958b6d5125f978febeba0556a5", ["packages/ops_store/tests/relay_sites"]
+        )
+        == []
+    )

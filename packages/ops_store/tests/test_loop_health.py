@@ -11,6 +11,7 @@ no test and no row fails here, and so does a row whose key has its test or is no
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 from ops_store.background import PROCESSES
@@ -101,3 +102,17 @@ def test_the_scan_reads_the_key_in_both_argument_forms() -> None:
         "    await loop_reports_failure(client, key, trip)\n"
     )
     assert keys_with_a_test(source) == {"files_relay", "files_retention"}
+
+
+def test_a_baseline_only_falls_in_the_history() -> None:
+    """A row raised, or a file added, in a commit with no `Standards-exception:` trailer: the working tree alone
+    cannot show it, since the baseline and the code are changed together."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import baseline_history  # noqa: PLC0415
+
+    assert (
+        baseline_history.problems(
+            ROOT, "fb7c75814504a9958b6d5125f978febeba0556a5", ["packages/ops_store/tests/loop_health"]
+        )
+        == []
+    )
