@@ -335,7 +335,7 @@ export interface ModuleTestResult {
   /** Test environment: the host a read reached. */
   reachedHost?: string;
   /** Inputs the gateway filled or checked from the run context. */
-  bound: { arg: string; value: string; source: BindingSource }[];
+  bound: { arg: string; value: string; source: BindingSource | 'sample' }[];
   /** A write would pause here for an approval token. */
   wouldPause: boolean;
   output: unknown;

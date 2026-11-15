@@ -406,7 +406,7 @@ export function ResultBody({ result, op, running, onSimulate, badge, labels, bri
             Bound:{' '}
             {result.bound.map((b) => (
               <span key={b.arg} className="mr-2">
-                <code className="font-mono text-foreground">{b.arg}</code> = <code className="font-mono text-foreground">{b.value}</code> from the {BINDING_LABEL[b.source].toLowerCase()}
+                <code className="font-mono text-foreground">{b.arg}</code> = <code className="font-mono text-foreground">{b.value}</code> {b.source === 'sample' ? 'as typed' : `from the ${BINDING_LABEL[b.source].toLowerCase()}`}
               </span>
             ))}
           </p>

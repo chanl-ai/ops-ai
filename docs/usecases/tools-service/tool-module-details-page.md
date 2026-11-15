@@ -19,9 +19,8 @@ The page is `/tools/[id]` in the console. Tool modules come from the console moc
 | 1 | Open `/tools/mod_core_banking` at 1440 px | The test panel sits to the right of the tabs; there is no Test console tab |
 | 2 | Open Run as, then type `loanAccountId` and Run `get_loan_account` against the stub | Run as lists the owner only, with no sample-values context; Allowed, HTTP 200 |
 | 3 | Pick `transfer_funds`, fill `toAccount` and `amount`, Run | Denied, HTTP 403, "The operation is hidden in this module." |
-| 4 | Activity tab | Executions list each call with its caller and "via" the actor |
-| 5 | Click a row's caller | The call sheet opens and names the same workflow |
-| 6 | Resize to 375 px | No sideways scroll |
+| 4 | Activity tab | Executions list is shown; test runs on stub operations are not logged, so it is empty (caller and "via" cells: uc-086) |
+| 5 | Resize to 375 px | No sideways scroll |
 
 ## Acceptance layers
 
@@ -32,5 +31,4 @@ The page is `/tools/[id]` in the console. Tool modules come from the console moc
 ## Non-vacuous check
 
 `the test panel sits beside the Operations tab` failed with the panel's two-column grid removed (the panel dropped
-below the tabs). `executions list a caller and who it acted via` failed with the "via" line removed from
-`CallerCell`. Step 3's refusal pairs with step 2's allow on the same run context.
+below the tabs). Step 3's refusal pairs with step 2's allow on the same run context.
