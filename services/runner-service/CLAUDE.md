@@ -59,5 +59,5 @@ for it (`SVC=runner` fails with a traceback). Exercise it through a code tool in
 | [docs/services/runner-service/overview.md](../../docs/services/runner-service/overview.md) | Purpose, runtime, route, deploy targets, settings, walls and their tests |
 | [docs/architecture/service-map.md](../../docs/architecture/service-map.md) | Where it sits |
 
-There is no `docs/usecases/runner-service/` folder; the end-to-end check of a code tool is uc-531, registered under
+Use cases: none of its own; the end-to-end check of a code tool is uc-531, registered under
 tools-service (`make usecase-test UC=uc-531`).

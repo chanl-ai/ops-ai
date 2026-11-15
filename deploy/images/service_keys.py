@@ -1,5 +1,5 @@
 """The keys (from deploy/fly/generate_keys.py) each service uses besides its own signing key: one table every
-deployment target reads (deploy/fly/staging/apps.py, deploy/k8s/secrets.py), so no service is handed a key it does
+deployment target reads (deploy/fly/staging/apps.py, deploy/k8s/write_secrets.py), so no service is handed a key it does
 not use. The worker uses agents-service's."""
 
 from __future__ import annotations

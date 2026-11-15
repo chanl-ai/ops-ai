@@ -54,7 +54,9 @@ through another package (`scripts/dependants.py` reads each member's `pyproject.
 
 Gap: `ops_extract` and `ops_plugin_sdk` have test suites that no pool job runs, so a full `make verify` skips them.
 They run when they change (`make test` with no `PKG`, and CI's per-package job). Packages with no tests of their own
-are covered by the services that use them; each package's `CLAUDE.md` names where.
+are covered by the services that use them; each package's `CLAUDE.md` names where. Packages have no use cases of
+their own: the use cases of the service that runs a package cover it end to end (`make usecase-coverage
+SERVICE=<service>`, [registry](../docs/usecases/README.md)).
 
 ## Packages
 

@@ -19,7 +19,7 @@ build pointed at them. Package rules: [../CLAUDE.md](../CLAUDE.md); repo-wide ru
 - Each run picks free ports and creates its own database (`isolation.ts`), dropped at the end; `OPS_USECASE_*` set by
   the caller pins one. Model keys are removed from a script's environment unless `APPROVED_REAL_CALLS=<n>` is set.
 - A layer is available when its provider exists (`src/layers.ts:12`): `sdk` needs `sdk/python` or `sdk/typescript`,
-  `cli` needs `scripts/sample_team.py` or `packages/ops_plugins`.
+  `cli` needs `scripts/sample_team.py`.
 - A ui script fails when a page it opens reads data the console still answers from its mock beside real services:
   the console writes `[ops-ai sample data] <area> on <path>` (`apps/console/src/lib/api/sample-reads.ts`) and the
   harness's `chromium` turns it into a `FAIL`. A script that means to show sample data calls
@@ -46,6 +46,4 @@ A change here is skipped by `scripts/verify-changed.sh` (`packages/usecase-runne
 ## Reference docs
 
 - [docs/packages/usecase-runner/overview.md](../../docs/packages/usecase-runner/overview.md): modules, verdict and exit codes.
-  Its layers row says `sdk` needs `packages/sdk-py` or `packages/sdk-ts` and `cli` needs `packages/ops-cli`; the code
-  checks `sdk/python`, `sdk/typescript`, `scripts/sample_team.py` and `packages/ops_plugins`, so that row is out of date
 - [docs/usecases/README.md](../../docs/usecases/README.md): the registry and the rules every use case follows

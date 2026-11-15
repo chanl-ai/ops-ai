@@ -24,7 +24,7 @@ other folder (onion order, one stack, calling the API as a person, tests, commit
 | Production build | `pnpm build` |
 | Make verbs | `make help`: `install`, `run`, `lint`, `typecheck`, `verify`, `stop`, `logs`, `health`, `clean`. `make test` prints "no tests yet" and runs nothing; use `pnpm test` |
 
-The console type-checks against the TypeScript SDK's build in `sdk/typescript/dist/`, made by `pnpm install`. After a
+The console type-checks against the TypeScript SDK's build (the SDK's `dist` folder), made by `pnpm install`. After a
 route change regenerates the SDK (`make openapi`), rebuild it with `pnpm --filter @chanl-ai/ops-ai build` (or
 `make sdk-verify`, which builds it as part of its test); until then `tsc` reports fields the services already return as
 missing (TS2339).

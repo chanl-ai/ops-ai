@@ -53,7 +53,5 @@ the distribution's `tesseract-ocr` package. The root workspace installs the `ocr
 ## Reference docs
 
 - [docs/packages/ops_ingest/tests.md](../../docs/packages/ops_ingest/tests.md): each failure mode and the test that guards it
-- [docs/packages/ops_ingest/overview.md](../../docs/packages/ops_ingest/overview.md). Its status says there is no
-  server and it lists a `services/shared` dependency; kb-service now runs this library and no `services/shared` exists,
-  so that page is out of date
+- [docs/packages/ops_ingest/overview.md](../../docs/packages/ops_ingest/overview.md): what the library holds
 - [docs/services/kb-service/overview.md](../../docs/services/kb-service/overview.md): the service that runs it
