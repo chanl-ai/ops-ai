@@ -232,7 +232,7 @@ jobs:
     # Every merge to develop goes to staging once ci-ok passed for that commit, so the owner tests the real combination.
     # Pull requests and pushes to main never reach this job (main deploys through release-tag.yml).
     needs: ci-ok
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success'
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     environment: staging
