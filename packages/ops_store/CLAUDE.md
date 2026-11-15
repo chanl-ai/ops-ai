@@ -71,3 +71,9 @@ every dependant's suite under `make test` with no `PKG`.
 - [docs/architecture/decisions/database-support.md](../../docs/architecture/decisions/database-support.md): PostgreSQL and SQL Server
 - [docs/architecture/identity-and-tenancy.md](../../docs/architecture/identity-and-tenancy.md): tenant and team isolation
 - [docs/architecture/decisions/fencing-and-timers.md](../../docs/architecture/decisions/fencing-and-timers.md): leases and the database clock
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [data access](../../docs/architecture/standards/data-access.md) (`DA1` to `DA13`), [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [events, the relay and workers](../../docs/architecture/standards/events-and-workers.md) (`EV1` to `EV6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

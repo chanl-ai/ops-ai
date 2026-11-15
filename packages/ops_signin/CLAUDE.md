@@ -42,3 +42,9 @@ Every protocol is tested against the fake identity provider only; no real identi
   Its SAML row says an encrypted assertion is refused; the code decrypts one (`src/ops_signin/xmlenc.py`), so that row
   is out of date
 - [docs/architecture/decisions/auth-provider-seam.md](../../docs/architecture/decisions/auth-provider-seam.md)
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [security](../../docs/architecture/standards/security.md) (`SC1` to `SC6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

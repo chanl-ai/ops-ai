@@ -61,3 +61,9 @@ models-service and platform-service.
 
 - [docs/architecture/roles-and-permissions.md](../../docs/architecture/roles-and-permissions.md): the grid, the policies and the exceptions register
 - [docs/architecture/identity-and-tenancy.md](../../docs/architecture/identity-and-tenancy.md)
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [security](../../docs/architecture/standards/security.md) (`SC1` to `SC6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

@@ -42,7 +42,8 @@ another repository, replace the profile.
 | Design | `ops-architect` | Owners, flows, data and decision records for a change; a fresh-eyes review of a design |
 | Design | `ops-mock-designer` | Mocks from the console's existing components, every state, both widths |
 | Test design | `ops-test-designer` | Failure modes first, one test per failure mode with what to revert to see it fail |
-| Build | `ops-builder` | The code, tests and docs of one approved change, inside out |
+| Build | `ops-builder` | Routes each file the plan names to the specialist that owns it and runs the lanes inside out on one branch |
+| Build | `ops-store-builder`, `ops-service-builder`, `ops-access-builder`, `ops-events-builder`, `ops-console-builder`, `ops-sdk-builder`, `ops-plugin-builder`, `ops-ci-builder` | One module each (stores and migrations; routes and the kit; access; events and workers; console; SDKs and CLI; plugins; CI and deploy), carrying its standards, helpers and commands |
 | Test audit | `ops-test-auditor` | How effective the tests are: mutation score on the changed lines, tests that cannot fail, failure modes with no test |
 | Browser test | `ops-browser-tester` | The few end-to-end paths through a headless browser as each role at both widths |
 | UX review | `ops-ux-reviewer` | A mock or a built screen against the UI standard, the usability heuristics and WCAG 2.2 AA |

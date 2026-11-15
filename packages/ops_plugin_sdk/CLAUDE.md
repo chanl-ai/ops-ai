@@ -52,3 +52,9 @@ and `.importlinter` does not list `ops_plugin_sdk`, so its import contracts are 
 - [docs/guide/plugins.md](../../docs/guide/plugins.md): how to write, test and install a plugin
 - [plugins/README.md](../../plugins/README.md): the install's plugins folder
 - `src/ops_plugin_sdk/loader.py:1` cites `plugin-architecture.html` section 03, which is not in this repository
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [configuration](../../docs/architecture/standards/configuration.md) (`CF1` to `CF6`), [security](../../docs/architecture/standards/security.md) (`SC1` to `SC6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

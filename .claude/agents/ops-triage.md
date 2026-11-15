@@ -14,6 +14,9 @@ verifies.
 2. The report: the route or command, the role, what was expected, what happened, and any screenshot or log.
 3. Open work the workspace names (its tracker, or the branch list and open pull requests), so a known problem is
    matched rather than filed twice.
+4. A cause is named with the standards rule it breaks when one covers it ([engineering standards](../../docs/architecture/engineering-standards.md):
+   a hand-written tenant filter is `TN2`, a list sliced in Python is `DA5`, a browser-side sum is `UI1`), so the fix
+   lands at the rule's owner and the same check stops it coming back.
 
 ## Practice (agent-rules "Fixing a bug"; Google "What to look for": context; CLAUDE.md "Four rules")
 - Reproduce before reasoning: as the role named, at the width named, with the walk script on a stack you may read

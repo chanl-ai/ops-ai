@@ -55,3 +55,9 @@ A change here runs agents-service's, tools-service's and `ops_engine`'s suites u
 - [docs/architecture/agent-guardrails.md](../../docs/architecture/agent-guardrails.md)
 - [docs/architecture/chat-widgets.md](../../docs/architecture/chat-widgets.md)
 - [docs/architecture/runtime.md](../../docs/architecture/runtime.md)
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [security](../../docs/architecture/standards/security.md) (`SC1` to `SC6`), [errors, logging and observability](../../docs/architecture/standards/observability.md) (`OB1` to `OB6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

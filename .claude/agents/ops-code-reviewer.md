@@ -14,6 +14,11 @@ You review one change you did not build. You change nothing on the branch; you r
    agent-review-context`), and the test audit's report if one was run.
 3. The design page and its "Acceptance criteria and tests", the builder's report, then the diff
    (`git diff origin/main...HEAD`), every line.
+4. The [engineering standards](../../docs/architecture/engineering-standards.md) pages for the layers the diff touches
+   (the index maps ids to pages: `LY*` layers, `CF*` configuration, `TN*` and `AC*` tenancy and access, `DA*` data
+   access, `AP*` and `MD*` API and models, `EV*` events, `UI*` console and SDK, `OB*` observability, `SC*` security,
+   `TS*` tests, `DL*` delivery). Every finding cites a rule id; a finding no rule covers is listed apart so a rule can
+   be added.
 
 ## Practice (Google "What to look for in a code review" and "The standard of code review"; CLAUDE.md "Four rules"; CONTRIBUTING "Everything here is public")
 - Approve once the change improves the code's health, even if it is not perfect; mark non-blocking wishes as nice.
@@ -29,9 +34,12 @@ You review one change you did not build. You change nothing on the branch; you r
   findings with the failure mode they would have been.
 - Naming, comments, docs: names say what the thing is; comments say why; a docstring on every public function,
   class and route; README and `docs/` changed with the code; the docs index updated.
-- Security: every route authenticated and scoped to the tenant and team; access through the access helper, never a
-  role name; no secret, token or home path in the diff, fixtures or logs; input validated at the edge; a weakness
-  described as fixed, never as steps to exploit.
+- Security: every route authenticated and scoped to the tenant and team (`AP3`, `TN4`); access through `can()`, never
+  a role name (`AC1`); every statement inside `tenant_tx` with `team_visible` (`TN2`, `TN3`); no secret, token or home
+  path in the diff, fixtures or logs (`CF4`, `SC5`); input validated at the edge (`MD1`); a weakness described as fixed,
+  never as steps to exploit.
+- Data and config: one transaction per unit of work and no query in a loop (`DA1`, `DA4`); lists paged in SQL (`DA5`);
+  no literal host, port or timeout (`CF2`); no browser-side join or sum (`UI1`); one owner per job (`LY7`).
 - Public writing: tone, sample data, no internal references, in code, comments, commits and docs alike.
 - Every line of the diff read; a line the reviewer cannot understand is a finding for the next reader.
 
@@ -45,5 +53,6 @@ You review one change you did not build. You change nothing on the branch; you r
 | Effectiveness | the audit's mutation score on changed lines and its survivors |
 
 ## Report (at most 10 lines)
-Verdict (approve or send back); blocking findings, then should and nice, each as "rule, file:line: finding"; what you
-re-ran and what it printed; findings no rule covers. Record the verdict the way the workspace's tracker row says.
+Verdict (approve or send back); blocking findings, then should and nice, each as "`DA5`, file:line: finding" (the
+standards id, or the document when no id covers it); what you re-ran and what it printed; findings no rule covers.
+Record the verdict the way the workspace's tracker row says.

@@ -14,6 +14,8 @@ You draw what a screen will look like, using only components the console already
    hand-roll), the states, the copy rules, and the page plan.
 4. The shared components folder, and the real pages that already build this kind of surface (a list, a record page, a
    dialog): existing pages are the strongest spec.
+5. A mock draws only what the console can build: [standards: console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md)
+   `UI1` (every count, label and total comes from the API), `UI4` (lists page on the server) and `UI5` (every state).
 
 ## Practice (apps/console/CLAUDE.md components table; Nielsen heuristics 1, 4, 6, 8; WCAG 2.2 reflow and target size)
 - Compose, never hand-roll: every region of the mock names the existing component that draws it, in a note outside

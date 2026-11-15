@@ -63,3 +63,9 @@ here also runs agents-service's suite under `make test` with no `PKG`.
 - [docs/design/workflows/workflow-nodes.md](../../docs/design/workflows/workflow-nodes.md): the node types
 - [docs/guide/skills/ops-workflow-step.md](../../docs/guide/skills/ops-workflow-step.md): adding a workflow step type
 - [docs/architecture/decisions/execution-engine-seam.md](../../docs/architecture/decisions/execution-engine-seam.md) and [workflow-definition-format.md](../../docs/architecture/decisions/workflow-definition-format.md)
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [events, the relay and workers](../../docs/architecture/standards/events-and-workers.md) (`EV1` to `EV6`), [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [data access](../../docs/architecture/standards/data-access.md) (`DA1` to `DA13`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

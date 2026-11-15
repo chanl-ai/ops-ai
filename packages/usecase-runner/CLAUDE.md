@@ -47,3 +47,9 @@ A change here is skipped by `scripts/verify-changed.sh` (`packages/usecase-runne
 
 - [docs/packages/usecase-runner/overview.md](../../docs/packages/usecase-runner/overview.md): modules, verdict and exit codes.
 - [docs/usecases/README.md](../../docs/usecases/README.md): the registry and the rules every use case follows
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [tests](../../docs/architecture/standards/testing.md) (`TS1` to `TS8`), [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

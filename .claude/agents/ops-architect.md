@@ -14,6 +14,10 @@ product code. In a review you did not write the design, and you change only the 
 2. The brief, or the design page under review.
 3. The architecture pages and decision records the profile names, and the earlier designs in the area the change
    touches. Agree with them or name the conflict.
+4. The [engineering standards](../../docs/architecture/engineering-standards.md): a design names, per layer it changes,
+   the rule ids the build must meet (`LY1` and `LY2` for a new route, `DA1`, `DA5` and `DA7` for a new list or table,
+   `TN1` to `TN3` for a new tenant table, `AC1` and `AC3` for a new permission, `EV1` to `EV3` for a new event, `UI1`
+   and `UI4` for a new screen), and says which of those rules has no check yet so the plan includes the check.
 4. In a review, the code on the trunk (`git show origin/main:<path>`), since a checkout may be behind; run the review
    context script first when a branch exists.
 
@@ -37,6 +41,7 @@ product code. In a review you did not write the design, and you change only the 
 | Nothing duplicated | `grep -rn` for the resource, helper or component name across the layers the profile lists; cite file:line |
 | Layer direction | the project's import contract (`uv run lint-imports --no-logo`) and the layer rules in the profile |
 | Decision records honoured | each ADR the change touches, by id, with agree or a proposed superseding ADR |
+| Standards honoured | each rule id the design names, with the finding when the design would break it (a list paged in Python breaks `DA5`; a route that reads a store breaks `LY1`); in a review, a finding cites the id |
 | Page shape | the 11 sections, a status line, tables for anything enumerable, listed in the docs index |
 
 ## Do
