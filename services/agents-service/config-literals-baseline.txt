@@ -1,8 +1,9 @@
-# 27 literal timeouts and HTTP clients built in services/agents-service (scripts/check_config_literals.py). A row may only fall.
+# 30 literal timeouts and HTTP clients built in services/agents-service (scripts/check_config_literals.py). A row may only fall.
 1 client services/agents-service/src/ops_agents/api/acting_for.py
 1 timeout services/agents-service/src/ops_agents/api/acting_for.py
 6 client services/agents-service/src/ops_agents/api/app.py
 10 timeout services/agents-service/src/ops_agents/api/app.py
 1 client services/agents-service/src/ops_agents/api/routers/background.py
+1 timeout services/agents-service/src/ops_agents/api/routers/background.py
 4 client services/agents-service/src/ops_agents/api/worker.py
-4 timeout services/agents-service/src/ops_agents/api/worker.py
+6 timeout services/agents-service/src/ops_agents/api/worker.py

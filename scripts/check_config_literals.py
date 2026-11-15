@@ -5,16 +5,20 @@ configuration.md, CF2 and CF3), in every package's and service's `src`:
             "http://127.0.0.1:..."`). None is allowed: a missing address must stop the process at start
             (`Settings.require`), not send its first call to the wrong place. LOOPBACK_WAITING names the one still
             there; a baseline file cannot allow another, and the entry fails once its fallback is gone.
-  timeout   a `timeout=` given as a number at a call. The value belongs on the setting (`Endpoint.timeout_s`).
-  client    an `httpx.AsyncClient(` built outside `ops_identity.client`, which owns the one a service call uses
-            (`ServiceClient.for_settings`).
+  timeout   a `timeout=` given as a number, an upper-case constant or arithmetic on them at a call, and an
+            `httpx.Timeout(` holding one. The value belongs on the setting (`Endpoint.timeout_s`).
+  client    an `httpx.AsyncClient(` or `httpx.Client(` built outside `ops_identity.client`, which owns the one a
+            service call uses (`ServiceClient.for_settings`).
 
 Timeouts and clients that exist today are listed per member in `<member>/config-literals-baseline.txt`, so only a
 new one is a finding; the member's lane takes its file to zero. A row may only fall: `--update` lowers rows and drops
-fixed ones, and never raises or adds one once a member has a file.
+fixed ones, and never raises or adds one once a member has a file. A baseline file read only against the code could be
+raised to match it, so `--commits` reads the files' history: a commit that raises a row or adds a file carries a
+`Standards-exception:` trailer a maintainer approved.
 
   uv run python scripts/check_config_literals.py            # findings, exit 0
   uv run python scripts/check_config_literals.py --strict   # exit 1 when there is a finding
+  uv run python scripts/check_config_literals.py --commits  # exit 1 when a commit raised a baseline without a trailer
   uv run python scripts/check_config_literals.py --update   # lower each baseline to today's findings
 """
 
@@ -24,6 +28,9 @@ import ast
 import sys
 from collections import Counter
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import baseline_history
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_NAME = "config-literals-baseline.txt"
@@ -37,6 +44,8 @@ LOOPBACK_WAITING = {
     # Settings.endpoint("platform_internal") when that lands. Every process already requires the endpoint at start.
     "packages/ops_identity/src/ops_identity/fastapi.py": 1,
 }
+# The commit that created the first member baseline; a commit after it that raises a row or adds a file needs a trailer.
+BASELINES_BEGAN = "d737b71434be868ceadc2b84fb28bcbb206a7ea1"
 
 Key = tuple[str, str]  # (kind, path relative to the repository root)
 
@@ -54,10 +63,32 @@ def _text(node: ast.expr) -> str:
     return ""
 
 
-def _is_async_client(func: ast.expr) -> bool:
+def _is_client(func: ast.expr) -> bool:
+    """`httpx.AsyncClient`, `httpx.Client` or either imported by name."""
+    names = {"AsyncClient", "Client"}
     if isinstance(func, ast.Attribute):
-        return func.attr == "AsyncClient" and isinstance(func.value, ast.Name) and func.value.id == "httpx"
-    return isinstance(func, ast.Name) and func.id == "AsyncClient"
+        return func.attr in names and isinstance(func.value, ast.Name) and func.value.id == "httpx"
+    return isinstance(func, ast.Name) and func.id in names
+
+
+def _is_timeout_class(func: ast.expr) -> bool:
+    if isinstance(func, ast.Attribute):
+        return func.attr == "Timeout" and isinstance(func.value, ast.Name) and func.value.id == "httpx"
+    return isinstance(func, ast.Name) and func.id == "Timeout"
+
+
+def _fixed(node: ast.expr) -> bool:
+    """A number, an upper-case constant (`RETRY_TIMEOUT`, `defaults.HTTP_TIMEOUT`) or arithmetic on them: a value
+    written in code that a setting should hold."""
+    if isinstance(node, ast.Constant):
+        return type(node.value) in (int, float)
+    if isinstance(node, ast.Name):
+        return node.id.isupper()
+    if isinstance(node, ast.Attribute):
+        return node.attr.isupper()
+    if isinstance(node, ast.BinOp):
+        return _fixed(node.left) and _fixed(node.right)
+    return False
 
 
 def findings(source: str) -> list[tuple[str, int]]:
@@ -69,12 +100,14 @@ def findings(source: str) -> list[tuple[str, int]]:
             if any(f"://{host}" in _text(v) for v in node.values[1:] for host in LOOPBACK_HOSTS):
                 found.append(("loopback", node.lineno))
         elif isinstance(node, ast.Call):
-            if _is_async_client(node.func):
+            if _is_client(node.func):
                 found.append(("client", node.lineno))
             for kw in node.keywords:
-                number = isinstance(kw.value, ast.Constant) and type(kw.value.value) in (int, float)
-                if kw.arg == "timeout" and number:
+                if kw.arg == "timeout" and _fixed(kw.value):
                     found.append(("timeout", kw.value.lineno))
+            # `httpx.Timeout(10.0, connect=3)` states the same limits as a number at the call.
+            if _is_timeout_class(node.func) and any(_fixed(a) for a in [*node.args, *(k.value for k in node.keywords)]):
+                found.append(("timeout", node.lineno))
     return found
 
 
@@ -161,7 +194,20 @@ def update(root: Path, now: Counter[Key]) -> int:
     return total
 
 
+def commit_problems(root: Path = ROOT) -> list[str]:
+    """Baseline rows a commit raised, or files it added, without a Standards-exception: trailer."""
+    return baseline_history.problems(
+        root, BASELINES_BEGAN, [f"packages/*/{BASELINE_NAME}", f"services/*/{BASELINE_NAME}"]
+    )
+
+
 def main(root: Path = ROOT) -> int:
+    if "--commits" in sys.argv:
+        missing = commit_problems(root)
+        sys.stdout.write(
+            "\n".join(missing) + "\n" if missing else "check_config_literals: every baseline rise is approved\n"
+        )
+        return 1 if missing else 0
     now, where = current(root)
     if "--update" in sys.argv:
         sys.stdout.write(f"check_config_literals: baselines hold {update(root, now)} findings\n")

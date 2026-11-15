@@ -3,6 +3,7 @@ one already on a member's baseline reported again; and a baseline that could be 
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -93,3 +94,62 @@ def test_the_loopback_waiting_list_holds_one_file_and_fails_once_its_fallback_is
     waiting.write_text("internal = settings.endpoint('platform_internal').base\n")
     assert run(tmp_path, monkeypatch, "--strict") == 1
     assert "fastapi.py: its loopback fallback is gone" in capsys.readouterr().err
+
+
+NAMED = """
+import httpx
+
+RETRY_TIMEOUT = 30
+await http.get("/a", timeout=RETRY_TIMEOUT)
+await http.get("/b", timeout=defaults.HTTP_TIMEOUT)
+await http.get("/c", timeout=5 * 60)
+limits = httpx.Timeout(10.0, connect=3)
+sync = httpx.Client(base_url=base)
+fine = httpx.Timeout(settings.agents.timeout_s)
+await http.get("/d", timeout=timeout)
+await http.get("/e", timeout=settings.agents.timeout_s)
+"""
+
+
+def test_a_timeout_held_in_a_constant_or_built_by_httpx_and_a_sync_client_are_found() -> None:
+    assert sorted(c.findings(NAMED)) == [
+        ("client", 9),
+        ("timeout", 5),
+        ("timeout", 6),
+        ("timeout", 7),
+        ("timeout", 8),
+    ]
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True, env=env).stdout.strip()
+
+
+def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kb = tmp_path / "services/kb-service"
+    kb.mkdir(parents=True)
+    (kb / c.BASELINE_NAME).write_text("# header\n2 timeout services/kb-service/src/app.py\n")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "the baselines begin")
+    monkeypatch.setattr(c, "BASELINES_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    (kb / c.BASELINE_NAME).write_text("# header\n1 timeout services/kb-service/src/app.py\n")
+    _git(tmp_path, "commit", "-qam", "a timeout moved onto the setting")
+    assert c.commit_problems(tmp_path) == []
+    (kb / c.BASELINE_NAME).write_text("# header\n3 timeout services/kb-service/src/app.py\n")
+    _git(tmp_path, "commit", "-qam", "a timeout back in code")
+    [raised] = c.commit_problems(tmp_path)
+    assert "timeout services/kb-service/src/app.py (1 -> 3)" in raised
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "x\n\nStandards-exception: three timeouts, approved by orch")
+    assert c.commit_problems(tmp_path) == []
+    # A member that had no file gets today's count from `--update`; that new file is a rise like any other.
+    models = tmp_path / "services/models-service"
+    models.mkdir()
+    (models / c.BASELINE_NAME).write_text("# header\n4 client services/models-service/src/app.py\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "a baseline file for a member with none")
+    [added] = c.commit_problems(tmp_path)
+    assert "client services/models-service/src/app.py (0 -> 4)" in added

@@ -1,0 +1,2 @@
+# 1 literal timeouts and HTTP clients built in packages/ops_extract (scripts/check_config_literals.py). A row may only fall.
+1 timeout packages/ops_extract/src/ops_extract/checks.py
