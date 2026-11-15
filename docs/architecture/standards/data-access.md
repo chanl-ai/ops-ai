@@ -29,9 +29,11 @@ async def _audit(c: AsyncConnection, actor: Actor, action: str, member_id: str, 
     await record(c, tenant_id=actor.tenant_id, ...)
 ```
 
-Check: no check yet. Needed: a request-scoped connection in `ops_store.isolation` (the first `isolated_tx` of a
-request opens it, later ones reuse it) and a test fixture that counts `BEGIN` per request through the real middleware
-and fails above two for any `GET`.
+Check: `packages/ops_store/tests/test_isolation_sites.py` fails on a new `engine.begin()` or `engine.connect()` in a
+service and on a caught database error with no savepoint, against one shrink-only list per service
+(`packages/ops_store/tests/isolation_sites/`); `packages/ops_identity/tests/test_request_transaction.py` proves the
+request transaction (`ops_identity.fastapi.Tx`) through the real middleware, and the request line carries
+`db.tx_count`. Needed: a test fixture that reads `db.tx_count` for every `GET` and fails above the route's budget.
 
 ## DA2 Statements are built with Core, never with strings
 
@@ -115,8 +117,11 @@ total = int((await c.execute(sa.select(sa.func.count()).select_from(cases).where
 q = sa.select(cases).where(*where).order_by(cases.c.resolution_due_at, cases.c.id).limit(size).offset((page - 1) * size)
 ```
 
-Check: no check yet. Needed: an OpenAPI rule that every list operation returns the paged shape, and a check that fails
-on a list slice (`rows[start : start + size]`) inside a route or facade outside the one shared helper.
+Check: `uv run python scripts/check_portable_store.py --strict` fails on a list slice (`rows[start : start + size]`) in
+a service's code outside its store, with today's sites in `list-slice-baseline.txt`, which may only fall. The shared
+form is `ListQuery` (`packages/ops_service_kit/src/ops_service_kit/listing.py`) and `list_page`
+(`packages/ops_store/src/ops_store/listing.py`). Needed: an OpenAPI rule that every list operation returns the paged
+shape.
 
 ## DA6 Every route has a statement budget
 
@@ -152,8 +157,8 @@ Pattern (`services/agents-service/src/ops_agents/store/background.py:47`):
 sa.Index("ix_background_jobs_at", "tenant_id", "at"),
 ```
 
-Check: no check yet. Needed: a metadata test that fails on a foreign key or a declared filter column with no index that
-leads with it, with an allowlist for tiny tables.
+Check: `deploy/database/tests/test_indexes.py` fails on a foreign key column, or a column declared `info=LISTED`
+(`ops_store.listing`), with no index that leads with it, outside a waiting list per chain that may only shrink.
 
 ## DA8 One migration chain per service, one head
 

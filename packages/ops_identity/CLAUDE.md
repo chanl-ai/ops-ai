@@ -13,7 +13,7 @@ test commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](
 |---|---|
 | `principal` | `Principal`: kind (`person`, `api_key`, `service`), tenant, the one acting team, roles, access grids, scopes, policies, security team |
 | `resolve` | `Identity` (resolution order: platform token, API key, service token, dev caller), `ServiceAuth`, `mint_service_token` |
-| `fastapi` | `Auth`, `install_auth`, and the route dependencies `CurrentPrincipal`, `CurrentService`, `CurrentCaller`, `CurrentTenantCaller`, `ActingPerson` |
+| `fastapi` | `Auth`, `install_auth`, and the route dependencies `CurrentPrincipal`, `CurrentService`, `CurrentCaller`, `CurrentTenantCaller`, `ActingPerson`, and `Tx` (the request's one transaction, closed when the route function returns) |
 | `client` | `ServiceClient` (`get`, `post`, `delete`, `pages`), `ServiceCallError`, `ServiceUnreachable`: service-to-service calls with token minting, envelope reading and retry. `ServiceClient.for_settings(settings, service=..., audience=...)` owns its `httpx.AsyncClient`, built from the callee's `Settings` endpoint (address, timeout, retries); `.importlinter` lets no other module outside tools-service, models-service and the client packages import `httpx`, beyond a list that only shrinks |
 | `acting_for` | `ActingForTokens`, `ActingForPerson`, header `X-Acting-For`: whom a service's call acts for, proven by a token platform-service signs |
 | `jwks` | `JwksCache`: platform-service's public keys by `kid`, refetched once on an unknown `kid`, rate-limited |

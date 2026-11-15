@@ -1,0 +1,4 @@
+# files-service: 1 raw transactions and 4 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+3 caught services/files-service/src/ops_files/store/files.py
+1 caught services/files-service/src/ops_files/store/read_requests.py
+1 raw services/files-service/src/ops_files/store/files.py

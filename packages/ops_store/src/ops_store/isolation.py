@@ -4,6 +4,7 @@
   async with isolation.isolated_tx(engine, role=ROLE) as conn: ...   # every read and write of an isolated table
   with isolation.tenant_wide(SEED, tenant_id=t): ...                # every team of one tenant, for a named reason
   async with isolation.system_tx(engine, CLAIM, role=SYSTEM): ...   # past the tenant, for a named reason
+  async with isolation.request_transaction(): ...                   # one request: every isolated_tx inside shares one
 
 The context is (tenant, one active team, scope, kind, reason). The tenant comes from the verified token or key and the
 team from X-Team-Id checked against it (`ops_identity`), never from a body, header or path. `isolated_tx` writes the
@@ -24,14 +25,16 @@ scope acts as its team, and a wider scope as none (every team of the tenant).
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator, Generator
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 
 from ops_service_kit.logging import add_context, get_logger
 from ops_service_kit.request_timing import note_caller
@@ -54,6 +57,11 @@ TASK = "task"
 
 class NoTenantError(RuntimeError):
     """A tenant-scoped statement ran with no isolation context set."""
+
+
+class RequestTransactionFailed(RuntimeError):
+    """A database error left an `isolated_tx` block of the request's transaction outside `attempt`, so nothing after
+    it can commit: the statement that may fail belongs inside `Store.attempt(conn)`."""
 
 
 @dataclass(frozen=True)
@@ -171,11 +179,155 @@ def tenant_wide(reason: str, *, tenant_id: str | None = None) -> Generator[Isola
         _ctx.reset(token)
 
 
+# One transaction per request (`request_transaction`, entered by `ops_identity.fastapi.Tx`): the first `isolated_tx`
+# of the request's task opens the connection and every later one re-enters it, so a request with twenty reads costs
+# one checkout, one BEGIN and one COMMIT, and its writes commit together. The context statement runs again only when
+# the role or the scope differs from what the connection carries. Another asyncio task (a gather branch, a created
+# task, a stream's generator after the route returned, a loop, a seed) is not the request and opens its own.
+# PostgreSQL refuses every statement after a failed one, so a database error that is caught runs inside `attempt`, a
+# savepoint; one that leaves an `isolated_tx` block any other way fails the request's transaction, on both databases.
+
+# What a connection's settings say: the context's tenant, team and scope, and the PostgreSQL role.
+_Carried = tuple[str, str | None, str, str | None]
+
+
+@dataclass
+class _Request:
+    """One request's transaction. Child tasks copy the ContextVar that holds it, so it names the task it belongs to."""
+
+    task: asyncio.Task[Any] | None
+    engine: AsyncEngine | None = None
+    conn: AsyncConnection | None = None
+    tx: AsyncTransaction | None = None
+    carried: _Carried | None = None
+    # isolated_tx blocks open now; a block that changed the settings restores them only for a block around it.
+    depth: int = 0
+    failed: BaseException | None = None
+    # The error the innermost `attempt` rolled back to its savepoint: the transaction is still good after it.
+    contained: BaseException | None = None
+    closed: bool = False
+
+
+_request: ContextVar[_Request | None] = ContextVar("ops_request_transaction", default=None)
+
+
+def _request_here(engine: AsyncEngine) -> _Request | None:
+    """The request transaction this call joins: the current task's, still open, on this engine."""
+    found = _request.get()
+    if found is None or found.closed or found.task is not asyncio.current_task():
+        return None
+    return found if found.engine is None or found.engine is engine else None
+
+
+@asynccontextmanager
+async def request_transaction() -> AsyncGenerator[None]:
+    """Held for one request by the Tx dependency. Opens nothing. The first isolated_tx in this asyncio task opens
+    the request's connection and begins; every later isolated_tx in the same task re-enters it. Exit clears SQL
+    Server's session context, then commits once, or rolls back once on an exception."""
+    outer = _request.get()
+    if outer is not None and not outer.closed and outer.task is asyncio.current_task():
+        yield  # already inside one: the outer block ends it
+        return
+    state = _Request(asyncio.current_task())
+    _request.set(state)
+    try:
+        yield
+    except BaseException:
+        await _end(state, commit=False)
+        raise
+    else:
+        failed = state.failed
+        await _end(state, commit=failed is None)
+        if failed is not None:
+            # The route caught the error and answered as if its writes held; they did not.
+            raise RequestTransactionFailed("the request's transaction failed and was rolled back") from failed
+    finally:
+        # Not a token reset: the dependency's exit may run in another context than its entry.
+        state.closed = True
+        _request.set(outer)
+
+
+async def _end(state: _Request, *, commit: bool) -> None:
+    conn, tx = state.conn, state.tx
+    state.closed = True
+    if conn is None or tx is None:
+        return
+    try:
+        if commit:
+            # Cleared before the commit, so a transaction commits once.
+            await leave_transaction(conn)
+            await tx.commit()
+            return
+        if tx.is_active:
+            await tx.rollback()
+        # A rollback leaves SQL Server's session context set, and the pooled connection must not carry it on.
+        await leave_transaction(conn)
+        if conn.in_transaction():
+            await conn.commit()
+    finally:
+        await conn.close()
+
+
 @asynccontextmanager
 async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncGenerator[AsyncConnection]:
-    """One transaction carrying the current context, as `role` on PostgreSQL (a role row-level security applies to),
-    with SQL Server's session context cleared when it ends however it ends."""
+    """Inside a request: re-enters the request's connection; a different role or a wider scope re-runs the context
+    statement on the same connection and restores it on exit. In another task (gather branch, created task, loop,
+    seed, test): its own transaction, as `role` on PostgreSQL (a role row-level security applies to), with SQL
+    Server's session context cleared when it ends however it ends. Only system_tx takes a second connection."""
     ctx = current()
+    state = _request_here(engine)
+    if state is None:
+        async with _own_tx(engine, ctx, role) as conn:
+            yield conn
+        return
+    if state.failed is not None:
+        raise RequestTransactionFailed("the request's transaction already failed") from state.failed
+    if state.conn is None:
+        state.engine = engine
+        state.conn = await engine.connect()
+        state.tx = await state.conn.begin()
+    conn = state.conn
+    want: _Carried = (ctx.tenant_id, ctx.team_id, ctx.scope, role)
+    before = state.carried
+    if before != want:
+        await enter_transaction(conn, ctx, role=role, reset_role=before is not None and before[3] is not None)
+        state.carried = want
+    state.depth += 1
+    try:
+        yield conn
+    except BaseException as e:
+        if isinstance(e, DBAPIError) and e is not state.contained:
+            state.failed = e
+        raise
+    finally:
+        state.depth -= 1
+        if state.depth and before is not None and state.carried != before:
+            # The block around this one reads on with the settings it entered with. After a failed statement
+            # PostgreSQL refuses this too; the next entry then sets them again.
+            state.carried = None
+            with suppress(DBAPIError):
+                tenant_id, team_id, scope_, role_ = before
+                back = Isolation(tenant_id, team_id, scope_, ctx.kind)  # pyright: ignore[reportArgumentType]
+                await enter_transaction(conn, back, role=role_, reset_role=role is not None)
+                state.carried = before
+
+
+@asynccontextmanager
+async def attempt(conn: AsyncConnection) -> AsyncGenerator[None]:
+    """A savepoint around a statement that may fail and be caught, so the transaction stays usable: the failed
+    statement is rolled back to the savepoint and the error raised on for the caller to catch."""
+    try:
+        async with conn.begin_nested():
+            yield
+    except DBAPIError as e:
+        state = _request.get()
+        if state is not None and state.conn is conn:
+            state.contained = e
+        raise
+
+
+@asynccontextmanager
+async def _own_tx(engine: AsyncEngine, ctx: Isolation, role: str | None) -> AsyncGenerator[AsyncConnection]:
     async with engine.connect() as conn:
         tx = await conn.begin()
         try:
@@ -206,13 +358,18 @@ async def system_tx(engine: AsyncEngine, reason: str, *, role: str | None = None
         yield conn
 
 
-async def enter_transaction(conn: AsyncConnection, ctx: Isolation, *, role: str | None = None) -> None:
+async def enter_transaction(
+    conn: AsyncConnection, ctx: Isolation, *, role: str | None = None, reset_role: bool = False
+) -> None:
+    """Writes the context into the transaction. `reset_role` is for a transaction that already runs as a role and
+    now needs none: PostgreSQL goes back to the login's own."""
     values = {"tenant_id": ctx.tenant_id, "team_id": ctx.team_id or "", "scope": ctx.scope}
     match dialect.dialect_of(conn):
         case "postgresql":
             # The role is set by the same statement as the context: set_config('role', ...) is SET LOCAL ROLE, with the
             # same membership check, and a transaction's setup is one round trip.
-            settings = [*([("role", role)] if role else []), *((SETTINGS[k], v) for k, v in values.items())]
+            as_role = role or ("none" if reset_role else None)
+            settings = [*([("role", as_role)] if as_role else []), *((SETTINGS[k], v) for k, v in values.items())]
             await conn.execute(sa.select(*(sa.func.set_config(name, v, True) for name, v in settings)))
         case "mssql":
             await conn.execute(_MS_SET, values)
@@ -269,10 +426,13 @@ __all__ = [
     "TASK",
     "Isolation",
     "NoTenantError",
+    "RequestTransactionFailed",
+    "attempt",
     "current",
     "enter",
     "enter_caller",
     "isolated_tx",
+    "request_transaction",
     "scope",
     "system_tx",
     "team",

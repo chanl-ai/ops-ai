@@ -8,7 +8,10 @@ shows. Field names follow OpenTelemetry's HTTP conventions so a later exporter c
 
 Database time and query count come from the engine listeners `ops_store.open_database` installs, added to the
 `RequestTiming` of the request whose task ran the query. Work outside a request (workers, the engine poller) has no
-`RequestTiming`, so its queries are never counted to one.
+`RequestTiming`, so its queries are never counted to one. The same listeners count the request's transactions
+(`db.tx_count`, one for a route on the request transaction), the longest any of them stayed open (`db.tx_open_ms`) and
+what the pool cost it: the time spent waiting for a connection (`db.pool.wait_ms`) and the most connections in use at
+one of its checkouts against the pool's limit (`db.pool.in_use`, `db.pool.limit`).
 """
 
 from __future__ import annotations
@@ -41,9 +44,25 @@ class RequestTiming:
     tenant_id: str | None = None
     team_id: str | None = None
 
+    db_tx: int = 0
+    # The longest one transaction of the request stayed open, BEGIN to COMMIT or ROLLBACK.
+    db_tx_open_ms: float = 0.0
+    pool_wait_ms: float = 0.0
+    pool_in_use: int = 0
+    pool_limit: int | None = None
+
     def add_query(self, ms: float) -> None:
         self.db_ms += ms
         self.db_queries += 1
+
+    def add_transaction(self, open_ms: float) -> None:
+        self.db_tx += 1
+        self.db_tx_open_ms = max(self.db_tx_open_ms, open_ms)
+
+    def add_checkout(self, wait_ms: float, *, in_use: int, limit: int | None) -> None:
+        self.pool_wait_ms += wait_ms
+        self.pool_in_use = max(self.pool_in_use, in_use)
+        self.pool_limit = limit
 
 
 _current: ContextVar[RequestTiming | None] = ContextVar("ops_request_timing", default=None)
@@ -131,6 +150,11 @@ def _request_line(scope: Scope, timing: RequestTiming, status: int) -> None:
         "duration_ms": round((time.perf_counter() - timing.started) * 1000, 1),
         "db.duration_ms": round(timing.db_ms, 1),
         "db.query_count": timing.db_queries,
+        "db.tx_count": timing.db_tx,
+        "db.tx_open_ms": round(timing.db_tx_open_ms, 1),
+        "db.pool.wait_ms": round(timing.pool_wait_ms, 1),
+        "db.pool.in_use": timing.pool_in_use,
+        "db.pool.limit": timing.pool_limit,
         "tenant_id": timing.tenant_id,
         "team_id": timing.team_id,
     }

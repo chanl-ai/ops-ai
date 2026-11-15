@@ -10,9 +10,10 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 
 from ops_policy import CredentialStore, context_of
-from ops_store import Guarantee, isolation
+from ops_store import Guarantee
 from ops_store.database import Database
 from ops_store.dialect import db_now, locked
+from ops_store.store import Store
 
 from .tables import provider_keys as t
 
@@ -22,17 +23,18 @@ ROLE = "ops_models_tenant"
 META = (t.c.name, t.c.version, t.c.created_by, t.c.created_at, t.c.rotated_at)
 
 
-class ProviderKeyStore:
+class ProviderKeyStore(Store):
+    role = ROLE
     # A save locks the key's row while it moves the version on, so two saves of one name never both write version 2.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
     def __init__(self, db: Database, credentials: CredentialStore) -> None:
-        self.db = db
+        super().__init__(db)
         self.credentials = credentials
 
     async def listed(self, tenant_id: str) -> list[dict[str, Any]]:
         """Each key's name and history, never its value."""
-        async with isolation.isolated_tx(self.db, role=ROLE) as c:
+        async with self.tx() as c:
             rows = await c.execute(sa.select(*META).where(t.c.tenant_id == tenant_id).order_by(t.c.name))
             return [dict(r) for r in rows.mappings()]
 
@@ -42,7 +44,7 @@ class ProviderKeyStore:
         context = context_of(tenant_id, name)
         ref = await self.credentials.put(value, context=context)
         mine = sa.and_(t.c.tenant_id == tenant_id, t.c.name == name)
-        async with isolation.isolated_tx(self.db, role=ROLE) as c:
+        async with self.tx() as c:
             found = (await c.execute(locked(sa.select(t.c.version).where(mine), t))).first()
             # Read under the row lock just taken, so two saves each drop the value they replaced.
             old = await c.scalar(sa.select(t.c.ciphertext).where(mine)) if found is not None else None
@@ -58,7 +60,7 @@ class ProviderKeyStore:
         return dict(saved), found is None
 
     async def delete(self, tenant_id: str, name: str) -> bool:
-        async with isolation.isolated_tx(self.db, role=ROLE) as c:
+        async with self.tx() as c:
             gone = await c.scalar(
                 t.delete().where(t.c.tenant_id == tenant_id, t.c.name == name).returning(t.c.ciphertext)
             )
@@ -70,7 +72,7 @@ class ProviderKeyStore:
     async def value(self, tenant_id: str, name: str) -> str | None:
         """The key's value, or None when the account holds none by that name. A value that does not open (the secrets
         key changed, or the vault lost it) raises CipherError rather than reaching a provider as garbage."""
-        async with isolation.isolated_tx(self.db, role=ROLE) as c:
+        async with self.tx() as c:
             ref = await c.scalar(sa.select(t.c.ciphertext).where(t.c.tenant_id == tenant_id, t.c.name == name))
         if ref is None:
             return None

@@ -2,21 +2,44 @@
 call site, or a service setting its own tenant or team fails here naming the file; each list only changes with the
 card that changes the call. Tests are not scanned: they act for whichever tenant they set up.
 
-platform-service names the tenant per transaction (it issues the tokens), so its one `scope` entry is its binding."""
+platform-service names the tenant per transaction (it issues the tokens), so its one `scope` entry is its binding.
+
+Two more lists, one file per service under `isolation_sites/`, each row `<count> <kind> <file>`:
+
+  raw     a transaction opened on the engine itself (`engine.begin()`, `engine.connect()`, the same on a `db` handle)
+          instead of through `Store.tx()`, so it is a second connection beside the request's and carries no caller
+  caught  a handler that catches a database error and carries on with no savepoint (`Store.attempt`) around the
+          statement; on the request's one transaction PostgreSQL refuses every statement after the failed one
+
+A row may only fall: a new site fails here naming its line, and a site that is gone fails until its row is lowered."""
 
 from __future__ import annotations
 
 import ast
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCES = sorted(p for p in (*ROOT.glob("packages/*/src"), *ROOT.glob("services/*/src")) if p.is_dir())
 MECHANISM = {"packages/ops_store/src/ops_store/isolation.py", "packages/ops_store/src/ops_store/dialect.py"}
+BASELINES = Path(__file__).parent / "isolation_sites"
+# The names a service gives its database handle; a transaction opened on one of them is a raw site.
+HANDLES = {"engine", "db", "database"}
+DB_ERRORS = {
+    "DataError",
+    "DBAPIError",
+    "IntegrityError",
+    "InterfaceError",
+    "OperationalError",
+    "ProgrammingError",
+    "SQLAlchemyError",
+    "StatementError",
+}
 
 # Reason (as written at the call) -> the files that widen for it. `reason` is a binding that passes its caller's on.
 WIDENINGS: dict[str, set[str]] = {
     "reason": {
+        "packages/ops_store/src/ops_store/store.py",
         "services/agents-service/src/ops_agents/store/engine.py",
         "services/agents-service/src/ops_agents/store/tenancy.py",
         "services/platform-service/src/ops_platform/store/tenancy.py",
@@ -207,3 +230,122 @@ def test_no_service_sets_its_own_tenant_or_team() -> None:
     assert refused == []
     acting = {rel for rel, _call, name in _calls() if name == "set_acting_team"}
     assert acting == ACTING_TEAM
+
+
+def _handle(node: ast.expr) -> str | None:
+    name = node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name) else None
+    return name.lstrip("_") if name else None
+
+
+def _names(node: ast.AST) -> set[str]:
+    return {
+        n.attr if isinstance(n, ast.Attribute) else n.id
+        for n in ast.walk(node)
+        if isinstance(n, ast.Attribute | ast.Name)
+    }
+
+
+def _in_savepoint(attempt: ast.Try) -> bool:
+    """Whether the guarded statements run inside `attempt(...)`, which rolls back to its savepoint first."""
+    return any(
+        isinstance(item.context_expr, ast.Call) and _handle(item.context_expr.func) == "attempt"
+        for stmt in attempt.body
+        for node in ast.walk(stmt)
+        if isinstance(node, ast.With | ast.AsyncWith)
+        for item in node.items
+    )
+
+
+def site_findings(source: str) -> list[tuple[int, str]]:
+    """(line, kind) for each raw transaction and each caught database error with no savepoint in one file."""
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"begin", "connect"}
+            and _handle(node.func.value) in HANDLES
+        ):
+            out.append((node.lineno, "raw"))
+        if isinstance(node, ast.Try) and not _in_savepoint(node):
+            out += [
+                (h.lineno, "caught")
+                for h in node.handlers
+                # A handler whose last statement raises does not carry on; one that retries or answers does.
+                if h.type is not None and _names(h.type) & DB_ERRORS and not isinstance(h.body[-1], ast.Raise)
+            ]
+    return sorted(out)
+
+
+def _found() -> tuple[dict[str, Counter[str]], dict[str, list[int]]]:
+    """Counts by service and row key, and the lines behind each key."""
+    counts: dict[str, Counter[str]] = defaultdict(Counter)
+    lines: dict[str, list[int]] = defaultdict(list)
+    for src in sorted(ROOT.glob("services/*/src")):
+        for path in sorted(src.rglob("*.py")):
+            for line, kind in site_findings(path.read_text()):
+                key = f"{kind} {path.relative_to(ROOT).as_posix()}"
+                counts[src.parent.name][key] += 1
+                lines[key].append(line)
+    return counts, lines
+
+
+def _listed(service: str) -> Counter[str]:
+    path = BASELINES / f"{service}.txt"
+    rows = (
+        [r.split(" ", 1) for r in path.read_text().splitlines() if r and not r.startswith("#")] if path.exists() else []
+    )
+    return Counter({key: int(n) for n, key in rows})
+
+
+def test_raw_transactions_and_caught_errors_are_only_the_listed_ones() -> None:
+    counts, lines = _found()
+    problems: list[str] = []
+    for service in sorted({*counts, *(p.stem for p in BASELINES.glob("*.txt"))}):
+        listed, now = _listed(service), counts.get(service, Counter())
+        for key in sorted({*listed, *now}):
+            kind, rel = key.split(" ", 1)
+            where = ", ".join(f"{rel}:{n}" for n in lines.get(key, []))
+            if now[key] > listed[key]:
+                fix = "use Store.tx()" if kind == "raw" else "run the statement inside Store.attempt(conn)"
+                problems.append(f"{service}: {kind} {now[key]} > {listed[key]} at {where}; {fix}")
+            elif now[key] < listed[key]:
+                problems.append(f"{service}: {key} fell to {now[key]}; lower its row in isolation_sites/{service}.txt")
+    assert problems == [], "\n".join(problems)
+
+
+def test_the_site_scan_finds_each_kind_and_passes_the_savepoint_form() -> None:
+    planted = """
+async def raw(self):
+    async with self.engine.begin() as c: ...
+    async with self._db.connect() as c: ...
+
+async def caught(self, conn):
+    try:
+        await conn.execute(q)
+    except IntegrityError:
+        return False
+
+async def retried(self, conn):
+    for attempt in range(3):
+        try:
+            await conn.execute(q)
+        except sa.exc.OperationalError:
+            if attempt == 2:
+                raise
+
+async def passed_on(self, conn):
+    try:
+        await conn.execute(q)
+    except IntegrityError as e:
+        raise Conflict("taken") from e
+
+async def savepoint(self, conn):
+    try:
+        async with self.attempt(conn):
+            await conn.execute(q)
+    except IntegrityError:
+        return False
+    async with self.tx() as c: ...
+"""
+    assert site_findings(planted) == [(3, "raw"), (4, "raw"), (9, "caught"), (16, "caught")]

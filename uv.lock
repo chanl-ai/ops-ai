@@ -1928,7 +1928,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
+    { name = "fastapi", specifier = ">=0.121" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "ops-policy", editable = "packages/ops_policy" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },

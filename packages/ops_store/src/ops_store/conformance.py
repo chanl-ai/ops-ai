@@ -15,7 +15,8 @@ from __future__ import annotations
 import asyncio
 import secrets
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from secrets import token_hex
 from typing import Any
@@ -47,6 +48,30 @@ async def engine_for(backend: Backend) -> AsyncEngine:
                 await c.execute(text(f'create database "{url.database}"'))
         await admin.dispose()
     return create_async_engine(url)
+
+
+@contextmanager
+def sql_server_database(prefix: str, server: str | None, password: str | None) -> Generator[str | None]:
+    """The async URL of a scratch SQL Server database, dropped afterwards, for a test that runs on both databases.
+    `server` is `host,port` and `password` the administrator's, which a test reads from OPS_MSSQL_SERVER and
+    MSSQL_SA_PASSWORD; None where either is unset, and the test skips."""
+    if not server or not password:
+        yield None
+        return
+    host, port = server.split(",")
+    odbc = {"driver": "ODBC Driver 18 for SQL Server", "TrustServerCertificate": "yes"}
+    master = sa.URL.create("mssql+pyodbc", "sa", password, host, int(port), "master", odbc)
+    name = f"{prefix}_{token_hex(4)}"
+    admin = sa.create_engine(master, isolation_level="AUTOCOMMIT")
+    with admin.connect() as c:
+        c.execute(text(f"CREATE DATABASE [{name}]"))
+    try:
+        yield master.set(drivername="mssql+aioodbc", database=name).render_as_string(hide_password=False)
+    finally:
+        with admin.connect() as c:
+            c.execute(text(f"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE"))
+            c.execute(text(f"DROP DATABASE [{name}]"))
+        admin.dispose()
 
 
 def _guarantees(repo: object, backend: Backend) -> None:

@@ -1,0 +1,3 @@
+# kb-service: 2 raw transactions and 0 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+1 raw services/kb-service/src/ops_kb/store/knowledge.py
+1 raw services/kb-service/src/ops_kb/store/vectors.py

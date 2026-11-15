@@ -2,6 +2,9 @@
 
   db = open_database(settings.database_url)   # the handle code outside a store holds; never AsyncEngine itself
 
+The pool is a setting, not the library's default: OPS_DB__SIZE connections kept, OPS_DB__OVERFLOW more under load,
+and OPS_DB__WAIT_S for a request to wait for one (`Settings.db`).
+
 A pooled connection is tested before it is handed out, and replaced when the database or a proxy closed it while it
 sat in the pool. On asyncpg the test is one round trip; SQLAlchemy's pool_pre_ping wraps it in BEGIN and ROLLBACK (for
 pgbouncer's transaction mode, which no install uses), three round trips on every transaction. Each connect
@@ -22,13 +25,16 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import event
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DisconnectionError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import AsyncAdaptedQueuePool, ConnectionPoolEntry
 from sqlalchemy.util import await_
 
 from ops_service_kit.logging import get_logger
+from ops_service_kit.request_timing import RequestTiming
 from ops_service_kit.request_timing import current as current_request
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import PoolSettings, Settings
 
 log = get_logger(__name__)
 # The handle routes, workers and entry points hold. It is the engine today; code outside a store only passes it to a
@@ -40,11 +46,38 @@ Database = AsyncEngine
 _CHECKED_IN = "ops_checked_in"
 # The start of each statement running on a connection, for the request timing.
 _STARTED = "ops_statement_started"
+# The request a connection's open transaction belongs to and when it began.
+_TX = "ops_transaction"
 
 
-def open_database(url: str, **options: Any) -> Database:
+class _TimedPool(AsyncAdaptedQueuePool):
+    """The queue pool, telling the request how long it waited for each connection and how full the pool was."""
+
+    def _do_get(self) -> ConnectionPoolEntry:
+        begun = time.perf_counter()
+        try:
+            return super()._do_get()
+        finally:
+            request = current_request()
+            if request is not None:
+                over = self._max_overflow  # pyright: ignore[reportPrivateUsage]
+                request.add_checkout(
+                    (time.perf_counter() - begun) * 1000,
+                    in_use=self.checkedout(),
+                    limit=None if over < 0 else self.size() + over,
+                )
+
+
+def open_database(url: str, *, pool: PoolSettings | None = None, **options: Any) -> Database:
     """The service's database handle: every checkout of a pooled connection tests it first, and
-    connects through the policy below."""
+    connects through the policy below. `pool` is the process's `Settings.db` unless one is passed; an engine option
+    given by name (the checkpointer's own pool size) wins over it."""
+    if make_url(url).get_backend_name() != "sqlite":
+        pool = pool or Settings().db
+        options.setdefault("poolclass", _TimedPool)
+        options.setdefault("pool_size", pool.size)
+        options.setdefault("max_overflow", pool.overflow)
+        options.setdefault("pool_timeout", pool.wait_s)
     engine = create_async_engine(url, **options)
     dialect = engine.dialect
 
@@ -68,6 +101,9 @@ def open_database(url: str, **options: Any) -> Database:
     event.listen(engine.sync_engine, "checkout", test_before_use)
     event.listen(engine.sync_engine, "before_cursor_execute", _statement_started)
     event.listen(engine.sync_engine, "after_cursor_execute", _statement_finished)
+    event.listen(engine.sync_engine, "begin", _transaction_began)
+    event.listen(engine.sync_engine, "commit", _transaction_ended)
+    event.listen(engine.sync_engine, "rollback", _transaction_ended)
     return engine
 
 
@@ -84,6 +120,20 @@ def _statement_finished(conn: sa.Connection, *_: Any) -> None:
     request = current_request()
     if request is not None:
         request.add_query((time.perf_counter() - begun) * 1000)
+
+
+def _transaction_began(conn: sa.Connection) -> None:
+    # Counted to the request whose task began it, so a transaction a stream's generator opens later still counts.
+    request = current_request()
+    if request is not None:
+        conn.info[_TX] = (request, time.perf_counter())
+
+
+def _transaction_ended(conn: sa.Connection) -> None:
+    found: tuple[RequestTiming, float] | None = conn.info.pop(_TX, None)
+    if found is not None:
+        request, begun = found
+        request.add_transaction((time.perf_counter() - begun) * 1000)
 
 
 # An attempt that stalled or was cut off; refused credentials or a missing database fail at once, every time.

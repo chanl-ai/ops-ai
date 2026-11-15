@@ -25,7 +25,7 @@ only. platform-service, the issuer, resolves its own sessions and does not use t
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -211,6 +211,15 @@ async def current_tenant_caller(
         return await current_service(request, authorization)
 
 
+async def request_tx() -> AsyncGenerator[None]:
+    async with isolation.request_transaction():
+        yield
+
+
+# A route that reads or writes takes `_: Tx` beside its caller: the request then holds one transaction that every
+# store call joins (`ops_store.isolation.request_transaction`), committed when the route function returns and rolled
+# back when it raises. Function scope ends it before the response is sent, so a stream's generator opens its own.
+Tx = Annotated[None, Depends(request_tx, scope="function")]
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 CurrentCaller = Annotated[Principal, Depends(current_caller)]
 CurrentService = Annotated[Principal, Depends(current_service)]
