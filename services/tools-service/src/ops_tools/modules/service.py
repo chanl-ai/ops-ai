@@ -402,10 +402,6 @@ class ModuleService:
         recorded them when it was requested (the workflow's team comes from agents-service)."""
         return self.dir.owners(m)
 
-    def _workflow_groups(self, a: dict[str, Any]) -> list[str | None]:
-        team = self.dir.team_by_id(a.get("workflow_team_id"))
-        return list(team.owner_groups) if team else []
-
     def _since(self, delta: timedelta) -> str:
         """`delta` before now, in the call log's created_at format, so the two compare as text."""
         return (self.clock() - delta).astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -542,34 +538,18 @@ class ModuleService:
             return r["approvalState"] != "expired" and nxt is not None and datetime.fromisoformat(nxt) - now < EXPIRING
         return r["errorRate"] >= FAILING_RATE or not r["reachable"]
 
-    def _run_contexts(self, m: Aggregate, team: Team) -> list[dict[str, Any]]:
-        """The module owner first, which needs no workflow approval, so the run panel's default is a try
-        the owner can always make; then one context per workflow this module is approved for or asked for, with no
-        case: the builder types the bound values, which the panel marks as a sample. Only the caller's team's
-        workflows: running as another team's workflow would borrow its approval."""
-        seen: dict[str, dict[str, Any]] = {}
-        for a in m["approvals"]:
-            ours = a.get("workflow_team_id") == team.id or self.dir.sees(team, self._workflow_groups(a))
-            if a["workflow_id"] not in seen and ours:
-                seen[a["workflow_id"]] = a
-        owner: dict[str, Any] = {
-            "id": OWNER_CONTEXT,
-            "label": "Owner, no case",
-            "workflowId": "",
-            "workflowName": "",
-            "caseId": SAMPLE_CASE,
-            "bindings": {},
-        }
-        return [owner] + [
+    def _run_contexts(self) -> list[dict[str, Any]]:
+        """The module owner only, who needs no workflow approval. The test panel's Run as lists it alone: a
+        workflow's context ran with typed sample values rather than a case, so it proved nothing a real run would."""
+        return [
             {
-                "id": w,
-                "label": f"{a['workflow_name']} · sample values",
-                "workflowId": w,
-                "workflowName": a["workflow_name"],
+                "id": OWNER_CONTEXT,
+                "label": "Owner, no case",
+                "workflowId": "",
+                "workflowName": "",
                 "caseId": SAMPLE_CASE,
                 "bindings": {},
             }
-            for w, a in seen.items()
         ]
 
     def _operation(
@@ -680,7 +660,7 @@ class ModuleService:
             "pendingChanges": m["pending"],
             "approvals": [self._approval_out(a) for a in ordered],
             "versions": [self._version_out(v) for v in reversed(m["versions"])],
-            "runContexts": self._run_contexts(m, team),
+            "runContexts": self._run_contexts(),
             **(self._rights(who, m) if who is not None else {}),
         }
 
@@ -2339,7 +2319,7 @@ class ModuleService:
         if o is None:
             raise NotFound("Operation")
         owner = i["context_id"] == OWNER_CONTEXT
-        ctx = None if owner else next((c for c in self._run_contexts(m, who.team) if c["id"] == i["context_id"]), None)
+        ctx = None if owner else next((c for c in self._run_contexts() if c["id"] == i["context_id"]), None)
         if ctx is None and not owner:
             raise ValidationFailed("Choose a run context.")
         call_id = new_id("test")

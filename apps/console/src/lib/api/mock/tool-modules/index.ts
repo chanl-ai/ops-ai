@@ -33,7 +33,7 @@ import { bulk, id, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam, teamOwner } from '../teams';
 import { MODULE_CONNECTION } from '../integrations/seed';
 import type { ConnectionLink } from '../integrations';
-import { daysAgo, DAY, DISCOVERY, f, inDays, MODULE_SEEDS, RUN_CONTEXTS, type ModuleSeed } from './seed';
+import { daysAgo, DAY, DISCOVERY, f, inDays, MODULE_SEEDS, type ModuleSeed } from './seed';
 
 /** Headers that carry a credential: a literal value in one is refused (tools-service `CREDENTIAL_HEADER`). */
 const CREDENTIAL_HEADER = /^(authorization|x-api-key|cookie)$/i;
@@ -398,11 +398,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
               ? !!r.pendingReview
               : r.errorRate >= FAILING_RATE || !r.reachable;
 
-  function runContexts(m: Mod): RunContextOption[] {
-    // Only the current team's workflows: running as another team's workflow would borrow its approval.
-    const wids = [...new Set(m.approvals.map((a) => a.workflowId))].filter((w) => inTeam(wfOwner(w)));
-    return wids.flatMap((w) => (RUN_CONTEXTS[w] ?? []).map((c) => ({ id: `${w}:${c.caseId}`, label: `${c.caseId} · ${c.label}`, workflowId: w, workflowName: wfName(w), caseId: c.caseId, bindings: c.bindings })));
-  }
+  // The owner only, as tools-service lists it: a workflow's sample context proved nothing a real run would.
+  const OWNER_CONTEXT: RunContextOption = { id: 'owner', label: 'Owner, no case', workflowId: '', workflowName: '', caseId: 'sample', bindings: {} };
+  const runContexts = (): RunContextOption[] => [OWNER_CONTEXT];
 
   function detail(m: Mod): ToolModuleDetail {
     const approvals = approvalsOf(m);
@@ -450,7 +448,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       pendingChanges: m.pending,
       approvals: approvals.sort((a, b) => order[a.status] - order[b.status] || (a.expiresAt ?? '9').localeCompare(b.expiresAt ?? '9')),
       versions: [...m.versions].reverse().map((v) => withReview(m, v)),
-      runContexts: runContexts(m),
+      runContexts: runContexts(),
     };
   }
 
@@ -961,32 +959,14 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         const m = find(mid);
         const o = m.ops.find((x) => x.name === input.operation) ?? notFound('Operation');
         const t = toolOf(o);
-        const ctx = runContexts(m).find((c) => c.id === input.contextId);
-        if (!ctx && input.contextId !== 'owner') throw new ApiError('Choose a run context.', 400);
+        if (!runContexts().some((c) => c.id === input.contextId)) throw new ApiError('Choose a run context.', 400);
         const callId = `test_${Math.random().toString(36).slice(2, 10)}`;
         const deny = (reason: string) => ({ decision: 'deny' as const, denyReason: reason, denyMessage: DENY_TEXT[reason], status: 403, latencyMs: 4 + Math.round(Math.random() * 8), bound: [], wouldPause: false, output: { error: reason, message: DENY_TEXT[reason] }, masked: [], callId });
         if (!t.enabled) return deny('operation_hidden');
         if (m.status !== 'published' && input.target === 'sandbox') return deny('module_not_published');
-        if (!ctx && input.target === 'sandbox') return deny('no_approval');
-        if (m.status === 'published' && ctx) {
-          const approvals = approvalsOf(m).filter((a) => a.workflowId === ctx.workflowId);
-          const active = approvals.filter((a) => a.status === 'approved');
-          if (!active.length) return deny(approvals.some((a) => a.status === 'expired') ? 'approval_expired' : 'no_approval');
-          if (!active.some((a) => a.operations.includes(o.name))) return deny('operation_not_approved');
-        }
+        // The owner needs no workflow approval and has no case: a bound field takes the value typed.
         const args: Record<string, unknown> = { ...input.input };
         const bound: { arg: string; value: string; source: SubjectBinding['bindTo'] }[] = [];
-        if (o.binding) {
-          const v = ctx?.bindings[o.binding.bindTo];
-          if (!v) {
-            if (o.binding.required) return deny('subject_unbound');
-          } else {
-            const given = args[o.binding.arg];
-            if (given !== undefined && given !== '' && given !== v && o.binding.mode === 'equals') return deny('subject_mismatch');
-            args[o.binding.arg] = v;
-            bound.push({ arg: o.binding.arg, value: v, source: o.binding.bindTo });
-          }
-        }
         const missing = o.input.filter((x) => x.required && (args[x.name] === undefined || args[x.name] === '')).map((x) => x.name);
         const latencyMs = input.target === 'stub' ? 12 + Math.round(Math.random() * 30) : Math.round((t.p95Ms || 300) * (0.35 + Math.random() * 0.4));
         if (missing.length) return { decision: 'invalid' as const, status: 422, latencyMs, bound, wouldPause: false, invalid: missing.map((field) => ({ field, message: 'Required.' })), output: { error: 'invalid_input', missing }, masked: [], callId };
