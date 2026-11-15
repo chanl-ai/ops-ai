@@ -26,9 +26,10 @@ Also `apps/console/src/components/shared/team-name.tsx:11` (a per-row join of `t
 Pattern (`apps/console/src/hooks/systems-queries.ts`): the hook asks the API for the shape the screen shows; the row
 carries its labels and the list carries its facets.
 
-Check: no check yet. Needed: an `apps/console/scripts/check-standards.mjs` rule that fails on `.reduce(`,
-`.filter(...).length` and `.find(` over a list hook's data inside components and pages, and on `pageSize` above 50
-outside an options hook, with today's sites as a shrink-only baseline.
+Check: `apps/console/scripts/check-standards.mjs` rule 23 fails on `.reduce(` and `.filter(...).length` inside
+components and pages, on `pageSize` above 50 outside the options hooks, and on `fetch(` outside `lib/api`, with
+today's sites held per file in `apps/console/scripts/data-baseline.json`, which may only fall. Needed: the same for
+`.find(` over a list hook's data.
 
 ## UI2 One direction: pages, hooks, contract, client
 

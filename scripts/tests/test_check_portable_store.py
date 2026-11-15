@@ -129,3 +129,14 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     assert "sql b.py ON CONFLICT (0 -> 1)" in problem
     _git(tmp_path, "commit", "-q", "--amend", "-m", "an upsert\n\nStandards-exception: b.py upsert, approved by orch")
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
+
+
+def test_a_page_cut_in_python_is_found_and_other_slices_are_not() -> None:
+    code = """
+page = rows[start : start + size]
+more = hits[offset : offset + limit + 1]
+head = rows[:limit]
+tail = rows[start:]
+span = text[a : b + 1]
+"""
+    assert c.slice_findings(code) == [2, 3]  # pyright: ignore[reportUnknownMemberType]

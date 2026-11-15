@@ -18,7 +18,7 @@ other folder (onion order, one stack, calling the API as a person, tests, commit
 | The console on the live stack | `make up` from the root serves it at http://localhost:3016 with every area on the services; `make -C ../.. logs SVC=console FOLLOW=0` prints its log |
 | The console on the mock alone | `pnpm dev` (:3016) or `pnpm dev:runtime` (:3017, chat on the agents service); not while `make up` holds the port |
 | Type-check | `pnpm typecheck` |
-| Standards check | `pnpm check:standards` (`scripts/check-standards.mjs`; `--write-baseline` locks in a drop it reports) |
+| Standards check | `pnpm check:standards` (`scripts/check-standards.mjs`; `--write-baseline` locks in a drop it reports; rule 23 holds page sizes above 50, browser-side sums and counts, and `fetch(` outside `lib/api` to `scripts/data-baseline.json`) |
 | Unit tests | `pnpm test` (`node --test 'src/**/*.test.ts'`, beside the code they test under `src/lib/`) |
 | All of the above, plus the embed app's type-check | `pnpm verify` |
 | Production build | `pnpm build` |

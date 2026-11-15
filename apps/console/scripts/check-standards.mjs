@@ -270,7 +270,62 @@ for (const f of files) {
     if (!(reuseBaseline[key] ?? []).includes(f.rel)) report(f, at, rule.what);
   }
 }
+// 23. Lists are asked for the way the screen shows them (docs/architecture/standards/console-and-sdk.md UI1, and
+//     data-access.md DA5). Three shapes do the server's work in the browser, each held per file to its count in
+//     data-baseline.json: a file may lower its count, never raise it, and a file not listed may have none.
+//     `--write-baseline` records a drop.
+//       pageSize   a page size above 50, which loads a table to show part of it; only the options hooks, which page
+//                  as a picker scrolls, are outside the rule
+//       aggregate  `.reduce(` or `.filter(...).length` in a page or component: a sum or a count the API returns
+//       fetch      `fetch(` outside lib/api, which skips the contract, the team header and the error envelope
+const DATA = {
+  pageSize: {
+    what: 'a page size above 50 (ask for the page the screen shows; a picker pages through hooks/options-queries.ts)',
+    reads: (rel) => rel !== 'src/hooks/options-queries.ts' && !rel.startsWith('src/lib/api/mock/'),
+    hits: (text) => [...text.matchAll(/\bpageSize\s*[:=]\s*(\d+)/g)].filter((m) => Number(m[1]) > 50),
+  },
+  aggregate: {
+    what: 'a sum or count worked out in the browser (the API returns it: a facet, a count or a field on the row)',
+    reads: (rel) => /^src\/(app|components)\//.test(rel) && !rel.startsWith('src/components/ui/'),
+    hits: (text) => [...text.matchAll(/\.reduce\(|\.filter\((?:[^()]|\([^()]*\))*\)\.length\b/g)],
+  },
+  fetch: {
+    what: 'fetch( outside lib/api (call the API contract through a hook)',
+    reads: (rel) => !rel.startsWith('src/lib/api/'),
+    hits: (text) => [...text.matchAll(/(?<![\w.$])fetch\s*\(/g)],
+  },
+};
+const dataPath = join(root, 'scripts/data-baseline.json');
+const dataBaseline = existsSync(dataPath) ? JSON.parse(readFileSync(dataPath, 'utf8')) : {};
+const dataNow = Object.fromEntries(Object.keys(DATA).map((k) => [k, {}]));
+for (const f of files) {
+  if (/\.test\.tsx?$/.test(f.rel)) continue;
+  for (const [key, rule] of Object.entries(DATA)) {
+    if (!rule.reads(f.rel)) continue;
+    const hits = rule.hits(f.text);
+    if (hits.length) dataNow[key][f.rel] = hits.length;
+    const allowed = dataBaseline[key]?.[f.rel] ?? 0;
+    if (hits.length > allowed) report(f, hits[allowed].index, `${rule.what}: ${hits.length} here, ${allowed} allowed`);
+    else if (hits.length < allowed) notes.push(`${f.rel}: ${key} ${hits.length} of ${allowed} allowed; run with --write-baseline to lock the drop in`);
+  }
+}
 const reuseWrite = process.argv.includes('--write-baseline');
+if (reuseWrite) {
+  // Lowered only: a count never rises and a file is never added once the baseline exists.
+  const first = !existsSync(dataPath);
+  const kept = Object.fromEntries(
+    Object.keys(DATA).map((k) => [
+      k,
+      Object.fromEntries(
+        Object.entries(dataNow[k])
+          .map(([rel, n]) => [rel, first ? n : Math.min(n, dataBaseline[k]?.[rel] ?? 0)])
+          .filter(([, n]) => n > 0)
+          .sort(),
+      ),
+    ]),
+  );
+  writeFileSync(dataPath, JSON.stringify(kept, null, 2) + '\n');
+}
 for (const [key, listed] of Object.entries(reuseBaseline))
   for (const rel of listed)
     if (!reuseNow[key]?.includes(rel) && !reuseWrite) violations.push(`${rel}: listed under ${key} in reuse-baseline.json but no longer breaks it; take it off (run with --write-baseline)`);

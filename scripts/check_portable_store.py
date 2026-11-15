@@ -11,6 +11,9 @@
         except a postgresql_where given with its mssql_where twin.
   meta  table metadata SQL Server refuses: a key column (primary key, unique, indexed or a foreign key) of unbounded
         text, and a table, column, index or constraint name over 60 characters.
+  slice a list cut to its page in Python (`rows[start : start + size]`) in a service's code outside its store: every
+        row was loaded to show a few, so the cost grows with the table. `ops_store.listing.list_page` counts, sorts
+        and cuts in SQL. Today's sites are in list-slice-baseline.txt, which the same rule holds: a row may only fall.
 
 What is there today is listed in portable-baseline.txt, so only new code is a finding. The gate (verify-staged and
 make python-verify) runs `--strict`, and `--commits`: a commit that raises a baseline row carries a
@@ -37,6 +40,7 @@ import sqlalchemy as sa
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "portable-baseline.txt"
+SLICE_BASELINE = ROOT / "list-slice-baseline.txt"
 SRC_ROOTS = sorted([*ROOT.glob("packages/*/src"), *ROOT.glob("services/*-service/src")])
 # The store seam is where database-specific SQL belongs: each dialect's version of a query lives there.
 SEAM = ROOT / "packages" / "ops_store"
@@ -135,6 +139,42 @@ def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str
         ):
             out.append((node.lineno, "SKIP LOCKED"))
     return sorted(set(out))
+
+
+def slice_findings(source: str) -> list[int]:
+    """The line of each window slice, `x[a : a + n]`: a page cut out of rows that were all loaded."""
+    out: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice)):
+            continue
+        low, high = node.slice.lower, node.slice.upper
+        if low is None or not (isinstance(high, ast.BinOp) and isinstance(high.op, ast.Add)):
+            continue
+        # The window starts where its end is counted from: `start + size`, also `offset + limit + 1`.
+        terms, left = [high.right], high.left
+        while isinstance(left, ast.BinOp) and isinstance(left.op, ast.Add):
+            terms, left = [*terms, left.right], left.left
+        if ast.dump(low) in {ast.dump(t) for t in (*terms, left)}:
+            out.append(node.lineno)
+    return sorted(out)
+
+
+def slice_sources() -> list[Path]:
+    """A service's routes, facades and app layer: everything in its source but the store, which pages in SQL."""
+    services = sorted(ROOT.glob("services/*-service/src"))
+    return sorted(p for src in services for p in src.rglob("*.py") if not is_store(p.relative_to(src)))
+
+
+def current_slices() -> tuple[Counter[str], dict[str, list[str]]]:
+    counts: Counter[str] = Counter()
+    where: dict[str, list[str]] = {}
+    for path in slice_sources():
+        rel = path.relative_to(ROOT).as_posix()
+        for line in slice_findings(path.read_text()):
+            key = f"slice {rel} list slice"
+            counts[key] += 1
+            where.setdefault(key, []).append(f"{rel}:{line}")
+    return counts, where
 
 
 def _named(node: ast.expr) -> str | None:
@@ -241,6 +281,8 @@ def warnings(now: Counter[str], base: Counter[str], where: dict[str, list[str]])
             fix = (
                 "bound the column (sa.String(n)) or shorten the name"
                 if kind == "meta"
+                else "page in the store with ops_store.listing.list_page: count, ORDER BY, LIMIT and OFFSET in SQL"
+                if kind == "slice"
                 else "give every supported database its own form of the index, or do without it"
                 if construct.endswith(" option")
                 else "write the portable form: IN :ids (expanding bindparam), CAST(x AS t), CASE in the aggregate"
@@ -260,6 +302,18 @@ def render(counts: Counter[str]) -> str:
         "# Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and"
         " db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key."
     )
+    return _render(head, counts)
+
+
+def render_slices(counts: Counter[str]) -> str:
+    head = [
+        f"# {sum(counts.values())} findings: lists cut to their page in Python outside a store"
+        " (scripts/check_portable_store.py). A row may only fall; ops_store.listing.list_page pages in SQL."
+    ]
+    return _render(head, counts)
+
+
+def _render(head: list[str], counts: Counter[str]) -> str:
     lines: list[str] = []
     for owner in sorted({_owner(k) for k in counts}):
         rows = sorted((k, n) for k, n in counts.items() if _owner(k) == owner)
@@ -319,12 +373,17 @@ def main() -> int:
         )
         return 1 if missing else 0
     now, where = current()
+    slices, slices_where = current_slices()
     if "--update" in sys.argv:
         BASELINE.write_text(render(now))
+        SLICE_BASELINE.write_text(render_slices(slices))
         sys.stdout.write(f"check_portable_store: baseline has {sum(now.values())} findings\n")
+        sys.stdout.write(f"check_portable_store: list-slice baseline has {sum(slices.values())} findings\n")
         return 0
     base = read_baseline(BASELINE.read_text()) if BASELINE.exists() else Counter[str]()
-    found = warnings(now, base, where)
+    slice_base = read_baseline(SLICE_BASELINE.read_text()) if SLICE_BASELINE.exists() else Counter[str]()
+    found = [*warnings(now, base, where), *warnings(slices, slice_base, slices_where)]
+    now, base = now + slices, base + slice_base
     for line in found:
         sys.stderr.write(line + "\n")
     fell = sum(base.values()) - sum(min(n, base[k]) for k, n in now.items())
