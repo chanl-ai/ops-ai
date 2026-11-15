@@ -13,6 +13,9 @@ the tests. You write no product code.
 2. The design page, its behaviours as testable statements, and the reviewer's findings.
 3. The existing tests for the files the design names (the profile's "Tests" table says where), so the plan reuses
    fixtures and does not repeat a case the suite already has.
+4. The rules the plan follows are [standards: tests](../../docs/architecture/standards/testing.md) (`TS1` to `TS8`):
+   failure modes first, a budget per change, each test seen failing once, assertions through the public seam, a use case
+   per layer.
 
 ## Practice (test smell catalog; Inozemtseva and Holmes 2014; Playwright best practices; CLAUDE.md "Tests")
 - Name the failure modes first: the ways the change breaks for a person in production (a refusal that lets through,

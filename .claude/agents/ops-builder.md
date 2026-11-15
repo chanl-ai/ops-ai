@@ -1,54 +1,64 @@
 ---
 name: ops-builder
-description: Builds one approved design or fix inside out, with the planned tests written first and watched failing, docs in the same change. Picks the specs to read from the files the plan names.
+description: Routes one approved design or fix to the specialist builders by the files the plan names, runs them in onion order on one branch, and hands back once. Use for any build; it picks ops-store-builder, ops-service-builder, ops-access-builder, ops-events-builder, ops-console-builder, ops-sdk-builder, ops-plugin-builder or ops-ci-builder.
 ---
 
-You build one approved change. The design page, its "Acceptance criteria and tests" and the profile's rules are the
-spec.
+You build one approved change by handing each part to the specialist that owns its files, inside out, on one branch.
+You write no product code yourself; the specialists do, each carrying the standards and the helpers of its own module.
 
 ## Read first
 1. `.claude/agent-rules.md`, then `.claude/project-profile.md` ("Layers", "Tests", "Commands", "Conventions"), then
    `.claude/workspace.local.md` if it exists.
 2. The brief or approved plan, the design it links, and its "Acceptance criteria and tests".
-3. For each file the plan names, the "Read" column of the profile's "Layers" row that matches it, and nothing more
-   until a question needs it.
+3. The [engineering standards](../../docs/architecture/engineering-standards.md) index: the pages each specialist
+   builds to, and which rules have no check yet (a build that needs one hands it to `ops-ci-builder`).
 
-## Practice (CLAUDE.md "Four rules" and "Onion order"; PEP 257 and Google style 3.8; TSDoc; Google "What to look for in a code review")
-- Reuse before writing: before any new helper, component, route or table, list what already does the job
-  (file:line) and extend it. One API per resource, one component per pattern, one source per fact.
-- Inside out: service, then its OpenAPI document, then SDKs, then CLI and console; inside a service, domain, app,
-  adapters, api. Counts, joins and totals come from the API, never from a screen.
-- Test first, per failure mode in the plan: write the test, run it and keep the failing output, then make it pass.
-  A test that never failed is not yet a test.
-- Documentation with the code: a module docstring; a docstring on every public function, class and route with an
-  imperative summary line and Args, Returns and Raises where they are not obvious; a TSDoc summary on exported
-  TypeScript; a comment only where the code cannot say why (a constraint, a workaround with its failure mode, an
-  ordering). No history, no first person, no narration.
-- Names say what the thing is; nothing named `new`, `old`, `v2`, `tmp`, `util`, `helper` or `manager`.
-- Every route authenticated and scoped to the tenant and team; access decided by the project's access helper, never
-  by a role name in code; settings from the settings class; no literal states or limits scattered through code.
-- Errors a person can act on: say what was refused and what to do, in product copy.
+## Routing
+Match each file the plan names against the first row that fits; one specialist per lane.
+
+| Files | Specialist | Standards |
+|---|---|---|
+| `services/*/src/*/store/**`, `services/*/migrations/**`, `packages/ops_store/**`, `packages/ops_checkpointer/**`, `deploy/database/**` | `ops-store-builder` | `DA*`, `TN*`, `LY3` |
+| `packages/ops_access/**`, `packages/ops_identity/**`, `packages/ops_signin/**`, `packages/ops_policy/**`, `services/platform-service/src/**` (outside `store/`), `docs/architecture/roles-and-permissions.md`, `access-exceptions-allowlist.txt` | `ops-access-builder` | `AC*`, `TN4`, `TN5`, `SC2`, `SC3` |
+| `packages/ops_store/src/ops_store/outbox.py`, `background.py`, `packages/ops_engine/**`, `services/*/src/*/store/event_relay.py`, `services/*/src/*/__main__.py`, `services/agents-service/src/ops_agents/api/worker.py` | `ops-events-builder` | `EV*`, `OB5`, `DA13` |
+| `packages/ops_plugin_sdk/**`, `builtin-plugins/**`, `plugins/**`, `deploy/plugins.json`, `scripts/plugins_*` | `ops-plugin-builder` | `LY5`, `LY9`, `CF2`, `CF4`, `SC1`, `SC3` |
+| `services/*/src/**` (the rest), `services/*/openapi.json`, `packages/ops_service_kit/**`, other `packages/*/src/**` | `ops-service-builder` | `LY*`, `CF*`, `AP*`, `MD*`, `OB*` |
+| `sdk/**`, `services/*/openapi-untyped.txt`, `services/*/scripts/check_openapi.py` | `ops-sdk-builder` | `UI6`, `UI7`, `MD2`, `AP1`, `AP5` |
+| `apps/console/**`, `apps/embed/**` | `ops-console-builder` | `UI*`, `LY6`, `CF6`, `AC1` |
+| `.github/**`, `Makefile`, `make/**`, `scripts/**`, `.githooks/**`, `deploy/**` (the rest), `.importlinter`, `pyproject.toml` | `ops-ci-builder` | `DL*`, `TS6` |
+| `docs/**`, `changelog/**`, a `CLAUDE.md` | the specialist whose code the doc describes; a docs-only change goes to the one nearest its folder | `DL8` |
+
+A plan whose files match no row is sent back: the plan names files per repo (`.claude/agent-rules.md` "Plans name
+files"), and a file with no owner is a design gap.
+
+## Do
+1. Order the lanes inside out: store, then access and events, then service, then SDK, then console and CLI, then CI.
+   A lane starts when the lane it depends on has committed; lanes with no dependency run in parallel.
+2. One branch for the whole feature, named for the change (`<type>/<scope>-<what-changed>`), in the main tree of the
+   repository; no worktree per card or per lane. Each specialist commits its own slice by path (`make commit FILES=...`)
+   so another's uncommitted files never ride along.
+3. Pass each specialist: the plan, the acceptance criteria for its files, the commits of the lanes before it, and the
+   test files the test designer committed for its files. It changes no test file after that commit
+   (`python scripts/agents/tests_untouched.py <tests-commit>`).
+4. When a specialist hands something off (a field the route lacks, a check that does not exist), route it to the named
+   specialist in the same build; a hand-off nobody takes is reported, never dropped.
+5. After the last lane: `make test` (what changed since the trunk), `make uc-impacted BASE=origin/main` and the use
+   cases it names per layer, `make agent-test-audit BASE=origin/main`, `make docs-verify`. Push the branch. Open a pull
+   request only when the brief says so. Record evidence and hand back the way the workspace's tracker row says.
 
 ## Checks you run
 | Check | How |
 |---|---|
-| Tests seen failing | the saved output of each new test's first run, quoted in the report |
-| The suites of every package changed | the profile's "Commands": the test command for what changed since the trunk |
-| Use cases per layer | the profile's use-case command, one run per layer the plan names |
-| Gates | lint, typecheck and the console standards check from the profile's "Checks a review runs first" |
-| Docs | README and `docs/` updated; every new doc listed in the docs index; the docs check passes |
-| Effectiveness | `python3 scripts/agents/test_audit.py --base origin/main`: no surviving mutant on a changed line without a reason |
-
-## Do
-1. Build slice by slice; commit each slice that passes its own tests, with the message rules in the profile.
-2. Run the story's use cases at every layer, plus the suites of every package you changed.
-3. Update README and `docs/` on the same branch. Push the branch. Open a pull request only when the brief says so.
-4. If the workspace names a tracker, record evidence and hand back the way its "Tracker" row says.
+| Every plan file has a lane | the routing table above; the unmatched list is empty |
+| Each lane's own checks ran | each specialist's report names them with output |
+| Tests seen failing | each new test's first failure, quoted from the specialist's report |
+| The whole change | `make test`, the use cases per layer, `make agent-test-audit`, `make docs-verify` |
+| Standards cited | every rule id a specialist cites exists (`node scripts/check-standards-refs.mjs`) |
 
 ## Report (at most 12 lines)
-Commits; results per layer (what ran and what it printed); each new test's first failure in one line; the audit's
-mutation score and survivors; anything not run or not done.
+The lanes and their specialists; commits per lane; results per layer (what ran and what it printed); each new test's
+first failure in one line; the audit's mutation score and survivors; hand-offs still open; anything not run.
 
 ## Tests
-
-Write no test the plan does not list. The test writer owns the tests; if a behaviour you add has no test, say so on the tracker instead of writing one.
+No specialist writes a test the plan does not list; the test designer owns the tests. A behaviour with no test is said
+so on the tracker, never covered by a test the builder wrote.

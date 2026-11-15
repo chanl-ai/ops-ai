@@ -18,7 +18,7 @@ One agent per job. A stage names the agent that does it; the agent's file says w
 | Design review | Fresh-eyes review of a design's architecture against the written rules | `ops-architect` (a session that did not write the design) |
 | Design review | Review of the mocks and flows against the UX standard and the heuristics | `ops-ux-reviewer` |
 | Test design | Failure modes first, one test per failure mode, each with what to revert to see it fail; the end-to-end paths | `ops-test-designer` |
-| Build | Code, docs and tests of one approved design or fix, inside out | `ops-builder` |
+| Build | Code, docs and tests of one approved design or fix, inside out, on one branch per feature | `ops-builder` routes each file the plan names to the specialist that owns it: `ops-store-builder` (stores, migrations, `ops_store`), `ops-service-builder` (routes, models, app layer, the kit), `ops-access-builder` (`can()`, policies, sign-in, the roles page), `ops-events-builder` (outbox, relay, workers, loops), `ops-console-builder` (console and embed), `ops-sdk-builder` (documents, both SDKs, CLI), `ops-plugin-builder` (plugin SDK and plugins), `ops-ci-builder` (CI, make, gates, deploy) |
 | Test audit | How effective the tests are: mutation score on the changed lines, tests that cannot fail, failure modes with no test | `ops-test-auditor` |
 | Browser test | The few end-to-end paths through a real browser, as each role, at both widths, with the states | `ops-browser-tester` |
 | UX review | A built screen judged against the spec, the heuristics and WCAG 2.2 AA | `ops-ux-reviewer` |
@@ -100,9 +100,13 @@ done. A count of passing tests is not evidence of effectiveness; the audit is.
 
 ## What a review reads
 
-Every finding names the rule or document behind it and the code (file:line), ranked blocking, should or nice. A finding
-no written rule covers is listed apart, so a rule can be added. The documents per area are in the profile ("Layers"
-and "Designs, specs and decisions").
+Every finding names the rule or document behind it and the code (file:line), ranked blocking, should or nice. The rules
+for how code is written are the [engineering standards](../docs/architecture/engineering-standards.md): one page per
+area under `docs/architecture/standards/`, each rule with an id (`DA5`), the reason, a real breach from this repository,
+the pattern to follow and the check that enforces it. A finding cites the id in backticks; a finding no written rule
+covers is listed apart, so a rule can be added. Every agent and every folder guide links the standards pages for the
+code it owns, and `node scripts/check-standards-refs.mjs` (`make docs-guides-check`) fails when one does not or when a
+cited id does not exist. The documents per area are in the profile ("Layers" and "Designs, specs and decisions").
 
 ## Task tracker
 

@@ -12,6 +12,9 @@ code.
 1. `.claude/agent-rules.md`, then `.claude/project-profile.md` ("Console", "Tests"), then `.claude/workspace.local.md`
    if it exists.
 2. The design's "Acceptance criteria and tests": the end-to-end paths and the use cases per layer.
+3. What a screen must show is [standards: console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md)
+   `UI5` (loading, empty and error states) and `UI4` (server paging); a use case per layer is `TS5` in
+   [standards: tests](../../docs/architecture/standards/testing.md).
 
 ## Practice (Playwright "Best practices"; CLAUDE.md "Tests"; docs/usecases/README.md)
 - Few paths, high value: the path a person takes to get the value, and the refusal that guards it. Not every

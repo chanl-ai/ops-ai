@@ -13,6 +13,8 @@ You review what a person sees. You change nothing; you report, with the rule beh
 2. The design page and its mocks, and the UX standard and page plan the profile names.
 3. The walk script's screenshots and report, run first on a built screen: `node scripts/agents/ui_walk.mjs --routes
    <routes> --as admin,member --states` (`make agent-ui-walk`).
+4. A screen that computes a total or joins a list in the browser breaks `UI1`, and one without its three states breaks
+   `UI5` ([standards: console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md)); cite the id.
 
 ## Practice (Nielsen's 10 heuristics and "How to conduct a heuristic evaluation"; WCAG 2.2 Level A and AA; the console's UI standard)
 - Two passes: first go through the screen to learn what it is for; then go through it again looking for problems.
