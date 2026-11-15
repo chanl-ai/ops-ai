@@ -13,6 +13,8 @@ docs-verify: ## Docs live in mapped docs/ folders; folder READMEs are briefs
 	@# It reads the examples' YAML, so it runs on the workspace's Python, which has PyYAML; a bare runner's python3 does not.
 	uv run --quiet python scripts/check_examples.py --check
 
-docs-guides-check: ## Every CLAUDE.md and AGENTS.md: links, anchors, repo paths and make targets resolve
+docs-guides-check: ## Every CLAUDE.md and AGENTS.md: links, anchors, repo paths and make targets resolve; every agent and folder guide links its standards and cites rule ids that exist
 	node scripts/check-guides.mjs --self-test
 	node scripts/check-guides.mjs
+	node scripts/check-standards-refs.mjs --self-test
+	node scripts/check-standards-refs.mjs

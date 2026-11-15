@@ -15,7 +15,7 @@ the guide of the folder you change before changing it.
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches and pull requests, commit messages, what is public, doc standards and the 11-section spec shape, code standards |
 | [.claude/agent-rules.md](.claude/agent-rules.md), [.claude/project-profile.md](.claude/project-profile.md) | Which agent does which stage, what "done" means, the checks a review runs first |
 | [docs/architecture/README.md](docs/architecture/README.md) | The current design per area; [service map](docs/architecture/service-map.md) for who owns what |
-| [docs/architecture/engineering-standards.md](docs/architecture/engineering-standards.md) | Target state for how code is written: numbered rules per layer with the check that enforces each; a review cites the rule id |
+| [docs/architecture/engineering-standards.md](docs/architecture/engineering-standards.md) | Target state for how code is written: one page per area under `docs/architecture/standards/`, each rule with an id (`DA5`), the reason, a real breach from this repository, the pattern to follow and the check that enforces it; a review cites the id, and every folder guide below links the pages for its code |
 | [docs/architecture/decisions/](docs/architecture/decisions/) | ADRs. Each is a proposal until a maintainer accepts it; ADR-0015 keeps the engine open (Temporal or LangGraph on PostgreSQL), so no code or doc treats one engine as settled. A spec that needs a decision changed proposes a new ADR under "Open questions" |
 | [docs/usecases/README.md](docs/usecases/README.md) | The use case registry and the rules every use case follows |
 

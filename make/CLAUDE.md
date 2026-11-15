@@ -81,3 +81,9 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | `db.mk`, `db-scripts.mk` | `db-up`, `db-down`, `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)) |
 | `release.mk`, `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
 | `services.mk` | The generated `<verb>-<svc>` pass-throughs, for example `test-tools` runs `make -C services/tools-service test` |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [delivery, deploy and upgrade](../docs/architecture/standards/delivery.md) (`DL1` to `DL9`), [tests](../docs/architecture/standards/testing.md) (`TS1` to `TS8`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

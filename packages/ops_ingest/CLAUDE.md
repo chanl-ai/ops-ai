@@ -55,3 +55,9 @@ the distribution's `tesseract-ocr` package. The root workspace installs the `ocr
 - [docs/packages/ops_ingest/tests.md](../../docs/packages/ops_ingest/tests.md): each failure mode and the test that guards it
 - [docs/packages/ops_ingest/overview.md](../../docs/packages/ops_ingest/overview.md): what the library holds
 - [docs/services/kb-service/overview.md](../../docs/services/kb-service/overview.md): the service that runs it
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [configuration](../../docs/architecture/standards/configuration.md) (`CF1` to `CF6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

@@ -126,3 +126,9 @@ Edit the generator, regenerate, and commit both; never hand-edit a generated fil
 | Shared dev host | [docs/deploy/devhost.md](../docs/deploy/devhost.md) |
 | Mailbox demo | [docs/deploy/demo-mailbox.md](../docs/deploy/demo-mailbox.md) |
 | Docs site hosting | [docs/deploy/docs-site.md](../docs/deploy/docs-site.md) |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [delivery, deploy and upgrade](../docs/architecture/standards/delivery.md) (`DL1` to `DL9`), [data access](../docs/architecture/standards/data-access.md) (`DA1` to `DA13`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

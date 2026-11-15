@@ -39,3 +39,9 @@ alerts, mermaid, diagrams, figures, file links) are listed once in
 [docs/README.md, "How the docs site shows a page"](../../docs/README.md#how-the-docs-site-shows-a-page). A new page is
 listed in `docs/README.md` and placed in `SITE`; the page's opening paragraph stays free of paths and code spans
 (`CONTRIBUTING.md`, writing rules).
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [delivery, deploy and upgrade](../../docs/architecture/standards/delivery.md) (`DL1` to `DL9`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

@@ -21,3 +21,9 @@ Tests: `bake_plugins.py` is covered by `scripts/tests/test_bake_plugins.py` (`uv
 the rest is proved by the compose and kind proofs (`../compose/proof.sh`, `../k8s/proof.sh`).
 
 Docs: [docs/deploy/compose.md](../../docs/deploy/compose.md), [docs/deploy/install.md](../../docs/deploy/install.md).
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [delivery, deploy and upgrade](../../docs/architecture/standards/delivery.md) (`DL1` to `DL9`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

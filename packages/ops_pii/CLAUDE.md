@@ -14,3 +14,9 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 | Tests | None here; covered by `make test PKG=services/agents-service T=tests/unit/test_pii_masking.py` |
 | Lint, types | `uv run ruff check packages/ops_pii`, `uv run pyright packages/ops_pii` |
 | Gap | Not listed in `.importlinter`, so its import contracts are unchecked |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [configuration](../../docs/architecture/standards/configuration.md) (`CF1` to `CF6`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

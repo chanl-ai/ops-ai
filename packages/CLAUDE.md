@@ -85,3 +85,9 @@ SERVICE=<service>`, [registry](../docs/usecases/README.md)).
 
 Design docs for packages live in `docs/packages/<folder>/` where they exist, and in
 [docs/architecture/service-map.md](../docs/architecture/service-map.md) for how packages and services fit together.
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [configuration](../docs/architecture/standards/configuration.md) (`CF1` to `CF6`), [data access](../docs/architecture/standards/data-access.md) (`DA1` to `DA13`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.

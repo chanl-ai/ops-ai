@@ -135,3 +135,9 @@ buttons say the action, placeholders start with "e.g." and never look like real 
 1. `pnpm verify` passes.
 2. Every changed route returns 200 and renders in Chrome without console errors.
 3. An independent reviewer (a person or a fresh coding agent, in a browser, this file and `docs/console/page-plan.md` as the standard) has exercised the change, and its blockers and majors are fixed.
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md) (`UI1` to `UI7`), [configuration](../../docs/architecture/standards/configuration.md) (`CF1` to `CF6`), [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

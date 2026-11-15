@@ -9,3 +9,9 @@ not add code to this folder; work on Reviews in [agents-service](../agents-servi
 
 Design: [docs/architecture/human-in-the-loop.md](../../docs/architecture/human-in-the-loop.md) and
 [docs/architecture/service-map.md](../../docs/architecture/service-map.md).
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

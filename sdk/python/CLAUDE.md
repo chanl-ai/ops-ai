@@ -22,3 +22,9 @@ Shared SDK rules, the generator and every command: [../CLAUDE.md](../CLAUDE.md).
 | Tests | `uv run --isolated --quiet --with pytest --with-editable sdk/python pytest -q sdk/python/tests` |
 | One test file | the same with `sdk/python/tests/test_cli.py` |
 | Lint and format | `uv run ruff check sdk/python` and `uv run ruff format --check sdk/python` |
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md) (`UI1` to `UI7`), [API contracts and models](../../docs/architecture/standards/api-and-models.md) (`AP1` to `AP7`, `MD1` to `MD4`). The index of every rule is
+[engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.

@@ -91,3 +91,9 @@ revision -m "<what it changes>"`; the root `make migration NAME=...` makes an ag
 Design for every service: [docs/architecture/service-map.md](../docs/architecture/service-map.md),
 [identity and tenancy](../docs/architecture/identity-and-tenancy.md), [API conventions](../docs/architecture/api.md).
 Use cases per service: [docs/usecases/](../docs/usecases/README.md).
+
+## Engineering standards
+
+The rules the code in this folder is held to, each with a real example from this repository and the check that
+enforces it: [layers and ownership](../docs/architecture/standards/layers.md) (`LY1` to `LY9`), [API contracts and models](../docs/architecture/standards/api-and-models.md) (`AP1` to `AP7`, `MD1` to `MD4`), [data access](../docs/architecture/standards/data-access.md) (`DA1` to `DA13`), [tenant isolation and access](../docs/architecture/standards/tenancy-and-access.md) (`TN1` to `TN5`, `AC1` to `AC5`), [errors, logging and observability](../docs/architecture/standards/observability.md) (`OB1` to `OB6`). The index of every rule is
+[engineering standards](../docs/architecture/engineering-standards.md); a review cites the rule id.
