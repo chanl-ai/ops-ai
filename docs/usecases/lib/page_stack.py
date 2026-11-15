@@ -305,6 +305,60 @@ def _bank_stack(stack: ExitStack, names: list[str]) -> dict[str, dict[str, Any]]
     return out
 
 
+def _platform_stack(stack: ExitStack, names: list[str]) -> dict[str, dict[str, Any]]:
+    """The services the real stack runs, for a page whose row names no stack of its own: platform-service signing the
+    page's people in, models-service, tools-service and agents-service (on the scripted model, gateway to that
+    tools-service), each verifying platform tokens. A ui script gets the same from the harness
+    (packages/usecase-runner/src/harness.ts resolveStack). Each profile is a dev role or a seeded person
+    (scripts/api_as.py email_for), acting in that person's own team with their own tokens."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from api_as import Refused, email_for, team_of  # scripts/ is on the path only from here
+    from usecase_harness import (
+        AGENTS_PORT,
+        MODELS_PORT,
+        PLATFORM_INTERNAL_PORT,
+        PLATFORM_PORT,
+        TOOLS_PORT,
+        agents,
+        models,
+        platform,
+        signed_in,
+        tools,
+    )
+
+    try:
+        emails = {n: email_for(n) for n in names}
+    except Refused as e:
+        raise SystemExit(f"page_stack: a profile on the page names nobody: {e}") from e
+    auth = {
+        "OPS_AUTH_MODE": "platform",
+        "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+        "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
+    }
+    gateway = f"http://127.0.0.1:{TOOLS_PORT}"
+    api, _inner = stack.enter_context(platform())
+    models_url = stack.enter_context(models(auth))
+    stack.enter_context(tools({**auth, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
+    stack.enter_context(agents(gateway_url=gateway, models_url=models_url, env=auth))
+    services = {
+        "platform": f"http://127.0.0.1:{PLATFORM_PORT}",
+        "models": f"http://127.0.0.1:{MODELS_PORT}",
+        "tools": gateway,
+        "agents": f"http://127.0.0.1:{AGENTS_PORT}",
+    }
+    out: dict[str, dict[str, Any]] = {}
+    for name, email in emails.items():
+        session = signed_in(api, email)
+        out[name] = {
+            "baseUrl": f"http://127.0.0.1:{PLATFORM_PORT}",
+            "team": team_of(session.get("principal") or {}) or "team_ops",
+            "services": services,
+            "accessToken": session.get("token"),
+            "refreshToken": session.get("refreshToken"),
+        }
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
@@ -359,7 +413,11 @@ def main() -> None:
             sys.stdin.read()
             return
         if not services:
-            raise SystemExit(f"page_stack starts the knowledge services only; the page asks for: {ns.services!r}")
+            profiles = _platform_stack(stack, ns.profiles.split(","))
+            Path(ns.config).write_text(json.dumps({"profiles": profiles, "current": next(iter(profiles))}))
+            print("READY", flush=True)
+            sys.stdin.read()
+            return
         profile = {"baseUrl": "http://127.0.0.1", "team": "team_ops", "services": services}
         names = ns.profiles.split(",")
         Path(ns.config).write_text(json.dumps({"profiles": dict.fromkeys(names, profile), "current": names[0]}))
@@ -367,4 +425,5 @@ def main() -> None:
         sys.stdin.read()
 
 
-main()
+if __name__ == "__main__":
+    main()
