@@ -1,14 +1,13 @@
 # Knowledge ingestion
 
 Status: library in progress. Parsing, splitting, metadata mapping and holds, dedupe and versions, and
-source rules exist as a Python library with tests. There is no server, sync workflow, storage,
-embedding or AI gateway client yet.
+source rules exist as a Python library with tests, run by kb-service (`docs/services/kb-service/overview.md`).
 
 | Item | Detail |
 |---|---|
 | Purpose | Syncs knowledge sources, enforces required metadata, chunks, embeds through the AI gateway under the ingestion identity, indexes, tracks freshness and maintains the citation index that triggers re-tests. |
 | Owns | Separate PostgreSQL instance with pgvector; source copies in the object store. |
-| Depends on | Source systems (through the data gateway's network zone), the AI gateway, `services/shared`. |
+| Depends on | Source systems (through the data gateway's network zone), the AI gateway. kb-service runs it. |
 | Specs | [kb-service](../../services/kb-service/overview.md); ADR-0006, ADR-0008 |
 
 The service map that applies to every service is `docs/architecture/service-map.md`; trust rules are in

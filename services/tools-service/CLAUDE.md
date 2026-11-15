@@ -72,7 +72,7 @@ Reference: [make/CLAUDE.md](../../make/CLAUDE.md).
 | Writes need a token | OPA refuses a write without an approval token for exactly this input; a test for a new write path pairs the refusal with the success |
 | Secrets | Written once from a person's request, never read back through any route, scrubbed from upstream answers, every use audited |
 | Accounts | An account's credentials go only to the scheme, host and port of its `baseUrl` (`CONNECTION_HOST_MISMATCH` otherwise) |
-| Plugins | A plugin that fails to load is logged with the reason and the others still load (`plugins/host.py`, `tests/test_plugin_load_failure.py`). There is no `GET /v1/plugins` route, although `plugins/README.md` and [docs/guide/plugins.md](../../docs/guide/plugins.md) name one |
+| Plugins | A plugin that fails to load is logged with the reason and the others still load (`src/ops_tools/plugins/host.py`, `tests/test_plugin_load_failure.py`). There is no `GET /v1/plugins` route, although [docs/guide/plugins.md](../../docs/guide/plugins.md) names one |
 
 ## Known departures
 
