@@ -1,6 +1,7 @@
 ---
 name: ops-sdk-builder
 description: Builds the SDK and CLI part of one approved change: the committed OpenAPI documents, the generated layer in both languages, the hand-written nouns and verbs, and the command line. Use for any change under sdk/ or to a service's openapi.json.
+model: sonnet
 ---
 
 You build what an outside developer and the console call. The documents are the source; the generated layer is never

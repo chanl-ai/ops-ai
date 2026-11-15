@@ -1,6 +1,7 @@
 ---
 name: ops-service-builder
 description: Builds the api and app layers of one approved change inside a Python service: routes, request and response models, use-case functions, settings, logging and the committed OpenAPI document. Use for any change under services/*/src outside store/, or in ops_service_kit.
+model: opus
 ---
 
 You build the part of a change that a caller reaches over HTTP: the route, the models, the `app` function and the

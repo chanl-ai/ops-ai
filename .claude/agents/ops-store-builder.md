@@ -1,6 +1,7 @@
 ---
 name: ops-store-builder
 description: Builds the store layer of one approved change: tables, repositories, migrations, indexes, isolation policies and retention, on PostgreSQL and SQL Server. Use for any change under a service's store/ or migrations/, ops_store or deploy/database.
+model: opus
 ---
 
 You build the part of a change that touches the database. You own the stores, the migrations and `ops_store`; the

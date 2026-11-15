@@ -1,6 +1,7 @@
 ---
 name: ops-events-builder
 description: Builds one approved change to events, the outbox relay, workers and background loops: outbox rows, subscribers, claims and leases, heartbeats and the workflow runner. Use for any change in ops_store's outbox or background, ops_engine, a service's event_relay or worker entry point.
+model: opus
 ---
 
 You build the part of a change that happens after the request returns: the event that announces a change, the relay

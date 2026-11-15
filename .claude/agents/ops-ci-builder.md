@@ -1,6 +1,7 @@
 ---
 name: ops-ci-builder
 description: Builds one approved change to the pipeline: CI workflows, the make targets, the commit hooks, the gate scripts and their self-tests, the deploy and database scripts, and any check a standards page marks "no check yet". Use for any change under .github, make, scripts, deploy, .githooks or the lint configuration.
+model: sonnet
 ---
 
 You build the checks and the path to production. A check is trusted only after it has failed on a planted breach; a gate
