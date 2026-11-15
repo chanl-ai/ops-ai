@@ -13,10 +13,12 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 |---|---|---|
 | `settings` | `Settings` (pydantic-settings, prefix `OPS_`, secrets as files from `/run/secrets` or `OPS_SECRETS_DIR`, empty values unset); `Endpoint` (another service's address, timeout and retries), `PoolSettings` (`OPS_DB__*`), `Settings.require(...)` and `Settings.endpoint(name)` | every service and most packages |
 | `http` | `Envelope`, `ErrorEnvelope`, `ListResult`, `Pagination`, `ok()`, `paged()`, `page_window()`, `options_page()`, `install_error_handlers()`, `mark_public()`, `operation_id()` | every service's routes |
+| `listing` | `ListQuery` (`ListParams`, `list_params`): the query every list route takes; page size capped at `OPS_PAGE_SIZE_MAX`, every other query key a filter | every list route, with `ops_store.listing.list_page` |
 | `errors` | `ApiError` and its subclasses (`ValidationFailed`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Unprocessable`, `TooManyRequests`, `ServiceUnavailable`, `StepUpRequired`), turned into `{success: false, error: {code, message, status}}` | services and packages |
 | `ids` | `new_id`, `now_iso`, `canonical_json`, `input_hash`, `action_id` | kernel and services |
 | `logging` | `get_logger`, `configure_logging(service=)`, `add_context`, `json_formatter`, `redact`: one JSON line per event on stdout ([docs/packages/ops_service_kit/logging.md](../../docs/packages/ops_service_kit/logging.md)) | services |
-| `request_timing` | The request id that follows a call across services, one `http.request` line per request, `note_caller` for its tenant and team; with `OPS_REQUEST_TIMING` also `Server-Timing` | installed by `install_error_handlers` |
+| `request_timing` | The request id that follows a call across services, one `http.request` line per request (with `db.query_count`, `db.tx_count`, `db.tx_open_ms` and the pool's `db.pool.wait_ms`, `in_use` and `limit`), `note_caller` for its tenant and team; with `OPS_REQUEST_TIMING` also `Server-Timing` | installed by `install_error_handlers` |
+| `testing` | `statement_budget`: a pytest fixture that calls every GET at 5 and 50 rows and names the routes over their `budgets.toml` row; `logging.captured_logging` reads the lines | a service's tests |
 | `flags` | Feature flags: off unless `OPS_FLAGS` names them; read through `Settings.feature_flags` | services |
 | `credentials` | `credential_store(settings)`: picks the `ops_policy` credential store from settings | services that keep secrets |
 | `model_calls` | `ModelCalls`: one structured model call through models-service for a service that is not an agent | documents-service |
