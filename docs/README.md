@@ -120,6 +120,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/integrations.md` | Integrations in layers: plugins, auth configs, accounts, the gateway, triggers, events and MCP, with what is built per layer |
 | `architecture/console-areas.md` | The console's four areas (Work, Build, Data, Govern), the cells that offer each page, the area switcher and chat's links back (switcher designed, not built) |
 | `architecture/logging-and-data-writes.md` | One JSON log line per event with ids and redaction (built), and the store helper for a person's edit with revision check, audit and outbox (designed) |
+| `architecture/engineering-standards.md` | Target state: the numbered code rules for layers, configuration, data access, API models, console, security, reliability, testing and delivery, with the check that enforces each |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |

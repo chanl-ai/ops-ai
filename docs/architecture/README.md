@@ -37,6 +37,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Roles and permissions | [roles-and-permissions.md](roles-and-permissions.md) | Who may do what, approvals, the access rules and the exceptions register | Builder, approver |
 | Console areas | [console-areas.md](console-areas.md) | The four areas of the console and the cells that offer each page | Builder |
 | Logging and data writes | [logging-and-data-writes.md](logging-and-data-writes.md) | Log lines, ids and redaction; the store helper for a person's edit | Builder, operator |
+| Engineering standards | [engineering-standards.md](engineering-standards.md) | Target state: the numbered rules code must meet in each layer, and the check that enforces each | Builder, reviewer |
 | Templates | [templates.md](templates.md) | Templates a team installs, keeps, edits and updates: packs, copies, copy links, review and take; what is built and what is not | Builder |
 | Knowledge base | [knowledge-base.md](knowledge-base.md) | Knowledge bases: sources, ingest, chunking, embedding, search and citation; what is built and what is not | Builder |
 | Several accounts per app | [app-accounts.md](app-accounts.md) | Several named accounts of one app per team or person, the default, and how a call picks its account; sharing and role limits not built | Builder |
