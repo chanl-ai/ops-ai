@@ -62,6 +62,7 @@ python-verify: ## Lint and type-check packages, then verify each service with mo
 	$(KEEP) uv run python scripts/check_portable_store.py --commits
 	@# A loopback fallback anywhere; a literal timeout or an HTTP client beyond a member's config-literals-baseline.txt.
 	$(KEEP) uv run python scripts/check_config_literals.py --strict
+	$(KEEP) uv run python scripts/check_config_literals.py --commits
 	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
 
 # The suites share nothing but the machine, so they run side by side: one after another they used one of 14
