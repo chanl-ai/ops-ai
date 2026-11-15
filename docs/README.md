@@ -120,7 +120,18 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/integrations.md` | Integrations in layers: plugins, auth configs, accounts, the gateway, triggers, events and MCP, with what is built per layer |
 | `architecture/console-areas.md` | The console's four areas (Work, Build, Data, Govern), the cells that offer each page, the area switcher and chat's links back (switcher designed, not built) |
 | `architecture/logging-and-data-writes.md` | One JSON log line per event with ids and redaction (built), and the store helper for a person's edit with revision check, audit and outbox (designed) |
-| `architecture/engineering-standards.md` | Target state: the numbered code rules for layers, configuration, data access, API models, console, security, reliability, testing and delivery, with the check that enforces each |
+| `architecture/engineering-standards.md` | Index of the engineering standards: how to read a rule, the pages, one owner per job, every rule id with whether a check exists |
+| `architecture/standards/layers.md` | Standards: layers and ownership (`LY1` to `LY9`): the onion, one owner per job, names, ports, each rule with a real example and its check |
+| `architecture/standards/configuration.md` | Standards: configuration (`CF1` to `CF6`): one settings object, no literal hosts or timeouts, fail at start, secrets, safe defaults |
+| `architecture/standards/tenancy-and-access.md` | Standards: tenant isolation and access (`TN1` to `TN5`, `AC1` to `AC5`): row-level security, `isolated_tx`, `can()`, the exceptions register |
+| `architecture/standards/data-access.md` | Standards: data access (`DA1` to `DA13`): one transaction per request, Core statements, paging in SQL, indexes, migrations, retention |
+| `architecture/standards/api-and-models.md` | Standards: API contracts and models (`AP1` to `AP7`, `MD1` to `MD4`): typed, authenticated, idempotent routes; `extra="forbid"`; one model per contract |
+| `architecture/standards/events-and-workers.md` | Standards: events, the relay and workers (`EV1` to `EV6`): outbox in the same transaction, one relay, idempotent receivers, loop health |
+| `architecture/standards/console-and-sdk.md` | Standards: console, SDKs and CLI (`UI1` to `UI7`): no browser-side joins, hooks only, server paging, generated SDKs |
+| `architecture/standards/observability.md` | Standards: errors, logging and observability (`OB1` to `OB6`): kit logging, one request line with ids, typed errors, up and ready, timeouts |
+| `architecture/standards/security.md` | Standards: security (`SC1` to `SC6`): two gateways, audit in the same transaction, write-only secrets, dependencies, nothing committed that identifies a customer |
+| `architecture/standards/testing.md` | Standards: tests (`TS1` to `TS8`): failure modes first, a budget per change, seen failing once, public seams, use cases per layer |
+| `architecture/standards/delivery.md` | Standards: delivery, deploy and upgrade (`DL1` to `DL9`): branch and pull request, one gate, a separate reviewer, staging on every merge, proven upgrades |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
