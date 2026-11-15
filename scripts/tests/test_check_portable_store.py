@@ -140,3 +140,50 @@ tail = rows[start:]
 span = text[a : b + 1]
 """
     assert c.slice_findings(code) == [2, 3]  # pyright: ignore[reportUnknownMemberType]
+
+
+def test_a_page_cut_with_multiplied_bounds_or_in_two_cuts_is_found() -> None:
+    code = """
+by_page = out[(page - 1) * size : page * size]
+by_index = out[index * limit : (index + 1) * limit]
+chained = rows[offset:][:limit]
+fixed = rows[1:][:3]
+scaled = rows[a * 2 : b * 3]
+"""
+    assert c.slice_findings(code) == [2, 3, 4]  # pyright: ignore[reportUnknownMemberType]
+
+
+def test_the_list_slice_baseline_is_held_to_its_trailer_like_the_portable_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    portable, sliced = tmp_path / "portable-baseline.txt", tmp_path / "list-slice-baseline.txt"
+    _git(tmp_path, "init", "-q")
+    portable.write_text("# header\n")
+    sliced.write_text("# header\n1 slice a.py list slice\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "the baselines begin")
+    began = _git(tmp_path, "rev-parse", "HEAD")
+    for name, value in {"ROOT": tmp_path, "BASELINE": portable, "SLICE_BASELINE": sliced}.items():
+        monkeypatch.setattr(c, name, value)
+    monkeypatch.setattr(c, "BASELINE_BEGAN", began)
+    monkeypatch.setattr(c, "SLICE_BASELINE_BEGAN", began)
+    sliced.write_text("# header\n2 slice a.py list slice\n")
+    _git(tmp_path, "commit", "-qam", "a page cut in python")
+    [problem] = c.commit_problems()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    assert "slice a.py list slice (1 -> 2)" in problem
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "a page\n\nStandards-exception: a.py, approved by orch")
+    assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
+
+
+def test_update_lowers_a_baseline_row_and_never_raises_or_adds_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sliced = tmp_path / "list-slice-baseline.txt"
+    sliced.write_text("# header\n3 slice services/x-service/src/m.py list slice\n")
+    now = Counter(
+        {"slice services/x-service/src/m.py list slice": 5, "slice services/x-service/src/n.py list slice": 1}
+    )
+    held = c.lowered(now, c.read_baseline(sliced.read_text()))  # pyright: ignore[reportUnknownMemberType]
+    assert held == {"slice services/x-service/src/m.py list slice": 3}
+    held = c.lowered(Counter({"slice services/x-service/src/m.py list slice": 1}), c.read_baseline(sliced.read_text()))  # pyright: ignore[reportUnknownMemberType]
+    assert held == {"slice services/x-service/src/m.py list slice": 1}

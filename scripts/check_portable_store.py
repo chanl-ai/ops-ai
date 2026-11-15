@@ -16,13 +16,13 @@
         and cuts in SQL. Today's sites are in list-slice-baseline.txt, which the same rule holds: a row may only fall.
 
 What is there today is listed in portable-baseline.txt, so only new code is a finding. The gate (verify-staged and
-make python-verify) runs `--strict`, and `--commits`: a commit that raises a baseline row carries a
+make python-verify) runs `--strict`, and `--commits`: a commit that raises a row of either baseline carries a
 `Standards-exception:` trailer a maintainer approved. ops_store.dialect holds each database's form.
 
   uv run python scripts/check_portable_store.py            # findings, exit 0
   uv run python scripts/check_portable_store.py --strict   # exit 1 when there is a finding
-  uv run python scripts/check_portable_store.py --commits  # exit 1 when a commit raised the baseline without a trailer
-  uv run python scripts/check_portable_store.py --update   # rewrite the baseline to today's findings
+  uv run python scripts/check_portable_store.py --commits  # exit 1 when a commit raised a baseline without a trailer
+  uv run python scripts/check_portable_store.py --update   # lower the baselines to today's findings; never raises one
 """
 
 from __future__ import annotations
@@ -141,20 +141,56 @@ def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str
     return sorted(set(out))
 
 
-def slice_findings(source: str) -> list[int]:
-    """The line of each window slice, `x[a : a + n]`: a page cut out of rows that were all loaded."""
-    out: list[int] = []
-    for node in ast.walk(ast.parse(source)):
-        if not (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice)):
-            continue
-        low, high = node.slice.lower, node.slice.upper
-        if low is None or not (isinstance(high, ast.BinOp) and isinstance(high.op, ast.Add)):
-            continue
+def _factors(node: ast.expr) -> set[str]:
+    """The non-constant operands of a product: `(page - 1) * size` holds `(page - 1)` and `size`."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+        return _factors(node.left) | _factors(node.right)
+    return set() if isinstance(node, ast.Constant) else {ast.dump(node)}
+
+
+def _is_page(node: ast.Subscript) -> bool:
+    """One cut whose end is counted from its start: `a : a + n`, or the same in multiples: `(p - 1) * n : p * n`."""
+    assert isinstance(node.slice, ast.Slice)
+    low, high = node.slice.lower, node.slice.upper
+    if low is None or high is None:
+        return False
+    if isinstance(high, ast.BinOp) and isinstance(high.op, ast.Add):
         # The window starts where its end is counted from: `start + size`, also `offset + limit + 1`.
         terms, left = [high.right], high.left
         while isinstance(left, ast.BinOp) and isinstance(left.op, ast.Add):
             terms, left = [*terms, left.right], left.left
         if ast.dump(low) in {ast.dump(t) for t in (*terms, left)}:
+            return True
+    # Both bounds are multiples of a shared size: `rows[(page - 1) * size : page * size]`.
+    products = all(isinstance(b, ast.BinOp) and isinstance(b.op, ast.Mult) for b in (low, high))
+    return products and bool(_factors(low) & _factors(high))
+
+
+def _is_chained(node: ast.Subscript) -> bool:
+    """`rows[offset:][:limit]`: the page cut out of a tail cut, so every row was still loaded."""
+    inner = node.value
+    if not (
+        isinstance(inner, ast.Subscript) and isinstance(inner.slice, ast.Slice) and isinstance(node.slice, ast.Slice)
+    ):
+        return False
+    start, end = inner.slice.lower, node.slice.upper
+    return (
+        start is not None
+        and inner.slice.upper is None
+        and end is not None
+        and not (isinstance(start, ast.Constant) and isinstance(end, ast.Constant))
+    )
+
+
+def slice_findings(source: str) -> list[int]:
+    """The line of each page cut in Python: `x[a : a + n]`, `x[(p - 1) * n : p * n]` and `x[a:][:n]`."""
+    out: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.slice, ast.Slice)
+            and (_is_page(node) or _is_chained(node))
+        ):
             out.append(node.lineno)
     return sorted(out)
 
@@ -331,6 +367,8 @@ def _owner(key: str) -> str:
 
 # The commit before the first one this check reads: from here on, a commit that raises a baseline row needs a trailer.
 BASELINE_BEGAN = "ff31407eb261038374fc5c7fda556b40a519fcef"
+# The commit that created list-slice-baseline.txt; the rows it held are the start.
+SLICE_BASELINE_BEGAN = "583fbae33c53c028d7a20873eeb72db811888084"
 TRAILER = "Standards-exception:"
 
 
@@ -344,23 +382,35 @@ def raised(before: str, after: str) -> list[str]:
     return sorted(f"{key} ({old.get(key, 0)} -> {n})" for key, n in new.items() if n > old.get(key, 0))
 
 
-def commit_problems() -> list[str]:
-    """Commits after BASELINE_BEGAN that raise a row of portable-baseline.txt without a Standards-exception: trailer.
-    An export without history (verify-head's one-commit copy) has nothing to check; verify-staged runs it on the
-    repository."""
-    probe = ["git", "cat-file", "-e", f"{BASELINE_BEGAN}^{{commit}}"]
-    if subprocess.run(probe, cwd=ROOT, capture_output=True, check=False).returncode:
-        return []
+def _file_problems(name: str, began: str) -> list[str]:
     out: list[str] = []
-    for sha in _git("log", "--format=%H", f"{BASELINE_BEGAN}..HEAD", "--", BASELINE.name).split():
+    for sha in _git("log", "--format=%H", f"{began}..HEAD", "--", name).split():
         before = subprocess.run(
-            ["git", "show", f"{sha}^:{BASELINE.name}"], cwd=ROOT, capture_output=True, text=True, check=False
+            ["git", "show", f"{sha}^:{name}"], cwd=ROOT, capture_output=True, text=True, check=False
         ).stdout
-        rows = raised(before, _git("show", f"{sha}:{BASELINE.name}"))
+        rows = raised(before, _git("show", f"{sha}:{name}"))
         message = _git("log", "-1", "--format=%B", sha)
         if rows and not any(line.startswith(TRAILER) for line in message.splitlines()):
-            out += [f"trailer {sha[:8]} raises `{row}` with no {TRAILER} trailer" for row in rows]
+            out += [f"trailer {sha[:8]} raises `{row}` in {name} with no {TRAILER} trailer" for row in rows]
     return out
+
+
+def commit_problems() -> list[str]:
+    """Commits that raise a row of portable-baseline.txt or list-slice-baseline.txt without a Standards-exception:
+    trailer. An export without history (verify-head's one-commit copy) has nothing to check; verify-staged runs it on
+    the repository."""
+    out: list[str] = []
+    for path, began in ((BASELINE, BASELINE_BEGAN), (SLICE_BASELINE, SLICE_BASELINE_BEGAN)):
+        probe = ["git", "cat-file", "-e", f"{began}^{{commit}}"]
+        if subprocess.run(probe, cwd=ROOT, capture_output=True, check=False).returncode == 0:
+            out += _file_problems(path.name, began)
+    return out
+
+
+def lowered(now: Counter[str], base: Counter[str]) -> Counter[str]:
+    """Today's counts, no higher than the baseline's: `--update` drops fixed rows and lowers others, and a new or
+    raised one is written by hand with a Standards-exception: trailer on the commit."""
+    return Counter({key: min(n, base[key]) for key, n in now.items() if base.get(key)})
 
 
 def main() -> int:
@@ -375,6 +425,9 @@ def main() -> int:
     now, where = current()
     slices, slices_where = current_slices()
     if "--update" in sys.argv:
+        base = read_baseline(BASELINE.read_text()) if BASELINE.exists() else now
+        slice_base = read_baseline(SLICE_BASELINE.read_text()) if SLICE_BASELINE.exists() else slices
+        now, slices = lowered(now, base), lowered(slices, slice_base)
         BASELINE.write_text(render(now))
         SLICE_BASELINE.write_text(render_slices(slices))
         sys.stdout.write(f"check_portable_store: baseline has {sum(now.values())} findings\n")
