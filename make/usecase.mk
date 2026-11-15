@@ -18,6 +18,9 @@ usecase-test-run = python3 scripts/at-most.py $(USECASE_SLOTS) usecase -- $(USEC
 usecase-test: ## Run use cases: make usecase-test UC=<id> LAYER=api|sdk|cli|ui (both optional; needs make db-up)
 	@$(usecase-test-run) test $(if $(UC),--uc $(UC)) $(if $(LAYER),--layer $(LAYER))
 
+usecase-batch: ## Run a list of use cases in parallel, USECASE_SLOTS at a time: make usecase-batch UCS="uc-013:ui uc-607:api uc-590" (id or id:layer; one log each under .logs/usecases/batch/)
+	@python3 scripts/usecase_batch.py --slots $(USECASE_SLOTS) $(UCS)
+
 usecase-extract: ## A use case page's code as one file per tab (Python, TypeScript, CLI) under .logs/usecases/pages/: make usecase-extract UC=<id>
 	@$(USECASE) extract $(UC)
 
