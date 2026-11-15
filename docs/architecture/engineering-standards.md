@@ -42,7 +42,7 @@ console, CLI ──► SDK (generated + hand-written nouns) ──► HTTP ─�
 | L6 | The console and CLI call the platform only through the SDK; the SDK calls only routes marked `x-ops-public` `sdk` or `both` | One client means one place for auth headers, the envelope, paging and errors |
 | L7 | Code goes into a package when a second service needs it, and not before. Before adding a package, client, queue, scheduler or store, list what already does that job (file:line) and use it | One owner per job; a second owner needs a written reason ([root guide](../../CLAUDE.md), "Four rules") |
 | L8 | Packages carry names that say what they do; no `shared`, `common`, `utils`, `helpers` or `manager` | A vague name hides that a module has more than one job |
-| L9 | Anything that may later live outside us (a vault, a model provider, search, object storage) sits behind a port in `app`, with our implementation as one adapter | A bank swaps the adapter, not the use case |
+| L9 | Anything that may later live outside us (a vault, a model provider, search, object storage) sits behind a port in `app`, with our implementation as one adapter | A bank replaces the adapter and keeps the use case |
 
 One owner per job:
 
@@ -157,7 +157,7 @@ rules below means the connection and transaction `isolation.isolated_tx` opens.
 | T2 | A change adds at most 5 tests when small, 10 when medium and 15 when large; more needs a written reason | Every test costs run time and upkeep on every later change |
 | T3 | Each new test is seen failing once, with the code reverted, and the failure is stated in the evidence | A test that has never failed may test nothing |
 | T4 | Tests assert what a caller sees through the public seam (a route, an SDK call, a screen); fakes sit only at the edge (network, clock, model, outside APIs) | Tests on private helpers break on every refactor and miss the wiring |
-| T5 | Each user-visible behaviour has a use case per layer it touches (`api`, `sdk`, `cli`, `ui`) that passes through `make usecase-test` | The use case is the end-to-end proof; a unit pass is not |
+| T5 | Each user-visible behaviour has a use case per layer it touches (`api`, `sdk`, `cli`, `ui`) that passes through `make usecase-test` | A unit test proves one function; the use case proves the behaviour a person sees |
 | T6 | Tests and use cases run on the scripted model on a throwaway database; store tests run on PostgreSQL and SQL Server | Same answer every run, at no cost, on both supported databases |
 | T7 | Tests are written by a different agent or person from the code; the coder does not edit a test after the tests commit | A second author tests the cases the coder did not think of |
 | T8 | Every check on this page is shown to fail once on a planted breach before it is trusted | A check never seen failing may not detect the breach it names |
@@ -250,7 +250,7 @@ rules below means the connection and transaction `isolation.isolated_tx` opens.
 | T3 | Testing | `scripts/agents/test_audit.py` mutation score on changed lines | yes |
 | T4 | Testing | Review, with `test_audit.py` smells | no |
 | T5 | Testing | `make usecase-test`; `scripts/agents/affected_usecases.py` | yes |
-| T6 | Testing | `make/python.mk` unsets model keys; `scripts/test_db.py`; the database matrix in verify-head | yes |
+| T6 | Testing | `make/python.mk` unsets model keys; `scripts/test_db.py`; a SQL Server run of every store suite | yes |
 | T7 | Testing | `scripts/agents/tests_untouched.py` | yes |
 | T8 | Testing | `scripts/agents/seed_canaries.py` | yes |
 | T9 | Testing | Review | no |
