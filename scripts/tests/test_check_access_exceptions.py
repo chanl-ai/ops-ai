@@ -10,6 +10,7 @@ import ast
 import importlib.util
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
@@ -69,6 +70,24 @@ def test_a_refusal_returned_as_a_status_and_code_tuple_is_found() -> None:
     assert [(f.kind, f.key, f.line) for f in found] == [("refusal", "APP_OFF", 3)]
 
 
+def _committed(files: dict[str, str]) -> Callable[[str], str | None]:
+    """Stands in for the lane files at HEAD: the text of each lane named, None for one not committed yet."""
+
+    def at_head(lane: str) -> str | None:
+        return files.get(lane)
+
+    return at_head
+
+
+def _lanes(c: ModuleType, tmp: Path, monkeypatch: pytest.MonkeyPatch, **rows: str) -> None:
+    """An empty baseline file per lane in the temp tree, with `rows` as the text of the lanes named."""
+    (tmp / "lanes").mkdir(exist_ok=True)
+    for lane in c.LANES:
+        (tmp / "lanes" / f"{lane}.txt").write_text(rows.get(lane, ""))
+    monkeypatch.setattr(c, "BASELINES", tmp / "lanes")
+    monkeypatch.setattr(c, "committed_baseline", _committed({}))
+
+
 def _run(
     c: ModuleType,
     tmp: Path,
@@ -82,6 +101,7 @@ def _run(
     (tmp / "page.md").write_text(REGISTER)
     monkeypatch.setattr(c, "ALLOWLIST", tmp / "allow.txt")
     monkeypatch.setattr(c, "REGISTER_PAGE", tmp / "page.md")
+    _lanes(c, tmp, monkeypatch)
     monkeypatch.setattr(c, "findings", lambda: [c.Finding("a.py", 3, "conflict", "seeded", "raise Conflict(...)")])
     monkeypatch.setattr(c, "committed", lambda: base)
     code = c.main([])
@@ -115,11 +135,12 @@ def test_a_conflict_on_a_decided_row_or_classified_as_state_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     c = checker()
-    assert _run(c, tmp_path, "a.py conflict seeded 1 E01\n", monkeypatch=monkeypatch, capsys=capsys)[0] == 0
+    kept = "a.py conflict seeded 1 E01  # keep agents: a seeded record\n"
+    assert _run(c, tmp_path, kept, monkeypatch=monkeypatch, capsys=capsys)[0] == 0
     assert _run(c, tmp_path, "* conflict seeded 0 state\n", monkeypatch=monkeypatch, capsys=capsys)[0] == 0
 
 
-def test_a_line_added_on_a_row_with_no_decision_fails_and_one_already_there_goes_to_the_owner(
+def test_a_line_on_a_row_with_no_decision_fails_whether_added_or_already_there(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     c = checker()
@@ -128,7 +149,7 @@ def test_a_line_added_on_a_row_with_no_decision_fails_and_one_already_there_goes
     assert code == 1 and "E03 has no decision" in out, out
     there = {("a.py", "conflict", "seeded")}
     code, out = _run(c, tmp_path, allow, monkeypatch=monkeypatch, capsys=capsys, base=there)
-    assert code == 0 and "no decision, for a maintainer: E03" in out, out
+    assert code == 1 and "E03 has no decision" in out, out
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -167,6 +188,70 @@ def test_an_exception_line_added_without_the_trailer_fails_and_with_it_passes(
     allow.write_text(allow.read_text() + "c.py refusal z 1 E03\n")
     _git(tmp_path, "commit", "-qam", "undecided\n\nStandards-exception: E03, approved by a maintainer")
     assert [p.split()[0] for p in c.commit_problems()] == ["row"], "a row with no decision fails even when approved"
+
+
+def test_an_annotated_line_needs_the_trailer_and_annotating_a_line_already_there_does_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A line carries its outcome as a comment, so `E\\d+` no longer ends it; the comment must not hide a new line."""
+    c = checker()
+    allow = tmp_path / "access-exceptions-allowlist.txt"
+    _git(tmp_path, "init", "-q")
+    allow.write_text("a.py refusal x 1 E01\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "the list begins")
+    monkeypatch.setattr(c, "ROOT", tmp_path)
+    monkeypatch.setattr(c, "ALLOWLIST", allow)
+    monkeypatch.setattr(c, "LIST_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    monkeypatch.setattr(c, "BASELINES", tmp_path / "lanes")
+    (tmp_path / "page.md").write_text(REGISTER)
+    monkeypatch.setattr(c, "REGISTER_PAGE", tmp_path / "page.md")
+    allow.write_text("a.py refusal x 1 E01  # keep agents: the asker rule\n")
+    _git(tmp_path, "commit", "-qam", "an outcome on a line already there")
+    assert c.commit_problems() == []
+    allow.write_text(allow.read_text() + "b.py refusal y 1 E01  # keep agents: said so\n")
+    _git(tmp_path, "commit", "-qam", "a new line behind a comment")
+    assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E01"]
+    allow.write_text(allow.read_text().replace("a.py refusal x 1", "a.py refusal x 2"))
+    _git(tmp_path, "commit", "-qam", "a raised count")
+    assert [p.split("`")[1] for p in c.commit_problems()] == ["a.py refusal x 2 E01", "b.py refusal y 1 E01"]
+
+
+def test_a_lane_baseline_may_only_fall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An owner compare has no allowlist line, so its lane's file is its only ceiling: raising it to fit new code
+    fails against the committed file, and the same row already committed passes."""
+    c = checker()
+    site = "services/tools-service/src/ops_tools/a.py"
+    row = f"{site} owner-compare owner 1\n"
+    (tmp_path / "allow.txt").write_text("")
+    (tmp_path / "page.md").write_text(REGISTER)
+    monkeypatch.setattr(c, "ALLOWLIST", tmp_path / "allow.txt")
+    monkeypatch.setattr(c, "REGISTER_PAGE", tmp_path / "page.md")
+    monkeypatch.setattr(c, "committed", lambda: None)
+    monkeypatch.setattr(c, "findings", lambda: [c.Finding(site, 3, "owner-compare", "owner", "x.owner == me.sub")])
+    _lanes(c, tmp_path, monkeypatch, tools=row)
+    monkeypatch.setattr(c, "committed_baseline", _committed(dict.fromkeys(c.LANES, "")))
+    assert c.main([]) == 1
+    assert "tools.txt owner-compare rose from 0 to 1" in capsys.readouterr().out
+    monkeypatch.setattr(c, "committed_baseline", _committed({**dict.fromkeys(c.LANES, ""), "tools": row}))
+    assert c.main([]) == 0, capsys.readouterr().out
+    _lanes(c, tmp_path, monkeypatch)
+    assert c.main([]) == 1
+    assert f"new   {site}:3  owner-compare owner" in capsys.readouterr().out
+
+
+def test_the_self_test_plants_each_shape_and_each_turns_the_checker_red() -> None:
+    run = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/check_access_exceptions.py"), "--self-test"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+    for planted in ("flag", "role-set", "owner-compare", "policy-read", "role-name", "no decision", "outcome"):
+        assert f"red   {planted}" in run.stdout, run.stdout
 
 
 PLANTED = {

@@ -360,7 +360,10 @@ def check_value(key: str, value: Any) -> Any:
 
 
 def policy(p: Principal, key: str) -> Any:
-    """The policy's value for the caller's tenant, from the token; its default when the token carries none."""
+    """The policy's value for the caller's tenant, from the token; its default when the token carries none.
+
+    The one reader of a policy's value. Reading `p.policies` or `BY_KEY[key].default` anywhere else is a second copy
+    of the default, which `scripts/check_access_exceptions.py` counts as a `policy-read`."""
     return p.policies.get(key, BY_KEY[key].default)
 
 

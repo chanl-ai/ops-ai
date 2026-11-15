@@ -189,8 +189,8 @@ SECURITY_ADMIN = BuiltinRole(
     ),
 )
 # A person who only chats. It chats with the agents published to its team and sees only its
-# own threads. It is granted on its own, or as the membership role `chat_user` that a first SSO sign-in gives a person
-# new to the workspace; no invite or role change can set that membership role.
+# own threads. It is granted on its own, or as the membership role `chat_user`, given like any other membership role:
+# by a first SSO sign-in, an invite or a role change (`INVITE_ROLES`).
 CHAT_USER = BuiltinRole(
     "chat_user",
     "Chat user",
@@ -216,6 +216,8 @@ MEMBER_ROLE_TO_BUILTIN = {
     "viewer": "viewer",
     "chat_user": "chat_user",
 }
+# The membership roles an invite or a role change may give: every stored value, Chat user among them.
+INVITE_ROLES = tuple(MEMBER_ROLE_TO_BUILTIN)
 
 
 def builtin_roles_for(member_role: str, *, security_team: bool) -> tuple[str, ...]:
