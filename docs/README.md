@@ -132,6 +132,14 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/standards/security.md` | Standards: security (`SC1` to `SC6`): two gateways, audit in the same transaction, write-only secrets, dependencies, nothing committed that identifies a customer |
 | `architecture/standards/testing.md` | Standards: tests (`TS1` to `TS8`): failure modes first, a budget per change, seen failing once, public seams, use cases per layer |
 | `architecture/standards/delivery.md` | Standards: delivery, deploy and upgrade (`DL1` to `DL9`): branch and pull request, one gate, a separate reviewer, staging on every merge, proven upgrades |
+| `architecture/migration/README.md` | The migration to the standards: goal, phases, sizes and calendar, what is replaced and kept, the rules every lane follows, how to verify |
+| `architecture/migration/components.md` | Phase 0: the eight shared components, their files, target interfaces, three builder tracks, checks and branches |
+| `architecture/migration/pilot.md` | Phase 1: documents, files, models and runner on every component; the coverage gap measured and published |
+| `architecture/migration/lane-platform.md` | Phase 2: platform-service's store and request layers replaced wholesale; the page shell as one call |
+| `architecture/migration/lane-kb.md` | Phase 2: kb-service's four lists in SQL, typed rows, the `kb.changed` event |
+| `architecture/migration/lane-tools.md` | Phase 2: tools-service's sixteen tables policed, hand filters onto `team_visible()`, the catalogue events |
+| `architecture/migration/lane-agents.md` | Phase 2: agents-service's 43 store files on the base, 21 tables policed, lists and labels in SQL from local copies |
+| `architecture/migration/lane-console.md` | Phase 3: the console's data layer onto the list contract and the fields the lanes return |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
