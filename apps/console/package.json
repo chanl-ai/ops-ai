@@ -11,7 +11,7 @@
     "check:standards": "node scripts/check-standards.mjs",
     "test": "node --test 'src/**/*.test.ts'",
     "bake:workflows": "node scripts/bake-workflow-positions.ts",
-    "verify": "tsc --noEmit && tsc --noEmit -p ../embed && node scripts/check-standards.mjs && node --test 'src/**/*.test.ts'"
+    "verify": "tsc --noEmit && tsc --noEmit -p ../embed && node scripts/check-standards.mjs && node scripts/check-standards.mjs --self-test && node --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@chanl-ai/ops-ai": "workspace:*",

@@ -1,10 +1,24 @@
 #!/usr/bin/env node
 // Enforces the grep-provable rules in CLAUDE.md. Exits 1 with file:line for every violation.
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
 const src = join(root, 'src');
+
+// One read in a try/catch: a check for the file followed by a read is a race, and a missing file is an answer here.
+function readOrNull(path) {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+function readJson(path, missing = {}) {
+  const text = readOrNull(path);
+  return text === null ? missing : JSON.parse(text);
+}
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -32,7 +46,7 @@ const classesAround = (text, index) => {
 };
 const isRail = (text, m) => /(^|\s)shrink-0(\s|$)/.test(classesAround(text, m.index));
 const baselinePath = join(root, 'scripts/palette-baseline.json');
-const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {};
+const baseline = readJson(baselinePath);
 const counts = {};
 // Rule 18: an identifier drawn as JSX text (`{step.nodeId}`, `{c.operation}`, `{error.tool}`), or the operation badge.
 const SELF_WORDED = /(?<![=\w$])\{\s*[\w.?]+\.(?:nodeId|operation|tool)\s*\}|<OperationBadge\b/g;
@@ -199,7 +213,10 @@ function importedSource(f, name) {
   const spec = m[1];
   const base = spec.startsWith('@/') ? join(src, spec.slice(2)) : spec.startsWith('.') ? join(f.abs, '..', spec) : null;
   if (!base) return null;
-  for (const candidate of [`${base}.tsx`, `${base}.ts`, join(base, 'index.tsx')]) if (existsSync(candidate)) return { abs: candidate, text: readFileSync(candidate, 'utf8') };
+  for (const candidate of [`${base}.tsx`, `${base}.ts`, join(base, 'index.tsx')]) {
+    const text = readOrNull(candidate);
+    if (text !== null) return { abs: candidate, text };
+  }
   return null;
 }
 const reachesLayout = (f, depth = 0) =>
@@ -258,7 +275,7 @@ const REUSE = {
   },
 };
 const reusePath = join(root, 'scripts/reuse-baseline.json');
-const reuseBaseline = existsSync(reusePath) ? JSON.parse(readFileSync(reusePath, 'utf8')) : {};
+const reuseBaseline = readJson(reusePath);
 const reuseNow = Object.fromEntries(Object.keys(REUSE).map((k) => [k, []]));
 for (const f of files) {
   if (f.rel.endsWith('.test.ts')) continue;
@@ -278,11 +295,23 @@ for (const f of files) {
 //                  as a picker scrolls, are outside the rule
 //       aggregate  `.reduce(` or `.filter(...).length` in a page or component: a sum or a count the API returns
 //       fetch      `fetch(` outside lib/api, which skips the contract, the team header and the error envelope
+// `pageSize: 200`, `pageSize: BIG` where the same file says `const BIG = 200`, and `pageSize: PAGE_ALL` imported from
+// elsewhere (a constant held in another file is read as over the limit, since this file cannot show its value). A
+// lower-case name is a parameter or state passed along, which says nothing about its size.
+function pageSizeHits(text) {
+  const known = new Map([...text.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*(?::\s*number\s*)?=\s*(\d+)\s*[;,\n]/g)].map((m) => [m[1], Number(m[2])]));
+  return [...text.matchAll(/\bpageSize\s*[:=]\s*([A-Za-z_$][\w$]*|\d+)\b(?!\s*[.(\[])/g)].filter((m) => {
+    const v = m[1];
+    if (/^\d+$/.test(v)) return Number(v) > 50;
+    if (known.has(v)) return known.get(v) > 50;
+    return /^[A-Z][A-Z0-9_]*$/.test(v);
+  });
+}
 const DATA = {
   pageSize: {
     what: 'a page size above 50 (ask for the page the screen shows; a picker pages through hooks/options-queries.ts)',
     reads: (rel) => rel !== 'src/hooks/options-queries.ts' && !rel.startsWith('src/lib/api/mock/'),
-    hits: (text) => [...text.matchAll(/\bpageSize\s*[:=]\s*(\d+)/g)].filter((m) => Number(m[1]) > 50),
+    hits: pageSizeHits,
   },
   aggregate: {
     what: 'a sum or count worked out in the browser (the API returns it: a facet, a count or a field on the row)',
@@ -295,8 +324,23 @@ const DATA = {
     hits: (text) => [...text.matchAll(/(?<![\w.$])fetch\s*\(/g)],
   },
 };
+if (process.argv.includes('--self-test')) {
+  // Each plant is one way a page size above 50 gets past a digits-only reading; the last three must stay clean.
+  const plants = [
+    ['useRows({ pageSize: 200 })', 1],
+    ['const BIG = 200;\nuseRows({ pageSize: BIG })', 1],
+    ['useRows({ pageSize: PAGE_ALL })', 1],
+    ['const SMALL = 20;\nuseRows({ pageSize: SMALL })', 0],
+    ['useRows({ pageSize: params.pageSize })', 0],
+    ['useRows({ pageSize: 25 })', 0],
+  ];
+  const failed = plants.filter(([text, want]) => pageSizeHits(text).length !== want);
+  for (const [text, want] of failed) console.error(`self-test: ${JSON.stringify(text)} should give ${want} hit(s)`);
+  console.log(failed.length ? 'check-standards self-test: FAILED' : `check-standards self-test: ${plants.length} plants behave`);
+  process.exit(failed.length ? 1 : 0);
+}
 const dataPath = join(root, 'scripts/data-baseline.json');
-const dataBaseline = existsSync(dataPath) ? JSON.parse(readFileSync(dataPath, 'utf8')) : {};
+const dataBaseline = readJson(dataPath);
 const dataNow = Object.fromEntries(Object.keys(DATA).map((k) => [k, {}]));
 for (const f of files) {
   if (/\.test\.tsx?$/.test(f.rel)) continue;
@@ -312,7 +356,7 @@ for (const f of files) {
 const reuseWrite = process.argv.includes('--write-baseline');
 if (reuseWrite) {
   // Lowered only: a count never rises and a file is never added once the baseline exists.
-  const first = !existsSync(dataPath);
+  const first = readJson(dataPath, null) === null;
   const kept = Object.fromEntries(
     Object.keys(DATA).map((k) => [
       k,
