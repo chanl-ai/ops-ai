@@ -10,7 +10,7 @@ the lanes run. Nothing in a service changes in this phase except where a compone
 |---|---|
 | The rules each component serves | [engineering-standards.md](../engineering-standards.md) and the pages under [standards/](../standards/) |
 | What a service does today at each seam | `packages/ops_store/src/ops_store/isolation.py`, `packages/ops_service_kit/src/ops_service_kit/settings.py`, `packages/ops_store/src/ops_store/outbox.py`, the five `store/event_relay.py` files, `access-exceptions-allowlist.txt` |
-| The counts the checks start from | Raw `engine.begin()` or `engine.connect()` sites 172; caught database errors that carry on 27; list slices in `api/` or `app/` 10; literal `timeout=` 58; `httpx.AsyncClient(` outside `ops_identity` 47; loopback fallbacks 13; `Relay(` constructions 5; store functions returning `dict[str, Any]` 194; `asyncio.gather(` 13 and `asyncio.create_task(` 32; `extra="allow"` 4; access decisions on the allowlist 75 |
+| The counts the checks start from | Raw `engine.begin()` or `engine.connect()` sites 197; caught database errors that carry on 28; list slices in `api/` or `app/` 10; literal `timeout=` 58; `httpx.AsyncClient(` outside `ops_identity` 47; loopback fallbacks 13; `Relay(` constructions 5; store functions returning `dict[str, Any]` 194; `asyncio.gather(` 13 and `asyncio.create_task(` 32; `extra="allow"` 4; access decisions on the allowlist 78 |
 
 ## The components
 
@@ -245,8 +245,8 @@ against a deployed stack instead of starting one; today they start their own ser
 
 `scripts/check_access_exceptions.py` exits 1 on an allowlist line whose register row reads "no decision" (two today);
 `is_admin`, `role in (...)` and owner compares become shapes with a ceiling of zero; the role-name kind gets a
-shrink-only baseline file per lane; `--self-test` plants one of each shape and expects exit 1. Each of the 75 lines on
-`access-exceptions-allowlist.txt` gains its outcome and lane as a comment: 58 kept with a reason, 15 converted onto
+shrink-only baseline file per lane; `--self-test` plants one of each shape and expects exit 1. Each of the 78 lines on
+`access-exceptions-allowlist.txt` gains its outcome and lane as a comment: 60 kept with a reason, 16 converted onto
 `can()` or `policy()`, 2 deleted with their code. `policy(p, key)` in `packages/ops_access/src/ops_access/policies.py`
 becomes the one reader of a policy value. The two undecided register rows are decided on the page the register lives
 on: team roles are no longer mapped to a three-valued session role in the console, and the Chat user role is given like
@@ -303,8 +303,8 @@ check green; open the pull request.
 
 | Component | Green when |
 |---|---|
-| C1 | `test_isolation_sites.py` fails on a new `engine.begin(` or `engine.connect(` under `services/*/src` outside a per-service list starting at 172, and on a caught database error with no savepoint outside a list starting at 27; the six tests pass on both databases; the request line carries `db.tx_count`, `db.tx_open_ms` and the pool numbers; pool settings are read from `OPS_DB__*` |
-| C2 | `check_portable_store.py` fails on a list slice in `api/` or `app/` (red at 10 today); `test_indexes.py` fails on an unindexed foreign key or filter column outside a waiting list starting at the eight known; the console's `check-standards.mjs` gains three rules: `pageSize` above 50 outside `options-queries.ts`, `.reduce(` or `.filter(...).length` in components and app, `fetch(` outside `lib/api` |
+| C1 | `test_isolation_sites.py` fails on a new `engine.begin(` or `engine.connect(` under `services/*/src` outside a per-service list starting at 197, and on a caught database error with no savepoint outside a list starting at 28; the six tests pass on both databases; the request line carries `db.tx_count`, `db.tx_open_ms` and the pool numbers; pool settings are read from `OPS_DB__*` |
+| C2 | `check_portable_store.py` fails on a list slice in `api/` or `app/` (red at 10 today); `test_indexes.py` fails on an unindexed foreign key or filter column outside a waiting list starting at the 17 known; the console's `check-standards.mjs` gains three rules: `pageSize` above 50 outside `options-queries.ts`, `.reduce(` or `.filter(...).length` in components and app, `fetch(` outside `lib/api` |
 | C3 | `check_config_literals.py` is at zero for loopback fallbacks and on per-service baselines starting at 58 and 47 for timeouts and clients; the import-linter contract allows `httpx` only in tools-service, models-service, `ops_identity.client` and the listed client packages; one boot test per service that an unset required endpoint exits naming it; `make verify` green with `auth_mode` defaulting to `platform` |
 | C4 | A test that `Relay(` is constructed only in `ops_store.outbox` (red at 5 today); a test that every key on `PROCESSES` has a `loop_reports_failure` test |
 | C5 | `check_typed_boundaries.py --strict` with a baseline file per service: `dict[str, Any]` per layer starting at 4,308; dict-returning store functions at 194; bare tasks at 13 and 32; `logging.getLogger(` and `print(` outside the kit at zero; the contract walk asserts every body is an `In` and every reply an `Out`; ruff `S608` and `ASYNC` and pyright `reportDeprecated` on |
