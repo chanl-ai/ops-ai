@@ -24,6 +24,7 @@ from collections.abc import Callable, Generator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -92,11 +93,18 @@ LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", ROOT / ".logs")) / "usecase"
 TEAM = {"X-Team-Id": "team_ops"}
 
 
+def _external_host() -> str:
+    """host:port of the side-container database. OPS_INFRA=external is set in the devcontainer (host `postgres`) and
+    in CI, whose runner reaches the service container on localhost; OPS_DATABASE_URL names whichever applies."""
+    netloc = urlsplit(os.environ.get("OPS_DATABASE_URL", "")).netloc.rpartition("@")[2]
+    return netloc or "postgres:5432"
+
+
 def pg_url(db: str = DB, driver: str = "postgresql+asyncpg") -> str:
     """The URL of database `db` by make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external,
     `postgres:5432`), or this machine's compose PostgreSQL on OPS_PG_PORT."""
     if os.environ.get("OPS_INFRA") == "external":
-        return f"{driver}://ops:ops@postgres:5432/{db}"
+        return f"{driver}://ops:ops@{_external_host()}/{db}"
     return f"{driver}://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/{db}"
 
 
@@ -712,7 +720,7 @@ def assistant_sign_in(
     seeded password."""
     import base64
     import secrets
-    from urllib.parse import parse_qs, urlsplit
+    from urllib.parse import parse_qs
 
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()

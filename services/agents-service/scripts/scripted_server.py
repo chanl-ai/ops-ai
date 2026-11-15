@@ -20,6 +20,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import asyncpg
 import uvicorn
@@ -35,10 +36,17 @@ from ops_service_kit.settings import Settings  # noqa: E402
 from tests.conftest import SEED, FakeGraphModels, scripted_model  # noqa: E402
 
 
+def _external_host() -> str:
+    """host:port of the side-container database. OPS_INFRA=external is set in the devcontainer (host `postgres`) and
+    in CI, whose runner reaches the service container on localhost; OPS_DATABASE_URL names whichever applies."""
+    netloc = urlsplit(os.environ.get("OPS_DATABASE_URL", "")).netloc.rpartition("@")[2]
+    return netloc or "postgres:5432"
+
+
 def pg_url(db: str, driver: str = "postgresql+asyncpg") -> str:
     """make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external), else compose on OPS_PG_PORT."""
     if os.environ.get("OPS_INFRA") == "external":
-        return f"{driver}://ops:ops@postgres:5432/{db}"
+        return f"{driver}://ops:ops@{_external_host()}/{db}"
     return f"{driver}://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/{db}"
 
 
