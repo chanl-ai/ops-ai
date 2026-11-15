@@ -25,9 +25,8 @@ import tomllib
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute, iter_route_contexts
@@ -47,6 +46,17 @@ class Seeded:
     ids: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
+class Answer(Protocol):
+    @property
+    def status_code(self) -> int: ...
+
+
+class Client(Protocol):
+    """The part of the test's HTTP client the budget uses (an `httpx.AsyncClient` on the app)."""
+
+    async def get(self, url: str, *, headers: Mapping[str, str]) -> Answer: ...
+
+
 SeedTeam = Callable[[int], Awaitable[Seeded]]
 StatementBudget = Callable[[Path], Awaitable[list[str]]]
 
@@ -57,7 +67,7 @@ def get_routes(app: FastAPI) -> list[str]:
 
 
 async def over_budget(
-    app: FastAPI, client: httpx.AsyncClient, seed_team: SeedTeam, budgets: Path, stream: io.StringIO
+    app: FastAPI, client: Client, seed_team: SeedTeam, budgets: Path, stream: io.StringIO
 ) -> list[str]:
     """One line per GET route that has no budget row, runs more statements at 50 rows than at 5, exceeds its row,
     opens more transactions than its row lists (one unless it says otherwise) or keeps one open too long."""
@@ -101,7 +111,7 @@ async def over_budget(
 
 
 @pytest.fixture
-def statement_budget(app: FastAPI, client: httpx.AsyncClient, seed_team: SeedTeam) -> Any:
+def statement_budget(app: FastAPI, client: Client, seed_team: SeedTeam) -> Any:
     """Seeds a team at 5 and 50 rows per list, calls every GET through the real middleware, reads db.query_count,
     db.tx_count and db.tx_open_ms from the request line, and answers one line per route that grows with rows,
     exceeds its budget in budgets.toml, opens more than one transaction (unless listed) or keeps it open longer than
