@@ -18,7 +18,7 @@ Two layouts from the same images. `make stg-deploy` drives the one-machine app (
 
 | Task | Command |
 |---|---|
-| Deploy, roll back, check staging | `make stg-deploy [REF=]`, `make stg-rollback [TO=]`, `make stg-health`; app names from your `staging.env` (`staging.env.example`) |
+| Deploy, roll back, check staging | `make stg-deploy-ci REF=` (on GitHub, the usual way), `make stg-deploy [REF=]`, `make stg-rollback [TO=]`, `make stg-health`; app names from your `staging.env` (`staging.env.example`) |
 | Rewrite the per-image app configs after editing `staging/apps.py` | `uv run python deploy/fly/staging/apps.py write`; `order` prints the deploy order |
 | Walk any install | `OPS_SMOKE_EMAIL=… OPS_SMOKE_PASSWORD=… node deploy/fly/smoke.mjs <origin>` |
 

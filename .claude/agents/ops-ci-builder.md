@@ -41,7 +41,7 @@ check's name goes on that rule's "Check" line in the same change (`DL8`).
 | What runs on a pull request | `scripts/ci-plan.sh` picks the jobs; `.github/workflows/ci.yml` job `checks` is where a fast check belongs; `ci-ok` is the one required job |
 | What a commit must pass | `scripts/verify-staged.sh` (pre-commit) and `scripts/verify-changed.sh` (`make test`); add the check to both or state why not |
 | Statement counts per request | `packages/ops_service_kit/src/ops_service_kit/request_timing.py:44` (`db.query_count` on the request line) for a statement budget test (`DA6`) |
-| A deploy step | `deploy/fly/stg_deploy.sh` (build, migrate, grants, health, OCR, plugins, click walk); `deploy/host/ops_host.py --check` |
+| A deploy step | `deploy/fly/stg_deploy.sh` (build, migrate, grants, health, OCR, plugins, signed-in request, click walk), run on GitHub by `.github/workflows/deploy-staging.yml`; `deploy/host/ops_host.py --check` |
 | A database proof | `make db-scripts-proof FROM=<ref>`, `deploy/database/tests/` |
 | A make target | a fragment in `make/*.mk` with a `##` help line; `make/CLAUDE.md` says how |
 
@@ -54,7 +54,7 @@ check's name goes on that rule's "Check" line in the same change (`DL8`).
 | The git rules | `make git-rules` |
 | CI plan for a change | `bash scripts/ci-plan.sh` (what `ci.yml` would run) |
 | Docs and guides | `make docs-verify` (`check-docs`, `check-guides`, `check-standards-refs`) |
-| Staging | `make stg-deploy`, `make stg-health`, `make stg-rollback` (changes a live app; only when the brief says so) |
+| Staging | `make stg-deploy-ci REF=`, `make stg-deploy`, `make stg-health`, `make stg-rollback` (changes a live app; only when the brief says so) |
 | Upgrade proof | `make db-scripts-proof FROM=<last tag>` (needs Docker) |
 | Release | `make release-tag DRY=1` (prints the tag); without `DRY=1` only when the brief says so |
 

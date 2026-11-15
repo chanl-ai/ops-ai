@@ -6,7 +6,9 @@
 #   3 grants  grants.sql from `make db-ddl` at REF (a throwaway local PostgreSQL), applied through `fly proxy`, so a table
 #             the migrations just added reaches its service's runtime login
 #   4 health  every process the host runs (ops_host.py --check on the machine), then OCR (check_ocr.py)
-#   5 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list
+#   5 signed in  the first admin signs in and lists agents through the public origin (platform issues, agents verifies)
+#   6 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list;
+#             SKIP_WALK=1 leaves it out
 # Each step prints its seconds; any failure exits non-zero. App names come from ~/.config/ops-ai/staging.env
 # (template deploy/fly/staging.env.example); secrets are read from the same directory and never printed.
 # Runbook: docs/deploy/fly-staging.md.
@@ -53,6 +55,8 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
   step build
 fi
 
+# From here the running machine changes; deploy-staging.yml reads this line to decide whether a failure needs a rollback.
+echo "stg-deploy: replacing the machine with $image"
 fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --image "$image" --ha=false \
   --wait-timeout 10m
 step "deploy (release command and machine)"
@@ -111,10 +115,32 @@ fly ssh console -a "$app" -C "sh -c '/app/.venv/bin/python /app/deploy/images/ba
 grep -E '^ok plugins' "$work/plugins.txt"
 step "plugins match deploy/plugins.json"
 
+pair() { grep "^$1=" "$conf/staging-admin.env" | cut -d= -f2-; }
+# One signed-in request through the public origin: platform issues the session, agents-service verifies it and reads
+# its own tables, so a broken signing key, JWKS or runtime login fails here even when the walk is skipped.
+STG_EMAIL=$(pair OPS_BOOTSTRAP_ADMIN_EMAIL) STG_PASSWORD=$(pair OPS_BOOTSTRAP_ADMIN_PASSWORD) python3 - "$origin" <<'PY' \
+  || { echo "stg-deploy: the signed-in request failed"; exit 1; }
+import json, os, sys, urllib.request
+o = sys.argv[1]
+def call(path, body=None, headers=None):
+    req = urllib.request.Request(o + path, data=None if body is None else json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json", **(headers or {})})
+    return json.load(urllib.request.urlopen(req, timeout=120))["data"]
+s = call("/api/platform/v1/auth/sign-in", {"email": os.environ["STG_EMAIL"], "password": os.environ["STG_PASSWORD"]})
+agents = call("/api/agents/v1/agents", headers={"Authorization": "Bearer " + s["token"], "X-Team-Id": s["principal"]["teamId"]})
+assert isinstance(agents.get("data"), list), agents
+print("ok signed in as", s["principal"]["teamId"], "and listed", len(agents["data"]), "agents")
+PY
+step "signed-in request"
+
+if [ "${SKIP_WALK:-0}" = 1 ]; then
+  echo "stg-deploy: click walk skipped (SKIP_WALK=1)"
+  echo "stg-deploy: $app at $sha in $(( $(date +%s) - begin ))s; $origin"
+  exit 0
+fi
 # The walk imports workspace packages, so a fresh checkout (a throwaway worktree) needs them installed first.
 [ -d "$root/node_modules/@ops-ai/usecase-runner" ] || pnpm -C "$root" install --frozen-lockfile --ignore-scripts >"$work/pnpm.log" 2>&1 \
   || { tail -20 "$work/pnpm.log"; exit 1; }
-pair() { grep "^$1=" "$conf/staging-admin.env" | cut -d= -f2-; }
 # Counted through tee, so a walk that crashes after some OK lines would pass; its exit status becomes a FAIL line.
 {
   STG_ORIGIN="$origin" STG_EMAIL=$(pair OPS_BOOTSTRAP_ADMIN_EMAIL) STG_PASSWORD=$(pair OPS_BOOTSTRAP_ADMIN_PASSWORD) \

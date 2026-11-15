@@ -72,6 +72,7 @@ Run from the repo root; `make help` lists them with their arguments.
 | `make install-proof` | `release/install_proof.sh`: a fresh clone through `./install.sh` on GHCR images | Slow; pulls images |
 | `make release-tag` | `scripts/release-tag.sh`; `DRY=1` prints the tag name only | Pushes a tag without `DRY=1` |
 | `make stg-deploy`, `stg-rollback`, `stg-health` | `fly/stg_deploy.sh` on the app named by `STG_APP` in your staging config | Changes a live Fly app |
+| `make stg-deploy-ci REF=` | `fly/stg_deploy_ci.sh`: starts `.github/workflows/deploy-staging.yml` on GitHub and watches it | Changes a live Fly app |
 | `make uc-sql-server` | `fly/mssql/run-usecases.sh` on a SQL Server test machine | Starts paid machines |
 | `make qa-mirror`, `mirror-down` | `mirror-test/lane.sh` | Yes; its own compose project, slow |
 

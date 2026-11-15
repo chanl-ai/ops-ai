@@ -1,0 +1,181 @@
+# The one way a commit reaches staging (docs/deploy/fly-staging.md). Two triggers, one job:
+#   - ci.yml calls it after ci-ok passes on a push to develop, with that commit;
+#   - anyone with write access runs it by hand (Actions, deploy-staging, Run workflow, or `make stg-deploy-ci REF=`)
+#     with a branch, tag or commit.
+# A merge is not deployed while staging is pinned: an open release PR (develop into main) or the repository variable
+# STAGING_HOLD (its value is the reason). A hand-started run deploys anyway and says in the summary what it overrode.
+#
+# The deploy is .github/actions/stg-deploy (`make stg-deploy REF=<sha>`): build once per commit, migrate, grants, every
+# process up, OCR, plugins, a signed-in request, then the click walk (skip_walk leaves the walk out). When a step fails
+# after the machine was replaced, the job redeploys the release staging ran before (`make stg-rollback TO=`) and fails.
+name: deploy-staging
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit, tag or branch to deploy
+        type: string
+        required: true
+      skip_walk:
+        description: Leave out the click walk
+        type: boolean
+        default: false
+      reason:
+        description: Why, shown in the summary
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, tag or branch to deploy
+        type: string
+        default: develop
+      skip_walk:
+        description: Leave out the click walk (the signed-in request still runs)
+        type: boolean
+        default: false
+      reason:
+        description: Why, shown in the summary
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    environment:
+      name: staging
+      url: https://${{ vars.STG_APP }}.fly.dev
+    permissions:
+      contents: read
+      pull-requests: read # to see an open release PR
+    # One deploy at a time, from either trigger. A run that is waiting is replaced by a newer one; a running one finishes.
+    # Set on the job: concurrency at the top of a called workflow does not apply.
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: false
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      STG_APP: ${{ vars.STG_APP }}
+      STG_DB_APP: ${{ vars.STG_DB_APP }}
+      STG_APP_PREFIX: ${{ vars.STG_APP_PREFIX }}
+      STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
+      STAGING_ADMIN_ENV: ${{ secrets.STAGING_ADMIN_ENV }}
+      SKIP_WALK: ${{ inputs.skip_walk && '1' || '0' }}
+      # Inside a called workflow event_name is the caller's (push), so only a hand-started run is manual.
+      MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: What to deploy, and is staging pinned?
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASKED: ${{ inputs.ref }}
+          HOLD: ${{ vars.STAGING_HOLD }}
+        run: |
+          started=$(date +%s); echo "STG_STARTED=$started" >> "$GITHUB_ENV"
+          sha=$(git rev-parse --verify -q "$ASKED^{commit}" || git rev-parse --verify -q "origin/$ASKED^{commit}") \
+            || { echo "::error title=Staging not deployed::No commit named $ASKED"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # The pin file stg_deploy.sh reads lives on the owner's machine, so the runner asks GitHub instead.
+          release=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head develop --state open --json number --jq '.[0].number // empty')
+          pin=""
+          [ -z "$release" ] || pin="release PR #$release is open"
+          [ -z "$HOLD" ] || pin="${pin:+$pin; }STAGING_HOLD is set: $HOLD"
+          go=true
+          if [ -n "$pin" ] && [ "$MANUAL" = true ]; then
+            note="Started by hand, so it overrides the pin: $pin."
+            echo "::warning title=Staging pin overridden::$note"
+          elif [ -n "$pin" ]; then
+            go=false
+            note="Not deployed: $pin. Clear STAGING_HOLD or merge or close the release PR; the next merge to develop deploys."
+            echo "::notice title=Staging not deployed::$note"
+          else
+            note=""
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "note=$note" >> "$GITHUB_OUTPUT"
+      - name: Deploy
+        id: deploy
+        if: steps.plan.outputs.go == 'true'
+        uses: ./.github/actions/stg-deploy
+        with:
+          sha: ${{ steps.plan.outputs.sha }}
+      - name: Roll back to the release before
+        id: rollback
+        if: failure() && steps.deploy.outcome == 'failure'
+        env:
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/stg-deploy.log"
+          if ! grep -q '^stg-deploy: replacing the machine' "$log" 2>/dev/null; then
+            echo "result=not needed: the failure came before the machine was replaced" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -z "${STG_PREVIOUS:-}" ]; then
+            echo "result=not possible: the release before this deploy is unknown" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+          case "$SHA" in "$STG_PREVIOUS"*)
+            echo "result=not possible: the release before was this same commit" >> "$GITHUB_OUTPUT"; exit 1 ;;
+          esac
+          # The walk is left out: the rollback proves every process, OCR, plugins and the signed-in request.
+          if SKIP_WALK=1 make -s stg-rollback TO="$STG_PREVIOUS" 2>&1 | tee "$RUNNER_TEMP/stg-rollback.log"; then
+            echo "result=done: staging runs $STG_PREVIOUS again, checked" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAILED: staging may be down; run make stg-health" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+      - name: Summary
+        if: always()
+        env:
+          SHA: ${{ steps.plan.outputs.sha }}
+          ASKED: ${{ inputs.ref }}
+          REASON: ${{ inputs.reason }}
+          NOTE: ${{ steps.plan.outputs.note }}
+          GO: ${{ steps.plan.outputs.go }}
+          OUTCOME: ${{ steps.deploy.outcome }}
+          ROLLBACK: ${{ steps.rollback.outputs.result }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          log="$RUNNER_TEMP/stg-deploy.log"
+          url="https://$STG_APP.fly.dev"
+          if [ "$MANUAL" = true ]; then trigger="started by hand by @$ACTOR"; else trigger="merge to develop, after ci-ok"; fi
+          case "$GO/$OUTCOME" in
+            true/success) result="deployed and checked" ;;
+            true/failure) result="FAILED" ;;
+            false/*) result="not deployed (pinned)" ;;
+            *) result="not run" ;;
+          esac
+          {
+            echo "## Staging: $result"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | ${SHA:+[\`${SHA:0:8}\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA)} (asked: \`$ASKED\`) |"
+            echo "| Trigger | $trigger |"
+            [ -z "$REASON" ] || echo "| Reason | $REASON |"
+            [ -z "$NOTE" ] || echo "| Pin | $NOTE |"
+            echo "| URL | $url |"
+            build="built on this run"
+            [ "${SKIP_BUILD:-0}" != 1 ] || build="reused the image an earlier release pushed"
+            walk=$(grep -o 'click walk ([0-9]* OK, [0-9]* FAIL)' "$log" 2>/dev/null | tail -1)
+            [ "$SKIP_WALK" != 1 ] || walk="skipped on request"
+            echo "| Build | $build |"
+            echo "| Click walk | ${walk:-did not run} |"
+            [ -z "$ROLLBACK" ] || echo "| Rollback | $ROLLBACK |"
+            echo "| Job time | $(( $(date +%s) - ${STG_STARTED:-$(date +%s)} )) s |"
+            if [ -s "$log" ]; then
+              echo
+              echo "| Step | Seconds |"
+              echo "|---|---|"
+              sed -nE 's/^stg-deploy: (.*) took ([0-9]+)s$/| \1 | \2 |/p' "$log"
+              failures=$(grep -E '^(FAIL|stg-deploy: .*(failed|differ|references))' "$log" | head -20 || true)
+              fence='```'
+              if [ -n "$failures" ]; then printf '\n%s\n%s\n%s\n' "$fence" "$failures" "$fence"; fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

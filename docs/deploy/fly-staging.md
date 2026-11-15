@@ -93,7 +93,8 @@ The deploy refuses any app whose name does not start with `STG_APP_PREFIX` (defa
 carry `<your-app>` or `<app-prefix>` placeholders; the deploy fills them in and passes `-a`.
 
 ```
-make stg-deploy              # REF=<sha> deploys another commit; SKIP_BUILD=1 reuses the pushed image
+make stg-deploy-ci REF=develop   # on GitHub (deploy-staging.yml), the usual way
+make stg-deploy              # from this machine; REF=<sha> deploys another commit; SKIP_BUILD=1 reuses the pushed image
 make stg-health              # every process, up or down
 ```
 
@@ -108,7 +109,8 @@ non-zero on any failure:
 | Health | Polls `ops_host.py --check` over `fly ssh` until every process is up | 10 s |
 | OCR | `deploy/fly/check_ocr.py` on the machine: fails unless Tesseract has English data and documents-service's `/health` does not report OCR missing | not measured |
 | Plugins | `deploy/images/bake_plugins.py --check` against the app's `OPS_PLUGINS_DIR`: fails unless the plugins match `deploy/plugins.json` by id and version | not measured |
-| Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env` | 136 s, 41 OK |
+| Signed in | The first admin signs in through the origin and lists agents: platform issues the session, agents-service verifies it | not measured |
+| Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env`; `SKIP_WALK=1` leaves it out | 136 s, 41 OK |
 
 The image installs Tesseract with English data (`tesseract-ocr`, `tesseract-ocr-eng`), and `fly.toml` sets
 `OPS_KB_OCR` and `OPS_ATTACHMENTS_OCR` to `auto`, so scanned pages in knowledge sources and chat attachments are read by
@@ -117,33 +119,45 @@ OCR. A deploy whose image lost Tesseract stops at the OCR step instead of lettin
 Build to every process up: about 2 minutes 20 seconds; with the walk, 4 minutes 33 seconds. The per-service deploy
 took about 21 minutes across 14 apps.
 
-### On every merge
+### Deploy on GitHub: deploy-staging.yml
 
-Staging runs `develop`. When a push to `develop` passes `ci-ok`, the `staging` job of `.github/workflows/ci.yml` runs
-`make stg-deploy REF=<that commit>` (through `.github/actions/stg-deploy`, the same steps `release-tag.yml` uses). One
-deploy runs at a time: a newer merge replaces a deploy that is still waiting, and one already running finishes first.
-A push to `main` (a release) is tagged by `release-tag.yml` and deployed the same way.
+`.github/workflows/deploy-staging.yml` is the way to deploy staging. It runs `make stg-deploy REF=<commit>` on a runner
+(through `.github/actions/stg-deploy`), one deploy at a time (concurrency group `staging-deploy`: a run that is waiting
+is replaced by a newer one, a running one finishes). It starts two ways:
+
+| Trigger | When | Pin |
+|---|---|---|
+| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Skipped with a notice while staging is pinned |
+| By hand | `make stg-deploy-ci REF=<branch, tag or commit>` (`SKIP_WALK=1`, `REASON=`), or Actions, deploy-staging, Run workflow | Deploys anyway; the summary says which pin it overrode |
 
 | To | Do |
 |---|---|
-| Put another commit on staging | Run `release-tag` by hand (Actions, release-tag, Run workflow) with that commit, tag or branch |
+| Put another commit, tag or branch on staging | `make stg-deploy-ci REF=<ref>`; it starts the run and watches it to the end |
 | Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still checked but not deployed |
 | Test a release on staging | Open the release PR from `develop` into `main`; while it is open, merges to `develop` skip the deploy with a notice. Merge or close it to resume |
-| Go back to `develop` | Clear `STAGING_HOLD`, or merge the release PR; the next merge to `develop` deploys |
+| Go back to `develop` | Clear `STAGING_HOLD`, or merge the release PR; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
+
+`REF` is what is deployed; the workflow file itself always runs from `develop` (`WORKFLOW_REF=` changes that). A commit
+whose image an earlier release pushed is not built again (`SKIP_BUILD=1`). After the deploy the job checks every
+process, OCR, plugins and one signed-in request (the first admin signs in and lists agents), then the click walk, which
+`skip_walk` leaves out. If a step fails after the machine was replaced, the job runs `make stg-rollback TO=<the release
+before>` without the walk and fails either way; a failure before that point leaves staging as it was. The job summary
+shows the commit, the trigger, the reason, any pin it overrode, the URL, each step's seconds, the walk's counts and the
+rollback's result. A push to `main` (a release) is only tagged, by `release-tag.yml`.
 
 The local pin (`staging-pin` in the config folder, written by `repo.sh snapshot`) still stops `make stg-deploy` on the
 owner's machine; the runner has no such file, so it reads the open release PR and `STAGING_HOLD` instead.
 
-The deploy job runs in the GitHub environment `staging` (Settings, Environments) and needs three secrets and two
-variables there, and is skipped with a notice while any is missing. The variables are the app names, written into
-`staging.env` on the runner; the secrets are written to the files `stg_deploy.sh` reads and never printed:
+The job runs in the GitHub environment `staging` (Settings, Environments) and fails, naming what is missing, while any of
+these is unset. The variables are the app names, written into `staging.env` on the runner; the secrets are written to
+the files `stg_deploy.sh` reads and never printed:
 
 | Secret or variable | Value |
 |---|---|
 | `vars.STG_APP` | `<your-app>` |
 | `vars.STG_DB_APP` | `<app-prefix>-db` |
 | `vars.STG_APP_PREFIX` | Optional: `<app-prefix>`; names must start with it (default `<your-app>`) |
-| `FLY_API_TOKEN` | Two deploy tokens joined by a comma: `<your-app>` (build, deploy, ssh) and `<app-prefix>-db` (the grants proxy) |
+| `FLY_API_TOKEN` | Two deploy tokens joined by a comma: `<your-app>` (build, deploy, ssh, releases) and `<app-prefix>-db` (the grants proxy) |
 | `STAGING_DB_URL` | The contents of `<private-dir>/staging-db-url.txt` |
 | `STAGING_ADMIN_ENV` | The contents of `<private-dir>/staging-admin.env` |
 
@@ -154,7 +168,9 @@ fly tokens create deploy -a <your-app> -n "github ops-ai staging" -x 8760h
 fly tokens create deploy -a <app-prefix>-db -n "github ops-ai staging grants" -x 8760h
 ```
 
-Not yet run on GitHub: the comma-joined token, `fly ssh console` with a deploy token, and the pin check are verified on the first run after the secrets are added.
+Not yet run on GitHub: the call from `ci.yml` with the environment's secrets, a hand-started run, the comma-joined
+token, `fly ssh console` and `fly releases` with a deploy token, the pin check and the rollback are proven on the first
+runs after merge.
 
 ## Idle, cold boot and memory
 
@@ -205,7 +221,7 @@ with `--base-url http://<app-prefix>-fake.internal:8746/v1`.
 | Task | Command |
 |---|---|
 | Logs | `fly logs -a <your-app>`; each line starts with `[<process>]` |
-| Roll back | `REF=<older sha> SKIP_BUILD=1 make stg-deploy` when that sha's image was pushed. Migrations do not roll back: roll back only to an image whose chains the database already has |
+| Roll back | `make stg-rollback` (the release before) or `TO=<older sha>`; `make stg-deploy-ci REF=<older sha>` does it on GitHub without a build when that sha's image was pushed. Migrations do not roll back: roll back only to an image whose chains the database already has |
 | Stop | `fly machine stop <id> -a <your-app>`; the next request starts it |
 
 ## Not covered
