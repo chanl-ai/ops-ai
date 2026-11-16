@@ -2,7 +2,8 @@
 database at 0105 holding two tenants' rows: a row lands in the wrong tenant (a direct reference must beat the team, a
 child must follow its parent, a channel row its thread or deployment); outside dev a row with no one tenant is placed
 anyway instead of stopping the upgrade, or `local` beside one other tenant stops it; in dev such rows do not fall to
-`local`; the down path leaves duplicates under an install-wide key, or a second run places rows differently."""
+`local`; the down path leaves duplicates under an install-wide key, or a second run places rows differently; a fill
+larger than one batch leaves rows unplaced, or a run stopped after the columns were added cannot run again."""
 
 from __future__ import annotations
 
@@ -21,6 +22,8 @@ from .test_registry_tenant_preflight import agent, alembic, scratch_at, sql, thr
 
 BEFORE = "0105_thread_owner_column"
 HEAD = "0106_registry_tenant_columns"
+# One more than a batch (BATCH in 0106), so the fill has to loop.
+MANY = 4001
 AT = now_iso()
 
 
@@ -205,6 +208,31 @@ def test_each_row_takes_its_reference_then_its_team_then_local_and_a_second_run_
     migrate(scratch, "downgrade", BEFORE)
     migrate(scratch, "upgrade", HEAD)
     assert placed() == expected
+
+
+def test_a_fill_larger_than_a_batch_after_a_stopped_run_places_every_row(scratch: URL) -> None:
+    asyncio.run(
+        sql(
+            scratch,
+            # A run stopped after the columns were added: the upgrade runs again over them.
+            ("ALTER TABLE registry_agents ADD COLUMN tenant_id VARCHAR(64)", {}),
+            ("ALTER TABLE registry_agent_versions ADD COLUMN tenant_id VARCHAR(64)", {}),
+            thread("t-harbor", "team_claims"),
+            agent("ag_team", "team_claims"),
+            (
+                "INSERT INTO registry_agent_versions (agent_id, version, spec, digest, note, changes, saved_at, "
+                "saved_by) SELECT 'ag_team', n, CAST('{}' AS json), 'd-' || n, '', CAST('[]' AS json), :at, 'seed' "
+                "FROM generate_series(1, :n) n",
+                {"at": AT, "n": MANY},
+            ),
+        )
+    )
+    migrate(scratch, "upgrade", HEAD)
+    (rows,) = asyncio.run(
+        sql(scratch, ("SELECT tenant_id, COUNT(*) FROM registry_agent_versions GROUP BY tenant_id", {}))
+    )
+    assert rows == [("t-harbor", MANY)]
+    assert tenants(scratch, "registry_agents", "id") == {"ag_team": "t-harbor"}
 
 
 def test_outside_dev_it_stops_on_a_team_or_record_with_no_one_tenant_and_names_each(scratch: URL) -> None:

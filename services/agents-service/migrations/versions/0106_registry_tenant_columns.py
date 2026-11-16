@@ -22,6 +22,12 @@ their upserts or foreign keys (widgets, workflows, deployments, channel messages
 as do the row policies, so every table stays on the markings waiting list. The tenant role gains the stores' grants on
 PostgreSQL (SQL Server's runtime user holds them already). channel_files, which nothing reads or writes, is dropped.
 
+Each column is added without a default and each source's tenant copied into a session table in one short transaction;
+the rows are then filled in batches of BATCH, each committed alone, so no lock on a table lasts the whole fill. A last
+transaction places rows written meanwhile, gives what nothing placed `local` (a publish request's team ''), then makes
+each column NOT NULL with that default, which the stores of today rely on until the policies land. Runs again after a
+stopped run.
+
 The down path refuses, with a count, when a slug, a graph version or a digest is held by two tenants, since the
 install-wide keys would fail partway; offline SQL cannot count. Runs on PostgreSQL and SQL Server.
 """
@@ -74,6 +80,9 @@ REQUESTS_TEAM = "ix_registry_publish_requests_team"
 AGENT_SLUG = "uq_registry_agents_tenant_slug"
 VERSION_DIGEST = "uq_graph_versions_tenant_digest"
 VERSIONS_PK = "graph_versions_pkey"
+# Rows per committed batch; under 5000, where SQL Server escalates row locks to a table lock.
+BATCH = 4000
+KIND_OF = {name: kind for kind, name in TABLES.items()}
 
 
 def _policed(name: str, *, team: bool) -> sa.Table:
@@ -121,9 +130,17 @@ def _refuse_gaps() -> None:
         )
 
 
-def _backfill(dev: bool) -> None:
+def _has_column(name: str, column: str) -> bool:
+    """Whether a stopped run already added the column; offline SQL starts from 0105, where none has it."""
+    if op.get_context().as_sql:
+        return False
+    return column in {c["name"] for c in sa.inspect(op.get_bind()).get_columns(name)}
+
+
+def _team_from_threads() -> None:
+    """A deployment with no team takes its threads' team when they all share one; only rows still at '' change."""
     deployments = table("deployments", "id", "team_id")
-    threads = table("graph_threads", "tenant_id", "team_id", "deployment_id", "id")
+    threads = table("graph_threads", "team_id", "deployment_id")
     of_deployment = threads.c.deployment_id == deployments.c.id
     teams = sa.select(sa.func.count(sa.distinct(threads.c.team_id))).where(of_deployment, threads.c.team_id != "")
     op.execute(
@@ -135,16 +152,83 @@ def _backfill(dev: bool) -> None:
             .scalar_subquery()
         )
     )
+
+
+def _copy_name(dialect: str, what: str) -> str:
+    return f"#{what}_0106" if dialect == "mssql" else f"{what}_0106"
+
+
+def _sources(dev: bool) -> dict[str, sa.Select[Any, Any]]:
+    """Each session copy and the (k, v) rows that fill it: a key and the tenant (for requests, the team) it gives."""
+    out: dict[str, sa.Select[Any, Any]] = {}
+    for kind, name in TABLES.items():
+        row = table(name, "id", "team_id")
+        out[kind] = sa.select(row.c.id, tenant_of(kind, row, dev=dev))
+    threads = table("graph_threads", "id", "tenant_id")
+    out["thread"] = sa.select(threads.c.id, threads.c.tenant_id)
+    requests = table(REQUESTS, "id", "kind", "subject_id")
+    teams: list[sa.Select[Any, Any]] = []
+    for kind, name in TABLES.items():
+        subject = table(name, "id", "team_id")
+        teams.append(
+            sa.select(requests.c.id, subject.c.team_id).join_from(
+                requests, subject, sa.and_(subject.c.id == requests.c.subject_id, requests.c.kind == kind)
+            )
+        )
+    out["request"] = sa.union_all(*teams).subquery().select()
+    return out
+
+
+def _fills() -> list[tuple[str, str, str, str]]:
+    """(table, column, the table's column naming the key, copy) in the order the batches run."""
+    out = [(name, "tenant_id", "id", kind) for kind, name in TABLES.items()]
+    out += [(name, "tenant_id", key, KIND_OF[parent]) for name, (parent, key) in CHILDREN.items()]
+    out += [("graph_versions", "tenant_id", "name", "workflow"), ("thread_inbox", "tenant_id", "thread_id", "thread")]
+    out += [("channel_messages", "tenant_id", "thread_id", "thread")]
+    out += [("channel_messages", "tenant_id", "deployment_id", "deployment")]
+    out += [("channel_cursors", "tenant_id", "deployment_id", "deployment"), (REQUESTS, "team_id", "id", "request")]
+    return out
+
+
+def _fill(dialect: str, name: str, column: str, key: str, copy: str) -> str:
+    """Fills `column` of `name` from the copy BATCH rows at a time, each batch committed on its own."""
+    if dialect == "mssql":
+        return (
+            f"WHILE 1 = 1\nBEGIN\n"
+            f"    UPDATE TOP ({BATCH}) r SET {column} = s.v FROM {name} r JOIN {copy} s ON s.k = r.{key} "
+            f"WHERE r.{column} IS NULL;\n"
+            f"    IF @@ROWCOUNT = 0 BREAK;\nEND"
+        )
+    return (
+        f"DO $$\nDECLARE n integer;\nBEGIN\n    LOOP\n"
+        f"        UPDATE {name} r SET {column} = s.v FROM {copy} s WHERE s.k = r.{key} AND r.ctid IN "
+        f"(SELECT x.ctid FROM {name} x JOIN {copy} y ON y.k = x.{key} WHERE x.{column} IS NULL LIMIT {BATCH});\n"
+        f"        GET DIAGNOSTICS n = ROW_COUNT;\n        EXIT WHEN n = 0;\n        COMMIT;\n    END LOOP;\nEND $$"
+    )
+
+
+def _settle(dev: bool) -> None:
+    """Places the rows written while the batches ran, by the same rules in one statement each; gives what nothing
+    placed its fallback. A registry row with no one tenant outside dev stays NULL, so the NOT NULL below fails."""
     for kind, name in TABLES.items():
         row = table(name, "id", "team_id", "tenant_id")
-        op.execute(sa.update(row).values(tenant_id=tenant_of(kind, row, dev=dev)))
+        op.execute(sa.update(row).where(row.c.tenant_id.is_(None)).values(tenant_id=tenant_of(kind, row, dev=dev)))
     for name, (parent_name, key) in CHILDREN.items():
         child, parent = table(name, key, "tenant_id"), table(parent_name, "id", "tenant_id")
         found = sa.select(parent.c.tenant_id).where(parent.c.id == child.c[key])
-        op.execute(sa.update(child).where(sa.exists(found)).values(tenant_id=found.scalar_subquery()))
+        op.execute(
+            sa.update(child)
+            .where(child.c.tenant_id.is_(None))
+            .values(tenant_id=sa.func.coalesce(found.scalar_subquery(), LOCAL))
+        )
     versions, workflows = table("graph_versions", "name", "tenant_id"), table("registry_workflows", "id", "tenant_id")
     found = sa.select(workflows.c.tenant_id).where(workflows.c.id == versions.c.name)
-    op.execute(sa.update(versions).where(sa.exists(found)).values(tenant_id=found.scalar_subquery()))
+    op.execute(
+        sa.update(versions)
+        .where(versions.c.tenant_id.is_(None))
+        .values(tenant_id=sa.func.coalesce(found.scalar_subquery(), LOCAL))
+    )
+    threads = table("graph_threads", "tenant_id", "id")
     placed = table("deployments", "id", "tenant_id")
     for name in CHANNELS:
         row = table(name, *(("thread_id",) if name != "channel_cursors" else ()), "deployment_id", "tenant_id")
@@ -152,17 +236,20 @@ def _backfill(dev: bool) -> None:
         if "thread_id" in row.c:
             thread = sa.select(threads.c.tenant_id).where(threads.c.id == row.c.thread_id)
             cases.append((sa.exists(thread), thread.scalar_subquery()))
-        if "deployment_id" in row.c and name != "thread_inbox":
+        if name != "thread_inbox":
             deployment = sa.select(placed.c.tenant_id).where(placed.c.id == row.c.deployment_id)
             cases.append((sa.exists(deployment), deployment.scalar_subquery()))
-        op.execute(sa.update(row).values(tenant_id=sa.case(*cases, else_=LOCAL)))
+        op.execute(sa.update(row).where(row.c.tenant_id.is_(None)).values(tenant_id=sa.case(*cases, else_=LOCAL)))
     requests = table(REQUESTS, "kind", "subject_id", "team_id")
     for kind, name in TABLES.items():
         subject = table(name, "id", "team_id")
         team = sa.select(subject.c.team_id).where(subject.c.id == requests.c.subject_id)
         op.execute(
-            sa.update(requests).where(requests.c.kind == kind, sa.exists(team)).values(team_id=team.scalar_subquery())
+            sa.update(requests)
+            .where(requests.c.team_id.is_(None), requests.c.kind == kind, sa.exists(team))
+            .values(team_id=team.scalar_subquery())
         )
+    op.execute(sa.update(requests).where(requests.c.team_id.is_(None)).values(team_id=""))
 
 
 def upgrade() -> None:
@@ -170,19 +257,47 @@ def upgrade() -> None:
     offline = op.get_context().as_sql
     # Offline SQL is a DBA script for a real install, never dev: it takes the outside-dev rules.
     dev = not offline and Settings().environment == "dev"
-    for name in TENANTED:
-        with op.batch_alter_table(name) as b:
-            b.add_column(sa.Column("tenant_id", sa.String(64), nullable=False, server_default=LOCAL))
-    with op.batch_alter_table(REQUESTS) as b:
-        b.add_column(sa.Column("team_id", sa.String(64), nullable=False, server_default=""))
+    columns = [(name, "tenant_id") for name in TENANTED] + [(REQUESTS, "team_id")]
+    for name, column in columns:
+        if not _has_column(name, column):
+            op.add_column(name, sa.Column(column, sa.String(64), nullable=True))
     before, after = _every_tenant(dialect)
     for statement in before:
         op.execute(statement)
     if not dev and not offline:
         _refuse_gaps()
-    _backfill(dev)
+    _team_from_threads()
+    copies: dict[str, str] = {}
+    if dialect in ("postgresql", "mssql"):
+        create = "CREATE TABLE" if dialect == "mssql" else "CREATE TEMPORARY TABLE"
+        sources = _sources(dev)
+        copies = {what: _copy_name(dialect, what) for what in sources}
+        for what, source in sources.items():
+            # NOT NULL: outside dev a row with no one tenant fails here, before any row changes.
+            op.execute(f"{create} {copies[what]} (k VARCHAR(255) NOT NULL PRIMARY KEY, v VARCHAR(64) NOT NULL)")
+            copy = sa.table(copies[what], sa.column("k"), sa.column("v"))
+            op.execute(sa.insert(copy).from_select(["k", "v"], source))
     for statement in after:
         op.execute(statement)
+    if dialect in ("postgresql", "mssql"):
+        with op.get_context().autocommit_block():
+            for name, column, key, what in _fills():
+                op.execute(_fill(dialect, name, column, key, copies[what]))
+        for copy in copies.values():
+            op.execute(f"DROP TABLE {copy}")
+    for statement in before:
+        op.execute(statement)
+    _settle(dev)
+    for statement in after:
+        op.execute(statement)
+    for name, column in columns:
+        with op.batch_alter_table(name) as b:
+            b.alter_column(
+                column,
+                existing_type=sa.String(64),
+                nullable=False,
+                server_default=LOCAL if column == "tenant_id" else "",
+            )
 
     _drop_key("registry_agents", kind="UQ", column="slug", pg_name="registry_agents_slug_key")
     op.create_unique_constraint(AGENT_SLUG, "registry_agents", ["tenant_id", "slug"])
