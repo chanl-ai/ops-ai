@@ -19,6 +19,7 @@ from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
+from ops_identity.fastapi import Tx
 from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.client_address import client_address
@@ -331,6 +332,11 @@ def create_public_app(
         response.headers["Cache-Control"] = "public, max-age=300"
         return jwks
 
+    # The sign-in routes (/v1/auth/*, /oauth/*, invites, key introspection) take no `Tx`: each store call commits on
+    # its own, so a failed-attempt count, a refusal's audit row or a reused refresh token's ended session survives the
+    # 401 or 429 that follows it (tests/test_signin_lockout.py goes red under one request transaction). Routes that
+    # call an identity provider, DNS, the credential store, mail or agents-service take none either, so no
+    # transaction is open during the call. Every other route reads and writes in one request transaction.
     @app.post("/v1/auth/sign-in", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def sign_in(body: SignIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(_issued(await auth.sign_in(body.email, body.password, request_id=new_id("req"))))
@@ -531,7 +537,7 @@ def create_public_app(
         return await RoleStore(store.db).workspace_admin(tenant, user, now=now_iso())
 
     @app.get("/v1/me", tags=["me"], response_model=Envelope[Me], responses=ERRORS)
-    async def me(claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def me(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
         found = await store.user(tenant, user)
         if found is None:
@@ -551,7 +557,7 @@ def create_public_app(
         )
 
     @app.get("/v1/teams", tags=["teams"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
-    async def list_teams(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_teams(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The teams the caller may switch to: their own, and every active team for a workspace admin."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
         teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
@@ -559,6 +565,7 @@ def create_public_app(
 
     @app.get("/v1/settings/members", tags=["members"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS)
     async def list_members(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         actor: Annotated[Actor, Depends(acting)],
         role: Annotated[list[str] | None, Query()] = None,
         status: Annotated[list[str] | None, Query()] = None,
@@ -591,6 +598,7 @@ def create_public_app(
 
     @app.get("/v1/settings/members/options", tags=["members"], response_model=Envelope[OptionsPage], responses=ERRORS)
     async def member_options(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         actor: Annotated[Actor, Depends(acting)],
         search: str | None = None,
         cursor: str | None = None,
@@ -606,7 +614,7 @@ def create_public_app(
         return ok(options_page([r.model_dump(by_alias=True) for r in rows], offset, limit))
 
     @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
-    async def invite_members(body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.invite(actor, body.emails, body.role))
 
     async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
@@ -614,14 +622,14 @@ def create_public_app(
         return [m.user_id for m in rows if m.id in member_ids and m.user_id]
 
     @app.post("/v1/settings/members/role", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
-    async def change_roles(body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def change_roles(_: Tx, body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The owner is never demoted here: 409 `owner_must_transfer`."""
         if body.role != ADMIN.id:
             await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.set_role(actor, body.ids, body.role))
 
     @app.post("/v1/settings/members/delete", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
-    async def remove_members(body: DeleteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def remove_members(_: Tx, body: DeleteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The owner is never removed here: 409 `owner_must_transfer`."""
         await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.remove(actor, body.ids))
@@ -629,7 +637,7 @@ def create_public_app(
     roles = Roles(RoleStore(store.db))
 
     @app.get("/v1/roles", tags=["roles"], response_model=Envelope[list[RoleOut]], responses=ERRORS)
-    async def list_roles(actor: Annotated[Actor, Depends(reading)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_roles(_: Tx, actor: Annotated[Actor, Depends(reading)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs
         access.view in the acting team: 403 `admin_required`."""
         await people.require_admin(actor, "access", "view")
@@ -637,6 +645,7 @@ def create_public_app(
 
     @app.get("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def read_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         claims: Annotated[dict[str, Any], Depends(claims_of)],
         acting_actor: Annotated[Actor, Depends(reading)],
@@ -659,6 +668,7 @@ def create_public_app(
 
     @app.get("/v1/access/holders", tags=["access"], response_model=Envelope[HoldersOut], responses=ERRORS)
     async def access_holders(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         area: Annotated[str, Query(max_length=32)],
         action: Annotated[str, Query(max_length=16)],
         actor: Annotated[Actor, Depends(acting)],
@@ -684,7 +694,7 @@ def create_public_app(
         return ok({"teamId": team, **found.model_dump(by_alias=True)})
 
     @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)
-    async def my_permissions(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def my_permissions(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """What the caller may do in each of their teams, and the roles that grant each action."""
         return ok(await roles.of_me(str(claims["tenant_id"]), str(claims["sub"])))
 
@@ -692,6 +702,7 @@ def create_public_app(
 
     @app.get("/v1/me/why", tags=["me"], response_model=Envelope[WhyOut], responses=ERRORS)
     async def why_not(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         area: Annotated[str, Query(max_length=32)],
         action: Annotated[str, Query(max_length=16)],
         actor: Annotated[Actor, Depends(acting)],
@@ -704,7 +715,7 @@ def create_public_app(
 
     @app.post("/v1/access/check", tags=["access"], response_model=Envelope[AccessCheckOut], responses=ERRORS)
     async def check_access(  # pyright: ignore[reportUnusedFunction]
-        body: AccessCheckIn, actor: Annotated[Actor, Depends(acting)]
+        _: Tx, body: AccessCheckIn, actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """Whether a person may take `area.action` in the team the request acts in, by the same `can()` the
         services run with the workspace's policies: allowed with the granting roles, or refused with the reason. The
@@ -724,7 +735,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def person_permissions(  # pyright: ignore[reportUnusedFunction]
-        person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx, person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
     ) -> Any:
         """What a person may do in the teams they share with the caller, with their name and address; 404 when they
         share none."""
@@ -949,7 +960,7 @@ def create_public_app(
     policies = Policies(policy_store, people, guards={REQUIRED: break_glass.guard_policy})
 
     @app.get("/v1/policies", tags=["policies"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
-    async def list_policies(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_policies(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Every policy with its value and open default; any member of the workspace reads them."""
         return ok(await policies.list(actor))
 
@@ -965,6 +976,7 @@ def create_public_app(
 
     @app.get("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def get_policy(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         key: Annotated[str, Path(max_length=64)],
         token: Annotated[str, Depends(_bearer)],
         x_team_id: Annotated[str | None, Header()] = None,
@@ -986,6 +998,7 @@ def create_public_app(
 
     @app.get("/v1/team-names", tags=["teams"], response_model=Envelope[list[TeamName]], responses=ERRORS)
     async def team_names(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every team's display name in the workspace, so a page showing another team's record names its team.
@@ -1001,6 +1014,7 @@ def create_public_app(
 
     @app.get("/v1/people-names", tags=["people"], response_model=Envelope[list[PersonName]], responses=ERRORS)
     async def people_names(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every person's display name in the workspace by email, so a list naming who did something shows a
@@ -1016,7 +1030,7 @@ def create_public_app(
 
     @app.put("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def set_policy(  # pyright: ignore[reportUnusedFunction]
-        key: Annotated[str, Path(max_length=64)], body: PolicyIn, actor: Annotated[Actor, Depends(acting)]
+        _: Tx, key: Annotated[str, Path(max_length=64)], body: PolicyIn, actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """Sets one policy for the workspace, audited, and moves the permission version so tokens refresh; who holds
         settings.manage in the acting team. 400 `policy_value` for a key or value the catalogue does not take."""
@@ -1110,6 +1124,7 @@ def create_public_app(
 
     @app.put("/v1/roles/{role_id}/permissions", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def edit_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: RoleCellsIn,
         actor: Annotated[Actor, Depends(on_workspace)],
@@ -1123,7 +1138,7 @@ def create_public_app(
         return ok(edited | {"canEdit": True})
 
     @app.post("/v1/roles", tags=["roles"], status_code=201, response_model=Envelope[RoleCreatedOut], responses=ERRORS)
-    async def create_role(body: RoleCreateIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def create_role(_: Tx, body: RoleCreateIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """A custom role, from scratch (`permissions`) or as a copy of another (`copyOf`), less the cells a custom role
         may not hold: secrets, egress and Security-team ones (400 `not_for_custom_roles` when given; named in
         `leftOut` when copied). A workspace admin's (access.manage); audited; 409 `name_taken`."""
@@ -1144,6 +1159,7 @@ def create_public_app(
 
     @app.patch("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def rename_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: RolePatchIn,
         actor: Annotated[Actor, Depends(on_workspace)],
@@ -1165,7 +1181,7 @@ def create_public_app(
         "/v1/roles/{role_id}/holders", tags=["roles"], response_model=Envelope[list[RoleHolderOut]], responses=ERRORS
     )
     async def role_holders(  # pyright: ignore[reportUnusedFunction]
-        role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """Who holds the role and in which team: what deleting it would take from them. A workspace admin's."""
         await people.require_admin(actor, "access", "view")
@@ -1178,7 +1194,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def person_role_grants(  # pyright: ignore[reportUnusedFunction]
-        person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx, person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
     ) -> Any:
         """The custom roles given to a person on their own, each with its team; read by whoever shares a team with
         them, as their permissions are (404 otherwise)."""
@@ -1194,6 +1210,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def give_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: RoleGrantIn,
         actor: Annotated[Actor, Depends(acting)],
@@ -1208,6 +1225,7 @@ def create_public_app(
 
     @app.delete("/v1/people/{person_id}/role-grants/{grant_id}", tags=["people"], status_code=204, responses=ERRORS)
     async def take_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
         grant_id: Annotated[str, Path(pattern=RECORD_ID)],
         claims: Annotated[dict[str, Any], Depends(claims_of)],
@@ -1224,6 +1242,7 @@ def create_public_app(
 
     @app.delete("/v1/roles/{role_id}", tags=["roles"], status_code=204, responses=ERRORS)
     async def delete_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         actor: Annotated[Actor, Depends(on_workspace)],
         move_to: Annotated[str | None, Query(alias="moveTo", pattern=RECORD_ID)] = None,
@@ -1236,7 +1255,7 @@ def create_public_app(
 
     @app.post("/v1/roles/{role_id}/reset", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def reset_role(  # pyright: ignore[reportUnusedFunction]
-        role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """Reset to default: a built-in role's cells back to the ones it ships with. Audited; 400 `not_builtin`."""
         await people.require_admin(actor, "access", "manage")
@@ -1271,7 +1290,7 @@ def create_public_app(
         response_model=Envelope[WorkspaceTeamOut],
         responses=ERRORS,
     )
-    async def create_team(body: TeamIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def create_team(_: Tx, body: TeamIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """A new team with its first admin; workspace admins (`access.manage` in every team) only. A name the
         workspace already uses, in any case, is 409, so a retried create never makes a second team."""
         return ok(await team_admin.create(actor, body.name, body.admin), status=201)
@@ -1282,7 +1301,7 @@ def create_public_app(
         response_model=Envelope[WorkspaceTeamsOut],
         responses=ERRORS,
     )
-    async def read_workspace_teams(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def read_workspace_teams(_: Tx, token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's security team and the team new people join when nothing else names one. A workspace
         admin reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
@@ -1299,7 +1318,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def set_workspace_teams(  # pyright: ignore[reportUnusedFunction]
-        body: WorkspaceTeamsIn, actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, body: WorkspaceTeamsIn, actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """Workspace admins only. Moving the security team moves Security admin with it, at once."""
         return ok(await team_admin.set_workspace_teams(actor, body.security_team, body.default_team))
@@ -1311,7 +1330,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def rename_workspace(  # pyright: ignore[reportUnusedFunction]
-        body: WorkspaceRenameIn, actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, body: WorkspaceRenameIn, actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """Names the workspace (the console's header and switcher read it from `/v1/me`); workspace admins only."""
         return ok(await team_admin.rename_workspace(actor, body.name))
@@ -1323,6 +1342,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def rename_team(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         team_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: TeamRenameIn,
         actor: Annotated[Actor, Depends(on_workspace)],
@@ -1336,7 +1356,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def archive_team(  # pyright: ignore[reportUnusedFunction]
-        team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """The team leaves its members' next tokens and takes no new members; what it owns stays its own."""
         return ok(await team_admin.set_status(actor, team_id, archived=True))
@@ -1348,7 +1368,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def restore_team(  # pyright: ignore[reportUnusedFunction]
-        team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         return ok(await team_admin.set_status(actor, team_id, archived=False))
 
@@ -1359,7 +1379,7 @@ def create_public_app(
         "/v1/workspace/transfer", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS
     )
     async def transfer_workspace(  # pyright: ignore[reportUnusedFunction]
-        body: TransferIn, actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, body: TransferIn, actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """The owner hands the workspace to an account admin, at once and audited; the old owner stays an
         admin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in
@@ -1367,7 +1387,7 @@ def create_public_app(
         return ok(await lifecycle.transfer(actor, body.user_id))
 
     @app.post("/v1/workspace/leave", tags=["workspace"], status_code=204, responses=ERRORS)
-    async def leave_workspace(actor: Annotated[Actor, Depends(on_workspace)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    async def leave_workspace(_: Tx, actor: Annotated[Actor, Depends(on_workspace)]) -> Response:  # pyright: ignore[reportUnusedFunction]
         """The caller leaves every team of the workspace and their sessions end; the owner is refused with 409
         `owner_must_transfer` until they transfer."""
         await lifecycle.leave(actor)
@@ -1375,6 +1395,7 @@ def create_public_app(
 
     @app.post("/v1/workspace/close", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS)
     async def close_workspace(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         body: WorkspaceCloseIn,
         actor: Annotated[Actor, Depends(on_workspace)],
         reader: Annotated[UsageReader, Depends(team_usage)],
@@ -1385,13 +1406,13 @@ def create_public_app(
         return ok(await lifecycle.close(actor, body.name, reader))
 
     @app.post("/v1/workspace/restore", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS)
-    async def restore_workspace(actor: Annotated[Actor, Depends(on_workspace_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def restore_workspace(_: Tx, actor: Annotated[Actor, Depends(on_workspace_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Reopens a closed workspace and the keys its close stopped; 409 `purged` once the purge has started."""
         return ok(await lifecycle.restore(actor))
 
     @app.post("/v1/settings/teams/{team_id}/leave", tags=["teams"], status_code=204, responses=ERRORS)
     async def leave_team(  # pyright: ignore[reportUnusedFunction]
-        team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Response:
         """The caller leaves one team; its last admin is refused with 409 `last_admin`."""
         await lifecycle.leave_team(actor, team_id)
@@ -1427,6 +1448,7 @@ def create_public_app(
 
     @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[list[ApiKeyOut]], responses=ERRORS)
     async def list_api_keys(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         actor: Annotated[Actor, Depends(acting)],
         target_kind: Annotated[Literal["agent", "workflow", "mcp_link"] | None, Query(alias="targetKind")] = None,
         target_id: Annotated[str | None, Query(alias="targetId", max_length=64)] = None,
@@ -1438,12 +1460,13 @@ def create_public_app(
     @app.post(
         "/v1/api-keys", tags=["api-keys"], status_code=201, response_model=Envelope[ApiKeyCreated], responses=ERRORS
     )
-    async def create_api_key(body: ApiKeyIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def create_api_key(_: Tx, body: ApiKeyIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         target = body.target.model_dump() if body.target else None
         return ok(await keys.create(actor, body.name, list(body.scopes), body.expires_in_days, target), status=201)
 
     @app.get("/v1/api-key-summaries", tags=["api-keys"], response_model=Envelope[list[ApiKeySummary]], responses=ERRORS)
     async def api_key_summaries(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every team's keys in the workspace with what each serves: for agents-service's list of API channels
@@ -1461,7 +1484,7 @@ def create_public_app(
 
     @app.post("/v1/api-keys/{key_id}/revoke", tags=["api-keys"], response_model=Envelope[ApiKeyOut], responses=ERRORS)
     async def revoke_api_key(  # pyright: ignore[reportUnusedFunction]
-        key_id: Annotated[str, Path(pattern=KEY_ID)], actor: Annotated[Actor, Depends(acting)]
+        _: Tx, key_id: Annotated[str, Path(pattern=KEY_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         return ok(await keys.revoke(actor, key_id))
 
@@ -1469,6 +1492,7 @@ def create_public_app(
 
     @app.get("/v1/audit", tags=["audit"], response_model=Envelope[AuditPage], responses=ERRORS)
     async def read_audit(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         *,
         actor: Annotated[Actor, Depends(acting)],
         action: Annotated[str | None, Query(max_length=80)] = None,
@@ -1537,7 +1561,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         response_model=Envelope[PermissionVersionOut],
         responses=ERRORS,
     )
-    async def permission_version(caller: Annotated[Caller, Depends(services.principal)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def permission_version(_: Tx, caller: Annotated[Caller, Depends(services.principal)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The tenant's permission version, which each service compares a person's token with so a role change decides
         on the next request. The service token names the tenant, never the request (I1)."""
         if not caller.tenant_id:
@@ -1551,7 +1575,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         responses=ERRORS,
     )
     async def receive_audit_event(  # pyright: ignore[reportUnusedFunction]
-        body: AuditEventIn, caller: Annotated[Caller, Depends(services.principal)]
+        _: Tx, body: AuditEventIn, caller: Annotated[Caller, Depends(services.principal)]
     ) -> Any:
         """An audit entry another service recorded with the change it describes (ops_store.audit), delivered by that
         service's relay, so the Audit page reads one log for the whole account. The token holds `audit:create` and
@@ -1580,7 +1604,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
             responses=ERRORS,
         )
         async def acting_for_token(  # pyright: ignore[reportUnusedFunction]
-            body: ActingForIn, caller: Annotated[Caller, Depends(services.principal)]
+            _: Tx, body: ActingForIn, caller: Annotated[Caller, Depends(services.principal)]
         ) -> Any:
             """A 60-second token naming the person a tool call acts for; the service token names the tenant and
             the team, never the body (I1)."""
