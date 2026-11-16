@@ -74,7 +74,8 @@ export interface paths {
          * Access Holders
          * @description Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
          *     what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-         *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask.
+         *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
+         *     access.view where the request acts (a Chat user does not: 403 `admin_required`).
          */
         get: operations["access_access_holders"];
         put?: never;
@@ -686,8 +687,9 @@ export interface paths {
         };
         /**
          * People Names
-         * @description Every person's display name in the workspace by email, so a list naming who did something shows a
-         *     name rather than an address. Any member reads them; a service token needs the `settings:view` scope.
+         * @description Every person's display name in the workspace by email, so a list naming who did something shows a name
+         *     rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
+         *     user's none); a service token needs the `settings:view` scope.
          */
         get: operations["people_people_names"];
         put?: never;
@@ -708,7 +710,7 @@ export interface paths {
         /**
          * Person Permissions
          * @description What a person may do in the teams they share with the caller, with their name and address; 404 when they
-         *     share none.
+         *     share none. Another person's needs access.view where the request acts (a Chat user reads only their own).
          */
         get: operations["people_person_permissions"];
         put?: never;
@@ -729,7 +731,8 @@ export interface paths {
         /**
          * Person Role Grants
          * @description The custom roles given to a person on their own, each with its team, on the shared list contract by role
-         *     name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise).
+         *     name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise), and
+         *     holds access.view where the request acts when it is another person (a Chat user reads only their own).
          */
         get: operations["people_person_role_grants"];
         put?: never;
@@ -774,7 +777,8 @@ export interface paths {
         };
         /**
          * List Policies
-         * @description Every policy with its value and open default; any member of the workspace reads them.
+         * @description Every policy with its value and open default; whoever holds access.view where the request acts reads them
+         *     (every role but Chat user and Security admin: 403 `admin_required`).
          */
         get: operations["policies_list_policies"];
         put?: never;
@@ -794,7 +798,7 @@ export interface paths {
         };
         /**
          * Get Policy
-         * @description One policy of the workspace. Any member reads it; a service token needs the
+         * @description One policy of the workspace. A person needs access.view where the request acts; a service token needs the
          *     `settings:view` scope and reads its own tenant's value, as a background job with no person does (the
          *     memory sweep). 400 `policy_value` for a key the catalogue does not hold.
          */
@@ -1465,8 +1469,9 @@ export interface paths {
         };
         /**
          * Team Names
-         * @description Every team's display name in the workspace, so a page showing another team's record names its team.
-         *     Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's.
+         * @description Every team's display name in the workspace, so a page showing another team's record names its team. A
+         *     person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
+         *     token needs the `settings:view` scope and reads its own tenant's.
          */
         get: operations["teams_team_names"];
         put?: never;

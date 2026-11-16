@@ -39,11 +39,12 @@ async def test_a_team_admin_outside_security_sets_their_own_teams_approval_rule_
     assert (await signin.public.get("/v1/policies/appChanges", headers=c)).json()["data"]["value"].get(team_c) is None
 
 
-async def test_a_chat_user_reads_no_roles_but_every_member_still_reads_the_policies(signin: SignInRig) -> None:
+async def test_a_chat_user_reads_neither_the_roles_nor_the_policies(signin: SignInRig) -> None:
+    # A Chat user holds own-thread chat and own memory only; the policies are read with access.view.
     _, chat = await _team_admin(signin, "cleo", role="chat_user")
     roles = await signin.public.get("/v1/roles", headers=chat)
     assert roles.status_code == 403, roles.text
-    assert (await signin.public.get("/v1/policies/appChanges", headers=chat)).status_code == 200
+    assert (await signin.public.get("/v1/policies/appChanges", headers=chat)).status_code == 403
 
 
 async def test_a_first_sso_sign_in_never_links_a_person_holding_access_manage_through_a_custom_role(

@@ -5,13 +5,14 @@ to it goes through (C5)."""
 
 from __future__ import annotations
 
+import pytest
 import sqlalchemy as sa
 
 from ops_platform.store.tables import role_assignments
 
 from .conftest import Platform
 from .test_audit_route import audit
-from .test_members import as_admin, invite_one, join, member_rows, team_of
+from .test_members import as_admin, bearer, invite_one, join, member_rows, team_of
 from .test_permissions import held, permissions
 
 
@@ -62,3 +63,32 @@ async def test_the_last_admin_is_not_demoted_to_chat_user(platform: Platform) ->
         "/v1/settings/members/role", headers=h, json={"ids": [me["id"]], "role": "chat_user"}
     )
     assert r.json()["data"] == {"updated": [], "skipped": [{"id": me["id"], "reason": "last_admin"}]}, r.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/access/holders?area=agents&action=edit",
+        "/v1/policies",
+        "/v1/policies/requesterMayDecide",
+        "/v1/people/{other}/role-grants",
+        "/v1/people/{other}/permissions",
+        "/v1/people-names",
+        "/v1/team-names",
+    ],
+)
+async def test_a_chat_user_reads_no_one_elses_access_and_a_viewer_still_does(platform: Platform, path: str) -> None:
+    # A Chat user holds own-thread chat and own memory only: who holds what, the policies, another person's grants and
+    # the workspace's names answer 403 through can() (access.view), while a Viewer in the same team still reads them.
+    admin, _ = await as_admin(platform)
+    team = team_of(admin)
+    url = path.format(other=admin.user_id)
+    for role, status in (("chat_user", 403), ("viewer", 200)):
+        person = await join(platform, admin, role)
+        mine = {**await bearer(platform, person), "X-Team-Id": team}
+        r = await platform.public.get(url, headers=mine)
+        assert r.status_code == status, (role, r.text)
+        if status == 403:
+            assert r.json()["error"]["code"] == "admin_required", r.text
+            own = await platform.public.get(f"/v1/people/{person.user_id}/role-grants", headers=mine)
+            assert own.status_code == 200, own.text

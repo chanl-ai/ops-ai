@@ -11,13 +11,13 @@ queries = 0
 not_budgeted = "needs the area and action query parameters, which the budget does not send"
 
 ["GET /v1/api-key-summaries"]
-queries = 10
+queries = 8
 
 ["GET /v1/api-keys"]
-queries = 11
+queries = 9
 
 ["GET /v1/audit"]
-queries = 18
+queries = 15
 
 ["GET /v1/auth/oidc/callback"]
 queries = 0
@@ -27,16 +27,16 @@ status = 303   # listed: it answers the browser with a redirect by design
 queries = 0
 
 ["GET /v1/auth/saml/metadata/{sp_id}"]
-queries = 2
+queries = 1
 
 ["GET /v1/auth/session"]
-queries = 2
+queries = 1
 
 ["GET /v1/health"]
 queries = 0
 
 ["GET /v1/invites/{token}"]
-queries = 6
+queries = 3
 transactions = 3   # listed: what the route opens today; the store rewrite takes it to one
 connections = 3
 
@@ -44,7 +44,7 @@ connections = 3
 queries = 8   # a workspace admin, as here, reads every other team too; anyone else runs 7
 
 ["GET /v1/me/permissions"]
-queries = 9
+queries = 7
 
 ["GET /v1/me/why"]
 not_budgeted = "needs the area and action query parameters, which the budget does not send"
@@ -53,81 +53,81 @@ not_budgeted = "needs the area and action query parameters, which the budget doe
 not_budgeted = "needs a registered client's query parameters, which the budget does not send"
 
 ["GET /v1/oauth/grants"]
-queries = 8
+queries = 4
 transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
 connections = 4
 
 ["GET /v1/people-names"]
-queries = 4
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/people/{person_id}/permissions"]
-queries = 13
+queries = 15   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/people/{person_id}/role-grants"]
-queries = 14
+queries = 16   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/permission-version"]
-queries = 2
+queries = 1
 
 ["GET /v1/policies"]
-queries = 4
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/policies/{key}"]
-queries = 4
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/roles"]
-queries = 11
+queries = 9
 
 ["GET /v1/roles/{role_id}"]
-queries = 17
-
-["GET /v1/roles/{role_id}/holders"]
-queries = 11
-
-["GET /v1/settings/members"]
 queries = 14
 
+["GET /v1/roles/{role_id}/holders"]
+queries = 9
+
+["GET /v1/settings/members"]
+queries = 12
+
 ["GET /v1/settings/members/options"]
-queries = 10
+queries = 8
 
 ["GET /v1/settings/sign-in/break-glass"]
-queries = 18
+queries = 11
 transactions = 6   # listed: what the route opens today; the store rewrite takes it to one
 connections = 6
 
 ["GET /v1/settings/sign-in/providers"]
-queries = 16
+queries = 11
 transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
 connections = 4
 
 ["GET /v1/settings/sign-in/secret-names"]
-queries = 13
+queries = 8
 transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
 connections = 4
 
 ["GET /v1/settings/sign-in/secrets"]
-queries = 13
+queries = 8
 transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
 connections = 4
 
 ["GET /v1/settings/sign-in/test-results/{flow_id}"]
-queries = 13
+queries = 8
 transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
 connections = 4
 
 ["GET /v1/settings/teams"]
-queries = 12
+queries = 10
 
 ["GET /v1/settings/teams/{team_id}/delete-check"]
-queries = 15
+queries = 9
 transactions = 5   # listed: what the route opens today; the store rewrite takes it to one
 connections = 5
 
 ["GET /v1/settings/workspace-teams"]
-queries = 11
+queries = 9
 
 ["GET /v1/team-names"]
-queries = 4
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/teams"]
-queries = 12
+queries = 10

@@ -672,6 +672,22 @@ def create_public_app(
 
     holder_store = HolderStore(store.db)
 
+    async def reads_access(actor: Actor) -> None:
+        """access.view where the request acts; a caller of several teams who names none (`*`) needs it in one of them.
+        A Chat user holds it nowhere: 403 `admin_required`."""
+        if actor.team_id != ANY_TEAM:
+            await people.require_admin(actor, "access", "view")
+            return
+        p, access = await RoleStore(store.db).live(actor.tenant_id, actor.user_id)
+        # `from_any_team`: the token-less caller acts in no team, so each of theirs is asked by name.
+        team = next((t for t in p.team_ids if access.may(p, "access", "view", team=t, from_any_team=True)), ANY_TEAM)
+        access.can(p, "access", "view", team=team, what="this team", code="admin_required", from_any_team=True)
+
+    async def others_access(actor: Actor, person_id: str) -> None:
+        """Another person's roles and grants are read with access.view; one's own need no cell."""
+        if person_id != actor.user_id:
+            await reads_access(actor)
+
     @app.get("/v1/access/holders", tags=["access"], response_model=Envelope[HoldersOut], responses=ERRORS)
     async def access_holders(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
@@ -683,9 +699,11 @@ def create_public_app(
     ) -> Any:
         """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
         what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-        record, else the one the request acts in; a member of that team, or a workspace admin, may ask."""
+        record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
+        access.view where the request acts (a Chat user does not: 403 `admin_required`)."""
         if area not in AREAS or action not in ACTIONS:
             raise ValidationFailed(f"{area}.{action} is not in the catalogue.", code="unknown_cell")
+        await people.require_admin(actor, "access", "view")
         named: list[Any] = claims.get("team_ids") or []
         outside = team is not None and team not in [str(t) for t in named]
         if outside and not await everywhere(actor.tenant_id, actor.user_id):
@@ -741,10 +759,14 @@ def create_public_app(
         responses=ERRORS,
     )
     async def person_permissions(  # pyright: ignore[reportUnusedFunction]
-        _: Tx, person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx,
+        person_id: Annotated[str, Path(pattern=RECORD_ID)],
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """What a person may do in the teams they share with the caller, with their name and address; 404 when they
-        share none."""
+        share none. Another person's needs access.view where the request acts (a Chat user reads only their own)."""
+        await others_access(actor, person_id)
         tenant = str(claims["tenant_id"])
         view = await roles.of_person(tenant, str(claims["sub"]), person_id)
         who = await store.user(tenant, person_id)
@@ -967,7 +989,9 @@ def create_public_app(
 
     @app.get("/v1/policies", tags=["policies"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
     async def list_policies(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """Every policy with its value and open default; any member of the workspace reads them."""
+        """Every policy with its value and open default; whoever holds access.view where the request acts reads them
+        (every role but Chat user and Security admin: 403 `admin_required`)."""
+        await people.require_admin(actor, "access", "view")
         return ok(await policies.list(actor))
 
     readers = services or ServiceAuth(
@@ -988,7 +1012,7 @@ def create_public_app(
         token: Annotated[str, Depends(_bearer)],
         x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """One policy of the workspace. Any member reads it; a service token needs the
+        """One policy of the workspace. A person needs access.view where the request acts; a service token needs the
         `settings:view` scope and reads its own tenant's value, as a background job with no person does (the
         memory sweep). 400 `policy_value` for a key the catalogue does not hold."""
         if readers.signs(token):
@@ -997,7 +1021,9 @@ def create_public_app(
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             rows = await policies.for_tenant(svc.tenant_id)
         else:
-            rows = await policies.list(await acting(await claims_of(request, token), x_team_id))
+            actor = await acting(await claims_of(request, token), x_team_id)
+            await people.require_admin(actor, "access", "view")
+            rows = await policies.list(actor)
         row = next((r for r in rows if r["key"] == key), None)
         if row is None:
             raise ValidationFailed(f"{key} is not a policy", code="policy_value")
@@ -1008,16 +1034,20 @@ def create_public_app(
         _: Tx,
         request: Request,
         token: Annotated[str, Depends(_bearer)],
+        x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """Every team's display name in the workspace, so a page showing another team's record names its team.
-        Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
+        """Every team's display name in the workspace, so a page showing another team's record names its team. A
+        person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
+        token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
             svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
         else:
-            tenant = str((await claims_of(request, token))["tenant_id"])
+            actor = await reading(await claims_of(request, token), x_team_id)
+            await reads_access(actor)
+            tenant = actor.tenant_id
         return ok([t.model_dump(by_alias=True) for t in await team_store.names(tenant)])
 
     @app.get("/v1/people-names", tags=["people"], response_model=Envelope[list[PersonName]], responses=ERRORS)
@@ -1025,16 +1055,20 @@ def create_public_app(
         _: Tx,
         request: Request,
         token: Annotated[str, Depends(_bearer)],
+        x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """Every person's display name in the workspace by email, so a list naming who did something shows a
-        name rather than an address. Any member reads them; a service token needs the `settings:view` scope."""
+        """Every person's display name in the workspace by email, so a list naming who did something shows a name
+        rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
+        user's none); a service token needs the `settings:view` scope."""
         if readers.signs(token):
             svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
         else:
-            tenant = str((await claims_of(request, token))["tenant_id"])
+            actor = await reading(await claims_of(request, token), x_team_id)
+            await reads_access(actor)
+            tenant = actor.tenant_id
         return ok([p.model_dump(by_alias=True) for p in await team_store.people_names(tenant)])
 
     @app.put("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
@@ -1214,9 +1248,12 @@ def create_public_app(
         q: ListQuery,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
         claims: Annotated[dict[str, Any], Depends(claims_of)],
+        actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """The custom roles given to a person on their own, each with its team, on the shared list contract by role
-        name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise)."""
+        name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise), and
+        holds access.view where the request acts when it is another person (a Chat user reads only their own)."""
+        await others_access(actor, person_id)
         tenant = str(claims["tenant_id"])
         await roles.of_person(tenant, str(claims["sub"]), person_id)
         return ok(await roles.store.grants_of(tenant, person_id, q))
