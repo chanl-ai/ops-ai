@@ -197,9 +197,11 @@ def _now() -> Any:
 
 
 def _row(team: str, n: int) -> ReadingRow:
-    return ReadingRow(
-        "t", f"d{team}{n}", READER_VERSION, "auto:eng", "queued", None, 0, None, None, None, 0, "f", team, "x", None
-    )
+    return ReadingRow.model_validate({
+        "tenant_id": "t", "file_digest": f"d{team}{n}", "reader_version": READER_VERSION, "settings_key": "auto:eng",
+        "status": "queued", "pages_total": None, "pages_done": 0, "facts": None, "error_code": None, "error": None,
+        "attempts": 0, "file_id": "f", "team": team, "actor": "x", "duration_ms": None,
+    })  # fmt: skip
 
 
 def test_one_teams_bulk_upload_does_not_hold_up_another() -> None:

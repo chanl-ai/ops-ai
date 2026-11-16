@@ -14,18 +14,21 @@ from __future__ import annotations
 
 import gzip
 import json
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import sqlalchemy as sa
+from pydantic import Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_service_kit.http import Out
 from ops_store import isolation
 from ops_store.outbox import add
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
 from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
@@ -95,16 +98,17 @@ documents_reading_files = sa.Table(
 )
 
 
-@dataclass(frozen=True)
-class ReadingRow:
+class ReadingRow(Out):
+    """A reading's row, its key columns under shorter names."""
+
     tenant_id: str
-    digest: str
-    version: str
-    key: str
+    digest: str = Field(alias="file_digest")
+    version: str = Field(alias="reader_version")
+    key: str = Field(alias="settings_key")
     status: ReadingStatus
     pages_total: int | None
     pages_done: int
-    facts: dict[str, Any] | None
+    facts: Annotated[dict[str, Any] | None, JSON_TEXT]
     error_code: str | None
     error: str | None
     attempts: int
@@ -114,24 +118,12 @@ class ReadingRow:
     duration_ms: int | None
 
 
-def _row(m: Any) -> ReadingRow:
-    return ReadingRow(
-        tenant_id=m["tenant_id"],
-        digest=m["file_digest"],
-        version=m["reader_version"],
-        key=m["settings_key"],
-        status=m["status"],
-        pages_total=m["pages_total"],
-        pages_done=m["pages_done"],
-        facts=json.loads(m["facts"]) if m["facts"] else None,
-        error_code=m["error_code"],
-        error=m["error"],
-        attempts=m["attempts"],
-        file_id=m["file_id"],
-        team=m["team"],
-        actor=m["actor"],
-        duration_ms=m["duration_ms"],
-    )
+_t = documents_readings.c
+# The columns a ReadingRow names: every other column (its times) is read by no caller.
+ROW = (
+    _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.status, _t.pages_total, _t.pages_done,
+    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
+)  # fmt: skip
 
 
 def _pack(page: dict[str, Any]) -> bytes:
@@ -148,6 +140,7 @@ class ReadingsStore(Store):
     as one team never reads another team's rows even where the database has no row policy."""
 
     role = ROLE
+    system_role = SYSTEM_ROLE
 
     @staticmethod
     def _where(t: sa.Table, team: str, digest: str, version: str, key: str) -> sa.ColumnElement[bool]:
@@ -162,9 +155,8 @@ class ReadingsStore(Store):
     async def get(self, team: str, digest: str, version: str, key: str) -> ReadingRow | None:
         t = documents_readings
         async with self.tx() as c:
-            query = sa.select(t).where(self._where(t, team, digest, version, key), team_visible(t))
-            m = (await c.execute(query)).mappings().first()
-        return _row(m) if m is not None else None
+            query = sa.select(*ROW).where(self._where(t, team, digest, version, key), team_visible(t))
+            return await one(c, query, ReadingRow)
 
     async def link(self, file_id: str, team: str, digest: str, at: datetime) -> None:
         """Records that the team's file holds these bytes; a file that changes content is linked to its new digest."""
@@ -372,14 +364,13 @@ class ReadingsStore(Store):
         """Every queued or unfinished reading, across tenants and teams, oldest first: what a restart picks up again,
         each then read in its own team."""
         t = documents_readings
-        async with isolation.system_tx(self.engine, RECOVER_PENDING, role=SYSTEM_ROLE) as c:
+        async with self.system_tx(RECOVER_PENDING) as c:
             query = (
-                sa.select(t)
+                sa.select(*ROW)
                 .where(t.c.status.in_(PENDING), any_team(t, "a restart picks up every team's unfinished readings"))
                 .order_by(t.c.created_at)
             )
-            rows = (await c.execute(query)).mappings().all()
-        return [_row(m) for m in rows]
+            return await rows(c, query, ReadingRow)
 
     async def purge(self, file_id: str, team: str) -> int:
         """Forgets that the team's deleted file held its bytes, and removes the team's readings of those bytes once no
