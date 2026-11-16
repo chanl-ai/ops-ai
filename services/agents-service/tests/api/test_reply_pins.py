@@ -27,6 +27,8 @@ _TIME = re.compile(r"^\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(\.\d+)?(\+00:00|Z)?$")
 _ID = re.compile(r"^([a-z]+)_(?=[0-9a-zA-Z_-]*[0-9])[0-9a-zA-Z_-]{6,64}$")
 # A request id: its kind's prefix and a generated tail (AGP-3f2a...).
 _REQUEST = re.compile(r"^([A-Z]{2,4})-[0-9A-Za-z]{4,40}$")
+# The kit's request id: its hex tail can hold no digit, which _ID needs.
+_KIT_REQUEST = re.compile(r"^req_[0-9a-f]{6,64}$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _HEX = re.compile(r"^[0-9a-f]{16,64}$")
 # Measured, so only their being numbers is compared.
@@ -47,6 +49,8 @@ def scrubbed(value: Any) -> Any:
     if isinstance(value, str):
         if m := _TIME.match(value):
             return f"<time{m.group(2) or ''}>"
+        if _KIT_REQUEST.match(value):
+            return "<req>"
         if m := _ID.match(value):
             return f"<{m.group(1)}>"
         if (head := value.partition(":"))[1] and (m := _ID.match(head[2])):
