@@ -60,9 +60,11 @@ export_path="$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | t
 # lets the history checks read the commits already made, which the export does not have.
 printf '%s\n' "${staged[@]}" > "$tmp/.staged"
 # A service's typecheck target runs `uv run pyright`, which would build an environment in the export; this `uv` runs the
-# command from the checkout's own environment instead.
+# command from the checkout's own environment instead. Any other uv command (the SBOM check's `uv export --frozen` on a
+# lock change) goes to the real uv, which reads the export's lock and writes nothing.
+real_uv="$(command -v uv || echo uv)"
 mkdir -p "$tmp/.bin"
-printf '#!/bin/sh\n[ "$1" = run ] && shift\nexec "$@"\n' > "$tmp/.bin/uv"
+printf '#!/bin/sh\nif [ "$1" = run ]; then shift; exec "$@"; fi\nexec "%s" "$@"\n' "$real_uv" > "$tmp/.bin/uv"
 chmod +x "$tmp/.bin/uv"
 if ! PATH="$tmp/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$tmp/.staged" \
   PY="$root/.venv/bin/python" PYRIGHT="$root/.venv/bin/pyright" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$tmp/.checks.log" 2>&1; then
