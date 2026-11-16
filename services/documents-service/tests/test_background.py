@@ -113,6 +113,13 @@ async def test_a_queued_reading_that_fails_starts_the_next_and_reports_on_health
 
     monkeypatch.setattr(readings.store, "start", start)
 
+    async def nothing_left() -> list[Any]:
+        return []
+
+    # The lifespan resumes every tenant's unfinished rows; other tests' rows finishing would overwrite the heartbeat.
+    for store, name in ((readings.store, "pending"), (s.extractor.store, "pending"), (s.types.store, "pending_tests")):
+        monkeypatch.setattr(store, name, nothing_left)
+
     async def both(c: httpx.AsyncClient) -> None:
         assert (await ask(c, failing)).status_code == 202
         assert (await ask(c, good)).status_code == 202
