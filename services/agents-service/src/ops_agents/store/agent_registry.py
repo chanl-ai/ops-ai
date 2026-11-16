@@ -18,7 +18,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
-from .tenancy import LOCAL_TENANT, RuntimeStore, current_tenant
+from .tenancy import LOCAL_TENANT, OWNER, RuntimeStore, current_tenant
 
 registry_agents = sa.Table(
     "registry_agents",
@@ -194,15 +194,10 @@ class AgentRegistry(RuntimeStore):
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
-    async def owner_team(self, agent_id: str) -> str | None:
+    async def owner_team(self, agent_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns an agent, whoever is acting; None when there is no such agent. Only for deciding a
         refusal by the owning team, never for showing the agent."""
-        q = sa.select(registry_agents.c.team_id).where(
-            registry_agents.c.id == agent_id, any_team(registry_agents, "the owning team a refusal is decided on")
-        )
-        async with self.tx() as c:
-            team = (await c.execute(q)).scalar()
-        return str(team) if team else None
+        return (await self.owner_teams(conn, registry_agents, {agent_id}, OWNER)).get(agent_id)
 
     async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
         """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""
@@ -298,7 +293,8 @@ class AgentRegistry(RuntimeStore):
         """`create` for an agent whose id is fixed (a team's Ops Assistant): False when a row of that id, or one
         racing it for the same slug, is already there, so two first chats at once leave one agent."""
         try:
-            await self.create(spec, by=by, team_id=team_id, agent_id=agent_id, published=True)
+            async with self.tx() as c, self.attempt(c):
+                await self.create(spec, by=by, team_id=team_id, agent_id=agent_id, published=True, conn=c)
         except IntegrityError:
             return False
         return True
@@ -314,39 +310,53 @@ class AgentRegistry(RuntimeStore):
         published: bool = False,
         template_id: str | None = None,
         protection: str | None = None,
+        conn: AsyncConnection | None = None,
     ) -> str:
-        aid = agent_id or new_id("ag")
-        at = now_iso()
-        async with self.tx() as c:
-            slug = await self._unique_slug(c, spec["name"])
-            await c.execute(
-                registry_agents.insert().values(
-                    id=aid,
-                    slug=slug,
+        if conn is None:
+            async with self.tx() as c:
+                return await self.create(
+                    spec,
+                    by=by,
                     team_id=team_id,
+                    agent_id=agent_id,
                     version=version,
-                    published_version=version if published else None,
-                    paused=False,
-                    created_at=at,
-                    updated_at=at,
+                    published=published,
                     template_id=template_id,
                     protection=protection,
+                    conn=c,
                 )
+        c = conn
+        aid = agent_id or new_id("ag")
+        at = now_iso()
+        slug = await self._unique_slug(c, spec["name"])
+        await c.execute(
+            registry_agents.insert().values(
+                id=aid,
+                slug=slug,
+                team_id=team_id,
+                version=version,
+                published_version=version if published else None,
+                paused=False,
+                created_at=at,
+                updated_at=at,
+                template_id=template_id,
+                protection=protection,
             )
-            await c.execute(
-                registry_agent_versions.insert().values(
-                    agent_id=aid,
-                    version=version,
-                    spec=spec,
-                    digest=digest_of(spec),
-                    note="Seeded" if published else "",
-                    changes=["Created"],
-                    saved_at=at,
-                    saved_by=by,
-                    published_at=at if published else None,
-                    published_by=by if published else None,
-                )
+        )
+        await c.execute(
+            registry_agent_versions.insert().values(
+                agent_id=aid,
+                version=version,
+                spec=spec,
+                digest=digest_of(spec),
+                note="Seeded" if published else "",
+                changes=["Created"],
+                saved_at=at,
+                saved_by=by,
+                published_at=at if published else None,
+                published_by=by if published else None,
             )
+        )
         return aid
 
     async def save(self, agent_id: str, spec: dict[str, Any], *, by: str, note: str = "") -> int:
@@ -450,16 +460,18 @@ class AgentRegistry(RuntimeStore):
         the older one could only ever put a version live that lacks what was saved since."""
         for attempt in range(3):
             try:
-                return await self._open_request(
-                    kind,
-                    subject_id,
-                    version,
-                    note=note,
-                    by=by,
-                    body=body,
-                    approved=approved,
-                    replaces_older=replaces_older,
-                )
+                async with self.tx() as c, self.attempt(c):
+                    return await self._open_request(
+                        c,
+                        kind,
+                        subject_id,
+                        version,
+                        note=note,
+                        by=by,
+                        body=body,
+                        approved=approved,
+                        replaces_older=replaces_older,
+                    )
             except IntegrityError:
                 # Two opens in the tenant took the same number; the next attempt reads the one that landed.
                 if attempt == 2:
@@ -468,6 +480,7 @@ class AgentRegistry(RuntimeStore):
 
     async def _open_request(
         self,
+        c: AsyncConnection,
         kind: str,
         subject_id: str,
         version: int,
@@ -480,54 +493,51 @@ class AgentRegistry(RuntimeStore):
     ) -> dict[str, Any]:
         at = now_iso()
         prefix = REQUEST_PREFIXES.get(kind, "WFP")
-        async with self.tx() as c:
-            pending = (
-                await c.execute(
-                    sa.select(publish_requests.c.id, publish_requests.c.version).where(
-                        _mine(),
-                        publish_requests.c.kind == kind,
-                        publish_requests.c.subject_id == subject_id,
-                        publish_requests.c.status == "pending",
-                    )
+        pending = (
+            await c.execute(
+                sa.select(publish_requests.c.id, publish_requests.c.version).where(
+                    _mine(),
+                    publish_requests.c.kind == kind,
+                    publish_requests.c.subject_id == subject_id,
+                    publish_requests.c.status == "pending",
                 )
-            ).first()
-            if pending is not None and not (replaces_older and int(pending[1]) < version):
-                raise Conflict(f"Publish request {pending[0]} is already open.", code="review_open")
-            if pending is not None:
-                # Returned, the state a reviewer's send-back leaves, so a late approval of it answers already_decided.
-                await c.execute(
-                    publish_requests.update()
-                    .where(_mine(), publish_requests.c.id == pending[0], publish_requests.c.status == "pending")
-                    .values(
-                        status="returned",
-                        decided_at=at,
-                        decided_by=by,
-                        decision_reason=f"Replaced by the request for version {version}.",
-                    )
+            )
+        ).first()
+        if pending is not None and not (replaces_older and int(pending[1]) < version):
+            raise Conflict(f"Publish request {pending[0]} is already open.", code="review_open")
+        if pending is not None:
+            # Returned, the state a reviewer's send-back leaves, so a late approval of it answers already_decided.
+            await c.execute(
+                publish_requests.update()
+                .where(_mine(), publish_requests.c.id == pending[0], publish_requests.c.status == "pending")
+                .values(
+                    status="returned",
+                    decided_at=at,
+                    decided_by=by,
+                    decision_reason=f"Replaced by the request for version {version}.",
                 )
-            # The next number after the tenant's highest for this prefix. A row count repeats a number once a request
-            # is deleted (an agent's are deleted with it).
-            taken = (
-                await c.execute(
-                    sa.select(publish_requests.c.id).where(_mine(), publish_requests.c.id.like(f"{prefix}-%"))
-                )
-            ).scalars()
-            numbers = [int(i.rsplit("-", 1)[1]) for i in taken if i.rsplit("-", 1)[1].isdigit()]
-            row = {
-                "id": f"{prefix}-{max(numbers, default=1000) + 1}",
-                "kind": kind,
-                "subject_id": subject_id,
-                "version": version,
-                "status": "approved" if approved else "pending",
-                "note": note,
-                "requested_by": by,
-                "created_at": at,
-                "decided_at": at if approved else None,
-                "decided_by": "auto-approve (dev)" if approved else None,
-                "decision_reason": None,
-                "body": body,
-            }
-            await c.execute(publish_requests.insert().values(**row))
+            )
+        # The next number after the tenant's highest for this prefix. A row count repeats a number once a request
+        # is deleted (an agent's are deleted with it).
+        taken = (
+            await c.execute(sa.select(publish_requests.c.id).where(_mine(), publish_requests.c.id.like(f"{prefix}-%")))
+        ).scalars()
+        numbers = [int(i.rsplit("-", 1)[1]) for i in taken if i.rsplit("-", 1)[1].isdigit()]
+        row = {
+            "id": f"{prefix}-{max(numbers, default=1000) + 1}",
+            "kind": kind,
+            "subject_id": subject_id,
+            "version": version,
+            "status": "approved" if approved else "pending",
+            "note": note,
+            "requested_by": by,
+            "created_at": at,
+            "decided_at": at if approved else None,
+            "decided_by": "auto-approve (dev)" if approved else None,
+            "decision_reason": None,
+            "body": body,
+        }
+        await c.execute(publish_requests.insert().values(**row))
         return row
 
     async def all_requests(self) -> list[dict[str, Any]]:
