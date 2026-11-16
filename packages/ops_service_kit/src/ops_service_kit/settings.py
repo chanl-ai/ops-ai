@@ -82,6 +82,17 @@ class ModelsEndpoint(Endpoint):
     timeout_s: float = Field(default=120.0, gt=0)
 
 
+class RunnerWaits(BaseModel):
+    """How runner-service's host waits on a guest (OPS_RUNNER_WAITS__*): the epoch tick a run's time limit is counted
+    in, the grace after that limit for a guest that trapped but still holds its pipes, and how soon it looks again for
+    a guest that has not opened its end of a pipe (open) or has no writer on stdout yet (read)."""
+
+    tick_s: float = Field(default=0.1, gt=0)
+    grace_s: float = Field(default=2.0, gt=0)
+    open_poll_s: float = Field(default=0.005, gt=0)
+    read_poll_s: float = Field(default=0.01, gt=0)
+
+
 class PoolSettings(BaseModel):
     """The database connection pool of one process: connections kept, connections opened beyond those under load, and
     how long a request waits for one."""
@@ -319,6 +330,9 @@ class Settings(BaseSettings):
     runner_max_memory_mb: int = 1024
     runner_max_time_s: float = 60.0
     runner_max_calls: int = 100
+    # How long the one download of the WASI build may take (`make -C services/runner-service wasm`): about 25 MB.
+    runner_fetch_timeout_s: float = Field(default=120.0, gt=0)
+    runner_waits: RunnerWaits = RunnerWaits()
     # files-service's public base, path included (e.g. https://ops.example/api/files), when a proxy serves it under a
     # path it strips: every upload and download URL the service hands out is built on it. Unset, the request's base.
     files_public_url: str | None = None

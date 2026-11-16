@@ -206,3 +206,36 @@ def test_a_number_in_another_function_or_a_parameter_of_the_same_name_is_not_a_t
         "def d(t=5):\n    return http.get('/x', timeout=t)\n"
     )
     assert c.findings(src) == [("timeout", 3)]
+
+
+WAITS = """
+import os, select
+import sqlalchemy as sa
+
+GRACE_S = 2.0
+NAMES = ("a", "b")
+thread.join(timeout=GRACE_S)
+thread.join(0.01)
+stop.wait(GRACE_S)
+ready, _, _ = select.select(r, w, x, 1.5)
+selector.select(3)
+os.path.join(base, name)
+", ".join(NAMES)
+sep.join(NAMES)
+thread.join()
+stop.wait(settings.runner_waits.grace_s)
+select.select(r, w, x)
+await c.execute(sa.select(1))
+"""
+
+
+def test_a_wait_given_its_limit_by_position_is_found_and_a_string_or_path_join_is_not() -> None:
+    # A thread join, an event wait or a select names its limit first (select.select fourth); a positional number there
+    # is the same literal timeout as `timeout=` and is counted the same.
+    assert sorted(c.findings(WAITS)) == [
+        ("timeout", 7),
+        ("timeout", 8),
+        ("timeout", 9),
+        ("timeout", 10),
+        ("timeout", 11),
+    ]

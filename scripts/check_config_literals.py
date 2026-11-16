@@ -5,8 +5,9 @@ configuration.md, CF2 and CF3), in every package's and service's `src`:
             "http://127.0.0.1:..."`). None is allowed: a missing address must stop the process at start
             (`Settings.require`), not send its first call to the wrong place. LOOPBACK_WAITING names any still
             there (none now); a baseline file cannot allow one, and an entry fails once its fallback is gone.
-  timeout   a `timeout=` given as a number, an upper-case constant or arithmetic on them at a call, and an
-            `httpx.Timeout(` holding one. The value belongs on the setting (`Endpoint.timeout_s`).
+  timeout   a `timeout=` given as a number, an upper-case constant or arithmetic on them at a call, the same
+            given by position to a thread join, an event wait or a select, and an `httpx.Timeout(` holding one.
+            The value belongs on the setting (`Endpoint.timeout_s`).
   client    an `httpx.AsyncClient(` or `httpx.Client(` built outside `ops_identity.client`, which owns the one a
             service call uses (`ServiceClient.for_settings`).
 
@@ -74,12 +75,15 @@ class Scope:
         self.imports: Names = {}
         self.strings: Names = {}
         self.numbers: set[str] = set()
+        # Names `import x` or `import x as y` binds: a call on one is a module's function, not a thread's or event's.
+        self.modules: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module and not node.level:
                 for a in node.names:
                     self.imports[a.asname or a.name] = f"{node.module}.{a.name}"
             elif isinstance(node, ast.Import):
                 for a in node.names:
+                    self.modules.add(a.asname or a.name.split(".")[0])
                     if a.asname:
                         self.imports[a.asname] = a.name
             elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
@@ -140,6 +144,40 @@ def _fixed(node: ast.expr, scope: Scope) -> bool:
     return False
 
 
+def _number(node: ast.expr, scope: Scope) -> bool:
+    """A number, a name this file assigns a number, or arithmetic on them: `_fixed` without upper-case names, which at
+    a `join` are as often a tuple of strings (`", ".join(NAMES)`)."""
+    if isinstance(node, ast.Constant):
+        return type(node.value) in (int, float)
+    if isinstance(node, ast.Name):
+        return node.id in scope.numbers
+    if isinstance(node, ast.BinOp):
+        return _number(node.left, scope) and _number(node.right, scope)
+    return False
+
+
+def _positional_wait(node: ast.Call, scope: Scope) -> ast.expr | None:
+    """The limit a thread join, an event or condition wait, or a select gives by position: `select.select`'s fourth
+    argument, otherwise a lone first one. A string join, or a module's function (`os.path.join`, `sa.select`), is
+    never a wait."""
+    func = node.func
+    if not isinstance(func, ast.Attribute) or func.attr not in ("join", "wait", "select"):
+        return None
+    root = func.value
+    while isinstance(root, ast.Attribute):
+        root = root.value
+    if scope.dotted(func) == "select.select":
+        limit = node.args[3] if len(node.args) > 3 else None
+    elif len(node.args) == 1 and not (isinstance(root, ast.Name) and root.id in scope.modules):
+        limit = node.args[0]
+    else:
+        return None
+    if limit is None:
+        return None
+    counted = _number(limit, scope) if func.attr == "join" else _fixed(limit, scope)
+    return limit if counted else None
+
+
 def _loopback(node: ast.expr, scope: Scope) -> bool:
     text = _text(node, scope.strings)
     return any(f"://{host}" in text for host in LOOPBACK_HOSTS)
@@ -181,6 +219,9 @@ def findings(source: str) -> list[tuple[str, int]]:
             # `asyncio.wait_for(work(), 30)` gives its limit by position.
             if scope.dotted(node.func) == "asyncio.wait_for" and len(node.args) > 1 and _fixed(node.args[1], scope):
                 found.append(("timeout", node.args[1].lineno))
+            # `thread.join(0.01)`, `stop.wait(GRACE_S)`, `select.select(r, w, x, 1.5)`: the limit given by position.
+            if (limit := _positional_wait(node, scope)) is not None:
+                found.append(("timeout", limit.lineno))
             # `httpx.Timeout(10.0, connect=3)` states the same limits as a number at the call.
             if _is_timeout_class(node.func, scope) and any(
                 _fixed(a, scope) for a in [*node.args, *(k.value for k in node.keywords)]

@@ -76,3 +76,18 @@ def test_models_and_platform_are_endpoints_from_the_addresses_every_deploy_alrea
     monkeypatch.delenv("OPS_PLATFORM__TIMEOUT_S")
     with pytest.raises(ValueError, match="OPS_PLATFORM_URL is not set"):
         Settings().endpoint("platform")
+
+
+def test_the_runner_reads_its_fetch_timeout_and_every_wait_on_a_guest_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A wait the runner passes to a join or a fetch is a setting, so an operator can widen it without a code change.
+    monkeypatch.setenv("OPS_RUNNER_FETCH_TIMEOUT_S", "300")
+    monkeypatch.setenv("OPS_RUNNER_WAITS__GRACE_S", "5")
+    settings = Settings()
+    waits = settings.runner_waits
+    assert settings.runner_fetch_timeout_s == 300.0
+    assert (waits.tick_s, waits.grace_s, waits.open_poll_s, waits.read_poll_s) == (0.1, 5.0, 0.005, 0.01)
+    monkeypatch.setenv("OPS_RUNNER_WAITS__READ_POLL_S", "0")
+    with pytest.raises(ValueError, match="greater than 0"):
+        Settings()
