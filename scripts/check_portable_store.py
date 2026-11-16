@@ -17,7 +17,7 @@
 
 What is there today is listed in portable-baseline.txt, so only new code is a finding. The gate (verify-staged and
 make python-verify) runs `--strict`, and `--commits`: a commit that raises a row of either baseline carries a
-`Standards-exception:` trailer a maintainer approved. ops_store.dialect holds each database's form.
+maintainer's review on the pull request. ops_store.dialect holds each database's form.
 
   uv run python scripts/check_portable_store.py            # findings, exit 0
   uv run python scripts/check_portable_store.py --strict   # exit 1 when there is a finding
@@ -408,7 +408,8 @@ def warnings(now: Counter[str], base: Counter[str], where: dict[str, list[str]])
 def render(counts: Counter[str]) -> str:
     head = [
         f"# {sum(counts.values())} findings: code and metadata outside ops_store that would not run on SQL Server"
-        " (scripts/check_portable_store.py). A row may only fall; raising one needs a Standards-exception: trailer.",
+        " (scripts/check_portable_store.py). A row may only fall;"
+        " a raise waits for a maintainer's review on the pull request.",
     ]
     head.append(
         "# Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and"
@@ -445,7 +446,6 @@ def _owner(key: str) -> str:
 BASELINE_BEGAN = "ff31407eb261038374fc5c7fda556b40a519fcef"
 # The commit that created list-slice-baseline.txt; the rows it held are the start.
 SLICE_BASELINE_BEGAN = "583fbae33c53c028d7a20873eeb72db811888084"
-TRAILER = "Standards-exception:"
 
 
 def _git(*args: str) -> str:
@@ -458,36 +458,31 @@ def raised(before: str, after: str) -> list[str]:
     return sorted(f"{key} ({old.get(key, 0)} -> {n})" for key, n in new.items() if n > old.get(key, 0))
 
 
-def _file_problems(name: str, began: str) -> list[str]:
+def _file_rises(name: str, began: str) -> list[str]:
     out: list[str] = []
-    for sha in _git("log", "--format=%H", f"{began}..HEAD", "--", name).split():
+    for sha in _git("log", "--format=%H", f"{baseline_history.history_start(began)}..HEAD", "--", name).split():
         before = subprocess.run(
             ["git", "show", f"{sha}^:{name}"], cwd=ROOT, capture_output=True, text=True, check=False
         ).stdout
-        rows = raised(before, _git("show", f"{sha}:{name}"))
-        message = _git("log", "-1", "--format=%B", sha)
-        if rows and not baseline_history.approved(message, baseline_history.maintainers_at(ROOT, f"{sha}^")):
-            out += [
-                f"trailer {sha[:8]} raises `{row}` in {name} with no {baseline_history.WANTED} trailer" for row in rows
-            ]
+        out += [f"{sha[:8]} raises `{row}` in {name}" for row in raised(before, _git("show", f"{sha}:{name}"))]
     return out
 
 
 def commit_problems() -> list[str]:
-    """Commits that raise a row of portable-baseline.txt or list-slice-baseline.txt without a Standards-exception:
-    trailer. An export without history (verify-head's one-commit copy) has nothing to check; verify-staged runs it on
-    the repository."""
+    """Commits that raise a row of portable-baseline.txt or list-slice-baseline.txt: rises that wait for a
+    maintainer's review on the pull request (scripts/baseline_history.py). An export without history (verify-head's
+    one-commit copy) has nothing to check; verify-staged runs it on the repository."""
     out: list[str] = []
     for path, began in ((BASELINE, BASELINE_BEGAN), (SLICE_BASELINE, SLICE_BASELINE_BEGAN)):
-        probe = ["git", "cat-file", "-e", f"{began}^{{commit}}"]
+        probe = ["git", "cat-file", "-e", f"{baseline_history.history_start(began)}^{{commit}}"]
         if subprocess.run(probe, cwd=ROOT, capture_output=True, check=False).returncode == 0:
-            out += _file_problems(path.name, began)
-    return out
+            out += _file_rises(path.name, began)
+    return baseline_history.awaiting_review(out)
 
 
 def lowered(now: Counter[str], base: Counter[str]) -> Counter[str]:
     """Today's counts, no higher than the baseline's: `--update` drops fixed rows and lowers others, and a new or
-    raised one is written by hand with a Standards-exception: trailer on the commit."""
+    raised one is written by hand and waits for a maintainer's review on the pull request."""
     return Counter({key: min(n, base[key]) for key, n in now.items() if base.get(key)})
 
 
@@ -497,7 +492,7 @@ def main() -> int:
         sys.stdout.write(
             "\n".join(missing) + "\n"
             if missing
-            else f"Every baseline rise since {BASELINE_BEGAN[:8]} carries {TRAILER}\n"
+            else f"Every baseline rise since {BASELINE_BEGAN[:8]} is approved or none was made\n"
         )
         return 1 if missing else 0
     now, where = current()

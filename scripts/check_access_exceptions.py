@@ -41,8 +41,8 @@ Role-name compares, owner compares and policy reads are also counted per lane in
 `scripts/access-baselines/<lane>.txt` (`path kind key count`); a lane's total of a kind may only fall, against the
 committed file and in every commit (`--commits`), and the lane takes its file to zero.
 
-Every commit after the list began that adds a line with a register row must carry a `Standards-exception:` trailer
-that says `approved by a maintainer` (`--commits`).
+Every commit after the list began that adds a line with a register row needs an approving review on the pull request
+from a maintainer (`--commits`, scripts/baseline_history.py).
 
   python3 scripts/check_access_exceptions.py            # exit 1 on a new, stale or unregistered exception
   python3 scripts/check_access_exceptions.py --list     # every finding with its line, listed or not
@@ -86,22 +86,6 @@ NEVER = ("flag", "role-set")
 OUTCOMES = ("keep", "convert", "delete")
 # The commit that began the list with the exceptions already in the code; lines added after it need the trailer.
 LIST_BEGAN = "67f10685"
-TRAILER = "Standards-exception:"
-# Commits up to this one were approved under the older phrase "approved by a maintainer" (below); a commit after it
-# needs `Standards-exception: approved by <login>: <reason>` naming a login in .github/standards-maintainers.txt.
-NAMED_APPROVER_AFTER = "dc281681"
-# Who approves an exception line: the trailer names them, so a trailer anyone could write does not pass.
-APPROVER = "approved by a maintainer"
-# Commits whose added lines were approved after they landed, each with the approval and the fix-forward commit that
-# records it; an exact sha, never a pattern.
-APPROVED_AFTER = {
-    # E09 dev-caller moved from agents auth.py into ops_store.isolation; same decision, total unchanged.
-    "07770915": (
-        "Standards-exception: E09 dev-caller moved into ops_store.isolation in 07770915; approved by a maintainer"
-    ),
-    # E23 appWritesNeedApproval, off by default; its commit's trailer named no approver.
-    "2214769e": "Standards-exception: E23 appWritesNeedApproval defaults to no app listed; approved by a maintainer",
-}
 
 # The always-on baseline (roles-and-permissions.md, "How access is decided"): token identity, team and
 # tenant isolation, scoped service and API key tokens, the embed's configured origins, and secrets kept hidden. A 403
@@ -571,34 +555,24 @@ def _row_problems(
     return problems
 
 
-def _approved(sha: str, message: str) -> bool:
-    """Whether the commit's trailer approves it: the older phrase for a commit up to NAMED_APPROVER_AFTER, else a
-    listed maintainer named as the parent commit's file has them."""
-    older = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", sha, NAMED_APPROVER_AFTER], cwd=ROOT, capture_output=True, check=False
-    )
-    if older.returncode == 0:
-        lines = [*message.splitlines(), APPROVED_AFTER.get(sha[:8], "")]
-        return any(line.startswith(TRAILER) and APPROVER in line for line in lines)
-    return baseline_history.approved(message, baseline_history.maintainers_at(ROOT, f"{sha}^"))
-
-
 def commit_problems() -> list[str]:
-    """Commits after the list began that add a line with a register row and carry no Standards-exception: trailer
-    naming its approver, or add one on a row with no decision. An export without history (verify-head's one-commit copy)
-    has nothing to check; verify-staged runs it on the repo."""
-    known = ["git", "cat-file", "-e", f"{LIST_BEGAN}^{{commit}}"]
+    """Commits after the list began that add a line with a register row, which wait for a maintainer's review on the
+    pull request (scripts/baseline_history.py), or add one on a row with no decision, which no review approves. An
+    export without history (verify-head's one-commit copy) has nothing to check; verify-staged runs it on the repo."""
+    began = baseline_history.history_start(LIST_BEGAN)
+    known = ["git", "cat-file", "-e", f"{began}^{{commit}}"]
     if subprocess.run(known, cwd=ROOT, capture_output=True, check=False).returncode:
         return []
     log = subprocess.run(
-        ["git", "log", "--format=%H", f"{LIST_BEGAN}..HEAD", "--", ALLOWLIST.name],
+        ["git", "log", "--format=%H", f"{began}..HEAD", "--", ALLOWLIST.name],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=True,
     ).stdout.split()
     rows = register()
-    out: list[str] = baseline_history.list_problems(ROOT)
+    out: list[str] = []
+    awaiting: list[str] = baseline_history.list_rises(ROOT, began)
     for sha in log:
         # Added: a line whose five fields the parent's file does not hold. An outcome comment alone adds nothing; a
         # new line behind a comment, or a raised count, does.
@@ -608,27 +582,22 @@ def commit_problems() -> list[str]:
             for fields in (_fields(raw)[0] for raw in (_at(sha, ALLOWLIST.name) or "").splitlines())
             if len(fields) == 5 and tuple(fields) not in before and re.fullmatch(r"E\d+", fields[4])
         ]
-        message = subprocess.run(
-            ["git", "log", "-1", "--format=%B", sha], cwd=ROOT, capture_output=True, text=True, check=True
-        ).stdout
-        if added and not _approved(sha, message):
-            for line in added:
-                out.append(f"trailer {sha[:8]} adds `{line.strip()}` with no {baseline_history.WANTED} trailer")
+        awaiting += [f"{sha[:8]} adds `{line.strip()}` to {ALLOWLIST.name}" for line in added]
         for line in added:
             row = line.split()[-1]
             if "no decision" in rows.get(row, "").lower():
                 out.append(f"row     {sha[:8]} adds `{line.strip()}` on {row}, which has no decision")
     if not BASELINES.is_relative_to(ROOT):
-        return out
+        return [*out, *baseline_history.awaiting_review(awaiting)]
     folder = BASELINES.relative_to(ROOT).as_posix()
-    touched = ["git", "log", "--format=%H", f"{LIST_BEGAN}..HEAD", "--", folder]
+    touched = ["git", "log", "--format=%H", f"{began}..HEAD", "--", folder]
     for sha in subprocess.run(touched, cwd=ROOT, capture_output=True, text=True, check=True).stdout.split():
         for lane in LANES:
             name = f"{folder}/{lane}.txt"
             was = _at(f"{sha}^", name)
             if was is not None:
-                out.extend(f"{r} ({sha[:8]})" for r in _rises(f"{lane}.txt", was, _at(sha, name) or ""))
-    return out
+                awaiting.extend(f"{r} ({sha[:8]})" for r in _rises(f"{lane}.txt", was, _at(sha, name) or ""))
+    return [*out, *baseline_history.awaiting_review(awaiting)]
 
 
 def _at(rev: str, name: str) -> str | None:
@@ -645,7 +614,7 @@ def main(argv: list[str]) -> int:
         print(
             "\n".join(missing)
             if missing
-            else f"Every exception line added since {LIST_BEGAN} carries {TRAILER} {APPROVER}"
+            else f"Every exception line added since {LIST_BEGAN} is approved or none was added"
         )
         return 1 if missing else 0
     found = findings()
@@ -677,7 +646,8 @@ def main(argv: list[str]) -> int:
         print("\n".join(dict.fromkeys(problems)))
         print(
             "Move the rule into a roles-grid cell or a policy read by can(). If a maintainer decided it stays, add a "
-            "row to the register and a line to access-exceptions-allowlist.txt with a Standards-exception: trailer."
+            "row to the register and a line to access-exceptions-allowlist.txt; a maintainer reviews the line on the "
+            "pull request."
         )
         return 1
     print(f"Access exceptions: {sum(counts.values())} findings, all in the register.")

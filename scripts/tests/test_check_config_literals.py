@@ -127,7 +127,7 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True, env=env).stdout.strip()
 
 
-def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
+def test_a_baseline_row_raised_or_a_file_added_waits_for_the_review(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     kb = tmp_path / "services/kb-service"
@@ -141,6 +141,7 @@ def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-qm", "the baselines begin")
     monkeypatch.setattr(c, "BASELINES_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     (kb / c.BASELINE_NAME).write_text("# header\n1 timeout services/kb-service/src/app.py\n")
     _git(tmp_path, "commit", "-qam", "a timeout moved onto the setting")
     assert c.commit_problems(tmp_path) == []
@@ -148,15 +149,16 @@ def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
     _git(tmp_path, "commit", "-qam", "a timeout back in code")
     [raised] = c.commit_problems(tmp_path)
     assert "timeout services/kb-service/src/app.py (1 -> 3)" in raised
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "x\n\nStandards-exception: approved by owner-login: three timeouts")
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
     assert c.commit_problems(tmp_path) == []
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     # A member that had no file gets today's count from `--update`; that new file is a rise like any other.
     models = tmp_path / "services/models-service"
     models.mkdir()
     (models / c.BASELINE_NAME).write_text("# header\n4 client services/models-service/src/app.py\n")
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-qm", "a baseline file for a member with none")
-    [added] = c.commit_problems(tmp_path)
+    [added] = [p for p in c.commit_problems(tmp_path) if "services/models-service" in p]
     assert "client services/models-service/src/app.py (0 -> 4)" in added
 
 

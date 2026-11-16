@@ -1,8 +1,6 @@
-# Who may approve a Standards-exception: trailer, one sha256 a line: the hash of the maintainer's lower-case GitHub login
-# (python3 -c "import hashlib;print(hashlib.sha256(b'<login>').hexdigest())"), since the repository is public and names
-# no person. A commit that raises a baseline row or adds an access exception line needs a trailer in this form, naming
-# a login whose hash is listed as the commit's parent had it:
-#   Standards-exception: approved by <login>: <reason>
-# A builder never writes its own: the trailer is the maintainer's approval of one change, given in that change's review.
-# A commit that edits this file needs the same approval from a login already listed (scripts/baseline_history.py).
+# Who may approve a raised baseline row or a new access exception line, one sha256 a line: the hash of the maintainer's
+# lower-case GitHub login (python3 -c "import hashlib;print(hashlib.sha256(b'<login>').hexdigest())"), since the
+# repository is public and names no person. The approval is an approving review on the pull request by a listed
+# maintainer, read from GitHub by scripts/check_review_approval.py in CI's maintainer-review job; no commit message
+# approves anything. The list that counts is the one at the pull request's base. Editing this file is itself a rise.
 802b1d90cdaab230e1867251feef6b21516e4d68ead9f7e9c9a84c9f961e208b

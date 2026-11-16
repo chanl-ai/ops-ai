@@ -7,9 +7,9 @@ The grid below is generated from `packages/ops_access` and checked by `make pyth
 `scripts/check_access_exceptions.py` on every commit: every 403 (typed errors included) and every 409 code against a
 line of `access-exceptions-allowlist.txt`, every line's row against this register (a resolved row holds no lines; a
 line added on a row with no decision fails, and the lines already on one are printed for review), and every
-exception line added since the list began against a `Standards-exception:` trailer on its commit: up to commit
-`dc281681` it says `approved by a maintainer`; after it, `approved by <login>: <reason>` naming a maintainer whose hash
-`.github/standards-maintainers.txt` lists in the commit's parent.
+exception line a pull request adds, which needs an approving review on it from a maintainer listed (by hash) in
+`.github/standards-maintainers.txt`; CI's `maintainer-review` job reads the review from GitHub, so no commit message
+approves anything.
 
 ## How access is decided
 
@@ -591,4 +591,4 @@ for reuse.
 | Access check | Each architecture review, and each question about access | A change, question or diff conflicts with this page, or asks something [Access rules](#access-rules) answers |
 
 A new rule adds a row to Access rules in the same change that acts on it; a new exception adds a register
-row and an allowlist line with a `Standards-exception:` trailer.
+row and an allowlist line, which a maintainer approves in review on the pull request.

@@ -2,7 +2,7 @@
 # check in verify-changed.sh and pre-commit (`make checks STAGED=1`) all run `make checks`, so a check added here runs
 # in every one of them and none can run a shorter list. A check is a name in CHECKS, the command that runs it and, for
 # pre-commit, the staged paths that can change its result. Each is proven red by its own test or `--self-test`.
-.PHONY: checks checks-list
+.PHONY: checks checks-list checks-history
 
 ##@ Checks
 
@@ -19,7 +19,7 @@ CHECKS = \
   typed-boundaries \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
-  lint-imports sdk-drift changelog-entries console-standards
+  ratchet-history lint-imports sdk-drift changelog-entries console-standards
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -55,6 +55,10 @@ check-paths.isolation-markings = ^deploy/database/|^(services|packages)/[^/]+/(s
 check-run.isolation-sites = $(PYTEST) packages/ops_store/tests/test_isolation_sites.py packages/ops_store/tests/test_relay_sites.py packages/ops_store/tests/test_loop_health.py
 check-paths.isolation-sites = ^packages/ops_store/|^(services|packages)/[^/]+/(src|tests)/.*\.py$$
 
+# The waiting lists of the pytest ratchets only fall, by their history (scripts/baseline_history.py).
+check-run.ratchet-history = $(PYTEST) packages/ops_store/tests deploy/database/tests -k falls_in_the_history
+check-paths.ratchet-history = ^packages/ops_store/tests/(isolation_sites|relay_sites|loop_health)/|^deploy/database/tests/test_indexes\.py$$
+
 # Files written from code match it.
 check-run.store-inventory = $(PY) scripts/store_inventory.py --check
 check-paths.store-inventory = ^(services|packages)/[^/]+/(src|migrations)/|^docs/architecture/data\.md$$|^scripts/store_inventory\.py$$
@@ -86,6 +90,14 @@ check-step = $(if $(STAGED),if $(checks-staged) | grep -qE '$(check-paths.$(1))'
 checks: ## Every check on the one list (CHECKS), each run to the end and the failures listed; STAGED=1 runs those the staged paths can change; make checks-list prints them
 	@rm -f $(CHECKS_FAILED)
 	@$(foreach c,$(CHECKS),$(call check-step,$(c)))
+	@$(ROOT)/scripts/keep_going.sh --report $(CHECKS_FAILED)
+
+# The checks that read history, as CI's maintainer-review job runs them after scripts/check_review_approval.py has set
+# OPS_STANDARDS_REVIEW: `required` fails a rise in a baseline, `approved` passes it, unset prints it as awaiting review.
+CHECKS_HISTORY = access-exceptions-commits portable-store-commits config-literals-commits ratchet-history
+checks-history: ## The history checks alone, for the pull request's review job (OPS_STANDARDS_REVIEW=required|approved)
+	@rm -f $(CHECKS_FAILED)
+	@$(foreach c,$(CHECKS_HISTORY),echo "== $(c)"; $(ROOT)/scripts/keep_going.sh $(CHECKS_FAILED) $(check-run.$(c));)
 	@$(ROOT)/scripts/keep_going.sh --report $(CHECKS_FAILED)
 
 checks-list: ## Print each check on the list with the command it runs

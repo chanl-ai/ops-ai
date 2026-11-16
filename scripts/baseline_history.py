@@ -2,9 +2,15 @@
 
 A check that compares the code with its baseline file cannot see the baseline being raised to match the code. This
 reads the baseline files' own history instead: each commit after `began` that raises a row, adds a row or adds a file
-needs a `Standards-exception: approved by <login>: <reason>` trailer, <login> being a maintainer the parent commit's
-`.github/standards-maintainers.txt` lists (by hash). Used by scripts/check_portable_store.py,
-scripts/check_config_literals.py and the pytest ratchets under packages/ops_store/tests and deploy/database/tests.
+is a rise, and a rise needs an approving review on the pull request from a maintainer listed (by hash) in
+`.github/standards-maintainers.txt`. The review is read from GitHub by scripts/check_review_approval.py, which sets
+OPS_STANDARDS_REVIEW for the checks it runs, so nothing a commit says can approve it. Used by
+scripts/check_portable_store.py, scripts/check_config_literals.py, scripts/check_typed_boundaries.py and the pytest
+ratchets under packages/ops_store/tests and deploy/database/tests.
+
+OPS_STANDARDS_REVIEW unset (a developer's machine, the checks job): a rise is printed as awaiting review and passes.
+`required`: a rise fails. `approved`: a rise passes. OPS_STANDARDS_BASE narrows the history to a pull request's
+commits (its base sha).
 
 A checkout without the history (verify-head's one-commit export, a shallow clone) has nothing to read and reports
 nothing; verify-staged and CI run it on the repository.
@@ -14,18 +20,17 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import re
+import os
 import subprocess
+import sys
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
-TRAILER = "Standards-exception:"
 MAINTAINERS = ".github/standards-maintainers.txt"
-# The one form that approves a change: a listed login, then a reason. A bare trailer, or one naming nobody listed,
-# approves nothing, so a builder cannot approve its own change by writing the line.
-APPROVAL = re.compile(rf"^{re.escape(TRAILER)} approved by (?P<login>[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?): \S")
-WANTED = f"{TRAILER} approved by <maintainer in {MAINTAINERS}>: <reason>"
+REVIEW_ENV = "OPS_STANDARDS_REVIEW"
+BASE_ENV = "OPS_STANDARDS_BASE"
+AWAITING = "awaiting maintainer review on the pull request"
 
 Parse = Callable[[str], Counter[str]]
 
@@ -93,42 +98,50 @@ def login_hash(login: str) -> str:
     return hashlib.sha256(login.lower().encode()).hexdigest()
 
 
-def approved(message: str, allowed: set[str]) -> bool:
-    """Whether a commit message carries the approval trailer, naming a login whose hash is in `allowed`."""
-    for line in message.splitlines():
-        found = APPROVAL.match(line)
-        if found and login_hash(found["login"]) in allowed:
-            return True
-    return False
+def history_start(began: str) -> str:
+    """Where to read from: the pull request's base when OPS_STANDARDS_BASE names one, else `began`."""
+    return os.environ.get(BASE_ENV) or began
 
 
-def list_problems(root: Path) -> list[str]:
-    """Commits after the maintainers file's first that edit it without an approval from a login the file already
-    listed: without this a builder lists itself in one commit and approves its own change in the next."""
-    shas = _git(root, "log", "--format=%H", "--", MAINTAINERS).stdout.split()
-    return [
-        f"{sha[:8]} edits {MAINTAINERS} with no {WANTED} trailer from a listed maintainer"
-        for sha in shas[:-1]
-        if not approved(_git(root, "log", "-1", "--format=%B", sha).stdout, maintainers_at(root, f"{sha}^"))
-    ]
+def awaiting_review(rises: list[str]) -> list[str]:
+    """What a check reports for the rises it found, by OPS_STANDARDS_REVIEW (see the module docstring)."""
+    mode = os.environ.get(REVIEW_ENV, "")
+    if not rises or mode == "approved":
+        return []
+    if mode == "required":
+        return [f"{r}: {AWAITING}, from a maintainer in {MAINTAINERS}" for r in rises]
+    for r in rises:
+        sys.stderr.write(f"{AWAITING}: {r}\n")
+    return []
 
 
-def problems(root: Path, began: str, pathspecs: list[str], parse: Parse = rows) -> list[str]:
-    """One line for each baseline row a commit after `began` raised or added without the trailer, in files under
-    `pathspecs`. A file's first commit counts as adding every row it holds."""
+def list_rises(root: Path, began: str) -> list[str]:
+    """Commits that edit the maintainers file after its first: the list is a baseline too, and a login added to it is
+    a rise a listed maintainer's review approves."""
+    shas = _git(root, "log", "--format=%H", f"{began}..HEAD", "--", MAINTAINERS).stdout.split()
+    first = _git(root, "log", "--format=%H", "--", MAINTAINERS).stdout.split()[-1:]
+    return [f"{sha[:8]} edits {MAINTAINERS}" for sha in shas if sha not in first]
+
+
+def rises(root: Path, began: str, pathspecs: list[str], parse: Parse = rows) -> list[str]:
+    """One line for each baseline row a commit after `began` raised or added, in files under `pathspecs`. A file's
+    first commit counts as adding every row it holds."""
+    began = history_start(began)
     if _git(root, "cat-file", "-e", f"{began}^{{commit}}").returncode:
         return []
-    out: list[str] = list_problems(root)
+    out: list[str] = list_rises(root, began)
     shas = _git(root, "log", "--format=%H", f"{began}..HEAD", "--", *pathspecs).stdout.split()
     for sha in reversed(shas):
-        message = _git(root, "log", "-1", "--format=%B", sha).stdout
-        if approved(message, maintainers_at(root, f"{sha}^")):
-            continue
         changed = _git(root, "diff-tree", "--no-commit-id", "--name-only", "-r", sha, "--", *pathspecs).stdout.split()
         for name in changed:
             before = _git(root, "show", f"{sha}^:{name}")
             after = _git(root, "show", f"{sha}:{name}")
             now = parse(after.stdout) if not after.returncode else Counter[str]()
             was = parse(before.stdout) if not before.returncode else Counter[str]()
-            out += [f"{sha[:8]} raises {name}: `{row}` with no {WANTED} trailer" for row in raised(was, now)]
+            out += [f"{sha[:8]} raises {name}: `{row}`" for row in raised(was, now)]
     return out
+
+
+def problems(root: Path, began: str, pathspecs: list[str], parse: Parse = rows) -> list[str]:
+    """The rises that fail the check in this mode: none unless OPS_STANDARDS_REVIEW is `required`."""
+    return awaiting_review(rises(root, began, pathspecs, parse))

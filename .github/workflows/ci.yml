@@ -281,12 +281,37 @@ jobs:
       - name: A fresh install
         run: make install-proof
 
+  maintainer-review:
+    # A raised or new baseline row, or a new access exception line, in this pull request's commits needs an approving
+    # review on the pull request from a maintainer listed in .github/standards-maintainers.txt (scripts/baseline_history.py).
+    # The review is read from GitHub, so no commit message can stand in for it. After the review is given, re-run this job.
+    needs: plan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: A rise needs a maintainer's approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          review=$(uv run python scripts/check_review_approval.py --repo "$GITHUB_REPOSITORY" --pr "$PR" --base "$BASE_SHA")
+          echo "maintainer review: $review"
+          OPS_STANDARDS_BASE=$(git merge-base "$BASE_SHA" HEAD) OPS_STANDARDS_REVIEW="$review" make -s checks-history
+
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
     # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
     name: ci-ok
     if: always()
-    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof]
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, maintainer-review]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

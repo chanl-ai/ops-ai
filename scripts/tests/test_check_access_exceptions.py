@@ -158,7 +158,7 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True, env=env).stdout.strip()
 
 
-def test_an_exception_line_added_without_the_trailer_fails_and_with_it_passes(
+def test_an_exception_line_added_waits_for_the_review_and_a_row_with_no_decision_never_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     c = checker()
@@ -180,18 +180,16 @@ def test_an_exception_line_added_without_the_trailer_fails_and_with_it_passes(
     page = tmp_path / "page.md"
     page.write_text(REGISTER)
     monkeypatch.setattr(c, "REGISTER_PAGE", page)
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     assert c.commit_problems() == []
     allow.write_text(allow.read_text() + "b.py refusal y 1 E02\n")
-    _git(tmp_path, "commit", "-qam", "an exception with no trailer")
+    # A trailer the commit writes for itself approves nothing.
+    _git(tmp_path, "commit", "-qam", "an exception\n\nStandards-exception: approved by owner-login: E02")
     assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"]
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: E02, approved by me")
-    assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"], "the trailer names no approver"
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: approved by intruder: E02")
-    assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"], "the approver is not listed"
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: approved by owner-login: E02")
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
     assert c.commit_problems() == []
     allow.write_text(allow.read_text() + "c.py refusal z 1 E03\n")
-    _git(tmp_path, "commit", "-qam", "undecided\n\nStandards-exception: approved by owner-login: E03")
+    _git(tmp_path, "commit", "-qam", "undecided")
     assert [p.split()[0] for p in c.commit_problems()] == ["row"], "a row with no decision fails even when approved"
 
 
@@ -211,6 +209,7 @@ def test_an_annotated_line_needs_the_trailer_and_annotating_a_line_already_there
     monkeypatch.setattr(c, "BASELINES", tmp_path / "lanes")
     (tmp_path / "page.md").write_text(REGISTER)
     monkeypatch.setattr(c, "REGISTER_PAGE", tmp_path / "page.md")
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     allow.write_text("a.py refusal x 1 E01  # keep agents: the asker rule\n")
     _git(tmp_path, "commit", "-qam", "an outcome on a line already there")
     assert c.commit_problems() == []

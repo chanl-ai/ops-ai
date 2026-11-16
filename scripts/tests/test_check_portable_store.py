@@ -125,6 +125,7 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     monkeypatch.setattr(c, "ROOT", tmp_path)
     monkeypatch.setattr(c, "BASELINE", base)
     monkeypatch.setattr(c, "BASELINE_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     base.write_text("# header\n1 sql a.py row lock\n")
     _git(tmp_path, "commit", "-qam", "a lock moved into ops_store: lowering needs no trailer")
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
@@ -132,14 +133,7 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     _git(tmp_path, "commit", "-qam", "a new upsert outside ops_store")
     [problem] = c.commit_problems()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     assert "sql b.py ON CONFLICT (0 -> 1)" in problem
-    _git(
-        tmp_path,
-        "commit",
-        "-q",
-        "--amend",
-        "-m",
-        "an upsert\n\nStandards-exception: approved by owner-login: b.py upsert",
-    )
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
 
 
@@ -207,11 +201,12 @@ def test_the_list_slice_baseline_is_held_to_its_trailer_like_the_portable_one(
         monkeypatch.setattr(c, name, value)
     monkeypatch.setattr(c, "BASELINE_BEGAN", began)
     monkeypatch.setattr(c, "SLICE_BASELINE_BEGAN", began)
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     sliced.write_text("# header\n2 slice a.py list slice\n")
     _git(tmp_path, "commit", "-qam", "a page cut in python")
     [problem] = c.commit_problems()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     assert "slice a.py list slice (1 -> 2)" in problem
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "a page\n\nStandards-exception: approved by owner-login: a.py")
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
 
 
