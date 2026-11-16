@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -28,8 +29,16 @@ from ops_tools.store.secrets import AUDIT_KEPT_S, AUDIT_RETENTION, AUDIT_SWEEP, 
 from ops_tools.store.team_defaults import TeamDefaults
 from ops_tools.store.tenancy import ROLE
 
+from .conftest import setup_tx
 from .test_personal_sign_in import TEAM, connection
 from .test_sign_in_keepalive import IDLE, System, rig
+
+
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """These jobs run on PostgreSQL and SQL Server (conftest.database_url): each reads across tenants as the system
+    role, which each database lets through its row policies differently."""
+    return both_engine
 
 
 def _other() -> str:
@@ -84,7 +93,7 @@ async def test_the_keepalive_refreshes_each_tenants_idle_sign_in_in_its_own_tena
             held[t] = await connection(store, t, "team")
             answer = {"access_token": f"at-{t}", "expires_in": 3600, "refresh_token": f"rt-{t}"}
             await tokens.store_answer(t, held[t], answer, SHARED)
-            async with engine.begin() as c:
+            async with setup_tx(engine, t, TEAM) as c:
                 await c.execute(
                     connection_tokens.update()
                     .where(k.tenant_id == t, k.connection_id == held[t], k.person_id == SHARED)
@@ -110,8 +119,8 @@ async def test_the_audit_sweep_deletes_every_tenants_old_rows_and_keeps_recent_o
     other = _other()
     now = datetime.now(UTC)
     old = now - timedelta(seconds=AUDIT_KEPT_S + 86400)
-    async with engine.begin() as c:
-        for t in (tenant, other):
+    for t in (tenant, other):
+        async with setup_tx(engine, t, TEAM) as c:
             for name, at in (("OLD", old), ("NEW", now)):
                 row = {"tenant_id": t, "team_id": TEAM, "name": name, "action": "used", "version": 1, "actor": "t"}
                 await c.execute(secret_audit.insert().values(**row, at=at))
@@ -121,9 +130,13 @@ async def test_the_audit_sweep_deletes_every_tenants_old_rows_and_keeps_recent_o
     async with SecretStore(engine).system_tx(AUDIT_RETENTION) as c:
         await sweep(c, time.time())
     a = secret_audit.c
-    async with engine.connect() as c:
-        left = await c.execute(sa.select(a.tenant_id, a.name).where(a.tenant_id.in_([tenant, other])))
-        assert sorted(left.all()) == sorted([(tenant, "NEW"), (other, "NEW")])
+    left: list[tuple[str, str]] = []
+    for t in (tenant, other):
+        async with setup_tx(engine, t, TEAM) as c:
+            left += [
+                (r.tenant_id, r.name) for r in await c.execute(sa.select(a.tenant_id, a.name).where(a.tenant_id == t))
+            ]
+    assert sorted(left) == sorted([(tenant, "NEW"), (other, "NEW")])
 
 
 async def test_the_seed_load_writes_each_tenants_modules_and_leaves_the_others(

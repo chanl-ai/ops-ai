@@ -74,7 +74,14 @@ def _column_type(column: sa.Column[Any]) -> str:
 def upgrade() -> None:
     dialect = op.get_context().dialect.name
     for name, table, columns in INDEXES:
-        op.create_index(name, table, columns, if_not_exists=True)
+        if dialect == "mssql":
+            # SQL Server has no CREATE INDEX IF NOT EXISTS, and SQLAlchemy drops the clause there without a word.
+            op.execute(
+                f"IF INDEXPROPERTY(OBJECT_ID(N'{table}'), N'{name}', 'IndexID') IS NULL "
+                f"CREATE INDEX {name} ON {table} ({', '.join(columns)})"
+            )
+        else:
+            op.create_index(name, table, columns, if_not_exists=True)
     if dialect not in ("postgresql", "mssql"):
         return
     tables = [_marked(n) for n in (*BY_TENANT, *BY_TEAM)]

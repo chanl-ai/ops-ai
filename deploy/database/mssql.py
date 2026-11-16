@@ -84,6 +84,20 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
         "ops_files_system",
         {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ()), "files": (("SELECT",), ())},
     ),
+    # tools: the team-default catch-up, review hand-over and sign-in keep-alive listings, the relay and the secret
+    # audit sweep (tools_0081).
+    "tools": (
+        "ops_tools_system",
+        {
+            "team_defaults": (("SELECT",), ()),
+            "tool_modules": (("SELECT",), ()),
+            "module_versions": (("SELECT",), ()),
+            "module_approvals": (("SELECT",), ()),
+            "module_operations": (("SELECT",), ()),
+            "service_outbox": (("SELECT", "UPDATE", "DELETE"), ()),
+            "secret_audit": (("SELECT", "DELETE"), ()),
+        },
+    ),
     # kb: the relay, and the listing of every tenant holding a source that the schedule, the embedding backlog and the
     # start-up move read (kb_0011, kb_0014, kb_0026).
     "kb": (

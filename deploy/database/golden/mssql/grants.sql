@@ -121,6 +121,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connection_tokens TO ops_tools_runti
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connect_links TO ops_tools_runtime;
 GRANT SELECT ON dbo.alembic_version_tools TO ops_tools_runtime;
 GO
+IF USER_ID(N'ops_tools_system') IS NULL CREATE USER ops_tools_system WITHOUT LOGIN;
+GO
+GRANT SELECT ON dbo.team_defaults TO ops_tools_system;
+GRANT SELECT ON dbo.tool_modules TO ops_tools_system;
+GRANT SELECT ON dbo.module_versions TO ops_tools_system;
+GRANT SELECT ON dbo.module_approvals TO ops_tools_system;
+GRANT SELECT ON dbo.module_operations TO ops_tools_system;
+GRANT SELECT, UPDATE, DELETE ON dbo.service_outbox TO ops_tools_system;
+GRANT SELECT, DELETE ON dbo.secret_audit TO ops_tools_system;
+GRANT IMPERSONATE ON USER::ops_tools_system TO ops_tools_runtime;
+GO
 -- models-service
 IF USER_ID(N'ops_models_runtime') IS NULL CREATE USER ops_models_runtime FOR LOGIN ops_models_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
