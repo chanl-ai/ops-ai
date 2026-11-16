@@ -37,8 +37,8 @@ def test_a_route_added_without_regenerating_the_document_is_refused(tmp_path: Pa
 def prerequisites(makefile: str, target: str, seen: frozenset[str] = frozenset()) -> set[str]:
     """The targets `target` runs, through the targets it names (verify -> checks -> openapi-check)."""
     found = re.search(rf"^{target}:([^#\n]*)", makefile, re.MULTILINE)
-    names = set(found.group(1).split()) if found else set()
-    for name in names - seen:
+    names: set[str] = set(found.group(1).split()) if found else set()
+    for name in sorted(names - seen):
         names |= prerequisites(makefile, name, seen | names)
     return names
 
