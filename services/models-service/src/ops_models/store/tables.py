@@ -148,6 +148,8 @@ model_call_log = sa.Table(
     # How many images the request carried, refused or sent.
     sa.Column("images", sa.Integer, nullable=False, server_default="0"),
     sa.Index("ix_model_call_log_key_run", "key_id", "run_id"),
+    # Every read names the tenant (the policy adds it) and the page sorts newest first.
+    sa.Index("ix_model_call_log_tenant_created", "tenant_id", "created_at"),
     # Held to its tenant by the database: written and read only as ROLE in that tenant (models_0012). A key's caps
     # are read from model_key_spend, never from here.
     info=TENANT_SCOPED,

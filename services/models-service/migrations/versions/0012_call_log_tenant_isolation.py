@@ -133,6 +133,8 @@ def upgrade() -> None:
         sa.Column("calls", sa.Integer, nullable=False),
         sa.Column("starts_at", sa.DateTime(timezone=True), nullable=False),
     )
+    # Every read of the log names the tenant (the policy adds it) and the page sorts newest first.
+    op.create_index("ix_model_call_log_tenant_created", "model_call_log", ["tenant_id", "created_at"])
     if dialect not in ("postgresql", "mssql"):
         return
     if dialect == "postgresql":
@@ -158,6 +160,7 @@ def downgrade() -> None:
         op.execute(f"REVOKE ALL ON model_call_log FROM {ROLE}")
     if dialect in ("postgresql", "mssql"):
         op.execute(move_sql(dialect, "model_call_refusals", "model_call_log", "1 = 1"))
+    op.drop_index("ix_model_call_log_tenant_created", table_name="model_call_log")
     op.drop_table("model_key_spend")
     op.drop_index("ix_model_call_refusals_created_at", table_name="model_call_refusals")
     op.drop_index("ix_model_call_refusals_thread_id", table_name="model_call_refusals")

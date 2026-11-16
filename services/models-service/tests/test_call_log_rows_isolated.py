@@ -92,3 +92,11 @@ async def test_a_call_row_and_its_keys_spend_commit_together_outside_a_request(m
     with isolation.scope(tenant, None):
         rows, _ = await log.page(key_id=key_id)
     assert rows == [], "a call row was kept with no spend counted for its key"
+
+
+async def test_the_tenants_newest_calls_are_read_from_an_index_that_leads_with_the_tenant(models: Models) -> None:
+    """Every read names the tenant (the policy adds it) and the page sorts by created_at: without an index that leads
+    with both, a tenant's page scans every tenant's calls."""
+    async with models.engine.connect() as c:
+        found = await c.run_sync(lambda sc: sa.inspect(sc).get_indexes("model_call_log"))
+    assert ["tenant_id", "created_at"] in [i["column_names"] for i in found], found
