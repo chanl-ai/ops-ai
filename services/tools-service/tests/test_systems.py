@@ -293,3 +293,29 @@ async def test_a_team_never_provisioned_gets_its_built_in_apps_when_they_are_ask
     r = await client.get("/v1/apps", params={"include": "builtin"}, headers=admin(tenant, "team_cards"))
     assert r.status_code == 200, r.text
     assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]}, r.json()["data"]
+
+
+async def test_the_apps_list_holds_each_card_once_by_name_ignoring_case(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    """Which cards the grid and the approval picker list and in what order: by name ignoring case, a person's
+    custom apps beside the installed plugins; the picker adds the built-in apps; another team's app never shows."""
+    await ensure_platform_tools(ModuleStore(engine), tenant_id=tenant, at=datetime.now(UTC), team_id=TEAM)
+    made: dict[str, str] = {}
+    for name, team in (("beta ledger", TEAM), ("Alpha desk", TEAM), ("Another team's", "team_ops")):
+        r = await client.post("/v1/apps", json={"name": name, "authKind": "none"}, headers=admin(tenant, team))
+        assert r.status_code == 201, r.text
+        made[name] = r.json()["data"]["id"]
+    custom = [made["Alpha desk"], made["beta ledger"]]
+    plugins = ["plugin:test.desk"]
+    builtins = ["builtin:document-types", "builtin:files"]
+    for params, want in (
+        ({}, [*custom, *plugins, "plugin:test.header-key"]),
+        (
+            {"include": "builtin"},
+            [*custom, *plugins, *builtins, "plugin:test.header-key", "builtin:knowledge", "builtin:mailboxes"],
+        ),
+    ):
+        got = await client.get("/v1/apps", params=params, headers=admin(tenant))
+        assert got.status_code == 200, got.text
+        assert [c["id"] for c in got.json()["data"]] == want, got.json()["data"]
