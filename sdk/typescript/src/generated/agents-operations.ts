@@ -1211,7 +1211,14 @@ export const agentsOperations = {
     "pathParams": [
       "workflow_id"
     ],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "graphs_list_graphs": {

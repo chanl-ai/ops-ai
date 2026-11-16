@@ -44,7 +44,8 @@ from ops_service_kit.errors import (
     Unauthorized,
     Unprocessable,
 )
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
@@ -213,9 +214,12 @@ async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> 
     return ok(_view(row, token if body.mode == "link" else None), 201)
 
 
-@router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[list[FormView]])
-async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONResponse:
-    return ok([_view(r) for r in await _links(rt).of_workflow(workflow_id)])
+@router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[ListResult[FormView]])
+async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
+    """The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
+    matches the title and slug, `ids` names forms."""
+    listed = await _links(rt).page(workflow_id, q)
+    return ok({**listed, "data": [_view(r) for r in listed["data"]]})
 
 
 async def _own(rt: Runtime, me: Principal, form_id: str) -> dict[str, Any]:

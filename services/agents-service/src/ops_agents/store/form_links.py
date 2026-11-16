@@ -14,8 +14,10 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
+from ops_store.listing import ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -130,15 +132,13 @@ class FormLinks:
             )
         return dict(found) if found is not None else None
 
-    async def of_workflow(self, workflow_id: str) -> list[dict[str, Any]]:
+    async def page(self, workflow_id: str, params: ListParams) -> ListPage:
+        """One page of the workflow's forms in the acting team, newest first, then by id; `search` matches the title
+        and the slug, `ids` names forms."""
         f = form_links
-        q = (
-            sa.select(f)
-            .where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.workflow_id == workflow_id)
-            .order_by(f.c.created_at.desc(), f.c.id)
-        )
+        q = sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.workflow_id == workflow_id)
         async with tenant_tx(self.engine) as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await list_page(c, q, params, search=[f.c.title, f.c.slug], default_sort=f.c.created_at.desc())
 
     async def update(self, form_id: str, **values: Any) -> dict[str, Any] | None:
         f = form_links

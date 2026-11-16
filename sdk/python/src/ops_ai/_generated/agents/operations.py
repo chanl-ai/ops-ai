@@ -955,7 +955,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows/{workflow_id}/forms",
         "pathParams": ["workflow_id"],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "graphs_list_graphs": {
@@ -3186,9 +3186,33 @@ class Operations:
         "Discard Draft"
         return self._t.call(SERVICE, OPERATIONS["workflows_discard_draft"], {"workflow_id": workflow_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def forms_workflow_forms(self, workflow_id: str) -> list[FormView]:
+    def forms_workflow_forms(
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultFormView:
         "Workflow Forms"
-        return self._t.call(SERVICE, OPERATIONS["forms_workflow_forms"], {"workflow_id": workflow_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["forms_workflow_forms"],
+            {"workflow_id": workflow_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def forms_create_form(self, workflow_id: str, body: FormIn) -> FormView:
         "Create Form"
@@ -4669,10 +4693,32 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_discard_draft"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def forms_workflow_forms(self, workflow_id: str) -> list[FormView]:
+    async def forms_workflow_forms(
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultFormView:
         "Workflow Forms"
         return await self._t.call(
-            SERVICE, OPERATIONS["forms_workflow_forms"], {"workflow_id": workflow_id}, {}, {}, None
+            SERVICE,
+            OPERATIONS["forms_workflow_forms"],
+            {"workflow_id": workflow_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def forms_create_form(self, workflow_id: str, body: FormIn) -> FormView:

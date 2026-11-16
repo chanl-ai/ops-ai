@@ -3307,7 +3307,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Workflow Forms */
+        /**
+         * Workflow Forms
+         * @description The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
+         *     matches the title and slug, `ids` names forms.
+         */
         get: operations["forms_workflow_forms"];
         put?: never;
         /**
@@ -5952,6 +5956,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[FormView]] */
+        Envelope_ListResult_FormView__: {
+            data: components["schemas"]["ListResult_FormView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[RunRow]] */
         Envelope_ListResult_RunRow__: {
             data: components["schemas"]["ListResult_RunRow_"];
@@ -6521,16 +6534,6 @@ export interface components {
         Envelope_list_AgentVersion__: {
             /** Data */
             data: components["schemas"]["AgentVersion"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[FormView]] */
-        Envelope_list_FormView__: {
-            /** Data */
-            data: components["schemas"]["FormView"][];
             /**
              * Success
              * @constant
@@ -7569,6 +7572,18 @@ export interface components {
         ListResult_DefinitionRow_: {
             /** Data */
             data: components["schemas"]["DefinitionRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[FormView] */
+        ListResult_FormView_: {
+            /** Data */
+            data: components["schemas"]["FormView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -31274,7 +31289,14 @@ export interface operations {
     };
     forms_workflow_forms: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 workflow_id: string;
@@ -31289,7 +31311,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_FormView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_FormView__"];
                 };
             };
             /** @description Invalid request */

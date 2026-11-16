@@ -3017,11 +3017,6 @@ class EnvelopeDictStrListToolUser(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListFormView(TypedDict, closed=True):
-    data: list[FormView]
-    success: Literal[True]
-
-
 class EnvelopeListGraphVersion(TypedDict, closed=True):
     data: list[GraphVersion]
     success: Literal[True]
@@ -3188,6 +3183,12 @@ class ListResultCaseTypeView(TypedDict, closed=True):
 
 class ListResultDefinitionRow(TypedDict, closed=True):
     data: list[DefinitionRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultFormView(TypedDict, closed=True):
+    data: list[FormView]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -3821,6 +3822,11 @@ class EnvelopeListResultCaseTypeView(TypedDict, closed=True):
 
 class EnvelopeListResultDefinitionRow(TypedDict, closed=True):
     data: ListResultDefinitionRow
+    success: Literal[True]
+
+
+class EnvelopeListResultFormView(TypedDict, closed=True):
+    data: ListResultFormView
     success: Literal[True]
 
 
