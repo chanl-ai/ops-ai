@@ -258,7 +258,9 @@ async def system_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncGen
     tenant is known; callers go through `ops_store.isolation.system_tx`, which names and logs the reason. PostgreSQL
     switches to it (a BYPASSRLS role); SQL Server impersonates the database user of that name (EXECUTE AS USER), which
     the read predicates pass and its grants limit, table by table and column by column (deploy/database/mssql.py). The
-    impersonation outlives the transaction, so it is reverted however it ends."""
+    impersonation outlives the transaction, so it is reverted however it ends: inside the transaction when the block
+    succeeds, since a REVERT after the commit begins a second transaction that the request's counters count; after the
+    rollback when it fails."""
     async with engine.connect() as conn:
         impersonating = False
         try:
@@ -276,6 +278,9 @@ async def system_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncGen
                     case _:
                         pass
                 yield conn
+                if impersonating:
+                    await conn.execute(sa.text("REVERT"), execution_options=ISOLATION)
+                    impersonating = False
         finally:
             if impersonating:
                 await conn.execute(sa.text("REVERT"), execution_options=ISOLATION)
