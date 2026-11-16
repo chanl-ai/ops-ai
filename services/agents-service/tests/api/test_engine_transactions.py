@@ -23,12 +23,14 @@ ON_ONE_TRANSACTION = [
     ("delete", "/v1/workflows/definitions/tx_flow"),
     ("get", "/v1/threads"),
     ("get", "/v1/graphs/tx_flow/versions"),
+    ("get", "/v1/graphs"),
 ]
 
 
-async def test_each_store_only_route_checks_out_one_connection(client: AsyncClient) -> None:
-    saved = await client.post("/v1/workflows/definitions", json={"definition": named("tx_flow", "Tx flow")})
-    assert saved.status_code == 201, saved.text
+async def checkouts(
+    client: AsyncClient, routes: list[tuple[str, str]], headers: dict[str, str] | None = None
+) -> list[tuple[str, int, int]]:
+    """(path, status, connections the request's own task checked out) for each route, called in order."""
     request_task = asyncio.current_task()
     counted: list[int] = []
 
@@ -40,12 +42,19 @@ async def test_each_store_only_route_checks_out_one_connection(client: AsyncClie
     event.listen(Pool, "checkout", checked_out)
     seen: list[tuple[str, int, int]] = []
     try:
-        for method, path in ON_ONE_TRANSACTION:
+        for method, path in routes:
             counted.append(0)
-            r = await client.request(method.upper(), path)
+            r = await client.request(method.upper(), path, headers=headers)
             seen.append((path, r.status_code, counted[-1]))
     finally:
         event.remove(Pool, "checkout", checked_out)
+    return seen
+
+
+async def test_each_store_only_route_checks_out_one_connection(client: AsyncClient) -> None:
+    saved = await client.post("/v1/workflows/definitions", json={"definition": named("tx_flow", "Tx flow")})
+    assert saved.status_code == 201, saved.text
+    seen = await checkouts(client, ON_ONE_TRANSACTION)
     # pause and resume answer 409 on a draft (no live version), after their reads, still on one connection.
     assert [(p, n) for p, _, n in seen if n != 1] == [], seen
     assert all(code < 500 for _, code, _ in seen), seen

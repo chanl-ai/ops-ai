@@ -81,7 +81,8 @@ async def reattach(
     rt: Rt, me: Me, thread_id: str, run_id: str, *, after: int = 0, follow: bool = True
 ) -> EventSourceResponse:
     """The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not
-    found for a run of a thread the caller may not read (`may_read_thread`)."""
+    found for a run of a thread the caller may not read (`may_read_thread`). No request transaction: a run's stream
+    holds none while it streams, and each poll reads the log afresh as the worker writes it."""
     store = graph_store(rt)
     thread = await store.thread(thread_id)
     run = await store.run(run_id)
@@ -93,5 +94,6 @@ async def reattach(
 @router.get("/v1/events", response_model=None, responses=SSE_RESPONSE)
 async def team_stream(rt: Rt, me: Me, after: int = 0, follow: bool = True) -> EventSourceResponse:
     """Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.
-    The SSE `id` is the stream position to pass back as `after`."""
+    The SSE `id` is the stream position to pass back as `after`. No request transaction: a stream holds none while it
+    streams."""
     return EventSourceResponse(team_frames(rt, me, me.team_id, after, follow=follow), sep="\n", ping=15)

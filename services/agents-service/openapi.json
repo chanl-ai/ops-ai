@@ -2546,6 +2546,7 @@
         "type": "object"
       },
       "BatchIn": {
+        "additionalProperties": false,
         "properties": {
           "dryRun": {
             "default": false,
@@ -23665,6 +23666,7 @@
     },
     "/health/background": {
       "get": {
+        "description": "This service's processes and their state, for `make health`. No request transaction: it has no caller, so no\ntenant to hold one in, and its one read is the heartbeat table.",
         "operationId": "background_health_background",
         "responses": {
           "200": {
@@ -30625,7 +30627,7 @@
     },
     "/v1/ai-steps/{step}": {
       "post": {
-        "description": "One AI step's answer; 422 `ai_steps_off` where the team has AI steps off, `text_too_long` past the service's\nbound, `invalid_settings` naming a setting the step's type refuses, `document_type_not_found` for a document type\nthe team cannot read; 429 past the team's calls a minute; 503 with no model configured.",
+        "description": "One AI step's answer; 422 `ai_steps_off` where the team has AI steps off, `text_too_long` past the service's\nbound, `invalid_settings` naming a setting the step's type refuses, `document_type_not_found` for a document type\nthe team cannot read; 429 past the team's calls a minute; 503 with no model configured. No request transaction:\nit reads no row of its own, and documents-service and the model are called with none open.",
         "operationId": "workflows_run_ai_step",
         "parameters": [
           {
@@ -31993,6 +31995,7 @@
     },
     "/v1/background": {
       "get": {
+        "description": "Every listed process of every service and the latest jobs, for an account admin. No request transaction: the\nother services' /health/background are read between this service's reads, with none open.",
         "operationId": "background_background_processes",
         "parameters": [
           {
@@ -32549,7 +32552,7 @@
     },
     "/v1/batches/{batch_id}/retry": {
       "post": {
-        "description": "A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again.",
+        "description": "A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again.\nNo request transaction: the rows are queued for the workflow worker, and committing them with the request's reads\nwould change when the worker sees them.",
         "operationId": "batches_retry_batch",
         "parameters": [
           {
@@ -37561,7 +37564,7 @@
     },
     "/v1/events": {
       "get": {
-        "description": "Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.\nThe SSE `id` is the stream position to pass back as `after`.",
+        "description": "Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.\nThe SSE `id` is the stream position to pass back as `after`. No request transaction: a stream holds none while it\nstreams.",
         "operationId": "threads_team_stream",
         "parameters": [
           {
@@ -37761,7 +37764,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Records the event and starts each listening system workflow's run, or returns the runs a repeat of it started.\nA repeat after a run failed starts the next attempt. 202 whether or not a workflow listens (`unhandled`): the\nreporting service never depends on who reacts.",
+        "description": "Records the event and starts each listening system workflow's run, or returns the runs a repeat of it started.\nA repeat after a run failed starts the next attempt. 202 whether or not a workflow listens (`unhandled`): the\nreporting service never depends on who reacts. No request transaction: the event starts or resumes runs the\nworker picks up, and folding those commits into one would change when the worker sees them.",
         "operationId": "workflows_emit_event",
         "parameters": [
           {
@@ -39096,6 +39099,7 @@
     },
     "/v1/graphs": {
       "get": {
+        "description": "Every graph the caller's tenant can run, with the input each needs.",
         "operationId": "graphs_list_graphs",
         "parameters": [
           {
@@ -47272,7 +47276,7 @@
     },
     "/v1/runs/{run_id}/steps/{step}/resume": {
       "post": {
-        "description": "Resumes the step parked on outside work with the posted result, which the step goes on with.",
+        "description": "Resumes the step parked on outside work with the posted result, which the step goes on with. No request\ntransaction: resuming queues the run for the worker, and folding that commit into the request's would change when\nthe worker sees it.",
         "operationId": "workflows_resume_step",
         "parameters": [
           {
@@ -52127,7 +52131,7 @@
     },
     "/v1/threads/{thread_id}/events": {
       "post": {
-        "description": "A channel event, as the mailbox adapter delivers it: a builder or admin of the thread's team, the role the\ninbox route takes, since restarting an SLA clock changes when the case escalates.",
+        "description": "A channel event, as the mailbox adapter delivers it: a builder or admin of the thread's team, the role the\ninbox route takes, since restarting an SLA clock changes when the case escalates. No request transaction: the\nre-armed timers are rows the poller claims, and folding their commit into the request's would change when they\nfire.",
         "operationId": "threads_thread_event",
         "parameters": [
           {
@@ -53493,7 +53497,7 @@
     },
     "/v1/threads/{thread_id}/runs/{run_id}/events": {
       "get": {
-        "description": "The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not\nfound for a run of a thread the caller may not read (`may_read_thread`).",
+        "description": "The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not\nfound for a run of a thread the caller may not read (`may_read_thread`). No request transaction: a run's stream\nholds none while it streams, and each poll reads the log afresh as the worker writes it.",
         "operationId": "threads_reattach",
         "parameters": [
           {
@@ -60558,7 +60562,7 @@
     },
     "/v1/workflows/{workflow_id}/batches": {
       "post": {
-        "description": "Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow\nworker starts a few at a time (202).",
+        "description": "Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow\nworker starts a few at a time (202). No request transaction: the file is read from Files between the workflow\nread and the batch write, with none open.",
         "operationId": "batches_start_batch",
         "parameters": [
           {

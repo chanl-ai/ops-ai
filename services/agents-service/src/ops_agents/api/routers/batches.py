@@ -14,14 +14,15 @@ from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_files_client import FileNotFound, FilesClient
+from ops_identity.fastapi import Tx
 from ops_ingest.parsers.spreadsheet import spreadsheet_rows
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, Out
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_tenant
@@ -36,10 +37,10 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 SAMPLE = 5
 
 
-class BatchIn(BaseModel):
-    file_id: str = Field(alias="fileId", min_length=1, max_length=64)
+class BatchIn(In):
+    file_id: str = Field(min_length=1, max_length=64)
     mode: Literal["live", "test"] = "live"
-    dry_run: bool = Field(default=False, alias="dryRun")
+    dry_run: bool = False
 
 
 class DryRun(Out):
@@ -116,7 +117,8 @@ def _mapping(header: list[str], inputs: dict[str, Any]) -> tuple[dict[str, str],
 @router.post("/v1/workflows/{workflow_id}/batches", response_model=Envelope[DryRun | BatchStarted])
 async def start_batch(rt: Rt, me: Me, workflow_id: str, body: BatchIn) -> JSONResponse:
     """Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow
-    worker starts a few at a time (202)."""
+    worker starts a few at a time (202). No request transaction: the file is read from Files between the workflow
+    read and the batch write, with none open."""
     stored = await startable(rt, me, workflow_id, None, body.mode)
     inputs = _inputs(stored)
     files = cast(FilesClient | None, rt.start_files)
@@ -171,7 +173,7 @@ def _status(r: BatchRowOut) -> str:
 
 
 @router.get("/v1/batches/{batch_id}", response_model=Envelope[BatchView])
-async def batch_page(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
+async def batch_page(rt: Rt, me: Me, _: Tx, batch_id: str) -> JSONResponse:
     """The batch's counts and every row, failed first: what its page shows."""
     batch = await _batch(rt, me, batch_id)
     rows = await Batches(rt.db).rows(batch_id)
@@ -200,7 +202,9 @@ async def batch_page(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
 
 @router.post("/v1/batches/{batch_id}/retry", status_code=202, response_model=Envelope[Retried])
 async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
-    """A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again."""
+    """A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again.
+    No request transaction: the rows are queued for the workflow worker, and committing them with the request's reads
+    would change when the worker sees them."""
     batch = await _batch(rt, me, batch_id)
     require_builder(me, area="workflows", team_id=batch.team_id, action="edit", what=f"batch {batch_id}")
     return ok({"retried": await Batches(rt.db).retry_failed(batch_id)}, 202)
@@ -211,7 +215,7 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     response_class=Response,
     responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}, "description": "One line per row"}},
 )
-async def batch_results(rt: Rt, me: Me, batch_id: str) -> Response:
+async def batch_results(rt: Rt, me: Me, _: Tx, batch_id: str) -> Response:
     """Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
     output are JSON, so a value holding a comma or a quote reads back as it was."""
     await _batch(rt, me, batch_id)

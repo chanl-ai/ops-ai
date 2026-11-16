@@ -21,6 +21,7 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.store.tables import engine_runs
+from tests.api.test_engine_transactions import checkouts
 from tests.api.test_forms import flow, runs_of
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT
@@ -100,6 +101,9 @@ async def test_too_many_rows_or_a_header_naming_no_input_is_refused_before_any_r
     assert "501" in big.json()["error"]["message"] and "500" in big.json()["error"]["message"], big.text
     assert stray.status_code == 422 and stray.json()["error"]["code"] == "batch_no_matching_columns", stray.text
     assert "Claim reference" in stray.json()["error"]["message"], "the refusal names the inputs the header could name"
+    fid = await ready(c, files, csv(3))
+    unknown = await c.post(f"/v1/workflows/{WID}/batches", json={"fileId": fid, "rows": 3}, headers=BUILDER)
+    assert unknown.status_code == 400, unknown.text
     await tick(rt)
     assert await runs_of(c, WID) == []
 
@@ -177,3 +181,6 @@ async def test_the_results_download_lists_every_row_with_its_status(stack: Stack
             sa.select(sa.func.count()).select_from(engine_runs).where(engine_runs.c.workflow_id == WID)
         )
     assert n == 3
+    # The page and the download each read the batch and its rows on one connection.
+    seen = await checkouts(c, [("get", f"/v1/batches/{bid}"), ("get", f"/v1/batches/{bid}/results.csv")], BUILDER)
+    assert [(code, k) for _, code, k in seen] == [(200, 1), (200, 1)], seen

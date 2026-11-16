@@ -28,7 +28,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health Background */
+        /**
+         * Health Background
+         * @description This service's processes and their state, for `make health`. No request transaction: it has no caller, so no
+         *     tenant to hold one in, and its one read is the heartbeat table.
+         */
         get: operations["background_health_background"];
         put?: never;
         post?: never;
@@ -627,7 +631,8 @@ export interface paths {
          * Run Ai Step
          * @description One AI step's answer; 422 `ai_steps_off` where the team has AI steps off, `text_too_long` past the service's
          *     bound, `invalid_settings` naming a setting the step's type refuses, `document_type_not_found` for a document type
-         *     the team cannot read; 429 past the team's calls a minute; 503 with no model configured.
+         *     the team cannot read; 429 past the team's calls a minute; 503 with no model configured. No request transaction:
+         *     it reads no row of its own, and documents-service and the model are called with none open.
          */
         post: operations["workflows_run_ai_step"];
         delete?: never;
@@ -742,7 +747,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Background Processes */
+        /**
+         * Background Processes
+         * @description Every listed process of every service and the latest jobs, for an account admin. No request transaction: the
+         *     other services' /health/background are read between this service's reads, with none open.
+         */
         get: operations["background_background_processes"];
         put?: never;
         post?: never;
@@ -805,6 +814,8 @@ export interface paths {
         /**
          * Retry Batch
          * @description A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again.
+         *     No request transaction: the rows are queued for the workflow worker, and committing them with the request's reads
+         *     would change when the worker sees them.
          */
         post: operations["batches_retry_batch"];
         delete?: never;
@@ -1214,7 +1225,8 @@ export interface paths {
         /**
          * Team Stream
          * @description Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.
-         *     The SSE `id` is the stream position to pass back as `after`.
+         *     The SSE `id` is the stream position to pass back as `after`. No request transaction: a stream holds none while it
+         *     streams.
          */
         get: operations["threads_team_stream"];
         put?: never;
@@ -1342,7 +1354,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Graphs */
+        /**
+         * List Graphs
+         * @description Every graph the caller's tenant can run, with the input each needs.
+         */
         get: operations["graphs_list_graphs"];
         put?: never;
         post?: never;
@@ -2063,7 +2078,9 @@ export interface paths {
         put?: never;
         /**
          * Resume Step
-         * @description Resumes the step parked on outside work with the posted result, which the step goes on with.
+         * @description Resumes the step parked on outside work with the posted result, which the step goes on with. No request
+         *     transaction: resuming queues the run for the worker, and folding that commit into the request's would change when
+         *     the worker sees it.
          */
         post: operations["workflows_resume_step"];
         delete?: never;
@@ -2480,7 +2497,9 @@ export interface paths {
         /**
          * Thread Event
          * @description A channel event, as the mailbox adapter delivers it: a builder or admin of the thread's team, the role the
-         *     inbox route takes, since restarting an SLA clock changes when the case escalates.
+         *     inbox route takes, since restarting an SLA clock changes when the case escalates. No request transaction: the
+         *     re-armed timers are rows the poller claims, and folding their commit into the request's would change when they
+         *     fire.
          */
         post: operations["threads_thread_event"];
         delete?: never;
@@ -2604,7 +2623,8 @@ export interface paths {
         /**
          * Reattach
          * @description The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not
-         *     found for a run of a thread the caller may not read (`may_read_thread`).
+         *     found for a run of a thread the caller may not read (`may_read_thread`). No request transaction: a run's stream
+         *     holds none while it streams, and each poll reads the log afresh as the worker writes it.
          */
         get: operations["threads_reattach"];
         put?: never;
@@ -3229,7 +3249,8 @@ export interface paths {
         /**
          * Start Batch
          * @description Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow
-         *     worker starts a few at a time (202).
+         *     worker starts a few at a time (202). No request transaction: the file is read from Files between the workflow
+         *     read and the batch write, with none open.
          */
         post: operations["batches_start_batch"];
         delete?: never;

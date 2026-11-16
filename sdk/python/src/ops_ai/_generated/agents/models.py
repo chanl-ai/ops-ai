@@ -229,7 +229,7 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
-class BatchIn(TypedDict):
+class BatchIn(TypedDict, closed=True):
     dryRun: NotRequired[bool]
     fileId: str
     mode: NotRequired[Literal["live", "test"]]

@@ -11,11 +11,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
-from ops_contracts.chat import WireModel
 from ops_engine.node_types import EVENT_NAME
 from ops_identity import CurrentService
 from ops_service_kit.errors import Forbidden, Unprocessable
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, Out
 
 from .. import service_events
 from ..deps import Runtime, runtime
@@ -29,7 +28,7 @@ router = APIRouter(prefix="/v1/events")
 MAX_PAYLOAD_BYTES = 16_384
 
 
-class EventIn(WireModel):
+class EventIn(In):
     name: str = Field(pattern=EVENT_NAME, max_length=120)
     # Unique per occurrence, e.g. the record's id and version: the same key is the same event.
     key: str = Field(min_length=1, max_length=200)
@@ -57,7 +56,8 @@ class EventOut(Out):
 async def emit_event(rt: Rt, caller: CurrentService, body: EventIn) -> JSONResponse:
     """Records the event and starts each listening system workflow's run, or returns the runs a repeat of it started.
     A repeat after a run failed starts the next attempt. 202 whether or not a workflow listens (`unhandled`): the
-    reporting service never depends on who reacts."""
+    reporting service never depends on who reacts. No request transaction: the event starts or resumes runs the
+    worker picks up, and folding those commits into one would change when the worker sees them."""
     if "events:emit" not in caller.scopes:
         raise Forbidden("This service token does not hold the events:emit scope.", code="scope_required")
     if not caller.tenant_id:

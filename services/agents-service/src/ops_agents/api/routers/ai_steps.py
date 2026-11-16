@@ -15,11 +15,10 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import ai_steps, default_registry
 from ops_service_kit.errors import ServiceUnavailable, TooManyRequests, Unprocessable
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In, Out
 from ops_service_kit.ids import new_id
 
 from ...store.tenancy import current_team, current_tenant
@@ -50,14 +49,14 @@ Step = Literal["classify", "summarise", "extract-text", "draft"]
 calls = RateLimit()
 
 
-class AiStepIn(WireModel):
+class AiStepIn(In):
     # What the step reads: text as it is, any other value as JSON.
     text: Any = Field(description="The text to read; any other value is read as JSON.")
     # The step's settings as a workflow step holds them (categories, fields, instructions, model, ...).
     settings: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
-class AiStepOut(WireModel):
+class AiStepOut(Out):
     # The port a workflow step would leave by: a category, otherwise, ok or error.
     port: str
     output: dict[str, Any]
@@ -67,7 +66,8 @@ class AiStepOut(WireModel):
 async def run_ai_step(rt: Rt, me: Me, step: Step, body: AiStepIn) -> JSONResponse:
     """One AI step's answer; 422 `ai_steps_off` where the team has AI steps off, `text_too_long` past the service's
     bound, `invalid_settings` naming a setting the step's type refuses, `document_type_not_found` for a document type
-    the team cannot read; 429 past the team's calls a minute; 503 with no model configured."""
+    the team cannot read; 429 past the team's calls a minute; 503 with no model configured. No request transaction:
+    it reads no row of its own, and documents-service and the model are called with none open."""
     team = current_team() or me.team_id
     if not team:
         raise Unprocessable("Choose a team with the X-Team-Id header; AI steps follow a team's settings.")

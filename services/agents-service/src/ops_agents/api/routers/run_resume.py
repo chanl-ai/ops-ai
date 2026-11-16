@@ -66,7 +66,9 @@ async def resume_caller(
 async def resume_step(
     rt: Rt, run_id: str, step: str, body: ResumeBody, claim: Annotated[ResumeClaim, Depends(resume_caller)]
 ) -> JSONResponse:
-    """Resumes the step parked on outside work with the posted result, which the step goes on with."""
+    """Resumes the step parked on outside work with the posted result, which the step goes on with. No request
+    transaction: resuming queues the run for the worker, and folding that commit into the request's would change when
+    the worker sees it."""
     run = await RunStore(EngineTransactions(rt.db)).get(run_id)
     if run is None:
         raise NotFound("The run")
