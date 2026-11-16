@@ -79,12 +79,12 @@ class WasmPython:
         started = time.monotonic()
         work = Path(tempfile.mkdtemp(prefix="ops-run-"))
         try:
-            return Run(self, work, started, limits, answer).execute(source, entry, input)
+            return _Run(self, work, started, limits, answer).execute(source, entry, input)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
 
-class Run:
+class _Run:
     """One run's directory, pipes and guest thread, and the conversation with the guest over them."""
 
     def __init__(self, runtime: WasmPython, work: Path, started: float, limits: Limits, answer: CallAnswer) -> None:
@@ -134,13 +134,13 @@ class Run:
         # A fifo's open blocks until the other end opens. Non-blocking opens keep a guest that dies during set-up from
         # hanging the host.
         out_fd = os.open(self.stdout, os.O_RDONLY | os.O_NONBLOCK)
-        in_fd = open_writer(self.stdin, thread, self.runtime.waits.open_poll_s)
+        in_fd = _open_writer(self.stdin, thread, self.runtime.waits.open_poll_s)
         result = RunResult(ok=False, create_ms=self._ms())
         deadline = self.started + self.limits.time_s + self.runtime.waits.grace_s
         try:
             if in_fd is not None:
                 _write(in_fd, {"source": source, "entry": entry, "input": input})
-            self.converse(result, thread, out_fd, in_fd, deadline)
+            self._converse(result, thread, out_fd, in_fd, deadline)
         finally:
             if in_fd is not None:
                 os.close(in_fd)
@@ -152,7 +152,7 @@ class Run:
         result.execute_ms = self._ms() - result.create_ms
         return result
 
-    def converse(
+    def _converse(
         self, result: RunResult, thread: threading.Thread, out_fd: int, in_fd: int | None, deadline: float
     ) -> None:
         buf = bytearray()
@@ -166,9 +166,8 @@ class Run:
             if not chunk:
                 if not thread.is_alive():
                     return
-                thread.join(
-                    timeout=self.runtime.waits.read_poll_s
-                )  # no writer: the guest has not opened stdout, or closed it and is ending
+                # No writer: the guest has not opened stdout, or closed it and is ending.
+                thread.join(timeout=self.runtime.waits.read_poll_s)
                 continue
             buf.extend(chunk)
             if len(buf) > OUTPUT_CAP:
@@ -222,7 +221,7 @@ class Run:
         return int((time.monotonic() - self.started) * 1000)
 
 
-def open_writer(path: str, thread: threading.Thread, poll_s: float) -> int | None:
+def _open_writer(path: str, thread: threading.Thread, poll_s: float) -> int | None:
     while True:
         try:
             return os.open(path, os.O_WRONLY | os.O_NONBLOCK)
