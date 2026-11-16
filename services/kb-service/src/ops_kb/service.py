@@ -35,7 +35,9 @@ from ops_ingest.text import approx_tokens
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_store.listing import ListPage
 from ops_store.schedule import last_slot, next_run
 
 from .agents import AgentDirectory, Usage
@@ -187,13 +189,6 @@ def pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
         "hasNext": page < total_pages,
         "hasPrev": page > 1,
     }
-
-
-def _facet(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
-    out: dict[str, int] = {}
-    for r in rows:
-        out[str(r[key])] = out.get(str(r[key]), 0) + 1
-    return out
 
 
 # The Documents table's filters that are facets, by the row field each counts.
@@ -608,25 +603,26 @@ class KnowledgeService:
         options = [{"id": r.id, "label": r.name, "hint": r.owner or None, "disabled": None} for r in rows]
         return options_page(options, offset, limit)
 
-    async def list_bases(
-        self, who: Who, *, page: int, page_size: int, search: str | None, template_id: str | None = None
-    ) -> dict[str, Any]:
-        bases = [
-            b for b in await self.store.bases(who.tenant_id) if template_id is None or b.template_id == template_id
-        ]
-        sources = {s.id: s for s in await self.store.sources(who.tenant_id)}
-        by_kb, _ = await self._joined(who.tenant_id)
+    async def list_bases(self, who: Who, q: ListParams) -> ListPage:
+        """A page of the team's bases, paged and counted in SQL with no other service asked; then, with no
+        transaction open, agents-service's "used by" for the page's bases."""
+        found = await self.store.base_page(who.tenant_id, q)
+        if not found.bases:
+            return found.page
         using = await self.agents.usage(who.tenant_id, who.team_id)
-        rows = [
+        counts = {
+            s.id: {**s.item_counts, "synced": s.last_sync_at, "freshness": self.freshness_of(s)} for s in found.sources
+        }
+        names = {s.id: s.name for s in found.sources}
+        found.page["data"] = [
             {
-                **self._base(b, by_kb.get(b.id, []), await self._counts(who.tenant_id)),
-                "sourceNames": [sources[s].name for s in by_kb.get(b.id, []) if s in sources],
+                **self._base(b, found.links.get(b.id, []), counts),
+                "sourceNames": [names[s] for s in found.links.get(b.id, []) if s in names],
                 **_used_by(using, b.id),
             }
-            for b in sorted(bases, key=lambda b: b.created_at, reverse=True)
-            if _matches(search, b.name, b.description, b.owner)
+            for b in found.bases
         ]
-        return page_of(rows, page=page, page_size=page_size, facets={"health": _facet(rows, "health")})
+        return found.page
 
     async def get_base(self, who: Who, kb_id: str) -> dict[str, Any]:
         b = await self.store.base(who.tenant_id, kb_id)
@@ -823,22 +819,17 @@ class KnowledgeService:
 
     # ── Sources ──────────────────────────────────────────────────────────
 
-    async def list_sources(self, who: Who, *, page: int, page_size: int, search: str | None) -> dict[str, Any]:
-        sources = await self.store.sources(who.tenant_id)
-        bases = {b.id: b for b in await self.store.bases(who.tenant_id)}
-        _, by_source = await self._joined(who.tenant_id)
-        running = await self.store.running_sources(who.tenant_id)
-        rows = [
+    async def list_sources(self, who: Who, q: ListParams) -> ListPage:
+        found = await self.store.source_page(who.tenant_id, q)
+        found.page["data"] = [
             {
-                **self._source(s, by_source.get(s.id, [])),
-                "usedBy": [{"id": k, "name": bases[k].name} for k in by_source.get(s.id, []) if k in bases],
-                "running": s.id in running,
+                **self._source(s, [b.id for b in found.feeds.get(s.id, [])]),
+                "usedBy": [b.model_dump() for b in found.feeds.get(s.id, [])],
+                "running": s.id in found.running,
             }
-            for s in sorted(sources, key=lambda s: s.created_at, reverse=True)
-            if _matches(search, s.name, s.owner, s.collection)
+            for s in found.sources
         ]
-        facets = {"type": _facet(rows, "type"), "status": _facet(rows, "status")}
-        return page_of(rows, page=page, page_size=page_size, facets=facets)
+        return found.page
 
     async def plugin_sources(self, who: Who, plugin: str) -> list[dict[str, Any]]:
         """The sources the caller's team made from one plugin's knowledge sources, each with the bases it feeds. Read
@@ -2156,10 +2147,11 @@ class KnowledgeService:
 
     # ── Runs, source settings, refresh ───────────────────────────────────
 
-    async def source_runs(self, who: Who, source_id: str, *, page: int, page_size: int) -> dict[str, Any]:
+    async def source_runs(self, who: Who, source_id: str, q: ListParams) -> ListPage:
         await self._source_row(who, source_id)
-        rows = [_run(r) for r in await self.store.runs(who.tenant_id, source_id=source_id)]
-        return page_of(rows, page=page, page_size=page_size, facets={"status": _facet(rows, "status")})
+        page, runs = await self.store.run_page(who.tenant_id, source_id, q)
+        page["data"] = [_run(r) for r in runs]
+        return page
 
     async def get_run(self, who: Who, run_id: str) -> dict[str, Any]:
         found = await self.store.runs(who.tenant_id, run_id=run_id)
@@ -2541,16 +2533,17 @@ class KnowledgeService:
             "versionStatus": "current",
         }
 
-    async def source_items(
-        self, who: Who, source_id: str, *, page: int, page_size: int, search: str | None
-    ) -> dict[str, Any]:
+    async def source_items(self, who: Who, source_id: str, q: ListParams) -> ListPage:
         s = await self._source_row(who, source_id)
-        rows = [
-            self._item(i, s)
-            for i in await self.store.items(who.tenant_id, source_ids=[source_id])
-            if _matches(search, i.title, i.path)
-        ]
-        return page_of(rows, page=page, page_size=page_size, facets={"status": _facet(rows, "status")})
+        page, items = await self.store.item_page(who.tenant_id, source_id, q)
+        page["data"] = [self._item(i, s) for i in items]
+        # Counted as stored; shown under the console's names, so an item being read counts as processing.
+        shown: dict[str, int] = {}
+        for status, n in page["facets"].get("status", {}).items():
+            name = SHOWN_STATUS.get(status, status)
+            shown[name] = shown.get(name, 0) + n
+        page["facets"]["status"] = shown
+        return page
 
     async def add_page(self, who: Who, kb_id: str, title: str, text: str) -> dict[str, Any]:
         """A page written in the console: a titled text, stored as a Markdown file in the base's own pages source

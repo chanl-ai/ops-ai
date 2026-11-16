@@ -41,6 +41,7 @@ from ops_service_kit.http import (
     ok,
     operation_id,
 )
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -385,14 +386,11 @@ def create_kb_app(
     kbs = APIRouter(prefix="/v1/knowledge-bases", tags=["knowledge-bases"], responses=errors)
 
     @kbs.get("", response_model=Envelope[ListResult[KnowledgeBaseRow]])
-    async def list_knowledge_bases(  # pyright: ignore[reportUnusedFunction]
-        who: Caller,
-        page: Page = 1,
-        page_size: PageSize = 25,
-        search: str | None = None,
-        template_id: Annotated[str | None, Query(alias="templateId")] = None,
-    ) -> JSONResponse:
-        return ok(await service.list_bases(who, page=page, page_size=page_size, search=search, template_id=template_id))
+    async def list_knowledge_bases(who: Caller, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The team's knowledge bases, newest first; `search` in the name, description or owner, `ids` for exact rows
+        (pickers), `templateId` to filter; a facet by health. No `Tx`: "used by" is asked of agents-service after the
+        page's transaction ends."""
+        return ok(await service.list_bases(who, q))
 
     @kbs.get("/options", response_model=Envelope[OptionsPage])
     async def knowledge_base_options(  # pyright: ignore[reportUnusedFunction]
@@ -501,10 +499,9 @@ def create_kb_app(
     sources = APIRouter(prefix="/v1/sources", tags=["sources"], responses=errors)
 
     @sources.get("", response_model=Envelope[ListResult[SourceRow]])
-    async def list_sources(  # pyright: ignore[reportUnusedFunction]
-        who: Person, _: Tx, page: Page = 1, page_size: PageSize = 25, search: str | None = None
-    ) -> JSONResponse:
-        return ok(await service.list_sources(who, page=page, page_size=page_size, search=search))
+    async def list_sources(who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The team's sources, newest first; `search` in the name, owner or collection; facets by type and status."""
+        return ok(await service.list_sources(who, q))
 
     @sources.get("/from-plugin", response_model=Envelope[list[PluginSource]])
     async def list_plugin_sources(  # pyright: ignore[reportUnusedFunction]
@@ -567,10 +564,9 @@ def create_kb_app(
         return ok(await service.sync(who, source_id, full=opts.full, retry=opts.retry))
 
     @sources.get("/{source_id}/runs", response_model=Envelope[ListResult[SyncRun]])
-    async def list_runs(  # pyright: ignore[reportUnusedFunction]
-        source_id: str, who: Person, _: Tx, page: Page = 1, page_size: PageSize = 25
-    ) -> JSONResponse:
-        return ok(await service.source_runs(who, source_id, page=page, page_size=page_size))
+    async def list_runs(source_id: str, who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A source's sync runs, newest first, with a facet by status."""
+        return ok(await service.source_runs(who, source_id, q))
 
     @sources.patch("/{source_id}", response_model=Envelope[Source])
     async def update_source(source_id: str, body: SourcePatch, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -591,10 +587,9 @@ def create_kb_app(
         return ok(await service.put_item(who, source_id, body.model_dump(exclude_none=True)))
 
     @sources.get("/{source_id}/items", response_model=Envelope[ListResult[Item]])
-    async def list_items(  # pyright: ignore[reportUnusedFunction]
-        source_id: str, who: Person, _: Tx, page: Page = 1, page_size: PageSize = 25, search: str | None = None
-    ) -> JSONResponse:
-        return ok(await service.source_items(who, source_id, page=page, page_size=page_size, search=search))
+    async def list_items(source_id: str, who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A source's documents, oldest first; `search` in the title or path; a facet by status."""
+        return ok(await service.source_items(who, source_id, q))
 
     @sources.delete("/{source_id}", status_code=204, response_class=Response)
     async def remove_source(source_id: str, who: Caller) -> Response:  # pyright: ignore[reportUnusedFunction]

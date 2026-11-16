@@ -23,11 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.audit import AUDIT_EVENT, AUDIT_ROUTE
 from ops_store.audit import record as record_audit
 from ops_store.database import open_database, reachable
 from ops_store.dialect import Vector, db_after, db_now, insert_ignore, locked
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.outbox import Event, KbChanged, Poster, Relay, outbox_table, relay
 from ops_store.outbox import add as add_event
 from ops_store.rows import one, rows
@@ -78,7 +80,7 @@ kb_bases = sa.Table(
     sa.Column("last_refreshed_at", sa.DateTime(timezone=True)),
     # The template the provisioning service made it from, and how the platform protects it: `system` cannot be
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
-    sa.Column("template_id", sa.String(120)),
+    sa.Column("template_id", sa.String(120), info=LISTED),
     sa.Column("protection", sa.String(16)),
     # The base's own documents source, which Add documents adds files to; found by id, so renaming the base or
     # the source never makes a second one. Null until the first Add documents.
@@ -88,6 +90,8 @@ kb_bases = sa.Table(
     # Name uniqueness per team: two of a team's knowledge bases with one name make a grant ambiguous to the person
     # granting it. Another team's names are not seen.
     sa.UniqueConstraint("tenant_id", "team_id", "name", name="uq_kb_bases_name"),
+    # The list's `templateId` filter (kb_0028).
+    sa.Index("ix_kb_bases_template", "tenant_id", "template_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -772,6 +776,64 @@ class ChangePage(NamedTuple):
     origins: dict[str, int]
 
 
+class SourcePage(NamedTuple):
+    """A page of sources (`page["data"]` the rows as read), with each row's item counts, the bases each feeds by
+    source id, and the ids with a run going."""
+
+    page: ListPage
+    sources: list[SourceRow]
+    feeds: dict[str, list[BaseName]]
+    running: set[str]
+
+
+async def _item_counts(c: AsyncConnection, tenant: str, ids: list[str] | None) -> dict[str, dict[str, int]]:
+    """Each source's documents by status, and `chunks` for its indexed ones, from its items; every source's when
+    `ids` is None."""
+    i = kb_items.c
+    counted = (
+        sa.select(i.source_id, i.status, sa.func.count().label("n"), sa.func.coalesce(sa.func.sum(i.chunk_count), 0))
+        .where(i.tenant_id == tenant, team_visible(kb_items))
+        .group_by(i.source_id, i.status)
+    )
+    if ids is not None:
+        counted = counted.where(i.source_id.in_(ids))
+    counts: dict[str, dict[str, int]] = {}
+    for source_id, status, n, chunks in await c.execute(counted):
+        mine = counts.setdefault(str(source_id), {})
+        mine[str(status)] = int(n)
+        if status == "indexed":
+            mine["chunks"] = int(chunks)
+    return counts
+
+
+def _word(word: str) -> sa.ColumnClause[str]:
+    """A fixed word written into the statement, not bound: a GROUP BY must name the same expression the select does,
+    and two bound copies of one value are two parameters to the database."""
+    return sa.literal_column(f"'{word}'", sa.String())
+
+
+class BasePage(NamedTuple):
+    """A page of knowledge bases (`page["data"]` the rows as read), with the source ids each reads and those
+    sources."""
+
+    page: ListPage
+    bases: list[BaseRow]
+    links: dict[str, list[str]]
+    sources: list[SourceRow]
+
+
+async def _sources_in(c: AsyncConnection, tenant: str, ids: list[str] | None) -> list[SourceRow]:
+    """The team's sources, or those of `ids`, each with its item counts."""
+    q = sa.select(*SOURCE_COLUMNS, db_now().label("db_now")).where(
+        kb_sources.c.tenant_id == tenant, team_visible(kb_sources)
+    )
+    if ids is not None:
+        q = q.where(kb_sources.c.id.in_(ids))
+    rows = [dict(r) for r in (await c.execute(q)).mappings()]
+    counts = await _item_counts(c, tenant, ids)
+    return [SourceRow.model_validate({**r, "item_counts": counts.get(r["id"], {})}) for r in rows]
+
+
 class KnowledgeStore(Store):
     """kb-service's door to its knowledge bases and sources, always inside one tenant. Creating a knowledge base with
     its links, attaching sources and removing a source with its links each land whole."""
@@ -840,32 +902,103 @@ class KnowledgeStore(Store):
     async def sources(self, tenant: str, ids: list[str] | None = None) -> list[SourceRow]:
         """Each source with `item_counts`, its documents by status (pending, indexed, failed), so what a source says
         about its documents is what its items are."""
-        q = sa.select(*SOURCE_COLUMNS, db_now().label("db_now")).where(
-            kb_sources.c.tenant_id == tenant, team_visible(kb_sources)
-        )
-        if ids is not None:
-            q = q.where(kb_sources.c.id.in_(ids))
-        counted = (
-            sa.select(
-                kb_items.c.source_id,
-                kb_items.c.status,
-                sa.func.count().label("n"),
-                sa.func.coalesce(sa.func.sum(kb_items.c.chunk_count), 0).label("chunks"),
-            )
-            .where(kb_items.c.tenant_id == tenant, team_visible(kb_items))
-            .group_by(kb_items.c.source_id, kb_items.c.status)
-        )
-        if ids is not None:
-            counted = counted.where(kb_items.c.source_id.in_(ids))
         async with self.tx() as c:
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            counts: dict[str, dict[str, int]] = {}
-            for r in (await c.execute(counted)).mappings():
-                mine = counts.setdefault(str(r["source_id"]), {})
-                mine[str(r["status"])] = int(r["n"])
-                if r["status"] == "indexed":
-                    mine["chunks"] = int(r["chunks"])
-        return [SourceRow.model_validate({**r, "item_counts": counts.get(r["id"], {})}) for r in rows]
+            return await _sources_in(c, tenant, ids)
+
+    async def base_page(self, tenant: str, params: ListParams) -> BasePage:
+        """One page of the team's knowledge bases, newest first, searched by name, description or owner, filtered by
+        `templateId` and counted by health in SQL; then the page's links and the sources they read, so the statements
+        are the same number whatever the page size. Health is the row's (`service._base`): never refreshed, else
+        degraded while a document of a source it reads failed, else healthy."""
+        b, link, item = kb_bases.c, kb_base_sources.c, kb_items.c
+        failed = (
+            sa.select(link.kb_id, sa.func.count().label("failed"))
+            .select_from(
+                kb_base_sources.join(
+                    kb_items, sa.and_(item.tenant_id == link.tenant_id, item.source_id == link.source_id)
+                )
+            )
+            .where(link.tenant_id == tenant, item.status == "failed")
+            .where(team_visible(kb_base_sources), team_visible(kb_items))
+            .group_by(link.kb_id)
+            .subquery("failed")
+        )
+        health = sa.case(
+            (b.last_refreshed_at.is_(None), _word("never")),
+            (failed.c.failed > 0, _word("degraded")),
+            else_=_word("healthy"),
+        )
+        q = (
+            sa.select(*BASE_COLUMNS)
+            .select_from(kb_bases.outerjoin(failed, failed.c.kb_id == b.id))
+            .where(b.tenant_id == tenant, team_visible(kb_bases))
+        )
+        async with self.tx() as c:
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[b.name, b.description, b.owner],
+                default_sort=b.created_at.desc(),
+                filters={"templateId": b.template_id},
+                facets={"health": health},
+            )
+            found = [BaseRow.model_validate(r) for r in page["data"]]
+            if not found:
+                return BasePage(page, [], {}, [])
+            linked = (
+                sa.select(link.kb_id, link.source_id)
+                .where(link.tenant_id == tenant, link.kb_id.in_([x.id for x in found]), team_visible(kb_base_sources))
+                .order_by(link.kb_id, link.source_id)
+            )
+            links: dict[str, list[str]] = {}
+            for kb_id, source_id in await c.execute(linked):
+                links.setdefault(str(kb_id), []).append(str(source_id))
+            read = sorted({s for ids in links.values() for s in ids})
+            sources = await _sources_in(c, tenant, read) if read else []
+        return BasePage(page, found, links, sources)
+
+    async def source_page(self, tenant: str, params: ListParams) -> SourcePage:
+        """One page of the team's sources, newest first, searched by name, owner or collection and counted by type
+        and status in SQL; then, for the page's sources only, their item counts, the bases each feeds and whether a
+        run is going, so the statements are the same number whatever the page size."""
+        s = kb_sources.c
+        q = sa.select(*SOURCE_COLUMNS, db_now().label("db_now")).where(s.tenant_id == tenant, team_visible(kb_sources))
+        async with self.tx() as c:
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[s.name, s.owner, s.collection],
+                default_sort=s.created_at.desc(),
+                facets={"type": s.type, "status": s.status},
+            )
+            ids = [str(r["id"]) for r in page["data"]]
+            if not ids:
+                return SourcePage(page, [], {}, set())
+            counts = await _item_counts(c, tenant, ids)
+            link, base = kb_base_sources.c, kb_bases.c
+            fed = (
+                sa.select(link.source_id, base.id, base.name)
+                .select_from(
+                    kb_base_sources.join(kb_bases, sa.and_(base.tenant_id == link.tenant_id, base.id == link.kb_id))
+                )
+                .where(link.tenant_id == tenant, link.source_id.in_(ids), team_visible(kb_base_sources))
+                .where(team_visible(kb_bases))
+                .order_by(link.source_id, link.kb_id)
+            )
+            feeds: dict[str, list[BaseName]] = {}
+            for r in await c.execute(fed):
+                feeds.setdefault(str(r.source_id), []).append(BaseName(id=r.id, name=r.name))
+            going = sa.select(kb_runs.c.source_id).where(
+                kb_runs.c.tenant_id == tenant,
+                kb_runs.c.source_id.in_(ids),
+                kb_runs.c.status == "running",
+                team_visible(kb_runs),
+            )
+            running = {str(r[0]) for r in await c.execute(going.distinct())}
+        found = [SourceRow.model_validate({**r, "item_counts": counts.get(str(r["id"]), {})}) for r in page["data"]]
+        return SourcePage(page, found, feeds, running)
 
     async def links(self, tenant: str) -> list[tuple[str, str]]:
         """(knowledge base id, source id) for every attachment in the tenant."""
@@ -1387,6 +1520,25 @@ class KnowledgeStore(Store):
             q = q.where(kb_runs.c.id == run_id)
         async with self.tx() as c:
             return await rows(c, q.order_by(kb_runs.c.started_at.desc()), RunRow)
+
+    async def run_page(self, tenant: str, source_id: str, params: ListParams) -> tuple[ListPage, list[RunRow]]:
+        """One page of a source's runs, newest first, counted by status in SQL."""
+        r = kb_runs.c
+        shown = (col for col in kb_runs.c if col.name not in ("tenant_id", "team_id", "started_by"))
+        q = sa.select(*shown).where(r.tenant_id == tenant, r.source_id == source_id, team_visible(kb_runs))
+        async with self.tx() as c:
+            page = await list_page(c, q, params, default_sort=r.started_at.desc(), facets={"status": r.status})
+        return page, [RunRow.model_validate(row) for row in page["data"]]
+
+    async def item_page(self, tenant: str, source_id: str, params: ListParams) -> tuple[ListPage, list[ItemRow]]:
+        """One page of a source's documents, oldest first, searched by title or path and counted by status in SQL."""
+        i = kb_items.c
+        q = sa.select(*ITEM_COLUMNS).where(i.tenant_id == tenant, i.source_id == source_id, team_visible(kb_items))
+        async with self.tx() as c:
+            page = await list_page(
+                c, q, params, search=[i.title, i.path], default_sort=i.created_at.asc(), facets={"status": i.status}
+            )
+        return page, [ItemRow.model_validate(row) for row in page["data"]]
 
     async def drafts(self, tenant: str, item_id: str) -> list[ChangeRow]:
         """The item's FAQ drafts in every state, oldest first."""

@@ -99,7 +99,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Knowledge Bases */
+        /**
+         * List Knowledge Bases
+         * @description The team's knowledge bases, newest first; `search` in the name, description or owner, `ids` for exact rows
+         *     (pickers), `templateId` to filter; a facet by health. No `Tx`: "used by" is asked of agents-service after the
+         *     page's transaction ends.
+         */
         get: operations["knowledge_bases_list_knowledge_bases"];
         put?: never;
         /** Create Knowledge Base */
@@ -426,7 +431,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Sources */
+        /**
+         * List Sources
+         * @description The team's sources, newest first; `search` in the name, owner or collection; facets by type and status.
+         */
         get: operations["sources_list_sources"];
         put?: never;
         /** Create Source */
@@ -589,7 +597,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Items */
+        /**
+         * List Items
+         * @description A source's documents, oldest first; `search` in the title or path; a facet by status.
+         */
         get: operations["sources_list_items"];
         put?: never;
         /**
@@ -645,7 +656,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Runs */
+        /**
+         * List Runs
+         * @description A source's sync runs, newest first, with a facet by status.
+         */
         get: operations["sources_list_runs"];
         put?: never;
         post?: never;
@@ -3374,9 +3388,11 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
                 search?: string | null;
-                templateId?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -5685,8 +5701,11 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
                 search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -6836,8 +6855,11 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
                 search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path: {
@@ -7256,7 +7278,11 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path: {

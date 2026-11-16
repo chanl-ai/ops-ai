@@ -37,6 +37,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     kb,
     platform,
@@ -575,8 +576,8 @@ def resource_stories(
     )
     sid = str((data(source) or {}).get("id")) if source.status_code == 201 else None
     synced = knowledge.post(f"/v1/sources/{sid}/sync", headers=kb_ops) if sid else None
-    items = data(knowledge.get(f"/v1/sources/{sid}/items", headers=kb_ops)) or {} if sid else {}
-    titles = sorted(str(i.get("title")) for i in (items.get("data") if isinstance(items, dict) else items) or [])
+    items = every_page(knowledge, f"/v1/sources/{sid}/items", headers=kb_ops) if sid else []
+    titles = sorted(str(i.get("title")) for i in items)
     check(
         "57 the app's knowledge source is added to the team's knowledge base and its sync reads both articles",
         source.status_code == 201

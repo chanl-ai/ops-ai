@@ -23,6 +23,7 @@ from usecase_harness import (
     agents,
     check,
     data,
+    every_page,
     fake_openai,
     finish,
     kb,
@@ -57,7 +58,7 @@ RULES = {
 
 
 def items(k: Any, source_id: str) -> dict[str, dict[str, Any]]:
-    return {i["path"]: i for i in data(k.get(f"/v1/sources/{source_id}/items", params={"pageSize": 100}))["data"]}
+    return {i["path"]: i for i in every_page(k, f"/v1/sources/{source_id}/items")}
 
 
 def ask(k: Any, kb_id: str, question: str) -> dict[str, Any]:

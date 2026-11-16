@@ -20,7 +20,7 @@ from fake_sharepoint_confluence import FAILING_QUERY, connect, stack
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate
-from usecase_harness import KB_PORT, agents, check, data, finish, sse
+from usecase_harness import KB_PORT, agents, check, data, every_page, finish, sse
 
 RUN = int(time.time())
 OWNER = "maya@harborpine.example"
@@ -48,7 +48,7 @@ def docx(title: str, text: str) -> bytes:
 
 
 def items(k: Any, source_id: str) -> dict[str, dict[str, Any]]:
-    return {i["path"]: i for i in data(k.get(f"/v1/sources/{source_id}/items", params={"pageSize": 100}))["data"]}
+    return {i["path"]: i for i in every_page(k, f"/v1/sources/{source_id}/items")}
 
 
 def search(k: Any, kb_id: str, question: str) -> list[dict[str, Any]]:

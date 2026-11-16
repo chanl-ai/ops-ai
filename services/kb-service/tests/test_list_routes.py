@@ -1,0 +1,253 @@
+"""The four lists on the shared list contract, each through its route, by failure mode: another tenant's or another
+team's row shown; the total counting rows the caller cannot see; a page asked past the end answering empty instead
+of the last page; rows that share a sort value repeated or skipped between pages."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
+from uuid import uuid4
+
+import httpx
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from ops_kb.store import KnowledgeStore
+from ops_kb.store.knowledge import kb_items, kb_runs
+from ops_store import isolation
+
+from .test_provisioned_bases import kb, person  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
+from .test_team_isolation import outsider
+
+# One moment for every seeded row, so only the primary key orders them.
+AT = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
+
+
+def _source(tenant: str, team: str, name: str) -> dict[str, Any]:
+    return {
+        "tenant_id": tenant,
+        "id": f"src_{uuid4().hex[:12]}",
+        "team_id": team,
+        "type": "file",
+        "name": name,
+        "collection": "Policies",
+        "owner": "Card operations",
+        "sensitivity": "internal",
+        "status": "active",
+        "tags": [],
+        "file_ids": [],
+        "file_names": {},
+        "created_by": "james@harborpine.example",
+        "created_at": AT,
+    }
+
+
+async def _seed_sources(engine: AsyncEngine, tenant: str, team: str, *names: str) -> list[str]:
+    store = KnowledgeStore(engine)
+    made = [_source(tenant, team, n) for n in names]
+    with isolation.scope(tenant, team):
+        for row in made:
+            await store.create_source(row, [])
+    return [r["id"] for r in made]
+
+
+async def _insert(engine: AsyncEngine, tenant: str, team: str, table: sa.Table, *rows: dict[str, Any]) -> list[str]:
+    """Rows written as `team` in `tenant`, with no check that their source is that team's: a stray row the list's own
+    predicates must leave out."""
+    with isolation.scope(tenant, team):
+        async with KnowledgeStore(engine).tx() as c:
+            for row in rows:
+                await c.execute(sa.insert(table).values(tenant_id=tenant, team_id=team, **row))
+    return [r["id"] for r in rows]
+
+
+def _run(source_id: str) -> dict[str, Any]:
+    return {
+        "id": f"run_{uuid4().hex[:12]}",
+        "source_id": source_id,
+        "trigger": "manual",
+        "started_at": AT,
+        "duration_sec": 1.0,
+        "status": "success",
+        "counts": {},
+        "errors": [],
+        "log": [],
+        "started_by": "james@harborpine.example",
+    }
+
+
+def _item(source_id: str, title: str, status: str = "indexed") -> dict[str, Any]:
+    return {
+        "id": f"item_{uuid4().hex[:12]}",
+        "source_id": source_id,
+        "path": f"{title}.pdf",
+        "title": title,
+        "mime": "application/pdf",
+        "size": 10,
+        "file_id": f"file_{uuid4().hex[:12]}",
+        "digest": "d",
+        "version": 1,
+        "status": status,
+        "chunk_count": 0,
+        "owner": "Card operations",
+        "created_at": AT,
+    }
+
+
+async def _page(c: httpx.AsyncClient, path: str, **params: Any) -> dict[str, Any]:
+    r = await c.get(path, params=params)
+    assert r.status_code == 200, r.text
+    return r.json()["data"]
+
+
+async def test_sources_list_only_the_teams_rows_with_ties_ordered_by_id(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    mine = await _seed_sources(engine, tenant, "team_ops", "Rates", "Hardship", "Mortgages")
+    lending = await _seed_sources(engine, tenant, "team_lending", "Lending rates")
+    elsewhere = f"t_{uuid4().hex[:10]}"
+    other = await _seed_sources(engine, elsewhere, "team_ops", "Other tenant rates")
+
+    first = await _page(kb, "/v1/sources", pageSize=2)
+    second = await _page(kb, "/v1/sources", pageSize=2, page=2)
+    past = await _page(kb, "/v1/sources", pageSize=2, page=9)
+    shown = [r["id"] for r in first["data"] + second["data"]]
+    # The same created_at for all three: the newest-first list then orders them by id, descending.
+    assert shown == sorted(mine, reverse=True)
+    assert (first["pagination"]["total"], first["facets"]["type"]) == (3, {"file": 3})
+    assert (past["pagination"]["page"], [r["id"] for r in past["data"]]) == (2, [r["id"] for r in second["data"]])
+
+    theirs = (await kb.get("/v1/sources", headers=outsider(tenant))).json()["data"]
+    assert ([r["id"] for r in theirs["data"]], theirs["pagination"]["total"]) == (lending, 1)
+    another = (await kb.get("/v1/sources", headers=person(elsewhere, "james@harborpine.example", "builder"))).json()
+    assert [r["id"] for r in another["data"]["data"]] == other
+
+
+async def _per_source_list(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+    *,
+    child: str,
+    table: sa.Table,
+    make: Callable[[str, str], dict[str, Any]],
+) -> tuple[list[str], dict[str, Any]]:
+    """Three rows of one source at one moment, and rows on the same source id written as another team and in another
+    tenant (where a source of that id is that tenant's own); the route must answer the three alone."""
+    [sid] = await _seed_sources(engine, tenant, "team_ops", "Rates")
+    elsewhere = f"t_{uuid4().hex[:10]}"
+    other = _source(elsewhere, "team_ops", "Rates")
+    with isolation.scope(elsewhere, "team_ops"):
+        await KnowledgeStore(engine).create_source({**other, "id": sid}, [])
+    mine = await _insert(engine, tenant, "team_ops", table, make(sid, "a"), make(sid, "b"), make(sid, "c"))
+    await _insert(engine, tenant, "team_lending", table, make(sid, "d"))
+    await _insert(engine, elsewhere, "team_ops", table, make(sid, "e"))
+
+    path = f"/v1/sources/{sid}/{child}"
+    first = await _page(kb, path, pageSize=2)
+    second = await _page(kb, path, pageSize=2, page=2)
+    past = await _page(kb, path, pageSize=2, page=9)
+    shown = [r["id"] for r in first["data"] + second["data"]]
+    assert first["pagination"]["total"] == 3
+    assert (past["pagination"]["page"], [r["id"] for r in past["data"]]) == (2, [r["id"] for r in second["data"]])
+    return shown, {"mine": mine, "first": first}
+
+
+async def test_runs_list_only_the_sources_team_rows_newest_first_with_ties_by_id(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    def make(sid: str, _n: str) -> dict[str, Any]:
+        return _run(sid)
+
+    shown, seen = await _per_source_list(kb, engine, tenant, child="runs", table=kb_runs, make=make)
+    assert shown == sorted(seen["mine"], reverse=True)
+    assert seen["first"]["facets"]["status"] == {"success": 3}
+
+
+async def test_items_list_only_the_sources_team_rows_oldest_first_with_ties_by_id(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    def make(sid: str, n: str) -> dict[str, Any]:
+        return _item(sid, f"Policy {n}", "reading" if n == "a" else "indexed")
+
+    shown, seen = await _per_source_list(kb, engine, tenant, child="items", table=kb_items, make=make)
+    assert shown == sorted(seen["mine"])
+    # Stored as reading, shown and counted as processing.
+    assert seen["first"]["facets"]["status"] == {"processing": 1, "indexed": 2}
+
+
+def _base(tenant: str, team: str, name: str, *, refreshed: bool = True, template: str | None = None) -> dict[str, Any]:
+    return {
+        "tenant_id": tenant,
+        "id": f"kb_{uuid4().hex[:12]}",
+        "team_id": team,
+        "name": name,
+        "slug": name.lower().replace(" ", "_"),
+        "description": f"{name} for the card desk",
+        "color": "blue",
+        "owner": "Card operations",
+        "collections": [],
+        "retrieval": {},
+        "created_by": "james@harborpine.example",
+        "created_at": AT,
+        "last_refreshed_at": AT if refreshed else None,
+        "template_id": template,
+    }
+
+
+async def test_bases_list_only_the_teams_rows_with_health_counted_and_ids_answered(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    store = KnowledgeStore(engine)
+    [failing] = await _seed_sources(engine, tenant, "team_ops", "Rates")
+    await _insert(engine, tenant, "team_ops", kb_items, _item(failing, "Rate sheet", "failed"))
+    made = [
+        _base(tenant, "team_ops", "Disputes", template="banking/policies"),
+        _base(tenant, "team_ops", "Hardship", refreshed=False),
+        _base(tenant, "team_ops", "Rates"),
+    ]
+    with isolation.scope(tenant, "team_ops"):
+        for row in made:
+            await store.create_base(row, [failing] if row["name"] == "Rates" else [])
+    lending = _base(tenant, "team_lending", "Lending")
+    with isolation.scope(tenant, "team_lending"):
+        await store.create_base(lending, [])
+    elsewhere = f"t_{uuid4().hex[:10]}"
+    other = _base(elsewhere, "team_ops", "Other tenant rates")
+    with isolation.scope(elsewhere, "team_ops"):
+        await store.create_base(other, [])
+    mine = sorted((r["id"] for r in made), reverse=True)
+
+    first = await _page(kb, "/v1/knowledge-bases", pageSize=2)
+    second = await _page(kb, "/v1/knowledge-bases", pageSize=2, page=2)
+    past = await _page(kb, "/v1/knowledge-bases", pageSize=2, page=9)
+    assert [r["id"] for r in first["data"] + second["data"]] == mine
+    assert first["pagination"]["total"] == 3
+    assert first["facets"]["health"] == {"healthy": 1, "never": 1, "degraded": 1}
+    assert {r["name"]: r["health"] for r in first["data"] + second["data"]} == {
+        "Disputes": "healthy",
+        "Hardship": "never",
+        "Rates": "degraded",
+    }
+    assert (past["pagination"]["page"], [r["id"] for r in past["data"]]) == (2, [r["id"] for r in second["data"]])
+
+    # Pickers: exact rows by id whatever the search says, never another team's; search and the template filter.
+    picked = await _page(kb, "/v1/knowledge-bases", ids=[made[1]["id"], lending["id"]], search="zzz")
+    assert [r["id"] for r in picked["data"]] == [made[1]["id"]]
+    assert [r["name"] for r in (await _page(kb, "/v1/knowledge-bases", search="hards"))["data"]] == ["Hardship"]
+    templated = await _page(kb, "/v1/knowledge-bases", templateId="banking/policies")
+    assert [r["name"] for r in templated["data"]] == ["Disputes"]
+
+    theirs = (await kb.get("/v1/knowledge-bases", headers=outsider(tenant))).json()["data"]
+    assert ([r["id"] for r in theirs["data"]], theirs["pagination"]["total"]) == ([lending["id"]], 1)
+    another = await kb.get("/v1/knowledge-bases", headers=person(elsewhere, "james@harborpine.example", "builder"))
+    assert [r["id"] for r in another.json()["data"]["data"]] == [other["id"]]
