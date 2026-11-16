@@ -1,0 +1,2621 @@
+{
+  "create": {
+    "body": {
+      "data": {
+        "dataSchema": {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "daily": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "account",
+            "daily"
+          ],
+          "type": "object"
+        },
+        "name": "Wire limit card",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "daily": 25000
+        },
+        "status": "draft",
+        "teamId": "team_ops",
+        "tree": {
+          "children": [
+            {
+              "label": "Daily",
+              "type": "metric",
+              "unit": "USD",
+              "value": {
+                "$bind": "/daily"
+              }
+            },
+            {
+              "label": "Look it up",
+              "reply": {
+                "text": "Look up this account.",
+                "values": {
+                  "query": {
+                    "$bind": "/account"
+                  }
+                }
+              },
+              "requires": "lookup_account",
+              "type": "button"
+            }
+          ],
+          "title": {
+            "$bind": "/account"
+          },
+          "type": "card"
+        },
+        "updatedAt": "<timeZ>",
+        "updatedBy": "usr_b@harborpine.example",
+        "useWhen": "The person asks for an account's wire limits.",
+        "version": 1,
+        "widgetId": "wire-limit-card"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "create.outsideCatalogue": {
+    "body": {
+      "error": {
+        "code": "invalid_widget",
+        "message": ": type 'html' is not in the catalogue (card, row, column, title, text, caption, badge, metric, table, chart, keyValue, list, button, divider, image, timeline, tracker, entity, brief, comparison, checklist, form, confirm, document, quote, plan, reasoning, slots, receipt, contact).",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "create.seededName": {
+    "body": {
+      "error": {
+        "code": "widget_taken",
+        "message": "hold-review is taken by a platform widget; rename yours.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "create.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "create",
+          "area": "widgets",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot create a widget; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "list": {
+    "body": {
+      "data": [
+        {
+          "dataSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "accountId": {
+                "maxLength": 34,
+                "type": "string"
+              },
+              "available": {
+                "type": "number"
+              },
+              "balance": {
+                "type": "number"
+              },
+              "currency": {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              "name": {
+                "maxLength": 120,
+                "type": "string"
+              },
+              "status": {
+                "maxLength": 40,
+                "type": "string"
+              },
+              "transactions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "amount": {
+                      "type": "number"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              "type": {
+                "maxLength": 40,
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "name",
+              "balance",
+              "currency"
+            ],
+            "type": "object"
+          },
+          "name": "Account snapshot",
+          "requiresTools": [],
+          "sample": {
+            "accountId": "<CHQ>",
+            "available": 4320.55,
+            "balance": 4820.55,
+            "currency": "USD",
+            "name": "Maria Lopez, everyday checking",
+            "status": "Open",
+            "transactions": [
+              {
+                "amount": -500,
+                "date": "2026-10-16",
+                "description": "Transfer to savings"
+              },
+              {
+                "amount": -42.1,
+                "date": "2026-10-15",
+                "description": "Card payment, Fresh Market"
+              },
+              {
+                "amount": 3150,
+                "date": "2026-10-14",
+                "description": "Payroll"
+              }
+            ],
+            "type": "Checking"
+          },
+          "status": "published",
+          "tree": {
+            "children": [
+              {
+                "children": [
+                  {
+                    "label": "Balance",
+                    "type": "metric",
+                    "unit": {
+                      "$bind": "/currency"
+                    },
+                    "value": {
+                      "$bind": "/balance"
+                    }
+                  },
+                  {
+                    "label": "Available",
+                    "type": "metric",
+                    "unit": {
+                      "$bind": "/currency"
+                    },
+                    "value": {
+                      "$bind": "/available"
+                    }
+                  }
+                ],
+                "gap": "lg",
+                "type": "row"
+              },
+              {
+                "items": [
+                  {
+                    "label": "Account",
+                    "value": {
+                      "$bind": "/accountId"
+                    }
+                  },
+                  {
+                    "label": "Type",
+                    "value": {
+                      "$bind": "/type"
+                    }
+                  },
+                  {
+                    "label": "Status",
+                    "value": {
+                      "$bind": "/status"
+                    }
+                  }
+                ],
+                "type": "keyValue"
+              },
+              {
+                "type": "divider"
+              },
+              {
+                "text": "Recent transactions",
+                "type": "caption"
+              },
+              {
+                "columns": [
+                  {
+                    "format": "date",
+                    "key": "date",
+                    "label": "Date"
+                  },
+                  {
+                    "key": "description",
+                    "label": "Description"
+                  },
+                  {
+                    "format": "money",
+                    "key": "amount",
+                    "label": "Amount"
+                  }
+                ],
+                "rows": {
+                  "$bind": "/transactions"
+                },
+                "type": "table"
+              }
+            ],
+            "title": {
+              "$bind": "/name"
+            },
+            "type": "card"
+          },
+          "useWhen": "The person asks about one account: its balance, its status or its recent transactions.",
+          "version": 1,
+          "widgetId": "account-snapshot"
+        },
+        {
+          "dataSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "caseId": {
+                "maxLength": 40,
+                "type": "string"
+              },
+              "due": {
+                "maxLength": 40,
+                "type": "string"
+              },
+              "nextSteps": {
+                "items": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              "owner": {
+                "maxLength": 120,
+                "type": "string"
+              },
+              "priority": {
+                "maxLength": 20,
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "open",
+                  "waiting",
+                  "overdue",
+                  "closed"
+                ],
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 160,
+                "type": "string"
+              }
+            },
+            "required": [
+              "caseId",
+              "title",
+              "status"
+            ],
+            "type": "object"
+          },
+          "name": "Case summary",
+          "requiresTools": [
+            "request_document"
+          ],
+          "sample": {
+            "caseId": "<CASE>",
+            "due": "2026-10-20",
+            "nextSteps": [
+              "Ask the merchant for the receipt",
+              "Issue a provisional credit if no answer by Oct 19"
+            ],
+            "owner": "Dispute desk",
+            "priority": "High",
+            "status": "waiting",
+            "title": "Disputed card charge, Fresh Market"
+          },
+          "status": "published",
+          "tree": {
+            "children": [
+              {
+                "children": [
+                  {
+                    "text": {
+                      "$bind": "/status"
+                    },
+                    "tones": {
+                      "closed": "success",
+                      "open": "info",
+                      "overdue": "danger",
+                      "waiting": "warning"
+                    },
+                    "type": "badge"
+                  },
+                  {
+                    "text": {
+                      "$bind": "/caseId"
+                    },
+                    "type": "caption"
+                  }
+                ],
+                "gap": "sm",
+                "type": "row"
+              },
+              {
+                "items": [
+                  {
+                    "label": "Owner",
+                    "value": {
+                      "$bind": "/owner"
+                    }
+                  },
+                  {
+                    "label": "Priority",
+                    "value": {
+                      "$bind": "/priority"
+                    }
+                  },
+                  {
+                    "label": "Due",
+                    "value": {
+                      "$bind": "/due"
+                    }
+                  }
+                ],
+                "type": "keyValue"
+              },
+              {
+                "text": "Next steps",
+                "type": "caption"
+              },
+              {
+                "items": {
+                  "$bind": "/nextSteps"
+                },
+                "type": "list"
+              },
+              {
+                "label": "Show the case history",
+                "reply": {
+                  "text": "Show the history of this case.",
+                  "values": {
+                    "caseId": {
+                      "$bind": "/caseId"
+                    }
+                  }
+                },
+                "requires": "request_document",
+                "type": "button"
+              }
+            ],
+            "title": {
+              "$bind": "/title"
+            },
+            "type": "card"
+          },
+          "useWhen": "The person asks where a case stands: its status, owner, deadline and next steps.",
+          "version": 1,
+          "widgetId": "case-summary"
+        },
+        {
+          "dataSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "account": {
+                "maxLength": 34,
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "currency": {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              "holdId": {
+                "maxLength": 64,
+                "type": "string"
+              },
+              "payee": {
+                "maxLength": 120,
+                "type": "string"
+              },
+              "reason": {
+                "maxLength": 400,
+                "type": "string"
+              },
+              "recent": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "amount": {
+                      "type": "number"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              "status": {
+                "enum": [
+                  "held",
+                  "released"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "holdId",
+              "payee",
+              "amount",
+              "currency",
+              "status",
+              "reason",
+              "account"
+            ],
+            "type": "object"
+          },
+          "name": "Hold review",
+          "requiresTools": [
+            "lookup_account"
+          ],
+          "sample": {
+            "account": "<CHQ>",
+            "amount": 12500,
+            "currency": "USD",
+            "holdId": "hold_204",
+            "payee": "Acme Supplies Ltd",
+            "reason": "New payee over the daily limit",
+            "recent": [
+              {
+                "amount": -42.1,
+                "date": "2026-10-15",
+                "description": "Card payment, Fresh Market"
+              },
+              {
+                "amount": 3150,
+                "date": "2026-10-14",
+                "description": "Payroll"
+              }
+            ],
+            "status": "held"
+          },
+          "status": "published",
+          "tree": {
+            "children": [
+              {
+                "children": [
+                  {
+                    "label": "Held",
+                    "type": "metric",
+                    "unit": {
+                      "$bind": "/currency"
+                    },
+                    "value": {
+                      "$bind": "/amount"
+                    }
+                  },
+                  {
+                    "text": {
+                      "$bind": "/status"
+                    },
+                    "tones": {
+                      "held": "warning",
+                      "released": "success"
+                    },
+                    "type": "badge"
+                  }
+                ],
+                "gap": "md",
+                "type": "row"
+              },
+              {
+                "items": [
+                  {
+                    "label": "Reason",
+                    "value": {
+                      "$bind": "/reason"
+                    }
+                  },
+                  {
+                    "label": "Account",
+                    "value": {
+                      "$bind": "/account"
+                    }
+                  }
+                ],
+                "type": "keyValue"
+              },
+              {
+                "columns": [
+                  {
+                    "format": "date",
+                    "key": "date",
+                    "label": "Date"
+                  },
+                  {
+                    "key": "description",
+                    "label": "Description"
+                  },
+                  {
+                    "format": "money",
+                    "key": "amount",
+                    "label": "Amount"
+                  }
+                ],
+                "rows": {
+                  "$bind": "/recent"
+                },
+                "type": "table"
+              },
+              {
+                "children": [
+                  {
+                    "label": "Look up the account",
+                    "reply": {
+                      "text": "Look up this account.",
+                      "values": {
+                        "query": {
+                          "$bind": "/account"
+                        }
+                      }
+                    },
+                    "requires": "lookup_account",
+                    "type": "button"
+                  },
+                  {
+                    "label": "Keep it held",
+                    "reply": {
+                      "text": "Keep this hold in place.",
+                      "values": {
+                        "holdId": {
+                          "$bind": "/holdId"
+                        }
+                      }
+                    },
+                    "type": "button"
+                  }
+                ],
+                "gap": "sm",
+                "type": "row"
+              }
+            ],
+            "title": {
+              "$bind": "/payee"
+            },
+            "type": "card"
+          },
+          "useWhen": "A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+          "version": 1,
+          "widgetId": "hold-review"
+        },
+        {
+          "dataSchema": {
+            "properties": {
+              "account": {
+                "type": "string"
+              },
+              "daily": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "account",
+              "daily"
+            ],
+            "type": "object"
+          },
+          "name": "Limit card two",
+          "requiresTools": [
+            "lookup_account"
+          ],
+          "sample": {
+            "account": "<CHQ>",
+            "daily": 25000
+          },
+          "status": "draft",
+          "teamId": "team_ops",
+          "tree": {
+            "children": [
+              {
+                "label": "Daily",
+                "type": "metric",
+                "unit": "USD",
+                "value": {
+                  "$bind": "/daily"
+                }
+              },
+              {
+                "label": "Look it up",
+                "reply": {
+                  "text": "Look up this account.",
+                  "values": {
+                    "query": {
+                      "$bind": "/account"
+                    }
+                  }
+                },
+                "requires": "lookup_account",
+                "type": "button"
+              }
+            ],
+            "title": {
+              "$bind": "/account"
+            },
+            "type": "card"
+          },
+          "updatedAt": "<timeZ>",
+          "updatedBy": "usr_b@harborpine.example",
+          "useWhen": "The person asks for an account's wire limits.",
+          "version": 1,
+          "widgetId": "limit-card-two"
+        },
+        {
+          "dataSchema": {
+            "properties": {
+              "account": {
+                "type": "string"
+              },
+              "daily": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "account",
+              "daily"
+            ],
+            "type": "object"
+          },
+          "name": "Wire limit card",
+          "requiresTools": [
+            "lookup_account"
+          ],
+          "sample": {
+            "account": "<CHQ>",
+            "daily": 25000
+          },
+          "status": "published",
+          "teamId": "team_ops",
+          "tree": {
+            "children": [
+              {
+                "label": "Daily",
+                "type": "metric",
+                "unit": "USD",
+                "value": {
+                  "$bind": "/daily"
+                }
+              },
+              {
+                "label": "Look it up",
+                "reply": {
+                  "text": "Look up this account.",
+                  "values": {
+                    "query": {
+                      "$bind": "/account"
+                    }
+                  }
+                },
+                "requires": "lookup_account",
+                "type": "button"
+              }
+            ],
+            "title": {
+              "$bind": "/account"
+            },
+            "type": "card"
+          },
+          "updatedAt": "<timeZ>",
+          "updatedBy": "auto-approve (dev)",
+          "useWhen": "Wire limits.",
+          "version": 1,
+          "widgetId": "wire-limit-card"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "list.otherTeam": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "dataSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "accountId": {
+                  "maxLength": 34,
+                  "type": "string"
+                },
+                "available": {
+                  "type": "number"
+                },
+                "balance": {
+                  "type": "number"
+                },
+                "currency": {
+                  "pattern": "^[A-Z]{3}$",
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "status": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "transactions": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "amount": {
+                        "type": "number"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "type": {
+                  "maxLength": 40,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "name",
+                "balance",
+                "currency"
+              ],
+              "type": "object"
+            },
+            "name": "Account snapshot",
+            "requiresTools": [],
+            "sample": {
+              "accountId": "<CHQ>",
+              "available": 4320.55,
+              "balance": 4820.55,
+              "currency": "USD",
+              "name": "Maria Lopez, everyday checking",
+              "status": "Open",
+              "transactions": [
+                {
+                  "amount": -500,
+                  "date": "2026-10-16",
+                  "description": "Transfer to savings"
+                },
+                {
+                  "amount": -42.1,
+                  "date": "2026-10-15",
+                  "description": "Card payment, Fresh Market"
+                },
+                {
+                  "amount": 3150,
+                  "date": "2026-10-14",
+                  "description": "Payroll"
+                }
+              ],
+              "type": "Checking"
+            },
+            "status": "published",
+            "tree": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "label": "Balance",
+                      "type": "metric",
+                      "unit": {
+                        "$bind": "/currency"
+                      },
+                      "value": {
+                        "$bind": "/balance"
+                      }
+                    },
+                    {
+                      "label": "Available",
+                      "type": "metric",
+                      "unit": {
+                        "$bind": "/currency"
+                      },
+                      "value": {
+                        "$bind": "/available"
+                      }
+                    }
+                  ],
+                  "gap": "lg",
+                  "type": "row"
+                },
+                {
+                  "items": [
+                    {
+                      "label": "Account",
+                      "value": {
+                        "$bind": "/accountId"
+                      }
+                    },
+                    {
+                      "label": "Type",
+                      "value": {
+                        "$bind": "/type"
+                      }
+                    },
+                    {
+                      "label": "Status",
+                      "value": {
+                        "$bind": "/status"
+                      }
+                    }
+                  ],
+                  "type": "keyValue"
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "text": "Recent transactions",
+                  "type": "caption"
+                },
+                {
+                  "columns": [
+                    {
+                      "format": "date",
+                      "key": "date",
+                      "label": "Date"
+                    },
+                    {
+                      "key": "description",
+                      "label": "Description"
+                    },
+                    {
+                      "format": "money",
+                      "key": "amount",
+                      "label": "Amount"
+                    }
+                  ],
+                  "rows": {
+                    "$bind": "/transactions"
+                  },
+                  "type": "table"
+                }
+              ],
+              "title": {
+                "$bind": "/name"
+              },
+              "type": "card"
+            },
+            "useWhen": "The person asks about one account: its balance, its status or its recent transactions.",
+            "version": 1,
+            "widgetId": "account-snapshot"
+          },
+          {
+            "dataSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "caseId": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "due": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "nextSteps": {
+                  "items": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "owner": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "priority": {
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "open",
+                    "waiting",
+                    "overdue",
+                    "closed"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 160,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "caseId",
+                "title",
+                "status"
+              ],
+              "type": "object"
+            },
+            "name": "Case summary",
+            "requiresTools": [
+              "request_document"
+            ],
+            "sample": {
+              "caseId": "<CASE>",
+              "due": "2026-10-20",
+              "nextSteps": [
+                "Ask the merchant for the receipt",
+                "Issue a provisional credit if no answer by Oct 19"
+              ],
+              "owner": "Dispute desk",
+              "priority": "High",
+              "status": "waiting",
+              "title": "Disputed card charge, Fresh Market"
+            },
+            "status": "published",
+            "tree": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "text": {
+                        "$bind": "/status"
+                      },
+                      "tones": {
+                        "closed": "success",
+                        "open": "info",
+                        "overdue": "danger",
+                        "waiting": "warning"
+                      },
+                      "type": "badge"
+                    },
+                    {
+                      "text": {
+                        "$bind": "/caseId"
+                      },
+                      "type": "caption"
+                    }
+                  ],
+                  "gap": "sm",
+                  "type": "row"
+                },
+                {
+                  "items": [
+                    {
+                      "label": "Owner",
+                      "value": {
+                        "$bind": "/owner"
+                      }
+                    },
+                    {
+                      "label": "Priority",
+                      "value": {
+                        "$bind": "/priority"
+                      }
+                    },
+                    {
+                      "label": "Due",
+                      "value": {
+                        "$bind": "/due"
+                      }
+                    }
+                  ],
+                  "type": "keyValue"
+                },
+                {
+                  "text": "Next steps",
+                  "type": "caption"
+                },
+                {
+                  "items": {
+                    "$bind": "/nextSteps"
+                  },
+                  "type": "list"
+                },
+                {
+                  "label": "Show the case history",
+                  "reply": {
+                    "text": "Show the history of this case.",
+                    "values": {
+                      "caseId": {
+                        "$bind": "/caseId"
+                      }
+                    }
+                  },
+                  "requires": "request_document",
+                  "type": "button"
+                }
+              ],
+              "title": {
+                "$bind": "/title"
+              },
+              "type": "card"
+            },
+            "useWhen": "The person asks where a case stands: its status, owner, deadline and next steps.",
+            "version": 1,
+            "widgetId": "case-summary"
+          },
+          {
+            "dataSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "account": {
+                  "maxLength": 34,
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "currency": {
+                  "pattern": "^[A-Z]{3}$",
+                  "type": "string"
+                },
+                "holdId": {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                "payee": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "reason": {
+                  "maxLength": 400,
+                  "type": "string"
+                },
+                "recent": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "amount": {
+                        "type": "number"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "held",
+                    "released"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "holdId",
+                "payee",
+                "amount",
+                "currency",
+                "status",
+                "reason",
+                "account"
+              ],
+              "type": "object"
+            },
+            "name": "Hold review",
+            "requiresTools": [
+              "lookup_account"
+            ],
+            "sample": {
+              "account": "<CHQ>",
+              "amount": 12500,
+              "currency": "USD",
+              "holdId": "hold_204",
+              "payee": "Acme Supplies Ltd",
+              "reason": "New payee over the daily limit",
+              "recent": [
+                {
+                  "amount": -42.1,
+                  "date": "2026-10-15",
+                  "description": "Card payment, Fresh Market"
+                },
+                {
+                  "amount": 3150,
+                  "date": "2026-10-14",
+                  "description": "Payroll"
+                }
+              ],
+              "status": "held"
+            },
+            "status": "published",
+            "tree": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "label": "Held",
+                      "type": "metric",
+                      "unit": {
+                        "$bind": "/currency"
+                      },
+                      "value": {
+                        "$bind": "/amount"
+                      }
+                    },
+                    {
+                      "text": {
+                        "$bind": "/status"
+                      },
+                      "tones": {
+                        "held": "warning",
+                        "released": "success"
+                      },
+                      "type": "badge"
+                    }
+                  ],
+                  "gap": "md",
+                  "type": "row"
+                },
+                {
+                  "items": [
+                    {
+                      "label": "Reason",
+                      "value": {
+                        "$bind": "/reason"
+                      }
+                    },
+                    {
+                      "label": "Account",
+                      "value": {
+                        "$bind": "/account"
+                      }
+                    }
+                  ],
+                  "type": "keyValue"
+                },
+                {
+                  "columns": [
+                    {
+                      "format": "date",
+                      "key": "date",
+                      "label": "Date"
+                    },
+                    {
+                      "key": "description",
+                      "label": "Description"
+                    },
+                    {
+                      "format": "money",
+                      "key": "amount",
+                      "label": "Amount"
+                    }
+                  ],
+                  "rows": {
+                    "$bind": "/recent"
+                  },
+                  "type": "table"
+                },
+                {
+                  "children": [
+                    {
+                      "label": "Look up the account",
+                      "reply": {
+                        "text": "Look up this account.",
+                        "values": {
+                          "query": {
+                            "$bind": "/account"
+                          }
+                        }
+                      },
+                      "requires": "lookup_account",
+                      "type": "button"
+                    },
+                    {
+                      "label": "Keep it held",
+                      "reply": {
+                        "text": "Keep this hold in place.",
+                        "values": {
+                          "holdId": {
+                            "$bind": "/holdId"
+                          }
+                        }
+                      },
+                      "type": "button"
+                    }
+                  ],
+                  "gap": "sm",
+                  "type": "row"
+                }
+              ],
+              "title": {
+                "$bind": "/payee"
+              },
+              "type": "card"
+            },
+            "useWhen": "A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+            "version": 1,
+            "widgetId": "hold-review"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 3,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.page": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "dataSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "account": {
+                  "maxLength": 34,
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "currency": {
+                  "pattern": "^[A-Z]{3}$",
+                  "type": "string"
+                },
+                "holdId": {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                "payee": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "reason": {
+                  "maxLength": 400,
+                  "type": "string"
+                },
+                "recent": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "amount": {
+                        "type": "number"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "held",
+                    "released"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "holdId",
+                "payee",
+                "amount",
+                "currency",
+                "status",
+                "reason",
+                "account"
+              ],
+              "type": "object"
+            },
+            "name": "Hold review",
+            "requiresTools": [
+              "lookup_account"
+            ],
+            "sample": {
+              "account": "<CHQ>",
+              "amount": 12500,
+              "currency": "USD",
+              "holdId": "hold_204",
+              "payee": "Acme Supplies Ltd",
+              "reason": "New payee over the daily limit",
+              "recent": [
+                {
+                  "amount": -42.1,
+                  "date": "2026-10-15",
+                  "description": "Card payment, Fresh Market"
+                },
+                {
+                  "amount": 3150,
+                  "date": "2026-10-14",
+                  "description": "Payroll"
+                }
+              ],
+              "status": "held"
+            },
+            "status": "published",
+            "tree": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "label": "Held",
+                      "type": "metric",
+                      "unit": {
+                        "$bind": "/currency"
+                      },
+                      "value": {
+                        "$bind": "/amount"
+                      }
+                    },
+                    {
+                      "text": {
+                        "$bind": "/status"
+                      },
+                      "tones": {
+                        "held": "warning",
+                        "released": "success"
+                      },
+                      "type": "badge"
+                    }
+                  ],
+                  "gap": "md",
+                  "type": "row"
+                },
+                {
+                  "items": [
+                    {
+                      "label": "Reason",
+                      "value": {
+                        "$bind": "/reason"
+                      }
+                    },
+                    {
+                      "label": "Account",
+                      "value": {
+                        "$bind": "/account"
+                      }
+                    }
+                  ],
+                  "type": "keyValue"
+                },
+                {
+                  "columns": [
+                    {
+                      "format": "date",
+                      "key": "date",
+                      "label": "Date"
+                    },
+                    {
+                      "key": "description",
+                      "label": "Description"
+                    },
+                    {
+                      "format": "money",
+                      "key": "amount",
+                      "label": "Amount"
+                    }
+                  ],
+                  "rows": {
+                    "$bind": "/recent"
+                  },
+                  "type": "table"
+                },
+                {
+                  "children": [
+                    {
+                      "label": "Look up the account",
+                      "reply": {
+                        "text": "Look up this account.",
+                        "values": {
+                          "query": {
+                            "$bind": "/account"
+                          }
+                        }
+                      },
+                      "requires": "lookup_account",
+                      "type": "button"
+                    },
+                    {
+                      "label": "Keep it held",
+                      "reply": {
+                        "text": "Keep this hold in place.",
+                        "values": {
+                          "holdId": {
+                            "$bind": "/holdId"
+                          }
+                        }
+                      },
+                      "type": "button"
+                    }
+                  ],
+                  "gap": "sm",
+                  "type": "row"
+                }
+              ],
+              "title": {
+                "$bind": "/payee"
+              },
+              "type": "card"
+            },
+            "useWhen": "A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+            "version": 1,
+            "widgetId": "hold-review"
+          },
+          {
+            "dataSchema": {
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "daily": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "account",
+                "daily"
+              ],
+              "type": "object"
+            },
+            "name": "Limit card two",
+            "requiresTools": [
+              "lookup_account"
+            ],
+            "sample": {
+              "account": "<CHQ>",
+              "daily": 25000
+            },
+            "status": "draft",
+            "teamId": "team_ops",
+            "tree": {
+              "children": [
+                {
+                  "label": "Daily",
+                  "type": "metric",
+                  "unit": "USD",
+                  "value": {
+                    "$bind": "/daily"
+                  }
+                },
+                {
+                  "label": "Look it up",
+                  "reply": {
+                    "text": "Look up this account.",
+                    "values": {
+                      "query": {
+                        "$bind": "/account"
+                      }
+                    }
+                  },
+                  "requires": "lookup_account",
+                  "type": "button"
+                }
+              ],
+              "title": {
+                "$bind": "/account"
+              },
+              "type": "card"
+            },
+            "updatedAt": "<timeZ>",
+            "updatedBy": "usr_b@harborpine.example",
+            "useWhen": "The person asks for an account's wire limits.",
+            "version": 1,
+            "widgetId": "limit-card-two"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 2,
+          "total": 5,
+          "totalPages": 3
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.pastTheEnd": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "dataSchema": {
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "daily": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "account",
+                "daily"
+              ],
+              "type": "object"
+            },
+            "name": "Wire limit card",
+            "requiresTools": [
+              "lookup_account"
+            ],
+            "sample": {
+              "account": "<CHQ>",
+              "daily": 25000
+            },
+            "status": "published",
+            "teamId": "team_ops",
+            "tree": {
+              "children": [
+                {
+                  "label": "Daily",
+                  "type": "metric",
+                  "unit": "USD",
+                  "value": {
+                    "$bind": "/daily"
+                  }
+                },
+                {
+                  "label": "Look it up",
+                  "reply": {
+                    "text": "Look up this account.",
+                    "values": {
+                      "query": {
+                        "$bind": "/account"
+                      }
+                    }
+                  },
+                  "requires": "lookup_account",
+                  "type": "button"
+                }
+              ],
+              "title": {
+                "$bind": "/account"
+              },
+              "type": "card"
+            },
+            "updatedAt": "<timeZ>",
+            "updatedBy": "auto-approve (dev)",
+            "useWhen": "Wire limits.",
+            "version": 1,
+            "widgetId": "wire-limit-card"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 3,
+          "pageSize": 2,
+          "total": 5,
+          "totalPages": 3
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.search": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "dataSchema": {
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "daily": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "account",
+                "daily"
+              ],
+              "type": "object"
+            },
+            "name": "Limit card two",
+            "requiresTools": [
+              "lookup_account"
+            ],
+            "sample": {
+              "account": "<CHQ>",
+              "daily": 25000
+            },
+            "status": "draft",
+            "teamId": "team_ops",
+            "tree": {
+              "children": [
+                {
+                  "label": "Daily",
+                  "type": "metric",
+                  "unit": "USD",
+                  "value": {
+                    "$bind": "/daily"
+                  }
+                },
+                {
+                  "label": "Look it up",
+                  "reply": {
+                    "text": "Look up this account.",
+                    "values": {
+                      "query": {
+                        "$bind": "/account"
+                      }
+                    }
+                  },
+                  "requires": "lookup_account",
+                  "type": "button"
+                }
+              ],
+              "title": {
+                "$bind": "/account"
+              },
+              "type": "card"
+            },
+            "updatedAt": "<timeZ>",
+            "updatedBy": "usr_b@harborpine.example",
+            "useWhen": "The person asks for an account's wire limits.",
+            "version": 1,
+            "widgetId": "limit-card-two"
+          },
+          {
+            "dataSchema": {
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "daily": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "account",
+                "daily"
+              ],
+              "type": "object"
+            },
+            "name": "Wire limit card",
+            "requiresTools": [
+              "lookup_account"
+            ],
+            "sample": {
+              "account": "<CHQ>",
+              "daily": 25000
+            },
+            "status": "published",
+            "teamId": "team_ops",
+            "tree": {
+              "children": [
+                {
+                  "label": "Daily",
+                  "type": "metric",
+                  "unit": "USD",
+                  "value": {
+                    "$bind": "/daily"
+                  }
+                },
+                {
+                  "label": "Look it up",
+                  "reply": {
+                    "text": "Look up this account.",
+                    "values": {
+                      "query": {
+                        "$bind": "/account"
+                      }
+                    }
+                  },
+                  "requires": "lookup_account",
+                  "type": "button"
+                }
+              ],
+              "title": {
+                "$bind": "/account"
+              },
+              "type": "card"
+            },
+            "updatedAt": "<timeZ>",
+            "updatedBy": "auto-approve (dev)",
+            "useWhen": "Wire limits.",
+            "version": 1,
+            "widgetId": "wire-limit-card"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "v1 \u00b7 The person asks about one account: its balance, its status or its recent transactions.",
+            "id": "account-snapshot",
+            "label": "Account snapshot"
+          },
+          {
+            "disabled": "Needs request_document; grant it first.",
+            "hint": "v1 \u00b7 The person asks where a case stands: its status, owner, deadline and next steps.",
+            "id": "case-summary",
+            "label": "Case summary"
+          },
+          {
+            "disabled": "Needs lookup_account; grant it first.",
+            "hint": "v1 \u00b7 A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+            "id": "hold-review",
+            "label": "Hold review"
+          },
+          {
+            "disabled": "Needs lookup_account; grant it first.",
+            "hint": "v1 \u00b7 Wire limits.",
+            "id": "wire-limit-card",
+            "label": "Wire limit card"
+          }
+        ],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.granted": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "v1 \u00b7 The person asks about one account: its balance, its status or its recent transactions.",
+            "id": "account-snapshot",
+            "label": "Account snapshot"
+          },
+          {
+            "disabled": "Needs request_document; grant it first.",
+            "hint": "v1 \u00b7 The person asks where a case stands: its status, owner, deadline and next steps.",
+            "id": "case-summary",
+            "label": "Case summary"
+          }
+        ],
+        "nextCursor": "2"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.ids": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": "Needs lookup_account; grant it first.",
+            "hint": "v1 \u00b7 A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+            "id": "hold-review",
+            "label": "Hold review"
+          },
+          {
+            "disabled": "Needs lookup_account; grant it first.",
+            "hint": "v1 \u00b7 The person asks for an account's wire limits.",
+            "id": "limit-card-two",
+            "label": "Limit card two"
+          }
+        ],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.next": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": "Needs lookup_account; grant it first.",
+            "hint": "v1 \u00b7 A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+            "id": "hold-review",
+            "label": "Hold review"
+          },
+          {
+            "disabled": "Needs lookup_account; grant it first.",
+            "hint": "v1 \u00b7 Wire limits.",
+            "id": "wire-limit-card",
+            "label": "Wire limit card"
+          }
+        ],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.otherTeam": {
+    "body": {
+      "data": {
+        "data": [],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.search": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": "Needs lookup_account; grant it first.",
+            "hint": "v1 \u00b7 Wire limits.",
+            "id": "wire-limit-card",
+            "label": "Wire limit card"
+          }
+        ],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "publish": {
+    "body": {
+      "data": {
+        "dataSchema": {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "daily": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "account",
+            "daily"
+          ],
+          "type": "object"
+        },
+        "name": "Wire limit card",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "daily": 25000
+        },
+        "status": "published",
+        "teamId": "team_ops",
+        "tree": {
+          "children": [
+            {
+              "label": "Daily",
+              "type": "metric",
+              "unit": "USD",
+              "value": {
+                "$bind": "/daily"
+              }
+            },
+            {
+              "label": "Look it up",
+              "reply": {
+                "text": "Look up this account.",
+                "values": {
+                  "query": {
+                    "$bind": "/account"
+                  }
+                }
+              },
+              "requires": "lookup_account",
+              "type": "button"
+            }
+          ],
+          "title": {
+            "$bind": "/account"
+          },
+          "type": "card"
+        },
+        "updatedAt": "<timeZ>",
+        "updatedBy": "auto-approve (dev)",
+        "useWhen": "Wire limits.",
+        "version": 1,
+        "widgetId": "wire-limit-card"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "publish.again": {
+    "body": {
+      "error": {
+        "code": "already_published",
+        "message": "v1 is already published; save a change to make a new version.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "publish.retired": {
+    "body": {
+      "error": {
+        "code": "widget_retired",
+        "message": "The widget is retired.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "publish.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "publish",
+          "area": "widgets",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot publish this widget; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "read": {
+    "body": {
+      "data": {
+        "canDelete": true,
+        "canEdit": true,
+        "canPublish": true,
+        "dataSchema": {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "daily": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "account",
+            "daily"
+          ],
+          "type": "object"
+        },
+        "name": "Wire limit card",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "daily": 25000
+        },
+        "status": "draft",
+        "teamId": "team_ops",
+        "teamName": "Operations",
+        "tree": {
+          "children": [
+            {
+              "label": "Daily",
+              "type": "metric",
+              "unit": "USD",
+              "value": {
+                "$bind": "/daily"
+              }
+            },
+            {
+              "label": "Look it up",
+              "reply": {
+                "text": "Look up this account.",
+                "values": {
+                  "query": {
+                    "$bind": "/account"
+                  }
+                }
+              },
+              "requires": "lookup_account",
+              "type": "button"
+            }
+          ],
+          "title": {
+            "$bind": "/account"
+          },
+          "type": "card"
+        },
+        "updatedAt": "<timeZ>",
+        "updatedBy": "usr_b@harborpine.example",
+        "useWhen": "The person asks for an account's wire limits.",
+        "version": 1,
+        "widgetId": "wire-limit-card"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "read.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget wd_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "read.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget wire-limit-card was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "read.seeded": {
+    "body": {
+      "data": {
+        "canDelete": false,
+        "canEdit": false,
+        "canPublish": false,
+        "dataSchema": {
+          "additionalProperties": false,
+          "properties": {
+            "account": {
+              "maxLength": 34,
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            },
+            "currency": {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            "holdId": {
+              "maxLength": 64,
+              "type": "string"
+            },
+            "payee": {
+              "maxLength": 120,
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 400,
+              "type": "string"
+            },
+            "recent": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "type": "number"
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "maxItems": 10,
+              "type": "array"
+            },
+            "status": {
+              "enum": [
+                "held",
+                "released"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "holdId",
+            "payee",
+            "amount",
+            "currency",
+            "status",
+            "reason",
+            "account"
+          ],
+          "type": "object"
+        },
+        "name": "Hold review",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "amount": 12500,
+          "currency": "USD",
+          "holdId": "hold_204",
+          "payee": "Acme Supplies Ltd",
+          "reason": "New payee over the daily limit",
+          "recent": [
+            {
+              "amount": -42.1,
+              "date": "2026-10-15",
+              "description": "Card payment, Fresh Market"
+            },
+            {
+              "amount": 3150,
+              "date": "2026-10-14",
+              "description": "Payroll"
+            }
+          ],
+          "status": "held"
+        },
+        "status": "published",
+        "teamName": null,
+        "tree": {
+          "children": [
+            {
+              "children": [
+                {
+                  "label": "Held",
+                  "type": "metric",
+                  "unit": {
+                    "$bind": "/currency"
+                  },
+                  "value": {
+                    "$bind": "/amount"
+                  }
+                },
+                {
+                  "text": {
+                    "$bind": "/status"
+                  },
+                  "tones": {
+                    "held": "warning",
+                    "released": "success"
+                  },
+                  "type": "badge"
+                }
+              ],
+              "gap": "md",
+              "type": "row"
+            },
+            {
+              "items": [
+                {
+                  "label": "Reason",
+                  "value": {
+                    "$bind": "/reason"
+                  }
+                },
+                {
+                  "label": "Account",
+                  "value": {
+                    "$bind": "/account"
+                  }
+                }
+              ],
+              "type": "keyValue"
+            },
+            {
+              "columns": [
+                {
+                  "format": "date",
+                  "key": "date",
+                  "label": "Date"
+                },
+                {
+                  "key": "description",
+                  "label": "Description"
+                },
+                {
+                  "format": "money",
+                  "key": "amount",
+                  "label": "Amount"
+                }
+              ],
+              "rows": {
+                "$bind": "/recent"
+              },
+              "type": "table"
+            },
+            {
+              "children": [
+                {
+                  "label": "Look up the account",
+                  "reply": {
+                    "text": "Look up this account.",
+                    "values": {
+                      "query": {
+                        "$bind": "/account"
+                      }
+                    }
+                  },
+                  "requires": "lookup_account",
+                  "type": "button"
+                },
+                {
+                  "label": "Keep it held",
+                  "reply": {
+                    "text": "Keep this hold in place.",
+                    "values": {
+                      "holdId": {
+                        "$bind": "/holdId"
+                      }
+                    }
+                  },
+                  "type": "button"
+                }
+              ],
+              "gap": "sm",
+              "type": "row"
+            }
+          ],
+          "title": {
+            "$bind": "/payee"
+          },
+          "type": "card"
+        },
+        "useWhen": "A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+        "version": 1,
+        "widgetId": "hold-review"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "retire": {
+    "body": {
+      "data": {
+        "dataSchema": {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "daily": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "account",
+            "daily"
+          ],
+          "type": "object"
+        },
+        "name": "Wire limit card",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "daily": 25000
+        },
+        "status": "deprecated",
+        "teamId": "team_ops",
+        "tree": {
+          "children": [
+            {
+              "label": "Daily",
+              "type": "metric",
+              "unit": "USD",
+              "value": {
+                "$bind": "/daily"
+              }
+            },
+            {
+              "label": "Look it up",
+              "reply": {
+                "text": "Look up this account.",
+                "values": {
+                  "query": {
+                    "$bind": "/account"
+                  }
+                }
+              },
+              "requires": "lookup_account",
+              "type": "button"
+            }
+          ],
+          "title": {
+            "$bind": "/account"
+          },
+          "type": "card"
+        },
+        "updatedAt": "<timeZ>",
+        "updatedBy": "usr_b@harborpine.example",
+        "useWhen": "Wire limits.",
+        "version": 1,
+        "widgetId": "wire-limit-card"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "retire.noReason": {
+    "body": {
+      "error": {
+        "code": "reason_required",
+        "message": "Say why the widget is retired.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "retire.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "widgets",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit this widget; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "save": {
+    "body": {
+      "data": {
+        "dataSchema": {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "daily": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "account",
+            "daily"
+          ],
+          "type": "object"
+        },
+        "name": "Wire limit card",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "daily": 25000
+        },
+        "status": "draft",
+        "teamId": "team_ops",
+        "tree": {
+          "children": [
+            {
+              "label": "Daily",
+              "type": "metric",
+              "unit": "USD",
+              "value": {
+                "$bind": "/daily"
+              }
+            },
+            {
+              "label": "Look it up",
+              "reply": {
+                "text": "Look up this account.",
+                "values": {
+                  "query": {
+                    "$bind": "/account"
+                  }
+                }
+              },
+              "requires": "lookup_account",
+              "type": "button"
+            }
+          ],
+          "title": {
+            "$bind": "/account"
+          },
+          "type": "card"
+        },
+        "updatedAt": "<timeZ>",
+        "updatedBy": "usr_b@harborpine.example",
+        "useWhen": "Wire limits.",
+        "version": 1,
+        "widgetId": "wire-limit-card"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "save.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget wire-limit-card was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "save.retired": {
+    "body": {
+      "error": {
+        "code": "widget_retired",
+        "message": "The widget is retired; it takes no new versions.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "save.seeded": {
+    "body": {
+      "error": {
+        "code": "seeded_widget",
+        "message": "hold-review is a platform widget from the seeded library; it cannot be edited here.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "save.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "x"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "x: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "save.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "widgets",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit this widget; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  }
+}
