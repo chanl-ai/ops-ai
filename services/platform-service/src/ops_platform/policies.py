@@ -80,9 +80,9 @@ class Policies:
                 raise ValidationFailed(
                     f"There is no role {role_id}. Choose a role that can approve.", code="reviewer_role_unknown"
                 )
-            if not any(g[:2] == ("reviews", "decide") for g in role["grants"]):
+            if not any(g[:2] == ("reviews", "decide") for g in role.grants):
                 raise ValidationFailed(
-                    f"{role['name']} cannot decide reviews. Choose a role that can approve.", code="role_cannot_approve"
+                    f"{role.name} cannot decide reviews. Choose a role that can approve.", code="role_cannot_approve"
                 )
 
     @staticmethod

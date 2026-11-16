@@ -15,7 +15,7 @@ from ops_access.catalogue import ADMIN
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
 
-from .store.roles import AlreadyGrantedError, Holdings, RoleInUseError, RoleNameTakenError, RoleStore
+from .store.roles import AlreadyGrantedError, Holdings, RoleInUseError, RoleNameTakenError, RoleRow, RoleStore
 
 
 def custom_role_refuses(area: str, action: str) -> bool:
@@ -35,16 +35,16 @@ class Roles:
     store: RoleStore
 
     async def list(self, tenant_id: str) -> list[dict[str, Any]]:
-        return await self.store.roles(tenant_id)
+        return [r.model_dump(by_alias=True) for r in await self.store.roles(tenant_id)]
 
     async def get(self, tenant_id: str, role_id: str) -> dict[str, Any]:
         role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
-        grants = role.pop("grants")
+        grants = role.grants
         held = {(a, x): s for a, x, s in grants}
         return {
-            **role,
+            **role.model_dump(by_alias=True, exclude={"grants"}),
             "permissionCount": len(grants),
             "permissions": [{"area": a, "action": x, "scope": s} for a, x, s in grants],
             # The whole catalogue, one row per area, so a grid shows refused cells as well as granted ones.
@@ -53,7 +53,7 @@ class Roles:
             ],
             # The cells this role may never hold: a custom role's secrets, egress and Security-team ones (D40).
             "notHeld": []
-            if role["builtin"]
+            if role.builtin
             else [f"{a}.{x}" for a in AREAS for x in ACTIONS if custom_role_refuses(a, x)],
         }
 
@@ -67,7 +67,7 @@ class Roles:
             raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
         _checked(cells)
         role = await self.store.role_by_id(tenant_id, role_id)
-        if role is not None and not role["builtin"]:
+        if role is not None and not role.builtin:
             self._custom_cells(cells)
         if not await self.store.set_grid(tenant_id, role_id, cells, by=by, request_id=request_id, action="role.edit"):
             raise NotFound("No role with that id.")
@@ -101,7 +101,7 @@ class Roles:
             source = await self.store.role_by_id(tenant_id, copy_of)
             if source is None:
                 raise NotFound("No role with that id to copy.")
-            grants: list[Grant] = list(source["grants"])
+            grants: list[Grant] = list(source.grants)
             left_out = sorted(f"{a}.{x}" for a, x, _ in grants if custom_role_refuses(a, x))
             grants = [g for g in grants if not custom_role_refuses(g[0], g[1])]
         else:
@@ -122,7 +122,7 @@ class Roles:
         role = await self._custom(tenant_id, role_id, "renamed")
         try:
             await self.store.rename(
-                tenant_id, role["id"], name=name, description=description, by=by, request_id=request_id
+                tenant_id, role.id, name=name, description=description, by=by, request_id=request_id
             )
         except RoleNameTakenError as e:
             raise Conflict(f"A role named {name} exists already.", code="name_taken") from e
@@ -136,11 +136,11 @@ class Roles:
         try:
             return await self.store.delete(tenant_id, role_id, move_to=move_to, by=by, request_id=request_id)
         except RoleInUseError as e:
-            names = ", ".join(sorted({str(h["name"]) for h in e.holders}))
+            names = ", ".join(sorted({h.name for h in e.holders}))
             raise Conflict(
                 f"{names} hold this role. Move them to another role, or delete it moving them.",
                 code="role_in_use",
-                details={"holders": e.holders},
+                details={"holders": [h.model_dump(by_alias=True) for h in e.holders]},
             ) from e
 
     async def grant(
@@ -151,9 +151,9 @@ class Roles:
         role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
-        if role["builtin"]:
+        if role.builtin:
             raise Conflict(
-                f"{role['name']} comes with a person's team role; change their role in the team instead.",
+                f"{role.name} comes with a person's team role; change their role in the team instead.",
                 code="builtin_role",
             )
         if team_id not in (await self.store.holdings(tenant_id, person_id)).teams:
@@ -161,14 +161,15 @@ class Roles:
         try:
             grant_id = await self.store.grant(tenant_id, person_id, role_id, team_id, by=by, request_id=request_id)
         except AlreadyGrantedError as e:
-            raise Conflict(f"They hold {role['name']} in that team already.", code="already_granted") from e
-        return next(g for g in await self.store.grants_of(tenant_id, person_id) if g["id"] == grant_id)
+            raise Conflict(f"They hold {role.name} in that team already.", code="already_granted") from e
+        given = next(g for g in await self.store.grants_of(tenant_id, person_id) if g.id == grant_id)
+        return given.model_dump(by_alias=True)
 
-    async def _custom(self, tenant_id: str, role_id: str, verb: str) -> dict[str, Any]:
+    async def _custom(self, tenant_id: str, role_id: str, verb: str) -> RoleRow:
         role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
-        if role["builtin"]:
+        if role.builtin:
             raise Conflict(f"A built-in role is not {verb}; copy it to make your own.", code="builtin_role")
         return role
 

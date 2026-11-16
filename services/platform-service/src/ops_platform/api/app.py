@@ -1169,7 +1169,7 @@ def create_public_app(
     ) -> Any:
         """Who holds the role and in which team: what deleting it would take from them. A workspace admin's."""
         await people.require_admin(actor, "access", "view")
-        return ok(await roles.store.holders(actor.tenant_id, role_id))
+        return ok([h.model_dump(by_alias=True) for h in await roles.store.holders(actor.tenant_id, role_id)])
 
     @app.get(
         "/v1/people/{person_id}/role-grants",
@@ -1184,7 +1184,7 @@ def create_public_app(
         them, as their permissions are (404 otherwise)."""
         tenant = str(claims["tenant_id"])
         await roles.of_person(tenant, str(claims["sub"]), person_id)
-        return ok(await roles.store.grants_of(tenant, person_id))
+        return ok([g.model_dump(by_alias=True) for g in await roles.store.grants_of(tenant, person_id)])
 
     @app.post(
         "/v1/people/{person_id}/role-grants",
@@ -1215,9 +1215,9 @@ def create_public_app(
         """Takes a given role away: an admin of its team or a workspace admin. Audited."""
         tenant = str(claims["tenant_id"])
         row = await roles.store.grant_row(tenant, grant_id)
-        if row is None or row["subjectId"] != person_id:
+        if row is None or row.subject_id != person_id:
             raise NotFound("No such role given to this person.")
-        actor = Actor(tenant, str(row["teamId"]), str(claims["sub"]), new_id("req"))
+        actor = Actor(tenant, row.team_id, str(claims["sub"]), new_id("req"))
         await people.require_admin(actor, "access", "manage")
         await roles.store.ungrant(tenant, grant_id, by=actor.user_id, request_id=actor.request_id)
         return Response(status_code=204)
