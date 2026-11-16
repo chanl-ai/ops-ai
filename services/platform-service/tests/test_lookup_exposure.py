@@ -8,23 +8,21 @@ lookups run as. Then the lookups' values read the same on both databases."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_platform.store.identity import IdentityStore
 from ops_platform.store.lookups import KEY, PASSWORD_RESET, SESSION, Lookup, lookup
 from ops_platform.store.signin import SignInStore
 from ops_platform.store.tables import api_keys, password_resets, sessions, signin_providers, teams, tenants, users
-from ops_platform.store.tenancy import SESSION_LOOKUP, TenantDb
+from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id, now_iso
 from ops_store.dialect import dialect_of
 
-RUNTIME = "ops_platform_runtime"
+from .conftest import as_tenant_role
 
 
 @pytest.fixture
@@ -32,18 +30,6 @@ async def db(store_url: str) -> AsyncIterator[TenantDb]:
     d = TenantDb.open(store_url)
     yield d
     await d.engine.dispose()
-
-
-@asynccontextmanager
-async def as_tenant_role(db: TenantDb, tenant: str | None) -> AsyncGenerator[AsyncConnection]:
-    """A transaction as the tenant role, in `tenant` or (None) in no tenant, as the lookups run."""
-    async with db.tenant_tx(tenant) if tenant else db.system_tx(SESSION_LOOKUP) as c:
-        mssql = dialect_of(c) == "mssql"
-        if mssql:
-            await c.execute(sa.text(f"EXECUTE AS USER = N'{RUNTIME}'"))
-        yield c
-        if mssql:
-            await c.execute(sa.text("REVERT"))
 
 
 async def _tenant_with_rows(db: TenantDb) -> dict[str, str]:

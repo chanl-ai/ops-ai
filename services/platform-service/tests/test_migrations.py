@@ -34,6 +34,7 @@ async def tables_and_version(url: str) -> tuple[set[str], str | None]:
     return names, version
 
 
+@pytest.mark.postgresql_only("revisions before the SQL Server baseline are PostgreSQL history")
 def test_down_to_base_and_up_to_head(database_url: str) -> None:
     ours = set(metadata.tables)
     command.downgrade(alembic_config(), "base")

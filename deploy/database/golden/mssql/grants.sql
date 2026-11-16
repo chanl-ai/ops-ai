@@ -1,6 +1,7 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- Run as ops_migrator in the database after the bundle and after each upgrade; every statement runs again.
--- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables and SELECT on its version table.
+-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables (SELECT, INSERT on an append-only
+-- one) and SELECT on its version table.
 -- No other permission, so it can create, alter or drop nothing, read no other service's tables, and
 -- every security policy applies to it. A chain's user may also impersonate that chain's system user (no
 -- login), which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.
@@ -184,7 +185,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.policies TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.members TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.api_keys TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.sessions TO ops_platform_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.audit_entries TO ops_platform_runtime;
+GRANT SELECT, INSERT ON dbo.audit_entries TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.role_permissions TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.role_assignments TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_providers TO ops_platform_runtime;

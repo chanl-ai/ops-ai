@@ -21,7 +21,7 @@ from ops_platform.store.tables import audit_entries, members, tenants
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id, now_iso
 
-from .conftest import DEMO_PASSWORD, SignInRig
+from .conftest import DEMO_PASSWORD, SignInRig, seed_tx
 
 DEFAULTS: dict[str, Any] = {
     "requesterMayDecide": False,
@@ -59,7 +59,7 @@ ADA = "ada@harborpine.example"
 
 async def tenant(engine: AsyncEngine) -> str:
     t = new_id("ten")
-    async with engine.begin() as c:
+    async with seed_tx(engine, t) as c:
         await c.execute(
             tenants.insert().values(id=t, name=t, status="active", allowed_domains=[], created_at=now_iso())
         )
@@ -67,7 +67,7 @@ async def tenant(engine: AsyncEngine) -> str:
 
 
 async def audit(engine: AsyncEngine, t: str) -> list[tuple[str, str, dict[str, object]]]:
-    async with engine.begin() as c:
+    async with seed_tx(engine, t) as c:
         rows = await c.execute(
             sa.select(audit_entries.c.action, audit_entries.c.target_id, audit_entries.c.detail)
             .where(audit_entries.c.tenant_id == t)
@@ -134,7 +134,7 @@ async def test_one_tenants_setting_does_not_reach_another(engine: AsyncEngine) -
 async def test_only_who_holds_settings_manage_changes_a_policy_and_the_change_is_served(signin: SignInRig) -> None:
     email = f"team.admin@{signin.zone}"
     await signin.person(email, role="admin")
-    async with signin.engine.connect() as c:
+    async with seed_tx(signin.engine, signin.tenant) as c:
         team = (await c.execute(sa.text("select team_id from members where email = :e"), {"e": email})).scalar_one()
     r = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
     other = {"Authorization": f"Bearer {r.json()['data']['token']}", "X-Team-Id": team}
@@ -179,7 +179,7 @@ async def test_a_key_or_value_the_catalogue_does_not_take_is_a_400(signin: SignI
 async def test_a_team_admin_sets_memory_retention_and_a_service_reads_it_for_its_own_tenant(signin: SignInRig) -> None:
     email = f"team.admin@{signin.zone}"
     await signin.person(email, role="admin")
-    async with signin.engine.connect() as c:
+    async with seed_tx(signin.engine, signin.tenant) as c:
         team = (await c.execute(sa.text("select team_id from members where email = :e"), {"e": email})).scalar_one()
     r = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
     admin = {"Authorization": f"Bearer {r.json()['data']['token']}", "X-Team-Id": team}
@@ -205,7 +205,7 @@ async def test_a_team_admin_sets_memory_retention_and_a_service_reads_it_for_its
 async def _team_admin(signin: SignInRig, name: str, role: str = "admin") -> tuple[str, dict[str, str]]:
     email = f"{name}@{signin.zone}"
     await signin.person(email, role=role)
-    async with signin.engine.connect() as c:
+    async with seed_tx(signin.engine, signin.tenant) as c:
         team = (await c.execute(sa.text("select team_id from members where email = :e"), {"e": email})).scalar_one()
     r = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
     return team, {"Authorization": f"Bearer {r.json()['data']['token']}", "X-Team-Id": team}
@@ -290,7 +290,7 @@ async def test_a_team_admin_switches_an_apps_ask_before_changes_off_and_a_builde
     assert list(put.json()["data"]["value"].values()) == [["plugin:opsai.salesforce"]], put.text
     email = f"b.lane@{signin.zone}"
     user = await signin.person(email, role="builder")
-    async with signin.engine.connect() as c:
+    async with seed_tx(signin.engine, signin.tenant) as c:
         team = (await c.execute(sa.select(members.c.team_id).where(members.c.user_id == user))).scalar_one()
     token = (await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})).json()
     builder = {"Authorization": f"Bearer {token['data']['token']}", "X-Team-Id": team}

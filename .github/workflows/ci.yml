@@ -273,7 +273,7 @@ jobs:
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
             [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py tests/test_background_tenants.py tests/test_system_user_predicates.py tests/test_lookup_indexes.py tests/test_list_routes.py tests/test_statement_budget.py"
-            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py"
+            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py tests/test_rls.py tests/test_policies.py"
             [tools-service]="tests/test_policed_tables.py tests/test_module_tenant_policy.py tests/test_mcp_link_rows_isolated.py tests/test_secret_rows_isolated.py tests/test_sign_in_rows_isolated.py tests/test_registry_store.py tests/test_background_two_tenants.py tests/test_gateway_fences.py tests/test_statement_budget.py"
           )
           failed=0

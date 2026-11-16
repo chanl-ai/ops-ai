@@ -166,6 +166,9 @@ BASELINE = {
 # signin_group_rules, so the rule key's SET NULL cannot stand there. The store clears a grant's rule before it deletes
 # the rule (ops_platform.store.signin._keep_rules), and a provider's delete takes its grants with its rules.
 NO_SECOND_CASCADE = {("signin_grants", "signin_grants_rule_id_fkey")}
+# Tables a chain's runtime user may read and add to only, as its PostgreSQL tenant role may (platform 0002 revokes
+# UPDATE and DELETE on audit_entries from ops_platform_tenant): the audit log is append-only on both databases.
+APPEND_ONLY = {("platform", "audit_entries")}
 # Offline SQL holding one of these was written for PostgreSQL (op.execute text passes through unchanged).
 POSTGRES_ONLY = re.compile(
     r"DO \$\$|CREATE POLICY|ROW LEVEL SECURITY|current_setting|::\w|jsonb|SET LOCAL|\bRAISE\b", re.I
@@ -455,7 +458,8 @@ def roles_script(order: list[str]) -> str:
 def grants_script(chains_: list[dict[str, Any]]) -> str:
     out = [
         f"-- Run as {MIGRATOR} in the database after the bundle and after each upgrade; every statement runs again.\n",
-        "-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables and SELECT on its version table.\n",
+        "-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables (SELECT, INSERT on an append-only\n",
+        "-- one) and SELECT on its version table.\n",
         "-- No other permission, so it can create, alter or drop nothing, read no other service's tables, and\n",
         "-- every security policy applies to it. A chain's user may also impersonate that chain's system user (no\n",
         "-- login), which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.\n",
@@ -468,7 +472,11 @@ def grants_script(chains_: list[dict[str, Any]]) -> str:
             f"IF USER_ID(N'{user}') IS NULL CREATE USER {user} FOR LOGIN {user} WITH DEFAULT_SCHEMA = dbo;"
         )
         statements.append(
-            "\n".join(f"GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.{t} TO {user};" for t in c["tables"])
+            "\n".join(
+                f"GRANT {'SELECT, INSERT' if (c['name'], t) in APPEND_ONLY else 'SELECT, INSERT, UPDATE, DELETE'}"
+                f" ON dbo.{t} TO {user};"
+                for t in c["tables"]
+            )
             + f"\nGRANT SELECT ON dbo.{c['versionTable']} TO {user};"
         )
         if lookups := LOOKUP_USERS.get(c["name"], (None, ()))[1]:

@@ -66,7 +66,8 @@ class HolderStore(TenantDb):
         )
         # Granted in this team itself, not only through a grant in every team (a workspace admin's, or the install's
         # first admin's): the people a notice names first, as the ones who work in the team.
-        here = (role_assignments.c.team_id == team_id).label("here")
+        # A CASE, not the comparison itself: SQL Server has no boolean value to select.
+        here = sa.case((role_assignments.c.team_id == team_id, sa.true()), else_=sa.false()).label("here")
         direct = sa.select(role_assignments.c.subject_id.label("user_id"), role_assignments.c.role_id, here).where(
             live, role_assignments.c.subject_kind == "person"
         )

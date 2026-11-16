@@ -173,7 +173,7 @@ make db-ddl DIALECT=mssql REF=<release tag> OUT=dist/db/<tag>/baseline
 | `roles.sql` | In master, as a server administrator: one SQL login per service plus `ops_migrator`, each password a sqlcmd variable (`-v ops_migrator_password=...`); the database with collation `Latin1_General_100_BIN2_UTF8` and `READ_COMMITTED_SNAPSHOT ON`, owned by `ops_migrator` |
 | `01-agents.sql` ... `07-documents.sql` | Each chain's tables, indexes, keys and defaults, its security policies, and its version table stamped at the chain's head. For review |
 | `bundle.sql` | As `ops_migrator` in the database: refuses a database with another collation, without READ_COMMITTED_SNAPSHOT or below compatibility level 160, then every chain's file |
-| `grants.sql` | As `ops_migrator`: a database user per service login, with SELECT, INSERT, UPDATE and DELETE on its own tables and SELECT on its version table, and nothing else; then the user `ops_runtime_system` (no login) with exactly the grants PostgreSQL's role of that name has, and IMPERSONATE on it for `ops_agents_runtime` alone (below); SELECT on platform's lookup functions for `ops_platform_runtime`; run again after every upgrade |
+| `grants.sql` | As `ops_migrator`: a database user per service login, with SELECT, INSERT, UPDATE and DELETE on its own tables (SELECT and INSERT only on platform's append-only `audit_entries`, as PostgreSQL's tenant role) and SELECT on its version table, and nothing else; then the user `ops_runtime_system` (no login) with exactly the grants PostgreSQL's role of that name has, and IMPERSONATE on it for `ops_agents_runtime` alone (below); SELECT on platform's lookup functions for `ops_platform_runtime`; run again after every upgrade |
 | `manifest.json`, `SHA256SUMS` | As for PostgreSQL, with each chain's SQL Server baseline revision and anything left out |
 
 ```
@@ -203,7 +203,7 @@ models; `make uc-sql-server` installs the bundle on the SQL Server test machine 
 | Not on SQL Server yet | Owner |
 |---|---|
 | kb's full-text column `kb_chunks.tsv` and its GIN index (left out, listed in the kb file and the manifest) | kb's full-text card |
-| A live run of `isolated_tables` on `sys.security_policies` (written, never run on a server) and of the isolation suite; a live check that `EXECUTE AS USER` and the column grant hold on a server | a run on a SQL Server test machine |
+| A live check that agents' column grant to `ops_runtime_system` holds on a server (`isolated_tables`, `EXECUTE AS USER` and the append-only audit grant run live in platform-service's SQL Server tests: `test_rls.py`, `test_migrations.py`, `test_lookup_exposure.py`) | a run on a SQL Server test machine |
 | An upgrade applied to a SQL Server install (uc-565 S2) | the first migration after the first installable release |
 
 `deploy/database/tests/test_mssql_ddl.py` compiles the models and compares every file with the reviewed golden files
