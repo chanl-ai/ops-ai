@@ -23,7 +23,10 @@ BUDGETS = """
 ["GET /v1/flat"]
 queries = 3
 ["GET /v1/per-row"]
-queries = 80
+queries = 51
+["GET /v1/roomy"]
+queries = 5
+transactions = 2
 ["GET /v1/heavy/{item_id}"]
 queries = 3
 ["GET /v1/twice"]
@@ -98,6 +101,8 @@ def app(seeded: dict[str, int]) -> FastAPI:
     app.get("/v1/twice")(lambda: spend(2, transactions=2))
     app.get("/v1/stream")(lambda: spend(2, transactions=2))
     app.get("/v1/unlisted")(lambda: spend(1))
+    # Two statements and one transaction against a row of five and two: a budget left high lets the route grow unseen.
+    app.get("/v1/roomy")(lambda: spend(2))
     app.get("/v1/two-connections")(lambda: spend(2, connections=2))
     app.get("/v1/hop")(lambda: spend(2, hop="inside"))
     app.get("/v1/hop-listed")(lambda: spend(2, hop="inside"))
@@ -140,6 +145,8 @@ async def test_each_route_outside_its_budget_is_named_and_one_inside_it_is_not(
         "GET /v1/hop: 1 service call while a transaction was open, 0 listed",
         "GET /v1/no-reason: not_budgeted needs a reason",
         "GET /v1/per-row: 6 statements at 5 rows, 51 at 50",
+        "GET /v1/roomy: budget 5, 2 statements measured; lower it",
+        "GET /v1/roomy: 2 transactions listed, 1 measured; lower it",
         "GET /v1/twice: 2 transactions, 1 listed",
         "GET /v1/two-connections: 2 connection checkouts, 1 listed",
         "GET /v1/unlisted: no row in budgets.toml",

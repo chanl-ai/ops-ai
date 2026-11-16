@@ -51,6 +51,10 @@ from .logging import captured_logging
 
 # The longest a request may keep a transaction open.
 MAX_OPEN_MS = 2000.0
+# How far a statement budget may sit above what the route runs: a row set above its route's count would let the route
+# grow unseen, so a budget more than this over the measured number fails and names it. The slack covers a statement
+# one database runs and the other does not. A listed transaction, connection or service-call count has none.
+QUERY_SLACK = 2
 SIZES = (5, 50)
 
 
@@ -86,11 +90,12 @@ async def over_budget(
     app: FastAPI, client: Client, seed_team: SeedTeam, budgets: Path, stream: io.StringIO
 ) -> list[str]:
     """One line per GET route that has no budget row, answers other than its row's `status` (200 unless listed), runs
-    more statements at 50 rows than at 5, exceeds its row, opens more transactions or checks out more connections than
-    its row lists (one of each unless it says otherwise), calls another service while a transaction is open (none
-    unless listed) or keeps a transaction open too long. A row's `query` table is sent as the query string, each
-    value formatted with the seeded ids. A row with `not_budgeted = "<reason>"` is not called, and
-    needs its reason."""
+    more statements at 50 rows than at 5, exceeds its row or sits more than QUERY_SLACK statements under it, lists
+    more transactions, connections or service calls than it makes, opens more transactions or checks out more
+    connections than its row lists (one of each unless it says otherwise), calls another service while a transaction
+    is open (none unless listed) or keeps a transaction open too long. A row's `query` table is sent as the query
+    string, each value formatted with the seeded ids. A row with `not_budgeted = "<reason>"` is not called, and needs
+    its reason."""
     rows: dict[str, dict[str, Any]] = tomllib.loads(await asyncio.to_thread(budgets.read_text))
     seen: dict[str, list[dict[str, Any]]] = {}
     problems: list[str] = []
@@ -129,6 +134,8 @@ async def over_budget(
             problems.append(f"GET {route}: {small} statements at {SIZES[0]} rows, {large} at {SIZES[1]}")
         if large > int(row["queries"]):
             problems.append(f"GET {route}: {large} statements, budget {row['queries']}")
+        elif int(row["queries"]) > large + QUERY_SLACK:
+            problems.append(f"GET {route}: budget {row['queries']}, {large} statements measured; lower it")
         opened, allowed = max(int(x["db.tx_count"]) for x in measured), int(row.get("transactions", 1))
         if opened > allowed:
             problems.append(f"GET {route}: {opened} transactions, {allowed} listed")
@@ -139,6 +146,12 @@ async def over_budget(
         if hops > allowed:
             calls = "call" if hops == 1 else "calls"
             problems.append(f"GET {route}: {hops} service {calls} while a transaction was open, {allowed} listed")
+        listed = {"transactions": opened, "connections": checked_out, "hops_in_transaction": hops}
+        problems += [
+            f"GET {route}: {row[key]} {key} listed, {n} measured; lower it"
+            for key, n in listed.items()
+            if key in row and int(row[key]) > n
+        ]
         held = max(float(x["db.tx_open_ms"]) for x in measured)
         if held > MAX_OPEN_MS:
             problems.append(f"GET {route}: a transaction stayed open {held:.0f} ms, over {MAX_OPEN_MS:.0f}")
@@ -159,4 +172,13 @@ def budget_check(app: FastAPI, client: Client, seed_team: SeedTeam) -> Iterator[
         yield check
 
 
-__all__ = ["MAX_OPEN_MS", "SeedTeam", "Seeded", "StatementBudget", "budget_check", "get_routes", "over_budget"]
+__all__ = [
+    "MAX_OPEN_MS",
+    "QUERY_SLACK",
+    "SeedTeam",
+    "Seeded",
+    "StatementBudget",
+    "budget_check",
+    "get_routes",
+    "over_budget",
+]
