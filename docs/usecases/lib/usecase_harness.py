@@ -471,8 +471,9 @@ def files(
     env["OPS_FILES_PORT"] = str(port)
     env["OPS_FILES_DIR"] = str(files_dir)
     env["OPS_FILES_SCANNING"] = scanning
-    if agents_url:
-        env["OPS_AGENTS_URL"] = agents_url
+    # files-service exits at start without an agents address: the run's agents-service, or its port when the run
+    # starts none, where the events wait in the outbox as nothing answers.
+    env["OPS_AGENTS_URL"] = agents_url or f"http://127.0.0.1:{AGENTS_PORT}"
     if platform_auth:
         env["OPS_AUTH_MODE"] = "platform"
         env["OPS_PLATFORM_URL"] = f"http://127.0.0.1:{PLATFORM_PORT}"
