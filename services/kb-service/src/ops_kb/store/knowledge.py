@@ -12,10 +12,10 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, ClassVar, NamedTuple, cast
+from typing import Annotated, Any, ClassVar, NamedTuple, cast
 
 import sqlalchemy as sa
-from pydantic import JsonValue
+from pydantic import BeforeValidator, JsonValue
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -553,6 +553,22 @@ class ChangeRow(Out):
     decided_at: datetime | None
 
 
+def _whole_counts(value: object) -> object:
+    """A run's counts as whole numbers. A row an older build wrote may hold a count as a decimal (2.0), a string
+    ("3") or null: a number is kept as its whole part, anything else is left out, so its run list still answers."""
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, int] = {}
+    for k, v in cast(dict[object, object], value).items():
+        if isinstance(v, bool) or v is None:
+            continue
+        if isinstance(v, int | float):
+            out[str(k)] = int(v)
+        elif isinstance(v, str) and v.strip().lstrip("-").isdigit():
+            out[str(k)] = int(v.strip())
+    return out
+
+
 class RunRow(Out):
     """One sync run of a source: running, or ended with its counts, errors and log."""
 
@@ -562,7 +578,7 @@ class RunRow(Out):
     started_at: datetime
     duration_sec: float
     status: str
-    counts: dict[str, int]
+    counts: Annotated[dict[str, int], BeforeValidator(_whole_counts)]
     errors: list[JsonValue]
     log: list[JsonValue]
     finished_at: datetime | None = None
