@@ -142,16 +142,16 @@ async def test_a_graph_runs_record_and_models_service_name_the_same_alias_and_re
     thread = await new_thread(client)
     await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
     assert rt.graph_store is not None
-    rows = [r for r in await ModelCallLedger(rt.graph_store.engine).calls(thread["id"]) if r["kind"] == "model"]
+    rows = [r for r in await ModelCallLedger(rt.graph_store.engine).calls(thread["id"]) if r.kind == "model"]
     # The fake's answer cites none of the thread's passages, so the end check adds one correction call on the same
     # alias and in the same run.
-    assert len(rows) == 2 and {r["model_alias"] for r in rows} == {"bank-standard"}, rows
+    assert len(rows) == 2 and {r.model_alias for r in rows} == {"bank-standard"}, rows
     # The graph turn's requests; the memory extraction after the turn runs outside the graph, with no thread.
     sent = [r for r in models.requests if "x-thread-id" in r.headers]
     assert {json.loads(r.content)["model"] for r in sent} == {"bank-standard"}
     assert {r.headers["x-thread-id"] for r in sent} == {thread["id"]}
-    assert {r.headers["x-request-hash"] for r in sent} == {r["request_hash"] for r in rows}
-    assert {r.headers["x-run-id"] for r in sent} == {rows[0]["run_id"]}
+    assert {r.headers["x-request-hash"] for r in sent} == {r.request_hash for r in rows}
+    assert {r.headers["x-run-id"] for r in sent} == {rows[0].run_id}
     assert {r.headers["x-tenant-id"] for r in sent} == {DEV_TENANT}
 
 

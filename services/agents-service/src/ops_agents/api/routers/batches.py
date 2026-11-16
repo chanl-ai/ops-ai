@@ -23,7 +23,7 @@ from ops_ingest.parsers.spreadsheet import spreadsheet_rows
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
 from ops_service_kit.http import Envelope, Out
 
-from ...store.batches import MAX_ROWS, Batches
+from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_tenant
 from ..auth import Principal, principal, require_builder, started_by
 from ..deps import Runtime, runtime
@@ -156,18 +156,18 @@ async def start_batch(rt: Rt, me: Me, workflow_id: str, body: BatchIn) -> JSONRe
         created_by=started_by(me),
         rows=mapped,
     )
-    return ok({"id": made["id"], "total": made["total"]}, 202)
+    return ok({"id": made.id, "total": made.total}, 202)
 
 
-async def _batch(rt: Runtime, me: Principal, batch_id: str) -> dict[str, Any]:
+async def _batch(rt: Runtime, me: Principal, batch_id: str) -> BatchOut:
     found = await Batches(rt.db).get(batch_id)
     if found is None:
         raise NotFound(f"Batch {batch_id}")
     return found
 
 
-def _status(r: dict[str, Any]) -> str:
-    return str(r["run_status"]) if r["run_status"] else "pending"
+def _status(r: BatchRowOut) -> str:
+    return r.run_status or "pending"
 
 
 @router.get("/v1/batches/{batch_id}", response_model=Envelope[BatchView])
@@ -177,20 +177,20 @@ async def batch_page(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     rows = await Batches(rt.db).rows(batch_id)
     statuses = [_status(r) for r in rows]
     view = {
-        "id": batch["id"],
-        "workflowId": batch["workflow_id"],
-        "fileName": batch["file_name"],
-        "mode": batch["mode"],
-        "total": batch["total"],
+        "id": batch.id,
+        "workflowId": batch.workflow_id,
+        "fileName": batch.file_name,
+        "mode": batch.mode,
+        "total": batch.total,
         "finished": statuses.count("succeeded"),
         "failed": sum(s in ("failed", "cancelled") for s in statuses),
         "pending": statuses.count("pending"),
         "running": sum(s not in ("succeeded", "failed", "cancelled", "pending") for s in statuses),
-        "stopped": {"reason": batch["stopped_reason"], "at": batch["stopped_at"]} if batch["stopped_at"] else None,
+        "stopped": {"reason": batch.stopped_reason, "at": batch.stopped_at} if batch.stopped_at else None,
         "rows": [
             {
-                "row": r["row"], "attempt": r["attempt"], "status": _status(r), "outcome": r["outcome"],
-                "output": r["output"], "error": r["error"], "runId": r["run_id"], "input": r["input"],
+                "row": r.row, "attempt": r.attempt, "status": _status(r), "outcome": r.outcome,
+                "output": r.output, "error": r.error, "runId": r.run_id, "input": r.input,
             }
             for r in rows
         ],
@@ -202,7 +202,7 @@ async def batch_page(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
 async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     """A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again."""
     batch = await _batch(rt, me, batch_id)
-    require_builder(me, area="workflows", team_id=str(batch["team_id"]), action="edit", what=f"batch {batch_id}")
+    require_builder(me, area="workflows", team_id=batch.team_id, action="edit", what=f"batch {batch_id}")
     return ok({"retried": await Batches(rt.db).retry_failed(batch_id)}, 202)
 
 
@@ -222,10 +222,10 @@ async def batch_results(rt: Rt, me: Me, batch_id: str) -> Response:
     def as_json(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False) if value is not None else ""
 
-    for r in sorted(await Batches(rt.db).rows(batch_id), key=lambda x: int(x["row"])):
+    for r in sorted(await Batches(rt.db).rows(batch_id), key=lambda x: x.row):
         writer.writerow(
-            [r["row"], as_json(r["input"]), _status(r), r["outcome"] or "", r["run_id"] or "", r["error"] or "",
-             as_json(r["output"])]
+            [r.row, as_json(r.input), _status(r), r.outcome or "", r.run_id or "", r.error or "",
+             as_json(r.output)]
         )  # fmt: skip
     name = f"results-{batch_id}.csv"
     return Response(

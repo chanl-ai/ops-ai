@@ -58,7 +58,7 @@ from ops_service_kit.ids import now_iso
 
 from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
-from ..store.events import EventLog
+from ..store.events import EventLog, EventOut
 from ..store.reviews import DecisionOut, ReviewStore
 from ..store.tenancy import current_team
 from .auth import Principal, caller_of, graph_target, key_scope
@@ -386,7 +386,7 @@ async def messages_of(
     if not thread_ids:
         return out
     rows = await EventLog(store.engine).for_threads(thread_ids)
-    by_thread: dict[str, list[Any]] = {t: [] for t in thread_ids}
+    by_thread: dict[str, list[EventOut]] = {t: [] for t in thread_ids}
     for r in rows:
         by_thread[r.thread_id].append(r)
     for tid in thread_ids:
@@ -396,7 +396,9 @@ async def messages_of(
     return out
 
 
-async def _thread_messages(rt: Runtime, thread_id: str, events: list[Any], *, audit: bool = False) -> list[ChatMessage]:
+async def _thread_messages(
+    rt: Runtime, thread_id: str, events: list[EventOut], *, audit: bool = False
+) -> list[ChatMessage]:
     runs = [r for r in await graph_store(rt).runs(thread_id) if r["kind"] in ("input", "resume", "recovery")]
     decisions = await decisions_of(rt, thread_id) if runs else {}
     approvals = await approvals_of(rt, thread_id) if runs else {}

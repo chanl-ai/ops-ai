@@ -1,4 +1,4 @@
-# 2541 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 2523 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body agents_attach_skill
 1 body agents_create_agent
 1 reply agents_create_agent
@@ -149,7 +149,6 @@
 3 task services/agents-service/src/ops_agents/api/app.py
 14 dict-any services/agents-service/src/ops_agents/api/apps_line.py
 28 dict-any services/agents-service/src/ops_agents/api/assurance.py
-2 dict-any services/agents-service/src/ops_agents/api/batches.py
 35 dict-any services/agents-service/src/ops_agents/api/case_page.py
 13 dict-any services/agents-service/src/ops_agents/api/case_story.py
 2 dict-any services/agents-service/src/ops_agents/api/case_type_seeds.py
@@ -204,7 +203,7 @@
 10 dict-any services/agents-service/src/ops_agents/api/routers/assurance.py
 4 dict-any services/agents-service/src/ops_agents/api/routers/background.py
 1 gather services/agents-service/src/ops_agents/api/routers/background.py
-11 dict-any services/agents-service/src/ops_agents/api/routers/batches.py
+9 dict-any services/agents-service/src/ops_agents/api/routers/batches.py
 8 dict-any services/agents-service/src/ops_agents/api/routers/case_records.py
 5 dict-any services/agents-service/src/ops_agents/api/routers/case_types.py
 30 dict-any services/agents-service/src/ops_agents/api/routers/channel_list.py
@@ -283,8 +282,7 @@
 10 store-dict services/agents-service/src/ops_agents/store/agent_registry.py
 2 dict-any services/agents-service/src/ops_agents/store/background.py
 1 store-dict services/agents-service/src/ops_agents/store/background.py
-5 dict-any services/agents-service/src/ops_agents/store/batches.py
-4 store-dict services/agents-service/src/ops_agents/store/batches.py
+3 dict-any services/agents-service/src/ops_agents/store/batches.py
 4 dict-any services/agents-service/src/ops_agents/store/case_links.py
 3 store-dict services/agents-service/src/ops_agents/store/case_links.py
 16 dict-any services/agents-service/src/ops_agents/store/cases.py
@@ -298,8 +296,8 @@
 1 dict-any services/agents-service/src/ops_agents/store/chat_search.py
 4 dict-any services/agents-service/src/ops_agents/store/evals.py
 2 store-dict services/agents-service/src/ops_agents/store/evals.py
-4 dict-any services/agents-service/src/ops_agents/store/events.py
-4 store-dict services/agents-service/src/ops_agents/store/events.py
+1 dict-any services/agents-service/src/ops_agents/store/events.py
+1 store-dict services/agents-service/src/ops_agents/store/events.py
 6 dict-any services/agents-service/src/ops_agents/store/form_links.py
 5 store-dict services/agents-service/src/ops_agents/store/form_links.py
 19 dict-any services/agents-service/src/ops_agents/store/graphs.py
@@ -312,8 +310,6 @@
 1 store-dict services/agents-service/src/ops_agents/store/mailboxes.py
 11 dict-any services/agents-service/src/ops_agents/store/memories.py
 9 store-dict services/agents-service/src/ops_agents/store/memories.py
-1 dict-any services/agents-service/src/ops_agents/store/model_calls.py
-1 store-dict services/agents-service/src/ops_agents/store/model_calls.py
 2 dict-any services/agents-service/src/ops_agents/store/reviews.py
 10 dict-any services/agents-service/src/ops_agents/store/service_events.py
 4 store-dict services/agents-service/src/ops_agents/store/service_events.py

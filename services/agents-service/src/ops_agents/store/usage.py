@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.graphs.metering import CallSite
 from ops_metering import MICRO, Budget, Exhausted, PriceTable, Totals, Usage, cost, exhausted
+from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.dialect import upsert
+from ops_store.rows import one
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
@@ -32,6 +34,17 @@ thread_budgets = sa.Table(
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default=LOCAL_TENANT),
     info=TENANT_SCOPED,
 )
+
+
+class BudgetOut(Out):
+    """A thread's stored limits; None is no limit on that measure."""
+
+    max_calls: int | None
+    max_tokens: int | None
+    max_cost_micros: int | None
+
+
+_t = thread_budgets.c
 
 
 def _micros(amount: Decimal) -> int:
@@ -97,19 +110,13 @@ class UsageLedger(RuntimeStore):
         return await self.calls.sums(thread_id, by_run=True)
 
     async def budget(self, thread_id: str) -> Budget | None:
+        q = sa.select(_t.max_calls, _t.max_tokens, _t.max_cost_micros).where(_t.thread_id == thread_id)
         async with self.tx() as c:
-            row = (
-                (await c.execute(thread_budgets.select().where(thread_budgets.c.thread_id == thread_id)))
-                .mappings()
-                .first()
-            )
+            row = await one(c, q, BudgetOut)
         if row is None:
             return None
-        return Budget(
-            row["max_calls"],
-            row["max_tokens"],
-            _amount(row["max_cost_micros"]) if row["max_cost_micros"] is not None else None,
-        )
+        cap = _amount(row.max_cost_micros) if row.max_cost_micros is not None else None
+        return Budget(row.max_calls, row.max_tokens, cap)
 
     async def set_budget(self, thread_id: str, budget: Budget) -> None:
         values: dict[str, Any] = {

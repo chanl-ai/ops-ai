@@ -9,13 +9,15 @@ key already names instead of starting a second."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
 
 from ops_engine.store.tables import engine_runs
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -68,6 +70,59 @@ run_batch_rows = sa.Table(
 )
 
 
+class BatchOut(Out):
+    """One batch: what was started from which file, and why it stopped starting rows when it did."""
+
+    id: str
+    team_id: str
+    workflow_id: str
+    version: int
+    mode: str
+    file_id: str
+    file_name: str
+    total: int
+    created_by: str
+    created_at: str
+    stopped_reason: str | None = None
+    stopped_at: str | None = None
+
+
+class BatchRowOut(Out):
+    """One row of a batch with its run's status, outcome, output and error (all None before its run starts)."""
+
+    row: int
+    attempt: int
+    input: dict[str, Any]
+    run_id: str | None
+    row_status: str
+    run_status: str | None
+    outcome: str | None
+    output: Any
+    error: str | None
+
+
+class PendingRowOut(Out):
+    """A row waiting for its attempt to start, with what the worker starts it as."""
+
+    tenant_id: str
+    team_id: str
+    batch_id: str
+    row: int
+    attempt: int
+    input: dict[str, Any]
+    workflow_id: str
+    version: int
+    mode: Literal["live", "test"]
+    created_by: str
+
+
+_b = run_batches.c
+BATCH_COLUMNS = (
+    _b.id, _b.team_id, _b.workflow_id, _b.version, _b.mode, _b.file_id, _b.file_name, _b.total, _b.created_by,
+    _b.created_at, _b.stopped_reason, _b.stopped_at,
+)  # fmt: skip
+
+
 def run_key(batch_id: str, row: int, attempt: int) -> str:
     return f"batch:{batch_id}:{row}:{attempt}"
 
@@ -86,7 +141,7 @@ class Batches(RuntimeStore):
         file_name: str,
         created_by: str,
         rows: list[dict[str, Any]],
-    ) -> dict[str, Any]:
+    ) -> BatchOut:
         batch = {
             "id": new_id("batch"),
             "team_id": team_id,
@@ -105,15 +160,13 @@ class Batches(RuntimeStore):
                 run_batch_rows.insert(),
                 [{"batch_id": batch["id"], "row": i, "team_id": team_id, "input": r} for i, r in enumerate(rows, 1)],
             )
-        return batch
+        return BatchOut.model_validate(batch)
 
-    async def get(self, batch_id: str) -> dict[str, Any] | None:
-        b = run_batches
+    async def get(self, batch_id: str) -> BatchOut | None:
         async with self.tx() as c:
-            found = (await c.execute(sa.select(b).where(b.c.id == batch_id, team_visible(b)))).mappings().first()
-        return dict(found) if found is not None else None
+            return await one(c, sa.select(*BATCH_COLUMNS).where(_b.id == batch_id, team_visible(run_batches)), BatchOut)
 
-    async def rows(self, batch_id: str) -> list[dict[str, Any]]:
+    async def rows(self, batch_id: str) -> list[BatchRowOut]:
         """Every row with its run's status, outcome, output and error, failed rows first, then in file order."""
         r, e = run_batch_rows, engine_runs
         joined = r.outerjoin(e, sa.and_(e.c.tenant_id == r.c.tenant_id, e.c.id == r.c.run_id))
@@ -128,7 +181,7 @@ class Batches(RuntimeStore):
             .order_by(failed_first, r.c.row)
         )  # fmt: skip
         async with self.tx() as c:
-            return [dict(x) for x in (await c.execute(q)).mappings()]
+            return await rows(c, q, BatchRowOut)
 
     async def retry_failed(self, batch_id: str) -> int:
         """A new attempt for each row whose run failed or was cancelled; rows that succeeded or are under way stay."""
@@ -145,7 +198,7 @@ class Batches(RuntimeStore):
             )
         return int(done.rowcount or 0)
 
-    async def pending(self, limit: int) -> list[dict[str, Any]]:
+    async def pending(self, limit: int) -> list[PendingRowOut]:
         """Rows waiting for their attempt to start, across every tenant, oldest batch first; none of a stopped batch."""
         r, b = run_batch_rows, run_batches
         q = (
@@ -159,7 +212,7 @@ class Batches(RuntimeStore):
             .limit(limit)
         )  # fmt: skip
         async with self.system_tx(BATCH_START) as c:
-            return [dict(x) for x in (await c.execute(q)).mappings()]
+            return await rows(c, q, PendingRowOut)
 
     async def spent(self, batch_id: str) -> str | None:
         """The error of a row's run that met the model budget, when one did: the batch stops starting rows."""

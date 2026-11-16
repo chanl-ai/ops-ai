@@ -19,9 +19,11 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from ops_metering import MICRO, Totals
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore
+from ops_store.rows import rows
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
@@ -72,6 +74,46 @@ class ModelCall:
     response: Any = None
 
 
+class ModelCallOut(Out):
+    """One recorded model call, as the journal and tests read it."""
+
+    id: str
+    thread_id: str
+    run_id: str | None
+    step: str
+    task: str | None
+    kind: str
+    model_alias: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_micros: int
+    latency_ms: int | None
+    request_hash: str | None
+    response: Any
+    created_at: str
+
+
+_m = model_call_records.c
+CALL_COLUMNS = (
+    _m.id,
+    _m.thread_id,
+    _m.run_id,
+    _m.step,
+    _m.task,
+    _m.kind,
+    _m.model_alias,
+    _m.calls,
+    _m.input_tokens,
+    _m.output_tokens,
+    _m.cost_micros,
+    _m.latency_ms,
+    _m.request_hash,
+    _m.response,
+    _m.created_at,
+)
+
+
 class ModelCallLedger(RuntimeStore):
     # Replay depends on the first response recorded for a (thread, task, request) winning (CAS); a record and the sum
     # a budget check reads are each one statement, so no transaction spans them.
@@ -97,11 +139,10 @@ class ModelCallLedger(RuntimeStore):
         async with self.tx() as c:
             return (await c.execute(q)).scalar_one_or_none()
 
-    async def calls(self, thread_id: str) -> list[dict[str, Any]]:
-        q = model_call_records.select().where(model_call_records.c.thread_id == thread_id)
+    async def calls(self, thread_id: str) -> list[ModelCallOut]:
+        q = sa.select(*CALL_COLUMNS).where(_m.thread_id == thread_id).order_by(_m.created_at, _m.id)
         async with self.tx() as c:
-            rows = (await c.execute(q.order_by(model_call_records.c.created_at))).mappings().all()
-        return [dict(r) for r in rows]
+            return await rows(c, q, ModelCallOut)
 
     async def sums(self, thread_id: str, *, by_run: bool) -> dict[str | None, Totals]:
         m = model_call_records.c

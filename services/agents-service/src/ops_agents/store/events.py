@@ -9,8 +9,10 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -44,17 +46,30 @@ thread_events = sa.Table(
 LIFECYCLE = ("started", "waiting", "waiting_review", "decided", "finished", "failed")
 
 
-def view(row: Any) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "seq": row.seq,
-        "type": row.type,
-        "threadId": row.thread_id,
-        "runId": row.run_id,
-        "node": row.node,
-        "at": row.at,
-        "data": row.data,
-    }
+class EventOut(Out):
+    """One logged event. `wire()` is its stream form: the camelCase keys a client re-attaches with."""
+
+    id: str
+    seq: int
+    type: str
+    thread_id: str
+    run_id: str | None
+    node: str | None
+    at: str
+    data: Any
+
+    def wire(self) -> dict[str, Any]:
+        return self.model_dump(by_alias=True, exclude={"position"})
+
+
+class TeamEventOut(EventOut):
+    """A lifecycle event with its stream position, the next cursor of a team's stream."""
+
+    position: int
+
+
+_e = thread_events.c
+EVENT_COLUMNS = (_e.id, _e.seq, _e.type, _e.thread_id, _e.run_id, _e.node, _e.at, _e.data)
 
 
 class EventLog(RuntimeStore):
@@ -72,7 +87,7 @@ class EventLog(RuntimeStore):
         node: str | None = None,
         data: Any = None,
         generation: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> EventOut:
         """Appends one event at the thread's next seq. Concurrent appends to one thread retry on the unique seq.
         `generation`: the writer's lease generation, checked in the same transaction (a workflow runner's worker)."""
         for _ in range(5):
@@ -100,16 +115,12 @@ class EventLog(RuntimeStore):
                         seq = int((await c.execute(stmt)).scalar_one())
             except IntegrityError:
                 continue
-            return {k: values[k] for k in ("id", "type", "node", "at", "data")} | {
-                "seq": seq,
-                "threadId": thread_id,
-                "runId": run_id,
-            }
+            return EventOut.model_validate({k: v for k, v in values.items() if k != "team_id"} | {"seq": seq})
         raise RuntimeError(f"could not append an event to {thread_id} after 5 attempts")
 
-    async def run_events(self, thread_id: str, run_id: str, after: int) -> list[dict[str, Any]]:
+    async def run_events(self, thread_id: str, run_id: str, after: int) -> list[EventOut]:
         q = (
-            thread_events.select()
+            sa.select(*EVENT_COLUMNS)
             .where(
                 thread_events.c.thread_id == thread_id,
                 thread_events.c.run_id == run_id,
@@ -119,12 +130,12 @@ class EventLog(RuntimeStore):
             .order_by(thread_events.c.seq)
         )
         async with self.tx() as c:
-            return [view(r) for r in (await c.execute(q)).all()]
+            return await rows(c, q, EventOut)
 
-    async def team_events(self, team_id: str, after: int, limit: int = 200) -> list[tuple[int, dict[str, Any]]]:
+    async def team_events(self, team_id: str, after: int, limit: int = 200) -> list[TeamEventOut]:
         """Lifecycle events for a team after a stream position, with each event's position for the next cursor."""
         q = (
-            thread_events.select()
+            sa.select(*EVENT_COLUMNS, _e.position)
             .where(
                 thread_events.c.team_id == team_id,
                 thread_events.c.tenant_id == current_tenant(),
@@ -136,14 +147,14 @@ class EventLog(RuntimeStore):
             .limit(limit)
         )
         async with self.tx() as c:
-            return [(int(r.position), view(r)) for r in (await c.execute(q)).all()]
+            return await rows(c, q, TeamEventOut)
 
-    async def for_threads(self, thread_ids: list[str]) -> list[Any]:
+    async def for_threads(self, thread_ids: list[str]) -> list[EventOut]:
         """Every event of the given threads, in seq order."""
         q = (
-            thread_events.select()
-            .where(thread_events.c.thread_id.in_(thread_ids), team_visible(thread_events))
-            .order_by(thread_events.c.seq)
+            sa.select(*EVENT_COLUMNS)
+            .where(_e.thread_id.in_(thread_ids), team_visible(thread_events))
+            .order_by(_e.seq, _e.position)
         )
         async with self.tx() as c:
-            return list((await c.execute(q)).all())
+            return await rows(c, q, EventOut)

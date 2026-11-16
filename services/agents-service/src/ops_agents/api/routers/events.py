@@ -39,8 +39,8 @@ async def run_frames(
     while True:
         batch = await EventLog(store.engine).run_events(thread_id, run_id, cursor)
         for e in batch:
-            cursor = e["seq"]
-            yield {"id": str(e["seq"]), "event": e["type"], "data": json.dumps(e, ensure_ascii=False)}
+            cursor = e.seq
+            yield {"id": str(e.seq), "event": e.type, "data": json.dumps(e.wire(), ensure_ascii=False)}
         if not follow:
             return
         # Ends when the run has, not at the first terminal type: the paused node's own end event follows `waiting`.
@@ -61,15 +61,15 @@ async def team_frames(
     readable: dict[str, bool] = {}
     while True:
         batch = await EventLog(store.engine).team_events(team_id, cursor)
-        for position, e in batch:
-            cursor = position
-            thread_id = str(e["threadId"])
+        for e in batch:
+            cursor = position = e.position
+            thread_id = e.thread_id
             if thread_id not in readable:
                 row = await store.thread(thread_id)
                 readable[thread_id] = row is not None and may_read_thread(row, me)
             if not readable[thread_id]:
                 continue
-            yield {"id": str(position), "event": f"thread.{e['type']}", "data": json.dumps(e, ensure_ascii=False)}
+            yield {"id": str(position), "event": f"thread.{e.type}", "data": json.dumps(e.wire(), ensure_ascii=False)}
         if not follow:
             return
         if not batch:

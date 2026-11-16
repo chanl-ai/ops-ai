@@ -1448,9 +1448,9 @@ async def event_frames(
     while True:
         batch = await log.run_events(run_id, run_id, cursor)
         for e in batch:
-            cursor = e["seq"]
-            shown = {**e, "data": masked(e.get("data"))} if mask else e
-            yield {"id": str(e["seq"]), "event": e["type"], "data": json.dumps(shown, ensure_ascii=False)}
+            cursor = e.seq
+            shown = {**e.wire(), "data": masked(e.data)} if mask else e.wire()
+            yield {"id": str(e.seq), "event": e.type, "data": json.dumps(shown, ensure_ascii=False)}
         if not follow:
             return
         run = await store.get(run_id)
