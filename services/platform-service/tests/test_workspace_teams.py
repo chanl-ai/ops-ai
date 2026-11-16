@@ -186,6 +186,7 @@ async def test_groups_add_each_mapped_membership_once_and_never_an_admin(signin:
         "sip_groups", _oidc(domain, jit={"role": "chat_user", "team": branch}, groups={"map": [admin_rule]})
     )
     assert r.status_code == 400 and r.json()["error"]["code"] == "group_role", r.text
+    assert r.json()["error"]["message"] == "A group may give chat_user, viewer, builder, approver.", r.text
     body = _oidc(
         domain,
         jit={"role": "chat_user", "team": branch},
