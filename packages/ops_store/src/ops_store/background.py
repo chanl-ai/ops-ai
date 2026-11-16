@@ -326,6 +326,7 @@ EXEMPT: dict[str, str] = {
     "ops_tools.transform.*": "waits on one call's child process",
     "ops_runner.wasm.*": "waits inside one code run, for its guest's pipes and lines, bounded by the run's time limit",
     "ops_tools.opa.*": "retries loading the policy at start-up",
+    "ops_kb.__main__.wait_for_files": "start-up probe of files-service, bounded by ready_wait_s, then ends",
     "ops_identity.client.*": "pages through one list call",
     "ops_email.inbound.*": "reads one mailbox for the mail listener",
     "ops_agents.api.email_trigger.EmailTriggers.idle_forever": "holds one mailbox's IDLE connection; mail listener",
