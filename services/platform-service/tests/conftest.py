@@ -47,6 +47,7 @@ from ops_service_kit.testdb import isolate_from_stack, refusal, unanswered_endpo
 from ops_signin.dns import TxtResolver
 from ops_signin.fake_idp import FakeDns, self_signed
 from ops_signin.fake_idp import create_app as create_idp
+from ops_store.testing import DATABASES, NO_SQL_SERVER, sql_server_schema
 
 ROOT = Path(__file__).parents[1]
 DEMO_PASSWORD = "demo-password-for-tests"
@@ -80,6 +81,22 @@ def alembic_config() -> Config:
 def database_url() -> str:
     command.upgrade(alembic_config(), "head")
     return Settings().database_url
+
+
+@pytest.fixture(scope="session", params=DATABASES)
+def store_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """The chain on PostgreSQL, and on a scratch SQL Server database holding its golden DDL when OPS_MSSQL_SERVER and
+    MSSQL_SA_PASSWORD are set (ops_store.testing), for the store tests that run on both. The rest of the suite stays on
+    PostgreSQL: its rigs write as the database owner, and the lookups before a tenant is known are PostgreSQL
+    functions with no SQL Server form yet."""
+    if request.param == "postgresql":
+        command.upgrade(alembic_config(), "head")
+        yield Settings().database_url
+        return
+    with sql_server_schema("platform", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as url:
+        if url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield url
 
 
 @pytest.fixture
