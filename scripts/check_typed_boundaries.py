@@ -16,10 +16,13 @@ observability.md, OB1), in every package's and service's `src`:
 What exists today is listed per member in `<member>/typed-boundaries-baseline.txt` (a route row names its operation
 id), so only a new site is a finding; the member's lane takes its file to zero. `logging` and `print` are at zero and
 no file can allow one. A row may only fall: `--update` lowers rows and drops fixed ones, and never raises or adds one
-once a member has a file.
+once a member has a file. A baseline read only against the code could be raised to match it, so `--commits` reads the
+files' history: a commit that raises a row, adds a row or adds a file (a deleted and regenerated file is one) carries a
+`Standards-exception:` trailer a listed maintainer approved (scripts/baseline_history.py).
 
   uv run python scripts/check_typed_boundaries.py            # findings, exit 0
   uv run python scripts/check_typed_boundaries.py --strict   # exit 1 when there is a finding
+  uv run python scripts/check_typed_boundaries.py --commits  # exit 1 when a commit raised a baseline without a trailer
   uv run python scripts/check_typed_boundaries.py --update   # lower each baseline to today's findings
 """
 
@@ -37,10 +40,15 @@ from typing import Any
 
 import fastapi
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import baseline_history
+
 from ops_service_kit.contract import boundaries
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_NAME = "typed-boundaries-baseline.txt"
+# The commit that created the first member baseline; a commit after it that raises a row or adds a file needs a trailer.
+BASELINES_BEGAN = "f2f7893e913d7d10257cf517d3273bc4696e6b18"
 # The package that owns logging and the Passthrough base, where the zero-ceiling kinds do not apply.
 KIT = "packages/ops_service_kit/"
 ZERO = ("logging", "print")
@@ -261,10 +269,23 @@ def summary(now: Counter[Key]) -> str:
     return ", ".join(f"{k} {kinds[k]}" for k in FIX) + f" (dict-any by layer: {per_layer})"
 
 
+def commit_problems(root: Path = ROOT) -> list[str]:
+    """Baseline rows a commit raised, or files it added, without a Standards-exception: trailer."""
+    return baseline_history.problems(
+        root, BASELINES_BEGAN, [f"packages/*/{BASELINE_NAME}", f"services/*/{BASELINE_NAME}"]
+    )
+
+
 def main(root: Path = ROOT, *, with_routes: bool = True) -> int:
     if "--walk" in sys.argv:
         sys.stdout.write("\n" + json.dumps(walk(Path(sys.argv[sys.argv.index("--walk") + 1]))) + "\n")
         return 0
+    if "--commits" in sys.argv:
+        missing = commit_problems(root)
+        sys.stdout.write(
+            "\n".join(missing) + "\n" if missing else "check_typed_boundaries: every baseline rise is approved\n"
+        )
+        return 1 if missing else 0
     now, where = scan(root)
     if with_routes:
         now.update(routes(root))

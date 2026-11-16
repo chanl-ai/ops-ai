@@ -4,6 +4,8 @@ could be raised by rewriting it."""
 
 from __future__ import annotations
 
+import hashlib
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -105,3 +107,48 @@ def test_update_lowers_a_row_and_never_raises_or_adds_one(tmp_path: Path, monkey
     (root / STORE).write_text(CODE + "    asyncio.gather(x())\n")
     run(root, monkeypatch, "--update")
     assert baseline.read_text().splitlines()[1:] == [f"1 gather {STORE}"], "never raised"
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True, env=env).stdout.strip()
+
+
+def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kb = tmp_path / "services/kb-service"
+    kb.mkdir(parents=True)
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github/standards-maintainers.txt").write_text(
+        f"# maintainers\n{hashlib.sha256(b'owner-login').hexdigest()}\n"
+    )
+    (kb / c.BASELINE_NAME).write_text("# header\n2 gather services/kb-service/src/app.py\n")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "the baselines begin")
+    monkeypatch.setattr(c, "BASELINES_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    (kb / c.BASELINE_NAME).write_text("# header\n1 gather services/kb-service/src/app.py\n")
+    _git(tmp_path, "commit", "-qam", "a gather became a task group")
+    assert c.commit_problems(tmp_path) == []
+    (kb / c.BASELINE_NAME).write_text("# header\n3 gather services/kb-service/src/app.py\n")
+    _git(tmp_path, "commit", "-qam", "a gather back in code")
+    [raised] = c.commit_problems(tmp_path)
+    assert "gather services/kb-service/src/app.py (1 -> 3)" in raised
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "x\n\nStandards-exception: approved by owner-login: three")
+    assert c.commit_problems(tmp_path) == []
+    # Deleting the file and regenerating it with `--update` is a new file holding every row: a rise.
+    (kb / c.BASELINE_NAME).unlink()
+    _git(tmp_path, "commit", "-qam", "drop the baseline")
+    (kb / c.BASELINE_NAME).write_text("# header\n9 task services/kb-service/src/app.py\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "regenerate the baseline")
+    assert any("task services/kb-service/src/app.py (0 -> 9)" in p for p in c.commit_problems(tmp_path))
+
+
+def test_main_commits_flag_exits_1_on_a_raised_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(c, "commit_problems", lambda _root: ["abc raises x"])  # pyright: ignore[reportUnknownLambdaType]
+    assert run(tmp_path, monkeypatch, "--commits") == 1
+    assert "abc raises x" in capsys.readouterr().out
