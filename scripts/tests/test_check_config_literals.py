@@ -158,3 +158,48 @@ def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
     _git(tmp_path, "commit", "-qm", "a baseline file for a member with none")
     [added] = c.commit_problems(tmp_path)
     assert "client services/models-service/src/app.py (0 -> 4)" in added
+
+
+FORMS = """
+import asyncio
+import httpx as h
+from httpx import AsyncClient as Pool, Timeout as Limit
+
+DEFAULT = "http://localhost:8740"
+WAIT = 30
+t = 12
+
+a = settings.kb_url or DEFAULT
+b = settings.kb_url if settings.kb_url else "http://localhost:8740"
+c = settings.kb_url or settings.other_url
+await asyncio.wait_for(work(), 30)
+await asyncio.wait_for(work(), timeout=WAIT)
+await asyncio.wait_for(work(), settings.kb.timeout_s)
+await http.get("/x", timeout=t)
+await http.get("/x", timeout=u)
+client = h.AsyncClient()
+pool = Pool()
+limits = Limit(5)
+"""
+
+
+def test_a_fallback_in_a_constant_or_a_ternary_a_named_number_and_an_aliased_client_are_found() -> None:
+    assert sorted(c.findings(FORMS)) == [
+        ("client", 18),
+        ("client", 19),
+        ("loopback", 10),
+        ("loopback", 11),
+        ("timeout", 14),
+        ("timeout", 16),
+        ("timeout", 20),
+    ]
+
+
+def test_a_number_in_another_function_or_a_parameter_of_the_same_name_is_not_a_timeout() -> None:
+    src = (
+        "def a():\n    t = 30\n    return http.get('/x', timeout=t)\n"
+        "def b(t):\n    return http.get('/x', timeout=t)\n"
+        "def c():\n    t = 30\n"
+        "def d(t=5):\n    return http.get('/x', timeout=t)\n"
+    )
+    assert c.findings(src) == [("timeout", 3)]

@@ -27,6 +27,7 @@ from __future__ import annotations
 import ast
 import sys
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -51,58 +52,136 @@ def members(root: Path) -> list[Path]:
     return sorted(p.parent for p in [*root.glob("packages/*/src"), *root.glob("services/*-service/src")])
 
 
-def _text(node: ast.expr) -> str:
+Names = dict[str, str]
+
+
+def _text(node: ast.expr, strings: Names | None = None) -> str:
+    """The text a string expression holds; a name stands for the string constant the file assigns it."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.JoinedStr):
         return "".join(v.value for v in node.values if isinstance(v, ast.Constant) and isinstance(v.value, str))
+    if isinstance(node, ast.Name) and strings:
+        return strings.get(node.id, "")
     return ""
 
 
-def _is_client(func: ast.expr) -> bool:
-    """`httpx.AsyncClient`, `httpx.Client` or either imported by name."""
-    names = {"AsyncClient", "Client"}
-    if isinstance(func, ast.Attribute):
-        return func.attr in names and isinstance(func.value, ast.Name) and func.value.id == "httpx"
-    return isinstance(func, ast.Name) and func.id in names
+class Scope:
+    """What one file's names stand for, found without running it: imports (`import httpx as h`), string constants and
+    numbers assigned to a plain name at module level (a function's own are added as it is read: `numbers_in`)."""
+
+    def __init__(self, tree: ast.AST) -> None:
+        self.imports: Names = {}
+        self.strings: Names = {}
+        self.numbers: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                for a in node.names:
+                    self.imports[a.asname or a.name] = f"{node.module}.{a.name}"
+            elif isinstance(node, ast.Import):
+                for a in node.names:
+                    if a.asname:
+                        self.imports[a.asname] = a.name
+            elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+                for t in node.targets:
+                    if isinstance(t, ast.Name) and isinstance(node.value.value, str):
+                        self.strings[t.id] = node.value.value
+        if isinstance(tree, ast.Module):
+            self.numbers = numbers_in(tree.body)
+
+    def dotted(self, node: ast.expr) -> str:
+        parts: list[str] = []
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if not isinstance(node, ast.Name):
+            return ""
+        return ".".join([self.imports.get(node.id, node.id), *reversed(parts)])
 
 
-def _is_timeout_class(func: ast.expr) -> bool:
-    if isinstance(func, ast.Attribute):
-        return func.attr == "Timeout" and isinstance(func.value, ast.Name) and func.value.id == "httpx"
-    return isinstance(func, ast.Name) and func.id == "Timeout"
+def numbers_in(body: list[ast.stmt]) -> set[str]:
+    """Names a block assigns a number (`t = 12`), not looking into nested functions or classes."""
+    out: set[str] = set()
+    todo: list[ast.AST] = list(body)
+    while todo:
+        node = todo.pop()
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+            continue
+        if (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant)
+            and type(node.value.value) in (int, float)
+        ):
+            out.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        todo.extend(ast.iter_child_nodes(node))
+    return out
 
 
-def _fixed(node: ast.expr) -> bool:
-    """A number, an upper-case constant (`RETRY_TIMEOUT`, `defaults.HTTP_TIMEOUT`) or arithmetic on them: a value
-    written in code that a setting should hold."""
+def _is_client(func: ast.expr, scope: Scope) -> bool:
+    """`httpx.AsyncClient`, `httpx.Client` or either imported by name or under another name."""
+    return scope.dotted(func) in ("httpx.AsyncClient", "httpx.Client")
+
+
+def _is_timeout_class(func: ast.expr, scope: Scope) -> bool:
+    return scope.dotted(func) == "httpx.Timeout"
+
+
+def _fixed(node: ast.expr, scope: Scope) -> bool:
+    """A number, a name or attribute that is an upper-case constant (`RETRY_TIMEOUT`, `defaults.HTTP_TIMEOUT`) or that
+    the file assigns a number, or arithmetic on them: a value written in code that a setting should hold."""
     if isinstance(node, ast.Constant):
         return type(node.value) in (int, float)
     if isinstance(node, ast.Name):
-        return node.id.isupper()
+        return node.id.isupper() or node.id in scope.numbers
     if isinstance(node, ast.Attribute):
         return node.attr.isupper()
     if isinstance(node, ast.BinOp):
-        return _fixed(node.left) and _fixed(node.right)
+        return _fixed(node.left, scope) and _fixed(node.right, scope)
     return False
+
+
+def _loopback(node: ast.expr, scope: Scope) -> bool:
+    text = _text(node, scope.strings)
+    return any(f"://{host}" in text for host in LOOPBACK_HOSTS)
+
+
+def _nodes(node: ast.AST, numbers: set[str]) -> Iterator[tuple[ast.AST, set[str]]]:
+    """Every node with the numbers its scope assigns: the module's, then a function's own, minus its parameters."""
+    yield node, numbers
+    inner = numbers
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        args = node.args
+        params = {a.arg for a in [*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg] if a}
+        inner = (numbers - params) | numbers_in(node.body)
+    for child in ast.iter_child_nodes(node):
+        yield from _nodes(child, inner)
 
 
 def findings(source: str) -> list[tuple[str, int]]:
     """Each (kind, line) in one file's source."""
     found: list[tuple[str, int]] = []
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    scope = Scope(tree)
+    for node, numbers in _nodes(tree, scope.numbers):
+        scope.numbers = numbers
         if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
             # The first operand is the setting; a later one naming this machine is the fallback.
-            if any(f"://{host}" in _text(v) for v in node.values[1:] for host in LOOPBACK_HOSTS):
+            if any(_loopback(v, scope) for v in node.values[1:]):
+                found.append(("loopback", node.lineno))
+        elif isinstance(node, ast.IfExp):
+            # `x if x else "http://localhost"`: either branch falling back to this machine.
+            if _loopback(node.body, scope) or _loopback(node.orelse, scope):
                 found.append(("loopback", node.lineno))
         elif isinstance(node, ast.Call):
-            if _is_client(node.func):
+            if _is_client(node.func, scope):
                 found.append(("client", node.lineno))
             for kw in node.keywords:
-                if kw.arg == "timeout" and _fixed(kw.value):
+                if kw.arg == "timeout" and _fixed(kw.value, scope):
                     found.append(("timeout", kw.value.lineno))
             # `httpx.Timeout(10.0, connect=3)` states the same limits as a number at the call.
-            if _is_timeout_class(node.func) and any(_fixed(a) for a in [*node.args, *(k.value for k in node.keywords)]):
+            if _is_timeout_class(node.func, scope) and any(
+                _fixed(a, scope) for a in [*node.args, *(k.value for k in node.keywords)]
+            ):
                 found.append(("timeout", node.lineno))
     return found
 
