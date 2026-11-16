@@ -27,6 +27,7 @@ from pydantic import Field, model_validator
 
 from ops_access import Access
 from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal, current_service, install_auth
+from ops_identity.fastapi import Tx
 from ops_metering import Price, Usage, cost
 from ops_policy import CredentialStore
 from ops_service_kit.credentials import credential_store
@@ -376,7 +377,7 @@ def create_models_app(
         response_model=Envelope[list[ProviderOut]],
         responses=connection_errors,
     )
-    async def list_providers() -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_providers(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Every provider connection: where its calls go and the name of the key it signs in with, never a key."""
         return ok([_provider_view(r) for r in await providers.all()])
 
@@ -388,7 +389,7 @@ def create_models_app(
         response_model=Envelope[ProviderCreated],
         responses=connection_errors,
     )
-    async def create_provider(body: ProviderIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def create_provider(body: ProviderIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Adds a connection; 400 naming the field its type refuses (an Azure OpenAI connection needs its endpoint and
         api-version; its region is optional)."""
         pid = new_id("prov")
@@ -412,7 +413,7 @@ def create_models_app(
         response_model=Envelope[ProviderOut],
         responses=connection_errors,
     )
-    async def rebind_provider(provider_id: str, body: ProviderRebind) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def rebind_provider(provider_id: str, body: ProviderRebind, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Points a connection at another endpoint, credential name, api-version and region. Every alias version bound
         to it follows on its next call, which is how one alias moves between a fake and the real provider without a
         new version."""
@@ -442,7 +443,7 @@ def create_models_app(
     @app.get(
         "/v1/provider-keys", tags=["provider-keys"], response_model=Envelope[list[ProviderKeyOut]], responses=key_errors
     )
-    async def list_provider_keys(p: CurrentPrincipal) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_provider_keys(p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The account's model provider keys by name; a value is never returned."""
         account_admin(p)
         return ok([_provider_key_view(r) for r in await key_vault.listed(p.tenant_id)])
@@ -454,18 +455,21 @@ def create_models_app(
         responses=key_errors,
     )
     async def save_provider_key(  # pyright: ignore[reportUnusedFunction]
-        name: Annotated[str, KEY_NAME], body: ProviderKeyIn, p: CurrentPrincipal
+        name: Annotated[str, KEY_NAME], body: ProviderKeyIn, p: CurrentPrincipal, _: Tx
     ) -> JSONResponse:
         """Saves a key under the name a provider connection's keyRef gives, or replaces its value. The next call
         through a connection naming it uses the new value."""
         by = account_admin(p)
-        saved, _ = await key_vault.save(p.tenant_id, name, body.value, by=by)
+        saved, _new = await key_vault.save(p.tenant_id, name, body.value, by=by)
         keys.forget(p.tenant_id, name)
         return ok(_provider_key_view(saved))
 
     async def saved_key(p: Principal, name: str) -> str:
+        """The key's value, read in a transaction of its own that is closed before the key goes to the provider; inside
+        a route on `Tx` it is the request's."""
         account_admin(p)
-        value = await keys.get(name, p.tenant_id)
+        async with isolation.request_transaction():
+            value = await keys.get(name, p.tenant_id)
         if value is None:
             raise NotFound(f"Model provider key {name}")
         return value
@@ -524,7 +528,7 @@ def create_models_app(
             {403: "Not an account admin", 404: "No key saved under that name", 422: "The endpoint is refused"}
         ),
     )
-    async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key
         belongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or
         version 1 on a fresh install, where no chat alias exists yet."""
@@ -575,7 +579,7 @@ def create_models_app(
         response_class=Response,
         responses=key_errors,
     )
-    async def delete_provider_key(name: Annotated[str, KEY_NAME], p: CurrentPrincipal) -> Response:  # pyright: ignore[reportUnusedFunction]
+    async def delete_provider_key(name: Annotated[str, KEY_NAME], p: CurrentPrincipal, _: Tx) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Deletes a key no provider connection names; 409 naming the connection that still does."""
         account_admin(p)
         using = [r.name for r in await providers.all() if r.key_ref == name]
@@ -593,7 +597,7 @@ def create_models_app(
         response_model=Envelope[list[AliasOut]],
         responses=ERRORS,
     )
-    async def list_aliases() -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_aliases(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok([_alias_view(cur) for cur in await aliases.all_current()])
 
     @app.post(
@@ -604,7 +608,7 @@ def create_models_app(
         response_model=Envelope[AliasRef],
         responses=ERRORS,
     )
-    async def create_alias(body: AliasIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def create_alias(body: AliasIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         if not await aliases.create(body.name, body.kind, _version_fields(body)):
             return refused(409, "alias_exists", f"Alias {body.name} exists; add a version instead.")
         return ok({"name": body.name, "version": 1}, status=201)
@@ -616,7 +620,7 @@ def create_models_app(
         response_model=Envelope[list[AliasOut]],
         responses=ERRORS,
     )
-    async def list_versions(name: str) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_versions(name: str, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         rows = [_alias_view(r) for r in await aliases.versions(name)]
         return ok(rows) if rows else refused(404, "alias_not_found", f"No alias {name}.")
 
@@ -628,7 +632,7 @@ def create_models_app(
         response_model=Envelope[AliasRef],
         responses=ERRORS,
     )
-    async def add_version(name: str, body: AliasVersionIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def add_version(name: str, body: AliasVersionIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         # Versions are immutable: a change is a new version, which replaces the one serving.
         version = await aliases.add_version(name, _version_fields(body))
         if version is None:
@@ -638,7 +642,7 @@ def create_models_app(
     @app.get(
         "/v1/models/keys", dependencies=[guard], tags=["keys"], response_model=Envelope[list[KeyOut]], responses=ERRORS
     )
-    async def list_keys() -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_keys(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok([_key_view(r) for r in await key_store.all()])
 
     @app.post(
@@ -649,7 +653,7 @@ def create_models_app(
         response_model=Envelope[KeySecret],
         responses=ERRORS,
     )
-    async def issue_key(body: KeyIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def issue_key(body: KeyIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         secret = new_secret()
         row = {"id": body.id, "kind": body.kind, "budget": body.budget, "spent": Decimal(0), "status": "active"}
         limits = {"rate_limit_per_minute": body.rate_limit_per_minute, "expires_at": body.expires_at}
@@ -665,7 +669,7 @@ def create_models_app(
         response_model=Envelope[KeyRotated],
         responses=ERRORS,
     )
-    async def rotate_key(key_id: str, body: RotateIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def rotate_key(key_id: str, body: RotateIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         secret = new_secret()
         overlap = body.overlap_seconds if body.overlap_seconds is not None else overlap_seconds
         now = datetime.now(UTC)
@@ -679,6 +683,7 @@ def create_models_app(
         "/v1/models/calls", dependencies=[guard], tags=["calls"], response_model=Envelope[CallPage], responses=ERRORS
     )
     async def list_calls(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         key_id: Annotated[str | None, Query(alias="keyId")] = None,
         alias: str | None = None,
         outcome: str | None = None,
@@ -720,7 +725,7 @@ def create_models_app(
         response_model=Envelope[Admission],
         responses=ERRORS,
     )
-    async def admit(body: AdmitIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def admit(body: AdmitIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """agents-service asks before it opens a thread. An unregistered identity is refused: every caller that
         spends on models needs a key with a budget."""
         key = await key_store.get(body.key_id)
@@ -768,19 +773,30 @@ def create_models_app(
             await self.log("error" if status >= 500 else "denied", code, **(self.version if versioned else {}))
             return refused(status, code, message)
 
+        # After the provider answers, everything the call writes (the region it answered from, the spend, its row) is
+        # one transaction of its own: none is open while the provider works, and the gate's committed before it.
+
         async def settle(self, input_tokens: int, output_tokens: int) -> None:
             spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), self.price)
             tenant = self.tenant if self.key.tenant_budget is not None else None
-            if tenant is not None:
-                with isolation.scope(tenant, None):
-                    await key_store.spend(self.key.id, spend, tenant_id=tenant)
-            else:
-                await key_store.spend(self.key.id, spend)
-            # An Azure answer from another region than its connection names is recorded on the row, not refused.
-            provider = self.provider
-            mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
-            values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
-            await self.log("ok", mismatch[:64] if mismatch else None, **values, **self.version)
+            async with isolation.request_transaction():
+                await self.observed()
+                if tenant is not None:
+                    with isolation.scope(tenant, None):
+                        await key_store.spend(self.key.id, spend, tenant_id=tenant)
+                else:
+                    await key_store.spend(self.key.id, spend)
+                # An Azure answer from another region than its connection names is recorded on the row, not refused.
+                provider = self.provider
+                mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
+                values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+                await self.log("ok", mismatch[:64] if mismatch else None, **values, **self.version)
+
+        async def broke(self, reason: str) -> None:
+            """A stream that ended without settling: the provider failed part-way or the client went."""
+            async with isolation.request_transaction():
+                await self.observed()
+                await self.log("error", reason, **self.version)
 
         async def observed(self) -> None:
             """Records the region an Azure resource answered from on its connection, when it changed."""
@@ -793,8 +809,7 @@ def create_models_app(
         async def failed(self, e: Exception) -> JSONResponse:
             """The provider's failure as the caller gets it, its code also the call-log row's reason."""
             failure = e if isinstance(e, ProviderError) else ProviderError(why="the provider answered an empty stream")
-            await self.observed()
-            await self.log("error", failure.code, **self.version)
+            await self.broke(failure.code)
             return provider_refused(failure)
 
         @property
@@ -922,23 +937,25 @@ def create_models_app(
     ) -> ChatCompletion | Response:
         body = request.model_dump(exclude_unset=True)
         alias_name = request.model
-        gate = await open_gate(
-            authorization,
-            alias_name,
-            "chat",
-            sensitivity=x_data_sensitivity,
-            tenant=x_tenant_id,
-            images=images_in(request.messages),
-            run_cap=x_run_spend_cap,
-            run_id=x_run_id,
-            step_id=x_step_id,
-            thread_id=x_thread_id,
-            request_hash=x_request_hash,
-        )
+        # The gate is one transaction, committed (a refusal's row with it) before the provider is called.
+        async with isolation.request_transaction():
+            gate = await open_gate(
+                authorization,
+                alias_name,
+                "chat",
+                sensitivity=x_data_sensitivity,
+                tenant=x_tenant_id,
+                images=images_in(request.messages),
+                run_cap=x_run_spend_cap,
+                run_id=x_run_id,
+                step_id=x_step_id,
+                thread_id=x_thread_id,
+                request_hash=x_request_hash,
+            )
         if isinstance(gate, JSONResponse):
             return gate
-        alias_row, provider, version = gate.serving, gate.provider, gate.version
-        log, settle, observed, failed = gate.log, gate.settle, gate.observed, gate.failed
+        alias_row, provider = gate.serving, gate.provider
+        settle, broke, failed = gate.settle, gate.broke, gate.failed
         if alias_row.reasoning_effort and "reasoning_effort" not in body:
             body["reasoning_effort"] = alias_row.reasoning_effort
         call_id = new_id("chatcmpl")
@@ -953,7 +970,6 @@ def create_models_app(
                 first = await anext(chunks)
             except (ProviderError, StopAsyncIteration) as e:
                 return await failed(e)
-            await observed()
 
             async def events() -> AsyncIterator[str]:
                 settling: asyncio.Task[None] | None = None
@@ -965,7 +981,8 @@ def create_models_app(
                         yield f"data: {json.dumps(out)}\n\n"
                         pending = await anext(chunks, None)
                     # Spend and the log row are written before the client sees the end: once it has [DONE] it
-                    # disconnects, and Starlette cancels whatever this generator is still awaiting.
+                    # disconnects, and Starlette cancels whatever this generator is still awaiting. A shielded task of
+                    # its own, not background.start: that hands back nothing to await before [DONE].
                     settling = asyncio.ensure_future(settle(usage.input_tokens, usage.output_tokens))
                     await asyncio.shield(settling)
                     yield "data: [DONE]\n\n"
@@ -974,14 +991,13 @@ def create_models_app(
                 finally:
                     if settling is None:
                         # A provider failure or a client gone mid-stream: one error row, shielded from the cancel.
-                        await asyncio.shield(log("error", reason, **version))
+                        await asyncio.shield(broke(reason))
 
             return StreamingResponse(events(), media_type="text/event-stream")
         try:
             done = await provider.complete(alias_row.model_id, body)
         except ProviderError as e:
             return await failed(e)
-        await observed()
         await settle(done.input_tokens, done.output_tokens)
         # `tool_calls` is left unset, not None, when there are none: the route drops unset fields, so the key is absent.
         message = (
@@ -1032,27 +1048,28 @@ def create_models_app(
         """Vectors for one text or a batch, from an alias of kind embedding, through the same key, budget and clearance
         checks as a completion, and one call-log row per request."""
         inputs = [request.input] if isinstance(request.input, str) else list(request.input)
-        gate = await open_gate(
-            authorization,
-            request.model,
-            "embedding",
-            sensitivity=x_data_sensitivity,
-            tenant=x_tenant_id,
-            run_cap=x_run_spend_cap,
-            run_id=x_run_id,
-            step_id=x_step_id,
-        )
+        # The gate is one transaction, committed (a refusal's row with it) before the provider is called.
+        async with isolation.request_transaction():
+            gate = await open_gate(
+                authorization,
+                request.model,
+                "embedding",
+                sensitivity=x_data_sensitivity,
+                tenant=x_tenant_id,
+                run_cap=x_run_spend_cap,
+                run_id=x_run_id,
+                step_id=x_step_id,
+            )
+            if isinstance(gate, Gate) and (not inputs or len(inputs) > MAX_EMBED_INPUTS):
+                gate = await gate.refuse(
+                    400, "invalid_input", f"Send 1 to {MAX_EMBED_INPUTS} texts to embed, not {len(inputs)}."
+                )
         if isinstance(gate, JSONResponse):
             return gate
-        if not inputs or len(inputs) > MAX_EMBED_INPUTS:
-            return await gate.refuse(
-                400, "invalid_input", f"Send 1 to {MAX_EMBED_INPUTS} texts to embed, not {len(inputs)}."
-            )
         try:
             done = await gate.provider.embed(gate.serving.model_id, inputs, request.dimensions)
         except ProviderError as e:
             return await gate.failed(e)
-        await gate.observed()
         await gate.settle(done.input_tokens, 0)
         return Embeddings(
             object="list",

@@ -94,7 +94,7 @@ class CallLog(Store):
 
     async def recent(self, key_id: str) -> int:
         """How many calls the key made in the last minute."""
-        q = sa.select(sa.func.count()).where(t.c.key_id == key_id, t.c.created_at > db_after(-60))
+        q = sa.select(sa.func.count(t.c.id)).where(t.c.key_id == key_id, t.c.created_at > db_after(-60))
         async with self.install_tx(CALL_LOG) as c:
             return int((await c.execute(q)).scalar_one())
 
@@ -114,7 +114,7 @@ class CallLog(Store):
         totals = (
             sa.select(
                 t.c.key_id,
-                sa.func.count().label("calls"),
+                sa.func.count(t.c.id).label("calls"),
                 sa.func.coalesce(sa.func.sum(t.c.cost), 0).label("cost"),
             )
             .where(*where)

@@ -14,7 +14,7 @@ import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import dev_service_signer, mint_service_token
 from ops_models.app import create_models_app
@@ -23,6 +23,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_store.database import open_database
 
 ROOT = Path(__file__).parents[1]
 # agents-service's Ed25519 token for models-service's internal routes (dev key, dev only), naming its tenant.
@@ -79,7 +80,8 @@ class Models:
 
 @pytest.fixture
 async def models(database_url: str) -> AsyncIterator[Models]:
-    engine = create_async_engine(database_url)
+    # open_database, as __main__ opens it: its listeners count each request's statements and transactions.
+    engine = open_database(database_url)
     await seed(engine)
     app = create_models_app(engine, overlap_seconds=2)
     # Every JSON response is checked against the app's own OpenAPI document.
