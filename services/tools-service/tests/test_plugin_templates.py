@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.pool import QueuePool
 
 from ops_identity import Auth, Identity, dev_service_signer, mint_service_token
 from ops_plugin_sdk import Plugin
@@ -311,3 +312,21 @@ async def test_a_pack_with_no_connection_loads_lists_its_templates_and_needs_no_
         ("task_type", "callback"),
     ]
     assert next(t for t in on if t["id"] == "no-advice")["body"]["topics"] == ["investment advice"]
+
+
+async def test_no_connection_is_held_while_the_resources_tab_asks_for_the_teams_copies(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The copies are asked of agents-service and documents-service: no connection is held while they answer.
+    checked_out: list[int] = []
+    asked = FakeCopies.of
+
+    async def watched(self: FakeCopies, *args: str) -> list[dict[str, Any]]:
+        pool = engine.pool
+        assert isinstance(pool, QueuePool)
+        checked_out.append(pool.checkedout())
+        return await asked(self, *args)
+
+    monkeypatch.setattr(FakeCopies, "of", watched)
+    r = await client.get(f"/v1/apps/plugin:{LINKED}/resources", headers=person(tenant, "Ravi Menon", {ON: "builder"}))
+    assert (r.status_code, checked_out) == (200, [0]), r.text
