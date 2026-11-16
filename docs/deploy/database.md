@@ -233,7 +233,10 @@ and creating it needs `STG_FLY_ORG`. The SA password is the app's `MSSQL_SA_PASS
 `<config dir>/test-mssql-sa.txt` (mode 600); `up` generates both on first use. Several builders can share it: each test
 makes its own randomly named database and drops it. A member whose tests start their own OPA (tools-service) gets one
 started on the host for the run. Fly cannot stop an idle machine that has no service, so run `make mssql-remote-down`
-when done. Cost: about 21 USD a month if left running (about 3 cents an hour), about 1 USD a month stopped (the
+when done. Each statement crosses the proxy (about 60 ms a round trip from ewr's neighbourhood), so runs are slow:
+`packages/ops_store` about 11 minutes, kb-service's `store-mssql` list about 12, tools-service's about 20. Timing
+assertions do not hold there: tools-service's `test_statement_budget.py` fails its 2-second open-transaction budget on
+latency alone, and needs `OPS_TEST_HANG_SECONDS=2400` to finish at all. Cost: about 21 USD a month if left running (about 3 cents an hour), about 1 USD a month stopped (the
 volume and the stopped image).
 
 ## Facts that shape it

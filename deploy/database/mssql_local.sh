@@ -77,7 +77,7 @@ case "${1:-}" in
     [ "$gitdir" = "$ROOT/.git" ] || extra+=(-v "$gitdir:$gitdir:ro")
     # The password goes in by name from this process's environment, so it is not on docker's command line.
     MSSQL_SA_PASSWORD="$pw" docker run --rm -v "$ROOT":/src:ro -v ops-mssql-venv:/venv -v ops-mssql-uvcache:/root/.cache/uv \
-      -e MSSQL_SA_PASSWORD -e OPS_MSSQL_SERVER="$addr" ${extra[@]+"${extra[@]}"} \
+      -e MSSQL_SA_PASSWORD -e OPS_MSSQL_SERVER="$addr" -e OPS_TEST_HANG_SECONDS ${extra[@]+"${extra[@]}"} \
       -e OPS_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" \
       -e OPS_TEST_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" -w "/src/$member" "$CLIENT" \
       sh -c 'uv sync -q --frozen --all-packages && /venv/bin/python /src/scripts/test_db.py "$OPS_DATABASE_URL" \
