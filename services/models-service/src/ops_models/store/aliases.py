@@ -8,11 +8,13 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import ListResult, Out
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
-from ops_store.rows import one, rows
+from ops_store.listing import list_page
+from ops_store.rows import one
 from ops_store.store import Store
 
 from .tables import model_aliases as t
@@ -80,13 +82,27 @@ class Aliases(Store):
             q = SERVING.where(t.c.name == name).order_by(t.c.version.desc()).limit(1)
             return await one(c, q, ServingAlias)
 
-    async def all_current(self) -> list[ServingAlias]:
+    async def page(self, params: ListParams) -> ListResult[ServingAlias]:
+        """One page of the aliases' serving versions by name; `search` matches the name, the kind or the model, and
+        `ids` names aliases by name."""
+        query, params = _named(SERVING, t.c.name, params)
         async with self.install_tx(ALIASES, tables=(t, p)) as c:
-            return await rows(c, SERVING.order_by(t.c.name), ServingAlias)
+            page = await list_page(
+                c, query, params, search=(t.c.name, t.c.kind, t.c.model_id), default_sort=t.c.name.asc()
+            )
+        return ListResult[ServingAlias].model_validate(page)
 
-    async def versions(self, name: str) -> list[AliasRow]:
+    async def version_page(self, name: str, params: ListParams) -> ListResult[AliasRow] | None:
+        """One page of `name`'s versions, oldest first; `search` matches the model or the status, and `ids` names
+        versions by number. None when there is no such alias, so an alias whose versions match nothing is told apart
+        from one that does not exist."""
+        query, params = _named(t.select().where(t.c.name == name), t.c.version, params, numbers=True)
         async with self.install_tx(ALIASES, tables=(t,)) as c:
-            return await rows(c, t.select().where(t.c.name == name).order_by(t.c.version), AliasRow)
+            page = await list_page(c, query, params, search=(t.c.model_id, t.c.status), default_sort=t.c.version.asc())
+            # Asked only when nothing matched, so a listed alias costs no statement more.
+            if page["pagination"]["total"] == 0 and not await c.scalar(sa.select(t.c.name).where(t.c.name == name)):
+                return None
+        return ListResult[AliasRow].model_validate(page)
 
     async def create(self, name: str, kind: str, fields: Mapping[str, Any]) -> bool:
         """Version 1 of a new alias; False, and nothing written, when the alias exists."""
@@ -109,6 +125,17 @@ class Aliases(Store):
             await c.execute(t.update().where(t.c.name == name, t.c.status == "current").values(status="retired"))
             await c.execute(t.insert().values(**_row(name, version, last.kind, fields)))
         return version
+
+
+def _named(
+    query: sa.Select[Any], column: sa.Column[Any], params: ListParams, *, numbers: bool = False
+) -> tuple[sa.Select[Any], ListParams]:
+    """`ids` narrowed here, by `column`: an alias version is keyed by (name, version), and list_page picks ids only by
+    a key of one column. The rows ids name are answered whatever the search says, as list_page answers them."""
+    if params.ids is None:
+        return query, params
+    wanted: list[Any] = [int(i) for i in params.ids if i.isdigit()] if numbers else list(params.ids)
+    return query.where(column.in_(wanted)), params.model_copy(update={"ids": None, "search": None})
 
 
 def _row(name: str, version: int, kind: str, fields: Mapping[str, Any]) -> dict[str, Any]:

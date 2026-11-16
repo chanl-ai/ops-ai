@@ -1091,7 +1091,9 @@ def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
     fake_url = f"http://127.0.0.1:{os.environ.get('OPS_FAKE_OPENAI_PORT', '8746')}/v1"
     token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
     with httpx.Client(base_url=f"http://127.0.0.1:{port}", headers={"Authorization": f"Bearer {token}"}) as m:
-        providers = items(data(m.get("/v1/models/providers")))
+        # The connections this needs, by id or by name, rather than one page of them all.
+        asked = ({"ids": FAKE_PROVIDER}, {"search": FAKE_PROVIDER}, {"search": "openai-local"})
+        providers = [p for q in asked for p in items(data(m.get("/v1/models/providers", params=q)))]
         found = next((p for p in providers if FAKE_PROVIDER in (p["id"], p.get("name"))), None)
         if found is None:
             body = {"name": FAKE_PROVIDER, "type": "openai-compatible", "baseUrl": fake_url}
@@ -1117,7 +1119,8 @@ def ensure_fake_aliases(fakes: dict[str, Any]) -> None:
                 data(m.post("/v1/models/aliases", json={"name": alias, "kind": "chat", **wanted}))
                 say("MADE", f"model alias {alias}", f"on {FAKE_PROVIDER}")
                 continue
-            current = data(versions)[-1]
+            # The serving version, which the versions list (oldest first, a page at a time) may not reach.
+            current = items(data(m.get("/v1/models/aliases", params={"ids": alias})))[0]
             if alias != fakes["modelAlias"] and current["providerId"] not in own:
                 # An admin pointed this alias at their own model (the console's model setup): it stays there.
                 say("SKIP", f"model alias {alias}", "left on the model an admin chose")

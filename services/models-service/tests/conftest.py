@@ -136,7 +136,8 @@ class Models:
             page += 1
 
     async def spent(self, key_id: str) -> Decimal:
-        keys = (await self.client.get("/v1/models/keys", headers=SERVICE)).json()["data"]
+        listed = await self.client.get("/v1/models/keys", params={"ids": key_id}, headers=SERVICE)
+        keys = listed.json()["data"]["data"]
         return Decimal(next(k for k in keys if k["id"] == key_id)["spent"])
 
 

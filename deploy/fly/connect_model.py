@@ -91,7 +91,7 @@ def main() -> None:
     with httpx.Client(base_url=a.models_url, headers={"Authorization": f"Bearer {token}"}, timeout=15) as c:
         made = c.post("/v1/models/providers", json={"name": a.provider, "type": a.type, **where})
         if made.status_code == 409:
-            found = _check(c.get("/v1/models/providers"), 200)["data"]
+            found = _check(c.get("/v1/models/providers", params={"search": a.provider}), 200)["data"]["data"]
             pid = next(x["id"] for x in found if x["name"] == a.provider)
             _check(c.put(f"/v1/models/providers/{pid}", json=where), 200)
             print(f"provider {a.provider}: rebound to {a.base_url}")

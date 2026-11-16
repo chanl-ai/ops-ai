@@ -8,10 +8,12 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import ListResult, Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore
-from ops_store.rows import one, rows
+from ops_store.listing import list_page
+from ops_store.rows import one
 from ops_store.store import Store
 
 from .tables import provider_connections as t
@@ -39,9 +41,17 @@ class Providers(Store):
     # A connection's name is unique, so two creates of one name cannot both land (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
-    async def all(self) -> list[ProviderRow]:
+    async def page(
+        self, params: ListParams, *, name: str | None = None, key_ref: str | None = None
+    ) -> ListResult[ProviderRow]:
+        """One page of the connections by name, then id; `search` matches the name or the type, `ids` names
+        connections by id. `name` and `key_ref` keep only the connection of that name or those that sign in with
+        that key."""
+        given = {"name": name, "key_ref": key_ref}
+        query = sa.select(t).where(*(t.c[column] == value for column, value in given.items() if value is not None))
         async with self.install_tx(CONNECTIONS, tables=(t,)) as c:
-            return await rows(c, t.select().order_by(t.c.name), ProviderRow)
+            page = await list_page(c, query, params, search=(t.c.name, t.c.type), default_sort=t.c.name.asc())
+        return ListResult[ProviderRow].model_validate(page)
 
     async def get(self, provider_id: str) -> ProviderRow | None:
         async with self.install_tx(CONNECTIONS, tables=(t,)) as c:

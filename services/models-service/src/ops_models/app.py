@@ -46,6 +46,7 @@ from ops_service_kit.errors import (
 from ops_service_kit.http import (
     Envelope,
     In,
+    ListResult,
     Out,
     error_body,
     error_responses,
@@ -54,7 +55,7 @@ from ops_service_kit.http import (
     operation_id,
 )
 from ops_service_kit.ids import new_id, now_iso
-from ops_service_kit.listing import ListQuery
+from ops_service_kit.listing import ListParams, ListQuery
 from ops_service_kit.logging import get_logger
 from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
@@ -481,12 +482,15 @@ def create_models_app(
         "/v1/models/providers",
         dependencies=[connections_guard],
         tags=["providers"],
-        response_model=Envelope[list[ProviderOut]],
+        response_model=Envelope[ListResult[ProviderOut]],
         responses=connection_errors,
     )
-    async def list_providers(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Every provider connection: where its calls go and the name of the key it signs in with, never a key."""
-        return typed([_provider_view(r) for r in await providers.all()])
+    async def list_providers(_: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The provider connections by name: where their calls go and the name of the key each signs in with, never
+        a key. `search` matches the name or the type; `ids` names connections by id."""
+        page = await providers.page(q)
+        views = [_provider_view(r) for r in page.data]
+        return typed(ListResult[ProviderOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.post(
         "/v1/models/providers",
@@ -548,12 +552,17 @@ def create_models_app(
     key_errors = error_responses({403: "Not an account admin", 409: "A provider connection still uses the key"})
 
     @app.get(
-        "/v1/provider-keys", tags=["provider-keys"], response_model=Envelope[list[ProviderKeyOut]], responses=key_errors
+        "/v1/provider-keys",
+        tags=["provider-keys"],
+        response_model=Envelope[ListResult[ProviderKeyOut]],
+        responses=key_errors,
     )
-    async def list_provider_keys(p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The account's model provider keys by name; a value is never returned."""
+    async def list_provider_keys(p: CurrentPrincipal, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The account's model provider keys by name; a value is never returned. `search` and `ids` match the name."""
         account_admin(p)
-        return typed([_provider_key_view(r) for r in await key_vault.listed(p.tenant_id)])
+        page = await key_vault.page(p.tenant_id, q)
+        views = [_provider_key_view(r.model_dump()) for r in page.data]
+        return typed(ListResult[ProviderKeyOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.put(
         "/v1/provider-keys/{name}",
@@ -651,12 +660,12 @@ def create_models_app(
             fields = {"type": "openai-compatible", "base_url": CHAT_BASES[body.provider], "api_version": None}
             fields["key_ref"] = body.key_name
         name = f"{chat_aliases[0]}-{body.provider}"
-        held = next((r for r in await providers.all() if r.name == name), None)
+        held = next(iter((await providers.page(ListParams(), name=name)).data), None)
         pid = new_id("prov") if held is None else held.id
         if held is None and not await providers.create(
             {"id": pid, "name": name, **fields, "region": None, "created_at": now_iso()}
         ):
-            held = next(r for r in await providers.all() if r.name == name)
+            held = (await providers.page(ListParams(), name=name)).data[0]
         if held is not None:
             pid = held.id
             await providers.rebind(pid, {**fields, "region": None})
@@ -689,7 +698,7 @@ def create_models_app(
     async def delete_provider_key(name: Annotated[str, KEY_NAME], p: CurrentPrincipal, _: Tx) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Deletes a key no provider connection names; 409 naming the connection that still does."""
         account_admin(p)
-        using = [r.name for r in await providers.all() if r.key_ref == name]
+        using = [r.name for r in (await providers.page(ListParams(), key_ref=name)).data]
         if using:
             raise Conflict(f"Provider connection {', '.join(using)} signs in with {name}.", code="key_in_use")
         if not await key_vault.delete(p.tenant_id, name):
@@ -701,11 +710,15 @@ def create_models_app(
         "/v1/models/aliases",
         dependencies=[guard],
         tags=["aliases"],
-        response_model=Envelope[list[AliasOut]],
+        response_model=Envelope[ListResult[AliasOut]],
         responses=ERRORS,
     )
-    async def list_aliases(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return typed([_alias_view(cur) for cur in await aliases.all_current()])
+    async def list_aliases(_: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names
+        aliases by name."""
+        page = await aliases.page(q)
+        views = [_alias_view(r) for r in page.data]
+        return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.post(
         "/v1/models/aliases",
@@ -724,14 +737,17 @@ def create_models_app(
         "/v1/models/aliases/{name}/versions",
         dependencies=[guard],
         tags=["aliases"],
-        response_model=Envelope[list[AliasOut]],
+        response_model=Envelope[ListResult[AliasOut]],
         responses=ERRORS,
     )
-    async def list_versions(name: str, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        rows = [_alias_view(r) for r in await aliases.versions(name)]
-        if not rows:
+    async def list_versions(name: str, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The alias's versions, oldest first. `search` matches the model or the status; `ids` names versions by
+        number. 404 when there is no such alias."""
+        page = await aliases.version_page(name, q)
+        if page is None:
             raise refusal(404, "alias_not_found", f"No alias {name}.")
-        return typed(rows)
+        views = [_alias_view(r) for r in page.data]
+        return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.post(
         "/v1/models/aliases/{name}/versions",
@@ -749,10 +765,18 @@ def create_models_app(
         return typed(AliasRef(name=name, version=version), status=201)
 
     @app.get(
-        "/v1/models/keys", dependencies=[guard], tags=["keys"], response_model=Envelope[list[KeyOut]], responses=ERRORS
+        "/v1/models/keys",
+        dependencies=[guard],
+        tags=["keys"],
+        response_model=Envelope[ListResult[KeyOut]],
+        responses=ERRORS,
     )
-    async def list_keys(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return typed([_key_view(r) for r in await key_store.all()])
+    async def list_keys(_: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The model keys by id, never a secret or its hash. `search` matches the id, the kind or the status; `ids`
+        names keys by id."""
+        page = await key_store.page(q)
+        views = [_key_view(r) for r in page.data]
+        return typed(ListResult[KeyOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.post(
         "/v1/models/keys",

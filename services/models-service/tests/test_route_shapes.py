@@ -31,10 +31,10 @@ async def test_the_alias_list_holds_each_aliases_serving_version_only(models: Mo
     added = await models.client.post(f"/v1/models/aliases/{name}/versions", json=again, headers=SERVICE)
     assert added.json()["data"] == {"name": name, "version": 2}
 
-    r = await models.client.get("/v1/models/aliases", headers=SERVICE)
+    r = await models.client.get("/v1/models/aliases", params={"ids": name}, headers=SERVICE)
 
     assert r.status_code == 200
-    listed = [a for a in r.json()["data"] if a["name"] == name]
+    listed = [a for a in r.json()["data"]["data"] if a["name"] == name]
     assert listed == [
         {
             "name": name,
@@ -50,9 +50,9 @@ async def test_the_alias_list_holds_each_aliases_serving_version_only(models: Mo
             "images": False,
         }
     ]
-    names = [a["name"] for a in r.json()["data"]]
+    names = [a["name"] for a in r.json()["data"]["data"]]
     assert len(names) == len(set(names))
-    assert all(set(a) == ALIAS_KEYS for a in r.json()["data"])
+    assert all(set(a) == ALIAS_KEYS for a in r.json()["data"]["data"])
 
 
 async def test_a_body_takes_camel_or_snake_names_and_refuses_an_unknown_one(models: Models) -> None:
@@ -62,7 +62,8 @@ async def test_a_body_takes_camel_or_snake_names_and_refuses_an_unknown_one(mode
         r = await models.client.post("/v1/models/keys", json=body, headers=SERVICE)
         assert r.status_code == 201, r.text
         assert set(r.json()["data"]) == {"id", "secret"}
-        keys = (await models.client.get("/v1/models/keys", headers=SERVICE)).json()["data"]
+        listed = await models.client.get("/v1/models/keys", params={"ids": body["id"]}, headers=SERVICE)
+        keys = listed.json()["data"]["data"]
         assert next(k for k in keys if k["id"] == body["id"])["rateLimitPerMinute"] == limit
 
     unknown = {**camel, "id": f"workflow:shape-{uuid4().hex[:8]}", "colour": "red"}

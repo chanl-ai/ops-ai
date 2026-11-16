@@ -8,24 +8,29 @@ queries = 0
 ["GET /health/background"]
 queries = 0
 
+# The shared list contract: the page's count and its rows.
 ["GET /v1/models/providers"]
-queries = 2
+queries = 3
 
+# The shared list contract: the page's count and its rows.
 ["GET /v1/provider-keys"]
-queries = 2
+queries = 3
 
 # The key is read in a transaction of its own, closed before the provider is asked for the models it reaches.
 ["GET /v1/provider-keys/{name}/models"]
 queries = 2
 
+# The shared list contract: the page's count and its rows.
 ["GET /v1/models/aliases"]
-queries = 2
+queries = 3
 
+# The shared list contract: the page's count and its rows.
 ["GET /v1/models/aliases/{name}/versions"]
-queries = 2
+queries = 3
 
+# The shared list contract: the page's count and its rows.
 ["GET /v1/models/keys"]
-queries = 2
+queries = 3
 
 # The shared list contract: the page's count, its rows and the per-key totals, each one statement at any size.
 ["GET /v1/models/calls"]

@@ -182,8 +182,10 @@ async def test_the_estimate_prices_the_alias_with_the_callers_tenant_on_the_toke
         claims = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
         if not claims.get("tenant_id"):
             return httpx.Response(401, json={"success": False, "error": {"code": "unauthorized", "message": "no"}})
+        assert (request.url.path, request.url.params.get("ids")) == ("/v1/models/aliases", "extract")
         row = {"status": "current", "inputPerMillion": "0.250000", "outputPerMillion": "2.000000"}
-        return httpx.Response(200, json={"success": True, "data": [row]})
+        paging = {"page": 1, "pageSize": 20, "total": 1, "totalPages": 1, "hasNext": False, "hasPrev": False}
+        return httpx.Response(200, json={"success": True, "data": {"data": [row], "pagination": paging, "facets": {}}})
 
     http = httpx.AsyncClient(base_url="http://models", transport=httpx.MockTransport(models))
     prices = document_types.ModelsPrices(

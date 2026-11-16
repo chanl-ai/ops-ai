@@ -62,9 +62,8 @@ with (
     models({"OPS_MODELS_FAKE_OPENAI_URL": fake_url}) as models_url,
     httpx.Client(base_url=models_url, timeout=30) as api,
 ):
-    providers = data(api.get("/v1/models/providers", headers=SERVICE))
-    local = [p for p in providers if p["id"] == "openai-local"]
-    aliases = {a["name"]: a for a in data(api.get("/v1/models/aliases", headers=SERVICE))}
+    local = data(api.get("/v1/models/providers", params={"ids": "openai-local"}, headers=SERVICE))["data"]
+    aliases = {a["name"]: a for a in data(api.get("/v1/models/aliases", params={"ids": "default"}, headers=SERVICE))["data"]}
     check(
         "the dev seed made connection openai-local at the fake's URL and bound default to it",
         [(p["type"], p["baseUrl"]) for p in local] == [("openai-compatible", fake_url)]

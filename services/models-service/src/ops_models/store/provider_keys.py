@@ -5,14 +5,18 @@ a reference copied to another name or tenant does not open."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
 from ops_policy import CredentialStore, context_of
+from ops_service_kit.http import ListResult, Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.database import Database
 from ops_store.dialect import db_now, locked
+from ops_store.listing import list_page
 from ops_store.store import Store
 
 from .tables import provider_keys as t
@@ -21,6 +25,16 @@ from .tables import provider_keys as t
 ROLE = "ops_models_tenant"
 
 META = (t.c.name, t.c.version, t.c.created_by, t.c.created_at, t.c.rotated_at)
+
+
+class ProviderKeyRow(Out):
+    """A key's name and history, never its value."""
+
+    name: str
+    version: int
+    created_by: str
+    created_at: datetime
+    rotated_at: datetime | None
 
 
 class ProviderKeyStore(Store):
@@ -37,6 +51,13 @@ class ProviderKeyStore(Store):
         async with self.tx() as c:
             rows = await c.execute(sa.select(*META).where(t.c.tenant_id == tenant_id).order_by(t.c.name))
             return [dict(r) for r in rows.mappings()]
+
+    async def page(self, tenant_id: str, params: ListParams) -> ListResult[ProviderKeyRow]:
+        """One page of the account's keys by name; `search` matches the name and `ids` names keys by name."""
+        async with self.tx() as c:
+            query = sa.select(*META).where(t.c.tenant_id == tenant_id)
+            page = await list_page(c, query, params, search=(t.c.name,), default_sort=t.c.name.asc())
+        return ListResult[ProviderKeyRow].model_validate(page)
 
     async def save(self, tenant_id: str, name: str, value: str, *, by: str) -> tuple[dict[str, Any], bool]:
         """Creates the key or replaces its value; returns its history and whether it was new. A replaced value is

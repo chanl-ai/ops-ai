@@ -35,7 +35,9 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc605-cli-fake-"))) as fake_v1:
     with models(install) as base, httpx.Client(base_url=base, timeout=30) as m:
         local = next(
             p
-            for p in m.get("/v1/models/providers", headers=service_headers("models")).json()["data"]
+            for p in m.get(
+                "/v1/models/providers", params={"ids": "openai-local"}, headers=service_headers("models")
+            ).json()["data"]["data"]
             if p["id"] == "openai-local"
         )
         answer = m.post(

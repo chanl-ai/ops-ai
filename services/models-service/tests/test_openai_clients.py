@@ -189,7 +189,7 @@ async def test_an_alias_version_sets_the_reasoning_effort_a_request_leaves_unset
                 "/v1/models/aliases", json=version | ({"reasoningEffort": effort} if effort else {}), headers=SERVICE
             )
             assert made.status_code == 201, made.text
-            listed = (await client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]
+            listed = (await client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
             assert listed[0]["reasoningEffort"] == effort, listed
         _, secret = await models.key(budget="5")
         auth = {"Authorization": f"Bearer {secret}", "X-Tenant-Id": "local"}

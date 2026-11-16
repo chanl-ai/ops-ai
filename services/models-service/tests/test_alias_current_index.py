@@ -16,6 +16,7 @@ from ops_models.seed import SCRIPTED
 from ops_models.store import Aliases
 from ops_models.store.tables import model_aliases
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListParams
 
 from .conftest import Models
 
@@ -35,8 +36,9 @@ async def test_two_versions_leave_one_current_and_a_second_current_is_refused(
     name = f"alias-{uuid4().hex[:8]}"
     assert await aliases.create(name, "chat", FIELDS)
     assert await aliases.add_version(name, FIELDS) == 2
-    versions = await aliases.versions(name)
-    assert [(v.version, v.status) for v in versions] == [(1, "retired"), (2, "current")]
+    versions = await aliases.version_page(name, ListParams())
+    assert versions is not None
+    assert [(v.version, v.status) for v in versions.data] == [(1, "retired"), (2, "current")]
 
     row = {**FIELDS, "name": name, "version": 3, "kind": "chat", "status": "current", "created_at": now_iso()}
     engine = create_async_engine(database_url)

@@ -128,8 +128,8 @@ class Azure:
         )
 
     async def connection(self, provider_id: str) -> dict[str, Any]:
-        rows = (await self.client.get("/v1/models/providers", headers=SERVICE)).json()["data"]
-        return next(r for r in rows if r["id"] == provider_id)
+        listed = await self.client.get("/v1/models/providers", params={"ids": provider_id}, headers=SERVICE)
+        return next(r for r in listed.json()["data"]["data"] if r["id"] == provider_id)
 
 
 async def _azure(models: Models, region: str = "Sweden Central", role: str = "admin") -> AsyncIterator[Azure]:
@@ -213,7 +213,7 @@ async def test_key_never_echoed(models: Models, caplog: pytest.LogCaptureFixture
         pid = await azure.connect()
         alias = await azure.alias(pid)
         plain, streamed = await azure.call(alias), await azure.call(alias, stream=True)
-        listed = await client.get("/v1/models/providers", headers=SERVICE)
+        listed = await client.get("/v1/models/providers", params={"ids": pid}, headers=SERVICE)
         calls = await client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)
     assert plain.status_code == 502 and streamed.status_code == 502
     for text in (plain.text, streamed.text, listed.text, calls.text, caplog.text):
@@ -290,8 +290,8 @@ async def test_account_admin_manages_connections_and_others_are_refused(models: 
     async for admin in _azure(models, role="admin"):
         made = await admin.client.post("/v1/models/providers", json=body | {"name": f"a-{uuid4().hex[:6]}"})
         assert made.status_code == 201, made.text
-        listed = await admin.client.get("/v1/models/providers")
-        assert any(r["region"] == "westeurope" and r["apiVersion"] == "v1" for r in listed.json()["data"])
+        listed = await admin.client.get("/v1/models/providers", params={"ids": made.json()["data"]["id"]})
+        assert any(r["region"] == "westeurope" and r["apiVersion"] == "v1" for r in listed.json()["data"]["data"])
     async for builder in _azure(models, role="builder"):
         refused = await builder.client.post("/v1/models/providers", json=body | {"name": f"b-{uuid4().hex[:6]}"})
         assert refused.status_code == 403, refused.text

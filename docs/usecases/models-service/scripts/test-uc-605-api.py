@@ -65,7 +65,7 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc605-fake-"))) as fake_v1:
             return every_page(m, "/v1/models/calls", headers=S, alias=name)
 
         def connection(pid: str) -> dict[str, Any]:
-            return next(p for p in data(m.get("/v1/models/providers", headers=S)) if p["id"] == pid)
+            return data(m.get("/v1/models/providers", params={"ids": pid}, headers=S))["data"][0]
 
         dated = connect("claims-azure")
         claims = alias("uc605-claims", dated)
@@ -133,7 +133,7 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc605-fake-"))) as fake_v1:
         )
         seen = " ".join(
             [
-                m.get("/v1/models/providers", headers=S).text,
+                json.dumps(every_page(m, "/v1/models/providers", headers=S)),
                 json.dumps(calls(claims)),
                 *(r.text for r in (wrong, no_region, too_old, plain, streamed)),
             ]

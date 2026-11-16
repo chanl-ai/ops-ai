@@ -11,10 +11,12 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import ListResult, Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, locked
-from ops_store.rows import one, rows
+from ops_store.listing import list_page
+from ops_store.rows import one
 from ops_store.store import Store
 
 from .provider_keys import ROLE
@@ -89,9 +91,13 @@ class ModelKeys(Store):
         super().__init__(engine)
         self.shares = KeyShares(engine)
 
-    async def all(self) -> list[KeyRow]:
+    async def page(self, params: ListParams) -> ListResult[KeyRow]:
+        """One page of the keys by id; `search` matches the id, the kind or the status."""
         async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
-            return await rows(c, t.select().order_by(t.c.id), KeyRow)
+            page = await list_page(
+                c, sa.select(t), params, search=(t.c.id, t.c.kind, t.c.status), default_sort=t.c.id.asc()
+            )
+        return ListResult[KeyRow].model_validate(page)
 
     async def get(self, key_id: str) -> KeyRow | None:
         async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:

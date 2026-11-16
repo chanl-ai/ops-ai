@@ -221,7 +221,8 @@ def _models_service() -> httpx.AsyncClient:
 
     def answer(request: httpx.Request) -> httpx.Response:
         rows = [{"name": "bank-standard", "kind": "chat"}, {"name": "bank-embed", "kind": "embedding"}]
-        return httpx.Response(200, json={"success": True, "data": rows})
+        paging = {"page": 1, "pageSize": 20, "total": 2, "totalPages": 1, "hasNext": False, "hasPrev": False}
+        return httpx.Response(200, json={"success": True, "data": {"data": rows, "pagination": paging, "facets": {}}})
 
     return httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://models")
 
@@ -291,10 +292,18 @@ async def test_the_alias_picker_lists_exactly_what_publish_accepts(client: Async
 
 
 async def test_models_service_aliases_are_its_chat_aliases_and_an_outage_is_503() -> None:
+    pages = {
+        "1": [{"name": "bank-embed", "kind": "embedding"}],
+        "2": [{"name": "bank-standard", "kind": "chat"}],
+    }
+
     def answer(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"].startswith("Bearer ")
-        rows = [{"name": "bank-standard", "kind": "chat"}, {"name": "bank-embed", "kind": "embedding"}]
-        return httpx.Response(200, json={"success": True, "data": rows})
+        page = request.url.params.get("page", "1")
+        paging = {"page": int(page), "pageSize": 1, "total": 2, "totalPages": 2}
+        paging |= {"hasNext": page == "1", "hasPrev": page == "2"}
+        listed = {"data": pages[page], "pagination": paging, "facets": {}}
+        return httpx.Response(200, json={"success": True, "data": listed})
 
     def models(handler: Any) -> ServiceClient:
         http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://m")
