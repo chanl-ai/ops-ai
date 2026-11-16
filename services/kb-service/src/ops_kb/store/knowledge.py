@@ -356,6 +356,9 @@ kb_changes = sa.Table(
 )
 
 
+# A change row as it leaves the store: every column but the tenant and team, which the caller already holds.
+CHANGE = tuple(col for col in kb_changes.c if col.name not in ("tenant_id", "team_id"))
+
 kb_runs = sa.Table(
     "kb_runs",
     metadata,
@@ -529,6 +532,27 @@ class VersionRow(Out):
     created_at: datetime
 
 
+class ChangeRow(Out):
+    """A change in the Changes queue: a version a sync applied or holds for review, or a drafted FAQ pair."""
+
+    id: str
+    item_id: str
+    source_id: str
+    title: str
+    section: str
+    from_version: int
+    to_version: int
+    before: str
+    after: str
+    changed_by: str
+    changed_at: datetime
+    origin: str
+    status: str
+    detail: dict[str, JsonValue] | None
+    decided_by: str | None
+    decided_at: datetime | None
+
+
 class SameText(Out):
     """An indexed document of a base this one shares, holding the same text."""
 
@@ -539,7 +563,7 @@ class SameText(Out):
 
 
 class ChangePage(NamedTuple):
-    rows: list[dict[str, Any]]
+    rows: list[ChangeRow]
     total: int
     views: dict[str, int]
     origins: dict[str, int]
@@ -1164,16 +1188,16 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_runs.c.started_at.desc()))).mappings()]
 
-    async def drafts(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+    async def drafts(self, tenant: str, item_id: str) -> list[ChangeRow]:
         """The item's FAQ drafts in every state, oldest first."""
         c = kb_changes
         q = (
-            sa.select(c)
+            sa.select(*CHANGE)
             .where(c.c.tenant_id == tenant, c.c.item_id == item_id, c.c.origin == "faq", team_visible(c))
             .order_by(c.c.changed_at, c.c.id)
         )
         async with self.tx() as conn:
-            return [dict(r) for r in (await conn.execute(q)).mappings()]
+            return await rows(conn, q, ChangeRow)
 
     async def add_drafts(self, tenant: str, rows: list[dict[str, Any]]) -> None:
         if not rows:
@@ -1209,12 +1233,12 @@ class KnowledgeStore(Store):
                 team = await self._team_of(conn, kb_items, tenant, item_id)
                 await conn.execute(sa.insert(u), [{**x, "tenant_id": tenant, "team_id": team} for x in units])
 
-    async def changes(self, tenant: str, *, ids: list[str] | None = None) -> list[dict[str, Any]]:
-        q = sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant, team_visible(kb_changes))
+    async def changes(self, tenant: str, *, ids: list[str] | None = None) -> list[ChangeRow]:
+        q = sa.select(*CHANGE).where(kb_changes.c.tenant_id == tenant, team_visible(kb_changes))
         if ids is not None:
             q = q.where(kb_changes.c.id.in_(ids))
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.order_by(kb_changes.c.changed_at.desc()))).mappings()]
+            return await rows(c, q.order_by(kb_changes.c.changed_at.desc()), ChangeRow)
 
     async def change_page(
         self,
@@ -1271,15 +1295,15 @@ class KnowledgeStore(Store):
             size = max(1, page_size)
             page = max(1, min(page, -(-total // size) or 1))
             q = (
-                sa.select(c)
+                sa.select(*CHANGE)
                 .select_from(joined)
                 .where(*listed)
                 .order_by(c.c.changed_at.desc(), c.c.id)
                 .offset((page - 1) * size)
                 .limit(size)
             )
-            rows = [dict(r) for r in (await conn.execute(q)).mappings()]
-        return ChangePage(rows, total, {"mine": int(mine_n), "open": int(open_n), "resolved": int(done_n)}, facet)
+            found = await rows(conn, q, ChangeRow)
+        return ChangePage(found, total, {"mine": int(mine_n), "open": int(open_n), "resolved": int(done_n)}, facet)
 
 
 # What `kb.changed` carries of a base: its label as other services show it.

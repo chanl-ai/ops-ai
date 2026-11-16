@@ -62,7 +62,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
-from .store.knowledge import ChunkRow
+from .store.knowledge import ChangeRow, ChunkRow
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -1531,9 +1531,9 @@ class KnowledgeService:
                     run.notes.update(n for n in result.notes if "stopped" in n)
         return pieces(who.tenant_id, item_id, version, title, result, self._metadata(s, doc)), result
 
-    async def _drafts(self, who: Who, item_id: str) -> list[dict[str, Any]]:
+    async def _drafts(self, who: Who, item_id: str) -> list[ChangeRow]:
         """The item's FAQ drafts that still stand (a superseded one was replaced by a newer draft of its section)."""
-        return [d for d in await self.store.drafts(who.tenant_id, item_id) if d["status"] != "superseded"]
+        return [d for d in await self.store.drafts(who.tenant_id, item_id) if d.status != "superseded"]
 
     async def _settle_drafts(
         self, who: Who, s: dict[str, Any], item_id: str, rows: list[dict[str, Any]], result: SplitResult
@@ -1549,10 +1549,10 @@ class KnowledgeService:
             detail = detail_of(d)
             if detail.get("sectionDigest") in live:
                 continue
-            if d["status"] == "pending":
-                await self.store.update_change(who.tenant_id, d["id"], {"status": "superseded"})
-            elif d["status"] == "approved":
-                await self.store.update_change(who.tenant_id, d["id"], {"status": "source_changed"})
+            if d.status == "pending":
+                await self.store.update_change(who.tenant_id, d.id, {"status": "superseded"})
+            elif d.status == "approved":
+                await self.store.update_change(who.tenant_id, d.id, {"status": "source_changed"})
         rows_by_index = {int(r["position"]): r for r in rows}
         drafts = [
             {
@@ -1588,14 +1588,14 @@ class KnowledgeService:
         live = await self.store.chunks(who.tenant_id, item_id)
         units: list[dict[str, Any]] = []
         for d in await self._drafts(who, item_id):
-            if d["status"] not in ("approved", "source_changed"):
+            if d.status not in ("approved", "source_changed"):
                 continue
             detail = detail_of(d)
             quote = " ".join(str(detail.get("quote") or "").split()).lower()
             holder = next((c for c in live if quote and quote in " ".join(c.text.split()).lower()), None)
             if holder is None:
                 continue
-            heading = " ".join(p for p in (str(d["title"]), holder.section) if p)
+            heading = " ".join(p for p in (str(d.title), holder.section) if p)
             units.append(
                 {
                     "id": new_id("unt"),
@@ -1616,20 +1616,20 @@ class KnowledgeService:
         """Approve, reject or edit FAQ drafts, each by the knowledge owner of its source. An approved pair is
         searchable at once (embedded with the rest of the tenant's units); an edit keeps it waiting for review."""
         found = {
-            c["id"]: c
+            c.id: c
             for c in await self.store.changes(who.tenant_id, ids=ids)
-            if c["origin"] == "faq" or "held" in detail_of(c)
+            if c.origin == "faq" or "held" in detail_of(c)
         }
         if missing := [i for i in ids if i not in found]:
             raise NotFound(f"No FAQ draft or held change {missing[0]}.")
         items: set[str] = set()
         for change_id in ids:
             d = found[change_id]
-            await self._changeable_source(who, str(d["source_id"]))
-            if d["status"] not in DECIDABLE:
-                raise Conflict(f"That draft is {d['status']}; there is nothing to decide.", code="draft_decided")
+            await self._changeable_source(who, str(d.source_id))
+            if d.status not in DECIDABLE:
+                raise Conflict(f"That draft is {d.status}; there is nothing to decide.", code="draft_decided")
             values: dict[str, Any] = {"decided_by": who.email, "decided_at": datetime.now(UTC)}
-            if d["origin"] == "sync":
+            if d.origin == "sync":
                 # A version a sync held for review: approving indexes it; it cannot be edited.
                 if decision == "edit":
                     raise Conflict("A synced version is approved or rejected, not edited.", code="draft_decided")
@@ -1644,7 +1644,7 @@ class KnowledgeService:
             else:
                 values["status"] = "approved" if decision == "approve" else "rejected"
             await self.store.update_change(who.tenant_id, change_id, values)
-            items.add(str(d["item_id"]))
+            items.add(str(d.item_id))
         for item_id in items:
             await self._faq_units(who, item_id)
         await self.embed_now(who.tenant_id)
@@ -1960,26 +1960,26 @@ class KnowledgeService:
         """A changed version a base feeding this source reviews: kept in Changes as a pending change with the version
         built, while search keeps serving the current one. Approving it indexes the version as built. The same content
         found again (still waiting, or rejected) is not held twice."""
-        held = [c for c in await self.store.changes(who.tenant_id) if c["item_id"] == existing["id"]]
+        held = [c for c in await self.store.changes(who.tenant_id) if c.item_id == existing["id"]]
         digest = str(item["content_digest"])
-        if any(c["origin"] == "sync" and detail_of(c).get("digest") == digest for c in held):
+        if any(c.origin == "sync" and detail_of(c).get("digest") == digest for c in held):
             return {**existing, "unchanged": True}
         for c in held:
-            if c["origin"] == "sync" and c["status"] == "pending":
-                await self.store.update_change(who.tenant_id, str(c["id"]), {"status": "superseded"})
+            if c.origin == "sync" and c.status == "pending":
+                await self.store.update_change(who.tenant_id, str(c.id), {"status": "superseded"})
         payload = {"item": item, "version": version_row, "chunks": chunks}
         detail = {"digest": digest, "held": _json_safe(payload)}
         # Written with the drafts' insert: one change row, waiting for a decision.
         await self.store.add_drafts(who.tenant_id, [{**change, "status": "pending", "detail": detail}])
         return {**existing, "unchanged": True}
 
-    async def _apply_held(self, who: Who, change: dict[str, Any]) -> bool:
+    async def _apply_held(self, who: Who, change: ChangeRow) -> bool:
         """Indexes the version a held change carries, as a sync would have when it found it; False when the document
         moved on since (its version is no longer the one the change started from), and nothing is indexed."""
         held = cast(dict[str, Any], _from_json_safe(detail_of(change)["held"]))
-        current = await self.store.items(who.tenant_id, source_ids=[str(change["source_id"])])
-        now = next((i for i in current if i["id"] == change["item_id"]), None)
-        if now is None or int(now["version"]) != int(change["from_version"]):
+        current = await self.store.items(who.tenant_id, source_ids=[str(change.source_id)])
+        now = next((i for i in current if i["id"] == change.item_id), None)
+        if now is None or int(now["version"]) != int(change.from_version):
             return False
         await self.store.index_version(
             who.tenant_id, held["item"], held["version"], held["chunks"], new=False, change=None
@@ -2397,7 +2397,7 @@ class KnowledgeService:
 
     # ── Changes ──────────────────────────────────────────────────────────
 
-    async def _changes_out(self, who: Who, found: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _changes_out(self, who: Who, found: list[ChangeRow]) -> list[dict[str, Any]]:
         """Changes as the Changes queue shows them; the sources and bases they name are read once for all of them."""
         if not found:
             return []
@@ -2409,52 +2409,52 @@ class KnowledgeService:
     def _change_out(
         self,
         who: Who,
-        ch: dict[str, Any],
+        ch: ChangeRow,
         sources: dict[str, dict[str, Any]],
         bases: dict[str, dict[str, Any]],
         by_source: dict[str, list[str]],
     ) -> dict[str, Any]:
-        s = sources.get(ch["source_id"])
-        kbs = [{"id": k, "name": bases[k]["name"]} for k in by_source.get(ch["source_id"], []) if k in bases]
-        if ch["origin"] == "faq":
+        s = sources.get(ch.source_id)
+        kbs = [{"id": k, "name": bases[k]["name"]} for k in by_source.get(ch.source_id, []) if k in bases]
+        if ch.origin == "faq":
             # Deciding a draft is changing the source, so it takes the right the decide route checks.
             allowed = s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"]
             draft = _draft_out(ch, s, kbs)
-            return {**draft, **self.review_state(s), "canDecide": allowed and ch["status"] in DECIDABLE}
+            return {**draft, **self.review_state(s), "canDecide": allowed and ch.status in DECIDABLE}
         held = "held" in detail_of(ch)
-        waiting = held and ch["status"] in DECIDABLE
+        waiting = held and ch.status in DECIDABLE
         return {
-            "id": ch["id"],
-            "summary": f"{ch['title']} changed from v{ch['from_version']} to v{ch['to_version']}",
+            "id": ch.id,
+            "summary": f"{ch.title} changed from v{ch.from_version} to v{ch.to_version}",
             "origin": SHOWN_ORIGIN["sync"],
-            "proposedBy": ch["changed_by"],
+            "proposedBy": ch.changed_by,
             "rationale": (
                 "A sync found a newer version; it is searched once approved."
                 if held
                 else "A newer file replaced the document when its source was synced."
             ),
-            "documentId": ch["item_id"],
-            "documentTitle": ch["title"],
-            "sourceId": ch["source_id"],
+            "documentId": ch.item_id,
+            "documentTitle": ch.title,
+            "sourceId": ch.source_id,
             "sourceName": s["name"] if s else "",
-            "section": ch["section"],
+            "section": ch.section,
             "kbs": kbs,
-            "fromVersion": f"v{ch['from_version']}",
-            "toVersion": f"v{ch['to_version']}",
-            "before": ch["before"],
-            "after": ch["after"],
+            "fromVersion": f"v{ch.from_version}",
+            "toVersion": f"v{ch.to_version}",
+            "before": ch.before,
+            "after": ch.after,
             "trust": "changed",
             **self.review_state(s),
             "citedBy": [],
             "owner": s["owner"] if s else "",
             # A sync applies its change when it runs, unless a base it feeds holds changes for review.
             "canDecide": waiting and s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"],
-            "status": ch["status"] if held else "approved",
-            "createdAt": _iso(ch["changed_at"]),
+            "status": ch.status if held else "approved",
+            "createdAt": _iso(ch.changed_at),
             **(
                 {
-                    "decidedAt": _iso(ch["decided_at"] or ch["changed_at"]),
-                    "decidedBy": ch["decided_by"] or ch["changed_by"],
+                    "decidedAt": _iso(ch.decided_at or ch.changed_at),
+                    "decidedBy": ch.decided_by or ch.changed_by,
                 }
                 if not waiting
                 else {}
@@ -3097,33 +3097,33 @@ SHOWN_ORIGIN = {"sync": "source_sync", "faq": "generated_faq"}
 CHANGE_ORIGINS = {shown: stored for stored, shown in SHOWN_ORIGIN.items()}
 
 
-def _draft_out(ch: dict[str, Any], s: dict[str, Any] | None, kbs: list[dict[str, Any]]) -> dict[str, Any]:
+def _draft_out(ch: ChangeRow, s: dict[str, Any] | None, kbs: list[dict[str, Any]]) -> dict[str, Any]:
     """An FAQ draft as the Changes queue shows it: the pair, the passage it quotes beside it, and its review state."""
     detail = detail_of(ch)
     return {
-        "id": ch["id"],
+        "id": ch.id,
         "summary": str(detail.get("question") or ""),
         "origin": SHOWN_ORIGIN["faq"],
         "proposedBy": "FAQ drafts",
-        "rationale": f"Drafted from {ch['title']}, {ch['section'] or 'its text'}.",
-        "documentId": ch["item_id"],
-        "documentTitle": ch["title"],
-        "sourceId": ch["source_id"],
+        "rationale": f"Drafted from {ch.title}, {ch.section or 'its text'}.",
+        "documentId": ch.item_id,
+        "documentTitle": ch.title,
+        "sourceId": ch.source_id,
         "sourceName": s["name"] if s else "",
-        "section": ch["section"],
+        "section": ch.section,
         "kbs": kbs,
-        "fromVersion": f"v{ch['from_version']}",
-        "toVersion": f"v{ch['to_version']}",
+        "fromVersion": f"v{ch.from_version}",
+        "toVersion": f"v{ch.to_version}",
         "before": str(detail.get("quote") or ""),
-        "after": ch["after"],
-        "trust": "source_changed" if ch["status"] == "source_changed" else "draft",
+        "after": ch.after,
+        "trust": "source_changed" if ch.status == "source_changed" else "draft",
         "citedBy": [],
         "owner": s["owner"] if s else "",
-        "canDecide": ch["status"] in DECIDABLE,
-        "status": ch["status"],
-        "createdAt": _iso(ch["changed_at"]),
-        "decidedAt": _iso(ch["decided_at"]) if ch.get("decided_at") else None,
-        "decidedBy": ch.get("decided_by"),
+        "canDecide": ch.status in DECIDABLE,
+        "status": ch.status,
+        "createdAt": _iso(ch.changed_at),
+        "decidedAt": _iso(ch.decided_at) if ch.decided_at else None,
+        "decidedBy": ch.decided_by,
         "faq": {
             "question": str(detail.get("question") or ""),
             "answer": str(detail.get("answer") or ""),
@@ -3149,9 +3149,9 @@ def adds_words(answer: str, passage: str) -> list[str]:
     return list(dict.fromkeys(w for w in words if w not in held and w not in _COMMON and len(w) > 2))
 
 
-def detail_of(change: dict[str, Any]) -> dict[str, Any]:
+def detail_of(change: ChangeRow) -> dict[str, Any]:
     """A draft's detail (question, answer, quote, section); empty for a sync's change."""
-    return cast(dict[str, Any], change.get("detail") or {})
+    return cast(dict[str, Any], change.detail or {})
 
 
 def ai_steps_on(settings: IngestSettings) -> bool:
