@@ -16,10 +16,10 @@ CONSOLE = Settings(database_url="sqlite+aiosqlite://").cors_origins[0]
 async def test_a_500_to_the_console_origin_carries_cors_headers(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def broken(_: object) -> object:
+    async def broken(*_: object) -> object:
         raise RuntimeError("store is down")
 
-    monkeypatch.setattr(engine, "definitions", broken)
+    monkeypatch.setattr(engine, "definitions_page", broken)
     res = await client.get("/v1/workflows/definitions", headers={"Origin": CONSOLE})
     assert res.status_code == 500
     assert res.headers.get("access-control-allow-origin") == CONSOLE
