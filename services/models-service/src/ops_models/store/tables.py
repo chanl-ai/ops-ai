@@ -14,6 +14,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from ops_store.dialect import db_now
+from ops_store.listing import LISTED
 from ops_store.schema import TENANT_SCOPED, system
 
 metadata = sa.MetaData()
@@ -144,7 +145,10 @@ model_call_log = sa.Table(
     metadata,
     *_call_columns(),
     sa.Column("tenant_id", sa.String(64)),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), index=True),
+    # The call list sorts on it (`CallLog.page`).
+    sa.Column(
+        "created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), index=True, info=LISTED
+    ),
     # How many images the request carried, refused or sent.
     sa.Column("images", sa.Integer, nullable=False, server_default="0"),
     sa.Index("ix_model_call_log_key_run", "key_id", "run_id"),

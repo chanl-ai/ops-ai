@@ -53,6 +53,7 @@ from ops_service_kit.http import (
     operation_id,
 )
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
@@ -69,6 +70,7 @@ from .schemas import (
     Admission,
     AliasOut,
     AliasRef,
+    CallOut,
     CallPage,
     ChatChoice,
     ChatCompletion,
@@ -83,6 +85,7 @@ from .schemas import (
     KeyOut,
     KeyRotated,
     KeySecret,
+    KeySpend,
     ProviderCreated,
     ProviderKeyOut,
     ProviderOut,
@@ -763,39 +766,39 @@ def create_models_app(
     )
     async def list_calls(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        q: ListQuery,
         key_id: Annotated[str | None, Query(alias="keyId")] = None,
         alias: str | None = None,
         outcome: str | None = None,
         thread_id: Annotated[str | None, Query(alias="threadId")] = None,
-        limit: Annotated[int, Query(ge=1, le=500)] = 100,
     ) -> JSONResponse:
-        rows, totals = await call_log.page(
-            key_id=key_id, alias=alias, outcome=outcome, thread_id=thread_id, limit=limit
-        )
+        """The tenant's calls, newest first (`sortBy=createdAt` with `sortOrder`), and `byKey`: per key, how many
+        calls match and what they cost, across every page."""
+        page = await call_log.page(q, key_id=key_id, alias=alias, outcome=outcome, thread_id=thread_id)
         items = [
-            {
-                "id": r.id,
-                "keyId": r.key_id,
-                "alias": r.alias,
-                "aliasVersion": r.alias_version,
-                "providerModel": r.provider_model,
-                "inputTokens": r.input_tokens,
-                "outputTokens": r.output_tokens,
-                "cost": str(r.cost),
-                "latencyMs": r.latency_ms,
-                "outcome": r.outcome,
-                "reason": r.reason,
-                "runId": r.run_id,
-                "stepId": r.step_id,
-                "threadId": r.thread_id,
-                "requestHash": r.request_hash,
-                "createdAt": _iso(r.created_at),
-                "images": r.images,
-            }
-            for r in rows
+            CallOut(
+                id=r.id,
+                key_id=r.key_id,
+                alias=r.alias,
+                alias_version=r.alias_version,
+                provider_model=r.provider_model,
+                input_tokens=r.input_tokens,
+                output_tokens=r.output_tokens,
+                cost=str(r.cost),
+                latency_ms=r.latency_ms,
+                outcome=r.outcome,
+                reason=r.reason,
+                run_id=r.run_id,
+                step_id=r.step_id,
+                thread_id=r.thread_id,
+                request_hash=r.request_hash,
+                created_at=_iso(r.created_at),
+                images=r.images,
+            )
+            for r in page.data
         ]
-        by_key = [{"keyId": t.key_id, "calls": t.calls, "cost": str(t.cost)} for t in totals]
-        return ok({"items": items, "byKey": by_key})
+        by_key = [KeySpend(key_id=t.key_id, calls=t.calls, cost=str(t.cost)) for t in page.by_key]
+        return typed(CallPage(data=items, pagination=page.pagination, facets=page.facets, by_key=by_key))
 
     @app.post(
         "/v1/models/admit",

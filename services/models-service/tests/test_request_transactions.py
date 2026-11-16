@@ -103,4 +103,4 @@ async def test_the_provider_answers_with_no_transaction_open_between_one_gate_an
     measured = (line["db.tx_count"], line["db.connection_count"])
     assert measured == (row["transactions"], row["connections"]) == (2, 2), "one gate and one settle transaction"
     calls = (await models.client.get("/v1/models/calls", params={"keyId": key_id}, headers=SERVICE)).json()["data"]
-    assert [(c["outcome"], c["inputTokens"]) for c in calls["items"]] == [("ok", 4 if call == "embedding" else 9)]
+    assert [(c["outcome"], c["inputTokens"]) for c in calls["data"]] == [("ok", 4 if call == "embedding" else 9)]

@@ -15,9 +15,11 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import ListResult, Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, background, isolation
 from ops_store.dialect import insert_ignore
+from ops_store.listing import list_page
 from ops_store.rows import rows
 from ops_store.store import Store
 
@@ -70,6 +72,13 @@ class KeyTotal(Out):
     key_id: str
     calls: int
     cost: Decimal
+
+
+class CallList(ListResult[CallRow]):
+    """A page of calls, and per key every matching call's count and cost: a sum over the list, which facets (counts
+    per value) cannot hold."""
+
+    by_key: list[KeyTotal]
 
 
 LISTED = (
@@ -220,17 +229,19 @@ class CallLog(Store):
 
     async def page(
         self,
+        params: ListParams,
         *,
         key_id: str | None = None,
         alias: str | None = None,
         outcome: str | None = None,
         thread_id: str | None = None,
-        limit: int = 100,
-    ) -> tuple[list[CallRow], list[KeyTotal]]:
-        """The tenant's newest `limit` rows that match, and per key the number of matching calls and their cost."""
+    ) -> CallList:
+        """One page of the tenant's matching calls on the shared list contract, newest first, and per key the number
+        of all matching calls and their cost, read in one transaction so the totals count the rows the page counts."""
         given = {"key_id": key_id, "alias": alias, "outcome": outcome, "thread_id": thread_id}
         where = [t.c[name] == value for name, value in given.items() if value]
-        q = sa.select(*LISTED).where(*where).order_by(t.c.created_at.desc()).limit(limit)
+        if params.ids is not None:
+            where.append(t.c.id.in_(params.ids))
         totals = (
             sa.select(
                 t.c.key_id,
@@ -240,5 +251,12 @@ class CallLog(Store):
             .where(*where)
             .group_by(t.c.key_id)
         )
+        # The FROM is named: list_page counts with with_only_columns, which drops a FROM only the columns gave, so a
+        # list with no filter would count one row.
+        query = sa.select(*LISTED).select_from(t).where(*where)
         async with self.tx() as c:
-            return await rows(c, q, CallRow), await rows(c, totals, KeyTotal)
+            page = await list_page(
+                c, query, params, sortable={"createdAt": t.c.created_at}, default_sort=t.c.created_at.desc()
+            )
+            by_key = await rows(c, totals, KeyTotal)
+        return CallList.model_validate({**page, "by_key": by_key})

@@ -8,7 +8,7 @@ from __future__ import annotations
 import secrets
 
 import httpx
-from usecase_harness import TEAM, agents, check, data, finish, models, new_thread, run, service_headers
+from usecase_harness import TEAM, agents, check, data, every_page, finish, models, new_thread, run, service_headers
 
 SERVICE = service_headers("models")
 # Two turns spend the key's minute; the third is over its limit.
@@ -25,7 +25,7 @@ with models() as models_url, httpx.Client(base_url=models_url, timeout=30) as ad
     secret = data(issued)["secret"]
 
     def calls(**params: str) -> list[dict[str, str]]:
-        return data(admin.get("/v1/models/calls", params={"keyId": key_id, **params}, headers=SERVICE))["items"]
+        return every_page(admin, "/v1/models/calls", headers=SERVICE, keyId=key_id, **params)
 
     with agents(models_url=models_url, models_key=secret, model_alias="bank-standard") as api:
         name = f"Reasoning Desk {secrets.token_hex(2)}"

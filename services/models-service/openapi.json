@@ -585,6 +585,7 @@
       },
       "CallPage": {
         "additionalProperties": false,
+        "description": "A page of calls on the shared list contract, and per key the count and cost of every call that matches,\nwhichever page it is on.",
         "properties": {
           "byKey": {
             "items": {
@@ -593,16 +594,31 @@
             "title": "Bykey",
             "type": "array"
           },
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/CallOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         },
         "required": [
-          "items",
+          "data",
+          "pagination",
+          "facets",
           "byKey"
         ],
         "title": "CallPage",
@@ -1633,6 +1649,45 @@
           "cost"
         ],
         "title": "KeySpend",
+        "type": "object"
+      },
+      "Pagination": {
+        "additionalProperties": false,
+        "properties": {
+          "hasNext": {
+            "title": "Hasnext",
+            "type": "boolean"
+          },
+          "hasPrev": {
+            "title": "Hasprev",
+            "type": "boolean"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pageSize": {
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "totalPages": {
+            "title": "Totalpages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "pageSize",
+          "total",
+          "totalPages",
+          "hasNext",
+          "hasPrev"
+        ],
+        "title": "Pagination",
         "type": "object"
       },
       "ProviderCreated": {
@@ -2771,6 +2826,7 @@
     },
     "/v1/models/calls": {
       "get": {
+        "description": "The tenant's calls, newest first (`sortBy=createdAt` with `sortOrder`), and `byKey`: per key, how many\ncalls match and what they cost, across every page.",
         "operationId": "calls_list_calls",
         "parameters": [
           {
@@ -2839,14 +2895,95 @@
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 100,
-              "maximum": 500,
+              "default": 1,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {

@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from ops_service_kit.http import ExternalOut, In, Out, Passthrough
+from ops_service_kit.http import ExternalOut, In, ListResult, Out, Passthrough
 
 
 class Health(Out):
@@ -115,8 +115,10 @@ class KeySpend(Out):
     cost: str
 
 
-class CallPage(Out):
-    items: list[CallOut]
+class CallPage(ListResult[CallOut]):
+    """A page of calls on the shared list contract, and per key the count and cost of every call that matches,
+    whichever page it is on."""
+
     by_key: list[KeySpend]
 
 

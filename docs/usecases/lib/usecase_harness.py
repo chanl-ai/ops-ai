@@ -955,6 +955,20 @@ def data(res: httpx.Response) -> Any:
     return body.get("data") if isinstance(body, dict) else None
 
 
+def every_page(client: httpx.Client, path: str, *, headers: Any = None, **params: Any) -> list[dict[str, Any]]:
+    """Every row of a list on the shared list contract, page by page until `pagination.hasNext` is false; a page
+    holds at most the install's maximum, so one read is not the whole list."""
+    rows: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        body: dict[str, Any] = data(client.get(path, params={**params, "page": page}, headers=headers)) or {}
+        rows += body.get("data") or []
+        paging: dict[str, Any] = body.get("pagination") or {}
+        if not paging.get("hasNext"):
+            return rows
+        page += 1
+
+
 # The four thread calls (POST /v1/threads, POST .../runs/stream, GET .../state, GET /v1/threads).
 SEED = AGENTS_DIR / "tests" / "fixtures" / "seed"
 EMAILS: list[dict[str, Any]] = json.loads((SEED / "dispute_emails.json").read_text())

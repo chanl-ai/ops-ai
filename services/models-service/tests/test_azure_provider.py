@@ -231,7 +231,7 @@ async def test_stream_usage_read_and_annotation_frames_dropped(azure: Azure) -> 
     assert all(c.get("delta") is not None for e in events for c in e["choices"]), "a choice with no delta was passed on"
     usage = events[-1]["usage"]
     rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
-    row = rows["items"][0]
+    row = rows["data"][0]
     assert row["outcome"] == "ok" and row["inputTokens"] > 0 and row["outputTokens"] > 0, row
     assert (row["inputTokens"], row["outputTokens"]) == (usage["prompt_tokens"], usage["completion_tokens"])
 
@@ -266,7 +266,7 @@ async def test_region_mismatch_is_recorded_and_the_call_goes_through(models: Mod
         )
         rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
         expected = "answered from East US, expected swedencentral"
-        assert [(r["outcome"], r["reason"]) for r in rows["items"]] == [("ok", expected)] * 2, rows
+        assert [(r["outcome"], r["reason"]) for r in rows["data"]] == [("ok", expected)] * 2, rows
     # Azure's display name and the region's id are the same region.
     async for azure in _azure(models, region="Sweden Central"):
         pid = await azure.connect(region="swedencentral")
@@ -274,14 +274,14 @@ async def test_region_mismatch_is_recorded_and_the_call_goes_through(models: Mod
         assert (await azure.call(alias)).status_code == 200
         assert (await azure.connection(pid))["observedRegion"] == "Sweden Central"
         rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
-        assert [r["reason"] for r in rows["items"]] == [None]
+        assert [r["reason"] for r in rows["data"]] == [None]
 
 
 async def test_a_connection_without_a_region_answers_and_flags_nothing(azure: Azure) -> None:
     alias = await azure.alias(await azure.connect(region=None))
     assert (await azure.call(alias)).status_code == 200
     rows = (await azure.client.get("/v1/models/calls", params={"alias": alias}, headers=SERVICE)).json()["data"]
-    assert [r["reason"] for r in rows["items"]] == [None]
+    assert [r["reason"] for r in rows["data"]] == [None]
 
 
 async def test_account_admin_manages_connections_and_others_are_refused(models: Models) -> None:

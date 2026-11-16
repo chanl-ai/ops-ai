@@ -27,8 +27,9 @@ queries = 2
 ["GET /v1/models/keys"]
 queries = 2
 
+# The shared list contract: the page's count, its rows and the per-key totals, each one statement at any size.
 ["GET /v1/models/calls"]
-queries = 3
+queries = 4
 
 # The listed exception: a model call is a gate transaction (key, caps, alias, provider key; a refusal's row commits in
 # it), the provider call with no transaction open, then a settle transaction (region, spend, the call's row). One

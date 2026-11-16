@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from usecase_harness import check, fake_openai, finish, models, service_headers
+from usecase_harness import check, every_page, fake_openai, finish, models, service_headers
 
 KEY = "azure-uc605-key-0123456789"
 os.environ["FAKE_OPENAI_API_KEY"] = KEY
@@ -62,7 +62,7 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc605-fake-"))) as fake_v1:
             return m.post("/v1/models/chat/completions", json=body, headers=CALLER)
 
         def calls(name: str) -> list[dict[str, Any]]:
-            return data(m.get("/v1/models/calls", params={"alias": name}, headers=S))["items"]
+            return every_page(m, "/v1/models/calls", headers=S, alias=name)
 
         def connection(pid: str) -> dict[str, Any]:
             return next(p for p in data(m.get("/v1/models/providers", headers=S)) if p["id"] == pid)

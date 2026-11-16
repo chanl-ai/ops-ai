@@ -43,6 +43,7 @@ from usecase_harness import (
     _env,  # pyright: ignore[reportPrivateUsage]
     agents,
     check,
+    every_page,
     fake_openai,
     finish,
     kb,
@@ -227,9 +228,7 @@ def _settled(documents: httpx.Client, eid: str) -> dict[str, Any] | None:
 
 
 def model_calls(model_admin: httpx.Client, run_id: str) -> list[dict[str, Any]]:
-    items = (got(model_admin.get("/v1/models/calls", params={"pageSize": 200}, headers=MODELS_ADMIN)) or {}).get(
-        "items"
-    ) or []
+    items = every_page(model_admin, "/v1/models/calls", headers=MODELS_ADMIN)
     return [c for c in items if c.get("runId") == run_id]
 
 

@@ -123,9 +123,17 @@ class Models:
         )
 
     async def calls(self, key_id: str, tenant: str = "local") -> list[dict[str, Any]]:
-        """The key's calls that `tenant` made, read with a service token naming it."""
-        r = await self.client.get("/v1/models/calls", params={"keyId": key_id}, headers=_service(tenant))
-        return r.json()["data"]["items"]
+        """The key's calls that `tenant` made, every page of them, read with a service token naming it."""
+        found: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            params = {"keyId": key_id, "page": page}
+            r = await self.client.get("/v1/models/calls", params=params, headers=_service(tenant))
+            body = r.json()["data"]
+            found += body["data"]
+            if not body["pagination"]["hasNext"]:
+                return found
+            page += 1
 
     async def spent(self, key_id: str) -> Decimal:
         keys = (await self.client.get("/v1/models/keys", headers=SERVICE)).json()["data"]

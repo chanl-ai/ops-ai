@@ -15,6 +15,7 @@ from sqlalchemy import event
 
 from ops_models.store import CallLog
 from ops_models.store.tables import model_call_log, model_calls_untenanted
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_store.team_scope import InstallScopeError
@@ -47,11 +48,11 @@ async def test_a_tenant_reads_only_its_own_calls_and_the_install_scope_reads_non
         with isolation.scope(tenant, None):
             await log.record(_row(key_id, tenant))
     with isolation.scope(mine, None):
-        rows, totals = await log.page(key_id=key_id)
+        page = await log.page(ListParams(), key_id=key_id)
         async with isolation.isolated_tx(models.engine, role=ROLE) as c:
             q = sa.text("SELECT count(*) FROM model_call_log WHERE key_id = :k")
             seen = (await c.execute(q, {"k": key_id})).scalar_one()
-    assert (len(rows), [t.calls for t in totals], seen) == (1, [1], 1), "a tenant read another tenant's call"
+    assert (len(page.data), [t.calls for t in page.by_key], seen) == (1, [1], 1), "a tenant read another tenant's call"
     with pytest.raises(InstallScopeError):
         async with log.install_tx("probe") as c:
             await c.execute(sa.select(sa.func.count()).select_from(model_call_log))
@@ -94,8 +95,8 @@ async def test_a_call_row_and_its_keys_spend_commit_together_outside_a_request(m
     finally:
         event.remove(models.engine.sync_engine, "before_cursor_execute", refuse_spend)
     with isolation.scope(tenant, None):
-        rows, _ = await log.page(key_id=key_id)
-    assert rows == [], "a call row was kept with no spend counted for its key"
+        page = await log.page(ListParams(), key_id=key_id)
+    assert page.data == [], "a call row was kept with no spend counted for its key"
 
 
 async def test_the_tenants_newest_calls_are_read_from_an_index_that_leads_with_the_tenant(models: Models) -> None:

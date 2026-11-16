@@ -12,7 +12,18 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from usecase_harness import TEAM, agents, check, data, fake_openai, finish, free_port, models, service_headers
+from usecase_harness import (
+    TEAM,
+    agents,
+    check,
+    data,
+    every_page,
+    fake_openai,
+    finish,
+    free_port,
+    models,
+    service_headers,
+)
 
 SERVICE = service_headers("models")
 RUNTIME_KEY = "mk_dev_agents"  # models-service's dev seed: agents-service's own key
@@ -137,7 +148,7 @@ with (
         )
         agents_api.delete(f"/v1/agents/{aid}", headers=TEAM)
 
-    logged = data(api.get("/v1/models/calls", params={"alias": "default"}, headers=SERVICE))["items"]
+    logged = every_page(api, "/v1/models/calls", headers=SERVICE, alias="default")
     check(
         "models-service logged the default calls with provider model default, the failed one as an error",
         {c["providerModel"] for c in logged} == {"default"}

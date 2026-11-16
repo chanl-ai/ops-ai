@@ -182,7 +182,7 @@ async def test_a_call_carries_the_callers_request_hash_and_is_found_by_thread(mo
     r = await models.complete(secret, **{"X-Thread-Id": thread, "X-Request-Hash": "a" * 64}, **LOCAL)
     assert r.status_code == 200
     rows = (await models.client.get("/v1/models/calls", params={"threadId": thread}, headers=SERVICE)).json()
-    assert [(c["keyId"], c["requestHash"]) for c in rows["data"]["items"]] == [(key_id, "a" * 64)]
+    assert [(c["keyId"], c["requestHash"]) for c in rows["data"]["data"]] == [(key_id, "a" * 64)]
 
 
 async def test_one_tenant_spending_its_share_of_a_shared_key_leaves_other_tenants_theirs(models: Models) -> None:
