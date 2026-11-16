@@ -88,12 +88,19 @@ def check_env(path: Path, tree: ast.AST, allowed: Path) -> list[str]:
     if path.resolve() == allowed:
         return []
     out: list[str] = []
+    os_names = {"os"} | {
+        a.asname for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names if a.name == "os" and a.asname
+    }
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Attribute)
             and node.attr in {"environ", "getenv"}
             and isinstance(node.value, ast.Name)
-            and node.value.id == "os"
+            and node.value.id in os_names
+        ) or (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "os"
+            and any(a.name in {"environ", "getenv"} for a in node.names)
         ):
             out.append(f"{_at(path)}:{node.lineno} rule 4: environment read outside {_at(allowed)}")
         if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("dotenv"):
@@ -107,7 +114,11 @@ def check_logging(path: Path, tree: ast.AST) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print":
             out.append(f"{at}:{node.lineno} rule 6: print in package code")
-        if not is_logging_module(path) and isinstance(node, ast.Attribute) and node.attr == "getLogger":
+        if (not is_logging_module(path) and (isinstance(node, ast.Attribute) and node.attr == "getLogger")) or (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "logging"
+            and any(a.name == "getLogger" for a in node.names)
+        ):
             out.append(f"{at}:{node.lineno} rule 6: logging.getLogger outside ops_service_kit.logging")
         if not is_logging_module(path) and isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             out += check_log_call(at, path, node, node.func)

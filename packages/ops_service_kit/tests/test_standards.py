@@ -64,6 +64,18 @@ def test_each_breach_is_named_by_rule(tmp_path: Path) -> None:
         assert any(rule in line for line in found), (rule, found)
 
 
+def test_an_environment_read_or_a_logger_imported_by_name_or_under_another_name_is_found(tmp_path: Path) -> None:
+    source = (
+        "from os import environ, getenv as get\nimport os as o\nfrom logging import getLogger\nkey = o.environ['A']\n"
+    )
+    found = _check(tmp_path, source)
+    assert sorted(line.split(" rule ", 1)[1].split(":")[0] for line in found if " rule " in line) == [
+        "4",
+        "4",
+        "6",
+    ], found
+
+
 def test_a_route_with_no_sign_in_is_found_unless_it_is_listed_public(tmp_path: Path) -> None:
     found = _check(tmp_path, "x = 1\n", _app(guarded=False))
     assert any("/v1/things" in line and "rule 5" in line for line in found), found
