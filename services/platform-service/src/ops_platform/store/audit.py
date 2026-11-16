@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
-from ops_store.rows import rows
+from ops_store.listing import ListPage, list_page
 
 from .tables import api_keys, audit_entries, members, sessions, teams, tenants, users
 from .tenancy import TenantDb
@@ -301,9 +302,10 @@ class AuditLog(TenantDb):
         *,
         account: bool = False,
         filters: dict[str, str | None],
-        page: int,
-        size: int,
-    ) -> tuple[list[AuditEntryRow], int]:
+        params: ListParams,
+    ) -> tuple[ListPage, dict[tuple[str, str], int]]:
+        """One page of the entries on the shared list contract, newest first then by id, and the entries per
+        (action, target kind) the views and facets count, on one transaction. `filters` narrow the page only."""
         where: list[Any] = [_seen(team_id, account)]
         for column in ("action", "actor", "target_kind"):
             if filters.get(column):
@@ -319,8 +321,16 @@ class AuditLog(TenantDb):
         if filters.get("to"):
             where.append(audit_entries.c.at < filters["to"])
         # Names are joined here so the page shows people and targets without a second request per row; an actor or
-        # target removed since keeps its id and shows no name.
+        # target removed since keeps its id and shows no name. audit_entries first: list_page pages by its id.
         actor, person, target = users.alias("actor_user"), users.alias("target_user"), audit_entries.c.target_kind
+        joined = (
+            audit_entries.outerjoin(actor, actor.c.id == audit_entries.c.actor)
+            .outerjoin(teams, teams.c.id == audit_entries.c.team_id)
+            .outerjoin(members, sa.and_(target == "member", members.c.id == audit_entries.c.target_id))
+            .outerjoin(api_keys, sa.and_(target == "api_key", api_keys.c.id == audit_entries.c.target_id))
+            # An access check is about a person: their name, so the line reads "Checked Maya Okafor's access".
+            .outerjoin(person, sa.and_(target == "person", person.c.id == audit_entries.c.target_id))
+        )
         stmt = (
             sa.select(
                 audit_entries,
@@ -329,29 +339,20 @@ class AuditLog(TenantDb):
                 teams.c.name.label("team_name"),
                 sa.func.coalesce(members.c.email, api_keys.c.name, person.c.name).label("target_name"),
             )
-            .outerjoin(actor, actor.c.id == audit_entries.c.actor)
-            .outerjoin(teams, teams.c.id == audit_entries.c.team_id)
-            .outerjoin(members, sa.and_(target == "member", members.c.id == audit_entries.c.target_id))
-            .outerjoin(api_keys, sa.and_(target == "api_key", api_keys.c.id == audit_entries.c.target_id))
-            # An access check is about a person: their name, so the line reads "Checked Maya Okafor's access".
-            .outerjoin(person, sa.and_(target == "person", person.c.id == audit_entries.c.target_id))
+            .select_from(joined)
             .where(*where)
-            .order_by(audit_entries.c.at.desc(), audit_entries.c.id)
-            .limit(size)
-            .offset((page - 1) * size)
         )
-        total = sa.select(sa.func.count()).select_from(audit_entries).where(*where)
         async with self.tenant_tx(tenant_id) as c:
-            found = await rows(c, stmt, AuditEntryRow)
-            count = int((await c.execute(total)).scalar_one())
-        return found, count
+            found = await list_page(c, stmt, params, default_sort=audit_entries.c.at.desc())
+            counts = await _counts(c, team_id, account)
+        return found, counts
 
-    async def counts(self, tenant_id: str, team_id: str, *, account: bool = False) -> dict[tuple[str, str], int]:
-        """Entries per (action, target kind): what the audit page's views and filters count."""
-        q = (
-            sa.select(audit_entries.c.action, audit_entries.c.target_kind, sa.func.count())
-            .where(_seen(team_id, account))
-            .group_by(audit_entries.c.action, audit_entries.c.target_kind)
-        )
-        async with self.tenant_tx(tenant_id) as c:
-            return {(a, k): int(n) for a, k, n in (await c.execute(q)).all()}
+
+async def _counts(c: AsyncConnection, team_id: str, account: bool) -> dict[tuple[str, str], int]:
+    """Entries per (action, target kind): what the audit page's views and filters count."""
+    q = (
+        sa.select(audit_entries.c.action, audit_entries.c.target_kind, sa.func.count())
+        .where(_seen(team_id, account))
+        .group_by(audit_entries.c.action, audit_entries.c.target_kind)
+    )
+    return {(a, k): int(n) for a, k, n in (await c.execute(q)).all()}

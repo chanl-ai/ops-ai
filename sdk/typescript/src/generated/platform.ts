@@ -154,7 +154,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read Audit */
+        /**
+         * Read Audit
+         * @description The team's entries on the shared list contract, newest first then by id; `ids` names entries. The filters
+         *     narrow the page; `facets` and `viewCounts` count every entry the reader may see.
+         */
         get: operations["audit_read_audit"];
         put?: never;
         post?: never;
@@ -4338,7 +4342,11 @@ export interface operations {
                 from?: string | null;
                 to?: string | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

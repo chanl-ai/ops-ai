@@ -4,11 +4,11 @@ is `all` (the platform team). Entries are written by each store in the transacti
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from math import ceil
 from typing import Any
 
 from ops_access import ANY_TEAM
 from ops_service_kit.errors import Forbidden
+from ops_service_kit.listing import ListParams
 
 from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditEntryRow, AuditLog
 from .store.members import Actor, TeamStore
@@ -109,14 +109,14 @@ class AuditReader:
             return False
         return True
 
-    async def page(self, actor: Actor, filters: dict[str, str | None], page: int, size: int) -> dict[str, Any]:
+    async def page(self, actor: Actor, filters: dict[str, str | None], params: ListParams) -> dict[str, Any]:
         await self.members.require_admin(actor, "audit", "view")
         # The acting team's entries; the account's own (no team) only for whoever reads audit in every team, the
         # account admin. No team reads another team's.
         account = await self._account_admin(actor)
-        team = actor.team_id
-        rows, total = await self.log.page(actor.tenant_id, team, account=account, filters=filters, page=page, size=size)
-        counts = await self.log.counts(actor.tenant_id, team, account=account)
+        found, counts = await self.log.page(
+            actor.tenant_id, actor.team_id, account=account, filters=filters, params=params
+        )
         kinds: dict[str, int] = {}
         targets: dict[str, int] = {}
         for (action, target), n in counts.items():
@@ -124,17 +124,9 @@ class AuditReader:
             targets[target] = targets.get(target, 0) + n
         views = {v: sum(n for (a, _), n in counts.items() if a in actions) for v, actions in VIEWS.items()}
         views |= {v: sum(n for (a, _), n in counts.items() if a not in left) for v, left in EVERYTHING_BUT.items()}
-        pages = max(1, ceil(total / size))
         return {
-            "data": [shown(r) for r in rows],
-            "pagination": {
-                "page": page,
-                "pageSize": size,
-                "total": total,
-                "totalPages": pages,
-                "hasNext": page < pages,
-                "hasPrev": page > 1,
-            },
+            "data": [shown(AuditEntryRow.model_validate(r)) for r in found["data"]],
+            "pagination": found["pagination"],
             "facets": {"action": kinds, "targetType": targets},
             "viewCounts": {"all": sum(counts.values()), **views},
         }

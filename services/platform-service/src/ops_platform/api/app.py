@@ -1499,12 +1499,13 @@ def create_public_app(
         target_kind: Annotated[str | None, Query(alias="targetKind", max_length=40)] = None,
         since: Annotated[str | None, Query(alias="from", pattern=ISO_TIME)] = None,
         until: Annotated[str | None, Query(alias="to", pattern=ISO_TIME)] = None,
-        page: Annotated[int, Query(ge=1)] = 1,
-        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 50,
+        q: ListQuery,
     ) -> Any:
+        """The team's entries on the shared list contract, newest first then by id; `ids` names entries. The filters
+        narrow the page; `facets` and `viewCounts` count every entry the reader may see."""
         filters = {"action": action, "kind": kind, "view": view, "actor": actor_id, "target_kind": target_kind}
         filters |= {"from": since, "to": until}
-        return ok(await reader.page(actor, filters, page, page_size))
+        return ok(await reader.page(actor, filters, q))
 
     @app.get("/v1/invites/{token}", tags=["invites"], response_model=Envelope[InvitePreview], responses=ERRORS)
     async def read_invite(token: Annotated[str, Path(pattern=INVITE_TOKEN)]) -> Any:  # pyright: ignore[reportUnusedFunction]

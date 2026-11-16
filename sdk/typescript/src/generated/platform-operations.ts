@@ -84,7 +84,11 @@ export const platformOperations = {
       "from",
       "to",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

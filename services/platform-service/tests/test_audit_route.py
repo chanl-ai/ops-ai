@@ -13,7 +13,7 @@ from ops_platform.store.audit import record
 from ops_platform.store.tables import audit_entries, members, teams
 
 from .conftest import Platform
-from .test_members import as_admin, invite_one, join, member_rows
+from .test_members import as_admin, bearer, invite_one, join, member_rows, team_of
 from .test_permissions import grant
 
 
@@ -181,3 +181,20 @@ async def test_a_write_that_fails_part_way_leaves_no_entry_and_no_change(
             )
         ).scalar_one()
     assert (rows, entries) == (0, 0)
+
+
+async def test_the_audit_list_never_shows_another_teams_or_tenants_entries(platform: Platform) -> None:
+    # A filter or `ids` naming their entries each still answers the acting team's only.
+    admin, h = await as_admin(platform)
+    neighbour = await platform.person(roles=("admin",), tenant_id=admin.tenant_id)
+    _, outsider = await as_admin(platform)
+    heads = [h, {**(await bearer(platform, neighbour)), "X-Team-Id": team_of(neighbour)}, outsider]
+    made: list[str] = []
+    for n, head in enumerate(heads):
+        await invite_one(platform, head, f"scoped{n}@bank.test")
+        [entry] = (await audit(platform, head, action="member.invite"))["data"]
+        made.append(entry["id"])
+    mine, theirs = made[0], set(made[1:])
+    for params in ({}, {"action": "member.invite"}, {"ids": made}, {"pageSize": 50}):
+        listed = {e["id"] for e in (await audit(platform, h, **params))["data"]}
+        assert mine in listed and not listed & theirs, (params, listed)

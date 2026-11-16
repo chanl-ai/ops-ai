@@ -70,7 +70,21 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/audit",
         "pathParams": [],
-        "query": ["action", "kind", "view", "actor", "targetKind", "from", "to", "page", "pageSize"],
+        "query": [
+            "action",
+            "kind",
+            "view",
+            "actor",
+            "targetKind",
+            "from",
+            "to",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
+        ],
         "stream": False,
     },
     "auth_forgot_password": {
@@ -895,6 +909,10 @@ class Operations:
         to: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> AuditPage:
         "Read Audit"
         return self._t.call(
@@ -911,6 +929,10 @@ class Operations:
                 "to": to,
                 "page": page,
                 "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -1404,6 +1426,10 @@ class AsyncOperations:
         to: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> AuditPage:
         "Read Audit"
         return await self._t.call(
@@ -1420,6 +1446,10 @@ class AsyncOperations:
                 "to": to,
                 "page": page,
                 "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
