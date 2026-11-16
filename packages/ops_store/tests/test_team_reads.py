@@ -28,10 +28,8 @@ NOT_YET_MARKED = {
     "service_events",
     # ops_engine: runs and definitions, scoped by the team passed in
     "engine_definitions",
-    # tools-service
-    "send_policies",
-    "send_checks",
-    # the call log: Usage reads it by the acting team passed in; the database lock on it comes later
+    # tools-service: the call log, held to its tenant by the database (tools_0080); Usage reads it by the acting
+    # team passed in
     "gateway_calls",
     # files-service and documents-service: their `team` column
     # platform-service: identity and administration, read by team and role through platform's own routes

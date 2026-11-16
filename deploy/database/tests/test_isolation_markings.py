@@ -40,23 +40,8 @@ WAITING: dict[str, set[str]] = {
         "registry_workflows",
     },
     "tools": {
-        # connect_links, connection_environments, connection_tokens and oauth_states are isolated.
-        "egress_audit",
-        "egress_hosts",
-        "egress_ranges",
-        "gateway_calls",
-        "gateway_fences",
-        "module_approvals",
-        "module_egress_hosts",
-        "module_operations",
-        "module_versions",
-        "operation_mocks",
-        "operation_rate_windows",
-        "plugin_bindings",
-        "send_checks",
-        "send_policies",
-        # Each team's defaults version, team-owned like tool_modules beside it; isolated with them.
-        "team_defaults",
+        # A module with no team is read and called by every team, and the generated team policy reads only the
+        # acting team's rows; it waits for a marking whose policy also reads the tenant's no-team rows.
         "tool_modules",
     },
 }

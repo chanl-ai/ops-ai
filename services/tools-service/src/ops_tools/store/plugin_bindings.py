@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.dialect import upsert
-from ops_store.schema import TEAM_OWNED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import acting_as, any_team, team_visible
 
 from .modules import metadata
@@ -44,7 +44,7 @@ plugin_bindings = sa.Table(
     sa.Column("config_settings", sa.JSON),
     sa.Column("setting_modes", sa.JSON),
     # One team's row, never read across teams: the gateway reads the calling team's only.
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 

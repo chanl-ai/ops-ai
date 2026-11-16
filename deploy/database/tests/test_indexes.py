@@ -41,10 +41,6 @@ WAITING: dict[str, set[str]] = {
         "signin_providers.jit_team_id",
         "signin_providers.tenant_id",
     },
-    "tools": {
-        "connect_links.connection_id",
-        "module_egress_hosts.host",
-    },
 }
 
 

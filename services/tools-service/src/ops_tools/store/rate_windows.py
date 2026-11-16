@@ -17,6 +17,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
+from ops_store.schema import TENANT_SCOPED
 
 from .modules import metadata
 
@@ -28,6 +29,7 @@ operation_rate_windows = sa.Table(
     sa.Column("operation", sa.String(200), primary_key=True),
     sa.Column("window_start", sa.DateTime(timezone=True), primary_key=True),
     sa.Column("calls", sa.Integer, nullable=False),
+    info=TENANT_SCOPED,
 )
 
 

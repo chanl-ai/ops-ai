@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_store import Guarantee
+from ops_store.schema import TENANT_SCOPED
 from ops_store.search import contains
 from ops_store.team_scope import team_visible
 
@@ -38,6 +39,7 @@ def _listed(name: str, key: str, length: int) -> sa.Table:
         # `system` nothing, `managed` anything. Null on a record no template made.
         sa.Column("template_id", sa.String(120), index=True),
         sa.Column("protection", sa.String(16)),
+        info=TENANT_SCOPED,
     )
 
 
@@ -57,6 +59,7 @@ egress_audit = sa.Table(
     sa.Column("action", sa.String(16), nullable=False),
     sa.Column("actor", sa.String(200), nullable=False),
     sa.Column("at", _TS, nullable=False),
+    info=TENANT_SCOPED,
 )
 
 TABLES = {"host": (egress_hosts, egress_hosts.c.host), "range": (egress_ranges, egress_ranges.c.cidr)}

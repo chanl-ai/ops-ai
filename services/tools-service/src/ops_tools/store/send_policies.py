@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .modules import metadata
 
@@ -32,6 +34,7 @@ send_policies = sa.Table(
     sa.Column("text", sa.Text, nullable=False),
     sa.Column("saved_by", sa.String(320), nullable=False),
     sa.Column("saved_at", sa.String(32), nullable=False),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 send_checks = sa.Table(
@@ -44,6 +47,7 @@ send_checks = sa.Table(
     sa.Column("ok", sa.Boolean, nullable=False),
     sa.Column("reason", sa.Text, nullable=False),
     sa.Column("checked_at", sa.String(32), nullable=False),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -57,7 +61,12 @@ class SendPolicies:
 
     async def current(self, tenant_id: str, team_id: str) -> dict[str, Any] | None:
         t = send_policies
-        q = sa.select(t).where(t.c.tenant_id == tenant_id, t.c.team_id == team_id).order_by(t.c.version.desc()).limit(1)
+        q = (
+            sa.select(t)
+            .where(t.c.tenant_id == tenant_id, t.c.team_id == team_id, team_visible(t))
+            .order_by(t.c.version.desc())
+            .limit(1)
+        )
         async with self.engine.connect() as c:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
@@ -67,7 +76,9 @@ class SendPolicies:
         async with self.engine.begin() as c:
             newest = (
                 await c.execute(
-                    sa.select(sa.func.max(t.c.version)).where(t.c.tenant_id == tenant_id, t.c.team_id == team_id)
+                    sa.select(sa.func.max(t.c.version)).where(
+                        t.c.tenant_id == tenant_id, t.c.team_id == team_id, team_visible(t)
+                    )
                 )
             ).scalar()
             row = {
@@ -95,6 +106,7 @@ class SendPolicies:
             t.c.team_id == team_id,
             t.c.input_hash == input_hash,
             t.c.policy_version == version,
+            team_visible(t),
         )
         async with self.engine.connect() as c:
             row = (await c.execute(q)).mappings().first()

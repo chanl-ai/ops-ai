@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
 from ops_store.dialect import upsert
-from ops_store.schema import TEAM_OWNED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import acting_as, any_team, team_visible
 
 from .modules import metadata
@@ -24,7 +24,7 @@ team_defaults = sa.Table(
     sa.Column("team_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("applied_at", sa.DateTime(timezone=True), nullable=False),
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 # Why the sign-in keep-alive reads every team's row: it visits each team that has used this service, then refreshes

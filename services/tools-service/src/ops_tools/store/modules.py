@@ -23,7 +23,7 @@ from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
-from ops_store.schema import TEAM_OWNED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import acting_as, acting_team, any_team, team_visible
 
 metadata = sa.MetaData()
@@ -110,6 +110,8 @@ def _child(name: str, *columns: SchemaItem, **kw: Any) -> sa.Table:
         ),
         sa.Index(f"ix_{name}_module", "tenant_id", "module_id"),
         *columns,
+        # Held to its tenant by the database (tools_0080); read through its module, whose team the query names.
+        info=TENANT_SCOPED,
         **kw,
     )
 
@@ -205,6 +207,7 @@ operation_mocks = sa.Table(
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_at", _TS, nullable=False),
     sa.Index("ix_operation_mocks_operation", "tenant_id", "operation", "environment", "position"),
+    info=TENANT_SCOPED,
 )
 
 # The mock "environment" holding an operation's example answer: what Mock answers when no test mock matches,
@@ -285,6 +288,9 @@ module_egress_hosts = sa.Table(
     sa.ForeignKeyConstraint(
         ["tenant_id", "host"], ["egress_hosts.tenant_id", "egress_hosts.host"], ondelete="RESTRICT"
     ),
+    # Removing a listed host looks up the modules that use it.
+    sa.Index("ix_module_egress_hosts_host", "tenant_id", "host"),
+    info=TENANT_SCOPED,
 )
 
 # The fields of an operation that say how it is called; a staged change to any of them waits for publish.

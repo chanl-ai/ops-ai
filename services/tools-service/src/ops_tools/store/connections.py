@@ -252,6 +252,8 @@ connect_links = sa.Table(
     sa.ForeignKeyConstraint(
         ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
     ),
+    # Deleting a connection finds its links.
+    sa.Index("ix_connect_links_connection", "tenant_id", "connection_id"),
     # A link belongs to the connection's team; another team's link is not found, by the query and by the database.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )

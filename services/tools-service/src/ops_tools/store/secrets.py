@@ -70,6 +70,8 @@ secret_audit = sa.Table(
     # For a use: the tool whose call sent the value.
     sa.Column("tool", sa.String(120)),
     sa.Column("at", _TS, nullable=False),
+    # The retention sweep deletes by age across tenants.
+    sa.Index("ix_secret_audit_at", "at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 

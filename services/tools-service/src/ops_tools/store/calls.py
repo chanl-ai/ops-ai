@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.schema import TENANT_SCOPED, system
 
 metadata = sa.MetaData()
 
@@ -78,6 +79,9 @@ gateway_calls = sa.Table(
     sa.Index("ix_gateway_calls_thread_id", "thread_id"),
     # An approved write acts once per effect scope (tools migration 0017).
     sa.Index("ux_gateway_calls_effect_scope", "tenant_id", "effect_scope", "step", "tool", "input_hash", unique=True),
+    # Held to its tenant by the database (tools_0080); the team a call acted in is a filter of the reads, since a run's
+    # call on a module every team shares is logged in the calling team.
+    info=TENANT_SCOPED,
 )
 
 
@@ -118,6 +122,8 @@ gateway_fences = sa.Table(
     metadata,
     sa.Column("thread_id", sa.String(64), primary_key=True),
     sa.Column("generation", sa.BigInteger(), nullable=False),
+    # A run's lease generation, keyed by its thread id alone: checked and raised inside the claim of any tenant's write.
+    info=system("a thread's lease fence, keyed by thread id; it holds no tenant's record, only a generation number"),
 )
 
 
