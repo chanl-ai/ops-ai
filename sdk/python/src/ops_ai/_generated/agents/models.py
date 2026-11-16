@@ -3887,13 +3887,13 @@ class EnvelopeUnionListGuardrailGuardrailList(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeUnionListWidgetTemplateOutWidgetTemplateList(TypedDict, closed=True):
-    data: list[WidgetTemplateOut] | WidgetTemplateList
+class EnvelopeValidationRun(TypedDict, closed=True):
+    data: ValidationRun
     success: Literal[True]
 
 
-class EnvelopeValidationRun(TypedDict, closed=True):
-    data: ValidationRun
+class EnvelopeWidgetTemplateList(TypedDict, closed=True):
+    data: WidgetTemplateList
     success: Literal[True]
 
 

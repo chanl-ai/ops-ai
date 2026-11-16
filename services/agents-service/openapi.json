@@ -8507,36 +8507,6 @@
         "title": "Envelope[Union[list[Guardrail], GuardrailList]]",
         "type": "object"
       },
-      "Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/WidgetTemplateOut"
-                },
-                "type": "array"
-              },
-              {
-                "$ref": "#/components/schemas/WidgetTemplateList"
-              }
-            ],
-            "title": "Data"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[Union[list[WidgetTemplateOut], WidgetTemplateList]]",
-        "type": "object"
-      },
       "Envelope_UpdateReview_": {
         "additionalProperties": false,
         "properties": {
@@ -8592,6 +8562,25 @@
           "data"
         ],
         "title": "Envelope[ValidationRun]",
+        "type": "object"
+      },
+      "Envelope_WidgetTemplateList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WidgetTemplateList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[WidgetTemplateList]",
         "type": "object"
       },
       "Envelope_WidgetTemplateOut_": {
@@ -52336,6 +52325,7 @@
     },
     "/v1/threads/{thread_id}/inbox": {
       "get": {
+        "description": "The thread's channel messages; another team's or tenant's thread is not found (the store never returns it).",
         "operationId": "threads_get_inbox",
         "parameters": [
           {
@@ -54936,12 +54926,23 @@
     },
     "/v1/widgets": {
       "get": {
-        "description": "The seeded library, then the caller's teams' widgets, newest version each, by name; the agent page's picker\nreads it whole. With `page`, one page of those whose name matches `search`: the seeded library's few matches come\nfirst, then the registry's, whose page and count are queried, not sliced.",
+        "description": "One page of the seeded library, then the caller's teams' widgets, newest version each, by name, on the shared\nlist contract: `search` matches the name and `ids` names widgets exactly. The seeded library is a fixed handful\nheld in memory (seed/widgets.json), so its matches are cut to the page here; the registry's page and count are\nqueried, not sliced.",
         "operationId": "agents_list_widgets",
         "parameters": [
           {
             "in": "query",
             "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
             "required": false,
             "schema": {
               "anyOf": [
@@ -54953,19 +54954,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Page"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "title": "Pagesize"
             }
           },
           {
@@ -54973,9 +54962,65 @@
             "name": "search",
             "required": false,
             "schema": {
-              "default": "",
-              "title": "Search",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -55048,7 +55093,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__"
+                  "$ref": "#/components/schemas/Envelope_WidgetTemplateList_"
                 }
               }
             },
@@ -55340,7 +55385,7 @@
     },
     "/v1/widgets/options": {
       "get": {
-        "description": "The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,\nunretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the\ndraft's tools) is offered disabled with the reason, as a pin of it is refused.",
+        "description": "The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,\nunretired widgets with the content of the version a pin takes, searched and limited in one query. A widget whose\nbuttons need a tool outside `granted` (the draft's tools) is offered disabled with the reason, as a pin of it is\nrefused.",
         "operationId": "agents_widget_options",
         "parameters": [
           {
@@ -55595,6 +55640,7 @@
     },
     "/v1/widgets/{widget_id}": {
       "get": {
+        "description": "Off the request transaction: the team's display name is read from platform-service after the rows.",
         "operationId": "agents_get_widget",
         "parameters": [
           {
@@ -55978,7 +56024,7 @@
     },
     "/v1/widgets/{widget_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for the newest draft; 409 when it is already published, in review or retired.",
+        "description": "Opens a publish request for the newest draft; 409 when it is already published, in review or retired. Off the\nrequest transaction: the team's publish-review policy is read from platform-service between the reads and the\nwrites.",
         "operationId": "agents_request_widget_publish",
         "parameters": [
           {

@@ -304,7 +304,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/widgets",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "agents_publish_preview": {
@@ -2865,14 +2865,28 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def agents_list_widgets(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> WidgetTemplateList:
         "List Widgets"
         return self._t.call(
             SERVICE,
             OPERATIONS["agents_list_widgets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -4250,14 +4264,28 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def agents_list_widgets(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> WidgetTemplateList:
         "List Widgets"
         return await self._t.call(
             SERVICE,
             OPERATIONS["agents_list_widgets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

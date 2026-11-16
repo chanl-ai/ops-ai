@@ -2496,7 +2496,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Inbox */
+        /**
+         * Get Inbox
+         * @description The thread's channel messages; another team's or tenant's thread is not found (the store never returns it).
+         */
         get: operations["threads_get_inbox"];
         put?: never;
         /**
@@ -2744,9 +2747,10 @@ export interface paths {
         };
         /**
          * List Widgets
-         * @description The seeded library, then the caller's teams' widgets, newest version each, by name; the agent page's picker
-         *     reads it whole. With `page`, one page of those whose name matches `search`: the seeded library's few matches come
-         *     first, then the registry's, whose page and count are queried, not sliced.
+         * @description One page of the seeded library, then the caller's teams' widgets, newest version each, by name, on the shared
+         *     list contract: `search` matches the name and `ids` names widgets exactly. The seeded library is a fixed handful
+         *     held in memory (seed/widgets.json), so its matches are cut to the page here; the registry's page and count are
+         *     queried, not sliced.
          */
         get: operations["agents_list_widgets"];
         put?: never;
@@ -2768,8 +2772,9 @@ export interface paths {
         /**
          * Widget Options
          * @description The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,
-         *     unretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the
-         *     draft's tools) is offered disabled with the reason, as a pin of it is refused.
+         *     unretired widgets with the content of the version a pin takes, searched and limited in one query. A widget whose
+         *     buttons need a tool outside `granted` (the draft's tools) is offered disabled with the reason, as a pin of it is
+         *     refused.
          */
         get: operations["agents_widget_options"];
         put?: never;
@@ -2787,7 +2792,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Widget */
+        /**
+         * Get Widget
+         * @description Off the request transaction: the team's display name is read from platform-service after the rows.
+         */
         get: operations["agents_get_widget"];
         put?: never;
         post?: never;
@@ -2813,7 +2821,9 @@ export interface paths {
         put?: never;
         /**
          * Request Widget Publish
-         * @description Opens a publish request for the newest draft; 409 when it is already published, in review or retired.
+         * @description Opens a publish request for the newest draft; 409 when it is already published, in review or retired. Off the
+         *     request transaction: the team's publish-review policy is read from platform-service between the reads and the
+         *     writes.
          */
         post: operations["agents_request_widget_publish"];
         delete?: never;
@@ -6343,16 +6353,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[Union[list[WidgetTemplateOut], WidgetTemplateList]] */
-        Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__: {
-            /** Data */
-            data: components["schemas"]["WidgetTemplateOut"][] | components["schemas"]["WidgetTemplateList"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[UpdateReview] */
         Envelope_UpdateReview_: {
             data: components["schemas"]["UpdateReview"];
@@ -6374,6 +6374,15 @@ export interface components {
         /** Envelope[ValidationRun] */
         Envelope_ValidationRun_: {
             data: components["schemas"]["ValidationRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[WidgetTemplateList] */
+        Envelope_WidgetTemplateList_: {
+            data: components["schemas"]["WidgetTemplateList"];
             /**
              * Success
              * @constant
@@ -27925,9 +27934,12 @@ export interface operations {
     agents_list_widgets: {
         parameters: {
             query?: {
-                page?: number | null;
-                pageSize?: number;
-                search?: string;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -27941,7 +27953,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__"];
+                    "application/json": components["schemas"]["Envelope_WidgetTemplateList_"];
                 };
             };
             /** @description Invalid request */
