@@ -134,10 +134,8 @@ class Leases(RuntimeStore):
         }
         this = thread_leases.c.thread_id == thread_id
         generation, took_over = 0, False
-        # Its own transaction as the login, not `install_tx`: the thread lock is a database function the install
-        # scope's statement check refuses (`isolation.INSTALL_FUNCTIONS`), and it must be held in the lease's own
-        # transaction.
-        async with self.engine.begin() as c:
+        # The thread lock is held in the same transaction as the lease's write, so both end together.
+        async with self._tx() as c:
             await thread_lock(c, thread_id)
             # Each write below is conditional in one statement, so it settles a race by itself where the thread lock
             # takes none (SQLite): the insert does nothing when another made the row, the takeover changes nothing
