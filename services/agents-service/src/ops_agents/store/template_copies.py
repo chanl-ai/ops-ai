@@ -17,7 +17,6 @@ from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
@@ -25,7 +24,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 Kind = Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
 
@@ -73,24 +72,21 @@ sa.Index(
 )
 
 
-class TemplateCopies:
+class TemplateCopies(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def live(self, source: str, template_id: str) -> dict[str, Any] | None:
         """The acting team's live copy of this template, at whatever version it last took, if it has one."""
         t = template_copies
         q = sa.select(t).where(t.c.source == source, t.c.template_id == template_id, LIVE, team_visible(t))
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             found = (await c.execute(q)).mappings().first()
         return dict(found) if found is not None else None
 
     async def of_team(self) -> list[dict[str, Any]]:
         """Every live copy the acting team holds, for the template list's `installed`."""
         t = template_copies
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(sa.select(t).where(LIVE, team_visible(t)))).mappings()]
 
     async def add(
@@ -125,7 +121,7 @@ class TemplateCopies:
             "installed_at": now_iso(),
         }
         try:
-            async with tenant_tx(self.engine) as c:
+            async with self.tx() as c, self.attempt(c):
                 await c.execute(template_copies.insert().values(**row))
         except IntegrityError:
             first = await self.live(source, template_id)
@@ -144,7 +140,7 @@ class TemplateCopies:
         """The acting team's copy row of this record, detached or not, if the record is a copy."""
         t = template_copies
         q = sa.select(t).where(t.c.kind == kind, t.c.record_id == record_id, KEPT, team_visible(t))
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             found = (await c.execute(q)).mappings().first()
         return dict(found) if found is not None else None
 
@@ -161,13 +157,13 @@ class TemplateCopies:
         body it was merged against (never the merged result)."""
         t = template_copies
         values = {"version": version, "digest": digest, "record_digest": record_digest, "base": base}
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(t.update().where(t.c.id == copy_id, team_visible(t)).values(**values))
 
     async def detach(self, copy_id: str, *, by: str) -> dict[str, Any]:
         """Makes the copy the team's own: it is offered no update or reset again. A second call answers the same row."""
         t = template_copies
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 t.update()
                 .where(t.c.id == copy_id, t.c.detached_at.is_(None), team_visible(t))
@@ -178,12 +174,12 @@ class TemplateCopies:
     async def removed(self, copy_id: str) -> None:
         """The copy's record is gone: its row stops counting, so the next install makes a new copy."""
         t = template_copies
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(t.update().where(t.c.id == copy_id, team_visible(t)).values(removed_at=now_iso()))
 
     async def removed_record(self, kind: Kind, record_id: str) -> None:
         """The record a copy made was deleted: its live row, if any, stops counting (called by each delete route)."""
         t = template_copies
         q = t.update().where(t.c.kind == kind, t.c.record_id == record_id, KEPT, team_visible(t))
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(q.values(removed_at=now_iso()))
