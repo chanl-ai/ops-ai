@@ -295,7 +295,8 @@ def create_public_app(
         auth=auth,
         identity=store,
         store=signin_store,
-        http=httpx.AsyncClient(timeout=15, transport=sign.transport),
+        # Identity providers are outside services, so this client is not a ServiceClient; its timeout is the setting's.
+        http=httpx.AsyncClient(timeout=sign.http_timeout_s, transport=sign.transport),
         public_url=sign.public_url,
         console_url=sign.console_url,
         secrets=signin_secrets,
@@ -484,10 +485,7 @@ def create_public_app(
         team_delete_after_days=settings.team_delete_after_days,
     )
     if usage is None:
-        agents_http = httpx.AsyncClient(base_url=settings.endpoint("agents").base, timeout=5)
-        agents = ServiceClient.for_settings(
-            settings, agents_http, service="platform", audience="agents", scopes=["workflows:view"], timeout=5
-        )
+        agents = ServiceClient.for_settings(settings, service="platform", audience="agents", scopes=["workflows:view"])
         usage = AgentsUsage(agents)
     app.state.team_usage = usage
 

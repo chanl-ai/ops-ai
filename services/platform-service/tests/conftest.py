@@ -449,6 +449,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         password_min_length=12,
         flow_ttl_s=600,
         reset_ttl_s=3600,
+        http_timeout_s=15.0,
         public_url=PUBLIC_URL,
         console_url=CONSOLE,
         mcp_url=MCP_URL,

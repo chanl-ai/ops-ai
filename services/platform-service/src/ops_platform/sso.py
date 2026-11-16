@@ -77,7 +77,7 @@ async def guarded_get(http: httpx.AsyncClient, fetch: PublicFetch | None, url: s
     if fetch is not None:
         return await fetch.get(http, url)
     try:
-        r = await http.get(url, timeout=5)
+        r = await http.get(url)
         r.raise_for_status()
     except httpx.HTTPError as e:
         raise ValueError(f"{url} did not answer.") from e

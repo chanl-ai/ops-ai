@@ -90,7 +90,8 @@ async def serve(settings: Settings) -> None:
     # SAML providers' certificates: new ones from metadata, and Security admins told before one ends.
     sign = SignInOptions.from_settings(settings, mail=mail)
     signin_store = SignInStore(store.db)
-    http = httpx.AsyncClient(timeout=15)
+    # Identity providers are outside services: their client is this one, on the sign-in timeout setting.
+    http = httpx.AsyncClient(timeout=sign.http_timeout_s)
     watch = SignInWatch(
         signin_store,
         ProviderMetadata(signin_store, lambda url: guarded_get(http, sign.fetch, url)),
@@ -99,13 +100,10 @@ async def serve(settings: Settings) -> None:
     watching = asyncio.create_task(run_background("signin_watch", watch.once, stop=stop, store=LOCAL_BEATS))
     # Events other services act on (store/relay.py) go to each one this install runs; with no address for a service,
     # its events are delivered by doing nothing.
-    urls = {"tools": settings.tools_url, "agents": settings.agents_url}
     clients = {
-        name: ServiceClient.for_settings(
-            settings, httpx.AsyncClient(base_url=url, timeout=10), service="platform", audience=name, scopes=scopes
-        )
+        name: ServiceClient.for_settings(settings, service="platform", audience=name, scopes=scopes)
         for name, scopes in SCOPES.items()
-        if (url := urls.get(name))
+        if getattr(settings, name) is not None
     }
     relaying = asyncio.create_task(run_relay(platform_relay(store.db.engine, clients), key="platform_relay", stop=stop))
     try:

@@ -420,6 +420,8 @@ class Settings(BaseSettings):
     signin_fetch_ranges: list[str] = Field(default_factory=list[str])
     # Dev only: those fetches reach the local fake identity provider over plain http on loopback, unchecked.
     signin_fetch_local: bool = False
+    # How long one call to an identity provider may take: OIDC discovery and token exchange, SAML metadata.
+    signin_http_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     # Wrong passwords (sign-in and step-up together) a person may type in a window before both refuse them for the
     # lockout time, and reset links one person may be sent per window. A used reset link ends a lock.
     # The service provider's own key pair for SAML, PEM: it signs requests to identity providers that ask for
