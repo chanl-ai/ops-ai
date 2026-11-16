@@ -160,9 +160,7 @@ class Adapter:
         return str(r.json()["data"]["token"])
 
     async def effects(self, tid: str) -> list[tuple[str, str, str]]:
-        return [
-            (r["tool"], r["decision"], r["outcome"]) for r in await self.gateway.log.for_thread(tid, tenant_id="local")
-        ]
+        return [(r.tool, r.decision, r.outcome) for r in await self.gateway.log.for_thread(tid, tenant_id="local")]
 
     async def publish(self, name: str, **human: Any) -> httpx.Response:
         definition = {
@@ -269,8 +267,8 @@ async def test_an_edit_after_approval_voids_the_old_token(adapter: Adapter) -> N
     edited_call = (await adapter.state(tid))["interrupt"]["payload"]["call"]
     assert (await adapter.decide(tid))["status"] == "approved"
     rows = await adapter.gateway.log.for_thread(tid, tenant_id="local")
-    assert [(r["tool"], r["decision"], r["outcome"]) for r in rows] == [("send_reply", "allow", "ok")]
-    assert rows[0]["input_hash"] == input_hash(edited_call["input"])
+    assert [(r.tool, r.decision, r.outcome) for r in rows] == [("send_reply", "allow", "ok")]
+    assert rows[0].input_hash == input_hash(edited_call["input"])
 
 
 # 7. SLA timeout approves.
@@ -359,7 +357,7 @@ async def test_an_agent_interrupt_survives_a_restart_and_resumes_the_same_call(g
         await second_approval(a, tid)
         assert (await a.last_run(tid))["status"] == "done"
         rows = await a.gateway.log.for_thread(tid, tenant_id="local")
-        assert [(r["tool"], r["step"], r["outcome"]) for r in rows] == [("place_wire_hold", pending_key, "ok")]
+        assert [(r.tool, r.step, r.outcome) for r in rows] == [("place_wire_hold", pending_key, "ok")]
         assert a.model.calls - before == 1  # only the closing answer; the approved call is not asked for again
 
 

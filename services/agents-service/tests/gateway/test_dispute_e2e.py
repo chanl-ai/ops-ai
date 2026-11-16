@@ -24,7 +24,7 @@ from ops_agents.store.reviews import review_approvals
 from ops_service_kit.settings import Settings
 from tests.conftest import FakeGraphModels, decide, fixture_knowledge, last_run, scripted_model, sse_events, step_up
 
-from .conftest import SEED, Gateway
+from .conftest import SEED, Gateway, GatewayCall
 
 EMAILS: list[dict[str, Any]] = json.loads((Path(SEED) / "dispute_emails.json").read_text())
 
@@ -76,8 +76,8 @@ async def paused_dispute(client: httpx.AsyncClient) -> tuple[str, dict[str, Any]
     return tid, payload
 
 
-def effects(rows: list[dict[str, Any]]) -> list[tuple[str, str, str]]:
-    return [(r["tool"], r["decision"], r["outcome"]) for r in rows]
+def effects(rows: list[GatewayCall]) -> list[tuple[str, str, str]]:
+    return [(r.tool, r.decision, r.outcome) for r in rows]
 
 
 async def test_dispute_sends_through_the_gateway(runtime: httpx.AsyncClient, gateway: Gateway) -> None:
@@ -96,8 +96,9 @@ async def test_dispute_sends_through_the_gateway(runtime: httpx.AsyncClient, gat
     assert state["values"]["status"] == "replied"
     rows = await gateway.log.for_thread(tid, tenant_id="local")
     assert effects(rows) == [("send_reply", "allow", "ok")]
-    assert rows[0]["step"] == payload["call"]["step"]
-    assert rows[0]["output"]["reference"] == state["values"]["sent"]
+    assert rows[0].step == payload["call"]["step"]
+    out = rows[0].output
+    assert isinstance(out, dict) and out["reference"] == state["values"]["sent"]
 
 
 async def test_crash_after_the_gateway_sent_replays_instead_of_sending_again(
@@ -130,7 +131,7 @@ async def test_crash_after_the_gateway_sent_replays_instead_of_sending_again(
     assert state["values"]["sent"] == crashed[0]
     rows = await gateway.log.for_thread(tid, tenant_id="local")
     assert effects(rows) == [("send_reply", "allow", "ok"), ("send_reply", "allow", "replayed")]
-    assert [r["effect"] for r in rows] == [True, False]
+    assert [r.effect for r in rows] == [True, False]
 
 
 async def test_a_two_approver_write_needs_a_second_person(runtime: httpx.AsyncClient) -> None:

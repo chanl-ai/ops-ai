@@ -25,6 +25,7 @@ from ops_tools.app import create_gateway_app
 from ops_tools.opa import OpaClient
 from ops_tools.registry import ToolRegistry
 from ops_tools.store import CallLog
+from ops_tools.store.calls import GatewayCall
 from ops_tools.tokens import Binding, mint
 from ops_tools.tools import LocalToolRunner
 
@@ -87,7 +88,7 @@ class TenantReadLog(CallLog):
     """tools-service's call log as these tests read it: a store call needs the tenant a request would set, so the
     read sets the one it names, as tools-service's own tests do."""
 
-    async def for_thread(self, thread_id: str, *, tenant_id: str) -> list[dict[str, Any]]:
+    async def for_thread(self, thread_id: str, *, tenant_id: str) -> list[GatewayCall]:
         with tenant_scope(tenant_id):
             return await super().for_thread(thread_id, tenant_id=tenant_id)
 
