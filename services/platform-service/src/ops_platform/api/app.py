@@ -932,7 +932,8 @@ def create_public_app(
     @app.get("/v1/oauth/grants", tags=["oauth"], response_model=Envelope[list[GrantOut]], responses=ERRORS)
     async def oauth_grants(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The assistants the signed-in person has connected, newest first."""
-        return ok(await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso()))
+        found = await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso())
+        return ok([g.model_dump(by_alias=True) for g in found])
 
     @app.delete("/v1/oauth/grants/{grant_id}", tags=["oauth"], status_code=204, responses=ERRORS)
     async def oauth_disconnect(  # pyright: ignore[reportUnusedFunction]
@@ -1070,7 +1071,7 @@ def create_public_app(
     )
     async def list_break_glass(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The Security admins who may sign in by password while company sign-in is required."""
-        return ok(await break_glass.list(actor))
+        return ok([p.model_dump(by_alias=True) for p in await break_glass.list(actor)])
 
     @app.put(
         "/v1/settings/sign-in/break-glass/{user_id}",
@@ -1083,7 +1084,7 @@ def create_public_app(
     ) -> Any:
         """Adds a Security admin to the list (at most three); 422 `break_glass_not_security_admin`,
         `break_glass_full`. Returns the list."""
-        return ok(await break_glass.add(actor, user_id))
+        return ok([p.model_dump(by_alias=True) for p in await break_glass.add(actor, user_id)])
 
     @app.delete(
         "/v1/settings/sign-in/break-glass/{user_id}",
@@ -1095,7 +1096,7 @@ def create_public_app(
         user_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """Takes a person off the list; 409 `break_glass_last` while company sign-in is required. Returns the list."""
-        return ok(await break_glass.remove(actor, user_id))
+        return ok([p.model_dump(by_alias=True) for p in await break_glass.remove(actor, user_id)])
 
     team_admin = TeamAdmin(
         TeamAdminStore(store.db),

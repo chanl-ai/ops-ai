@@ -20,13 +20,16 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy import Row
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
 from .members import Actor, end_membership
@@ -84,10 +87,25 @@ class TrustedCertificate:
     warned: str | None = None
 
 
-def group_settings(config: dict[str, Any]) -> dict[str, Any]:
+def group_settings(config: dict[str, Any]) -> dict[str, JsonValue]:
     """A provider's group settings: `source` (the claim or attribute read) and `onMissing` (keep | remove)."""
-    found: dict[str, Any] = config.get("groups") or {}
-    return found
+    found: JsonValue = config.get("groups")
+    return found if isinstance(found, dict) else {}
+
+
+class BreakGlassRow(Out):
+    """A person on the break-glass list; `last_used_at` is None until they sign in with it."""
+
+    user_id: str
+    email: str
+    added_by: str
+    added_at: str
+    last_used_at: str | None
+
+
+class _TestResult(Out):
+    test_result: dict[str, JsonValue] | None
+    answered_at: str | None
 
 
 @dataclass(frozen=True)
@@ -375,7 +393,7 @@ class SignInStore(TenantDb):
 
     # ── Break-glass ──
 
-    async def break_glass(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def break_glass(self, tenant_id: str) -> list[BreakGlassRow]:
         """The people on the break-glass list, with their email; whether each still counts is the caller's check."""
         b = signin_break_glass.c
         q = (
@@ -384,9 +402,7 @@ class SignInStore(TenantDb):
             .order_by(b.added_at)
         )
         async with self.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(q)).all()
-        keys = ("userId", "email", "addedBy", "addedAt", "lastUsedAt")
-        return [dict(zip(keys, (str(r[0]), str(r[1]), str(r[2]), str(r[3]), r[4]), strict=True)) for r in rows]
+            return await rows(c, q, BreakGlassRow)
 
     async def add_break_glass(self, tenant_id: str, user_id: str, *, actor: str, at: str, request_id: str) -> None:
         async with self.tenant_tx(tenant_id) as c:
@@ -699,7 +715,7 @@ class SignInStore(TenantDb):
         async with self.tenant_tx(flow.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
 
-    async def record_test(self, flow: Flow, result: dict[str, Any], *, at: str) -> bool:
+    async def record_test(self, flow: Flow, result: dict[str, JsonValue], *, at: str) -> bool:
         """Keeps a test flow's result, once and before it expires. Sets no handoff, so no session can follow."""
         async with self.tenant_tx(flow.tenant_id) as c:
             done = await c.execute(
@@ -714,15 +730,15 @@ class SignInStore(TenantDb):
             )
         return bool(done.rowcount)
 
-    async def test_result(self, tenant_id: str, flow_id: str, user_id: str) -> dict[str, Any] | None:
+    async def test_result(self, tenant_id: str, flow_id: str, user_id: str) -> dict[str, JsonValue] | None:
         """A test flow's result for the admin who started it: `waiting` until the provider answers."""
         f = signin_flows.c
         q = sa.select(f.test_result, f.answered_at).where(f.id == flow_id, f.purpose == "test", f.user_id == user_id)
         async with self.tenant_tx(tenant_id) as c:
-            row = (await c.execute(q)).first()
+            row = await one(c, q, _TestResult)
         if row is None:
             return None
-        return dict(row[0]) if row[0] else {"state": "waiting"}
+        return row.test_result or {"state": "waiting"}
 
     async def take(self, flow: Flow, *, browser_hash: str, at: str) -> bool:
         """Spends the handoff, once, for the browser that started the flow, while the flow lives."""

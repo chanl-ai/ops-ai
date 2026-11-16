@@ -9,14 +9,16 @@ in the same transaction.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 
 from ops_access import ANY_TEAM, OWNER, active, encode_grid
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore
+from ops_store.rows import one, rows
 
 from .audit import record
 from .roles import RoleStore, version_in
@@ -99,6 +101,51 @@ class Key:
     scopes: list[str]
     created_by: str
     usable: bool
+
+
+class KeyTarget(Out):
+    """What an API key may start; `version` pins a workflow version, None runs the live one."""
+
+    kind: str
+    id: str
+    version: int | None
+
+
+class _KeyTargetRow(Out):
+    target_kind: str | None
+    target_id: str | None
+    target_version: int | None
+
+
+class LiveGrant(Out):
+    """A live assistant connection; `last_used_at` is None while it still runs on the token its code bought."""
+
+    id: str
+    client_id: str
+    client_name: str
+    team_id: str
+    team_name: str
+    resource: str
+    created_at: str
+    expires_at: str
+    last_used_at: str | None
+
+
+class _GrantSession(Out):
+    id: str
+    client_id: str
+    team_id: str
+    team_name: str
+    resource: str
+    created_at: str
+    expires_at: str
+    last_seen_at: str | None
+    code_used_at: str | None
+
+
+class _ClientName(Out):
+    id: str
+    name: str
 
 
 class IdentityStore:
@@ -341,18 +388,17 @@ class IdentityStore:
             row = (await c.execute(q, {"k": key_id, "now": now_iso()})).first()
         return Key(row[0], row[1], row[2], row[3], list(row[4]), row[5], bool(row[6])) if row else None
 
-    async def key_used(self, key: Key, *, at: str) -> dict[str, Any] | None:
+    async def key_used(self, key: Key, *, at: str) -> KeyTarget | None:
         """Moves the key's last use and returns what it may start, None for a key with no target. Read here,
         under the tenant, so the pre-tenant lookup function keeps returning only what verifying needs."""
         k = api_keys
+        q = sa.select(k.c.target_kind, k.c.target_id, k.c.target_version).where(k.c.id == key.id)
         async with self.db.tenant_tx(key.tenant_id) as c:
             await c.execute(k.update().where(k.c.id == key.id).values(last_used_at=at))
-            row = (
-                await c.execute(sa.select(k.c.target_kind, k.c.target_id, k.c.target_version).where(k.c.id == key.id))
-            ).first()
-        if row is None or not row[0]:
+            row = await one(c, q, _KeyTargetRow)
+        if row is None or not row.target_kind:
             return None
-        return {"kind": str(row[0]), "id": str(row[1]), "version": row[2]}
+        return KeyTarget(kind=row.target_kind, id=str(row.target_id), version=row.target_version)
 
     # ── Assistants at a team's MCP address: registered clients and the grants a person gives them ──
 
@@ -531,7 +577,7 @@ class IdentityStore:
             )
         return True
 
-    async def grants_of(self, tenant_id: str, user_id: str, *, now: str) -> list[dict[str, Any]]:
+    async def grants_of(self, tenant_id: str, user_id: str, *, now: str) -> list[LiveGrant]:
         """A person's live connections, newest first, with the client's name and the team's."""
         s, t, k = sessions, teams, oauth_clients
         q = (
@@ -542,7 +588,7 @@ class IdentityStore:
                 s.c.resource,
                 s.c.created_at,
                 s.c.expires_at,
-                t.c.name,
+                t.c.name.label("team_name"),
                 s.c.last_seen_at,
                 s.c.code_used_at,
             )
@@ -557,19 +603,20 @@ class IdentityStore:
             .order_by(s.c.created_at.desc())
         )
         async with self.db.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(q)).all()
-        names: dict[str, str] = {}
+            live = await rows(c, q, _GrantSession)
         async with self.db.system_tx(SIGNIN_LOOKUP) as c:
-            found = (await c.execute(sa.select(k.c.id, k.c.name).where(k.c.id.in_({r[1] for r in rows})))).all()
-            names = {str(r[0]): str(r[1]) for r in found}
+            clients = await rows(
+                c, sa.select(k.c.id, k.c.name).where(k.c.id.in_({g.client_id for g in live})), _ClientName
+            )
+        names = {n.id: n.name for n in clients}
         return [
-            {
-                "id": r[0], "clientId": r[1], "clientName": names.get(str(r[1]), str(r[1])), "teamId": r[2],
-                "teamName": r[6], "resource": r[3], "createdAt": r[4], "expiresAt": r[5],
+            LiveGrant(
+                id=g.id, client_id=g.client_id, client_name=names.get(g.client_id, g.client_id), team_id=g.team_id,
+                team_name=g.team_name, resource=g.resource, created_at=g.created_at, expires_at=g.expires_at,
                 # A renewal is the use platform-service sees; one still on the token its code bought has none yet.
-                "lastUsedAt": None if r[7] == r[8] else r[7],
-            }
-            for r in rows
+                last_used_at=None if g.last_seen_at == g.code_used_at else g.last_seen_at,
+            )
+            for g in live
         ]  # fmt: skip
 
 

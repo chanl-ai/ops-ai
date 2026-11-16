@@ -308,7 +308,7 @@ class Keys:
             "policies": await PolicyStore(self.store.db).token_values(key.tenant_id),
             # Which key, and what it may start: agents-service records `key:<id>` as a run's starter and refuses
             # anything outside the target.
-            "apiKey": {"id": key.id, "target": target},
+            "apiKey": {"id": key.id, "target": target.model_dump() if target else None},
         }
 
 

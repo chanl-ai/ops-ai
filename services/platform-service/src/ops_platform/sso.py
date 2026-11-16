@@ -22,7 +22,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from pydantic import SecretStr
+from pydantic import JsonValue, SecretStr
 
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unauthorized, ValidationFailed
 from ops_service_kit.logging import get_logger
@@ -358,7 +358,7 @@ class Sso:
     async def _answer(self, flow: Flow, p: Provider, who: VerifiedIdentity) -> str:
         now = _iso(datetime.now(UTC))
         if flow.purpose == TEST:
-            result = {
+            result: dict[str, JsonValue] = {
                 "state": "ok",
                 "subject": who.subject,
                 "email": who.email,
