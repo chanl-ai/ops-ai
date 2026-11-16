@@ -24,7 +24,7 @@ from ops_store.team_scope import team_visible
 
 from .calls import RAN, gateway_calls
 from .connections import connections
-from .modules import module_approvals, module_operations, module_versions, seen_modules, tool_modules
+from .modules import granted, module_approvals, module_operations, module_versions, seen_by, tool_modules
 from .plugin_bindings import plugin_bindings
 from .tenancy import ROLE
 
@@ -70,8 +70,8 @@ def _count(cond: sa.ColumnElement[bool]) -> sa.ColumnElement[int]:
     return sa.func.sum(sa.case((cond, 1), else_=0))
 
 
-def _derived(tenant_id: str, team_id: str, seen_by: str | None, w: Window) -> sa.Subquery:
-    """Every module the acting team (and `seen_by`, when given) sees, one row each, with what the list filters, sorts
+def _derived(tenant_id: str, team_id: str, team: str | None, w: Window) -> sa.Subquery:
+    """Every module the acting team (and `team`, when given) sees, one row each, with what the list filters, sorts
     and counts by. `team_id` is the team whose plugin bindings sign a plugin's module in."""
     t = tool_modules.c
     o = module_operations.c
@@ -196,7 +196,11 @@ def _derived(tenant_id: str, team_id: str, seen_by: str | None, w: Window) -> sa
             sa.case((sa.and_(t.reachable == sa.true(), sa.not_(down)), 1), else_=0).label("reachable"),
         )
         .select_from(joined)
-        .where(seen_modules(tenant_id, seen_by))
+        .where(
+            t.tenant_id == tenant_id,
+            sa.or_(team_visible(tool_modules), granted(tenant_id)),
+            seen_by(tenant_id, team) if team is not None else sa.true(),
+        )
         .subquery("d")
     )
 
@@ -227,7 +231,7 @@ class ModuleList(Store):
         t = tool_modules.c
         views = _views(d, w)
         joined = tool_modules.join(d, sa.and_(d.c.tenant_id == t.tenant_id, d.c.id == t.id))
-        base = sa.select(t.id, d.c.connection_id).select_from(joined)
+        base = sa.select(t.id, d.c.connection_id).select_from(joined).where(team_visible(tool_modules))
         in_view = base.where(views[view]) if view != "all" else base
         wanted = set(q.filters.get("access") or [])
         access = [d.c.reads == 1] * ("read" in wanted) + [d.c.writes == 1] * ("write" in wanted)

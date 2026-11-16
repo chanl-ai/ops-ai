@@ -432,7 +432,7 @@ def _as_team(team_id: str | None) -> Generator[None]:
             yield
 
 
-def _granted(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
+def granted(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
     """Modules approved for one of the acting team's (or `team`'s) workflows: the explicit grant across teams."""
     team = team or acting_team()
     if team is None:
@@ -443,15 +443,11 @@ def _granted(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
     )
 
 
-def seen_modules(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
-    """The modules the acting team reads: its own, workspace-level ones (no team) and those approved for one of its
-    workflows. `team` names the caller's team as well, for a caller whose request reads tenant-wide (the dev header
-    caller): the same three, for that team."""
-    seen = sa.and_(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
-    if team is None:
-        return seen
+def seen_by(tenant_id: str, team: str) -> sa.ColumnElement[bool]:
+    """`team`'s own modules, workspace-level ones (no team) and those approved for one of its workflows, named in the
+    query for a caller whose request reads tenant-wide (the dev header caller); beside `team_visible`, never instead."""
     t = tool_modules.c
-    return sa.and_(seen, sa.or_(t.team_id == team, t.team_id.is_(None), _granted(tenant_id, team)))
+    return sa.or_(t.team_id == team, t.team_id.is_(None), granted(tenant_id, team))
 
 
 def grant_views(now: datetime, expiring: timedelta) -> dict[str, sa.ColumnElement[bool]]:
@@ -546,7 +542,7 @@ class ModuleStore(Store):
         async with self.tx() as c:
             q = (
                 tool_modules.select()
-                .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
+                .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), granted(tenant_id)))
                 .order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
             )
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
@@ -558,7 +554,11 @@ class ModuleStore(Store):
         if not ids:
             return []
         async with self.tx() as c:
-            q = tool_modules.select().where(seen_modules(tenant_id), tool_modules.c.id.in_(list(ids)))
+            q = tool_modules.select().where(
+                tool_modules.c.tenant_id == tenant_id,
+                sa.or_(team_visible(tool_modules), granted(tenant_id)),
+                tool_modules.c.id.in_(list(ids)),
+            )
             rows = {r["id"]: dict(r) for r in (await c.execute(q)).mappings()}
             kids = await self._children(c, tenant_id, list(rows))
         return [{**rows[i], **kids[i]} for i in ids if i in rows]
@@ -574,7 +574,7 @@ class ModuleStore(Store):
         """One page of the approvals on the modules the acting team reads, newest request first, searched by workflow,
         module or requester, in `view`; and how many of them, unsearched, each of `views` holds."""
         a, t = module_approvals.c, tool_modules.c
-        seen = sa.and_(t.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
+        seen = sa.and_(t.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), granted(tenant_id)))
         joined = module_approvals.join(tool_modules, sa.and_(t.tenant_id == a.tenant_id, t.id == a.module_id))
         listed = sa.select(*module_approvals.c, t.display_name.label("module_name")).select_from(joined).where(seen)
         async with self.tx() as c:
@@ -645,7 +645,7 @@ class ModuleStore(Store):
         ops = module_operations.c
         async with self.tx() as c:
             q = sa.select(tool_modules.c.id, tool_modules.c.display_name, tool_modules.c.baseline).where(
-                tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id))
+                tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), granted(tenant_id))
             )
             rows: dict[str, Aggregate] = {
                 r["id"]: {**dict(r), "operations": []} for r in (await c.execute(q)).mappings()
@@ -667,7 +667,7 @@ class ModuleStore(Store):
             q = tool_modules.select().where(
                 tool_modules.c.tenant_id == tenant_id,
                 tool_modules.c.id == module_id,
-                sa.or_(team_visible(tool_modules), _granted(tenant_id)),
+                sa.or_(team_visible(tool_modules), granted(tenant_id)),
             )
             row = (await c.execute(q)).mappings().first()
             if row is None:
@@ -707,7 +707,7 @@ class ModuleStore(Store):
                     .where(
                         module_operations.c.tenant_id == tenant_id,
                         module_operations.c.name == name,
-                        sa.or_(team_visible(tool_modules), _granted(tenant_id)),
+                        sa.or_(team_visible(tool_modules), granted(tenant_id)),
                     )
                 )
                 rows = list((await c.execute(q)).all())
@@ -854,7 +854,7 @@ class ModuleStore(Store):
         q = (
             sa.select(sa.func.count())
             .select_from(tool_modules)
-            .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
+            .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), granted(tenant_id)))
         )
         async with self.tx() as c:
             return int((await c.execute(q)).scalar_one())
