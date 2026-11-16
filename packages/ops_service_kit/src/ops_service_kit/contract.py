@@ -35,7 +35,7 @@ from fastapi.routing import APIRoute, iter_route_contexts
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel
 
-from .http import In, Out, Passthrough
+from .http import In, JsonValue, Out, Passthrough
 
 # The body models that forward their JSON whole to an outside system, named `module.Class`. A `Passthrough` subclass
 # anywhere else is a body finding; a name is added here only in a reviewed change.
@@ -146,9 +146,9 @@ _SCALARS: tuple[type, ...] = (
 
 def _out(t: Any, seen: frozenset[type] = frozenset()) -> bool:
     """Whether a reply type is an `Out` all the way down: an Out whose generic arguments (Envelope[T], ListResult[T])
-    and whose field types are Outs or scalars, or a list, tuple, set, union, Literal or `dict[str, X]` of those. `Any`,
-    `object` and a bare or `Any`-valued dict are not typed."""
-    if get_origin(t) is Literal:
+    and whose field types are Outs or scalars, or a list, tuple, set, union, Literal or `dict[str, X]` of those, or a
+    `JsonValue`. `Any`, `object` and a bare or `Any`-valued dict are not typed."""
+    if t is JsonValue or get_origin(t) is Literal:
         return True
     if isinstance(t, type) and issubclass(t, _SCALARS):
         return True

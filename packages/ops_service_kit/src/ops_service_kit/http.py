@@ -15,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute, iter_route_contexts
 from pydantic import BaseModel, ConfigDict
+from pydantic import JsonValue as _Json
 from pydantic.alias_generators import to_camel
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
@@ -35,6 +36,12 @@ class In(BaseModel):
     parsed JSON in Python mode, where strict refuses an ISO date string, an enum's value and a UUID string."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+
+# Any JSON value (object, list, string, number, boolean or null, nested to any depth): the type of a reply field that
+# holds whatever a function or a document returned (a run's output). It is not `Any`: a value that is not JSON is
+# refused, its schema is the named `JsonValue`, and `contract.boundaries` counts it typed.
+type JsonValue = _Json
 
 
 class Out(BaseModel):

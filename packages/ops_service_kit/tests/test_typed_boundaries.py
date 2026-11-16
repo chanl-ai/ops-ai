@@ -15,11 +15,12 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ops_service_kit import contract
+from ops_service_kit import contract, openapi
 from ops_service_kit.contract import boundaries
 from ops_service_kit.http import (
     Envelope,
     In,
+    JsonValue,
     ListResult,
     Out,
     Passthrough,
@@ -165,3 +166,28 @@ def test_the_walk_follows_fields_raw_bodies_raw_replies_and_unlisted_passthrough
 def test_a_passthrough_on_the_named_list_is_let_through(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(contract, "PASSTHROUGH", frozenset({f"{Forwarded.__module__}.{Forwarded.__qualname__}"}))
     assert ("body", "forwarded") not in boundaries(planted())
+
+
+class RunOut(Out):
+    output: JsonValue
+
+
+async def test_a_reply_field_holding_any_json_value_is_typed_and_checked() -> None:
+    # A function's result is whatever JSON it returned: JsonValue types it without Any, and the reply still has to
+    # be JSON (the checker refuses nothing a JSON value may be, and the walk and the gate count the route typed).
+    api = FastAPI(generate_unique_id_function=operation_id)
+    install_error_handlers(api)
+
+    @api.get("/run", response_model=Envelope[RunOut])
+    async def run_read() -> JSONResponse:
+        return ok({"output": {"rows": [1, 2.5, None, "x", True], "nested": {"deep": []}}})
+
+    assert boundaries(api) == []
+    [op] = [m for p in api.openapi()["paths"].values() for m in p.values()]
+    assert openapi.typed(op)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(api),
+        base_url="http://kit",
+        event_hooks={"response": [contract.response_checker(api)]},
+    ) as client:
+        assert (await client.get("/run")).json()["data"]["output"]["nested"] == {"deep": []}
