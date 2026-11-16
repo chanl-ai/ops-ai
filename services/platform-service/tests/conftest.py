@@ -284,6 +284,8 @@ class SignInRig:
     admin: dict[str, str]
     app: FastAPI
     resolver: RigResolver
+    # The engine the app's own stores use (`engine` is the superuser's, for setting rows up).
+    app_engine: AsyncEngine
     # A domain of this run's own: email domains are unique across tenants, and the test database outlives a run.
     zone: str = field(default_factory=lambda: f"{secrets.token_hex(4)}.bank.test")
 
@@ -519,7 +521,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         # The client secret the OIDC providers name, saved by the workspace's Security admin.
         saved = await pub.put(f"/v1/settings/sign-in/secrets/{OIDC_SECRET}", json={"value": "s3cret"}, headers=headers)
         assert saved.status_code == 200, saved.text
-        yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public, resolver)
+        yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public, resolver, store.db.engine)
     stop_dns.set()
     await store.close()
 

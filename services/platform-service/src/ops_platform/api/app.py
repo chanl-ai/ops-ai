@@ -1395,7 +1395,6 @@ def create_public_app(
 
     @app.post("/v1/workspace/close", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS)
     async def close_workspace(  # pyright: ignore[reportUnusedFunction]
-        _: Tx,
         body: WorkspaceCloseIn,
         actor: Annotated[Actor, Depends(on_workspace)],
         reader: Annotated[UsageReader, Depends(team_usage)],

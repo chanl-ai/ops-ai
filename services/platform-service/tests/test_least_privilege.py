@@ -128,7 +128,7 @@ async def test_sign_in_lookups_work_as_the_app_role(app_url: str, signin: SignIn
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=public), base_url=PUBLIC_URL) as pub:
             rig = SignInRig(
                 pub, signin.idp, signin.mail, signin.engine, signin.tenant, signin.security_team, signin.ops_team,
-                signin.admin, public, signin.resolver,
+                signin.admin, public, signin.resolver, store.db.engine,
             )  # fmt: skip
             r = await pub.post("/v1/auth/options", json={"email": f"x@least.{signin.zone}"})
             assert r.json()["data"]["sso"] == {"kind": "oidc", "label": "Bank SSO"}, r.text
