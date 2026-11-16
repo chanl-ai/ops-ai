@@ -153,6 +153,9 @@ class Out(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 ```
 
+A body or reply in another system's wire format (OpenAI's `finish_reason`) takes `ExternalIn` or `ExternalOut`: the
+same refusal of unknown fields, with field names as declared instead of camelCase. Both count as `In` and `Out`.
+
 Check: `uv run python scripts/check_typed_boundaries.py --strict`: `extra="allow"` outside the kit's `Passthrough`, and
 every route whose JSON body is not an `In` (`ops_service_kit.contract.boundaries`), beyond the service's
 `typed-boundaries-baseline.txt`. It catches `dict[str, Any]`, `asyncio.gather`, `create_task`, `getLogger` and

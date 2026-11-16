@@ -46,6 +46,21 @@ class Out(BaseModel):
     )
 
 
+class ExternalIn(In):
+    """A body in an outside system's wire format (OpenAI's `max_tokens`): field names as declared, no camelCase alias,
+    and an unknown field still answers 400."""
+
+    model_config = ConfigDict(alias_generator=None)
+
+
+class ExternalOut(Out):
+    """A reply in an outside system's wire format (OpenAI's `finish_reason`, `prompt_tokens`): field names as declared,
+    no camelCase alias. Its schema matches a plain `extra="forbid"` model's, so converting one leaves the document as
+    it is."""
+
+    model_config = ConfigDict(alias_generator=None)
+
+
 class Passthrough(In):
     """A body forwarded whole to an outside system: the one reviewed exception to extra="forbid"."""
 

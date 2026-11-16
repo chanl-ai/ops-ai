@@ -193,6 +193,10 @@ class Passthrough(In):
     """A body forwarded whole to an outside system: the one reviewed exception to extra="forbid"."""
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="allow")
 
+class ExternalIn(In):   # ExternalOut(Out) likewise
+    """A body in an outside system's wire format: field names as declared, no camelCase alias, extras refused."""
+    model_config = ConfigDict(alias_generator=None)
+
 # packages/ops_store/src/ops_store/rows.py
 async def rows(conn: AsyncConnection, stmt: sa.Select[Any], model: type[M]) -> list[M]:
     """The only way a row leaves a store: the mapping validated through TypeAdapter(list[model]). A column the model
@@ -223,6 +227,13 @@ async with asyncio.TaskGroup() as tg:
 
 A frozen dataclass stays the right tool for a value that lives inside one layer; a dataclass that reaches a route or
 an outbox becomes a model.
+
+Which base: `In` and `Out` for every platform body and reply (camelCase); `ExternalIn` and `ExternalOut` when the wire
+format is another system's (models-service's OpenAI-compatible completions and embeddings keep `finish_reason`,
+`prompt_tokens`); `Passthrough` only for a body forwarded whole. A plain `extra="forbid"` model moves onto
+`ExternalOut` with its document unchanged. A plain model with no `extra` setting gains `"additionalProperties": false`
+on its schema when it moves onto either reply base (models' `Health`); `Out` keeps that key, so such a move is a
+document change for the owner to accept.
 
 ### C6: one list of checks
 
