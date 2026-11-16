@@ -218,6 +218,9 @@ MEMBER_ROLE_TO_BUILTIN = {
 }
 # The membership roles an invite or a role change may give: every stored value, Chat user among them.
 INVITE_ROLES = tuple(MEMBER_ROLE_TO_BUILTIN)
+# The membership roles by rank, lowest first. Where two rules give one person different roles in a team (sign-in group
+# rules), the higher one wins; Reviewer (`approver`) outranks Builder, and admin is the highest.
+MEMBER_ROLES_BY_RANK = ("chat_user", "viewer", "builder", "approver", "admin")
 
 
 def builtin_roles_for(member_role: str, *, security_team: bool) -> tuple[str, ...]:

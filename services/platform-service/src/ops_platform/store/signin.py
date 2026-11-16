@@ -25,6 +25,7 @@ from sqlalchemy import Row
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_access import MEMBER_ROLES_BY_RANK
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
@@ -56,9 +57,9 @@ from .tenancy import RESET_LOOKUP, SIGNIN_LOCKOUT, SIGNIN_LOOKUP, SIGNIN_WATCH, 
 from .workspace import default_team_in, security_team_in
 
 PASSWORD = "password"
-# The membership roles a provider may give, lowest first; when two group rules give one team, the later one wins.
-# Admin is never one (decision D5).
-SIGNIN_ROLES = ("chat_user", "viewer", "builder", "approver")
+# The membership roles a provider may give, lowest first: the catalogue's rank without its top, admin, which a provider
+# never gives (decision D5). When two group rules give one team, the higher role wins.
+SIGNIN_ROLES = MEMBER_ROLES_BY_RANK[:-1]
 # A sign-in flow by its state hash or its handoff hash, through migration 0010's SECURITY DEFINER functions.
 _FLOW_BY_STATE = sa.text("SELECT id, tenant_id FROM platform_signin_flow(:v)")
 _FLOW_BY_HANDOFF = sa.text("SELECT id, tenant_id FROM platform_signin_handoff(:v)")
