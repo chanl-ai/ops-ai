@@ -83,15 +83,18 @@ class ToolPublished(Out):
     kind: Literal["tool.module.published"] = "tool.module.published"
     id: str
     name: str
+    # True when the tool is gone: a copy deletes its row and ignores any older event about it.
+    deleted: bool = False
 
 
 class KbChanged(Out):
-    """A knowledge base created, renamed, recoloured or deleted, for the label copy other services show."""
+    """A knowledge base created, renamed, recoloured or deleted (`deleted`), for the label copy other services show."""
 
     kind: Literal["kb.changed"] = "kb.changed"
     id: str
     name: str
     colour: str | None = None
+    deleted: bool = False
 
 
 class Event(Out):

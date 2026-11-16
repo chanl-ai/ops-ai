@@ -46,6 +46,11 @@ log = get_logger(__name__)
 # One pass of a retention sweep: deletes what is past its date as of `now` on the caller's connection and returns
 # how many rows went.
 Sweep = Callable[[AsyncConnection, float], Awaitable[int]]
+# Opens one transaction of a pass: the service's `system_tx` with its reason and role.
+Tx = Callable[[], AbstractAsyncContextManager[AsyncConnection]]
+# A pass that opens its own transactions with `tx`, for one that calls another service between them and so must hold
+# no transaction across that call (a copy's resync), at `now`; returns how many rows changed.
+Cycle = Callable[[Tx, float], Awaitable[int]]
 
 
 @dataclass(frozen=True)
@@ -63,6 +68,8 @@ class Process:
     only_if: Callable[[], bool] | None = None
     # A retention process's one pass (`retention`); None for a process whose service supplies its own.
     sweep: Sweep | None = None
+    # A pass that opens its own transactions; `run_sweep` runs it instead of `sweep` when set.
+    cycle: Cycle | None = None
 
 
 @cache
@@ -591,7 +598,7 @@ async def start(coro: Coroutine[Any, Any, None], *, key: str, store: HeartbeatSt
 
 async def run_sweep(
     key: str,
-    tx: Callable[[], AbstractAsyncContextManager[AsyncConnection]],
+    tx: Tx,
     *,
     stop: asyncio.Event,
     store: HeartbeatStore = LOCAL,
@@ -600,16 +607,24 @@ async def run_sweep(
 ) -> None:
     """Runs the registered retention process `key` until `stop` is set, one pass per listed interval. `tx` opens the
     transaction a pass deletes in: the service's own `system_tx` with its reason and role, since the rows are every
-    tenant's."""
-    sweep = BY_KEY[key].sweep if key in BY_KEY else None
-    if sweep is None:
+    tenant's. A process with a `cycle` is handed `tx` and opens its transactions itself."""
+    process = BY_KEY.get(key)
+    cycle = None if process is None else process.cycle or (_in_one_tx(process.sweep) if process.sweep else None)
+    if cycle is None:
         raise ValueError(f"{key!r} is not a registered retention process; register(retention(...)) it first")
 
     async def once() -> int:
-        async with tx() as conn:
-            return await sweep(conn, clock())
+        return await cycle(tx, clock())
 
     await run(key, once, stop=stop, store=store, every_s=every_s, clock=clock)
+
+
+def _in_one_tx(sweep: Sweep) -> Cycle:
+    async def cycle(tx: Tx, now: float) -> int:
+        async with tx() as conn:
+            return await sweep(conn, now)
+
+    return cycle
 
 
 def report(beats: list[Heartbeat], service: str, now: float, *, detail: bool = False) -> list[dict[str, Any]]:
