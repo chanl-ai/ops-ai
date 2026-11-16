@@ -355,6 +355,7 @@ class SecretStore(Store):
                 today = sa.select(a.name).where(
                     a.tenant_id == tenant_id,
                     a.team_id == team_id,
+                    team_visible(secret_audit),
                     a.name.in_(list(found)),
                     a.action == "used",
                     a.actor == actor,
