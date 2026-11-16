@@ -37,8 +37,8 @@ queries = 0
 
 ["GET /v1/invites/{token}"]
 queries = 3
-transactions = 3   # listed: what the route opens today; the store rewrite takes it to one
-connections = 3
+transactions = 2   # listed: the invite is found by its token before its tenant is known, on system_tx's own connection; the tenant's reads then share one
+connections = 2
 
 ["GET /v1/me"]
 queries = 8   # a workspace admin, as here, reads every other team too; anyone else runs 7
@@ -54,8 +54,8 @@ not_budgeted = "needs a registered client's query parameters, which the budget d
 
 ["GET /v1/oauth/grants"]
 queries = 4
-transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
-connections = 4
+transactions = 2   # listed: the assistants' names are the install's own rows (oauth_clients, system), read through system_tx on its own connection; install_tx would need a reason listed in ops_store's isolation sites
+connections = 2
 
 ["GET /v1/people-names"]
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
@@ -92,36 +92,26 @@ queries = 8
 
 ["GET /v1/settings/sign-in/break-glass"]
 queries = 11
-transactions = 6   # listed: what the route opens today; the store rewrite takes it to one
-connections = 6
 
 ["GET /v1/settings/sign-in/providers"]
 queries = 11
-transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
-connections = 4
 
 ["GET /v1/settings/sign-in/secret-names"]
 queries = 8
-transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
-connections = 4
 
 ["GET /v1/settings/sign-in/secrets"]
 queries = 8
-transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
-connections = 4
 
 ["GET /v1/settings/sign-in/test-results/{flow_id}"]
 queries = 8
-transactions = 4   # listed: what the route opens today; the store rewrite takes it to one
-connections = 4
 
 ["GET /v1/settings/teams"]
 queries = 10
 
 ["GET /v1/settings/teams/{team_id}/delete-check"]
 queries = 9
-transactions = 5   # listed: what the route opens today; the store rewrite takes it to one
-connections = 5
+transactions = 3   # listed: agents-service is asked with no transaction open, so the route takes no Tx; its reads share one that ends before the call, and the session and workspace-open checks resolved before it run in their own
+connections = 3
 
 ["GET /v1/settings/workspace-teams"]
 queries = 9

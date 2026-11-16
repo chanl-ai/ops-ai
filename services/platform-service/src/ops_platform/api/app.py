@@ -799,7 +799,7 @@ def create_public_app(
         response_model=Envelope[list[ProviderOut]],
         responses=ERRORS,
     )
-    async def list_signin_providers(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_signin_providers(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's sign-in providers; Security team admins only."""
         return ok(await signin_settings.list(actor))
 
@@ -848,7 +848,7 @@ def create_public_app(
         response_model=Envelope[list[str]],
         responses=ERRORS,
     )
-    async def list_signin_secret_names(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_signin_secret_names(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The names an OIDC provider may give as `clientSecretRef`: the workspace's saved secrets, never the values."""
         return ok(await signin_settings.secret_names(actor))
 
@@ -858,7 +858,7 @@ def create_public_app(
         response_model=Envelope[list[SignInSecretOut]],
         responses=ERRORS,
     )
-    async def list_signin_secrets(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_signin_secrets(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's sign-in secrets with who saved each and when, never a value; Security team admins read."""
         return ok(await signin_settings.secrets_listed(actor))
 
@@ -969,7 +969,7 @@ def create_public_app(
         return ok(await authorizer.decide(claims, q, allow=body.decision == "allow", request_id=new_id("req")))
 
     @app.get("/v1/oauth/grants", tags=["oauth"], response_model=Envelope[list[GrantOut]], responses=ERRORS)
-    async def oauth_grants(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def oauth_grants(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The assistants the signed-in person has connected, newest first."""
         found = await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso())
         return ok([g.model_dump(by_alias=True) for g in found])
@@ -1110,7 +1110,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def signin_test_result(  # pyright: ignore[reportUnusedFunction]
-        flow_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+        _: Tx, flow_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """What a test sign-in got back: email, name and groups, or the check that failed. 404 to anyone but the admin
         who started it."""
@@ -1126,7 +1126,7 @@ def create_public_app(
         response_model=Envelope[list[BreakGlassOut]],
         responses=ERRORS,
     )
-    async def list_break_glass(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_break_glass(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The Security admins who may sign in by password while company sign-in is required."""
         return ok([p.model_dump(by_alias=True) for p in await break_glass.list(actor)])
 
@@ -1567,7 +1567,7 @@ def create_public_app(
         return ok(await reader.page(actor, filters, q))
 
     @app.get("/v1/invites/{token}", tags=["invites"], response_model=Envelope[InvitePreview], responses=ERRORS)
-    async def read_invite(token: Annotated[str, Path(pattern=INVITE_TOKEN)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def read_invite(_: Tx, token: Annotated[str, Path(pattern=INVITE_TOKEN)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.preview(token))
 
     @app.post("/v1/invites/{token}/accept", tags=["invites"], response_model=Envelope[SessionOut], responses=ERRORS)

@@ -21,6 +21,7 @@ from typing import Any
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from .store.lifecycle import (
     CLOSED,
@@ -171,9 +172,12 @@ class WorkspaceLifecycle:
             raise NotFound("team membership")
 
     async def delete_check(self, actor: Actor, team_id: str, usage: UsageReader) -> dict[str, Any]:
-        """What the Delete card shows: whether the team may be deleted now and, if not, each reason."""
-        await self.members.require_admin(workspace(actor), "access", "manage")
-        state = await self.store.team_state(actor.tenant_id, team_id)
+        """What the Delete card shows: whether the team may be deleted now and, if not, each reason. The reads run in
+        one transaction that ends before agents-service is asked, so none is open across the call."""
+        async with isolation.request_transaction():
+            await self.members.require_admin(workspace(actor), "access", "manage")
+            state = await self.store.team_state(actor.tenant_id, team_id)
+            security = team_id == await self.teams.security_team_of(actor.tenant_id)
         if state is None:
             raise NotFound("team")
         status, archived_at = state.status, state.archived_at
@@ -186,7 +190,6 @@ class WorkspaceLifecycle:
             found: TeamUsage | None = await usage.of(actor.tenant_id, team_id)
         except UsageUnavailable:
             found = None
-        security = team_id == await self.teams.security_team_of(actor.tenant_id)
         can_delete = (
             not security and status == "archived" and days_left == 0 and found is not None and not found.live_workflows
         )
