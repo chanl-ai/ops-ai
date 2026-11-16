@@ -18,6 +18,7 @@ import time
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from itertools import pairwise
 from secrets import token_hex
 from typing import Any
 
@@ -105,11 +106,31 @@ async def lease_suite(backend: Backend, make: Callable[[], Awaitable[LeasePort]]
 
     racers = [await make() for _ in range(CONTENDERS)]
     fresh = f"lease-{token_hex(4)}"
-    won = [g for g in await asyncio.gather(*(r.try_acquire(fresh, f"r{i}") for i, r in enumerate(racers))) if g]
-    assert len(won) == 1, f"{len(won)} contenders took one free key"
+    won = await _race(racers, fresh, "r")
+    assert _one_at_a_time(won, a.ttl), f"{len(won)} contenders took one free key: {won}"
     await asyncio.sleep(a.ttl * 1.5)
-    won = [g for g in await asyncio.gather(*(r.try_acquire(fresh, f"s{i}") for i, r in enumerate(racers))) if g]
-    assert len(won) == 1, f"{len(won)} contenders took one lapsed lease"
+    won = await _race(racers, fresh, "s")
+    assert _one_at_a_time(won, a.ttl), f"{len(won)} contenders took one lapsed lease: {won}"
+
+
+# A winner of a race: its generation and when its try_acquire started and returned, in seconds on one clock.
+_Win = tuple[int, float, float]
+
+
+async def _race(racers: Sequence[LeasePort], key: str, prefix: str) -> list[_Win]:
+    async def one(i: int, r: LeasePort) -> _Win | None:
+        start = time.monotonic()
+        g = await r.try_acquire(key, f"{prefix}{i}")
+        return (g, start, time.monotonic()) if g else None
+
+    return sorted(w for w in await asyncio.gather(*(one(i, r) for i, r in enumerate(racers))) if w)
+
+
+def _one_at_a_time(won: list[_Win], ttl: float) -> bool:
+    """One winner, or each later one only after the lease before it lapsed: a contender held up past the ttl (a slow
+    connection on a loaded host) takes the key once the first holder's lease ran out, which a correct lease allows. A
+    later winner that returned less than a ttl after the earlier one started took a lease that was still live."""
+    return len(won) >= 1 and all(later[2] - earlier[1] >= ttl for earlier, later in pairwise(won))
 
 
 async def timer_claim_suite(backend: Backend, make: Callable[[], Awaitable[TimerClaimPort]]) -> None:

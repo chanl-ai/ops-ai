@@ -4,6 +4,7 @@ services run the same suites on their own repositories."""
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any, ClassVar
 
@@ -65,6 +66,27 @@ class Leases:
             return (await c.execute(q)).rowcount == 1
 
 
+class ReadThenWrite(Leases):
+    """Reads the lease, then takes it unconditionally when it saw none live: a second holder asking later is refused,
+    but contenders that read at once all take it."""
+
+    async def try_acquire(self, key: str, holder: str) -> int | None:
+        async with self.engine.begin() as c:
+            live = (
+                await c.execute(sa.select(leases.c.key).where(leases.c.key == key, leases.c.expires_at >= NOW))
+            ).first()
+        return None if live else await Leases(self.engine, cas=False).try_acquire(key, holder)
+
+
+class Stalled(Leases):
+    """A correct lease whose call is held up past the ttl for one contender of each race, as on a loaded host."""
+
+    async def try_acquire(self, key: str, holder: str) -> int | None:
+        if holder in ("r1", "s1"):
+            await asyncio.sleep(self.ttl * 1.5)
+        return await super().try_acquire(key, holder)
+
+
 class Timers:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
@@ -113,6 +135,13 @@ async def test_leases_conform_and_a_lease_without_cas_does_not(backend: tuple[Ba
     await lease_suite(b, lambda: _ready(Leases(engine)))
     with pytest.raises(AssertionError, match="refuses a second holder"):
         await lease_suite(b, lambda: _ready(Leases(engine, cas=False)))
+    with pytest.raises(AssertionError, match="contenders took one free key"):
+        await lease_suite(b, lambda: _ready(ReadThenWrite(engine)))
+
+
+async def test_a_contender_held_up_past_the_ttl_may_take_the_lapsed_lease(backend: tuple[Backend, AsyncEngine]) -> None:
+    b, engine = backend
+    await lease_suite(b, lambda: _ready(Stalled(engine)))
 
 
 async def test_timer_claims_conform_and_a_read_then_write_claim_does_not(backend: tuple[Backend, AsyncEngine]) -> None:
