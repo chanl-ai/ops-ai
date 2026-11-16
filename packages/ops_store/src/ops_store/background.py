@@ -347,7 +347,8 @@ BACKOFF_START_S, BACKOFF_MAX_S = 1.0, 60.0
 # second is late after 20 s, not after one second it never wrote.
 LATE_AFTER, STOPPED_AFTER = 2, 5
 # An event-run process's passes are separate pieces of work (one file read, one event), so a later success does not
-# mean an earlier failure recovered: the failure keeps the process stopped for this long, the hour doneHour counts.
+# mean an earlier failure recovered: its row keeps the failure (lastError, lastErrorAt) for this long, the hour
+# doneHour counts, then drops it. Its state still follows the last pass, since `make health` counts stopped as down.
 FAILURE_SHOWN_S = 3600.0
 
 
@@ -375,16 +376,10 @@ class Heartbeat:
 
 def state(beat: Heartbeat | None, process: Process, now: float) -> State:
     """Running while the last pass is within LATE_AFTER intervals, late after that, stopped after STOPPED_AFTER or
-    while the last pass failed. An event-run process is running unless a pass failed within FAILURE_SHOWN_S, whatever
-    passed after it, or its last pass failed."""
+    while the last pass failed. An event-run process is running unless its last pass failed or work waits unclaimed."""
     if beat is None:
         return "not_reported"
-    error_at = beat.last_error_at
-    failed = error_at is not None and (
-        beat.last_ok_at is None
-        or error_at > beat.last_ok_at
-        or (process.every_s is None and now - error_at < FAILURE_SHOWN_S)
-    )
+    failed = beat.last_error_at is not None and (beat.last_ok_at is None or beat.last_error_at > beat.last_ok_at)
     if failed:
         return "stopped"
     if process.every_s is None:
@@ -697,7 +692,9 @@ def report(beats: list[Heartbeat], service: str, now: float, *, detail: bool = F
         mine = [b for b in beats if b.process == p.key]
         live = [b for b in mine if now - (b.last_run_at or b.started_at) <= gap or p.every_s is None]
         newest = max(mine, key=lambda b: b.last_run_at or b.started_at, default=None)
-        error = newest.last_error if newest else None
+        error, error_at = (newest.last_error, newest.last_error_at) if newest else (None, None)
+        if p.every_s is None and error_at is not None and now - error_at >= FAILURE_SHOWN_S:
+            error = error_at = None
         out.append(
             {
                 "key": p.key,
@@ -712,7 +709,7 @@ def report(beats: list[Heartbeat], service: str, now: float, *, detail: bool = F
                 "doneHour": sum(b.done_hour for b in live),
                 "waiting": max((b.waiting for b in live if b.waiting is not None), default=None),
                 "lastError": (error if detail else error.split(":", 1)[0]) if error else None,
-                "lastErrorAt": newest.last_error_at if newest else None,
+                "lastErrorAt": error_at,
             }
         )
     return out

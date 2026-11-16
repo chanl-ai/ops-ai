@@ -273,8 +273,8 @@ def test_a_pass_is_refused_for_an_unlisted_key_another_service_or_a_sweep_with_i
 
 async def test_a_started_task_that_failed_still_shows_it_after_a_later_task_succeeds_and_counts_add_up() -> None:
     """Tasks started under one key share one heartbeat in a process. Each is its own piece of work, so a later
-    success does not mean the earlier failure recovered: an event-run process shows a failure for FAILURE_SHOWN_S
-    after it, then ages out; meanwhile every task's success adds to doneHour."""
+    success does not mean the earlier failure recovered: the row keeps the failure for FAILURE_SHOWN_S, then drops
+    it; every task's success adds to doneHour."""
     beats = MemoryHeartbeats()
     outcomes = [RuntimeError("file unreadable"), None, None]
 
@@ -290,6 +290,6 @@ async def test_a_started_task_that_failed_still_shows_it_after_a_later_task_succ
     [row] = [
         r for r in background.report(await beats.read(), "documents", time.time()) if r["key"] == "document_reading"
     ]
-    assert (row["state"], row["lastError"], row["doneHour"], row["instances"]) == ("stopped", "RuntimeError", 2, 1)
+    assert (row["state"], row["lastError"], row["doneHour"], row["instances"]) == ("running", "RuntimeError", 2, 1)
     later = background.report(await beats.read(), "documents", row["lastErrorAt"] + background.FAILURE_SHOWN_S + 1)
-    assert [r["state"] for r in later if r["key"] == "document_reading"] == ["running"]
+    assert [(r["lastError"], r["lastErrorAt"]) for r in later if r["key"] == "document_reading"] == [(None, None)]
