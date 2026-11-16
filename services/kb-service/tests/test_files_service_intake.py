@@ -75,3 +75,39 @@ async def test_a_refusal_from_files_service_says_what_failed_not_a_generic_error
         assert body["code"] == "files_unavailable" and "refused" in body["message"] and "try again" in body["message"]
         refused = await client.post(f"/v1/sources/{src['id']}/files", json={"fileIds": [fid]})
         assert refused.status_code == 503 and refused.json()["error"]["code"] == "files_unavailable", refused.text
+
+
+async def test_an_item_written_before_its_scan_is_refused_as_not_ready_then_read(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    """Writing an item or a page goes through files-service, which holds a new file unreadable until its scan says
+    clean; the route answered 500 then. It answers 409 file_not_ready, and the same write after the scan is created."""
+    fake = FakeFilesService()
+    scanner = fake.client(service="scanner", scopes=["files:decide"])
+
+    async def scanned() -> None:
+        for fid, f in fake.files.items():
+            if f["scan"]["status"] == "pending":
+                await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
+
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
+        item = {"name": "chargeback-window", "title": "Chargeback window", "text": "Raised within 120 days."}
+        early = await client.post(f"/v1/sources/{src['id']}/items", json=item)
+        assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
+        await scanned()
+        put = data(await client.post(f"/v1/sources/{src['id']}/items", json=item))
+        assert (put["outcome"], put["item"]["path"], put["item"]["status"]) == (
+            "created",
+            "chargeback-window.md",
+            "indexed",
+        )
+        page = {"title": "Vault", "text": "Open at 8."}
+        early = await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page)
+        assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
+        await scanned()
+        assert data(await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page), 201)["title"] == "Vault"

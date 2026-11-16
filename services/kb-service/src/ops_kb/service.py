@@ -2600,11 +2600,30 @@ class KnowledgeService:
         )
         stored_file = await self.upload(who, source_id, data, name=name, mime=mime)
         same = before is not None and before["digest"] == stored_file["digest"] and before["status"] == "indexed"
+        log: list[str] = []
         if not same:
             # The same run as a sync, reading only this item: the source's other items are as they were.
-            await self._held_sync(who, await self._source_row(who, source_id), full=False, retry=False, only=name)
+            run = await self._held_sync(who, await self._source_row(who, source_id), full=False, retry=False, only=name)
+            log = [str(x) for x in cast(list[object], run.get("log") or [])]
         found = (await self.store.sources(who.tenant_id, [source_id]))[0]
-        item = next(x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name)
+        item = next(
+            (x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name), None
+        )
+        if item is None:
+            # Stored, but the run made no item: files-service holds a new file unreadable until its scan says clean
+            # (production scans every file), or a rule or the same content under another name left it out.
+            why = next((x for x in log if x.startswith(f"{name}:")), "")
+            if "not scanned" in why:
+                raise Conflict(
+                    f"{name} is stored but not scanned clean yet, so it is not searchable; it is read on the next sync "
+                    "after the scan, or send it again then.",
+                    code="file_not_ready",
+                )
+            # A rule of the source or the same content under another name: what was sent, so the caller's to change.
+            raise ValidationFailed(
+                f"{name} is stored but was not indexed: {why or 'the run made no item for it'}.",
+                code="item_not_indexed",
+            )
         url = str(i.get("url") or "").strip() or None
         if url and item.get("url") != url:
             await self.store.update_item(who.tenant_id, str(item["id"]), {"url": url})
