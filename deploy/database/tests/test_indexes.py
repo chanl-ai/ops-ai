@@ -22,10 +22,6 @@ from ops_store.schema import TEAM_KEY, TEAM_OWNED, TENANT_SCOPED, team_owned, te
 
 # Chain -> foreign key columns with no index yet.
 WAITING: dict[str, set[str]] = {
-    "kb": {
-        "kb_base_sources.source_id",
-        "kb_chunks.item_id",
-    },
     "models": {
         "model_aliases.provider_id",
     },

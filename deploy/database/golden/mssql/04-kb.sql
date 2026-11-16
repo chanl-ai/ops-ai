@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0026
+-- kb-service, stamped at kb_0027
 -- not on SQL Server yet: table kb_unit_vectors (PostgreSQL only)
 -- not on SQL Server yet: kb_units.tsv (TSVECTOR)
 CREATE TABLE kb_bases (
@@ -117,6 +117,8 @@ CREATE TABLE kb_base_sources (
 	CONSTRAINT fk_kb_link_source FOREIGN KEY(tenant_id, source_id) REFERENCES kb_sources (tenant_id, id) ON DELETE CASCADE
 );
 GO
+CREATE INDEX ix_kb_base_sources_source ON kb_base_sources (tenant_id, source_id);
+GO
 CREATE TABLE kb_items (
 	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -213,6 +215,8 @@ CREATE TABLE kb_chunks (
 	CONSTRAINT kb_chunks_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT fk_kb_chunk_item FOREIGN KEY(tenant_id, item_id) REFERENCES kb_items (tenant_id, id) ON DELETE CASCADE
 );
+GO
+CREATE INDEX ix_kb_chunks_item ON kb_chunks (tenant_id, item_id);
 GO
 CREATE TABLE kb_units (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -319,5 +323,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0026');
+INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0027');
 GO

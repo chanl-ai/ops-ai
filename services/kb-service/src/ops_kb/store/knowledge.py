@@ -145,6 +145,8 @@ kb_base_sources = sa.Table(
         ondelete="CASCADE",
         name="fk_kb_link_source",
     ),
+    # A source's bases, and the cascade when a source is deleted, without reading every link of the tenant.
+    sa.Index("ix_kb_base_sources_source", "tenant_id", "source_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -267,6 +269,8 @@ kb_chunks = sa.Table(
     sa.ForeignKeyConstraint(
         ["tenant_id", "item_id"], ["kb_items.tenant_id", "kb_items.id"], ondelete="CASCADE", name="fk_kb_chunk_item"
     ),
+    # An item's pieces (its detail, a re-index, the cascade when it is deleted) without reading every piece.
+    sa.Index("ix_kb_chunks_item", "tenant_id", "item_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 

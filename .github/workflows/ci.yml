@@ -271,7 +271,7 @@ jobs:
             [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
-            [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py tests/test_background_tenants.py tests/test_system_user_predicates.py"
+            [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py tests/test_background_tenants.py tests/test_system_user_predicates.py tests/test_lookup_indexes.py"
             [tools-service]="tests/test_policed_tables.py tests/test_mcp_link_rows_isolated.py tests/test_secret_rows_isolated.py tests/test_sign_in_rows_isolated.py tests/test_registry_store.py tests/test_background_two_tenants.py"
           )
           failed=0
