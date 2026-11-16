@@ -520,10 +520,11 @@ def _forget_install(_dbapi_conn: object, record: Any) -> None:
 _BARE = re.compile(r"\*|-?\d+(\.\d+)?|'[^']*'|[A-Za-z_][A-Za-z0-9_]*")
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # The database functions a statement in install scope may call, by name: the ones today's install statements use
-# (a count, a fallback, a maximum), which read only their arguments. Any other function may read any table (or a view
-# over one), so it is refused, as is a schema-qualified name or a function used as a table. The database's clock
-# (`dialect.db_now`, `db_epoch`, `db_after`) runs too.
-INSTALL_FUNCTIONS = frozenset({"coalesce", "count", "max"})
+# (a count, a fallback, a maximum) and the one `listing.list_page` adds on both databases (`lower`, its search's
+# `search.contains`; its sort and paging call none), which read only their arguments. Any other function may read any
+# table (or a view over one), so it is refused, as is a schema-qualified name or a function used as a table. The
+# database's clock (`dialect.db_now`, `db_epoch`, `db_after`) runs too.
+INSTALL_FUNCTIONS = frozenset({"coalesce", "count", "lower", "max"})
 _CLOCK = (dialect.db_now, dialect.db_epoch, dialect.db_after)
 # The statements an install-wide block runs: a DDL element or anything else is refused.
 _STATEMENTS = (sa.Select, sa.CompoundSelect, sa.Insert, sa.Update, sa.Delete)

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.sql.elements import quoted_name
 
+from ops_service_kit.listing import ListParams
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.backends import backends
@@ -27,6 +28,7 @@ from ops_store.conformance import engine_for, sql_server_database
 from ops_store.database import open_database
 from ops_store.dialect import db_epoch, db_now, dialect_of
 from ops_store.isolation import InstallScopeError, NoTenantError
+from ops_store.listing import LISTED, list_page
 from ops_store.schema import (
     MSSQL_SECURITY,
     TEAM_OWNED,
@@ -52,7 +54,7 @@ meta = sa.MetaData()
 settings = sa.Table(
     "store_test_install_settings",
     meta,
-    sa.Column("name", sa.String(64), primary_key=True),
+    sa.Column("name", sa.String(64), primary_key=True, info=LISTED),
     sa.Column("value", sa.String(64), nullable=False),
     info=system("the install's own settings: no tenant"),
 )
@@ -390,6 +392,27 @@ async def test_an_install_block_calls_only_the_listed_functions(engine: AsyncEng
     ]
     out = await _outcomes(st, [*allowed, *refused])
     assert out == ["ran"] * len(allowed) + ["refused"] * len(refused), out
+
+
+async def test_a_list_over_a_system_table_is_searched_and_sorted_inside_an_install_block(engine: AsyncEngine) -> None:
+    """`list_page`'s search (`lower(...) LIKE`), sort and counts run in install scope: the functions it emits are
+    listed, and nothing wider."""
+    st = Install(engine)
+    async with engine.begin() as c:
+        await c.execute(settings.insert(), [{"name": "Retention", "value": "30d"}, {"name": "retry", "value": "3"}])
+    asked = ListParams(search="RET", sort_by="name", sort_order="desc")
+    async with st.install_tx(SETTINGS) as c:
+        page = await list_page(
+            c,
+            sa.select(settings.c.name),
+            asked,
+            search=[settings.c.name],
+            sortable={"name": settings.c.name},
+            default_sort=settings.c.name,
+            facets={"value": settings.c.value},
+        )
+    assert sorted(r["name"] for r in page["data"]) == ["Retention", "retry"] and page["pagination"]["total"] == 2
+    assert page["facets"] == {"value": {"30d": 1, "3": 1}}
 
 
 async def test_an_install_block_touches_only_the_tables_it_declared(engine: AsyncEngine) -> None:
