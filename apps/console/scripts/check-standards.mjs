@@ -297,9 +297,20 @@ for (const f of files) {
 //       fetch      `fetch(` outside lib/api, which skips the contract, the team header and the error envelope
 // `pageSize: 200`, `pageSize: BIG` where the same file says `const BIG = 200`, and `pageSize: PAGE_ALL` imported from
 // elsewhere (a constant held in another file is read as over the limit, since this file cannot show its value). A
-// lower-case name is a parameter or state passed along, which says nothing about its size.
+// lower-case name is read when the file assigns it a number or arithmetic on numbers; one passed along as a parameter,
+// state or a call's result says nothing about its size, so this reads the literal form only.
 function pageSizeHits(text) {
-  const known = new Map([...text.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*(?::\s*number\s*)?=\s*(\d+)\s*[;,\n]/g)].map((m) => [m[1], Number(m[2])]));
+  // A name assigned a number or arithmetic on numbers (`const size = 100 * 2`, `let n = 500`) stands for its value.
+  const known = new Map();
+  for (const m of text.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::\s*number\s*)?=\s*([\d\s*+\-/()._]+?)\s*[;,\n]/g)) {
+    if (!/\d/.test(m[2])) continue;
+    try {
+      const value = Number(Function(`"use strict"; return (${m[2].replace(/_/g, '')});`)());
+      if (Number.isFinite(value)) known.set(m[1], value);
+    } catch {
+      // not arithmetic (an arrow function's parameters, say): the name stays unknown
+    }
+  }
   return [...text.matchAll(/\bpageSize\s*[:=]\s*([A-Za-z_$][\w$]*|\d+)\b(?!\s*[.(\[])/g)].filter((m) => {
     const v = m[1];
     if (/^\d+$/.test(v)) return Number(v) > 50;
@@ -333,6 +344,9 @@ if (process.argv.includes('--self-test')) {
     ['const SMALL = 20;\nuseRows({ pageSize: SMALL })', 0],
     ['useRows({ pageSize: params.pageSize })', 0],
     ['useRows({ pageSize: 25 })', 0],
+    ['const size = 100 * 2;\nuseRows({ pageSize: size })', 1],
+    ['let size = 500;\nuseRows({ pageSize: size })', 1],
+    ['const rows: number = 4 * 5;\nuseRows({ pageSize: rows })', 0],
   ];
   const failed = plants.filter(([text, want]) => pageSizeHits(text).length !== want);
   for (const [text, want] of failed) console.error(`self-test: ${JSON.stringify(text)} should give ${want} hit(s)`);
