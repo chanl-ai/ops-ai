@@ -444,7 +444,13 @@ async def sync_tool_source(
         changed = [r for r in changed if "content" not in r]
         for r in listed_whole:
             await _put(service, who, s, known, r, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
-        answers = await asyncio.gather(*(fetch(str(r["id"])) for r in changed))
+        try:
+            async with asyncio.TaskGroup() as group:
+                fetches = [group.create_task(fetch(str(r["id"]))) for r in changed]
+        except ExceptionGroup as failed:
+            # The run fails on the first fetch that raised, as it did before the fetches shared a group.
+            raise failed.exceptions[0] from None
+        answers = [f.result() for f in fetches]
         for r, got in zip(changed, answers, strict=True):
             if not got.ok and got.code == "NOT_FOUND" and (held := known.get(str(r["id"]))) is not None:
                 # Gone at the source: removed on the second sync in a row that finds it gone, then tombstoned.

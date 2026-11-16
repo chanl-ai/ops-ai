@@ -48,7 +48,6 @@
 3 dict-any services/kb-service/src/ops_kb/store/vectors.py
 2 store-dict services/kb-service/src/ops_kb/store/vectors.py
 42 dict-any services/kb-service/src/ops_kb/tool_sources.py
-1 gather services/kb-service/src/ops_kb/tool_sources.py
 1 body sources_add_files
 1 reply sources_cancel_run
 1 body sources_create_source

@@ -329,3 +329,23 @@ async def test_a_source_names_its_kind_as_its_plugin_titles_it(kb: httpx.AsyncCl
     """The console kept its own list of source kinds, so an app's source showed a label nobody declared."""
     src = await source(kb)
     assert data(await kb.get(f"/v1/sources/{src['id']}"))["kindLabel"] == "Salesforce Knowledge articles"
+
+
+async def test_a_fetch_that_raises_fails_the_sync_and_keeps_nothing(kb: httpx.AsyncClient, tools: FakeTools) -> None:
+    real = tools.call
+
+    async def call(tenant_id: str, team_id: str, tool: str, args: dict[str, Any], *, act: str) -> Answer:
+        if tool == GET and args.get("id") == "ka2":
+            raise RuntimeError("tools-service went away")
+        return await real(tenant_id, team_id, tool, args, act=act)
+
+    tools.call = call  # type: ignore[method-assign]
+    src = await source(kb)
+    r = await kb.post(f"/v1/sources/{src['id']}/sync", json={"full": False})
+    assert r.status_code == 500 and r.json()["error"]["code"] == "internal", r.text
+    assert data(await kb.get(f"/v1/sources/{src['id']}/runs"))["data"] == []
+    assert await items(kb, src["id"]) == {}
+    # The failed run holds no lock: the next sync reads every article.
+    tools.call = real  # type: ignore[method-assign]
+    again = await sync(kb, src["id"])
+    assert again["status"] == "success" and again["counts"]["upserted"] == 4, again
