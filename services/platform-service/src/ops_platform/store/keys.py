@@ -3,9 +3,11 @@ verifying a presented key is `IdentityStore.key`, on the introspection path."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from collections.abc import Mapping
+from typing import ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
@@ -87,7 +89,7 @@ class KeyStore(TenantDb):
         scopes: list[str],
         expires_at: str | None,
         at: str,
-        target: dict[str, Any] | None = None,
+        target: Mapping[str, JsonValue] | None = None,
     ) -> KeyRow:
         async with self.tenant_tx(actor.tenant_id) as c:
             await c.execute(
@@ -107,7 +109,8 @@ class KeyStore(TenantDb):
                     target_version=target.get("version") if target else None,
                 )
             )
-            await _audit(c, actor, "key.create", key_id, {"name": name, "scopes": scopes, "target": target})
+            given = dict(target) if target else None
+            await _audit(c, actor, "key.create", key_id, {"name": name, "scopes": [*scopes], "target": given})
             made = await one(c, self._listing(actor.team_id).where(api_keys.c.id == key_id), KeyRow)
             assert made is not None, key_id  # written above, in this transaction
             return made
@@ -125,7 +128,7 @@ class KeyStore(TenantDb):
             return await one(c, self._listing(actor.team_id).where(api_keys.c.id == key_id), KeyRow)
 
 
-async def _audit(c: AsyncConnection, actor: Actor, action: str, key_id: str, detail: dict[str, Any]) -> None:
+async def _audit(c: AsyncConnection, actor: Actor, action: str, key_id: str, detail: Mapping[str, JsonValue]) -> None:
     await record(
         c,
         tenant_id=actor.tenant_id,

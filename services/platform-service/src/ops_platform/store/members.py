@@ -10,10 +10,12 @@ tenant.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -483,7 +485,9 @@ async def _member(c: AsyncConnection, team_id: str, member_id: str) -> _MemberSt
     return await one(c, q, _MemberState)
 
 
-async def _audit(c: AsyncConnection, actor: Actor, action: str, member_id: str, detail: dict[str, Any]) -> None:
+async def _audit(
+    c: AsyncConnection, actor: Actor, action: str, member_id: str, detail: Mapping[str, JsonValue]
+) -> None:
     await record(
         c,
         tenant_id=actor.tenant_id,

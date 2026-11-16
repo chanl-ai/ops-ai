@@ -1,4 +1,4 @@
-# 204 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 200 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body access_check_access
 1 body api_keys_create_api_key
 1 reply audit_read_audit
@@ -52,9 +52,7 @@
 12 dict-any services/platform-service/src/ops_platform/roles.py
 17 dict-any services/platform-service/src/ops_platform/signin_settings.py
 3 dict-any services/platform-service/src/ops_platform/sso.py
-2 dict-any services/platform-service/src/ops_platform/store/keys.py
-1 dict-any services/platform-service/src/ops_platform/store/members.py
-9 dict-any services/platform-service/src/ops_platform/store/roles.py
+8 dict-any services/platform-service/src/ops_platform/store/roles.py
 6 store-dict services/platform-service/src/ops_platform/store/roles.py
 2 dict-any services/platform-service/src/ops_platform/store/seeding.py
 2 dict-any services/platform-service/src/ops_platform/store/signin.py

@@ -8,10 +8,12 @@ reader ever sees a role in `members` that the assignments disagree with. Every s
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import (
@@ -172,7 +174,7 @@ class RoleStore(TenantDb):
         return out
 
     async def record_check(
-        self, tenant_id: str, team_id: str, *, by: str, request_id: str, detail: dict[str, Any]
+        self, tenant_id: str, team_id: str, *, by: str, request_id: str, detail: Mapping[str, JsonValue]
     ) -> None:
         """An access check an admin ran: who checked whom for what, and the answer, in the audit log."""
         async with self.tenant_tx(tenant_id) as c:
