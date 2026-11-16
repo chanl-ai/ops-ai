@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_ingest.reading import Page
 from ops_service_kit.http import Out
 from ops_store import isolation
 from ops_store.outbox import add
@@ -130,9 +131,8 @@ def _pack(page: dict[str, Any]) -> bytes:
     return gzip.compress(json.dumps(page, separators=(",", ":")).encode())
 
 
-def _unpack(body: bytes) -> dict[str, Any]:
-    out: dict[str, Any] = json.loads(gzip.decompress(body))
-    return out
+def _unpack(body: bytes) -> Page:
+    return Page.model_validate_json(gzip.decompress(body))
 
 
 class ReadingsStore(Store):
@@ -347,9 +347,7 @@ class ReadingsStore(Store):
                 key=f"{name}:{digest}:{version}:{key}:{file_id}", payload=payload,
             )  # fmt: skip
 
-    async def pages(
-        self, team: str, digest: str, version: str, key: str, *, page: int | None = None
-    ) -> list[dict[str, Any]]:
+    async def pages(self, team: str, digest: str, version: str, key: str, *, page: int | None = None) -> list[Page]:
         p = documents_reading_pages
         query = (
             sa.select(p.c.body).where(self._where(p, team, digest, version, key), team_visible(p)).order_by(p.c.page)

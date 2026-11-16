@@ -70,7 +70,7 @@ def next_reading(queued: Sequence[ReadingRow], running_teams: Sequence[str]) -> 
     return 0
 
 
-def answer_of(row: ReadingRow, file_id: str, pages: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def answer_of(row: ReadingRow, file_id: str, pages: Sequence[Page] | None = None) -> dict[str, Any]:
     """What a caller reads: the reading's status and progress, then, once done, the file's facts and its pages."""
     mode, _, language = row.key.partition(":")
     out: dict[str, Any] = {
@@ -88,7 +88,7 @@ def answer_of(row: ReadingRow, file_id: str, pages: list[dict[str, Any]] | None 
         out["facts"] = row.facts
         out["durationMs"] = row.duration_ms
         if pages is not None:
-            out["pages"] = pages
+            out["pages"] = [p.model_dump(mode="json", by_alias=True) for p in pages]
     return out
 
 
@@ -148,7 +148,7 @@ class Readings:
                     await self._keep(who, file, made)
                     row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
                 assert row is not None
-                return 200, answer_of(row, file_id, [p.model_dump(mode="json", by_alias=True) for p in made.pages])
+                return 200, answer_of(row, file_id, made.pages)
         # The queued row commits before the task that reads it starts, so the task finds it.
         async with isolation.request_transaction():
             row = await self.store.queue(
@@ -202,7 +202,7 @@ class Readings:
         return Reading(
             settings=settings,
             facts=FileFacts.model_validate(row.facts),
-            pages=[Page.model_validate(p) for p in pages],
+            pages=pages,
             duration_ms=row.duration_ms or 0,
         )
 
