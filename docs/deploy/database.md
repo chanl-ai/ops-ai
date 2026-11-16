@@ -100,6 +100,7 @@ they are refused.
 | Revision | Stop | Why |
 |---|---|---|
 | models 0012 | models-service | It locks `model_call_log` against writes for the step, totals each key's spend per day and run from it, moves the calls that name no tenant to `model_calls_untenanted`, and then forces the tenant policy on the log. An old pod's insert names no tenant setting, so the policy refuses it and its completion answers 500 until the pod is replaced |
+| agents 0108 | agents-service | It changes the primary keys of the workflow, widget, deployment and channel tables to lead with the tenant and copies a workflow into each tenant whose threads run it. An old pod upserts deployments, channel messages and cursors on the keys this step drops, so its statements fail until it is replaced, and a version it writes under a parent of another tenant is refused by the new foreign key |
 
 ## Verify: drift
 

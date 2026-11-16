@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0107_system_reads_agent_pointers
+-- agents-service, stamped at 0108_registry_tenant_keys
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -118,6 +118,64 @@ CREATE TABLE engine_waits (
 GO
 CREATE INDEX ix_engine_waits_event ON engine_waits (tenant_id, team_id, event, wait_key);
 GO
+CREATE TABLE thread_leases (
+	thread_id VARCHAR(64) NOT NULL, 
+	owner VARCHAR(120) NOT NULL, 
+	run_id VARCHAR(64) NOT NULL, 
+	acquired_at FLOAT NOT NULL, 
+	heartbeat_at FLOAT NOT NULL, 
+	expires_at FLOAT NOT NULL, 
+	generation BIGINT NOT NULL DEFAULT '1', 
+	released_at FLOAT NULL, 
+	CONSTRAINT thread_leases_pkey PRIMARY KEY (thread_id)
+);
+GO
+CREATE INDEX ix_thread_leases_expires_at ON thread_leases (expires_at);
+GO
+CREATE TABLE graph_threads (
+	id VARCHAR(64) NOT NULL, 
+	graph VARCHAR(64) NOT NULL, 
+	meta NVARCHAR(max) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	version INTEGER NULL, 
+	digest VARCHAR(64) NULL, 
+	external_key VARCHAR(512) NULL, 
+	deployment_id VARCHAR(64) NULL, 
+	parent_thread_id VARCHAR(64) NULL, 
+	overrides NVARCHAR(max) NULL, 
+	owner VARCHAR(320) NULL, 
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	CONSTRAINT graph_threads_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_graph_threads_deployment_id ON graph_threads (deployment_id);
+GO
+CREATE INDEX ix_graph_threads_graph ON graph_threads (graph);
+GO
+CREATE INDEX ix_graph_threads_owner ON graph_threads (tenant_id, owner);
+GO
+CREATE INDEX ix_graph_threads_parent_thread_id ON graph_threads (parent_thread_id);
+GO
+CREATE INDEX ix_graph_threads_team_updated ON graph_threads (tenant_id, team_id, updated_at);
+GO
+CREATE INDEX ix_graph_threads_tenant_id ON graph_threads (tenant_id);
+GO
+CREATE UNIQUE INDEX uq_graph_threads_tenant_external_key ON graph_threads (tenant_id, external_key) WHERE external_key IS NOT NULL;
+GO
+CREATE TABLE graph_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	name VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	digest VARCHAR(64) NOT NULL, 
+	definition NVARCHAR(max) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT graph_versions_pkey PRIMARY KEY (tenant_id, name, version), 
+	CONSTRAINT uq_graph_versions_tenant_digest UNIQUE (tenant_id, digest)
+);
+GO
 CREATE TABLE registry_agents (
 	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
@@ -231,20 +289,6 @@ CREATE INDEX ix_case_events_case_id ON case_events (case_id);
 GO
 CREATE INDEX ix_case_events_tenant_id ON case_events (tenant_id);
 GO
-CREATE TABLE thread_leases (
-	thread_id VARCHAR(64) NOT NULL, 
-	owner VARCHAR(120) NOT NULL, 
-	run_id VARCHAR(64) NOT NULL, 
-	acquired_at FLOAT NOT NULL, 
-	heartbeat_at FLOAT NOT NULL, 
-	expires_at FLOAT NOT NULL, 
-	generation BIGINT NOT NULL DEFAULT '1', 
-	released_at FLOAT NULL, 
-	CONSTRAINT thread_leases_pkey PRIMARY KEY (thread_id)
-);
-GO
-CREATE INDEX ix_thread_leases_expires_at ON thread_leases (expires_at);
-GO
 CREATE TABLE thread_events (
 	position BIGINT NOT NULL IDENTITY, 
 	id VARCHAR(40) NOT NULL, 
@@ -310,50 +354,6 @@ CREATE TABLE form_links (
 );
 GO
 CREATE INDEX ix_form_links_workflow ON form_links (tenant_id, workflow_id);
-GO
-CREATE TABLE graph_threads (
-	id VARCHAR(64) NOT NULL, 
-	graph VARCHAR(64) NOT NULL, 
-	meta NVARCHAR(max) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	updated_at VARCHAR(32) NOT NULL, 
-	status VARCHAR(16) NOT NULL, 
-	version INTEGER NULL, 
-	digest VARCHAR(64) NULL, 
-	external_key VARCHAR(512) NULL, 
-	deployment_id VARCHAR(64) NULL, 
-	parent_thread_id VARCHAR(64) NULL, 
-	overrides NVARCHAR(max) NULL, 
-	owner VARCHAR(320) NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	CONSTRAINT graph_threads_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_graph_threads_deployment_id ON graph_threads (deployment_id);
-GO
-CREATE INDEX ix_graph_threads_graph ON graph_threads (graph);
-GO
-CREATE INDEX ix_graph_threads_owner ON graph_threads (tenant_id, owner);
-GO
-CREATE INDEX ix_graph_threads_parent_thread_id ON graph_threads (parent_thread_id);
-GO
-CREATE INDEX ix_graph_threads_team_updated ON graph_threads (tenant_id, team_id, updated_at);
-GO
-CREATE INDEX ix_graph_threads_tenant_id ON graph_threads (tenant_id);
-GO
-CREATE UNIQUE INDEX uq_graph_threads_tenant_external_key ON graph_threads (tenant_id, external_key) WHERE external_key IS NOT NULL;
-GO
-CREATE TABLE graph_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	name VARCHAR(64) NOT NULL, 
-	version INTEGER NOT NULL, 
-	digest VARCHAR(64) NOT NULL, 
-	definition NVARCHAR(max) NOT NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT graph_versions_pkey PRIMARY KEY (tenant_id, name, version), 
-	CONSTRAINT uq_graph_versions_tenant_digest UNIQUE (tenant_id, digest)
-);
 GO
 CREATE TABLE mailboxes (
 	id VARCHAR(64) NOT NULL, 
@@ -535,7 +535,7 @@ CREATE TABLE deployments (
 	created_at VARCHAR(32) NOT NULL, 
 	budget NVARCHAR(max) NULL, 
 	team_id VARCHAR(64) NOT NULL DEFAULT '', 
-	CONSTRAINT deployments_pkey PRIMARY KEY (id)
+	CONSTRAINT deployments_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE TABLE channel_messages (
@@ -547,7 +547,7 @@ CREATE TABLE channel_messages (
 	status VARCHAR(16) NOT NULL, 
 	payload NVARCHAR(max) NULL, 
 	received_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT channel_messages_pkey PRIMARY KEY (deployment_id, message_key)
+	CONSTRAINT channel_messages_pkey PRIMARY KEY (tenant_id, deployment_id, message_key)
 );
 GO
 CREATE TABLE channel_cursors (
@@ -555,7 +555,7 @@ CREATE TABLE channel_cursors (
 	deployment_id VARCHAR(64) NOT NULL, 
 	delta_link VARCHAR(max) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT channel_cursors_pkey PRIMARY KEY (deployment_id)
+	CONSTRAINT channel_cursors_pkey PRIMARY KEY (tenant_id, deployment_id)
 );
 GO
 CREATE TABLE thread_inbox (
@@ -887,7 +887,7 @@ CREATE TABLE registry_widgets (
 	created_at VARCHAR(32) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
 	updated_by VARCHAR(200) NOT NULL, 
-	CONSTRAINT registry_widgets_pkey PRIMARY KEY (id)
+	CONSTRAINT registry_widgets_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE TABLE registry_workflows (
@@ -904,7 +904,7 @@ CREATE TABLE registry_workflows (
 	draft_saved_by VARCHAR(200) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT registry_workflows_pkey PRIMARY KEY (id)
+	CONSTRAINT registry_workflows_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE TABLE registry_validations (
@@ -982,23 +982,6 @@ CREATE TABLE ops_checkpoint_fences (
 	CONSTRAINT ops_checkpoint_fences_pkey PRIMARY KEY (tenant_id, team_id, thread_id)
 );
 GO
-CREATE TABLE registry_agent_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	agent_id VARCHAR(64) NOT NULL, 
-	version INTEGER NOT NULL, 
-	spec NVARCHAR(max) NOT NULL, 
-	digest VARCHAR(64) NOT NULL, 
-	note VARCHAR(max) NOT NULL, 
-	changes NVARCHAR(max) NOT NULL, 
-	saved_at VARCHAR(32) NOT NULL, 
-	saved_by VARCHAR(200) NOT NULL, 
-	published_at VARCHAR(32) NULL, 
-	published_by VARCHAR(200) NULL, 
-	review_id VARCHAR(64) NULL, 
-	CONSTRAINT registry_agent_versions_pkey PRIMARY KEY (agent_id, version), 
-	CONSTRAINT registry_agent_versions_agent_id_fkey FOREIGN KEY(agent_id) REFERENCES registry_agents (id) ON DELETE CASCADE
-);
-GO
 CREATE TABLE graph_runs (
 	id VARCHAR(64) NOT NULL, 
 	thread_id VARCHAR(64) NOT NULL, 
@@ -1017,6 +1000,23 @@ GO
 CREATE INDEX ix_graph_runs_tenant_id ON graph_runs (tenant_id);
 GO
 CREATE INDEX ix_graph_runs_thread_id ON graph_runs (thread_id);
+GO
+CREATE TABLE registry_agent_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	agent_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	spec NVARCHAR(max) NOT NULL, 
+	digest VARCHAR(64) NOT NULL, 
+	note VARCHAR(max) NOT NULL, 
+	changes NVARCHAR(max) NOT NULL, 
+	saved_at VARCHAR(32) NOT NULL, 
+	saved_by VARCHAR(200) NOT NULL, 
+	published_at VARCHAR(32) NULL, 
+	published_by VARCHAR(200) NULL, 
+	review_id VARCHAR(64) NULL, 
+	CONSTRAINT registry_agent_versions_pkey PRIMARY KEY (agent_id, version), 
+	CONSTRAINT registry_agent_versions_agent_id_fkey FOREIGN KEY(agent_id) REFERENCES registry_agents (id) ON DELETE CASCADE
+);
 GO
 CREATE TABLE registry_guardrail_versions (
 	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
@@ -1064,8 +1064,8 @@ CREATE TABLE registry_widget_versions (
 	published_at VARCHAR(32) NULL, 
 	published_by VARCHAR(200) NULL, 
 	review_id VARCHAR(64) NULL, 
-	CONSTRAINT registry_widget_versions_pkey PRIMARY KEY (widget_id, version), 
-	CONSTRAINT registry_widget_versions_widget_id_fkey FOREIGN KEY(widget_id) REFERENCES registry_widgets (id) ON DELETE CASCADE
+	CONSTRAINT registry_widget_versions_pkey PRIMARY KEY (tenant_id, widget_id, version), 
+	CONSTRAINT registry_widget_versions_tenant_id_widget_id_fkey FOREIGN KEY(tenant_id, widget_id) REFERENCES registry_widgets (tenant_id, id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 GO
 CREATE TABLE registry_workflow_versions (
@@ -1078,8 +1078,8 @@ CREATE TABLE registry_workflow_versions (
 	published_at VARCHAR(32) NOT NULL, 
 	published_by VARCHAR(200) NOT NULL, 
 	review_id VARCHAR(64) NULL, 
-	CONSTRAINT registry_workflow_versions_pkey PRIMARY KEY (workflow_id, version), 
-	CONSTRAINT registry_workflow_versions_workflow_id_fkey FOREIGN KEY(workflow_id) REFERENCES registry_workflows (id) ON DELETE CASCADE
+	CONSTRAINT registry_workflow_versions_pkey PRIMARY KEY (tenant_id, workflow_id, version), 
+	CONSTRAINT registry_workflow_versions_tenant_id_workflow_id_fkey FOREIGN KEY(tenant_id, workflow_id) REFERENCES registry_workflows (tenant_id, id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
@@ -1130,6 +1130,12 @@ CREATE SECURITY POLICY ops_security.engine_waits_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.engine_waits AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.graph_threads_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.graph_threads,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.registry_publish_requests_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_publish_requests,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_publish_requests AFTER INSERT,
@@ -1170,12 +1176,6 @@ CREATE SECURITY POLICY ops_security.form_links_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.form_links,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.form_links AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.form_links AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
-CREATE SECURITY POLICY ops_security.graph_threads_isolation
-    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.graph_threads,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.mailboxes_isolation
@@ -1365,5 +1365,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0107_system_reads_agent_pointers');
+INSERT INTO alembic_version (version_num) VALUES ('0108_registry_tenant_keys');
 GO

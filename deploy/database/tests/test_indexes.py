@@ -22,6 +22,12 @@ from ops_store.schema import TEAM_KEY, TEAM_OWNED, TENANT_SCOPED, team_owned, te
 
 # Chain -> foreign key columns with no index yet.
 WAITING: dict[str, set[str]] = {
+    # Each leads its key after the tenant (agents 0108); counted as leading once the table is marked tenant-scoped,
+    # with its policy.
+    "agents": {
+        "registry_widget_versions.widget_id",
+        "registry_workflow_versions.workflow_id",
+    },
     "models": {
         "model_aliases.provider_id",
     },

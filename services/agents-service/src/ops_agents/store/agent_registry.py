@@ -19,6 +19,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
+from .graphs import mine
 from .tenancy import LOCAL_TENANT, OWNER, SERVE_PUBLISHED, RuntimeStore, current_tenant
 
 registry_agents = sa.Table(
@@ -251,7 +252,9 @@ class AgentRegistry(RuntimeStore):
 
     async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
         """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""
-        q = sa.select(registry_agents).where(registry_agents.c.id == agent_id, team_visible(registry_agents))
+        q = sa.select(registry_agents).where(
+            mine(registry_agents), registry_agents.c.id == agent_id, team_visible(registry_agents)
+        )
         if lock:
             q = q.with_for_update()
         if c is None:
@@ -266,7 +269,11 @@ class AgentRegistry(RuntimeStore):
     async def versions(self, agent_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(registry_agent_versions)
-            .where(registry_agent_versions.c.agent_id == agent_id, team_visible(registry_agent_versions))
+            .where(
+                mine(registry_agent_versions),
+                registry_agent_versions.c.agent_id == agent_id,
+                team_visible(registry_agent_versions),
+            )
             .order_by(registry_agent_versions.c.version.desc())
         )
         async with self.tx() as c:
@@ -274,6 +281,7 @@ class AgentRegistry(RuntimeStore):
 
     async def version(self, agent_id: str, version: int) -> dict[str, Any]:
         q = sa.select(registry_agent_versions).where(
+            mine(registry_agent_versions),
             registry_agent_versions.c.agent_id == agent_id,
             registry_agent_versions.c.version == version,
             team_visible(registry_agent_versions),

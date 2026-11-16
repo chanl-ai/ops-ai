@@ -7,16 +7,17 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore, upsert
 from ops_store.schema import TEAM_OWNED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
-from .graphs import graph_threads
+from .graphs import graph_threads, mine
 from .tenancy import RuntimeStore, current_tenant
 
 Multitask = Literal["enqueue", "reject"]
@@ -24,8 +25,9 @@ Multitask = Literal["enqueue", "reject"]
 deployments = sa.Table(
     "deployments",
     metadata,
-    # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106). Leads the key
+    # (agents 0108): whoever creates a deployment names its id.
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("graph", sa.String(64), nullable=False),
     sa.Column("channel", sa.String(32), nullable=False),
@@ -44,8 +46,8 @@ deployments = sa.Table(
 channel_messages = sa.Table(
     "channel_messages",
     metadata,
-    # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The deployment's tenant (agents 0106), leading the key as the deployment's does (agents 0108).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
     sa.Column("deployment_id", sa.String(64), primary_key=True),
     # Normalised Message-ID, or a synthetic key when the message has none.
     sa.Column("message_key", sa.String(512), primary_key=True),
@@ -60,8 +62,8 @@ channel_messages = sa.Table(
 channel_cursors = sa.Table(
     "channel_cursors",
     metadata,
-    # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The deployment's tenant (agents 0106), leading the key as the deployment's does (agents 0108).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
     sa.Column("deployment_id", sa.String(64), primary_key=True),
     sa.Column("delta_link", sa.Text, nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
@@ -100,9 +102,6 @@ class ChannelStore(RuntimeStore):
     # and writes in one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
-    def _insert(self, table: sa.Table) -> Any:
-        return (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(table)
-
     async def put_deployment(self, d: Deployment, now: str) -> None:
         """Creates the deployment, or changes it when `d.team_id` owns it. An id is unique in the tenant, so one
         another team holds is refused rather than written over, without naming that team."""
@@ -114,18 +113,26 @@ class ChannelStore(RuntimeStore):
             "budget": d.budget,
             "team_id": d.team_id,
         }
-        stmt = (
-            self._insert(deployments)
-            .values(id=d.id, created_at=now, **values)
-            .on_conflict_do_update(index_elements=["id"], set_=values, where=deployments.c.team_id == d.team_id)
-        )
+        key = {"tenant_id": current_tenant(), "id": d.id}
+        taken = Conflict(f"A deployment {d.id} exists; choose another id.", code="deployment_id_taken")
         async with self.tx() as c:
-            if (await c.execute(stmt)).rowcount != 1:
-                raise Conflict(f"A deployment {d.id} exists; choose another id.", code="deployment_id_taken")
+            try:
+                async with self.attempt(c):
+                    stmt = insert_ignore(c, deployments, {**key, "created_at": now, **values}, keys=list(key))
+                    if (await c.execute(stmt)).rowcount == 1:
+                        return
+            except IntegrityError:
+                # SQL Server's existence check sees only the acting team's rows, so another team's id fails the key.
+                raise taken from None
+            own = sa.and_(mine(deployments), deployments.c.id == d.id, deployments.c.team_id == d.team_id)
+            if (await c.execute(deployments.update().where(own).values(**values))).rowcount != 1:
+                raise taken
 
     async def deployment(self, deployment_id: str) -> Deployment | None:
         async with self.tx() as c:
-            q = deployments.select().where(deployments.c.id == deployment_id, team_visible(deployments))
+            q = deployments.select().where(
+                mine(deployments), deployments.c.id == deployment_id, team_visible(deployments)
+            )
             r = (await c.execute(q)).mappings().first()
         if r is None:
             return None
@@ -133,8 +140,8 @@ class ChannelStore(RuntimeStore):
 
     async def set_paused(self, deployment_id: str, paused: bool) -> bool:
         async with self.tx() as c:
-            mine = sa.and_(deployments.c.id == deployment_id, team_visible(deployments))
-            res = await c.execute(deployments.update().where(mine).values(paused=paused))
+            own = sa.and_(mine(deployments), deployments.c.id == deployment_id, team_visible(deployments))
+            res = await c.execute(deployments.update().where(own).values(paused=paused))
             return res.rowcount == 1
 
     # ── the message ledger ──
@@ -143,7 +150,9 @@ class ChannelStore(RuntimeStore):
         if not keys:
             return {}
         q = channel_messages.select().where(
-            channel_messages.c.deployment_id == deployment_id, channel_messages.c.message_key.in_(keys)
+            mine(channel_messages),
+            channel_messages.c.deployment_id == deployment_id,
+            channel_messages.c.message_key.in_(keys),
         )
         async with self.tx() as c:
             return {r["message_key"]: dict(r) for r in (await c.execute(q)).mappings()}
@@ -159,19 +168,23 @@ class ChannelStore(RuntimeStore):
         now: str,
         payload: Any = None,
     ) -> None:
+        keys = {"tenant_id": current_tenant(), "deployment_id": deployment_id, "message_key": key}
         values = {"thread_id": thread_id, "role": role, "status": status, "payload": payload}
-        stmt = (
-            self._insert(channel_messages)
-            .values(deployment_id=deployment_id, message_key=key, received_at=now, **values)
-            .on_conflict_do_update(index_elements=["deployment_id", "message_key"], set_=values)
-        )
         async with self.tx() as c:
-            await c.execute(stmt)
+            await c.execute(
+                upsert(
+                    c, channel_messages, {**keys, "received_at": now, **values}, keys=list(keys), update=list(values)
+                )
+            )
 
     async def deferred(self, deployment_id: str) -> list[dict[str, Any]]:
         q = (
             channel_messages.select()
-            .where(channel_messages.c.deployment_id == deployment_id, channel_messages.c.status == "deferred")
+            .where(
+                mine(channel_messages),
+                channel_messages.c.deployment_id == deployment_id,
+                channel_messages.c.status == "deferred",
+            )
             .order_by(channel_messages.c.received_at)
         )
         async with self.tx() as c:
@@ -181,17 +194,16 @@ class ChannelStore(RuntimeStore):
 
     async def cursor(self, deployment_id: str) -> str | None:
         async with self.tx() as c:
-            q = sa.select(channel_cursors.c.delta_link).where(channel_cursors.c.deployment_id == deployment_id)
+            q = sa.select(channel_cursors.c.delta_link).where(
+                mine(channel_cursors), channel_cursors.c.deployment_id == deployment_id
+            )
             return (await c.execute(q)).scalar_one_or_none()
 
     async def save_cursor(self, deployment_id: str, delta_link: str, now: str) -> None:
-        stmt = (
-            self._insert(channel_cursors)
-            .values(deployment_id=deployment_id, delta_link=delta_link, updated_at=now)
-            .on_conflict_do_update(index_elements=["deployment_id"], set_={"delta_link": delta_link, "updated_at": now})
-        )
+        keys = {"tenant_id": current_tenant(), "deployment_id": deployment_id}
+        values = {**keys, "delta_link": delta_link, "updated_at": now}
         async with self.tx() as c:
-            await c.execute(stmt)
+            await c.execute(upsert(c, channel_cursors, values, keys=list(keys)))
 
     # ── thread inbox ──
 

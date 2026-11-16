@@ -15,13 +15,15 @@ from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
+from .graphs import mine
 from .tenancy import OWNER, RuntimeStore, current_tenant
 
 registry_workflows = sa.Table(
     "registry_workflows",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106). Leads the
+    # key (agents 0108): a seeded workflow's id is chosen, and a tenant whose threads run it holds its own copy.
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
@@ -43,11 +45,9 @@ registry_workflows = sa.Table(
 registry_workflow_versions = sa.Table(
     "registry_workflow_versions",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
-    sa.Column(
-        "workflow_id", sa.String(64), sa.ForeignKey("registry_workflows.id", ondelete="CASCADE"), primary_key=True
-    ),
+    # Its workflow's tenant; the composite key below holds a version to a workflow of the same tenant (agents 0108).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
+    sa.Column("workflow_id", sa.String(64), primary_key=True),
     # Same number as the graph_versions row it published.
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("graph", sa.JSON, nullable=False),
@@ -56,6 +56,13 @@ registry_workflow_versions = sa.Table(
     sa.Column("published_at", sa.String(32), nullable=False),
     sa.Column("published_by", sa.String(200), nullable=False),
     sa.Column("review_id", sa.String(64)),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "workflow_id"],
+        ["registry_workflows.tenant_id", "registry_workflows.id"],
+        name="registry_workflow_versions_tenant_id_workflow_id_fkey",
+        ondelete="CASCADE",
+        onupdate="CASCADE",
+    ),
     info=team_owned_via("registry_workflows", "workflow_id"),
 )
 
@@ -80,14 +87,14 @@ class WorkflowRegistry(RuntimeStore):
     async def ids(self) -> set[str]:
         """Every row's id, deleted ones included, in every team: a new workflow's id is unique across the workspace."""
         q = sa.select(registry_workflows.c.id).where(
-            any_team(registry_workflows, "a workflow id is unique across every team")
+            mine(registry_workflows), any_team(registry_workflows, "a workflow id is unique across every team")
         )
         async with self.tx() as c:
             return {str(i) for i in (await c.execute(q)).scalars()}
 
     async def rows(self) -> list[dict[str, Any]]:
         q = sa.select(registry_workflows).where(
-            registry_workflows.c.status != "deleted", team_visible(registry_workflows)
+            registry_workflows.c.status != "deleted", mine(registry_workflows), team_visible(registry_workflows)
         )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -97,6 +104,7 @@ class WorkflowRegistry(RuntimeStore):
         workflow and team here): what it reads decides access by the workflow's own team, not the caller's."""
         q = sa.select(registry_workflows).where(
             registry_workflows.c.status != "deleted",
+            mine(registry_workflows),
             any_team(registry_workflows, "a service checks a workflow's team for a tool grant"),
         )
         async with self.tx() as c:
@@ -110,7 +118,7 @@ class WorkflowRegistry(RuntimeStore):
     async def find(self, workflow_id: str) -> dict[str, Any] | None:
         """The row, deleted or not."""
         q = sa.select(registry_workflows).where(
-            registry_workflows.c.id == workflow_id, team_visible(registry_workflows)
+            registry_workflows.c.id == workflow_id, mine(registry_workflows), team_visible(registry_workflows)
         )
         async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
@@ -125,7 +133,11 @@ class WorkflowRegistry(RuntimeStore):
     async def versions(self, workflow_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(registry_workflow_versions)
-            .where(registry_workflow_versions.c.workflow_id == workflow_id, team_visible(registry_workflow_versions))
+            .where(
+                registry_workflow_versions.c.workflow_id == workflow_id,
+                mine(registry_workflow_versions),
+                team_visible(registry_workflow_versions),
+            )
             .order_by(registry_workflow_versions.c.version.desc())
         )
         async with self.tx() as c:
@@ -139,7 +151,7 @@ class WorkflowRegistry(RuntimeStore):
         async with self.tx() as c:
             await c.execute(
                 registry_workflows.update()
-                .where(registry_workflows.c.id == workflow_id)
+                .where(mine(registry_workflows), registry_workflows.c.id == workflow_id)
                 .values(**values, updated_at=now_iso())
             )
 
@@ -148,6 +160,7 @@ class WorkflowRegistry(RuntimeStore):
             exists = (
                 await c.execute(
                     sa.select(registry_workflow_versions.c.version).where(
+                        mine(registry_workflow_versions),
                         registry_workflow_versions.c.workflow_id == row["workflow_id"],
                         registry_workflow_versions.c.version == row["version"],
                         any_team(registry_workflow_versions, "a version number is unique per workflow"),
@@ -171,7 +184,7 @@ class WorkflowRegistry(RuntimeStore):
             return []
         q = (
             sa.select(registry_validations)
-            .where(registry_validations.c.workflow_id.in_(sorted(workflow_ids)))
+            .where(mine(registry_validations), registry_validations.c.workflow_id.in_(sorted(workflow_ids)))
             .order_by(registry_validations.c.ran_at.desc(), registry_validations.c.id.desc())
         )
         async with self.tx() as c:
@@ -180,7 +193,7 @@ class WorkflowRegistry(RuntimeStore):
     async def last_validation(self, workflow_id: str) -> dict[str, Any] | None:
         q = (
             sa.select(registry_validations)
-            .where(registry_validations.c.workflow_id == workflow_id)
+            .where(mine(registry_validations), registry_validations.c.workflow_id == workflow_id)
             .order_by(registry_validations.c.ran_at.desc())
             .limit(1)
         )

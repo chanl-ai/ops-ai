@@ -208,12 +208,18 @@ class GraphStore(RuntimeStore):
             )
 
     async def versions(self, name: str) -> list[dict[str, Any]]:
-        q = graph_versions.select().where(graph_versions.c.name == name).order_by(graph_versions.c.version)
+        q = (
+            graph_versions.select()
+            .where(mine(graph_versions), graph_versions.c.name == name)
+            .order_by(graph_versions.c.version)
+        )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def version(self, name: str, version: int) -> dict[str, Any] | None:
-        q = graph_versions.select().where(graph_versions.c.name == name, graph_versions.c.version == version)
+        q = graph_versions.select().where(
+            mine(graph_versions), graph_versions.c.name == name, graph_versions.c.version == version
+        )
         async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
@@ -222,12 +228,18 @@ class GraphStore(RuntimeStore):
         """Stores the next version of a workflow; a definition already stored under its digest returns that version."""
         async with self.tx() as c:
             same = (
-                await c.execute(sa.select(graph_versions.c.version).where(graph_versions.c.digest == digest))
+                await c.execute(
+                    sa.select(graph_versions.c.version).where(mine(graph_versions), graph_versions.c.digest == digest)
+                )
             ).first()
             if same:
                 return int(same.version)
             latest = (
-                await c.execute(sa.select(sa.func.max(graph_versions.c.version)).where(graph_versions.c.name == name))
+                await c.execute(
+                    sa.select(sa.func.max(graph_versions.c.version)).where(
+                        mine(graph_versions), graph_versions.c.name == name
+                    )
+                )
             ).scalar()
             version = int(latest or 0) + 1
             await c.execute(
@@ -465,7 +477,11 @@ class GraphStore(RuntimeStore):
 
     async def latest_versions(self) -> dict[str, int]:
         """Every published definition's name and its highest version."""
-        q = sa.select(graph_versions.c.name, sa.func.max(graph_versions.c.version)).group_by(graph_versions.c.name)
+        q = (
+            sa.select(graph_versions.c.name, sa.func.max(graph_versions.c.version))
+            .where(mine(graph_versions))
+            .group_by(graph_versions.c.name)
+        )
         async with self.tx() as c:
             return {str(r[0]): int(r[1]) for r in await c.execute(q)}
 

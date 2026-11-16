@@ -23,13 +23,15 @@ from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
+from .graphs import mine
 from .tenancy import OWNER, RuntimeStore, current_tenant
 
 registry_widgets = sa.Table(
     "registry_widgets",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106). Leads the
+    # key (agents 0108): a widget id is a slug, so two tenants may choose the same one.
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
     # The widget id agents pin, a slug of its first name (hold-review).
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
@@ -49,9 +51,9 @@ registry_widgets = sa.Table(
 registry_widget_versions = sa.Table(
     "registry_widget_versions",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
-    sa.Column("widget_id", sa.String(64), sa.ForeignKey("registry_widgets.id", ondelete="CASCADE"), primary_key=True),
+    # Its widget's tenant; the composite key below holds a version to a widget of the same tenant (agents 0108).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
+    sa.Column("widget_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("content", sa.JSON, nullable=False),
     sa.Column("digest", sa.String(64), nullable=False),
@@ -61,6 +63,13 @@ registry_widget_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "widget_id"],
+        ["registry_widgets.tenant_id", "registry_widgets.id"],
+        name="registry_widget_versions_tenant_id_widget_id_fkey",
+        ondelete="CASCADE",
+        onupdate="CASCADE",
+    ),
     info=team_owned_via("registry_widgets", "widget_id"),
 )
 
@@ -83,7 +92,7 @@ class WidgetRegistry(RuntimeStore):
                 for r in (
                     await c.execute(
                         sa.select(registry_widgets)
-                        .where(team_visible(registry_widgets))
+                        .where(mine(registry_widgets), team_visible(registry_widgets))
                         .order_by(registry_widgets.c.id)
                     )
                 ).mappings()
@@ -94,7 +103,7 @@ class WidgetRegistry(RuntimeStore):
         query."""
         q = (
             sa.select(registry_widgets)
-            .where(self._matches(teams, search), team_visible(registry_widgets))
+            .where(self._matches(teams, search), mine(registry_widgets), team_visible(registry_widgets))
             .order_by(sa.func.lower(registry_widgets.c.name), registry_widgets.c.id)
         )
         async with self.tx() as c:
@@ -108,12 +117,15 @@ class WidgetRegistry(RuntimeStore):
         t = registry_widgets.c
         scope = t.team_id.in_(teams)
         if ids is not None:
-            q = sa.select(registry_widgets).where(scope, t.id.in_(ids), team_visible(registry_widgets))
+            q = sa.select(registry_widgets).where(
+                scope, t.id.in_(ids), mine(registry_widgets), team_visible(registry_widgets)
+            )
         else:
             q = sa.select(registry_widgets).where(
                 self._matches(teams, search),
                 t.published_version.is_not(None),
                 t.retired_reason.is_(None),
+                mine(registry_widgets),
                 team_visible(registry_widgets),
             )
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
@@ -124,7 +136,7 @@ class WidgetRegistry(RuntimeStore):
         q = (
             sa.select(sa.func.count())
             .select_from(registry_widgets)
-            .where(self._matches(teams, search), team_visible(registry_widgets))
+            .where(self._matches(teams, search), mine(registry_widgets), team_visible(registry_widgets))
         )
         async with self.tx() as c:
             return int((await c.execute(q)).scalar_one())
@@ -139,7 +151,9 @@ class WidgetRegistry(RuntimeStore):
         return (await self.owner_teams(conn, registry_widgets, {widget_id}, OWNER)).get(widget_id)
 
     async def find(self, widget_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
-        q = sa.select(registry_widgets).where(registry_widgets.c.id == widget_id, team_visible(registry_widgets))
+        q = sa.select(registry_widgets).where(
+            registry_widgets.c.id == widget_id, mine(registry_widgets), team_visible(registry_widgets)
+        )
         if c is not None:
             r = (await c.execute(q)).mappings().first()
         else:
@@ -158,6 +172,7 @@ class WidgetRegistry(RuntimeStore):
             q = sa.select(registry_widget_versions).where(
                 registry_widget_versions.c.widget_id == widget_id,
                 registry_widget_versions.c.version == version,
+                mine(registry_widget_versions),
                 team_visible(registry_widget_versions),
             )
             r = (await c.execute(q)).mappings().first()
@@ -167,7 +182,11 @@ class WidgetRegistry(RuntimeStore):
         async with self.tx() as c:
             q = (
                 sa.select(registry_widget_versions)
-                .where(registry_widget_versions.c.widget_id == widget_id, team_visible(registry_widget_versions))
+                .where(
+                    registry_widget_versions.c.widget_id == widget_id,
+                    mine(registry_widget_versions),
+                    team_visible(registry_widget_versions),
+                )
                 .order_by(registry_widget_versions.c.version.desc())
             )
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -176,8 +195,9 @@ class WidgetRegistry(RuntimeStore):
         at = now_iso()
         async with self.tx() as c:
             taken = sa.select(registry_widgets.c.id).where(
+                mine(registry_widgets),
                 registry_widgets.c.id == widget_id,
-                any_team(registry_widgets, "a widget id is unique across every team"),
+                any_team(registry_widgets, "a widget id is unique across the tenant's teams"),
             )
             if (await c.execute(taken)).first() is not None:
                 raise Conflict(f"A widget with id {widget_id} exists; rename it.", code="widget_taken")
@@ -213,6 +233,7 @@ class WidgetRegistry(RuntimeStore):
             q = sa.select(registry_widget_versions).where(
                 registry_widget_versions.c.widget_id == widget_id,
                 registry_widget_versions.c.version == n,
+                mine(registry_widget_versions),
                 team_visible(registry_widget_versions),
             )
             newest = (await c.execute(q)).mappings().one()
@@ -220,7 +241,11 @@ class WidgetRegistry(RuntimeStore):
             if newest["published_at"] is None:
                 await c.execute(
                     registry_widget_versions.update()
-                    .where(registry_widget_versions.c.widget_id == widget_id, registry_widget_versions.c.version == n)
+                    .where(
+                        mine(registry_widget_versions),
+                        registry_widget_versions.c.widget_id == widget_id,
+                        registry_widget_versions.c.version == n,
+                    )
                     .values(**values, changes=changes_between(newest["content"], content) or ["No change"])
                 )
             else:
@@ -232,7 +257,7 @@ class WidgetRegistry(RuntimeStore):
                 )
             await c.execute(
                 registry_widgets.update()
-                .where(registry_widgets.c.id == widget_id)
+                .where(mine(registry_widgets), registry_widgets.c.id == widget_id)
                 .values(version=n, name=str(content["name"]), updated_at=at, updated_by=by)
             )
         return n
@@ -242,12 +267,16 @@ class WidgetRegistry(RuntimeStore):
         async with self.tx() as c:
             await c.execute(
                 registry_widget_versions.update()
-                .where(registry_widget_versions.c.widget_id == widget_id, registry_widget_versions.c.version == version)
+                .where(
+                    mine(registry_widget_versions),
+                    registry_widget_versions.c.widget_id == widget_id,
+                    registry_widget_versions.c.version == version,
+                )
                 .values(published_at=at, published_by=by, review_id=review_id)
             )
             await c.execute(
                 registry_widgets.update()
-                .where(registry_widgets.c.id == widget_id)
+                .where(mine(registry_widgets), registry_widgets.c.id == widget_id)
                 .values(published_version=version, updated_at=at, updated_by=by)
             )
 
@@ -256,6 +285,6 @@ class WidgetRegistry(RuntimeStore):
             await self.row(widget_id, c)
             await c.execute(
                 registry_widgets.update()
-                .where(registry_widgets.c.id == widget_id)
+                .where(mine(registry_widgets), registry_widgets.c.id == widget_id)
                 .values(retired_reason=reason, updated_at=now_iso(), updated_by=by)
             )

@@ -1,4 +1,4 @@
-# 32 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull request.
+# 28 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull request.
 # Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key.
 # packages/ops_engine: 12
 2 sql packages/ops_engine/src/ops_engine/store/clock.py database clock
@@ -7,15 +7,13 @@
 1 sql packages/ops_engine/src/ops_engine/store/steps.py row lock
 1 sql packages/ops_engine/src/ops_engine/store/work.py SKIP LOCKED
 1 sql packages/ops_engine/src/ops_engine/store/work.py row lock
-# services/agents-service: 13
+# services/agents-service: 9
 1 sql services/agents-service/migrations/versions/0006_gateway_calls_and_review_approvals.py postgresql_where option
 1 sql services/agents-service/migrations/versions/0007_timers_human_step_sla_timers.py postgresql_where option
 2 sql services/agents-service/migrations/versions/0009_timer_claims_fenced_claim_and_retry_cap.py postgresql_where option
 1 sql services/agents-service/src/ops_agents/api/hitl_facade.py RETURNING
 1 sql services/agents-service/src/ops_agents/store/agent_registry.py row lock
 2 sql services/agents-service/src/ops_agents/store/cases.py row lock
-3 sql services/agents-service/src/ops_agents/store/channels.py ON CONFLICT
-1 sql services/agents-service/src/ops_agents/store/channels.py dialect insert
 1 sql services/agents-service/src/ops_agents/store/typed_records.py row lock
 # services/kb-service: 2
 2 sql services/kb-service/migrations/versions/0002_items_versions_and_chunks.py postgresql_using option

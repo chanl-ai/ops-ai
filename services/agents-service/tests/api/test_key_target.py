@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_agents.store.graphs import GraphStore
 from ops_agents.store.tenancy import tenant_scope
 from tests.api.test_action_roles import live_run, refused, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_lifecycle_rights import BUILDER, unowned_live
+from tests.engine.test_lifecycle_rights import BUILDER, TENANT, unowned_live
 
 WF, PIN, AGENT = ({"X-API-Key": f"ok_ops.{k}", "X-Team-Id": "team_ops"} for k in ("wf", "pin", "agent"))
 Stack = tuple[AsyncClient, AsyncEngine]
@@ -51,7 +51,8 @@ async def test_a_keys_run_is_its_own(stack: Stack) -> None:  # noqa: F811
 
 async def test_a_pinned_key_keeps_its_version_on_a_thread(stack: Stack) -> None:  # noqa: F811
     c, engine = stack
-    with tenant_scope("acme"):
+    # The keys act in the stack's tenant; graph versions are read only there (agents 0108).
+    with tenant_scope(TENANT):
         for n in (1, 2):
             await GraphStore(engine).publish("refunds", {"name": "refunds", "n": n}, f"d{n}", "now")
     asked = await c.post("/v1/threads", json={"graph": "refunds", "version": 2, "metadata": {}}, headers=PIN)
