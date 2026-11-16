@@ -1,0 +1,7104 @@
+{
+  "invite": {
+    "invites": [
+      {
+        "email": "new.one@<run>.bank.test",
+        "memberId": "<mem>",
+        "token": "<inv-token>"
+      }
+    ],
+    "skipped": [],
+    "updated": [
+      "<mem>"
+    ]
+  },
+  "keyCreate": {
+    "key": {
+      "createdAt": "<timeZ>",
+      "createdBy": "Ana Ops",
+      "expiresAt": null,
+      "id": "<key>",
+      "lastUsedAt": null,
+      "name": "ci",
+      "prefix": "<key>",
+      "scopes": [
+        "read"
+      ],
+      "status": "active",
+      "target": null,
+      "team": "Team admin <team>"
+    },
+    "secret": "ok_<key>.<secret>"
+  },
+  "keyRevoke": {
+    "createdAt": "<timeZ>",
+    "createdBy": "Ana Ops",
+    "expiresAt": null,
+    "id": "<key>",
+    "lastUsedAt": null,
+    "name": "ci",
+    "prefix": "<key>",
+    "scopes": [
+      "read"
+    ],
+    "status": "revoked",
+    "target": null,
+    "team": "Team admin <team>"
+  },
+  "keySummaries": [
+    {
+      "createdAt": "<timeZ>",
+      "expiresAt": null,
+      "id": "<key>",
+      "lastUsedAt": null,
+      "name": "ci",
+      "prefix": "<key>",
+      "status": "active",
+      "target": null,
+      "teamId": "<team>"
+    }
+  ],
+  "keys": [
+    {
+      "createdAt": "<timeZ>",
+      "createdBy": "Ana Ops",
+      "expiresAt": null,
+      "id": "<key>",
+      "lastUsedAt": null,
+      "name": "ci",
+      "prefix": "<key>",
+      "scopes": [
+        "read"
+      ],
+      "status": "active",
+      "target": null,
+      "team": "Team admin <team>"
+    }
+  ],
+  "me": {
+    "flags": [
+      {
+        "description": "Outside assistants reach a team's tools at the MCP address (/mcp/{env}/{team}).",
+        "name": "mcp_gateway",
+        "on": false
+      },
+      {
+        "description": "Agents with more tools than OPS_TOOL_SEARCH_ABOVE search for the one they need.",
+        "name": "tool_search",
+        "on": false
+      },
+      {
+        "description": "Each team keeps the plugin version it took and reviews an upgrade before its tools change.",
+        "name": "plugin_updates",
+        "on": false
+      },
+      {
+        "description": "The console shows one area at a time, picked from the top bar; off, the sidebar lists every area.",
+        "name": "area_tabs",
+        "on": false
+      }
+    ],
+    "policies": {
+      "aiSteps": {},
+      "aiStepsMaskPersonalData": {},
+      "appChanges": {},
+      "appChangesByApp": {},
+      "appWritesNeedApproval": {},
+      "appsChangeWithoutAsking": {},
+      "chatThreadsOwnerOnly": true,
+      "checkBeforeSend": {},
+      "companySignInRequired": false,
+      "egressNewHosts": "ask_security",
+      "extractionFloor": 0.8,
+      "mcpConnectionHours": 8,
+      "memoryRetentionDays": null,
+      "pageImages": {},
+      "publishReview": {},
+      "requesterMayDecide": false,
+      "reviewSlaHours": 8,
+      "securityTeamAddsSecrets": false,
+      "stepUp": false,
+      "taskAssist": {},
+      "toolWritesNeedApproval": {}
+    },
+    "securityTeamId": "team_security",
+    "teams": [
+      {
+        "id": "<team>",
+        "name": "Team admin <team>",
+        "role": "admin"
+      },
+      {
+        "id": "<team>",
+        "name": "Team viewer <team>",
+        "role": "admin"
+      }
+    ],
+    "tenantId": "<ten>",
+    "tenantName": "<ten>",
+    "user": {
+      "email": "owner@<run>.bank.test",
+      "id": "<usr>",
+      "name": "Ana Ops"
+    },
+    "workspace": {
+      "ownerUserId": null,
+      "purgeAfter": null,
+      "status": "active"
+    }
+  },
+  "memberRole": {
+    "skipped": [],
+    "updated": [
+      "<mem>"
+    ]
+  },
+  "members": {
+    "data": [
+      {
+        "email": "owner@<run>.bank.test",
+        "id": "<mem>",
+        "name": "Ana Ops",
+        "role": "admin",
+        "status": "active",
+        "team": "Team admin <team>",
+        "teamId": "<team>",
+        "userId": "<usr>",
+        "workspaceRoles": [
+          "Admin"
+        ]
+      },
+      {
+        "email": "new.one@<run>.bank.test",
+        "id": "<mem>",
+        "invitedAt": "<timeZ>",
+        "name": "new.one@<run>.bank.test",
+        "role": "viewer",
+        "status": "invited",
+        "team": "Team admin <team>",
+        "teamId": "<team>",
+        "userId": null,
+        "workspaceRoles": []
+      }
+    ],
+    "facets": {
+      "role": {
+        "admin": 1,
+        "viewer": 1
+      },
+      "status": {
+        "active": 1,
+        "invited": 1
+      }
+    },
+    "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 2,
+      "total": 2,
+      "totalPages": 1
+    }
+  },
+  "permissionVersion": {
+    "permissionVersion": 5
+  },
+  "permissions": {
+    "permissionVersion": 3,
+    "personId": "<usr>",
+    "teams": [
+      {
+        "permissions": [
+          {
+            "action": "view",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "agents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "workflows",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "skills",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "guardrails",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "widgets",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "evals",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "knowledge",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "tools",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "connections",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "documents",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "chat",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "own",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "memory",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "reviews",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "cases",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "deployments",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "access",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "audit",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "activity",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "mcp",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "webhooks",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "usage",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          }
+        ],
+        "teamId": "<team>",
+        "teamName": "Team admin <team>"
+      }
+    ],
+    "workspace": [
+      {
+        "action": "view",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "agents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "workflows",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "skills",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "guardrails",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "widgets",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "evals",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "knowledge",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "tools",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": true
+      },
+      {
+        "action": "manage",
+        "area": "secrets_egress",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": true
+      },
+      {
+        "action": "view",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "connections",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "files",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "documents",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "chat",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "own",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "memory",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "reviews",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "cases",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "deployments",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": true
+      },
+      {
+        "action": "create",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "settings",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": true
+      },
+      {
+        "action": "view",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "access",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "audit",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "activity",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "mcp",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "webhooks",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "usage",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      }
+    ]
+  },
+  "refresh": {
+    "expiresAt": "<timeZ>",
+    "principal": {
+      "authMethod": "dev",
+      "email": "owner@<run>.bank.test",
+      "kind": "person",
+      "name": "Ana Ops",
+      "policies": {
+        "chatThreadsOwnerOnly": true,
+        "companySignInRequired": false,
+        "extractionFloor": 0.8,
+        "mcpConnectionHours": 8,
+        "memoryRetentionDays": null,
+        "requesterMayDecide": false,
+        "reviewSlaHours": 8,
+        "securityTeamAddsSecrets": false,
+        "stepUp": false
+      },
+      "roles": {
+        "<team>": "admin"
+      },
+      "scopes": [],
+      "sub": "<usr>",
+      "teamId": null,
+      "teamIds": [
+        "<team>",
+        "<team>"
+      ],
+      "tenantId": "<ten>"
+    },
+    "refreshToken": "<ses>.<secret>",
+    "token": {
+      "<token>": {
+        "<lifetime>": 900,
+        "access": {
+          "*": [
+            "admin"
+          ],
+          "<team>": [
+            "admin"
+          ]
+        },
+        "amr": [],
+        "aud": [
+          "platform",
+          "agents"
+        ],
+        "auth_method": "dev",
+        "auth_time": "<epoch>",
+        "email": "owner@<run>.bank.test",
+        "exp": "<epoch>",
+        "grids": {
+          "admin": {
+            "access": "cxdemprv",
+            "activity": "cxdemprv",
+            "agents": "cxdemprv",
+            "audit": "cxdemprv",
+            "cases": "cxdemprv",
+            "chat": "cxdemprv",
+            "connections": "cxdemprv",
+            "deployments": "cxdemprv",
+            "documents": "cxdemprv",
+            "evals": "cxdemprv",
+            "files": "cxdemprv",
+            "guardrails": "cxdemprv",
+            "knowledge": "cxdemprv",
+            "mcp": "cxdemprv",
+            "memory": "cxdEmprv",
+            "reviews": "cxdemprv",
+            "secrets_egress": "cxdemprv",
+            "settings": "cxdemprv",
+            "skills": "cxdemprv",
+            "tools": "cxdemprv",
+            "usage": "cxdemprv",
+            "webhooks": "cxdemprv",
+            "widgets": "cxdemprv",
+            "workflows": "cxdemprv"
+          },
+          "builder": {
+            "access": "v",
+            "activity": "cxdemprv",
+            "agents": "cxdemprv",
+            "audit": "cxdemprv",
+            "cases": "cxdemprv",
+            "chat": "cxdemprv",
+            "connections": "v",
+            "deployments": "cxdemprv",
+            "documents": "cxdemprv",
+            "evals": "cxdemprv",
+            "files": "cxdemprv",
+            "guardrails": "cxdemprv",
+            "knowledge": "cxdemprv",
+            "mcp": "cxdemprv",
+            "memory": "cxdEmprv",
+            "reviews": "cxdemprv",
+            "secrets_egress": "v",
+            "skills": "cxdemprv",
+            "tools": "cxdemprv",
+            "widgets": "cxdemprv",
+            "workflows": "cxdemprv"
+          },
+          "chat_user": {
+            "chat": "rV",
+            "memory": "E"
+          },
+          "owner": {
+            "workspace": "m"
+          },
+          "reviewer": {
+            "access": "v",
+            "activity": "v",
+            "agents": "xv",
+            "cases": "cemv",
+            "chat": "xrV",
+            "connections": "v",
+            "deployments": "v",
+            "documents": "erv",
+            "evals": "v",
+            "files": "cdv",
+            "guardrails": "xDv",
+            "knowledge": "v",
+            "mcp": "V",
+            "memory": "E",
+            "reviews": "xv",
+            "secrets_egress": "xv",
+            "skills": "xDv",
+            "tools": "xv",
+            "widgets": "xv",
+            "workflows": "xv"
+          },
+          "security_admin": {
+            "activity": "v",
+            "secrets_egress": "cxdemv",
+            "settings": "mv"
+          },
+          "viewer": {
+            "access": "v",
+            "agents": "v",
+            "cases": "ceMv",
+            "chat": "rV",
+            "connections": "v",
+            "deployments": "v",
+            "documents": "erv",
+            "evals": "v",
+            "files": "cdv",
+            "guardrails": "Dv",
+            "knowledge": "v",
+            "mcp": "V",
+            "memory": "E",
+            "reviews": "v",
+            "secrets_egress": "v",
+            "skills": "Dv",
+            "tools": "v",
+            "widgets": "v",
+            "workflows": "v"
+          }
+        },
+        "iat": "<epoch>",
+        "jti": "<tok>",
+        "kind": "person",
+        "name": "Ana Ops",
+        "perm_version": 3,
+        "policies": {
+          "chatThreadsOwnerOnly": true,
+          "companySignInRequired": false,
+          "extractionFloor": 0.8,
+          "mcpConnectionHours": 8,
+          "memoryRetentionDays": null,
+          "requesterMayDecide": false,
+          "reviewSlaHours": 8,
+          "securityTeamAddsSecrets": false,
+          "stepUp": false
+        },
+        "roles": {
+          "<team>": "admin"
+        },
+        "security_team": "team_security",
+        "sid": "<ses>",
+        "sub": "<usr>",
+        "team_ids": [
+          "<team>",
+          "<team>"
+        ],
+        "tenant_id": "<ten>"
+      }
+    }
+  },
+  "role": {
+    "assignmentCount": 0,
+    "builtin": true,
+    "canEdit": true,
+    "description": "Everything in the team except people and access and the workspace's settings.",
+    "grid": [
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "agents"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "workflows"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "skills"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "guardrails"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "widgets"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "evals"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "knowledge"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "tools"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": "all"
+        },
+        "area": "secrets_egress"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": "all"
+        },
+        "area": "connections"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "files"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "documents"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "chat"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "own",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "memory"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "reviews"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "cases"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "deployments"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "settings"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": "all"
+        },
+        "area": "access"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "audit"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "activity"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
+        "area": "mcp"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "webhooks"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "usage"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "workspace"
+      }
+    ],
+    "id": "builder",
+    "lockedReason": null,
+    "name": "Builder",
+    "notHeld": [],
+    "permissionCount": 147,
+    "permissions": [
+      {
+        "action": "view",
+        "area": "access",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "activity",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "agents",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "audit",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "cases",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "chat",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "connections",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "deployments",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "documents",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "evals",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "files",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "guardrails",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "knowledge",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "mcp",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "memory",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "memory",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "memory",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "memory",
+        "scope": "own"
+      },
+      {
+        "action": "manage",
+        "area": "memory",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "memory",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "memory",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "memory",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "reviews",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "secrets_egress",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "skills",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "tools",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "widgets",
+        "scope": "all"
+      },
+      {
+        "action": "create",
+        "area": "workflows",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "workflows",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "workflows",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "workflows",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "workflows",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "workflows",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "workflows",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "workflows",
+        "scope": "all"
+      }
+    ]
+  },
+  "roleCreate": {
+    "assignmentCount": 0,
+    "builtin": false,
+    "canEdit": true,
+    "description": "",
+    "grid": [
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": "all"
+        },
+        "area": "agents"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "workflows"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "skills"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "guardrails"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "widgets"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "evals"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "knowledge"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "tools"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "secrets_egress"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "connections"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "files"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "documents"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "chat"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "memory"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "reviews"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "cases"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "deployments"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "settings"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "access"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "audit"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "activity"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "mcp"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "webhooks"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "usage"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "workspace"
+      }
+    ],
+    "id": "<role>",
+    "leftOut": [],
+    "name": "Case desk",
+    "notHeld": [
+      "secrets_egress.view",
+      "secrets_egress.create",
+      "secrets_egress.edit",
+      "secrets_egress.publish",
+      "secrets_egress.delete",
+      "secrets_egress.run",
+      "secrets_egress.decide",
+      "secrets_egress.manage",
+      "settings.view",
+      "settings.manage"
+    ],
+    "permissionCount": 1,
+    "permissions": [
+      {
+        "action": "view",
+        "area": "agents",
+        "scope": "all"
+      }
+    ]
+  },
+  "roleGive": {
+    "createdAt": "<timeZ>",
+    "expiresAt": null,
+    "grantedBy": "<usr>",
+    "id": "<ras>",
+    "roleId": "<role>",
+    "roleName": "Case desk",
+    "teamId": "<team>"
+  },
+  "roleGrants": [
+    {
+      "createdAt": "<timeZ>",
+      "expiresAt": null,
+      "grantedBy": "<usr>",
+      "id": "<ras>",
+      "roleId": "<role>",
+      "roleName": "Case desk",
+      "teamId": "<team>"
+    }
+  ],
+  "roleGrantsAfter": [],
+  "roleTake": null,
+  "roles": [
+    {
+      "assignmentCount": 2,
+      "builtin": true,
+      "description": "Everything in the team: every area and action. Actions held in the Security team still need a role there.",
+      "id": "admin",
+      "name": "Admin",
+      "permissionCount": 192
+    },
+    {
+      "assignmentCount": 0,
+      "builtin": true,
+      "description": "Everything in the team except people and access and the workspace's settings.",
+      "id": "builder",
+      "name": "Builder",
+      "permissionCount": 147
+    },
+    {
+      "assignmentCount": 0,
+      "builtin": true,
+      "description": "Reads the team's work and decides its reviews; in the Security team, decides module security reviews.",
+      "id": "reviewer",
+      "name": "Reviewer",
+      "permissionCount": 39
+    },
+    {
+      "assignmentCount": 1,
+      "builtin": true,
+      "description": "Reads the team's work and chats with its agents.",
+      "id": "viewer",
+      "name": "Viewer",
+      "permissionCount": 29
+    },
+    {
+      "assignmentCount": 0,
+      "builtin": true,
+      "description": "Changes egress, secrets and storage settings for every team, and decides module security reviews.",
+      "id": "security_admin",
+      "name": "Security admin",
+      "permissionCount": 9
+    },
+    {
+      "assignmentCount": 0,
+      "builtin": true,
+      "description": "Chats with the agents published to the team and sees only their own threads; nothing else.",
+      "id": "chat_user",
+      "name": "Chat user",
+      "permissionCount": 3
+    },
+    {
+      "assignmentCount": 0,
+      "builtin": true,
+      "description": "Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it.",
+      "id": "owner",
+      "name": "Owner",
+      "permissionCount": 1
+    }
+  ],
+  "session": {
+    "authMethod": "dev",
+    "email": "owner@<run>.bank.test",
+    "kind": "person",
+    "name": "Ana Ops",
+    "policies": {
+      "chatThreadsOwnerOnly": true,
+      "companySignInRequired": false,
+      "extractionFloor": 0.8,
+      "mcpConnectionHours": 8,
+      "memoryRetentionDays": null,
+      "requesterMayDecide": false,
+      "reviewSlaHours": 8,
+      "securityTeamAddsSecrets": false,
+      "stepUp": false
+    },
+    "roles": {
+      "<team>": "admin"
+    },
+    "scopes": [],
+    "sub": "<usr>",
+    "teamId": null,
+    "teamIds": [
+      "<team>",
+      "<team>"
+    ],
+    "tenantId": "<ten>"
+  },
+  "sessionAfter": [
+    401,
+    {
+      "error": {
+        "code": "unauthorized",
+        "message": "Sign in again.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    }
+  ],
+  "signIn": {
+    "expiresAt": "<timeZ>",
+    "principal": {
+      "authMethod": "dev",
+      "email": "owner@<run>.bank.test",
+      "kind": "person",
+      "name": "Ana Ops",
+      "policies": {
+        "chatThreadsOwnerOnly": true,
+        "companySignInRequired": false,
+        "extractionFloor": 0.8,
+        "mcpConnectionHours": 8,
+        "memoryRetentionDays": null,
+        "requesterMayDecide": false,
+        "reviewSlaHours": 8,
+        "securityTeamAddsSecrets": false,
+        "stepUp": false
+      },
+      "roles": {
+        "<team>": "admin"
+      },
+      "scopes": [],
+      "sub": "<usr>",
+      "teamId": null,
+      "teamIds": [
+        "<team>",
+        "<team>"
+      ],
+      "tenantId": "<ten>"
+    },
+    "refreshToken": "<ses>.<secret>",
+    "token": {
+      "<token>": {
+        "<lifetime>": 900,
+        "access": {
+          "*": [
+            "admin"
+          ],
+          "<team>": [
+            "admin"
+          ]
+        },
+        "amr": [],
+        "aud": [
+          "platform",
+          "agents"
+        ],
+        "auth_method": "dev",
+        "auth_time": "<epoch>",
+        "email": "owner@<run>.bank.test",
+        "exp": "<epoch>",
+        "grids": {
+          "admin": {
+            "access": "cxdemprv",
+            "activity": "cxdemprv",
+            "agents": "cxdemprv",
+            "audit": "cxdemprv",
+            "cases": "cxdemprv",
+            "chat": "cxdemprv",
+            "connections": "cxdemprv",
+            "deployments": "cxdemprv",
+            "documents": "cxdemprv",
+            "evals": "cxdemprv",
+            "files": "cxdemprv",
+            "guardrails": "cxdemprv",
+            "knowledge": "cxdemprv",
+            "mcp": "cxdemprv",
+            "memory": "cxdEmprv",
+            "reviews": "cxdemprv",
+            "secrets_egress": "cxdemprv",
+            "settings": "cxdemprv",
+            "skills": "cxdemprv",
+            "tools": "cxdemprv",
+            "usage": "cxdemprv",
+            "webhooks": "cxdemprv",
+            "widgets": "cxdemprv",
+            "workflows": "cxdemprv"
+          },
+          "builder": {
+            "access": "v",
+            "activity": "cxdemprv",
+            "agents": "cxdemprv",
+            "audit": "cxdemprv",
+            "cases": "cxdemprv",
+            "chat": "cxdemprv",
+            "connections": "v",
+            "deployments": "cxdemprv",
+            "documents": "cxdemprv",
+            "evals": "cxdemprv",
+            "files": "cxdemprv",
+            "guardrails": "cxdemprv",
+            "knowledge": "cxdemprv",
+            "mcp": "cxdemprv",
+            "memory": "cxdEmprv",
+            "reviews": "cxdemprv",
+            "secrets_egress": "v",
+            "skills": "cxdemprv",
+            "tools": "cxdemprv",
+            "widgets": "cxdemprv",
+            "workflows": "cxdemprv"
+          },
+          "chat_user": {
+            "chat": "rV",
+            "memory": "E"
+          },
+          "owner": {
+            "workspace": "m"
+          },
+          "reviewer": {
+            "access": "v",
+            "activity": "v",
+            "agents": "xv",
+            "cases": "cemv",
+            "chat": "xrV",
+            "connections": "v",
+            "deployments": "v",
+            "documents": "erv",
+            "evals": "v",
+            "files": "cdv",
+            "guardrails": "xDv",
+            "knowledge": "v",
+            "mcp": "V",
+            "memory": "E",
+            "reviews": "xv",
+            "secrets_egress": "xv",
+            "skills": "xDv",
+            "tools": "xv",
+            "widgets": "xv",
+            "workflows": "xv"
+          },
+          "security_admin": {
+            "activity": "v",
+            "secrets_egress": "cxdemv",
+            "settings": "mv"
+          },
+          "viewer": {
+            "access": "v",
+            "agents": "v",
+            "cases": "ceMv",
+            "chat": "rV",
+            "connections": "v",
+            "deployments": "v",
+            "documents": "erv",
+            "evals": "v",
+            "files": "cdv",
+            "guardrails": "Dv",
+            "knowledge": "v",
+            "mcp": "V",
+            "memory": "E",
+            "reviews": "v",
+            "secrets_egress": "v",
+            "skills": "Dv",
+            "tools": "v",
+            "widgets": "v",
+            "workflows": "v"
+          }
+        },
+        "iat": "<epoch>",
+        "jti": "<tok>",
+        "kind": "person",
+        "name": "Ana Ops",
+        "perm_version": 3,
+        "policies": {
+          "chatThreadsOwnerOnly": true,
+          "companySignInRequired": false,
+          "extractionFloor": 0.8,
+          "mcpConnectionHours": 8,
+          "memoryRetentionDays": null,
+          "requesterMayDecide": false,
+          "reviewSlaHours": 8,
+          "securityTeamAddsSecrets": false,
+          "stepUp": false
+        },
+        "roles": {
+          "<team>": "admin"
+        },
+        "security_team": "team_security",
+        "sid": "<ses>",
+        "sub": "<usr>",
+        "team_ids": [
+          "<team>",
+          "<team>"
+        ],
+        "tenant_id": "<ten>"
+      }
+    }
+  },
+  "signOut": null,
+  "teams": [
+    {
+      "id": "<team>",
+      "memberCount": 1,
+      "name": "Team admin <team>",
+      "ownerGroups": [],
+      "role": "admin",
+      "scope": "owned"
+    },
+    {
+      "id": "<team>",
+      "memberCount": 1,
+      "name": "Team viewer <team>",
+      "ownerGroups": [],
+      "role": "admin",
+      "scope": "owned"
+    }
+  ]
+}
