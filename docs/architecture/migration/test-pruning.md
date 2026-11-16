@@ -34,6 +34,11 @@ CI shards are unchanged: a shard runs serially.
 |---|---|---|---|
 | agents-service | 724 s | 178, 180, 173 s | `test_tools_ownership.py::test_tools_chain_adopts_tables_the_agents_chain_created` (also red in the serial baseline); three in `test_workflow_tools.py` and `test_child_runs.py` from source edits in progress on the branch |
 | tools-service | 869 s | 205, 203, 201 s | none (skips are the SQL Server tests, which need OPS_MSSQL_SERVER, as serially) |
+| platform-service | 287 s | 94, 93, 95 s (PAR=4) | none |
+| documents-service | 73 s | 35, 35, 37 s (PAR=4) | none |
+| files-service | 44 s | 24, 22, 22 s (PAR=4) | none |
+| models-service | 46 s | 22, 22, 21 s (PAR=4) | none |
+| kb-service, not enabled | 153 s | 53, 49, 49 s (PAR=4) | the second run failed two `test_settings_audit.py` tests that passed in the other two, and the third skipped five more tests than the first; serial runs also deselect 207 tests that parallel runs do not report, so kb stays serial until that is explained |
 
 ## Deleted tests
 
