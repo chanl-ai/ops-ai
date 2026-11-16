@@ -557,20 +557,38 @@ class Extractor:
             if held.request_hash != request_hash:
                 raise IdempotencyConflictError("this Idempotency-Key was used for a different extraction")
             return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
-        pages = None
-        if inline or row.size <= SYNC_BYTES:
-            try:
+        try:
+            pages = None
+            if inline or row.size <= SYNC_BYTES:
                 pages = await self._pages(who, row, request)
-            except Exception as e:
-                # Settled as failed, not left queued: a retry with the same key then runs again now, where a queued
-                # row would answer 202 until a restart resumed it.
-                await self.store.finish(held.id, status="failed", at=self.clock(), error_code="failed", error=str(e))
-                raise
-        if not inline and (pages is None or pages.count > SYNC_PAGES):
-            await self._later(held)
-            return 202, answer_of(held)
-        assert pages is not None  # parsed above whenever the extraction runs now
-        return 200, answer_of(await self._run(held, row, pages))
+            if not inline and (pages is None or pages.count > SYNC_PAGES):
+                await self._later(held)
+                return 202, answer_of(held)
+            assert pages is not None  # parsed above whenever the extraction runs now
+            return 200, answer_of(await self._run(held, row, pages))
+        except BaseException as e:
+            # A read this request started and did not finish (an error, the request cancelled, its task not
+            # started) is settled as failed, not left queued or running: a retry with the same key then runs again
+            # now, where a pending row would answer 202 until a restart resumed it.
+            await self._cut_off(held.id, e)
+            raise
+
+    async def _cut_off(self, extraction_id: str, cause: BaseException) -> None:
+        """Settles a still-pending extraction as failed. Shielded, so a second cancel cannot leave it half settled,
+        and a failure to settle is logged rather than raised over the cause."""
+        error = str(cause) or f"the read was cut off ({type(cause).__name__})"
+
+        async def settle() -> None:
+            row = await self.store.get(extraction_id)
+            if row is not None and row.status in ("queued", "running"):
+                await self.store.finish(
+                    extraction_id, status="failed", at=self.clock(), error_code="failed", error=error
+                )
+
+        try:
+            await asyncio.shield(settle())
+        except Exception as e:
+            log.warning("extraction_not_settled", extraction=extraction_id, error=str(e))
 
     async def classify(self, who: Who, file: FileInfo, *, ocr: bool) -> dict[str, Any]:
         """Which of the team's document types the file is (the model's answer over each type's name and

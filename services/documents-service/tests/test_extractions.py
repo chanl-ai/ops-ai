@@ -7,11 +7,13 @@ routes."""
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 from typing import Any
 
 import httpx
+import pytest
 import sqlalchemy as sa
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen.canvas import Canvas
@@ -290,3 +292,55 @@ class _DownModels(Models):
 
     async def structured(self, *args: Any, **kwargs: Any) -> Any:
         raise RuntimeError("model down")
+
+
+class _HeldModels(Models):
+    """A model call that waits until released, so the read can be cut off while the model is being asked."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.asked, self.release = asyncio.Event(), asyncio.Event()
+
+    async def structured(self, *args: Any, **kwargs: Any) -> Any:
+        self.asked.set()
+        await self.release.wait()
+        return await super().structured(*args, **kwargs)
+
+
+async def test_a_read_cancelled_during_the_model_call_runs_again_on_a_retry_with_the_same_key(make: Make) -> None:
+    """The request is cancelled while the model is asked: the row is not left running (a retry would answer 202 until
+    a restart), and the cancel still reaches the caller."""
+    models = _HeldModels()
+    s = make(models, Floor())
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        key = {**OPS, "Idempotency-Key": "run_1:read:cancelled"}
+        cut = asyncio.create_task(extract(c, fid, headers=key))
+        await models.asked.wait()
+        cut.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await cut
+        models.release.set()
+        again = await extract(c, fid, headers=key)
+    assert again.status_code == 200 and again.json()["data"]["status"] == "done", again.text
+
+
+@pytest.mark.lifespan_supervisor
+async def test_a_queued_read_cut_off_at_shutdown_during_the_model_call_finishes_after_a_restart(
+    make: Make, monkeypatch: Any
+) -> None:
+    """Shutdown cancels a queued read mid model call: drain returns, and the row stays pending, so the restart reads
+    it."""
+    monkeypatch.setattr(extraction, "SYNC_BYTES", 10)  # every file is large: queued, run as a task
+    models = _HeldModels()
+    first = make(models, Floor())
+    async with first.client as c, first.app.router.lifespan_context(first.app):
+        queued = (await extract(c, await first.stored(NOTICE))).json()["data"]
+        await models.asked.wait()
+    await asyncio.wait_for(first.extractor.drain(), 5)
+    restarted = make(Models(), Floor())
+    restarted.files.files, restarted.files.blobs = first.files.files, first.files.blobs
+    async with restarted.client as c, restarted.app.router.lifespan_context(restarted.app):
+        await restarted.extractor.drain()
+        body = (await c.get(f"/v1/documents/extractions/{queued['id']}", headers=OPS)).json()["data"]
+    assert body["status"] == "done", body
