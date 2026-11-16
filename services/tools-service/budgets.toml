@@ -1,0 +1,125 @@
+# The statement budget of each tools-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
+# standard DA1 and DA6), measured on PostgreSQL by tests/test_statement_budget.py. Each row is today's count at 50
+# rows. A route is one transaction on one connection unless its row lists more; the routes listing more open one short
+# transaction per store read and are budgeted as they run until their route is converted.
+
+["GET /health"]
+queries = 0
+
+["GET /health/background"]
+queries = 0
+
+# Grows with its rows: 31 statements at 5 credentials, 121 at 50 (a read per credential). Budgeted at
+# the 50-row count until its route is converted; tests/test_statement_budget.py lists it as growing.
+["GET /v1/app-credentials"]
+queries = 121
+transactions = 114
+connections = 114
+
+["GET /v1/app-credentials/{credential_id}"]
+queries = 25
+transactions = 17
+connections = 17
+
+["GET /v1/apps"]
+queries = 15
+transactions = 9
+connections = 9
+
+["GET /v1/apps/{app_id}"]
+queries = 52
+transactions = 32
+connections = 32
+
+["GET /v1/apps/{app_id}/accounts"]
+queries = 5
+transactions = 4
+connections = 4
+
+["GET /v1/apps/{app_id}/accounts/{account_id}"]
+queries = 11
+transactions = 8
+connections = 8
+
+["GET /v1/apps/{app_id}/resources"]
+queries = 0
+
+["GET /v1/apps/{app_id}/update"]
+queries = 1
+
+["GET /v1/apps/{app_id}/used-by"]
+queries = 1
+
+["GET /v1/connection-kinds"]
+queries = 0
+
+["GET /v1/egress"]
+queries = 3
+
+["GET /v1/egress/hosts"]
+queries = 3
+
+["GET /v1/executions"]
+queries = 8
+transactions = 2
+connections = 2
+
+["GET /v1/executions/{call_id}"]
+queries = 7
+transactions = 2
+connections = 2
+
+["GET /v1/grantable-operations"]
+not_budgeted = "agents-service's route, called with a service token; a person's token is refused before any statement"
+
+["GET /v1/knowledge-sources"]
+queries = 4
+transactions = 3
+connections = 3
+
+["GET /v1/mcp-links"]
+queries = 2
+
+["GET /v1/mcp-links/{link_id}"]
+queries = 1
+
+["GET /v1/me/accounts"]
+queries = 1
+
+["GET /v1/me/connections"]
+queries = 16
+transactions = 10
+connections = 10
+
+["GET /v1/plugin-templates"]
+queries = 0
+
+["GET /v1/secrets"]
+queries = 5
+
+["GET /v1/send-policy"]
+queries = 1
+
+["GET /v1/tool-modules"]
+queries = 10
+transactions = 5
+connections = 5
+
+["GET /v1/tool-modules/grants"]
+queries = 6
+
+["GET /v1/tool-modules/{module_id}"]
+queries = 9
+transactions = 4
+connections = 4
+
+["GET /v1/tool-modules/{module_id}/activity"]
+queries = 11
+transactions = 4
+connections = 4
+
+["GET /v1/tool-modules/{module_id}/operations/{op_id}/mocks"]
+queries = 8
+
+["GET /v1/tools/{name}"]
+not_budgeted = "agents-service's route, called with a service token; a person's token is refused before any statement"
