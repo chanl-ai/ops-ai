@@ -12224,7 +12224,7 @@
     },
     "/v1/policies": {
       "get": {
-        "description": "Every policy with its value and open default; whoever holds access.view where the request acts reads them\n(every role but Chat user and Security admin: 403 `admin_required`).",
+        "description": "Every policy with its value and open default; whoever holds access.view where the request acts reads them\n(every membership role but Chat user: 403 `admin_required`).",
         "operationId": "policies_list_policies",
         "parameters": [
           {

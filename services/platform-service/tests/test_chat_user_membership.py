@@ -8,12 +8,13 @@ from __future__ import annotations
 import pytest
 import sqlalchemy as sa
 
-from ops_platform.store.tables import role_assignments
+from ops_platform.store.tables import role_assignments, role_permissions, roles
+from ops_service_kit.ids import new_id, now_iso
 
 from .conftest import Platform
 from .test_audit_route import audit
 from .test_members import as_admin, bearer, invite_one, join, member_rows, team_of
-from .test_permissions import held, permissions
+from .test_permissions import grant, held, permissions
 
 
 async def _assigned(platform: Platform, user_id: str, team: str) -> list[str]:
@@ -77,17 +78,43 @@ async def test_the_last_admin_is_not_demoted_to_chat_user(platform: Platform) ->
         "/v1/team-names",
     ],
 )
-async def test_a_chat_user_reads_no_one_elses_access_and_a_viewer_still_does(platform: Platform, path: str) -> None:
-    # A Chat user holds own-thread chat and own memory only: who holds what, the policies, another person's grants and
-    # the workspace's names answer 403 through can() (access.view), while a Viewer in the same team still reads them.
+async def test_only_a_chat_user_is_refused_and_every_other_membership_still_reads(
+    platform: Platform, path: str
+) -> None:
+    # On develop any member read these. A Chat user holds own-thread chat and own memory only, so who holds what, the
+    # policies, another person's grants and the workspace's names answer 403 through can() on access.view, the cell
+    # that reads a team's people. Every other membership role holds it and still reads them (Admin with Security
+    # admin, as the Security team's admins hold it); a Chat user given a custom role with access.view reads them too.
     admin, _ = await as_admin(platform)
     team = team_of(admin)
     url = path.format(other=admin.user_id)
-    for role, status in (("chat_user", 403), ("viewer", 200)):
+    reader = new_id("role")
+    async with platform.engine.begin() as c:
+        await c.execute(
+            roles.insert().values(
+                tenant_id=admin.tenant_id, id=reader, name="People reader", builtin=False, description="",
+                created_at=now_iso(),
+            )
+        )  # fmt: skip
+        await c.execute(
+            role_permissions.insert().values(
+                tenant_id=admin.tenant_id, role_id=reader, area="access", action="view", scope="all"
+            )
+        )  # fmt: skip
+    for role, extra, status in (
+        ("chat_user", None, 403),
+        ("viewer", None, 200),
+        ("builder", None, 200),
+        ("approver", None, 200),
+        ("admin", "security_admin", 200),
+        ("chat_user", reader, 200),
+    ):
         person = await join(platform, admin, role)
+        if extra is not None:
+            await grant(platform, person, team, extra)
         mine = {**await bearer(platform, person), "X-Team-Id": team}
         r = await platform.public.get(url, headers=mine)
-        assert r.status_code == status, (role, r.text)
+        assert r.status_code == status, (role, extra, r.text)
         if status == 403:
             assert r.json()["error"]["code"] == "admin_required", r.text
             own = await platform.public.get(f"/v1/people/{person.user_id}/role-grants", headers=mine)

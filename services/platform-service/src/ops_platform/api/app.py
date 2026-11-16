@@ -990,7 +990,7 @@ def create_public_app(
     @app.get("/v1/policies", tags=["policies"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
     async def list_policies(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Every policy with its value and open default; whoever holds access.view where the request acts reads them
-        (every role but Chat user and Security admin: 403 `admin_required`)."""
+        (every membership role but Chat user: 403 `admin_required`)."""
         await people.require_admin(actor, "access", "view")
         return ok(await policies.list(actor))
 

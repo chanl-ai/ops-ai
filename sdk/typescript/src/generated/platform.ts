@@ -778,7 +778,7 @@ export interface paths {
         /**
          * List Policies
          * @description Every policy with its value and open default; whoever holds access.view where the request acts reads them
-         *     (every role but Chat user and Security admin: 403 `admin_required`).
+         *     (every membership role but Chat user: 403 `admin_required`).
          */
         get: operations["policies_list_policies"];
         put?: never;
