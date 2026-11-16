@@ -83,7 +83,6 @@ from ops_service_kit.http import (
     ListResult,
     OptionsPage,
     Out,
-    error_body,
     error_responses,
     install_error_handlers,
     ok,
@@ -200,9 +199,14 @@ class ScanResultIn(In):
     detail: str | None = Field(default=None, max_length=500)
 
 
-def _status(e: FilesError) -> ApiError:
+def _status(e: FilesError | HoldRefusedError | ObjectLockedError) -> ApiError:
     """The files rules' refusals as HTTP answers (files 5 and 6)."""
     message = str(e) or type(e).__name__
+    if isinstance(e, HoldRefusedError):
+        return Forbidden(message)
+    if isinstance(e, ObjectLockedError):
+        # Storage's own retention or legal hold refused the change, behind the service's checks; never a 500.
+        return Conflict(message, code="locked_in_storage")
     if isinstance(e, FileMissingError):
         return NotFound("File")
     if isinstance(e, DeleteNotAllowedError | EditNotAllowedError):
@@ -339,19 +343,15 @@ def create_files_app(
             max_age=600,
         )
 
-    @app.exception_handler(FilesError)
-    async def files_error(request: Request, e: FilesError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        api = _status(e)
-        return JSONResponse(error_body(api.status, api.code, api.message), status_code=api.status)
+    async def refused(request: Request, e: Exception) -> Response:
+        """A refusal raised below the routes, rendered by the kit's ApiError handler so it answers exactly as one a
+        route raises (details, the request id, Retry-After) rather than through a second copy of the envelope."""
+        assert isinstance(e, FilesError | HoldRefusedError | ObjectLockedError)
+        reply = app.exception_handlers[ApiError](request, _status(e))
+        return reply if isinstance(reply, Response) else await reply
 
-    @app.exception_handler(ObjectLockedError)
-    async def storage_locked(request: Request, e: ObjectLockedError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        # Storage's own retention or legal hold refused the change, behind the service's checks; never a 500.
-        return JSONResponse(error_body(409, "locked_in_storage", str(e)), status_code=409)
-
-    @app.exception_handler(HoldRefusedError)
-    async def hold_refused(request: Request, e: HoldRefusedError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return JSONResponse(error_body(403, "forbidden", str(e)), status_code=403)
+    for refusal in (FilesError, HoldRefusedError, ObjectLockedError):
+        app.add_exception_handler(refusal, refused)
 
     errors = error_responses({413: "Above the purpose's size limit", 415: "Type not allowed", 423: "Not scanned clean"})
 

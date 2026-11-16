@@ -27,7 +27,7 @@ services/agents-service/src/ops_agents/api/tool_module_reviews.py refusal servic
 services/agents-service/src/ops_agents/api/tool_module_reviews.py role-name service-sub 1 E08  # delete agents: with the import route
 services/documents-service/src/ops_documents/app.py refusal role_required 1 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
 services/documents-service/src/ops_documents/document_types.py refusal role_required 2 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
-services/files-service/src/ops_files/app.py refusal forbidden 1 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
+services/files-service/src/ops_files/tenant_files.py refusal forbidden 1 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
 services/files-service/src/ops_files/tenant_files.py refusal role_required 3 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
 services/models-service/src/ops_models/app.py refusal images_not_cleared 1 E16  # keep pilot: refused by a record's own clearance setting
 services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 E16  # keep pilot: refused by a record's own clearance setting
@@ -129,6 +129,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appChangesByApp={}
 * conflict key_in_use 0 state
 * conflict last_sign_in_method 0 state
 * conflict live_workflows 0 state
+* conflict locked_in_storage 0 state
 * conflict mailbox_in_use 0 state
 * conflict name_taken 0 state
 * conflict needs_reconnect 0 state
