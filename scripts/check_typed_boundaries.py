@@ -97,11 +97,46 @@ def _dict_any(node: ast.AST) -> bool:
     )
 
 
+def _aliases(tree: ast.AST) -> dict[str, str]:
+    """What each imported name stands for: `from asyncio import gather as g` makes `g` the dotted `asyncio.gather`, and
+    `import asyncio as aio` makes `aio` stand for `asyncio`. Names are resolved by file, not by scope."""
+    names: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            for a in node.names:
+                names[a.asname or a.name] = f"{node.module}.{a.name}"
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                if a.asname:
+                    names[a.asname] = a.name
+    return names
+
+
+def _resolved(node: ast.expr, names: dict[str, str]) -> str:
+    dotted = _dotted(node)
+    head, _, rest = dotted.partition(".")
+    return names.get(head, head) + (f".{rest}" if rest else "")
+
+
+def _on_a_loop(node: ast.expr) -> bool:
+    """A receiver that is an event loop: a name holding `loop`, or a call to get one."""
+    if isinstance(node, ast.Call):
+        return _dotted(node.func).rsplit(".", 1)[-1] in ("get_running_loop", "get_event_loop", "new_event_loop")
+    return "loop" in _dotted(node).lower()
+
+
 def findings(source: str, path: str) -> list[tuple[str, int]]:
     """Each (kind, line) in one file's source; `path` places it in a layer."""
     found: list[tuple[str, int]] = []
     in_store = "/store/" in path
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    names = _aliases(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict) and any(
+            isinstance(k, ast.Constant) and k.value == "extra" and isinstance(v, ast.Constant) and v.value == "allow"
+            for k, v in zip(node.keys, node.values, strict=True)
+        ):
+            found.append(("extra-allow", node.lineno))
         if _dict_any(node):
             found.append(("dict-any", getattr(node, "lineno", 0)))
         elif (
@@ -113,10 +148,14 @@ def findings(source: str, path: str) -> list[tuple[str, int]]:
             found.append(("store-dict", node.lineno))
         if not isinstance(node, ast.Call):
             continue
-        name = _dotted(node.func)
+        name = _resolved(node.func, names)
         if name == "asyncio.gather":
             found.append(("gather", node.lineno))
-        elif name in ("asyncio.create_task", "asyncio.ensure_future"):
+        elif name in ("asyncio.create_task", "asyncio.ensure_future") or (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("create_task", "ensure_future")
+            and _on_a_loop(node.func.value)
+        ):
             found.append(("task", node.lineno))
         elif name == "logging.getLogger":
             found.append(("logging", node.lineno))

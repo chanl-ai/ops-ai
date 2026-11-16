@@ -152,3 +152,41 @@ def test_main_commits_flag_exits_1_on_a_raised_row(
     monkeypatch.setattr(c, "commit_problems", lambda _root: ["abc raises x"])  # pyright: ignore[reportUnknownLambdaType]
     assert run(tmp_path, monkeypatch, "--commits") == 1
     assert "abc raises x" in capsys.readouterr().out
+
+
+FORMS = """
+import asyncio as aio
+import logging as lg
+from asyncio import create_task, gather as fan
+from logging import getLogger
+
+
+async def go(loop):
+    await fan(one(), two())
+    create_task(later())
+    aio.ensure_future(later())
+    asyncio.get_running_loop().create_task(later())
+    loop.create_task(later())
+    async with aio.TaskGroup() as tg:
+        tg.create_task(child())
+    log = getLogger(__name__)
+    other = lg.getLogger(__name__)
+
+
+class M(BaseModel):
+    model_config = {"extra": "allow"}
+    fine = {"extra": "forbid"}
+"""
+
+
+def test_a_call_through_an_alias_a_loop_or_a_plain_dict_config_is_found_and_a_task_group_child_is_not() -> None:
+    assert sorted(c.findings(FORMS, "services/kb-service/src/ops_kb/app.py")) == [
+        ("extra-allow", 21),
+        ("gather", 9),
+        ("logging", 16),
+        ("logging", 17),
+        ("task", 10),
+        ("task", 11),
+        ("task", 12),
+        ("task", 13),
+    ]
