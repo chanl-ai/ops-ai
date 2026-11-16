@@ -11,20 +11,23 @@ part of the plugin's card, so no app shows twice. Every read is the caller's tea
 
 import uuid
 from collections import Counter
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import Field
+from pydantic import Field, JsonValue
 
 from ops_access import tool_waits
 from ops_identity import ActingPerson
+from ops_identity.fastapi import Tx
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
+from ops_store import isolation
 
 from .app_states import AppGroup, AppState, app_group
 from .auth.kinds import BY_ID, kind_of
@@ -1158,30 +1161,62 @@ def credential_secret(credential_id: str) -> str:
     return f"APP_{credential_id.upper()}_CLIENT_SECRET"
 
 
-def _status(audits: list[dict[str, Any]]) -> CredentialStatus:
+def _status(checks: list[tuple[datetime, JsonValue]]) -> CredentialStatus:
     """The last Test with my account of any account on the credential: working, failing, or not tested."""
-    checked = next((x for x in audits if x["action"] == CHECKED), None)
-    said = str(cast(dict[str, Any], (checked or {}).get("detail") or {}).get("status") or "")
+    detail = max(checks, key=lambda c: c[0])[1] if checks else None
+    said = str(detail.get("status") or "") if isinstance(detail, dict) else ""
     return "working" if said == "ok" else "failing" if said == "failed" else "not_tested"
 
 
+# A credential (None for Ops AI's app), its app's card and the accounts signing in with it.
+Held = tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]
+
+
+@dataclass
+class _Reads:
+    """What the credential rows of one answer read once, not once a row: each account's last Test with my account, and
+    each team's listed secrets as they are first asked for. A list then costs the same statements at 5 credentials as
+    at 50."""
+
+    checks: dict[str, tuple[datetime, JsonValue]]
+    # By team: its secrets as listed, with the ends read for the client secrets named in this answer.
+    listed: dict[str, list[SecretMeta]] = field(default_factory=dict[str, list[SecretMeta]])
+
+
+async def _reads(apps: Apps, who: Caller, held: list[Held]) -> _Reads:
+    rows = await apps.connections.store.newest(who.tenant_id, [str(a["id"]) for _, _, xs in held for a in xs], CHECKED)
+    reads = _Reads({account: (at, detail) for account, at, detail in rows})
+    named: dict[str, set[str]] = {}
+    for cred, _, _ in held:
+        if cred is not None and cred.get("secret_name"):
+            named.setdefault(str(cred["team_id"]), set()).add(str(cred["secret_name"]))
+    resolver = apps.connections.secrets
+    for team, names in named.items():
+        listed = await resolver.store.listed(who.tenant_id, team)
+        unread = sorted(r.name for r in listed if r.name in names and r.ends is None)
+        ends = await resolver.ends_named(who.tenant_id, team, unread)
+        reads.listed[team] = [r.model_copy(update={"ends": ends[r.name]}) if r.name in ends else r for r in listed]
+    return reads
+
+
 async def _row(
-    apps: Apps, who: Caller, cred: dict[str, Any] | None, card: dict[str, Any], accounts: list[dict[str, Any]]
+    apps: Apps,
+    who: Caller,
+    cred: dict[str, Any] | None,
+    card: dict[str, Any],
+    accounts: list[dict[str, Any]],
+    *,
+    reads: _Reads,
 ) -> dict[str, Any]:
     """One credential's row: the team's own (`cred`) or, with none, Ops AI's app of `card`'s app."""
     plugin = _plugin(apps, card)
     scopes = str((cred or {}).get("scopes") or "").split()
     if not scopes and plugin is not None:
         scopes = [sc.id for sc in plugin.manifest.connection.scopes]
-    store = apps.connections.store
-    audits = sorted(
-        [x for a in accounts for x in await store.audit(who.tenant_id, str(a["id"]))],
-        key=lambda x: x["at"],
-        reverse=True,
-    )
+    checks = [reads.checks[str(a["id"])] for a in accounts if str(a["id"]) in reads.checks]
     own = cred is not None
     offered = {sc.id: sc for sc in plugin.manifest.connection.scopes} if plugin is not None else {}
-    secret = await _secret_row(apps, who, cred)
+    secret = await _secret_row(apps, who, cred, reads)
     return {
         "teamId": str(cred["team_id"]) if own else who.team.id,
         "secretEnds": secret.ends if secret else None,
@@ -1201,17 +1236,22 @@ async def _row(
             for sc in scopes
         ],
         "accounts": len(accounts),
-        "status": _status(audits),
+        "status": _status(checks),
         "created": cred["created_at"].isoformat() if own else None,
         "createdBy": cred["created_by"] if own else None,
     }
 
 
-async def _secret_row(apps: Apps, who: Caller, cred: dict[str, Any] | None) -> SecretMeta | None:
-    """The team secret holding a credential's client secret, as listed (never its value); None while it holds none."""
+async def _secret_row(
+    apps: Apps, who: Caller, cred: dict[str, Any] | None, reads: _Reads | None = None
+) -> SecretMeta | None:
+    """The team secret holding a credential's client secret, as listed (never its value); None while it holds none.
+    With `reads`, each team's secrets are listed once for the whole answer."""
     if cred is None or not cred.get("secret_name"):
         return None
     name, team = str(cred["secret_name"]), str(cred["team_id"])
+    if reads is not None and team in reads.listed:
+        return next((r for r in reads.listed[team] if r.name == name), None)
     rows = await apps.connections.secrets.store.listed(who.tenant_id, team)
     row = next((r for r in rows if r.name == name), None)
     if row is not None and row.ends is None:
@@ -1580,9 +1620,6 @@ async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str,
     return await app_credential(apps, who, credential_id)
 
 
-Held = tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]
-
-
 async def _credentials(apps: Apps, who: Caller) -> list[Held]:
     """Each of the team's credentials with its app's card and its accounts, then Ops AI's app of each app whose
     accounts sign in with it; an app no longer listed is left out."""
@@ -1608,7 +1645,8 @@ async def app_credentials(apps: Apps, who: Caller, app: str | None = None) -> li
     """The team's app credentials and Ops AI's app of each app using it, of one app when `app` is given: only a person
     who manages the team's apps reads them, and no secret is read."""
     held = [x for x in await _credentials(apps, who) if app is None or x[1]["id"] == app]
-    return [await _row(apps, who, cred, card, accounts) for cred, card, accounts in held]
+    reads = await _reads(apps, who, held)
+    return [await _row(apps, who, cred, card, accounts, reads=reads) for cred, card, accounts in held]
 
 
 async def app_credential(apps: Apps, who: Caller, credential_id: str) -> dict[str, Any]:
@@ -1651,7 +1689,7 @@ async def app_credential(apps: Apps, who: Caller, credential_id: str) -> dict[st
     fields = credential_fields(apps, card, await _custom_app(apps, who, card))
     values, modes = await _config_of(apps, who, card, cred)
     return {
-        **await _row(apps, who, cred, card, accounts),
+        **await _row(apps, who, cred, card, accounts, reads=await _reads(apps, who, [found])),
         "accountsList": listed,
         "redirectUri": kinds.get("redirectUri"),
         "updated": cred["updated_at"].isoformat() if cred else None,
@@ -1726,22 +1764,64 @@ async def app_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
 
 
 async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
-    """An app's page as one answer: a card of the caller's team only, so another team's app is not found."""
-    card = await apps.page_card(who, app_id)
-    detail = await apps.connections.detail(who, str(card["connectionId"])) if card.get("connectionId") else None
-    mine = own_key(who)
-    signed = [p for p in (detail or {}).get("people", []) if p["personId"] == mine]
-    people = (
-        {str(p["person_id"]) for p in await apps.connections.store.people(who.tenant_id, str(card["connectionId"]))}
-        if card.get("connectionId")
-        else set[str]()
-    )
-    # The page's Tools tab shows neither a tool's own approval flag nor its module.
-    tools = [
-        {k: v for k, v in t.items() if k not in ("waits", "setting", "settingRole", "moduleId")}
-        for t in await app_tools(apps, who, card)
-    ]
-    usage: list[dict[str, Any]] = []
+    """An app's page as one answer: a card of the caller's team only, so another team's app is not found. Every read
+    is one transaction; who uses each tool is asked of agents-service after it ends, so no connection is held while it
+    answers."""
+    async with isolation.request_transaction():
+        card = await apps.page_card(who, app_id)
+        detail = await apps.connections.detail(who, str(card["connectionId"])) if card.get("connectionId") else None
+        mine = own_key(who)
+        signed = [p for p in (detail or {}).get("people", []) if p["personId"] == mine]
+        people = (
+            {str(p["person_id"]) for p in await apps.connections.store.people(who.tenant_id, str(card["connectionId"]))}
+            if card.get("connectionId")
+            else set[str]()
+        )
+        # The page's Tools tab shows neither a tool's own approval flag nor its module.
+        tools = [
+            {k: v for k, v in t.items() if k not in ("waits", "setting", "settingRole", "moduleId")}
+            for t in await app_tools(apps, who, card)
+        ]
+        usage: list[dict[str, Any]] = []
+        if apps.calls is not None and card["moduleIds"]:
+            # The latest calls name their callers, so they come only to whoever reads the call log (activity.view);
+            # anyone else gets the page without them.
+            try:
+                ran = await apps.calls.executions(
+                    who,
+                    page=1,
+                    page_size=20,
+                    tool=None,
+                    module_ids=list(card["moduleIds"]),
+                    thread_id=None,
+                    decision=None,
+                )
+                usage = list(ran["data"])
+            except Forbidden:
+                usage = []
+        skills: list[dict[str, Any]] = []
+        plugin = _plugin(apps, card)
+        if plugin is not None:
+            skills = [
+                {"kind": t.kind, "id": t.id, "title": view_of(plugin, t)["title"]} for t in plugin.manifest.templates
+            ]
+        accounts = await _accounts(apps, who, card)
+        page = {
+            "card": card,
+            "connection": detail,
+            "me": {
+                "connected": bool(signed),
+                "account": signed[0].get("account") if signed else None,
+                "signIns": len(signed),
+            },
+            "peopleCount": len(people),
+            "accounts": accounts,
+            # Auth configs are for whoever manages the team's apps (builders and admins): anyone else gets none.
+            "authConfigs": await _auth_configs(apps, who, card, accounts) if apps.connections.may_manage(who) else [],
+            "tools": tools,
+            "skills": skills,
+            "usage": usage,
+        }
     if apps.users is not None and tools:
         try:
             uses = await apps.users.of(who.tenant_id, who.team.id, [t["name"] for t in tools])
@@ -1755,37 +1835,7 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
                     k: [{"id": u["id"], "name": u["name"]} for u in found if u["kind"] == kind]
                     for k, kind in (("agents", "agent"), ("workflows", "workflow"))
                 }
-    if apps.calls is not None and card["moduleIds"]:
-        # The latest calls name their callers, so they come only to whoever reads the call log (activity.view);
-        # anyone else gets the page without them.
-        try:
-            ran = await apps.calls.executions(
-                who, page=1, page_size=20, tool=None, module_ids=list(card["moduleIds"]), thread_id=None, decision=None
-            )
-            usage = list(ran["data"])
-        except Forbidden:
-            usage = []
-    skills: list[dict[str, Any]] = []
-    plugin = _plugin(apps, card)
-    if plugin is not None:
-        skills = [{"kind": t.kind, "id": t.id, "title": view_of(plugin, t)["title"]} for t in plugin.manifest.templates]
-    accounts = await _accounts(apps, who, card)
-    return {
-        "card": card,
-        "connection": detail,
-        "me": {
-            "connected": bool(signed),
-            "account": signed[0].get("account") if signed else None,
-            "signIns": len(signed),
-        },
-        "peopleCount": len(people),
-        "accounts": accounts,
-        # Auth configs are for whoever manages the team's apps (builders and admins): anyone else gets none.
-        "authConfigs": await _auth_configs(apps, who, card, accounts) if apps.connections.may_manage(who) else [],
-        "tools": tools,
-        "skills": skills,
-        "usage": usage,
-    }
+    return page
 
 
 async def account_choices(
@@ -2099,6 +2149,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     async def list_apps(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Caller, Depends(caller)],
         acting: ActingPerson,
+        _: Tx,
         include: Annotated[Literal["builtin"] | None, Query()] = None,
     ) -> JSONResponse:
         """The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
@@ -2112,18 +2163,20 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
         signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
-        person signs in to it."""
+        person signs in to it. No request transaction: the team's write approval policies and who uses each tool are
+        asked of the platform and agents-service."""
         return ok(await my_connectors(apps, who))
 
     @r.post("/v1/apps", response_model=Envelope[AccountDetail], status_code=201)
     async def add_app(body: NewAppIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,
-        or an MCP server by its address, whose sign-in is found from the server."""
+        or an MCP server by its address, whose sign-in is found from the server. No request transaction: the server is
+        asked how it signs in."""
         return ok(await apps.add_custom(who, body), 201)
 
     @r.get("/v1/app-credentials", response_model=Envelope[list[AppCredential]])
     async def list_app_credentials(  # pyright: ignore[reportUnusedFunction]
-        who: Annotated[Caller, Depends(caller)], app: Annotated[str | None, Query(max_length=200)] = None
+        who: Annotated[Caller, Depends(caller)], _: Tx, app: Annotated[str | None, Query(max_length=200)] = None
     ) -> JSONResponse:
         """The team's app credentials and Ops AI's app of each app using it, for the Credentials page and the pickers
         that name one (`app` keeps one app's): type, client id, permissions, accounts on it and the last Test with my
@@ -2132,21 +2185,21 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.post("/v1/app-credentials", response_model=Envelope[AppCredentialDetail], status_code=201)
     async def create_app_credential(  # pyright: ignore[reportUnusedFunction]
-        body: AppCredentialIn, who: Annotated[Caller, Depends(caller)]
+        body: AppCredentialIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Adds the team's own OAuth app for one of its apps: name, client id, secret and permissions, with no account
         needed; an account picks it by credentialId when connected. Team admins only; the answer has no secret."""
         return ok(AppCredentialDetail(**await add_app_credential(apps, who, body)).model_dump(by_alias=True), 201)
 
     @r.get("/v1/app-credentials/{credential_id}", response_model=Envelope[AppCredentialDetail])
-    async def get_app_credential(credential_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_app_credential(credential_id: str, who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """One app credential's page: its app, client id, permissions, who made it and the accounts signing in with it,
         each with its state. `ops-ai:<app>` is Ops AI's app of one app. Team admins only; no secret."""
         return ok(AppCredentialDetail(**await app_credential(apps, who, credential_id)).model_dump(by_alias=True))
 
     @r.patch("/v1/app-credentials/{credential_id}", response_model=Envelope[AppCredentialChange])
     async def change_app_credential(  # pyright: ignore[reportUnusedFunction]
-        credential_id: str, body: AppCredentialPatchIn, who: Annotated[Caller, Depends(caller)]
+        credential_id: str, body: AppCredentialPatchIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Edits the team's own app credential: its name, client id, permissions and the settings its app
         registration holds (`fields` on its page). A new client id, other permissions or settings mark every account
@@ -2159,6 +2212,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     async def delete_app_credential(  # pyright: ignore[reportUnusedFunction]
         credential_id: str,
         who: Annotated[Caller, Depends(caller)],
+        _: Tx,
         move_to: Annotated[str | None, Query(alias="moveTo", max_length=64)] = None,
         move: bool = False,
     ) -> JSONResponse:
@@ -2173,7 +2227,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.put("/v1/app-credentials/{credential_id}/secret", response_model=Envelope[AppCredentialDetail])
     async def set_app_credential_secret(  # pyright: ignore[reportUnusedFunction]
-        credential_id: str, body: CredentialSecretIn, who: Annotated[Caller, Depends(caller)]
+        credential_id: str, body: CredentialSecretIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Replaces the client secret of the team's own app credential. Team admins only; the answer has no secret."""
         row = await replace_credential_secret(apps, who, credential_id, body.client_secret)
@@ -2181,12 +2235,13 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.get("/v1/apps/{app_id}", response_model=Envelope[AppPage])
     async def get_app(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs."""
+        """One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs. No request
+        transaction: the page is read in one, then agents-service is asked who uses each tool with none open."""
         return ok(AppPage(**await app_page(apps, who, app_id)).model_dump(by_alias=True))
 
     @r.post("/v1/apps/{app_id}/tools", response_model=Envelope[list[AppTool]])
     async def add_tools(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, body: ToolsAddIn, who: Annotated[Caller, Depends(caller)]
+        app_id: str, body: ToolsAddIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Adds tools from an app's catalog to the team: agents may then pick them and the gateway runs them."""
         added = await apps.add_tools(who, app_id, body.tools)
@@ -2194,14 +2249,14 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.delete("/v1/apps/{app_id}/tools/{tool}", response_model=Envelope[AppTool])
     async def remove_tool(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, tool: str, who: Annotated[Caller, Depends(caller)]
+        app_id: str, tool: str, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Removes a tool from the team: agents are no longer offered it and its calls are refused."""
         return ok(AppTool(**await apps.remove_tool(who, app_id, tool)).model_dump(by_alias=True))
 
     @r.patch("/v1/apps/{app_id}", response_model=Envelope[AppKindChanged])
     async def change_app_kind(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, body: AppKindIn, who: Annotated[Caller, Depends(caller)]
+        app_id: str, body: AppKindIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """A custom app's sign-in kind: every account moves to it, drops what it held for the old one, and is named
         in the answer as needing its new sign-in."""
@@ -2212,12 +2267,13 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         app_id: str, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts
-        while a tool still uses it."""
+        while a tool still uses it. No request transaction: agents-service is asked whether a workflow or agent names
+        each account."""
         return ok(AppDeleted(**await apps.delete_app(who, app_id)).model_dump(by_alias=True))
 
     @r.put("/v1/apps/{app_id}/team", response_model=Envelope[SystemCard])
     async def set_team_app(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, body: TeamPluginIn, who: Annotated[Caller, Depends(caller)]
+        app_id: str, body: TeamPluginIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Turns a plugin's app on or off for the team and saves the team's settings: a team admin's alone. The first
         turn-on makes the team's default account."""
@@ -2228,7 +2284,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.put("/v1/apps/{app_id}/accounts/{account_id}/team-default", response_model=Envelope[AccountDetail])
     async def make_team_default(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]
+        app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Makes the account the one the team's calls use when they name none. Team admins only; a sandbox is
         refused, as only test runs use it."""
@@ -2238,6 +2294,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     async def list_account_choices(  # pyright: ignore[reportUnusedFunction]
         app_id: str,
         who: Annotated[Caller, Depends(caller)],
+        _: Tx,
         usable: bool = False,
         name: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
         mine: bool = False,
@@ -2251,7 +2308,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.post("/v1/apps/{app_id}/accounts", response_model=Envelope[AccountDetail], status_code=201)
     async def add_account(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)]
+        app_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Another account of one of the team's apps: a sandbox, which test runs use, or another named account
         (a second org of the same system). The first stays the default unless `makeDefault` is set. 409

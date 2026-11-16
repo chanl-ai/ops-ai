@@ -4,6 +4,7 @@ change it records. Values are put and read through `secrets.SecretResolver`; thi
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
@@ -236,6 +237,20 @@ class SecretStore(Store):
         async with self.tx() as c:
             found = (await c.execute(q)).first()
         return str(found.ciphertext) if found else None
+
+    async def missing_ends_named(self, tenant_id: str, team_id: str, names: Sequence[str]) -> dict[str, str]:
+        """`missing_ends` for several secrets of one team in one statement: each named secret still without its last
+        four characters, by name, with its reference."""
+        if not names:
+            return {}
+        q = sa.select(tool_secrets.c.name, tool_secrets.c.ciphertext).where(
+            _of(tenant_id, team_id),
+            tool_secrets.c.name.in_(list(names)),
+            tool_secrets.c.ends.is_(None),
+            team_visible(tool_secrets),
+        )
+        async with self.tx() as c:
+            return {str(r.name): str(r.ciphertext) for r in await c.execute(q)}
 
     async def keep_ends(self, tenant_id: str, team_id: str, name: str, ref: str, ends: str) -> None:
         """Keeps the last four characters read from `ref`, unless the secret was replaced since."""

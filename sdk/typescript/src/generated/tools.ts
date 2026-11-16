@@ -140,7 +140,8 @@ export interface paths {
         /**
          * Add App
          * @description A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,
-         *     or an MCP server by its address, whose sign-in is found from the server.
+         *     or an MCP server by its address, whose sign-in is found from the server. No request transaction: the server is
+         *     asked how it signs in.
          */
         post: operations["apps_add_app"];
         delete?: never;
@@ -158,7 +159,8 @@ export interface paths {
         };
         /**
          * Get App
-         * @description One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs.
+         * @description One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs. No request
+         *     transaction: the page is read in one, then agents-service is asked who uses each tool with none open.
          */
         get: operations["apps_get_app"];
         put?: never;
@@ -166,7 +168,8 @@ export interface paths {
         /**
          * Delete App
          * @description Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts
-         *     while a tool still uses it.
+         *     while a tool still uses it. No request transaction: agents-service is asked whether a workflow or agent names
+         *     each account.
          */
         delete: operations["apps_delete_app"];
         options?: never;
@@ -220,7 +223,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Account
-         * @description 409 connection_in_use while a module points at it.
+         * @description 409 connection_in_use while a module points at it. No request transaction: agents-service is asked
+         *     whether a workflow or agent names the account.
          */
         delete: operations["apps_delete_account"];
         options?: never;
@@ -869,7 +873,8 @@ export interface paths {
          * My Connections
          * @description The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
          *     signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
-         *     person signs in to it.
+         *     person signs in to it. No request transaction: the team's write approval policies and who uses each tool are
+         *     asked of the platform and agents-service.
          */
         get: operations["apps_my_connections"];
         put?: never;

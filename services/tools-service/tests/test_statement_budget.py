@@ -139,8 +139,4 @@ def seed_team(database_url: str, client: httpx.AsyncClient) -> SeedTeam:
 
 async def test_every_get_stays_in_its_budget(statement_budget: StatementBudget) -> None:
     problems = await statement_budget(BUDGETS)
-    grows = {p.split(":")[0] for p in problems if "statements at 5 rows" in p}
-    rest = [p for p in problems if "statements at 5 rows" not in p]
-    assert rest == [], "\n".join(rest)
-    # A route that grows with its rows today, budgeted at its 50-row count (budgets.toml) until its route is converted.
-    assert grows == {"GET /v1/app-credentials"}, grows
+    assert problems == [], "\n".join(problems)

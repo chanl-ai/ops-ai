@@ -9,37 +9,23 @@ queries = 0
 ["GET /health/background"]
 queries = 0
 
-# Grows with its rows: 31 statements at 5 credentials, 121 at 50 (a read per credential). Budgeted at
-# the 50-row count until its route is converted; tests/test_statement_budget.py lists it as growing.
 ["GET /v1/app-credentials"]
-queries = 121
-transactions = 114
-connections = 114
+queries = 23
 
 ["GET /v1/app-credentials/{credential_id}"]
 queries = 25
-transactions = 17
-connections = 17
 
 ["GET /v1/apps"]
 queries = 15
-transactions = 9
-connections = 9
 
 ["GET /v1/apps/{app_id}"]
 queries = 52
-transactions = 32
-connections = 32
 
 ["GET /v1/apps/{app_id}/accounts"]
 queries = 5
-transactions = 4
-connections = 4
 
 ["GET /v1/apps/{app_id}/accounts/{account_id}"]
 queries = 11
-transactions = 8
-connections = 8
 
 ["GET /v1/apps/{app_id}/resources"]
 queries = 0
@@ -84,6 +70,7 @@ queries = 1
 ["GET /v1/me/accounts"]
 queries = 1
 
+# Asks the platform and agents-service, so it holds no request transaction: each store read is its own.
 ["GET /v1/me/connections"]
 queries = 16
 transactions = 10

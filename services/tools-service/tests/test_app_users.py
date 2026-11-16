@@ -4,8 +4,12 @@ workflows; a viewer reads it; and a missing agents-service answer reads as "nobo
 
 from __future__ import annotations
 
+import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.pool import QueuePool
+
 from ops_service_kit.errors import ServiceUnavailable
-from ops_tools.modules.tool_users import StaticToolUsers
+from ops_tools.modules.tool_users import StaticToolUsers, Uses
 
 from .test_app_accounts import TEAM, World, admin, connected, world  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_plugins import ID
@@ -52,14 +56,27 @@ async def test_no_answer_from_agents_service_is_not_nobody(world: World, tenant:
 async def test_the_app_pages_tools_carry_who_uses_each_and_a_missing_answer_is_not_nobody(
     world: World,  # noqa: F811
     tenant: str,
+    engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The app page's Tools tab: each tool's agents and workflows, joined in the answer; agents-service down leaves
-    Used by unknown instead of empty, and the page still answers."""
+    """The app page's Tools tab: each tool's agents and workflows, joined in the answer, asked of agents-service with
+    no database connection held; agents-service down leaves Used by unknown instead of empty, and the page still
+    answers."""
     await connected(world, tenant)
     assert isinstance(world.users, StaticToolUsers)
     world.users.uses = {"desk_get_case": [{"kind": "agent", "id": "agt_1", "name": "Records helper"}]}
+    checked_out: list[int] = []
+    asked = world.users.of
+
+    async def watched(tenant_id: str, team_id: str, tools: list[str]) -> Uses:
+        pool = engine.pool
+        assert isinstance(pool, QueuePool)
+        checked_out.append(pool.checkedout())
+        return await asked(tenant_id, team_id, tools)
+
+    monkeypatch.setattr(world.users, "of", watched)
     page = await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))
-    assert page.status_code == 200, page.text
+    assert (page.status_code, checked_out) == (200, [0]), page.text
     tools = {t["name"]: t for t in page.json()["data"]["tools"]}
     assert tools["desk_get_case"]["usedBy"] == {"agents": [{"id": "agt_1", "name": "Records helper"}], "workflows": []}
 

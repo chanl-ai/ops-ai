@@ -15173,7 +15173,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,\nor an MCP server by its address, whose sign-in is found from the server.",
+        "description": "A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,\nor an MCP server by its address, whose sign-in is found from the server. No request transaction: the server is\nasked how it signs in.",
         "operationId": "apps_add_app",
         "parameters": [
           {
@@ -15382,7 +15382,7 @@
     },
     "/v1/apps/{app_id}": {
       "delete": {
-        "description": "Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts\nwhile a tool still uses it.",
+        "description": "Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts\nwhile a tool still uses it. No request transaction: agents-service is asked whether a workflow or agent names\neach account.",
         "operationId": "apps_delete_app",
         "parameters": [
           {
@@ -15588,7 +15588,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs.",
+        "description": "One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs. No request\ntransaction: the page is read in one, then agents-service is asked who uses each tool with none open.",
         "operationId": "apps_get_app",
         "parameters": [
           {
@@ -16474,7 +16474,7 @@
     },
     "/v1/apps/{app_id}/accounts/{account_id}": {
       "delete": {
-        "description": "409 connection_in_use while a module points at it.",
+        "description": "409 connection_in_use while a module points at it. No request transaction: agents-service is asked\nwhether a workflow or agent names the account.",
         "operationId": "apps_delete_account",
         "parameters": [
           {
@@ -25507,7 +25507,7 @@
     },
     "/v1/me/connections": {
       "get": {
-        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its appState and appGroup, and where it is used; an app the team has off is listed when each\nperson signs in to it.",
+        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its appState and appGroup, and where it is used; an app the team has off is listed when each\nperson signs in to it. No request transaction: the team's write approval policies and who uses each tool are\nasked of the platform and agents-service.",
         "operationId": "apps_my_connections",
         "parameters": [
           {

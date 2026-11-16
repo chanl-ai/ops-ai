@@ -794,6 +794,28 @@ class ConnectionStore(Store):
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
+    async def newest(
+        self, tenant_id: str, connection_ids: Sequence[str], action: str
+    ) -> list[tuple[str, datetime, JsonValue]]:
+        """Each account's newest audit row of one action, as (account id, at, detail), in one statement however many
+        accounts are named: an app credential's list reads its accounts' last Test with my account this way."""
+        if not connection_ids:
+            return []
+        a = connection_audit
+        last = (
+            sa.select(sa.func.max(a.c.id).label("id"))
+            .where(
+                a.c.tenant_id == tenant_id,
+                a.c.connection_id.in_(list(connection_ids)),
+                a.c.action == action,
+                team_visible(a),
+            )
+            .group_by(a.c.connection_id)
+        )
+        q = sa.select(a.c.connection_id, a.c.at, a.c.detail).where(a.c.id.in_(last), team_visible(a))
+        async with self.tx() as c:
+            return [(str(r.connection_id), r.at, cast(JsonValue, r.detail)) for r in await c.execute(q)]
+
     async def note(self, tenant_id: str, connection_id: str, event: Row, *, report: Row | None = None) -> None:
         """An audit row on its own (a sign-in, a sign-out, a failed refresh): action, actor, at, detail. `report`: a
         service event (connections.account_events) written in the same transaction."""

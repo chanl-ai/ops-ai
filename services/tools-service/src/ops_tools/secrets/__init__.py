@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -85,6 +86,16 @@ class SecretResolver:
         if ends is not None:
             await self.store.keep_ends(tenant_id, team_id, name, ref, ends)
         return ends
+
+    async def ends_named(self, tenant_id: str, team_id: str, names: Sequence[str]) -> dict[str, str | None]:
+        """`ends_of` for several secrets of one team, their references read in one statement: a list of app credentials
+        costs the same however many it shows. Only a secret still without its ends is named in the answer."""
+        out: dict[str, str | None] = {}
+        for name, ref in (await self.store.missing_ends_named(tenant_id, team_id, names)).items():
+            out[name] = ending(await self.credentials.get(ref, context=context_of(tenant_id, name)))
+            if (ends := out[name]) is not None:
+                await self.store.keep_ends(tenant_id, team_id, name, ref, ends)
+        return out
 
     async def rotate(
         self, tenant_id: str, team_id: str, name: str, value: str, *, actor: str, at: datetime
