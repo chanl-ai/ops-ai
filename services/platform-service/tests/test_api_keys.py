@@ -157,18 +157,40 @@ async def test_creating_and_revoking_are_audited(platform: Platform) -> None:
 
 
 async def test_the_keys_list_never_shows_another_teams_or_tenants_keys(platform: Platform) -> None:
-    # A search, a filter or `ids` naming them each still answers the acting team's keys only.
+    # A search, a filter or `ids` naming them each still answers the acting team's key, and only it: every key is
+    # the same name and target, so only the team and tenant predicates tell them apart.
+    target = {"kind": "workflow", "id": "levy_intake", "version": 3}
     admin, h = await as_admin(platform)
-    mine = await create(platform, h)
+    mine = await create(platform, h, target=target, scopes=["write"])
     team_admin = await platform.person(roles=("admin",), tenant_id=admin.tenant_id)
-    other_team = await create(platform, {**(await bearer(platform, team_admin)), "X-Team-Id": team_of(team_admin)})
+    th = {**(await bearer(platform, team_admin)), "X-Team-Id": team_of(team_admin)}
+    other_team = await create(platform, th, target=target, scopes=["write"])
     _, outsider = await as_admin(platform)
-    other_tenant = await create(platform, outsider)
+    other_tenant = await create(platform, outsider, target=target, scopes=["write"])
     theirs = {other_team["key"]["id"], other_tenant["key"]["id"]}  # type: ignore[index]
     ids = [mine["key"]["id"], *theirs]  # type: ignore[index]
-    asks: list[dict[str, Any]] = [{}, {"search": "ci"}, {"ids": ids}, {"targetKind": "agent", "pageSize": 50}]
+    asks: list[dict[str, Any]] = [{}, {"search": "ci"}, {"ids": ids}, {"targetKind": "workflow", "pageSize": 50}]
     for params in asks:
         r = await platform.public.get("/v1/api-keys", headers=h, params=params)
         assert r.status_code == 200, r.text
-        listed = {k["id"] for k in r.json()["data"]["data"]}
-        assert listed <= {mine["key"]["id"]} and not listed & theirs, (params, listed)  # type: ignore[index]
+        listed = [k["id"] for k in r.json()["data"]["data"]]
+        assert listed == [mine["key"]["id"]], (params, listed)  # type: ignore[index]
+        assert r.json()["data"]["pagination"]["total"] == 1, r.text
+
+
+async def test_the_keys_list_pages_without_repeating_or_skipping_a_key(platform: Platform) -> None:
+    # Three keys made in one millisecond share their sort value; the id orders them, so two pages hold all three.
+    _, h = await as_admin(platform)
+    made = {(await create(platform, h))["key"]["id"] for _ in range(3)}  # type: ignore[index]
+    seen: list[str] = []
+    for page, has_next in ((1, True), (2, False), (9, False)):
+        r = await platform.public.get("/v1/api-keys", headers=h, params={"pageSize": 2, "page": page})
+        assert r.status_code == 200, r.text
+        body = r.json()["data"]
+        assert (body["pagination"]["total"], body["pagination"]["hasNext"]) == (3, has_next), body["pagination"]
+        if page < 9:
+            seen += [k["id"] for k in body["data"]]
+        else:
+            # A page past the last answers the last page.
+            assert [k["id"] for k in body["data"]] == seen[2:], body
+    assert len(seen) == 3 and set(seen) == made, seen
