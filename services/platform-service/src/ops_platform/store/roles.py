@@ -207,9 +207,7 @@ class RoleStore(TenantDb):
         """Whether the person holds `access.manage` through a role assigned in every team (`*`): a workspace admin,
         who acts in any team of the workspace whether or not they belong to it."""
         del now  # `live` reads the clock itself
-        p, access = await self.live(tenant_id, user_id)
-        # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
-        return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
+        return is_workspace_admin(*await self.live(tenant_id, user_id))
 
     async def workspace_roles(self, tenant_id: str, user_ids: list[str], *, now: str) -> dict[str, list[str]]:
         """Each person's roles assigned in every team (`*`), by name, so a team's member list says where access beyond
@@ -637,6 +635,13 @@ async def access_from(
     return p, access
 
 
+def is_workspace_admin(p: Principal, access: Access) -> bool:
+    """The one decision of who is a workspace admin: `access.manage` through a role assigned in every team (`*`), so
+    they act in any team whether or not they belong to it. `RoleStore.workspace_admin` and `/v1/me` both ask it."""
+    # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
+    return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
+
+
 async def holdings_in(c: AsyncConnection, user_id: str) -> Holdings:
     """`RoleStore.holdings` on the caller's transaction: the person's active member teams, then `holdings_with`."""
     mine = (
@@ -759,6 +764,18 @@ def membership_admins() -> sa.Select[str, str]:
         role_assignments.c.subject_kind == "person",
         role_assignments.c.source == MEMBERSHIP,
         role_assignments.c.role_id == ADMIN.id,
+    )
+
+
+def team_admins(team_id: str) -> sa.ColumnElement[bool]:
+    """Which `members` rows are the team's admins: its active members whose membership gives the built-in Admin, read
+    from the role assignments through `membership_admins`, as the team's admin count and the Security mirror read them.
+    The last-admin guards lock these rows. A grant of Admin, an invite as admin and a removed admin are not counted."""
+    held = membership_admins().with_only_columns(role_assignments.c.subject_id)
+    return sa.and_(
+        members.c.team_id == team_id,
+        members.c.status == "active",
+        members.c.user_id.in_(held.where(role_assignments.c.team_id == team_id)),
     )
 
 

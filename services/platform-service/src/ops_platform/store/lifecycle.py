@@ -31,8 +31,7 @@ from ops_store.dialect import locked
 from ops_store.rows import one
 
 from .audit import record, record_grants_ending
-from .members import ADMIN
-from .roles import bump_version, mirror_membership
+from .roles import bump_version, mirror_membership, team_admins
 from .tables import (
     api_keys,
     members,
@@ -289,10 +288,8 @@ class LifecycleStore(TenantDb):
     async def leave_team(self, tenant_id: str, team_id: str, *, user_id: str, at: str, request_id: str) -> bool:
         """False when the person is not an active member of the team."""
         async with self.tenant_tx(tenant_id) as c:
-            admins_q = sa.select(members.c.user_id).where(
-                members.c.team_id == team_id, members.c.role == ADMIN, members.c.status == "active"
-            )
-            admins = {str(u) for u in (await c.execute(locked(admins_q, members))).scalars()}
+            admins_q = locked(sa.select(members.c.user_id).where(team_admins(team_id)), members)
+            admins = {str(u) for u in (await c.execute(admins_q)).scalars()}
             mine = (
                 await c.execute(
                     sa.select(members.c.id).where(

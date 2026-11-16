@@ -11,13 +11,13 @@ from typing import ClassVar
 
 import sqlalchemy as sa
 
-from ops_access import ANY_TEAM, Grant
+from ops_access import Grant
 from ops_store import Guarantee
 
 from .identity import User
 from .lifecycle import WorkspaceState, owner_query
 from .policies import PolicyValues, values_in
-from .roles import Holdings, access_from, grids_in, holdings_with
+from .roles import Holdings, access_from, grids_in, holdings_with, is_workspace_admin
 from .tables import members, teams, tenants, users
 from .tenancy import TenantDb
 
@@ -112,11 +112,11 @@ class MeStore(TenantDb):
 async def _workspace_admin(
     tenant_id: str, user_id: str, held: Holdings, grids: dict[str, list[Grant]], *, version: int, security: str | None
 ) -> bool:
-    """`RoleStore.workspace_admin`, decided by `can` on the rows already read rather than on a read of its own."""
+    """`is_workspace_admin` on the rows already read rather than on a read of its own."""
 
     async def fetch(_t: str, _v: int, ids: list[str]) -> dict[str, list[Grant]]:
         return {i: grids[i] for i in ids if i in grids}
 
-    p, access = await access_from(tenant_id, user_id, held, version=version, security=security, fetch=fetch)
-    # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
-    return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
+    return is_workspace_admin(
+        *await access_from(tenant_id, user_id, held, version=version, security=security, fetch=fetch)
+    )

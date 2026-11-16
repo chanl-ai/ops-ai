@@ -29,7 +29,7 @@ from ops_store.outbox import add as add_event
 from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
-from .roles import mirror_membership
+from .roles import mirror_membership, team_admins
 from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
 from .tenancy import INVITE_LOOKUP, TenantDb
 from .workspace import security_team_in
@@ -508,10 +508,8 @@ async def end_membership(c: AsyncConnection, actor: Actor, member_id: str, user_
 
 
 async def _lock_admins(c: AsyncConnection, team_id: str) -> set[str]:
-    q = sa.select(members.c.id).where(
-        members.c.team_id == team_id, members.c.role == ADMIN, members.c.status == "active"
-    )
-    q = locked(q, members)
+    """The team's admins' member ids (`team_admins`), their rows locked so two demotions wait for each other."""
+    q = locked(sa.select(members.c.id).where(team_admins(team_id)), members)
     return {str(i) for i in (await c.execute(q)).scalars().all()}
 
 
