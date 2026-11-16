@@ -117,6 +117,8 @@ async def list_runs(p: CurrentPrincipal, _: Tx, q: ListQuery, rt: Rt) -> JSONRes
 The response is `{data, pagination, facets}`; `apps/console/src/lib/api/contract.ts` already carries `facets` on
 `ListResult`, and `ids` joins its `ListParams`. A label another service owns comes from a local copy (C8), never from
 a hop while the transaction is open.
+Every list's ORDER BY ends with the primary key of the query's first table, in the main sort's direction, so rows that
+share a sort value never repeat or vanish between pages; `list_page` appends it.
 
 ### C3: every other service is a setting
 

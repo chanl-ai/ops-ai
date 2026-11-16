@@ -18,7 +18,6 @@ that has not changed still gets the same answer.
 | `GET /v1/files` | parameter `search` | string, default `""` | string or null, unset by default | Nothing | Yes |
 | `GET /v1/files` | `page` past the last page | an empty `data` with that page number | the last page, with its page number in `pagination.page` | Read `pagination.page` | Partly |
 | `GET /v1/files` | reply field `facets` | a value with no read-as type or read path counted under the key `"None"` | null values not counted | Do not read `facets.readAs.None` or `facets.readPath.None`; files with no reading are the total minus the counts | Partly |
-| `GET /v1/files` | order of rows with the same upload time | then by id | in the database's order (the list contract's default sort is one column) | Nothing for the Files page; a caller that pages through rows uploaded in the same instant may see one twice or miss one | Partly |
 
 ### Follow-ups for the SDK and console steps (files-service)
 
