@@ -598,7 +598,7 @@ class GatewayCalls:
             await self.log.record(**row, outcome="refused", error={"code": "CALL_ABANDONED", "message": reason})
             return Refused(call_id, 409, "call_abandoned", [reason])
         if first is not None:
-            if first["outcome"] == "running":
+            if first.outcome == "running":
                 reason = "the same write is already running; retry after it finishes"
                 # A refusal like any other, so the log, the module's Denied count and the response agree.
                 row.update(decision="deny", reasons=[reason])
@@ -606,10 +606,8 @@ class GatewayCalls:
                 await self.log.record(**row, outcome="in_progress", latency_ms=elapsed(), error=error)
                 return Refused(call_id, 409, "write_in_progress", [reason])
             # The same approved write again: answer with the first result, run nothing.
-            await self.log.record(
-                **row, outcome="replayed", output=first["output"], view=first["view"], replay_of=first["id"]
-            )
-            return Allowed(call_id, first["outcome"] == "ok", first["output"], first["view"], replay_of=first["id"])
+            await self.log.record(**row, outcome="replayed", output=first.output, view=first.view, replay_of=first.id)
+            return Allowed(call_id, first.outcome == "ok", first.output, first.view, replay_of=first.id)
         if (limited := await over_rate()) is not None:
             return limited
         approvers = (caller.email,) if self_approved else tuple(_approvers(req.approval_token))

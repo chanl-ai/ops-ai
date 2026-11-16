@@ -27,7 +27,7 @@ from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.service import Caller
 from .registry import ToolRegistry
-from .store.calls import CallLog
+from .store.calls import CallLog, LinkLastCall
 from .store.mcp_links import LinkedTool, McpLink, McpLinks
 
 # A link names its tools; past this many an assistant reads a list too long to choose from (tool search starts at 20).
@@ -107,7 +107,7 @@ def mcp_links_router(
         assert who.principal is not None
         return who.principal
 
-    def _view(row: McpLink, last: dict[str, Any] | None) -> dict[str, Any]:
+    def _view(row: McpLink, last: LinkLastCall | None) -> dict[str, Any]:
         tools = [LinkTool(name=t.name, title=t.title, kind=t.kind, access=t.access) for t in row.tools]
         return McpLinkView(
             id=row.id,
@@ -123,10 +123,10 @@ def mcp_links_router(
             created_at=row.created_at,
             last_call=LastCall(
                 # A signed-in assistant is known by its client id only; the console words it rather than show the id.
-                at=last["created_at"],
-                outcome=last["outcome"],
-                client=last["client_name"],
-                signed_in=last["client_id"] is not None,
+                at=last.created_at,
+                outcome=last.outcome,
+                client=last.client_name,
+                signed_in=last.client_id is not None,
             )
             if last
             else None,

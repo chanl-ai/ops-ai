@@ -6,12 +6,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
 
@@ -86,6 +89,73 @@ gateway_calls = sa.Table(
     # call on a module every team shares is logged in the calling team.
     info=TENANT_SCOPED,
 )
+
+
+class GatewayCall(Out):
+    """One row of the call log, every column."""
+
+    id: str
+    tool: str
+    access: str
+    input_hash: str
+    idempotency_key: str
+    thread_id: str | None
+    step: str | None
+    sub: str
+    act: str | None
+    decision: str
+    # Written from OPA's answer and an approval token's claims: JSON, read as text.
+    reasons: list[JsonValue]
+    approvers: list[JsonValue]
+    outcome: str
+    effect: bool
+    effect_scope: str
+    output: JsonValue
+    view: JsonValue
+    created_at: str
+    module_id: str | None
+    latency_ms: int | None
+    error: dict[str, JsonValue] | None
+    approval_token_id: str | None
+    replay_of: str | None
+    tenant_id: str | None
+    team_id: str | None
+    environment: str | None
+    connection_id: str | None
+    acting_for: str | None
+    credential: str | None
+    channel: str | None
+    client_name: str | None
+    client_id: str | None
+    link_id: str | None
+    caller_name: str | None
+
+
+class LinkLastCall(Out):
+    """A link's newest call, for the links list's Last call column."""
+
+    link_id: str
+    created_at: str
+    outcome: str
+    client_name: str | None
+    client_id: str | None
+    sub: str
+
+
+class CallStats(Out):
+    """Calls, errors and p95 latency of a module or one of its operations."""
+
+    calls: int
+    errors: int
+    p95_ms: int
+
+
+class DayStats(Out):
+    """Calls, errors and p95 latency of one UTC day."""
+
+    count: int
+    errors: int
+    p95_ms: int
 
 
 # A write still `running` after this long belongs to a gateway that stopped mid-execute: whether the system acted is
@@ -177,7 +247,7 @@ class CallLog(Store):
         async with self.tx() as c:
             await c.execute(gateway_calls.insert().values(effect=False, effect_scope=_own(row["id"]), **row))
 
-    async def claim(self, *, generation: int | None, **row: Any) -> dict[str, Any] | None:
+    async def claim(self, *, generation: int | None, **row: Any) -> GatewayCall | None:
         """Checks the thread's fence and inserts the row that will carry this write's side effect, in one transaction
         (ADR-0016): a superseded caller raises LeaseSupersededError before the dedup lookup, so it is refused, never
         answered with the new owner's result. Returns None when this call won the claim, or the first call's row when
@@ -208,9 +278,9 @@ class CallLog(Store):
                     gateway_calls.c.tool == row["tool"],
                     gateway_calls.c.input_hash == row["input_hash"],
                 )
-                first = (await c.execute(q)).mappings().first()
+                first = await one(c, q, GatewayCall)
                 assert first is not None, "the unique index conflicted, so the first row exists"
-                return dict(first)
+                return first
 
     async def refuse_claimed(self, call_id: str, *, reasons: list[str], error: dict[str, Any], latency_ms: int) -> None:
         """Turns a claimed write that was refused before it ran (its rate limit) into a refused row and gives up the
@@ -246,7 +316,7 @@ class CallLog(Store):
 
     async def abandon(
         self, *, tenant_id: str, key: str, tool: str, thread_id: str | None, sub: str
-    ) -> dict[str, Any] | None:
+    ) -> GatewayCall | None:
         """The call sent under `key` when the gateway has one; otherwise the key is marked abandoned, in the same
         transaction under the key's lock, so a claim of it arriving later is refused (CallAbandonedError)."""
         mine = (gateway_calls.c.tenant_id == tenant_id, gateway_calls.c.idempotency_key == key)
@@ -255,11 +325,12 @@ class CallLog(Store):
             q = (
                 gateway_calls.select()
                 .where(*mine, gateway_calls.c.outcome != "abandoned")
-                .order_by(gateway_calls.c.effect.desc(), gateway_calls.c.created_at)
+                .order_by(gateway_calls.c.effect.desc(), gateway_calls.c.created_at, gateway_calls.c.id)
+                .limit(1)
             )
-            found = (await c.execute(q)).mappings().first()
+            found = await one(c, q, GatewayCall)
             if found is not None:
-                return dict(found)
+                return found
             marked = sa.select(gateway_calls.c.id).where(*mine, gateway_calls.c.outcome == "abandoned")
             if (await c.execute(marked)).first() is None:
                 abandoned_id = new_id("gwc")
@@ -299,23 +370,22 @@ class CallLog(Store):
         async with self.tx() as c:
             await c.execute(gateway_calls.update().where(*where).values(outcome="lost", error=error))
 
-    async def get(self, call_id: str, *, tenant_id: str, team_ids: list[str]) -> dict[str, Any] | None:
+    async def get(self, call_id: str, *, tenant_id: str, team_ids: list[str]) -> GatewayCall | None:
         """One call by its id, as the log recorded it, made in one of `team_ids`; None when there is none there."""
         q = gateway_calls.select().where(
             gateway_calls.c.id == call_id, gateway_calls.c.tenant_id == tenant_id, gateway_calls.c.team_id.in_(team_ids)
         )
         async with self.tx() as c:
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q, GatewayCall)
 
-    async def for_thread(self, thread_id: str, *, tenant_id: str) -> list[dict[str, Any]]:
+    async def for_thread(self, thread_id: str, *, tenant_id: str) -> list[GatewayCall]:
         q = (
             gateway_calls.select()
             .where(gateway_calls.c.thread_id == thread_id, gateway_calls.c.tenant_id == tenant_id)
-            .order_by(gateway_calls.c.created_at)
+            .order_by(gateway_calls.c.created_at, gateway_calls.c.id)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, GatewayCall)
 
     async def search(
         self,
@@ -334,7 +404,7 @@ class CallLog(Store):
         sub: str | None = None,
         offset: int = 0,
         limit: int = 50,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[GatewayCall], int]:
         """Calls made in `team_ids` (the caller's team), newest first, with the total that match; `since` is an ISO
         time, compared as text like created_at. The team is the one the call acted in, not the module's: a module every
         team shares holds each team's calls, and each team reads only its own."""
@@ -365,10 +435,10 @@ class CallLog(Store):
         q = gateway_calls.select().where(*where).order_by(gateway_calls.c.created_at.desc()).offset(offset).limit(limit)
         total = sa.select(sa.func.count()).select_from(gateway_calls).where(*where)
         async with self.tx() as c:
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            return rows, int((await c.execute(total)).scalar_one())
+            found = await rows(c, q, GatewayCall)
+            return found, int((await c.execute(total)).scalar_one())
 
-    async def last_by_link(self, tenant_id: str, team_id: str, link_ids: list[str]) -> dict[str, dict[str, Any]]:
+    async def last_by_link(self, tenant_id: str, team_id: str, link_ids: list[str]) -> dict[str, LinkLastCall]:
         """Each link's newest call in the team, for the links list's Last call column."""
         if not link_ids:
             return {}
@@ -383,7 +453,7 @@ class CallLog(Store):
             newest, sa.and_(t.c.link_id == newest.c.link_id, t.c.created_at == newest.c.at)
         )
         async with self.tx() as c:
-            return {str(r["link_id"]): dict(r) for r in (await c.execute(q)).mappings()}
+            return {r.link_id: r for r in await rows(c, q, LinkLastCall)}
 
     async def made_for(
         self, person: str, module_ids: list[str], since: str, *, tenant_id: str, team_id: str
@@ -409,13 +479,11 @@ class CallLog(Store):
 
     async def traffic(
         self, module_ids: list[str], since: str, *, tenant_id: str, team_ids: list[str]
-    ) -> dict[tuple[str, str | None], dict[str, Any]]:
+    ) -> dict[tuple[str, str | None], CallStats]:
         async with self.tx() as c:
             return await traffic(c, module_ids, since, tenant_id=tenant_id, team_ids=team_ids)
 
-    async def daily(
-        self, module_id: str, since: str, *, tenant_id: str, team_ids: list[str]
-    ) -> dict[str, dict[str, Any]]:
+    async def daily(self, module_id: str, since: str, *, tenant_id: str, team_ids: list[str]) -> dict[str, DayStats]:
         async with self.tx() as c:
             return await daily(c, module_id, since, tenant_id=tenant_id, team_ids=team_ids)
 
@@ -437,7 +505,7 @@ def _ran_since(module_ids: list[str], since: str, tenant_id: str, team_ids: list
 
 async def traffic(
     conn: AsyncConnection, module_ids: list[str], since: str, *, tenant_id: str, team_ids: list[str]
-) -> dict[tuple[str, str | None], dict[str, Any]]:
+) -> dict[tuple[str, str | None], CallStats]:
     """Calls, errors and p95 latency since `since`, per (module, operation) and per module (operation None), in one
     aggregate: GROUPING SETS gives the module's p95 over all its calls, which the operations' p95s cannot."""
     if not module_ids:
@@ -455,20 +523,18 @@ async def traffic(
         .where(*_ran_since(module_ids, since, tenant_id, team_ids))
         .group_by(sa.func.grouping_sets(sa.tuple_(c.module_id, c.tool), sa.tuple_(c.module_id)))
     )
-    rows = (await conn.execute(q)).mappings().all()
+    found = (await conn.execute(q)).mappings().all()
     return {
-        (r["module_id"], None if r["whole"] else r["tool"]): {
-            "calls": int(r["calls"]),
-            "errors": int(r["errors"]),
-            "p95Ms": round(r["p95"] or 0),
-        }
-        for r in rows
+        (r["module_id"], None if r["whole"] else r["tool"]): CallStats(
+            calls=int(r["calls"]), errors=int(r["errors"]), p95_ms=round(r["p95"] or 0)
+        )
+        for r in found
     }
 
 
 async def daily(
     conn: AsyncConnection, module_id: str, since: str, *, tenant_id: str, team_ids: list[str]
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, DayStats]:
     """Per UTC day since `since`: calls, errors and p95 latency. created_at is ISO text, so its first ten characters
     are the day."""
     c = gateway_calls.c
@@ -483,7 +549,7 @@ async def daily(
         .where(*_ran_since([module_id], since, tenant_id, team_ids))
         .group_by(day)
     )
-    rows = (await conn.execute(q)).mappings().all()
+    found = (await conn.execute(q)).mappings().all()
     return {
-        r["day"]: {"count": int(r["calls"]), "errors": int(r["errors"]), "p95Ms": round(r["p95"] or 0)} for r in rows
+        r["day"]: DayStats(count=int(r["calls"]), errors=int(r["errors"]), p95_ms=round(r["p95"] or 0)) for r in found
     }

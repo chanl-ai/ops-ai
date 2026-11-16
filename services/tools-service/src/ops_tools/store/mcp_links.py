@@ -12,7 +12,6 @@ from typing import ClassVar, Literal
 import sqlalchemy as sa
 from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Out
@@ -20,6 +19,7 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee, isolation
 from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
 from .modules import metadata
@@ -74,25 +74,23 @@ class McpLink(Out):
     updated_at: str
 
 
-class McpLinks:
+class McpLinks(Store):
     # A slug is unique per team by constraint, so two creates of the same name cannot both win.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
 
     async def list(self, tenant_id: str, team_id: str) -> list[McpLink]:
         t = mcp_links
         with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.team_id == team_id)
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            async with self.tx() as c:
                 return await rows(c, q.order_by(t.c.name, t.c.id), McpLink)
 
     async def get(self, tenant_id: str, team_id: str, link_id: str) -> McpLink | None:
         t = mcp_links
         with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            async with self.tx() as c:
                 return await one(c, q, McpLink)
 
     async def by_slug(self, tenant_id: str, team_id: str, slug: str) -> McpLink | None:
@@ -101,7 +99,7 @@ class McpLinks:
             q = sa.select(t).where(
                 t.c.tenant_id == tenant_id, team_visible(t), t.c.team_id == team_id, t.c.slug == slug
             )
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            async with self.tx() as c:
                 return await one(c, q, McpLink)
 
     async def create(
@@ -123,7 +121,7 @@ class McpLinks:
         )
         try:
             with isolation.scope(tenant_id, team_id):
-                async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                async with self.tx() as c:
                     # Each tool is stored with only the keys it has, as before: a picked tool has no schema of its own.
                     tools_json = [x.model_dump(exclude_none=True) for x in tools]
                     await c.execute(sa.insert(mcp_links).values(**link.model_dump(exclude={"tools"}), tools=tools_json))
@@ -136,7 +134,7 @@ class McpLinks:
         t = mcp_links
         with isolation.scope(tenant_id, team_id):
             q = sa.delete(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            async with self.tx() as c:
                 return (await c.execute(q)).rowcount > 0
 
     async def set_paused(self, tenant_id: str, team_id: str, link_id: str, paused: bool) -> McpLink | None:
@@ -147,6 +145,6 @@ class McpLinks:
                 .where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
                 .values(paused=paused, updated_at=now_iso())
             )
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            async with self.tx() as c:
                 await c.execute(q)
         return await self.get(tenant_id, team_id, link_id)

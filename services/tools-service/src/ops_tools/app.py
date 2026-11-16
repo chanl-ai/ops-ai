@@ -502,12 +502,12 @@ def create_gateway_app(
         found = await log.abandon(tenant_id=tenant, key=body.key, tool=body.tool, thread_id=body.thread, sub=caller.sub)
         call = (
             {
-                "id": found["id"],
-                "outcome": found["outcome"],
-                "effect": bool(found["effect"]),
-                "decision": found["decision"],
-                "output": found["output"],
-                "error": found["error"],
+                "id": found.id,
+                "outcome": found.outcome,
+                "effect": found.effect,
+                "decision": found.decision,
+                "output": found.output,
+                "error": found.error,
             }
             if found
             else None

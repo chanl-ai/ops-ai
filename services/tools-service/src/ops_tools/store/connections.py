@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -298,13 +299,13 @@ FIXED_VALUE = "fixed"
 
 
 def split_config(
-    values: Mapping[str, Any] | None, modes: Mapping[str, Any] | None
-) -> tuple[dict[str, Any], dict[str, Any]]:
+    values: Mapping[str, JsonValue] | None, modes: Mapping[str, JsonValue] | None
+) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
     """An auth config's set values as (fixed, default). A value with no mode is fixed, as every value was before modes
     existed; an empty one is not set."""
-    held = {k: v for k, v in dict(values or {}).items() if v not in (None, "")}
+    held: dict[str, JsonValue] = {k: v for k, v in dict(values or {}).items() if v not in (None, "")}
     said = dict(modes or {})
-    fixed = {k: v for k, v in held.items() if said.get(k) != DEFAULT_VALUE}
+    fixed: dict[str, JsonValue] = {k: v for k, v in held.items() if said.get(k) != DEFAULT_VALUE}
     return fixed, {k: v for k, v in held.items() if k not in fixed}
 
 

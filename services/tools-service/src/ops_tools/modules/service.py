@@ -50,7 +50,7 @@ from ..limits import amount_refusal
 from ..mocks import MockAnswers
 from ..registry import approval_policy
 from ..secrets import SecretResolver, scrub
-from ..store.calls import CallLog
+from ..store.calls import CallLog, CallStats, DayStats
 from ..store.connections import ConnectionStore
 from ..store.mocks import MockStore
 from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError, ModuleStore, StaleModuleError
@@ -64,12 +64,13 @@ from .seed import blank, kind_of, major_of, open_connection, tool_title
 from .tool_users import ToolUsers
 from .workflows import StaticWorkflows, WorkflowDirectory
 
-Traffic = dict[tuple[str, str | None], dict[str, Any]]
-NO_TRAFFIC: dict[str, Any] = {"calls": 0, "errors": 0, "p95Ms": 0}
+Traffic = dict[tuple[str, str | None], CallStats]
+NO_TRAFFIC = CallStats(calls=0, errors=0, p95_ms=0)
+NO_CALLS = DayStats(count=0, errors=0, p95_ms=0)
 
 
-def _rates(t: dict[str, Any]) -> dict[str, Any]:
-    return {"calls24h": t["calls"], "errorRate": t["errors"] / t["calls"] if t["calls"] else 0, "p95Ms": t["p95Ms"]}
+def _rates(t: CallStats) -> dict[str, Any]:
+    return {"calls24h": t.calls, "errorRate": t.errors / t.calls if t.calls else 0, "p95Ms": t.p95_ms}
 
 
 # Short enough that an approval granted for 30 days (the test default) is not expiring the day it is granted.
@@ -557,7 +558,7 @@ class ModuleService:
         m: Aggregate,
         o: dict[str, Any],
         approvals: list[dict[str, Any]],
-        t: dict[str, Any],
+        t: CallStats,
         have: dict[str | None, set[str]] | None = None,
     ) -> dict[str, Any]:
         policy = approval_policy(m, o)
@@ -929,7 +930,7 @@ class ModuleService:
             m["id"], first.isoformat(), tenant_id=who.tenant_id, team_ids=self._call_teams(who)
         )
         days = [
-            {"date": d, **logged.get(d, {"count": 0, "errors": 0, "p95Ms": 0})}
+            {"date": d, **logged.get(d, NO_CALLS).model_dump(by_alias=True)}
             for d in ((first + timedelta(days=i)).isoformat() for i in range(14))
         ]
         since = self._since(timedelta(days=1))
@@ -941,7 +942,7 @@ class ModuleService:
         return {
             "days": days,
             "denied24h": denied,
-            "recent": [call_row(r, _workflow_names([m]), m, self._title(m, r["tool"])) for r in recent],
+            "recent": [call_row(r, _workflow_names([m]), m, self._title(m, r.tool)) for r in recent],
         }
 
     def _title(self, module: dict[str, Any] | None, tool: str) -> str | None:
@@ -1000,7 +1001,7 @@ class ModuleService:
         pages = max(1, -(-total // page_size))
         names = _workflow_names(list(mods.values()))
         listed = [
-            call_row(r, names, mods.get(r["module_id"] or ""), self._title(mods.get(r["module_id"] or ""), r["tool"]))
+            call_row(r, names, mods.get(r.module_id or ""), self._title(mods.get(r.module_id or ""), r.tool))
             for r in rows
         ]
         return {
@@ -1041,10 +1042,10 @@ class ModuleService:
         if row is None:
             raise NotFound("Call")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
-        if (who.verified or who.team.scope != "all") and row["module_id"] not in mods:
+        if (who.verified or who.team.scope != "all") and row.module_id not in mods:
             raise NotFound("Call")
-        module = mods.get(row["module_id"] or "")
-        return call_row(row, _workflow_names(list(mods.values())), module, self._title(module, row["tool"]))
+        module = mods.get(row.module_id or "")
+        return call_row(row, _workflow_names(list(mods.values())), module, self._title(module, row.tool))
 
     # ── Creating modules ──────────────────────────────────────────────────
 
