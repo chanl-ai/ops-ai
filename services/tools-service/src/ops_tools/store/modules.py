@@ -474,7 +474,7 @@ class ModuleStore(Store):
         """Each operation's example answer, by (module, operation name): the body of its example mock."""
         m = operation_mocks.c
         q = sa.select(m.module_id, m.operation, m.body).where(
-            m.tenant_id == tenant_id, m.module_id.in_(ids), m.environment == EXAMPLE, m.is_default.is_(True)
+            m.tenant_id == tenant_id, m.module_id.in_(ids), m.environment == EXAMPLE, m.is_default == sa.true()
         )
         return {(str(r.module_id), str(r.operation)): r.body for r in await c.execute(q)}
 
@@ -491,7 +491,7 @@ class ModuleStore(Store):
                 continue
             where = (m.tenant_id == tenant, m.module_id == module, m.operation == name, m.environment == EXAMPLE)
             if (module, name) in held:
-                await c.execute(operation_mocks.update().where(*where, m.is_default.is_(True)).values(body=body))
+                await c.execute(operation_mocks.update().where(*where, m.is_default == sa.true()).values(body=body))
                 continue
             last = (await c.execute(sa.select(sa.func.max(m.position)).where(*where))).scalar()
             await c.execute(

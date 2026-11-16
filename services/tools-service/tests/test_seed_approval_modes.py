@@ -21,7 +21,7 @@ async def test_a_reseed_leaves_every_seeded_write_that_declares_a_wait_answering
         await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     o = module_operations.c
     q = sa.select(o.name, o.approval_mode).where(
-        o.tenant_id == tenant, o.access == "write", o.requires_approval.is_(True)
+        o.tenant_id == tenant, o.access == "write", o.requires_approval == sa.true()
     )
     async with engine.connect() as c:
         rows = [(r[0], r[1]) for r in await c.execute(q)]
