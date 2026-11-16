@@ -121,7 +121,8 @@ Check: `uv run python scripts/check_portable_store.py --strict` fails on a list 
 a service's code outside its store, with today's sites in `list-slice-baseline.txt`, which may only fall. The shared
 form is `ListQuery` (`packages/ops_service_kit/src/ops_service_kit/listing.py`) and `list_page`
 (`packages/ops_store/src/ops_store/listing.py`). Needed: an OpenAPI rule that every list operation returns the paged
-shape.
+shape. The rule catches a bound held in a name the same function assigns (`end = o + n`), `itertools.islice` and a
+tail cut then cut again; a window counted in another function or a helper passes.
 
 ## DA6 Every route has a statement budget
 

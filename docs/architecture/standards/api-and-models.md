@@ -155,7 +155,9 @@ class Out(BaseModel):
 
 Check: `uv run python scripts/check_typed_boundaries.py --strict`: `extra="allow"` outside the kit's `Passthrough`, and
 every route whose JSON body is not an `In` (`ops_service_kit.contract.boundaries`), beyond the service's
-`typed-boundaries-baseline.txt`.
+`typed-boundaries-baseline.txt`. It catches `dict[str, Any]`, `asyncio.gather`, `create_task`, `getLogger` and
+`extra="allow"` in their literal form, by their imported names (`from asyncio import gather`); a type alias, a name
+that holds one, or a wrapper that calls them passes.
 
 ### MD2 One model per contract, generated everywhere else
 

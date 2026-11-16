@@ -69,6 +69,7 @@ retyped. In the small services it is `app.py` and the client modules.
 | Baselines shrink in the lane | Each check has a file per service (`portable-baseline.txt` today; the raw-site, savepoint, config-literal and typed-boundary lists the components add). A lane takes its own file to zero and edits no other lane's file |
 | No new breach anywhere | Each component's check is red on a new site from the day it merges, so the freeze is enforced by the gate, not by asking |
 | Access decisions | Every site on `access-exceptions-allowlist.txt` is converted onto `can()` or `policy()`, kept with its register reason, or deleted with its code, as the register says (`AC1`, `AC2`) |
+| Contract test before a conversion | Before a service converts a body or reply to `In` or `Out`, it adds a contract test that the route's accepted bodies and reply keys are unchanged |
 | Hard git rules | Commit subject at most 72 characters, body at most 3 lines; no `--no-verify`, no stash, no force push, never push `main` or `develop` directly |
 | Public repository | No tracker ids, no private paths, no customer names in code, commits or docs |
 

@@ -23,7 +23,8 @@ class Settings(BaseSettings):
 
 Check: `services/agents-service/scripts/check_standards.py` rule 4 (environment read only in `settings.py`; no
 `dotenv`; no `.env` file), run in the agents-service CI job and in pre-commit; `apps/console/scripts/check-standards.mjs`
-rule 4. Needed: run rule 4 over every service in the `checks` job.
+rule 4. Needed: run rule 4 over every service in the `checks` job. Python rule 4 catches `os.environ`, `os.getenv`,
+`import os as o` and `from os import environ`; it does not follow an environment mapping passed in from elsewhere.
 
 ## CF2 No literal host, port, URL, model or timeout in code
 
@@ -62,7 +63,9 @@ Check: `uv run python scripts/check_config_literals.py --strict` (in `make pytho
 loopback fallback fails anywhere but the two named in the script; a literal `timeout=` or an `httpx.AsyncClient(`
 fails beyond the member's `config-literals-baseline.txt`, whose rows only fall. `.importlinter` allows `httpx` only in
 tools-service, models-service, `ops_identity.client` and the client packages, beyond a list that only shrinks. Needed:
-`:<port>` literals.
+`:<port>` literals. The script catches the literal form only: a number, an upper-case constant, or a name the same
+function assigns a number (`timeout=t`), and a loopback in a constant or a ternary; a value passed in from a caller
+or built in another module passes.
 
 ## CF3 A missing required setting stops the process at start
 

@@ -175,13 +175,19 @@ async def loop_reports_failure(client: AsyncClient, key: str, trip: Callable[[],
 
 ### C5: a model at every boundary
 
+`In` is not `strict`: FastAPI validates the parsed JSON in Python mode, where strict refuses an ISO date string, an
+enum's value and a UUID string. `Out` does have `extra="forbid"`: its schema says `additionalProperties: false`, and a
+row with a column the model lacks fails in `ops_store.rows`. Dropping it changed every API document.
+
 ```python
 # packages/ops_service_kit/src/ops_service_kit/http.py
 class In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid", strict=True)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 class Out(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True, from_attributes=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="forbid", frozen=True, from_attributes=True
+    )
 
 class Passthrough(In):
     """A body forwarded whole to an outside system: the one reviewed exception to extra="forbid"."""
