@@ -1968,11 +1968,13 @@ export const agentsOperations = {
     "path": "/v1/workflows/definitions",
     "pathParams": [],
     "query": [
+      "status",
       "page",
       "pageSize",
       "search",
       "sortBy",
-      "sortOrder"
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

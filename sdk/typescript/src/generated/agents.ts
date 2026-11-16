@@ -2955,9 +2955,10 @@ export interface paths {
         };
         /**
          * List Definitions
-         * @description The team's v2 workflows, each at its latest version, with the shared list pattern: search over name and id,
-         *     status facets (draft, in review, live, paused) before the status filter, sort and pages. v1 workflows stay on
-         *     /v1/workflows.
+         * @description The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
+         *     `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
+         *     by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
+         *     v1 workflows stay on /v1/workflows.
          */
         get: operations["workflows_list_definitions"];
         put?: never;
@@ -29102,11 +29103,13 @@ export interface operations {
     workflows_list_definitions: {
         parameters: {
             query?: {
+                status?: string[] | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
                 search?: string | null;
                 sortBy?: string | null;
                 sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

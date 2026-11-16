@@ -57595,9 +57595,28 @@
     },
     "/v1/workflows/definitions": {
       "get": {
-        "description": "The team's v2 workflows, each at its latest version, with the shared list pattern: search over name and id,\nstatus facets (draft, in review, live, paused) before the status filter, sort and pages. v1 workflows stay on\n/v1/workflows.",
+        "description": "The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,\n`status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted\nby `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.\nv1 workflows stay on /v1/workflows.",
         "operationId": "workflows_list_definitions",
         "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -57614,11 +57633,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -57665,6 +57689,26 @@
               ],
               "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {

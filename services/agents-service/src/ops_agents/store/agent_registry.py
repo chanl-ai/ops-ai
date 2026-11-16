@@ -97,6 +97,8 @@ publish_requests = sa.Table(
     info=TENANT_SCOPED,
 )
 sa.Index("ix_registry_publish_requests_subject", publish_requests.c.kind, publish_requests.c.subject_id)
+# Whether one workflow's request is pending, within the tenant (agents 0112).
+sa.Index("ix_registry_publish_requests_tenant_subject", publish_requests.c.tenant_id, publish_requests.c.subject_id)
 # A request id's prefix by kind; workflow kinds take WFP.
 REQUEST_PREFIXES = {
     "agent": "AGP",

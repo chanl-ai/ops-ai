@@ -22,10 +22,10 @@ engine_definitions = sa.Table(
     sa.Column("workflow_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("digest", sa.String(64), nullable=False),
-    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     # The definition as JSON, schemaVersion 2; YAML given on create is parsed before it is stored.
     sa.Column("definition", sa.JSON, nullable=False),
-    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("created_by", sa.String(200), nullable=False),
     # The team that owns the workflow; null for one the seed or a service published, which every team sees.
     sa.Column("team_id", sa.String(64)),
@@ -38,6 +38,9 @@ engine_definitions = sa.Table(
     sa.Column("archived_by", sa.String(200)),
     # One version per definition: publishing the same definition again returns its version.
     sa.UniqueConstraint("tenant_id", "workflow_id", "digest", name="uq_engine_definitions_digest"),
+    # The v2 workflows list, one team's page by name or update time (agents 0112).
+    sa.Index("ix_engine_definitions_team_name", "tenant_id", "team_id", "name"),
+    sa.Index("ix_engine_definitions_team_created", "tenant_id", "team_id", "created_at"),
     info=TENANT_SCOPED,
 )
 

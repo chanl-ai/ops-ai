@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field, model_validator
 from sse_starlette import EventSourceResponse
@@ -46,6 +46,7 @@ from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 
 from ...store.actor_names import UNNAMED_WORKFLOW
+from ...store.definition_list import definitions_page
 from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
 from ...store.mailboxes import MailboxStore
@@ -416,16 +417,6 @@ async def _newest_versions(rt: Runtime, type_ids: set[str], *, team: str | None)
         await documents.aclose()
 
 
-def page(rows: list[dict[str, Any]], page_no: int, size: int) -> dict[str, Any]:
-    """The shared list envelope's data and pagination (as hitl_facade.page; imported from there it closes a cycle)."""
-    total = len(rows)
-    pages = max(1, -(-total // size))
-    start = (page_no - 1) * size
-    meta = {"page": page_no, "pageSize": size, "total": total, "totalPages": pages}
-    meta |= {"hasNext": page_no < pages, "hasPrev": page_no > 1}
-    return {"data": rows[start : start + size], "pagination": meta}
-
-
 class DefinitionRow(Out):
     workflow_id: str
     name: str
@@ -465,46 +456,18 @@ async def account_uses(
 
 @router.get("/definitions", response_model=Envelope[ListResult[DefinitionRow]])
 async def list_definitions(
-    *,
-    request: Request,
-    rt: Rt,
-    _: Tx,
-    page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
-    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
-    search: str | None = None,
-    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,
-    sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "desc",
+    *, rt: Rt, _: Tx, q: ListQuery, status: Annotated[list[str] | None, Query()] = None
 ) -> JSONResponse:
-    """The team's v2 workflows, each at its latest version, with the shared list pattern: search over name and id,
-    status facets (draft, in review, live, paused) before the status filter, sort and pages. v1 workflows stay on
-    /v1/workflows."""
-    open_requests = await pending_requests(rt)
-    rows: list[dict[str, Any]] = [
-        {
-            "workflowId": d["workflow_id"],
-            "name": d["name"],
-            "version": d["version"],
-            "digest": d["digest"],
-            "status": workflow_status(d, open_requests.get(d["workflow_id"])),
-            "liveVersion": d["current_version"],
-            "runs": d["runs"],
-            "updatedAt": d["created_at"],
-            "updatedBy": d["created_by"],
-        }
-        for d in await definitions(rt).summaries(team=current_team())
+    """The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
+    `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
+    by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
+    v1 workflows stay on /v1/workflows."""
+    del status  # read from `q.filters`; declared so the document and the SDKs name it
+    listed = await definitions_page(rt.db, q)
+    rows = [
+        DefinitionRow(**{k: v for k, v in r.items() if k != "recent"}).model_dump(by_alias=True) for r in listed["data"]
     ]
-    if search:
-        s = search.lower()
-        rows = [r for r in rows if s in r["name"].lower() or s in r["workflowId"].lower()]
-    facets: dict[str, dict[str, int]] = {"status": {}}
-    for r in rows:
-        facets["status"][r["status"]] = facets["status"].get(r["status"], 0) + 1
-    wanted = request.query_params.getlist("status")
-    # An archived workflow leaves the list unless asked for; the facet still counts it, so the filter can show it.
-    rows = [r for r in rows if r["status"] in wanted] if wanted else [r for r in rows if r["status"] != "archived"]
-    key = sort_by if sort_by in {"name", "updatedAt", "runs", "status", "version"} else "updatedAt"
-    rows.sort(key=lambda r: r[key], reverse=sort_order == "desc")
-    return ok({**page(rows, page_no, page_size), "facets": facets})
+    return ok({**listed, "data": rows})
 
 
 async def pending_requests(rt: Runtime) -> dict[str, dict[str, Any]]:

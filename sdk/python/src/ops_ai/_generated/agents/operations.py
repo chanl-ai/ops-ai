@@ -1558,7 +1558,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows/definitions",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder"],
+        "query": ["status", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "workflows_list_document_type_uses": {
@@ -3073,18 +3073,28 @@ class Operations:
     def workflows_list_definitions(
         self,
         *,
+        status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultDefinitionRow:
         "List Definitions"
         return self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_definitions"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "sortBy": sort_by, "sortOrder": sort_order},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -4581,18 +4591,28 @@ class AsyncOperations:
     async def workflows_list_definitions(
         self,
         *,
+        status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultDefinitionRow:
         "List Definitions"
         return await self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_definitions"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "sortBy": sort_by, "sortOrder": sort_order},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

@@ -280,7 +280,7 @@ queries = 2
 queries = 16
 
 ["GET /v1/workflows/definitions"]
-queries = 2
+queries = 3
 
 ["GET /v1/workflows/definitions/account-uses"]
 queries = 2

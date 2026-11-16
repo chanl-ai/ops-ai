@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0111_cases_list_indexes
+-- agents-service, stamped at 0112_definitions_list_indexes
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -19,6 +19,10 @@ CREATE TABLE engine_definitions (
 );
 GO
 CREATE INDEX ix_engine_definitions_live ON engine_definitions (tenant_id, workflow_id) WHERE stage = 'live';
+GO
+CREATE INDEX ix_engine_definitions_team_created ON engine_definitions (tenant_id, team_id, created_at);
+GO
+CREATE INDEX ix_engine_definitions_team_name ON engine_definitions (tenant_id, team_id, name);
 GO
 CREATE TABLE engine_runs (
 	id VARCHAR(64) NOT NULL, 
@@ -221,6 +225,8 @@ GO
 CREATE INDEX ix_registry_publish_requests_team ON registry_publish_requests (tenant_id, team_id);
 GO
 CREATE INDEX ix_registry_publish_requests_tenant_id ON registry_publish_requests (tenant_id);
+GO
+CREATE INDEX ix_registry_publish_requests_tenant_subject ON registry_publish_requests (tenant_id, subject_id);
 GO
 CREATE TABLE background_heartbeats (
 	process VARCHAR(64) NOT NULL, 
@@ -1473,5 +1479,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0111_cases_list_indexes');
+INSERT INTO alembic_version (version_num) VALUES ('0112_definitions_list_indexes');
 GO
