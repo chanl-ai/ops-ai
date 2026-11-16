@@ -10,6 +10,8 @@ Two more lists, one file per service under `isolation_sites/`, each row `<count>
           instead of through `Store.tx()`, so it is a second connection beside the request's and carries no caller
   caught  a handler that catches a database error and carries on with no savepoint (`Store.attempt`) around the
           statement; on the request's one transaction PostgreSQL refuses every statement after the failed one
+  install a block with no tenant (`Store.install_tx`, `isolation.install_wide`): counted per file, so a second one in a
+          file already listed by reason above fails here too
 
 A row may only fall: a new site fails here naming its line, and a site that is gone fails until its row is lowered."""
 
@@ -267,6 +269,7 @@ def _in_savepoint(attempt: ast.Try) -> bool:
     )
 
 
+INSTALL_CALLS = {"install_tx", "install_wide"}
 # Calls that send a statement; a catch around one is a catch around the database.
 STATEMENTS = {"execute", "executemany", "scalar", "scalars", "commit", "flush"}
 BROAD = {"Exception", "BaseException"}
@@ -302,6 +305,8 @@ def site_findings(source: str) -> list[tuple[int, str]]:
                 and isinstance(item.context_expr.func, ast.Attribute)
                 and item.context_expr.func.attr in {"begin", "connect"}
             }
+        if isinstance(node, ast.Call) and _handle(node.func) in INSTALL_CALLS:
+            out.add((node.lineno, "install"))
         if isinstance(node, ast.With | ast.AsyncWith):
             for item in node.items:
                 call = item.context_expr
@@ -355,7 +360,10 @@ def test_raw_transactions_and_caught_errors_are_only_the_listed_ones() -> None:
             kind, rel = key.split(" ", 1)
             where = ", ".join(f"{rel}:{n}" for n in lines.get(key, []))
             if now[key] > listed[key]:
-                fix = "use Store.tx()" if kind == "raw" else "run the statement inside Store.attempt(conn)"
+                fix = {
+                    "raw": "use Store.tx()",
+                    "install": "reach a system(...) table through an existing install block, or a tenant's own tx()",
+                }.get(kind, "run the statement inside Store.attempt(conn)")
                 problems.append(f"{service}: {kind} {now[key]} > {listed[key]} at {where}; {fix}")
             elif now[key] < listed[key]:
                 problems.append(f"{service}: {key} fell to {now[key]}; lower its row in isolation_sites/{service}.txt")
@@ -458,6 +466,16 @@ async def savepoint(self, conn):
         (20, "suppressed"),
         (24, "suppressed"),
     ]
+
+
+def test_the_site_scan_counts_each_install_block() -> None:
+    planted = """
+async def two(self):
+    async with self.install_tx(KEYS) as c: ...
+    async with self.install_tx(KEYS) as c: ...
+    with isolation.install_wide(KEYS): ...
+"""
+    assert site_findings(planted) == [(3, "install"), (4, "install"), (5, "install")]
 
 
 def test_a_baseline_only_falls_in_the_history() -> None:
