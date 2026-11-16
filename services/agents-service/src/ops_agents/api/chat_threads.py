@@ -16,12 +16,15 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
+from pydantic import TypeAdapter
+
 from ops_access import can
 from ops_agent_kernel.plan import NAME as PLAN_TOOL
 from ops_agent_kernel.search import NAME as SEARCH_TOOL
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import fill
 from ops_contracts.chat import (
+    ApprovalState,
     ApprovalWidget,
     BudgetPause,
     ChatMessage,
@@ -56,7 +59,7 @@ from ops_service_kit.ids import now_iso
 from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
 from ..store.events import EventLog
-from ..store.reviews import ReviewStore
+from ..store.reviews import DecisionOut, ReviewStore
 from ..store.tenancy import current_team
 from .auth import Principal, caller_of, graph_target, key_scope
 from .chat_history import PLAN_PART
@@ -107,7 +110,7 @@ class AssistantBuilder:
 
     catalog: Catalog
     message: ChatMessage
-    decisions: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    decisions: dict[str, DecisionOut] = field(default_factory=dict[str, DecisionOut])
     # Approvers so far per call step, for a money call that needs two before it is decided.
     approvals: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
     # Collect what a guardrail kept or took back (guardrail_audit): only for a reader allowed to view the audit, and
@@ -154,7 +157,14 @@ class AssistantBuilder:
         values = {k: str(v) for k, v in args.items()}
         decision = self.decisions.get(str(interrupt.get("id")))
         step = str(_d(p.get("call")).get("step"))
-        state = decision["decision"] if decision else "awaiting_second" if self.approvals.get(step) else "pending"
+        # The recorded decision is checked against the card's states, as the card's own validation did.
+        state: ApprovalState = (
+            _APPROVAL_STATE.validate_python(decision.decision)
+            if decision
+            else "awaiting_second"
+            if self.approvals.get(step)
+            else "pending"
+        )
         return ApprovalWidget(
             id=approval_widget_id(str(interrupt.get("id"))),
             title=fill(tpl.title, values) if tpl else self.titles.get(str(p.get("tool"))) or str(p.get("tool")),
@@ -178,8 +188,8 @@ class AssistantBuilder:
             step_up=bool(p.get("step_up")) or None,
             ask_first=bool(p.get("ask_first")),
             state=state,
-            decided_by=decision["decided_by"] if decision else None,
-            reason=decision["reason"] if decision else None,
+            decided_by=decision.decided_by if decision else None,
+            reason=decision.reason if decision else None,
             waiting_on=None
             if decision
             else "your answer"
@@ -354,7 +364,10 @@ def approval_widget_id(interrupt_id: str) -> str:
     return f"wg_{interrupt_id[:24]}"
 
 
-async def decisions_of(rt: Runtime, thread_id: str) -> dict[str, dict[str, Any]]:
+_APPROVAL_STATE: TypeAdapter[ApprovalState] = TypeAdapter(ApprovalState)
+
+
+async def decisions_of(rt: Runtime, thread_id: str) -> dict[str, DecisionOut]:
     return await ReviewStore(graph_store(rt).engine).decisions_of(thread_id)
 
 

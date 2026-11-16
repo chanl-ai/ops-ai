@@ -7,8 +7,10 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -58,24 +60,56 @@ def _team_of(thread_id: str) -> Any:
     return sa.select(t.c.team_id).where(t.c.id == thread_id, team_visible(t)).scalar_subquery()
 
 
+class DecisionOut(Out):
+    """One recorded decision on a review: who decided what, and how its resume went."""
+
+    thread_id: str
+    decision_id: str
+    decision: str
+    reason: str | None
+    decided_by: str
+    decided_at: str
+    review: dict[str, Any]
+    attempts: int
+    run_id: str | None
+    resumed_at: str | None
+    step_up_ref: str | None
+
+
+_d = review_decisions.c
+DECISION_COLUMNS = (
+    _d.thread_id,
+    _d.decision_id,
+    _d.decision,
+    _d.reason,
+    _d.decided_by,
+    _d.decided_at,
+    _d.review,
+    _d.attempts,
+    _d.run_id,
+    _d.resumed_at,
+    _d.step_up_ref,
+)
+
+
 class ReviewStore(RuntimeStore):
     # A decision is one insert keyed by its interrupt (a second decision of the same interrupt is refused), and an
     # approval replaces the approver's row and reads the step's approvers in one transaction.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
-    async def latest_decisions(self, thread_ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
+    async def latest_decisions(self, thread_ids: list[str] | None = None) -> dict[str, DecisionOut]:
         """The latest decision per thread."""
-        q = review_decisions.select().where(team_visible(review_decisions)).order_by(review_decisions.c.decided_at)
+        q = sa.select(*DECISION_COLUMNS).where(team_visible(review_decisions)).order_by(_d.decided_at)
         if thread_ids is not None:
-            q = q.where(review_decisions.c.thread_id.in_(thread_ids))
+            q = q.where(_d.thread_id.in_(thread_ids))
         async with self.tx() as c:
-            return {r["thread_id"]: dict(r) for r in (await c.execute(q)).mappings()}
+            return {r.thread_id: r for r in await rows(c, q, DecisionOut)}
 
-    async def decisions_of(self, thread_id: str) -> dict[str, dict[str, Any]]:
+    async def decisions_of(self, thread_id: str) -> dict[str, DecisionOut]:
         """Every decision on the thread, by interrupt id."""
-        q = review_decisions.select().where(review_decisions.c.thread_id == thread_id, team_visible(review_decisions))
+        q = sa.select(*DECISION_COLUMNS).where(_d.thread_id == thread_id, team_visible(review_decisions))
         async with self.tx() as c:
-            return {r["decision_id"]: dict(r) for r in (await c.execute(q)).mappings()}
+            return {r.decision_id: r for r in await rows(c, q, DecisionOut)}
 
     async def record_decision(
         self,

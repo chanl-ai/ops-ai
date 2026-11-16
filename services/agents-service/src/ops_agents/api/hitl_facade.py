@@ -27,7 +27,7 @@ from ..store.cases import CaseStore
 from ..store.events import EventLog
 from ..store.leases import LeaseHeldError
 from ..store.review_assignments import ReviewAssignments
-from ..store.reviews import ReviewStore
+from ..store.reviews import DecisionOut, ReviewStore
 from ..store.timers import TimerStore
 from . import engine_reviews, publish_reviews
 from .agent_registry import registry
@@ -134,7 +134,7 @@ def _steps(runs: list[dict[str, Any]], waiting_at: list[str]) -> list[dict[str, 
     return steps
 
 
-async def _decisions(rt: Runtime, thread_ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
+async def _decisions(rt: Runtime, thread_ids: list[str] | None = None) -> dict[str, DecisionOut]:
     """Latest decision per thread."""
     return await ReviewStore(graph_store(rt).engine).latest_decisions(thread_ids)
 
@@ -216,9 +216,7 @@ async def _needs_step_up(rt: Runtime, payload: dict[str, Any]) -> bool:
     return bool(payload.get("step_up"))
 
 
-async def run_row(
-    rt: Runtime, summary: dict[str, Any], decision: dict[str, Any] | None, now: datetime
-) -> dict[str, Any]:
+async def run_row(rt: Runtime, summary: dict[str, Any], decision: DecisionOut | None, now: datetime) -> dict[str, Any]:
     """One thread as a Cases RunRow (`RunRow` in apps/console/src/lib/types/cases.ts). State, status, subject, queue
     and SLA come from its summary row (`summary_rows`), as the list's do; this adds what only the checkpoint and the
     journal hold: the steps, the waiting call, the error and the trigger."""
@@ -236,7 +234,7 @@ async def run_row(
         (e.get("data", {}).get("message") for e in (last or {}).get("events", []) if e["event"] == "error"), None
     )
     payload: dict[str, Any] = interrupts[0]["payload"] if waiting and interrupts else {}
-    approved = 1 if decision and decision["decision"] == "approved" and decision["resumed_at"] else 0
+    approved = 1 if decision and decision.decision == "approved" and decision.resumed_at else 0
     return {
         "id": row["id"],
         "workflowId": row["graph"],
@@ -544,18 +542,18 @@ def _reasoning(payload: dict[str, Any]) -> list[str]:
     return out
 
 
-def _decided(d: dict[str, Any]) -> dict[str, Any]:
-    review: dict[str, Any] = dict(d["review"])
+def _decided(d: DecisionOut) -> dict[str, Any]:
+    review: dict[str, Any] = dict(d.review)
     # A decision recorded before reviews named their origin was a workflow's: chat approvals were not listed then.
     review.setdefault("origin", {"kind": "workflow"})
     resume: dict[str, Any] = dict(review.get("resume") or {})
     return review | {
-        "status": d["decision"],
-        "decidedBy": d["decided_by"],
-        "decidedAt": d["decided_at"],
-        "decisionReason": d["reason"],
+        "status": d.decision,
+        "decidedBy": d.decided_by,
+        "decidedAt": d.decided_at,
+        "decisionReason": d.reason,
         "option": resume.get("option"),
-        "stepUpRef": d.get("step_up_ref"),
+        "stepUpRef": d.step_up_ref,
     }
 
 
@@ -566,7 +564,10 @@ async def all_reviews(rt: Runtime) -> list[dict[str, Any]]:
     now = datetime.now(UTC)
     out: list[dict[str, Any]] = []
     for row, waiting, d in await _thread_reviews(rt):
-        out.append(await review_view(rt, row, waiting, now) if waiting else _decided(d or {}))
+        if waiting:
+            out.append(await review_view(rt, row, waiting, now))
+        elif d is not None:
+            out.append(_decided(d))
     # Agent and workflow publish requests are reviews too: one list, counted and filtered with the rest.
     rows = out + await publish_reviews.all_views(rt) + await engine_reviews.all_rows(rt)
     assigned = await ReviewAssignments(rt.db).current()
@@ -576,7 +577,7 @@ async def all_reviews(rt: Runtime) -> list[dict[str, Any]]:
 async def _places(rt: Runtime) -> list[dict[str, Any]]:
     """all_reviews by id and status alone, in its order, for a task's place in its queue: no review is built."""
     threads = [
-        {"id": row["id"], "status": "pending" if waiting else (d or {})["decision"]}
+        {"id": row["id"], "status": "pending" if waiting or d is None else d.decision}
         for row, waiting, d in await _thread_reviews(rt)
     ]
     published = [{"id": r["id"], "status": r["status"]} for r in await publish_reviews.all_views(rt)]
@@ -585,9 +586,9 @@ async def _places(rt: Runtime) -> list[dict[str, Any]]:
 
 async def _thread_reviews(
     rt: Runtime,
-) -> list[tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any] | None]]:
+) -> list[tuple[dict[str, Any], dict[str, Any] | None, DecisionOut | None]]:
     """Each graph thread that holds a review, with the interrupt it waits on (None once decided) and its decision."""
-    out: list[tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any] | None]] = []
+    out: list[tuple[dict[str, Any], dict[str, Any] | None, DecisionOut | None]] = []
     decisions = await _decisions(rt)
     for row in await graph_store(rt).threads(None):
         # A chat's write approval is listed, so a second approver need not be sent a chat link; other agent graph
@@ -609,7 +610,7 @@ async def _thread_reviews(
             log.warning("review_row_skipped", thread=row["id"], graph=row["graph"], error=e.code)
             continue
         waiting = pending(await graph.aget_state(config(row["id"])))
-        if waiting and not (d and d["decision_id"] == waiting[0]["id"]):
+        if waiting and not (d and d.decision_id == waiting[0]["id"]):
             out.append((row, waiting[0], d))
         elif d is not None:
             out.append((row, None, d))
@@ -763,7 +764,7 @@ async def get_review(rt: Runtime, thread_id: str) -> dict[str, Any]:
     _, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
     d = (await _decisions(rt, [thread_id])).get(thread_id)
-    if waiting and not (d and d["decision_id"] == waiting[0]["id"]):
+    if waiting and not (d and d.decision_id == waiting[0]["id"]):
         return await review_view(rt, row, waiting[0], datetime.now(UTC))
     if d is not None:
         return _decided(d)
@@ -813,15 +814,15 @@ async def decide(
     _, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
     recorded = (await _decisions(rt, [thread_id])).get(thread_id)
-    if not waiting or (recorded and recorded["decision_id"] == waiting[0]["id"]):
+    if not waiting or (recorded and recorded.decision_id == waiting[0]["id"]):
         if recorded is None:
             raise Conflict("This thread is not waiting for a decision.", code="run_not_waiting")
-        earlier: dict[str, Any] = dict(cast(dict[str, Any], recorded["review"]).get("resume") or {})
-        same = recorded["decision"] == decision or (earlier.get("option") and earlier["option"] == decision)
+        earlier: dict[str, Any] = dict(recorded.review.get("resume") or {})
+        same = recorded.decision == decision or (earlier.get("option") and earlier["option"] == decision)
         if not same:
-            was = earlier.get("option") or recorded["decision"]
+            was = earlier.get("option") or recorded.decision
             raise Conflict(f"This review was already decided: {was}.", code="already_decided")
-        if recorded["resumed_at"] is None and waiting:
+        if recorded.resumed_at is None and waiting:
             await _resume(rt, thread_id, recorded)
         return await get_review(rt, thread_id)
 
@@ -953,12 +954,12 @@ def option_call(option: dict[str, Any], inputs: dict[str, Any] | None, amount: f
     return apply_inputs(option, given)
 
 
-async def _resume(rt: Runtime, thread_id: str, recorded: dict[str, Any]) -> None:
+async def _resume(rt: Runtime, thread_id: str, recorded: DecisionOut) -> None:
     store, leases = graph_store(rt), rt.leases
     assert leases is not None
-    attempt = recorded["attempts"] + 1
-    run_id = f"run_{recorded['decision_id'][:24]}_{attempt}"
-    resume = dict(recorded["review"]["resume"])
+    attempt = recorded.attempts + 1
+    run_id = f"run_{recorded.decision_id[:24]}_{attempt}"
+    resume = dict(recorded.review["resume"])
     try:
         generation = await leases.acquire(thread_id, run_id)
     except LeaseHeldError as e:
@@ -966,7 +967,7 @@ async def _resume(rt: Runtime, thread_id: str, recorded: dict[str, Any]) -> None
             "A run is active on this thread; the decision is recorded and resumes after it.", code="run_active"
         ) from e
     reviews = ReviewStore(store.engine)
-    await reviews.update_decision(thread_id, recorded["decision_id"], attempts=attempt, run_id=run_id)
+    await reviews.update_decision(thread_id, recorded.decision_id, attempts=attempt, run_id=run_id)
     if not await store.start_run(run_id, thread_id, "resume", now_iso(), {"resume": resume}, generation=generation):
         await leases.release(thread_id, run_id)
         raise Conflict("That resume is already running.", code="run_active")
@@ -977,4 +978,4 @@ async def _resume(rt: Runtime, thread_id: str, recorded: dict[str, Any]) -> None
         if e["event"] == "end":
             status = e["data"]["status"]
     if status in ("done", "interrupted"):
-        await reviews.update_decision(thread_id, recorded["decision_id"], resumed_at=now_iso())
+        await reviews.update_decision(thread_id, recorded.decision_id, resumed_at=now_iso())

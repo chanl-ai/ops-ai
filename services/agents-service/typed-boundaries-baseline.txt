@@ -1,4 +1,4 @@
-# 2554 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 2541 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body agents_attach_skill
 1 body agents_create_agent
 1 reply agents_create_agent
@@ -156,7 +156,7 @@
 3 dict-any services/agents-service/src/ops_agents/api/chat_attachments.py
 16 dict-any services/agents-service/src/ops_agents/api/chat_budget.py
 8 dict-any services/agents-service/src/ops_agents/api/chat_history.py
-22 dict-any services/agents-service/src/ops_agents/api/chat_threads.py
+19 dict-any services/agents-service/src/ops_agents/api/chat_threads.py
 35 dict-any services/agents-service/src/ops_agents/api/child_runs.py
 13 dict-any services/agents-service/src/ops_agents/api/deployment_reviews.py
 3 dict-any services/agents-service/src/ops_agents/api/deps.py
@@ -180,7 +180,7 @@
 5 dict-any services/agents-service/src/ops_agents/api/event_workflows.py
 2 dict-any services/agents-service/src/ops_agents/api/file_names.py
 14 dict-any services/agents-service/src/ops_agents/api/guardrails.py
-104 dict-any services/agents-service/src/ops_agents/api/hitl_facade.py
+97 dict-any services/agents-service/src/ops_agents/api/hitl_facade.py
 2 dict-any services/agents-service/src/ops_agents/api/key_summaries.py
 23 dict-any services/agents-service/src/ops_agents/api/legacy_tasks.py
 6 dict-any services/agents-service/src/ops_agents/api/mailbox_gateway.py
@@ -314,8 +314,7 @@
 9 store-dict services/agents-service/src/ops_agents/store/memories.py
 1 dict-any services/agents-service/src/ops_agents/store/model_calls.py
 1 store-dict services/agents-service/src/ops_agents/store/model_calls.py
-3 dict-any services/agents-service/src/ops_agents/store/reviews.py
-2 store-dict services/agents-service/src/ops_agents/store/reviews.py
+2 dict-any services/agents-service/src/ops_agents/store/reviews.py
 10 dict-any services/agents-service/src/ops_agents/store/service_events.py
 4 store-dict services/agents-service/src/ops_agents/store/service_events.py
 14 dict-any services/agents-service/src/ops_agents/store/skills.py
