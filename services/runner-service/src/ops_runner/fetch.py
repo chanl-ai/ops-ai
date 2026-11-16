@@ -33,7 +33,9 @@ def main() -> None:
     if not path.is_file():
         path.parent.mkdir(parents=True, exist_ok=True)
         part = path.with_suffix(".part")
-        with httpx.stream("GET", settings.runner_wasm_url, follow_redirects=True, timeout=120) as r:
+        with httpx.stream(
+            "GET", settings.runner_wasm_url, follow_redirects=True, timeout=settings.runner_fetch_timeout_s
+        ) as r:
             r.raise_for_status()
             with part.open("wb") as f:
                 for chunk in r.iter_bytes(1 << 20):

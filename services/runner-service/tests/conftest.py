@@ -19,6 +19,8 @@ def runtime() -> Iterator[WasmPython]:
     if not path.is_file():
         # The build is gitignored: a fresh checkout (QA's included) fetches it once, checked by its SHA-256.
         fetch()
-    rt = WasmPython(path, sha256=settings.runner_wasm_sha256, compiled_dir=compiled_dir(settings))
+    rt = WasmPython(
+        path, sha256=settings.runner_wasm_sha256, compiled_dir=compiled_dir(settings), waits=settings.runner_waits
+    )
     yield rt
     rt.close()

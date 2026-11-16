@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from ops_runner.domain import Limits, RunResult
-from ops_runner.wasm import OPEN_POLL_S, READ_POLL_S, Run, WasmPython, open_writer
+from ops_runner.wasm import Run, WasmPython, open_writer
+from ops_service_kit.settings import RunnerWaits
+
+WAITS = RunnerWaits()
 
 
 class Guest(threading.Thread):
@@ -45,8 +48,8 @@ def test_the_host_writes_once_the_guest_opens_its_stdin(tmp_path: Path) -> None:
     os.mkfifo(fifo)
     readers: list[int] = []
     guest = Guest(lambda: readers.append(os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)))
-    fd = open_writer(fifo, guest)
-    assert fd is not None and guest.waits == [OPEN_POLL_S]
+    fd = open_writer(fifo, guest, WAITS.open_poll_s)
+    assert fd is not None and guest.waits == [WAITS.open_poll_s]
     os.close(fd)
     os.close(readers[0])
 
@@ -55,7 +58,7 @@ def test_the_host_stops_waiting_for_stdin_when_the_guest_has_ended(tmp_path: Pat
     fifo = str(tmp_path / "in")
     os.mkfifo(fifo)
     guest = Guest(lambda: None, alive=False)
-    assert open_writer(fifo, guest) is None and guest.waits == []
+    assert open_writer(fifo, guest, WAITS.open_poll_s) is None and guest.waits == []
 
 
 def test_the_host_stops_reading_when_the_guest_has_closed_its_stdout_and_ends(tmp_path: Path) -> None:
@@ -67,10 +70,12 @@ def test_the_host_stops_reading_when_the_guest_has_closed_its_stdout_and_ends(tm
     result = RunResult(ok=False)
     started = time.monotonic()
     run.converse(result, guest, out_fd, None, started + 5)
-    assert guest.waits == [READ_POLL_S] and not result.ok and time.monotonic() - started < 1
+    assert guest.waits == [WAITS.read_poll_s] and not result.ok and time.monotonic() - started < 1
     os.close(out_fd)
 
 
 def cast_runtime() -> WasmPython:
     """`converse` never touches the runtime; a run built only to read its pipes needs none."""
-    return object.__new__(WasmPython)
+    runtime = object.__new__(WasmPython)
+    runtime.waits = WAITS
+    return runtime

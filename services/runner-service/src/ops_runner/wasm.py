@@ -22,17 +22,10 @@ from typing import Any, cast
 
 from wasmtime import Config, Engine, ExitTrap, Linker, Module, Store, Trap, WasiConfig
 
+from ops_service_kit.settings import RunnerWaits
+
 from .domain import CallAnswer, Limits, RunResult, failure
 
-# Seconds between epoch ticks. A run's time limit is counted in ticks on its own store, so overlapping runs on the one
-# engine each keep their own limit; a per-run timer advancing the shared epoch would stop every run in flight.
-TICK_S = 0.1
-# Grace after the limit before the host stops waiting for a guest that trapped but has not let go of its pipes.
-GRACE_S = 2.0
-# How long the host waits before it looks again for a guest that has not opened its end of a pipe yet. The wait is a
-# join on the guest's thread, so it ends at once when the guest ends during set-up.
-OPEN_POLL_S = 0.005
-READ_POLL_S = 0.01
 LOG_CAP = 8192
 OUTPUT_CAP = 1 << 20
 
@@ -49,13 +42,18 @@ def sha256_of(path: Path) -> str:
 
 
 class WasmPython:
-    """One engine and one compiled module for the process; each run gets its own store, directory and pipes."""
+    """One engine and one compiled module for the process; each run gets its own store, directory and pipes.
 
-    def __init__(self, wasm: Path, *, sha256: str, compiled_dir: Path) -> None:
+    `waits` (settings.runner_waits): a run's time limit is counted in epoch ticks on its own store, so overlapping
+    runs on the one engine each keep their own limit; a per-run timer advancing the shared epoch would stop every run
+    in flight. The host's pipe waits are joins on the guest's thread, so each ends at once when the guest ends."""
+
+    def __init__(self, wasm: Path, *, sha256: str, compiled_dir: Path, waits: RunnerWaits) -> None:
         if not wasm.is_file():
             raise SystemExit(f"The runner's Python build is missing at {wasm}: run `make runner-wasm`.")
         if (found := sha256_of(wasm)) != sha256:
             raise SystemExit(f"The runner's Python build at {wasm} has SHA-256 {found}, not the pinned {sha256}.")
+        self.waits = waits
         cfg = Config()
         cfg.epoch_interruption = True
         # wasmtime's compiled-module cache, in a directory the service owns: a systemd unit has no writable home.
@@ -69,7 +67,7 @@ class WasmPython:
         threading.Thread(target=self._tick, daemon=True, name="wasm-epoch").start()
 
     def _tick(self) -> None:
-        while not self._stop.wait(TICK_S):
+        while not self._stop.wait(timeout=self.waits.tick_s):
             self.engine.increment_epoch()
 
     def close(self) -> None:
@@ -103,7 +101,7 @@ class Run:
         store = Store(self.runtime.engine)
         try:
             store.set_limits(memory_size=self.limits.memory_mb << 20)
-            store.set_epoch_deadline(max(1, round(self.limits.time_s / TICK_S)))
+            store.set_epoch_deadline(max(1, round(self.limits.time_s / self.runtime.waits.tick_s)))
             wasi = WasiConfig()
             wasi.argv = ["python", "-I", "-S", "/app/main.py"]
             wasi.preopen_dir(str(self.app), "/app")
@@ -136,9 +134,9 @@ class Run:
         # A fifo's open blocks until the other end opens. Non-blocking opens keep a guest that dies during set-up from
         # hanging the host.
         out_fd = os.open(self.stdout, os.O_RDONLY | os.O_NONBLOCK)
-        in_fd = open_writer(self.stdin, thread)
+        in_fd = open_writer(self.stdin, thread, self.runtime.waits.open_poll_s)
         result = RunResult(ok=False, create_ms=self._ms())
-        deadline = self.started + self.limits.time_s + GRACE_S
+        deadline = self.started + self.limits.time_s + self.runtime.waits.grace_s
         try:
             if in_fd is not None:
                 _write(in_fd, {"source": source, "entry": entry, "input": input})
@@ -146,7 +144,7 @@ class Run:
         finally:
             if in_fd is not None:
                 os.close(in_fd)
-            thread.join(timeout=GRACE_S)
+            thread.join(timeout=self.runtime.waits.grace_s)
             os.close(out_fd)
         if not result.ok and result.error is None:
             result.error = self._why(thread)
@@ -168,7 +166,9 @@ class Run:
             if not chunk:
                 if not thread.is_alive():
                     return
-                thread.join(READ_POLL_S)  # no writer: the guest has not opened stdout, or closed it and is ending
+                thread.join(
+                    timeout=self.runtime.waits.read_poll_s
+                )  # no writer: the guest has not opened stdout, or closed it and is ending
                 continue
             buf.extend(chunk)
             if len(buf) > OUTPUT_CAP:
@@ -222,14 +222,14 @@ class Run:
         return int((time.monotonic() - self.started) * 1000)
 
 
-def open_writer(path: str, thread: threading.Thread) -> int | None:
+def open_writer(path: str, thread: threading.Thread, poll_s: float) -> int | None:
     while True:
         try:
             return os.open(path, os.O_WRONLY | os.O_NONBLOCK)
         except OSError:  # ENXIO: the guest has not opened its stdin yet
             if not thread.is_alive():
                 return None
-            thread.join(OPEN_POLL_S)
+            thread.join(timeout=poll_s)
 
 
 def _write(fd: int, msg: dict[str, Any]) -> None:
