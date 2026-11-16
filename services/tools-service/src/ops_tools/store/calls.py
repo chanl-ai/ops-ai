@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
-from ops_store.dialect import insert_ignore, lock_key
+from ops_store.dialect import dialect_of, insert_ignore, lock_key
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
@@ -458,6 +458,16 @@ class CallLog(Store):
 RAN = ("ok", "error")
 
 
+def _p95() -> sa.WithinGroup[Any]:
+    # SQL Server takes the fraction only as a literal, so it is rendered into the statement, never bound.
+    return sa.func.percentile_cont(sa.literal(0.95, literal_execute=True)).within_group(gateway_calls.c.latency_ms)
+
+
+def _errors() -> sa.ColumnElement[int]:
+    # A sum of a case, not count(*) FILTER (WHERE ...), which SQL Server does not have.
+    return sa.func.sum(sa.case((gateway_calls.c.outcome == "error", 1), else_=0))
+
+
 def _ran_since(module_ids: list[str], since: str, tenant_id: str, team_ids: list[str]) -> list[sa.ColumnElement[bool]]:
     return [
         gateway_calls.c.tenant_id == tenant_id,
@@ -476,16 +486,19 @@ async def traffic(
     if not module_ids:
         return {}
     c = gateway_calls.c
+    ran = _ran_since(module_ids, since, tenant_id, team_ids)
+    if dialect_of(conn) == "mssql":
+        return await _traffic_mssql(conn, ran)
     q = (
         sa.select(
             c.module_id,
             c.tool,
             sa.func.grouping(c.tool).label("whole"),
             sa.func.count().label("calls"),
-            sa.func.count().filter(c.outcome == "error").label("errors"),
-            sa.func.percentile_cont(0.95).within_group(c.latency_ms).label("p95"),
+            _errors().label("errors"),
+            _p95().label("p95"),
         )
-        .where(*_ran_since(module_ids, since, tenant_id, team_ids))
+        .where(*ran)
         .group_by(sa.func.grouping_sets(sa.tuple_(c.module_id, c.tool), sa.tuple_(c.module_id)))
     )
     found = (await conn.execute(q)).mappings().all()
@@ -497,23 +510,64 @@ async def traffic(
     }
 
 
+async def _traffic_mssql(
+    conn: AsyncConnection, ran: list[sa.ColumnElement[bool]]
+) -> dict[tuple[str, str | None], CallStats]:
+    """`traffic` on SQL Server, where percentile_cont is a window function and not an aggregate: each operation's row
+    carries its own figures and its module's, over the two partitions, in one statement."""
+    c = gateway_calls.c
+    by_op, by_module = [c.module_id, c.tool], [c.module_id]
+    q = (
+        sa.select(
+            c.module_id,
+            c.tool,
+            sa.func.count().over(partition_by=by_op).label("calls"),
+            _errors().over(partition_by=by_op).label("errors"),
+            _p95().over(partition_by=by_op).label("p95"),
+            sa.func.count().over(partition_by=by_module).label("module_calls"),
+            _errors().over(partition_by=by_module).label("module_errors"),
+            _p95().over(partition_by=by_module).label("module_p95"),
+        )
+        .where(*ran)
+        .distinct()
+    )
+    out: dict[tuple[str, str | None], CallStats] = {}
+    for r in (await conn.execute(q)).mappings().all():
+        out[(r["module_id"], r["tool"])] = CallStats(
+            calls=int(r["calls"]), errors=int(r["errors"]), p95_ms=round(r["p95"] or 0)
+        )
+        out[(r["module_id"], None)] = CallStats(
+            calls=int(r["module_calls"]), errors=int(r["module_errors"]), p95_ms=round(r["module_p95"] or 0)
+        )
+    return out
+
+
 async def daily(
     conn: AsyncConnection, module_id: str, since: str, *, tenant_id: str, team_ids: list[str]
 ) -> dict[str, DayStats]:
     """Per UTC day since `since`: calls, errors and p95 latency. created_at is ISO text, so its first ten characters
     are the day."""
     c = gateway_calls.c
-    day = sa.func.substr(c.created_at, 1, 10)
-    q = (
-        sa.select(
-            day.label("day"),
-            sa.func.count().label("calls"),
-            sa.func.count().filter(c.outcome == "error").label("errors"),
-            sa.func.percentile_cont(0.95).within_group(c.latency_ms).label("p95"),
+    day = sa.func.left(c.created_at, 10)
+    ran = _ran_since([module_id], since, tenant_id, team_ids)
+    if dialect_of(conn) == "mssql":
+        # percentile_cont is a window function there: one row per day over the day's partition.
+        q = (
+            sa.select(
+                day.label("day"),
+                sa.func.count().over(partition_by=day).label("calls"),
+                _errors().over(partition_by=day).label("errors"),
+                _p95().over(partition_by=day).label("p95"),
+            )
+            .where(*ran)
+            .distinct()
         )
-        .where(*_ran_since([module_id], since, tenant_id, team_ids))
-        .group_by(day)
-    )
+    else:
+        q = (
+            sa.select(day.label("day"), sa.func.count().label("calls"), _errors().label("errors"), _p95().label("p95"))
+            .where(*ran)
+            .group_by(day)
+        )
     found = (await conn.execute(q)).mappings().all()
     return {
         r["day"]: DayStats(count=int(r["calls"]), errors=int(r["errors"]), p95_ms=round(r["p95"] or 0)) for r in found
