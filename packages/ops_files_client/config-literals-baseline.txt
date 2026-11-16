@@ -1,3 +1,2 @@
-# 2 literal timeouts and HTTP clients built in packages/ops_files_client (scripts/check_config_literals.py). A row may only fall.
-1 client packages/ops_files_client/src/ops_files_client/__init__.py
+# 1 literal timeouts and HTTP clients built in packages/ops_files_client (scripts/check_config_literals.py). A row may only fall.
 1 client packages/ops_files_client/src/ops_files_client/testing.py

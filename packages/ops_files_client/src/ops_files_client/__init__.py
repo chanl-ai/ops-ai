@@ -135,22 +135,17 @@ class FilesClient:
         self._files = files
 
     @classmethod
-    def from_settings(
-        cls, settings: Settings, *, service: str, timeout: float = 30, scopes: list[str] | None = None
-    ) -> FilesClient:
-        """files-service at the files endpoint, with this service's signing key. `scopes` are
-        the `area:action` grants the token claims, `files:view`, `files:create` and `files:edit` unless given; a scanner
-        claims `files:decide` for `report_scan`. files-service accepts only the scopes its Settings.service_scopes
-        gives the calling service."""
-        base = settings.endpoint("files").base
+    def from_settings(cls, settings: Settings, *, service: str, scopes: list[str] | None = None) -> FilesClient:
+        """files-service at the files endpoint (its address, timeout and retries), with this service's signing key.
+        `scopes` are the `area:action` grants the token claims, `files:view`, `files:create` and `files:edit` unless
+        given; a scanner claims `files:decide` for `report_scan`. files-service accepts only the scopes its
+        Settings.service_scopes gives the calling service."""
         return cls(
             ServiceClient.for_settings(
                 settings,
-                httpx.AsyncClient(base_url=base, timeout=timeout),
                 service=service,
                 audience="files",
                 scopes=scopes if scopes is not None else ["files:view", "files:create", "files:edit"],
-                timeout=timeout,
             )
         )
 

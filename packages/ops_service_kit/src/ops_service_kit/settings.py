@@ -82,6 +82,13 @@ class ModelsEndpoint(Endpoint):
     timeout_s: float = Field(default=120.0, gt=0)
 
 
+class FilesEndpoint(Endpoint):
+    """files-service: an upload or a download carries a file's bytes, and files-service hashes and may scan an upload
+    before it answers, so its default timeout is longer than a JSON call's."""
+
+    timeout_s: float = Field(default=30.0, gt=0)
+
+
 class RunnerWaits(BaseModel):
     """How runner-service's host waits on a guest (OPS_RUNNER_WAITS__*): the epoch tick a run's time limit is counted
     in, the grace after that limit for a guest that trapped but still holds its pipes, and how soon it looks again for
@@ -128,7 +135,7 @@ class Settings(BaseSettings):
     agents: Endpoint | None = None
     tools: Endpoint | None = None
     kb: Endpoint | None = None
-    files: Endpoint | None = None
+    files: FilesEndpoint | None = None
     documents: Endpoint | None = None
     # models-service (OPS_MODELS_URL), and platform-service's public port (OPS_PLATFORM_URL: floors, policies).
     models: ModelsEndpoint | None = None
