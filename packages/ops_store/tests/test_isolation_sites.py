@@ -56,6 +56,8 @@ WIDENINGS: dict[str, set[str]] = {
     "WIDGET_LOOKUP": {"services/agents-service/src/ops_agents/api/routers/widget.py"},
     # The workflow worker reads every tenant's pending batch rows, then starts each in its own tenant and team.
     "BATCH_START": {"services/agents-service/src/ops_agents/store/batches.py"},
+    # The operator preflight before agents 0106 reads every tenant's references and teams; it writes nothing.
+    "REGISTRY_TENANT_PREFLIGHT": {"services/agents-service/src/ops_agents/store/registry_tenants.py"},
     "KEY_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "INVITE_LOOKUP": {"services/platform-service/src/ops_platform/store/members.py"},
     "SIGNIN_LOCKOUT": {"services/platform-service/src/ops_platform/store/signin.py"},
