@@ -269,3 +269,27 @@ def test_a_pass_is_refused_for_an_unlisted_key_another_service_or_a_sweep_with_i
     finally:
         background.PROCESSES.remove(sweep)
         del BY_KEY[sweep.key]
+
+
+async def test_a_started_task_that_failed_still_shows_it_after_a_later_task_succeeds_and_counts_add_up() -> None:
+    """Tasks started under one key share one heartbeat in a process. Each is its own piece of work, so a later
+    success does not mean the earlier failure recovered: an event-run process shows a failure for FAILURE_SHOWN_S
+    after it, then ages out; meanwhile every task's success adds to doneHour."""
+    beats = MemoryHeartbeats()
+    outcomes = [RuntimeError("file unreadable"), None, None]
+
+    async def task(fails: BaseException | None) -> None:
+        if fails is not None:
+            raise fails
+
+    async with background.supervisor():
+        for outcome in outcomes:
+            await background.start(task(outcome), key="document_reading", store=beats)
+            await asyncio.sleep(0)
+        await _until(lambda: sum(b.done_hour for b in beats.beats.values()) == 2)
+    [row] = [
+        r for r in background.report(await beats.read(), "documents", time.time()) if r["key"] == "document_reading"
+    ]
+    assert (row["state"], row["lastError"], row["doneHour"], row["instances"]) == ("stopped", "RuntimeError", 2, 1)
+    later = background.report(await beats.read(), "documents", row["lastErrorAt"] + background.FAILURE_SHOWN_S + 1)
+    assert [r["state"] for r in later if r["key"] == "document_reading"] == ["running"]

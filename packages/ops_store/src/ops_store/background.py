@@ -346,6 +346,9 @@ BACKOFF_START_S, BACKOFF_MAX_S = 1.0, 60.0
 # WRITE_EVERY_S, so the count is of whichever is longer, the interval or the write gap: a worker polling every half
 # second is late after 20 s, not after one second it never wrote.
 LATE_AFTER, STOPPED_AFTER = 2, 5
+# An event-run process's passes are separate pieces of work (one file read, one event), so a later success does not
+# mean an earlier failure recovered: the failure keeps the process stopped for this long, the hour doneHour counts.
+FAILURE_SHOWN_S = 3600.0
 
 
 def instance_name() -> str:
@@ -372,10 +375,16 @@ class Heartbeat:
 
 def state(beat: Heartbeat | None, process: Process, now: float) -> State:
     """Running while the last pass is within LATE_AFTER intervals, late after that, stopped after STOPPED_AFTER or
-    while the last pass failed. An event-run process is running unless its last pass failed or work waits unclaimed."""
+    while the last pass failed. An event-run process is running unless a pass failed within FAILURE_SHOWN_S, whatever
+    passed after it, or its last pass failed."""
     if beat is None:
         return "not_reported"
-    failed = beat.last_error_at is not None and (beat.last_ok_at is None or beat.last_error_at > beat.last_ok_at)
+    error_at = beat.last_error_at
+    failed = error_at is not None and (
+        beat.last_ok_at is None
+        or error_at > beat.last_ok_at
+        or (process.every_s is None and now - error_at < FAILURE_SHOWN_S)
+    )
     if failed:
         return "stopped"
     if process.every_s is None:
@@ -495,9 +504,14 @@ class Beat:
         self.beat.next_run_at = self.clock() + next_in
         await self._write(self.clock(), force=True)
 
-    async def ok(self, done: int = 0, *, waiting: int | None = None, next_in: float | None = None) -> None:
+    async def ok(
+        self, done: int = 0, *, waiting: int | None = None, next_in: float | None = None, force: bool = False
+    ) -> None:
+        """`force` writes now: a started task's pass is rare and its count would otherwise wait for the next write."""
         now = self.clock()
-        recovering = self.beat.last_error_at is not None and (self.beat.last_ok_at or 0) < self.beat.last_error_at
+        recovering = force or (
+            self.beat.last_error_at is not None and (self.beat.last_ok_at or 0) < self.beat.last_error_at
+        )
         self.beat.last_run_at = self.beat.last_ok_at = now
         self.beat.done_hour = self._count(done, now)
         self.beat.next_run_at = now + next_in if next_in is not None else None
@@ -572,8 +586,17 @@ class NoSupervisor(RuntimeError):
     """`start` was called outside a lifespan that holds `supervisor()`."""
 
 
+@dataclass
+class _Group:
+    """One lifespan's TaskGroup, its tasks still running, and the one heartbeat per key (and store) its tasks share."""
+
+    group: asyncio.TaskGroup
+    tasks: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
+    beats: dict[tuple[str, int], Beat] = field(default_factory=dict[tuple[str, int], Beat])
+
+
 # The TaskGroups of the lifespans running in this process, innermost last; `start` puts a task on the last.
-_GROUPS: list[tuple[asyncio.TaskGroup, set[asyncio.Task[None]]]] = []
+_GROUPS: list[_Group] = []
 
 
 @asynccontextmanager
@@ -581,13 +604,13 @@ async def supervisor() -> AsyncGenerator[None]:
     """Held by a service's lifespan around its `yield`: the TaskGroup every `start`ed task runs on. Leaving it cancels
     the tasks still running and waits for them, so nothing a request started outlives the process's shutdown."""
     async with asyncio.TaskGroup() as group:
-        tasks: set[asyncio.Task[None]] = set()
-        _GROUPS.append((group, tasks))
+        held = _Group(group)
+        _GROUPS.append(held)
         try:
             yield
         finally:
-            _GROUPS.remove((group, tasks))
-            for task in tasks:
+            _GROUPS.remove(held)
+            for task in held.tasks:
                 task.cancel()
 
 
@@ -595,12 +618,16 @@ async def start(coro: Coroutine[Any, Any, None], *, key: str, store: HeartbeatSt
     """A task that outlives the request: on the lifespan's TaskGroup, cancelled at shutdown, its failure on
     /health/background under key. Its own asyncio task, so its own transaction.
 
-    A failure is caught and recorded rather than raised, so one failed task never cancels the group's others."""
+    A failure is caught and recorded rather than raised, so one failed task never cancels the group's others. Every
+    task under one key shares the lifespan's one heartbeat for it: a later task's success does not write over an
+    earlier one's failure, and doneHour counts them all."""
     if not _GROUPS:
         coro.close()
         raise NoSupervisor("background.start needs the lifespan to hold background.supervisor()")
-    beat = Beat(key, store)
-    group, tasks = _GROUPS[-1]
+    held = _GROUPS[-1]
+    beat = held.beats.get((key, id(store)))
+    if beat is None:
+        beat = held.beats[(key, id(store))] = Beat(key, store)
 
     async def supervised() -> None:
         try:
@@ -611,11 +638,11 @@ async def start(coro: Coroutine[Any, Any, None], *, key: str, store: HeartbeatSt
             log.warning("background_task_failed", process=key, error=f"{type(e).__name__}: {e}"[:500])
             await beat.failed(e)
         else:
-            await beat.ok(1)
+            await beat.ok(1, force=True)
 
-    task = group.create_task(supervised(), name=key)
-    tasks.add(task)
-    task.add_done_callback(tasks.discard)
+    task = held.group.create_task(supervised(), name=key)
+    held.tasks.add(task)
+    task.add_done_callback(held.tasks.discard)
 
 
 async def run_sweep(
