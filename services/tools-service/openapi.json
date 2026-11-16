@@ -6719,6 +6719,7 @@
       },
       "MockList": {
         "additionalProperties": false,
+        "description": "One page of an operation's mocks, with the operation's name.",
         "properties": {
           "data": {
             "items": {
@@ -6727,14 +6728,29 @@
             "title": "Data",
             "type": "array"
           },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
           "operation": {
             "title": "Operation",
             "type": "string"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         },
         "required": [
-          "operation",
-          "data"
+          "data",
+          "pagination",
+          "facets",
+          "operation"
         ],
         "title": "MockList",
         "type": "object"
@@ -31413,7 +31429,7 @@
     },
     "/v1/tool-modules/{module_id}/operations/{op_id}/mocks": {
       "get": {
-        "description": "The operation's mock answers in the order a test call checks them, or (`environment=example`) its example\nanswer.",
+        "description": "The operation's mock answers in the order a test call checks them, a page at a time on the shared list\ncontract (`search` on the name), or (`environment=example`) its example answer.",
         "operationId": "tool_modules_list_mocks",
         "parameters": [
           {
@@ -31446,6 +31462,100 @@
               ],
               "title": "Environment",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {

@@ -1279,8 +1279,8 @@ export interface paths {
         };
         /**
          * List Mocks
-         * @description The operation's mock answers in the order a test call checks them, or (`environment=example`) its example
-         *     answer.
+         * @description The operation's mock answers in the order a test call checks them, a page at a time on the shared list
+         *     contract (`search` on the name), or (`environment=example`) its example answer.
          */
         get: operations["tool_modules_list_mocks"];
         put?: never;
@@ -3879,12 +3879,22 @@ export interface components {
              */
             timeout: boolean;
         };
-        /** MockList */
+        /**
+         * MockList
+         * @description One page of an operation's mocks, with the operation's name.
+         */
         MockList: {
             /** Data */
             data: components["schemas"]["MockAnswer"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
             /** Operation */
             operation: string;
+            pagination: components["schemas"]["Pagination"];
         };
         /** MockPatchIn */
         MockPatchIn: {
@@ -15175,6 +15185,12 @@ export interface operations {
         parameters: {
             query?: {
                 environment?: "test" | "example";
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path: {

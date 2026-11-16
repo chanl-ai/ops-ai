@@ -585,11 +585,6 @@ class MockIn(TypedDict, closed=True):
     timeout: NotRequired[bool]
 
 
-class MockList(TypedDict, closed=True):
-    data: list[MockAnswer]
-    operation: str
-
-
 class MockPatchIn(TypedDict, closed=True):
     body: NotRequired[Any]
     default: NotRequired[bool | None]
@@ -1489,11 +1484,6 @@ class EnvelopeMockAnswer(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeMockList(TypedDict, closed=True):
-    data: MockList
-    success: Literal[True]
-
-
 class EnvelopeModuleApproval(TypedDict, closed=True):
     data: ModuleApproval
     success: Literal[True]
@@ -1618,6 +1608,13 @@ class McpLinkIn(TypedDict, closed=True):
     environment: NotRequired[Literal["test"]]
     name: str
     tools: list[PickedTool]
+
+
+class MockList(TypedDict, closed=True):
+    data: list[MockAnswer]
+    facets: dict[str, dict[str, int]]
+    operation: str
+    pagination: Pagination
 
 
 class ModuleActivity(TypedDict, closed=True):
@@ -2134,6 +2131,11 @@ class EnvelopeChange(TypedDict, closed=True):
 
 class EnvelopeExecutionList(TypedDict, closed=True):
     data: ExecutionList
+    success: Literal[True]
+
+
+class EnvelopeMockList(TypedDict, closed=True):
+    data: MockList
     success: Literal[True]
 
 

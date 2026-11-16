@@ -9,13 +9,14 @@ from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_access import Access, reader_of
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, Out, ok
+from ops_service_kit.http import Envelope, In, ListResult, Out, ok
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListQuery
 
 from .callers import caller_in
 from .mocks import MAX_WAIT_MS
@@ -29,11 +30,7 @@ from .store.modules import ModuleStore
 MAX_BODY_CHARS = 64_000
 
 
-class _Wire(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
-class MockIn(_Wire):
+class MockIn(In):
     name: str = Field(min_length=1, max_length=200)
     # test: answers test-environment calls; example: the operation's example answer, one per operation.
     environment: Literal["test", "example"] = "test"
@@ -47,7 +44,7 @@ class MockIn(_Wire):
     default: bool = False
 
 
-class MockPatchIn(_Wire):
+class MockPatchIn(In):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     match: dict[str, Any] | None = None
     status: int | None = Field(default=None, ge=100, le=599)
@@ -75,9 +72,10 @@ class MockAnswer(Out):
     updated_at: str
 
 
-class MockList(Out):
+class MockList(ListResult[MockAnswer]):
+    """One page of an operation's mocks, with the operation's name."""
+
     operation: str
-    data: list[MockAnswer]
 
 
 def _view(row: dict[str, Any]) -> dict[str, Any]:
@@ -137,17 +135,19 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
         module_id: str,
         op_id: str,
         who: Annotated[Caller, Depends(caller)],
+        _: Tx,
+        q: ListQuery,
         environment: Annotated[Literal["test", "example"], Query()] = "test",
     ) -> JSONResponse:
-        """The operation's mock answers in the order a test call checks them, or (`environment=example`) its example
-        answer."""
+        """The operation's mock answers in the order a test call checks them, a page at a time on the shared list
+        contract (`search` on the name), or (`environment=example`) its example answer."""
         m, op = await _operation(who, module_id, op_id)
-        rows = await mocks.listed(who.tenant_id, str(m["id"]), str(op["name"]), environment)
-        return ok({"operation": op["name"], "data": [_view(x) for x in rows]})
+        page = await mocks.page(who.tenant_id, str(m["id"]), str(op["name"]), environment, q)
+        return ok({**page, "operation": op["name"], "data": [_view(x) for x in page["data"]]})
 
     @r.post("/{module_id}/operations/{op_id}/mocks", response_model=Envelope[MockAnswer], status_code=201)
     async def add_mock(  # pyright: ignore[reportUnusedFunction]
-        module_id: str, op_id: str, body: MockIn, who: Annotated[Caller, Depends(caller)]
+        module_id: str, op_id: str, body: MockIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """A mock answer after the operation's others. Keeping a Try it answer is this call with that answer's status
         and body, which the test console returned already scrubbed and masked."""
@@ -182,7 +182,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
 
     @r.patch("/{module_id}/operations/{op_id}/mocks/{mock_id}", response_model=Envelope[MockAnswer])
     async def change_mock(  # pyright: ignore[reportUnusedFunction]
-        module_id: str, op_id: str, mock_id: str, body: MockPatchIn, who: Annotated[Caller, Depends(caller)]
+        module_id: str, op_id: str, mock_id: str, body: MockPatchIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         m, op = await _operation(who, module_id, op_id)
         _may_edit(who, m)
@@ -198,7 +198,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
 
     @r.delete("/{module_id}/operations/{op_id}/mocks/{mock_id}", status_code=204, response_class=Response)
     async def delete_mock(  # pyright: ignore[reportUnusedFunction]
-        module_id: str, op_id: str, mock_id: str, who: Annotated[Caller, Depends(caller)]
+        module_id: str, op_id: str, mock_id: str, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> Response:
         m, op = await _operation(who, module_id, op_id)
         _may_edit(who, m)

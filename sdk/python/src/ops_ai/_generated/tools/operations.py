@@ -721,7 +721,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/tool-modules/{module_id}/operations/{op_id}/mocks",
         "pathParams": ["module_id", "op_id"],
-        "query": ["environment"],
+        "query": ["environment", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "tool_modules_list_modules": {
@@ -1347,13 +1347,33 @@ class Operations:
             SERVICE, OPERATIONS["tool_modules_import_operations"], {"module_id": module_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def tool_modules_list_mocks(self, module_id: str, op_id: str, *, environment: str | None = None) -> MockList:
+    def tool_modules_list_mocks(
+        self,
+        module_id: str,
+        op_id: str,
+        *,
+        environment: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> MockList:
         "List Mocks"
         return self._t.call(
             SERVICE,
             OPERATIONS["tool_modules_list_mocks"],
             {"module_id": module_id, "op_id": op_id},
-            {"environment": environment},
+            {
+                "environment": environment,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1945,13 +1965,33 @@ class AsyncOperations:
             SERVICE, OPERATIONS["tool_modules_import_operations"], {"module_id": module_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def tool_modules_list_mocks(self, module_id: str, op_id: str, *, environment: str | None = None) -> MockList:
+    async def tool_modules_list_mocks(
+        self,
+        module_id: str,
+        op_id: str,
+        *,
+        environment: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> MockList:
         "List Mocks"
         return await self._t.call(
             SERVICE,
             OPERATIONS["tool_modules_list_mocks"],
             {"module_id": module_id, "op_id": op_id},
-            {"environment": environment},
+            {
+                "environment": environment,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

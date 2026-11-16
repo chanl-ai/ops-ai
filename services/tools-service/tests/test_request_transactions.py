@@ -15,6 +15,7 @@ from ops_service_kit.logging import captured_logging
 from ops_service_kit.settings import Settings
 from ops_store.database import open_database
 
+from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_egress_and_secrets_need_security_admin import client  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_review_decisions import person
 
@@ -26,6 +27,8 @@ ROUTES = [
     ("POST", "/v1/egress/hosts/remove", {"value": "tx-count.example.com"}),
     ("POST", "/v1/egress/ranges", {"value": "10.71.0.0/16"}),
     ("POST", "/v1/egress/ranges/remove", {"value": "10.71.0.0/16"}),
+    ("PUT", "/v1/send-policy", {"text": "Never send a card number."}),
+    ("GET", "/v1/send-policy", None),
 ]
 
 
@@ -57,6 +60,27 @@ async def _counted(
         r = await c.request(method, path, json=body, headers=headers, params=params or None)
     line = next(json.loads(x) for x in stream.getvalue().splitlines() if '"http.request"' in x)
     return r, int(line["db.tx_count"])
+
+
+async def test_an_operations_mocks_are_changed_and_paged_in_one_transaction(gateway: Gateway) -> None:  # noqa: F811
+    base = f"/v1/tool-modules/{MODULE}/operations/{MODULE}_op1/mocks"
+    c = gateway.client
+    counts: dict[str, int] = {}
+    made: list[str] = []
+    for i in range(3):
+        r, counts[f"add {i}"] = await _counted(c, "POST", base, {"name": f"m{i}"}, {})
+        assert r.status_code == 201, r.text
+        made.append(r.json()["data"]["id"])
+    r, counts["list"] = await _counted(c, "GET", base, None, {}, page=2, pageSize=2)
+    assert r.status_code == 200, r.text
+    page = r.json()["data"]
+    assert ([m["name"] for m in page["data"]], page["operation"]) == (["m2"], gateway.tool("get_account"))
+    assert (page["pagination"]["page"], page["pagination"]["total"]) == (2, 3)
+    r, counts["change"] = await _counted(c, "PATCH", f"{base}/{made[0]}", {"name": "m0b"}, {})
+    assert r.status_code == 200, r.text
+    r, counts["delete"] = await _counted(c, "DELETE", f"{base}/{made[1]}", None, {})
+    assert r.status_code == 204, r.text
+    assert counts == dict.fromkeys(["add 0", "add 1", "add 2", "list", "change", "delete"], 1), counts
 
 
 @pytest.mark.parametrize("path", ["/v1/egress/hosts"])

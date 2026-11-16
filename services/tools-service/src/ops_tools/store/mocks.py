@@ -11,7 +11,9 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import ListPage, list_page
 from ops_store.store import Store
 
 from .modules import operation_mocks
@@ -46,6 +48,16 @@ class MockStore(Store):
         )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def page(
+        self, tenant_id: str, module_id: str, operation: str, environment: str, params: ListParams
+    ) -> ListPage:
+        """One page of an operation's mocks in the order a test call checks them (position, then id), searched by
+        name."""
+        m = operation_mocks.c
+        q = sa.select(*operation_mocks.c).where(*self._of(tenant_id, module_id, operation, environment))
+        async with self.tx() as c:
+            return await list_page(c, q, params, search=[m.name], default_sort=m.position)
 
     async def get(self, tenant_id: str, mock_id: str) -> Row | None:
         q = operation_mocks.select().where(operation_mocks.c.tenant_id == tenant_id, operation_mocks.c.id == mock_id)

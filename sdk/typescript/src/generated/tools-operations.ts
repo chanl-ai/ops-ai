@@ -860,7 +860,13 @@ export const toolsOperations = {
       "op_id"
     ],
     "query": [
-      "environment"
+      "environment",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
