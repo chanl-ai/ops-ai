@@ -450,10 +450,10 @@ def create_app(
             # Without a seed directory (outside dev, unless one is named) nothing is seeded; the registries still load
             # and serve what is published.
             seed_dir = settings.seed_dir
-            seeded = await seed_workflows(rt.graph_store, seed_dir) if seed_dir else {}
-            # A seed update opens a publish request, and requests are per tenant while the registries
-            # are not yet: the seed's requests are the dev seed's tenant's, as engine_seed's records are.
+            # Everything seeded (workflows, publish requests, deployments) is the dev seed's tenant's, as
+            # engine_seed's records are; the stores write in the caller's tenant.
             with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
+                seeded = await seed_workflows(rt.graph_store, seed_dir) if seed_dir else {}
                 await agent_registry.load(rt, load_catalog(seed_dir, settings.agents_seed_file))
                 if seed_dir:
                     await guardrails.load_seed(rt, guardrails.seed_path(seed_dir, settings.agents_seed_file))
@@ -461,10 +461,10 @@ def create_app(
                     await engine_seed.load_seed(rt, engine_seed.seed_path(seed_dir, settings.agents_seed_file))
                 await workflow_registry.load(rt, seed_dir)
                 await workflow_registry.follow_seed(rt, seeded)
+                if rt.channels is not None:
+                    await seed_deployments(rt.channels, settings.deployments_seed_file)
             # Each team's Ops Assistant nobody changed takes the declared one (team defaults).
             await catch_up_assistants(rt)
-            if rt.channels is not None:
-                await seed_deployments(rt.channels, settings.deployments_seed_file)
             await seed_mailboxes(db, settings.mailboxes_seed_file)
             app.state.runtime = rt
             log.info(

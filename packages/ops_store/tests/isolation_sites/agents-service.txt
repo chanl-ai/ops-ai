@@ -7,5 +7,4 @@
 2 install services/agents-service/src/ops_agents/store/timers.py
 1 raw services/agents-service/src/ops_agents/api/channels/inbox.py
 1 raw services/agents-service/src/ops_agents/store/base.py
-10 raw services/agents-service/src/ops_agents/store/channels.py
 4 raw services/agents-service/src/ops_agents/store/graphs.py

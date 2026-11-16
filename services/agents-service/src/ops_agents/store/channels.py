@@ -8,7 +8,7 @@ from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql, sqlite
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict
 from ops_store import Guarantee
@@ -17,7 +17,7 @@ from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .graphs import graph_threads
-from .tenancy import tenant_tx
+from .tenancy import RuntimeStore
 
 Multitask = Literal["enqueue", "reject"]
 
@@ -95,13 +95,10 @@ class Deployment:
     team_id: str = ""
 
 
-class ChannelStore:
+class ChannelStore(RuntimeStore):
     # A channel message is recorded once by its provider id and a cursor moves only forward (CAS); a delivery decides
     # and writes in one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     def _insert(self, table: sa.Table) -> Any:
         return (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(table)
@@ -122,12 +119,12 @@ class ChannelStore:
             .values(id=d.id, created_at=now, **values)
             .on_conflict_do_update(index_elements=["id"], set_=values, where=deployments.c.team_id == d.team_id)
         )
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             if (await c.execute(stmt)).rowcount != 1:
                 raise Conflict(f"A deployment {d.id} exists; choose another id.", code="deployment_id_taken")
 
     async def deployment(self, deployment_id: str) -> Deployment | None:
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = deployments.select().where(deployments.c.id == deployment_id, team_visible(deployments))
             r = (await c.execute(q)).mappings().first()
         if r is None:
@@ -135,7 +132,7 @@ class ChannelStore:
         return Deployment(r["id"], r["graph"], r["channel"], r["paused"], r["multitask"], r["budget"], r["team_id"])
 
     async def set_paused(self, deployment_id: str, paused: bool) -> bool:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             mine = sa.and_(deployments.c.id == deployment_id, team_visible(deployments))
             res = await c.execute(deployments.update().where(mine).values(paused=paused))
             return res.rowcount == 1
@@ -148,7 +145,7 @@ class ChannelStore:
         q = channel_messages.select().where(
             channel_messages.c.deployment_id == deployment_id, channel_messages.c.message_key.in_(keys)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return {r["message_key"]: dict(r) for r in (await c.execute(q)).mappings()}
 
     async def record(
@@ -168,7 +165,7 @@ class ChannelStore:
             .values(deployment_id=deployment_id, message_key=key, received_at=now, **values)
             .on_conflict_do_update(index_elements=["deployment_id", "message_key"], set_=values)
         )
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(stmt)
 
     async def deferred(self, deployment_id: str) -> list[dict[str, Any]]:
@@ -177,13 +174,13 @@ class ChannelStore:
             .where(channel_messages.c.deployment_id == deployment_id, channel_messages.c.status == "deferred")
             .order_by(channel_messages.c.received_at)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     # ── delta cursor ──
 
     async def cursor(self, deployment_id: str) -> str | None:
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = sa.select(channel_cursors.c.delta_link).where(channel_cursors.c.deployment_id == deployment_id)
             return (await c.execute(q)).scalar_one_or_none()
 
@@ -193,7 +190,7 @@ class ChannelStore:
             .values(deployment_id=deployment_id, delta_link=delta_link, updated_at=now)
             .on_conflict_do_update(index_elements=["deployment_id"], set_={"delta_link": delta_link, "updated_at": now})
         )
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(stmt)
 
     # ── thread inbox ──
@@ -243,18 +240,18 @@ class ChannelStore:
         q = sa.select(graph_threads.c.id).where(
             graph_threads.c.external_key == external_key, team_visible(graph_threads)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             found: Any = (await c.execute(q)).scalar_one_or_none()
         return str(found) if found is not None else None
 
     async def inbox(self, thread_id: str) -> list[dict[str, Any]]:
         q = thread_inbox.select().where(thread_inbox.c.thread_id == thread_id).order_by(thread_inbox.c.seq)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def deliver_queued(self, thread_id: str, now: str) -> list[int]:
         """Marks the thread's queued messages delivered, in arrival order. Returns their positions."""
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             q = (
                 sa.select(thread_inbox.c.seq)
                 .where(thread_inbox.c.thread_id == thread_id, thread_inbox.c.status == "queued")
