@@ -19,7 +19,8 @@ cp "$root/make/checks.mk" make/checks.mk
 git add make/checks.mk
 git -c user.name=t -c user.email=t@local commit -q --no-verify -am "hook under test" >/dev/null 2>&1 || true
 # apps/embed/node_modules: the hook's console verify type-checks the embed app too (verify-staged.sh links it the same way).
-for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules .venv; do
+# sdk/typescript/node_modules: the sdk gate runs openapi-typescript from there (verify-staged.sh links it the same way).
+for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules sdk/typescript/node_modules .venv; do
   [ -e "$root/$dep" ] && ln -s "$root/$dep" "$dep"
 done
 git config core.hooksPath .githooks
@@ -34,7 +35,8 @@ git add apps/console/src/components/zz-unfinished.tsx
 if commit bad apps/console/src/components/zz-unfinished.tsx; then echo "FAIL the bad file was committed"; pass=1; else
   grep -q "imports the API client" "$tmp/bad.log" && echo "PASS committing the bad file fails on check-standards" || { echo "FAIL the bad commit failed for another reason:"; tail -5 "$tmp/bad.log"; pass=1; }
 fi
-# A route change committed without its openapi.json, then with it regenerated (the openapi gate, 10-18).
+# A route change committed with its openapi.json regenerated, and the SDK drift check run on it. Whether a document matches
+# its app is a CI and `make verify` check (`make openapi`), not a commit's: the commit check skips service builds.
 app=services/models-service/src/ops_models/app.py
 python3 - "$app" <<'PY'
 import pathlib, sys
@@ -42,12 +44,18 @@ p = pathlib.Path(sys.argv[1])
 s = p.read_text()
 old = '    @app.get("/health", tags=["health"], response_model=Health)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    @app.get("/health/probe", tags=["health"], response_model=Health)\n    async def probe() -> Health:  # pyright: ignore[reportUnusedFunction]\n        return Health(status="ok")\n\n' + old, 1))
+# A route a service may add without a new finding: authenticated, with a typed reply, so only the openapi gate fails.
+route = (
+    '    @app.get("/v1/models/probe", tags=["health"], response_model=Envelope[ProbeOut])\n'
+    "    async def probe(p: CurrentTenantCaller) -> Envelope[ProbeOut]:  # pyright: ignore[reportUnusedFunction]\n"
+    '        return ok(ProbeOut(status="ok"))\n\n'
+)
+model = "class _Wire(In):"
+assert s.count(model) == 1
+s = s.replace(model, "class ProbeOut(Out):\n    status: str\n\n\n" + model, 1)
+p.write_text(s.replace(old, route + old, 1))
 PY
 git add "$app"
-if commit route "$app"; then echo "FAIL a route change without its openapi.json was committed"; pass=1; else
-  grep -q "models-service/openapi.json does not match" "$tmp/route.log" && echo "PASS a route change without its openapi.json is refused" || { echo "FAIL the route commit failed for another reason:"; tail -5 "$tmp/route.log"; pass=1; }
-fi
 pp=$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src | tr '\n' ':')
 (cd services/models-service && "$root/.venv/bin/python" -I -c "import runpy, sys; sys.path[:0] = '$pp'.split(':'); sys.argv = ['check_openapi.py', '--write']; runpy.run_path('scripts/check_openapi.py', run_name='__main__')" >/dev/null)
 git add services/models-service/openapi.json
