@@ -70,10 +70,7 @@ async def finish_readings(service: KnowledgeService) -> int:
     settled = 0
     for tenant in await service.store.tenants():
         with isolation.tenant_wide(FIND_READING, tenant_id=tenant):
-            waiting = {
-                (str(i["team_id"]), str(i["file_id"]))
-                for i in [r.model_dump() for r in await service.store.reading_items(tenant)]
-            }
+            waiting = {(i.team_id, i.file_id) for i in await service.store.reading_items(tenant)}
         for team, file_id in sorted(waiting):
             with isolation.scope(tenant, team):
                 settled += await service.finish_reading(Who(tenant, "knowledge schedule", team), file_id)

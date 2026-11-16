@@ -1229,12 +1229,8 @@ class KnowledgeService:
         s = await self._source_row(who, source_id)
         if not self.settings_of(s).cleaning.site_repeats:
             return
-        items = [
-            i
-            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
-            if i["status"] == "indexed"
-        ]
-        found = repeated(i.get("lines") for i in items)
+        items = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i.status == "indexed"]
+        found = repeated([str(x) for x in i.lines] if i.lines is not None else None for i in items)
         cfg = dict(s.get("config") or {})
         if found == list(cfg.get("repeats") or []):
             return
@@ -2113,11 +2109,11 @@ class KnowledgeService:
         found = await self._retrieve(who.tenant_id, [b], question, collection=collection)
         passages = found.passages
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
-        items = {i["id"]: i for i in [r.model_dump() for r in await self.store.items(who.tenant_id)]}
+        items = {i.id: i for i in await self.store.items(who.tenant_id)}
 
         def source_name(p: Passage) -> str:
             item = items.get(p.item_id)
-            return sources[item["source_id"]]["name"] if item and item["source_id"] in sources else ""
+            return sources[item.source_id]["name"] if item and item.source_id in sources else ""
 
         return {
             "id": new_id("qry"),
@@ -2396,8 +2392,11 @@ class KnowledgeService:
     async def lookups(self, who: Who) -> dict[str, list[str]]:
         bases = await self.store.bases(who.tenant_id)
         sources = await self.store.sources(who.tenant_id)
-        items = [r.model_dump() for r in await self.store.items(who.tenant_id)]
-        owners = {b["owner"] for b in bases} | {s["owner"] for s in sources} | {i["owner"] for i in items}
+        owners = (
+            {b["owner"] for b in bases}
+            | {s["owner"] for s in sources}
+            | {i.owner for i in await self.store.items(who.tenant_id)}
+        )
         tags = {t for s in sources for t in s["tags"]}
         collections = {c for b in bases for c in b["collections"]} | {s["collection"] for s in sources}
         return {
