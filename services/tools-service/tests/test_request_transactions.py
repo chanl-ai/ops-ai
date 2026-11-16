@@ -11,12 +11,16 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_plugin_sdk import Plugin
+from ops_plugin_sdk.loader import Loaded
 from ops_service_kit.logging import captured_logging
 from ops_service_kit.settings import Settings
 from ops_store.database import open_database
+from ops_tools.plugins.host import PluginHost
 
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_egress_and_secrets_need_security_admin import client  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from .test_plugin_versions import ID, admin, routes  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_review_decisions import person
 
 # (method, path, body): each answered in one transaction.
@@ -124,3 +128,22 @@ async def test_a_page_past_the_end_answers_the_last_page(
     page = r.json()["data"]
     assert [h["host"] for h in page["data"]] == ["past-end-2.example.com"]
     assert (page["pagination"]["page"], page["pagination"]["total"]) == (2, 3)
+
+
+async def test_a_plugins_update_review_take_and_sources_each_hold_one_transaction(
+    routes: tuple[httpx.AsyncClient, PluginHost, Plugin],  # noqa: F811
+    tenant: str,
+) -> None:
+    c, host, v2 = routes
+    on = {"enabled": True, "credentials": {"token": "t-1"}}
+    assert (await c.put(f"/v1/apps/plugin:{ID}/team", json=on, headers=admin(tenant))).status_code == 200
+    host.loaded = [Loaded("fields_desk", v2, None)]
+    counts: dict[str, int] = {}
+    r, counts["review"] = await _counted(c, "GET", f"/v1/apps/plugin:{ID}/update", None, admin(tenant))
+    assert r.status_code == 200, r.text
+    take = {"digest": r.json()["data"]["installed"]["digest"]}
+    r, counts["take"] = await _counted(c, "POST", f"/v1/apps/plugin:{ID}/update", take, admin(tenant))
+    assert r.status_code == 200, r.text
+    r, counts["sources"] = await _counted(c, "GET", "/v1/knowledge-sources", None, admin(tenant))
+    assert r.status_code == 200, r.text
+    assert counts == dict.fromkeys(["review", "take", "sources"], 1), counts

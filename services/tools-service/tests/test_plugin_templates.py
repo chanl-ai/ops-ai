@@ -327,6 +327,15 @@ async def test_no_connection_is_held_while_the_resources_tab_asks_for_the_teams_
         checked_out.append(pool.checkedout())
         return await asked(self, *args)
 
+    listed = FakeCopies.sources
+
+    async def watched_sources(self: FakeCopies, *args: str) -> list[dict[str, Any]]:
+        pool = engine.pool
+        assert isinstance(pool, QueuePool)
+        checked_out.append(pool.checkedout())
+        return await listed(self, *args)
+
     monkeypatch.setattr(FakeCopies, "of", watched)
+    monkeypatch.setattr(FakeCopies, "sources", watched_sources)
     r = await client.get(f"/v1/apps/plugin:{LINKED}/resources", headers=person(tenant, "Ravi Menon", {ON: "builder"}))
-    assert (r.status_code, checked_out) == (200, [0]), r.text
+    assert (r.status_code, checked_out) == (200, [0, 0]), r.text

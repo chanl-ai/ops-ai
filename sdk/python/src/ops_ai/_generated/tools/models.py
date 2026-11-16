@@ -796,7 +796,7 @@ class PlatformEventOut(TypedDict, closed=True):
     handled: bool
 
 
-class PluginRef(TypedDict):
+class PluginRef(TypedDict, closed=True):
     id: str
     title: str
     version: str
@@ -823,7 +823,7 @@ class RenameIn(TypedDict, closed=True):
     name: str
 
 
-class ResourceCopy(TypedDict):
+class ResourceCopy(TypedDict, closed=True):
     id: str
     kind: str
     recordId: str
@@ -832,7 +832,7 @@ class ResourceCopy(TypedDict):
     version: int
 
 
-class ResourceInstalled(TypedDict):
+class ResourceInstalled(TypedDict, closed=True):
     changed: NotRequired[bool]
     copies: int
     newerAvailable: bool
@@ -1051,7 +1051,7 @@ class TeamPluginIn(TypedDict, closed=True):
     signIn: NotRequired[str | None]
 
 
-class TemplateRequires(TypedDict):
+class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
     resources: NotRequired[list[str]]
     tools: list[str]
@@ -1294,7 +1294,7 @@ class AppCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
-class AppResource(TypedDict):
+class AppResource(TypedDict, closed=True):
     canAdd: bool
     canRemove: NotRequired[bool]
     copy: NotRequired[ResourceCopy | None]
@@ -1820,7 +1820,7 @@ class PluginSetting(TypedDict, closed=True):
     secret: NotRequired[bool]
 
 
-class PluginTemplate(TypedDict):
+class PluginTemplate(TypedDict, closed=True):
     body: NotRequired[dict[str, Any]]
     digest: str
     id: str

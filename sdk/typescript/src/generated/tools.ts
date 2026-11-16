@@ -368,7 +368,8 @@ export interface paths {
          * List App Resources
          * @description The app's Resources tab: every agent, skill, workflow, document type and knowledge source the app brings,
          *     and every copy the team holds of one it no longer ships or of an app turned off, each with its state, the
-         *     team's copy, and whether the caller may add it (with who can, when they cannot).
+         *     team's copy, and whether the caller may add it (with who can, when they cannot). The copies are asked before
+         *     any read, so the request's transaction opens only after both services answer.
          */
         get: operations["plugins_list_app_resources"];
         put?: never;
@@ -475,7 +476,8 @@ export interface paths {
         /**
          * App Users
          * @description The team's agents and workflows that use the app's tools, each with the tools it uses: what turning the app
-         *     off stops. A team admin's, as turning it off is.
+         *     off stops. A team admin's, as turning it off is. No request transaction: the binding is read and its
+         *     transaction ends before agents-service is asked, so nothing is held while it answers.
          */
         get: operations["apps_app_users"];
         put?: never;
@@ -705,7 +707,8 @@ export interface paths {
          * @description The hosts a source's values would have its sync reach, each decided as any new outside address is: a
          *     person's request (adding the source) lists it where the account lets them, asks the Security team, or is
          *     refused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts
-         *     are never exempt from the account's list.
+         *     are never exempt from the account's list. No request transaction: each host's reads and writes take their
+         *     own, so none is held while the platform's policy is read or the Security team is asked.
          */
         post: operations["apps_knowledge_source_hosts"];
         delete?: never;

@@ -13,15 +13,15 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
+from ops_identity.fastapi import Tx
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.knowledge import source_hosts
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, ok
+from ops_service_kit.http import Envelope, In, Out, ok
 
 from ..auth.kinds import Kind, kind_of
 from ..callers import caller_in
@@ -50,11 +50,7 @@ from .host import (
 CLIENT_FIELDS = ("clientId", "clientSecret")
 
 
-class _Wire(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
-class TeamPluginIn(_Wire):
+class TeamPluginIn(In):
     enabled: bool
     settings: dict[str, Any] = Field(default_factory=dict[str, Any])
     # The team's app credential (GET /v1/app-credentials) the account signs in with; left out of the first turn-on,
@@ -77,13 +73,13 @@ class TeamPluginIn(_Wire):
     sandbox: bool = False
 
 
-class InputChanges(_Wire):
+class InputChanges(Out):
     added: list[str]
     removed: list[str]
     changed: list[str]
 
 
-class ToolChange(_Wire):
+class ToolChange(Out):
     """One tool an update adds, changes or removes, by its operation name."""
 
     name: str
@@ -97,12 +93,12 @@ class ToolChange(_Wire):
     python: bool
 
 
-class VersionRef(_Wire):
+class VersionRef(Out):
     version: str
     digest: str
 
 
-class PluginUpdateView(_Wire):
+class PluginUpdateView(Out):
     """What taking the installed version would change for the team: empty `tools` when it runs it already."""
 
     version: str | None
@@ -113,33 +109,33 @@ class PluginUpdateView(_Wire):
     tools: list[ToolChange]
 
 
-class AppUser(_Wire):
+class AppUser(Out):
     id: str
     name: str
     # The app's tools this agent or workflow uses, by operation name.
     tools: list[str]
 
 
-class AppUsers(_Wire):
+class AppUsers(Out):
     """Who uses an app's tools in the team, read before turning it off."""
 
     agents: list[AppUser]
     workflows: list[AppUser]
 
 
-class TakeUpdateIn(_Wire):
+class TakeUpdateIn(In):
     # The installed version's digest the review was read at; another upgrade since then refuses the take.
     digest: str = Field(min_length=64, max_length=64)
 
 
-class SourceHostsIn(_Wire):
+class SourceHostsIn(In):
     plugin: str = Field(min_length=1, max_length=200)
     source: str = Field(min_length=1, max_length=200)
     # The source's own values (its start addresses): the hosts asked about are the ones its egress_from input holds.
     values: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
-class SourceHost(_Wire):
+class SourceHost(Out):
     host: str
     # allowed: listed, or passing under the account's any_public policy; waiting: an admin has yet to approve it;
     # refused: the Security team refused it, or the account adds no new hosts.
@@ -154,7 +150,7 @@ class HostGate(Protocol):
     async def host_passes(self, tenant_id: str, host: str) -> bool: ...
 
 
-class KnowledgeSourceView(_Wire):
+class KnowledgeSourceView(Out):
     plugin: str
     source: str
     title: str
@@ -767,7 +763,8 @@ def plugins_router(
     @r.get("/v1/apps/{app_id}/used-by", response_model=Envelope[AppUsers])
     async def app_users(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The team's agents and workflows that use the app's tools, each with the tools it uses: what turning the app
-        off stops. A team admin's, as turning it off is."""
+        off stops. A team admin's, as turning it off is. No request transaction: the binding is read and its
+        transaction ends before agents-service is asked, so nothing is held while it answers."""
         accounts.manages(who)
         plugin = accounts.plugin(app_id)
         if users is None:
@@ -787,18 +784,18 @@ def plugins_router(
         )
 
     @r.get("/v1/apps/{app_id}/update", response_model=Envelope[PluginUpdateView])
-    async def plugin_update(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def plugin_update(app_id: str, who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """What taking the installed plugin version would change for the team: each new, changed and removed tool."""
         plugin, b = await _update(who, app_id)
         return ok(_review(plugin, b))
 
     @r.post("/v1/apps/{app_id}/update", response_model=Envelope[PluginUpdateView])
     async def take_plugin_update(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, body: TakeUpdateIn, who: Annotated[Caller, Depends(caller)]
+        app_id: str, body: TakeUpdateIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """Takes the installed version for the team, from its next call. The digest is the one the review was read
         at, so a review another upgrade has replaced since is refused rather than taken unseen."""
-        plugin, _ = await _update(who, app_id)
+        plugin = (await _update(who, app_id))[0]
         if body.digest != _installed(plugin)[1]:
             raise Conflict(
                 f"{plugin.manifest.title} changed again since this review; read the update again.",
@@ -813,7 +810,8 @@ def plugins_router(
         """The hosts a source's values would have its sync reach, each decided as any new outside address is: a
         person's request (adding the source) lists it where the account lets them, asks the Security team, or is
         refused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts
-        are never exempt from the account's list."""
+        are never exempt from the account's list. No request transaction: each host's reads and writes take their
+        own, so none is held while the platform's policy is read or the Security team is asked."""
         if hosts is None:
             raise ServiceUnavailable("This install decides no egress hosts.")
         plugin = accounts.plugin(f"{PLUGIN_APP}{body.plugin}")
@@ -838,7 +836,7 @@ def plugins_router(
         return ok([h.model_dump(by_alias=True) for h in out])
 
     @r.get("/v1/knowledge-sources", response_model=Envelope[list[KnowledgeSourceView]])
-    async def knowledge_sources(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def knowledge_sources(who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The knowledge sources a team can create from its plugins that are on, with the account each would read
         through: kb-service lists them and syncs by calling the two tools named here."""
         out: list[dict[str, Any]] = []

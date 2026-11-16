@@ -1,11 +1,10 @@
-# 1127 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 1119 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body apps_add_account
 1 reply apps_add_account
 1 body apps_add_app
 1 reply apps_add_app
 1 body apps_add_own_account
 1 body apps_add_tools
-1 reply apps_app_users
 1 body apps_change_account
 1 reply apps_change_account
 1 body apps_change_app_credential
@@ -19,22 +18,16 @@
 1 reply apps_get_app
 1 reply apps_get_app_credential
 1 body apps_give_own_credentials
-1 body apps_knowledge_source_hosts
-1 reply apps_knowledge_source_hosts
 1 reply apps_knowledge_sources
 1 reply apps_list_apps
 1 reply apps_make_team_default
 1 body apps_open_connect_link
 1 reply apps_pin_default
-1 reply apps_plugin_update
 1 body apps_set_app_credential_secret
 1 reply apps_set_app_credential_secret
-1 body apps_set_team_app
 1 reply apps_set_team_app
 1 reply apps_sign_out
 1 body apps_start_sign_in
-1 body apps_take_plugin_update
-1 reply apps_take_plugin_update
 1 body apps_test_account
 1 reply apps_test_account
 1 reply expressions_evaluate_formulas
@@ -55,7 +48,6 @@
 1 reply mailboxes_test
 1 body mailboxes_wait
 1 reply mailboxes_wait
-1 reply plugins_list_app_resources
 1 reply plugins_list_plugin_templates
 2 dict-any services/tools-service/src/ops_tools/__main__.py
 12 dict-any services/tools-service/src/ops_tools/app.py
