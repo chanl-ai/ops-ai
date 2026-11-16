@@ -342,11 +342,13 @@ class DocumentTypes:
     async def resolve(self, who: Who, type_id: str, version: int | None) -> dict[str, Any]:
         """The version an extraction reads with: the one asked for, or the newest. Another team's type, or a version
         it does not have, is not found."""
-        row = await self._own(who, type_id)
-        if row is None:
-            raise DocumentTypeMissingError(type_id)
-        n = version if version is not None else row.latest_version
-        found = await self.store.version(type_id, n)
+        # The type and its version in one transaction; inside a caller's own one, part of it.
+        async with isolation.request_transaction():
+            row = await self._own(who, type_id)
+            if row is None:
+                raise DocumentTypeMissingError(type_id)
+            n = version if version is not None else row.latest_version
+            found = await self.store.version(type_id, n)
         if found is None:
             raise DocumentTypeMissingError(f"{type_id} v{n}")
         return {

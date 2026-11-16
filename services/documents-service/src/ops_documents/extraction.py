@@ -526,32 +526,41 @@ class Extractor:
         extraction_id = f"ext_{uuid.uuid4().hex[:16]}"
         request_hash = _sha(json.dumps({"file": file_id, **request}, sort_keys=True))
         key = idempotency_key if idempotency_key is not None else extraction_id
-        held = await self.store.insert(
-            {
-                "id": extraction_id,
-                "tenant_id": who.tenant_id,
-                "team": who.team,
-                "file_id": file_id,
-                "file_digest": row.digest or "",
-                "request": request,
-                "schema_digest": _sha(json.dumps(request["fields"], sort_keys=True)),
-                "alias": self.alias,
-                "status": "queued",
-                "attempts": 0,
-                "key_hash": _key_hash(who, key),
-                "request_hash": request_hash,
-                "type_id": cast(dict[str, Any], request.get("documentType") or {}).get("id"),
-                "asked_by": who.actor,
-                "asked_at": self.clock(),
-            }
-        )
-        if held.id != extraction_id:
+        # Gate: the row saved, or the one the key holds queued again, committed before the file is read or a task
+        # picks it up.
+        async with isolation.request_transaction():
+            held = await self.store.insert(
+                {
+                    "id": extraction_id,
+                    "tenant_id": who.tenant_id,
+                    "team": who.team,
+                    "file_id": file_id,
+                    "file_digest": row.digest or "",
+                    "request": request,
+                    "schema_digest": _sha(json.dumps(request["fields"], sort_keys=True)),
+                    "alias": self.alias,
+                    "status": "queued",
+                    "attempts": 0,
+                    "key_hash": _key_hash(who, key),
+                    "request_hash": request_hash,
+                    "type_id": cast(dict[str, Any], request.get("documentType") or {}).get("id"),
+                    "asked_by": who.actor,
+                    "asked_at": self.clock(),
+                }
+            )
+            # A retry after the floor or the model was out of reach runs it again; a schema error stays the answer.
+            again = (
+                held.id != extraction_id
+                and held.request_hash == request_hash
+                and held.status == "failed"
+                and held.error_code != "schema_error"
+            )
+            if again:
+                held = await self.store.requeue(held.id)
+        if held.id != extraction_id and not again:
             if held.request_hash != request_hash:
                 raise IdempotencyConflictError("this Idempotency-Key was used for a different extraction")
-            if held.status != "failed" or held.error_code == "schema_error":
-                return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
-            # A retry after the floor or the model was out of reach runs it again; a schema error stays the answer.
-            held = await self.store.requeue(held.id)
+            return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
         pages = None
         if inline or row.size <= SYNC_BYTES:
             pages = await self._pages(who, row, request)
@@ -600,30 +609,32 @@ class Extractor:
         }
         extraction_id = f"ext_{uuid.uuid4().hex[:16]}"
         key = idempotency_key if idempotency_key is not None else extraction_id
-        held = await self.store.insert(
-            {
-                "id": extraction_id,
-                "tenant_id": who.tenant_id,
-                "team": who.team,
-                "file_id": file.id,
-                "file_digest": file.digest or "",
-                "request": request,
-                "schema_digest": _sha("[]"),
-                "alias": self.alias,
-                "status": "queued",
-                "attempts": 0,
-                "key_hash": _key_hash(who, key),
-                "request_hash": _sha(json.dumps({"file": file.id, **request}, sort_keys=True)),
-                "type_id": None,
-                "asked_by": who.actor,
-                "asked_at": self.clock(),
-            }
-        )
-        if held.id != extraction_id:
-            return answer_of(held)
-        result = {"fileId": file.id, "fields": {}, "needsReview": ["documentType"], "classification": found}
-        await self.store.finish(extraction_id, status="done", outcome="unknown", result=result, at=self.clock())
-        return answer_of(await self._row(who.tenant_id, extraction_id))
+        # Saved, finished and read back in one transaction: nothing is asked between them.
+        async with isolation.request_transaction():
+            held = await self.store.insert(
+                {
+                    "id": extraction_id,
+                    "tenant_id": who.tenant_id,
+                    "team": who.team,
+                    "file_id": file.id,
+                    "file_digest": file.digest or "",
+                    "request": request,
+                    "schema_digest": _sha("[]"),
+                    "alias": self.alias,
+                    "status": "queued",
+                    "attempts": 0,
+                    "key_hash": _key_hash(who, key),
+                    "request_hash": _sha(json.dumps({"file": file.id, **request}, sort_keys=True)),
+                    "type_id": None,
+                    "asked_by": who.actor,
+                    "asked_at": self.clock(),
+                }
+            )
+            if held.id != extraction_id:
+                return answer_of(held)
+            result = {"fileId": file.id, "fields": {}, "needsReview": ["documentType"], "classification": found}
+            await self.store.finish(extraction_id, status="done", outcome="unknown", result=result, at=self.clock())
+            return answer_of(await self._row(who.tenant_id, extraction_id))
 
     async def get(self, who: Who, extraction_id: str) -> dict[str, Any] | None:
         row = await self.store.get(extraction_id)
@@ -815,21 +826,23 @@ class Extractor:
 
     async def _run(self, row: ExtractionRow, file: FileInfo, pages: Pages) -> ExtractionRow:
         tenant, eid = row.tenant_id, row.id
-        if not await self.store.start(eid, self.clock()):
-            done = await self.store.get(eid)
-            assert done is not None
-            return done
+        # Gate: the row marked running and committed before anything is asked, so a read cut off part-way shows it
+        # ran. Each settle below saves the answer and reads it back in one transaction, after the last outside call.
+        async with isolation.request_transaction():
+            if not await self.store.start(eid, self.clock()):
+                return await self._row(tenant, eid)
         request = row.request
         fields = cast(list[dict[str, Any]], request["fields"])
         read = str(request.get("read") or "fields")
         pages, limited = _limited(pages, request)
         if not pages.texts:
             # No text layer and no OCR asked (or OCR found nothing): empty fields would pass as found.
-            await self.store.finish(
-                eid, status="unreadable", outcome="unreadable", at=self.clock(),
-                result={"fileId": row.file_id, "pages": pages.count},
-            )  # fmt: skip
-            return await self._row(tenant, eid)
+            async with isolation.request_transaction():
+                await self.store.finish(
+                    eid, status="unreadable", outcome="unreadable", at=self.clock(),
+                    result={"fileId": row.file_id, "pages": pages.count},
+                )  # fmt: skip
+                return await self._row(tenant, eid)
         many = bool(request["many"])
         pictures = self._pictures(row, file)
         layouts = cast(list[dict[str, Any]], request.get("templates") or [])
@@ -839,16 +852,14 @@ class Extractor:
             if read is not None:
                 return read
         if self.models is None:
-            await self._fail(row, "not_configured", "documents-service has no models-service key")
-            return await self._row(tenant, eid)
+            return await self._fail(row, "not_configured", "documents-service has no models-service key")
         usage = Usage()
         proposal: dict[str, Any] | None = None
         if read == "propose":
             try:
                 proposal = await self._propose(row, pages, usage)
             except ModelRefusedError as e:
-                await self._refused(row, e)
-                return await self._row(tenant, eid)
+                return await self._refused(row, e)
             fields = cast(list[dict[str, Any]], proposal["fields"])
             if not fields:
                 out: dict[str, Any] = {
@@ -856,8 +867,11 @@ class Extractor:
                 }  # fmt: skip
                 _recorded(out, usage)
                 tokens = (usage.input_tokens, usage.output_tokens)
-                await self.store.finish(eid, status="done", outcome="ok", result=out, at=self.clock(), tokens=tokens)
-                return await self._row(tenant, eid)
+                async with isolation.request_transaction():
+                    await self.store.finish(
+                        eid, status="done", outcome="ok", result=out, at=self.clock(), tokens=tokens
+                    )
+                    return await self._row(tenant, eid)
         schema = prompt.schema_for(fields, many=many)
         user = prompt.user_prompt(fields, pages.texts, many=many, examples=await self._examples(row, fields))
         try:
@@ -873,19 +887,16 @@ class Extractor:
                     images=shown,
                 )  # fmt: skip
                 if errors := prompt.schema_errors(answer, schema):
-                    await self._fail(
+                    return await self._fail(
                         row, "schema_error", "The answer did not match the fields asked for.", {"details": errors}
                     )
-                    return await self._row(tenant, eid)
             # With no platform-service configured the catalogue's default applies; a configured one that cannot be
             # read fails the extraction (FloorUnreadError), so a failed read never lowers the bar.
             floor = await self.floors.floor(tenant, row.team) if self.floors is not None else DEFAULT_FLOOR
         except FloorUnreadError as e:
-            await self._fail(row, "floor_unread", str(e))
-            return await self._row(tenant, eid)
+            return await self._fail(row, "floor_unread", str(e))
         except ModelRefusedError as e:
-            await self._refused(row, e)
-            return await self._row(tenant, eid)
+            return await self._refused(row, e)
         outcome, out = result.scored(
             fields,
             answer,
@@ -910,10 +921,11 @@ class Extractor:
             out["templateMiss"] = miss
         tokens = (usage.input_tokens, usage.output_tokens)
         fp = fingerprint_of(out, pages.layout) if not many and pages.layout is not None else None
-        await self.store.finish(
-            eid, status="done", outcome=outcome, result=out, at=self.clock(), tokens=tokens, fingerprint=fp
-        )
-        return await self._row(tenant, eid)
+        async with isolation.request_transaction():
+            await self.store.finish(
+                eid, status="done", outcome=outcome, result=out, at=self.clock(), tokens=tokens, fingerprint=fp
+            )
+            return await self._row(tenant, eid)
 
     async def _by_template(
         self, row: ExtractionRow, layouts: list[dict[str, Any]], pages: Pages, pictures: Pictures | None
@@ -958,8 +970,9 @@ class Extractor:
                 # estimate averages, which price a whole model read.
                 out["rereadTokens"] = {"input": usage.input_tokens, "output": usage.output_tokens}
             # No tokens: a template read is left out of the measured cost an estimate prices model reads at.
-            await self.store.finish(row.id, status="done", outcome=outcome, result=out, at=self.clock())
-            return await self._row(row.tenant_id, row.id), None
+            async with isolation.request_transaction():
+                await self.store.finish(row.id, status="done", outcome=outcome, result=out, at=self.clock())
+                return await self._row(row.tenant_id, row.id), None
         return None, best.wire() if best is not None else None
 
     async def _ruled(
@@ -1093,12 +1106,19 @@ class Extractor:
             kept.append(named | {"type": kind})
         return {"name": str(raw.get("name") or ""), "fields": kept}
 
-    async def _refused(self, row: ExtractionRow, e: ModelRefusedError) -> None:
+    async def _refused(self, row: ExtractionRow, e: ModelRefusedError) -> ExtractionRow:
         code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))
-        await self._fail(row, code, message)
+        return await self._fail(row, code, message)
 
-    async def _fail(self, row: ExtractionRow, code: str, message: str, extra: dict[str, Any] | None = None) -> None:
-        await self.store.finish(row.id, status="failed", at=self.clock(), error_code=code, error=message, result=extra)
+    async def _fail(
+        self, row: ExtractionRow, code: str, message: str, extra: dict[str, Any] | None = None
+    ) -> ExtractionRow:
+        """Settle as failed: the error saved and the row read back in one transaction."""
+        async with isolation.request_transaction():
+            await self.store.finish(
+                row.id, status="failed", at=self.clock(), error_code=code, error=message, result=extra
+            )
+            return await self._row(row.tenant_id, row.id)
 
     async def _row(self, tenant: str, extraction_id: str) -> ExtractionRow:
         found = await self.store.get(extraction_id)
