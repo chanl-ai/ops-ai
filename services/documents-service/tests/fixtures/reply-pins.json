@@ -632,14 +632,23 @@
   },
   "list": {
     "canCreate": true,
-    "items": [
+    "data": [
       {
         "description": null,
         "id": "invoice_notice",
         "latestVersion": 2,
         "name": "Invoice notice"
       }
-    ]
+    ],
+    "facets": {},
+    "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
+    }
   },
   "reading": {
     "digest": "a3dedc2b30264d92f482189fd65998ca46a3db72ac059ec596b8e50e2e485a06",

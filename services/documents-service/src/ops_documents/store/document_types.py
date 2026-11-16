@@ -21,8 +21,10 @@ from ops_contracts.field_values import DEFAULT_DATE_ORDER
 from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
 from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.dialect import locked
+from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
 from ops_store.store import Store
@@ -296,15 +298,26 @@ class DocumentTypesStore(Store):
         async with self.tx() as c:
             return await one(c, q, TypeRow)
 
-    async def list(self, team: str) -> list[TypeRow]:
+    async def every(self, team: str) -> list[TypeRow]:
+        """Every type of the team, by name: what classification chooses among."""
         t = document_types.c
         q = (
             sa.select(document_types)
             .where(t.tenant_id == isolation.tenant(), t.team == team, team_visible(document_types))
-            .order_by(t.name)
+            .order_by(t.name, t.id)
         )
         async with self.tx() as c:
             return await rows(c, q, TypeRow)
+
+    async def list(self, team: str, params: ListParams) -> tuple[list[TypeRow], ListPage]:
+        """One page of the team's types on the shared list contract, by name, searched on the name."""
+        t = document_types.c
+        query = sa.select(document_types).where(
+            t.tenant_id == isolation.tenant(), t.team == team, team_visible(document_types)
+        )
+        async with self.tx() as c:
+            page = await list_page(c, query, params, search=[t.name], default_sort=t.name.asc())
+        return [TypeRow.model_validate(r) for r in page["data"]], page
 
     async def version(self, type_id: str, n: int) -> VersionRow | None:
         v = document_type_versions.c

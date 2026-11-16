@@ -168,7 +168,7 @@ async def test_a_viewer_extracts_and_keeps_types_but_adds_none(make: Make) -> No
         listed = data(await c.get("/v1/document-types", headers=OPS))
         refused = await c.post("/v1/document-types", json={**TYPE, "id": "viewer_type"}, headers=OPS)
         kept = await c.post("/v1/document-types/invoice_notice/versions", json={"fields": FIELDS}, headers=OPS)
-    assert listed["canCreate"] is False and [t["id"] for t in listed["items"]] == ["invoice_notice"]
+    assert listed["canCreate"] is False and [t["id"] for t in listed["data"]] == ["invoice_notice"]
     assert (refused.status_code, refused.json()["error"]["code"]) == (403, "role_required"), refused.text
     assert kept.status_code in (200, 201), kept.text
 

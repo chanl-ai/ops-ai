@@ -50,7 +50,8 @@ export interface paths {
         };
         /**
          * List Types
-         * @description The team's types, and whether the caller may add one (the console's New type).
+         * @description The team's types on the shared list contract, by name and searched on it, and whether the caller may add
+         *     one (the console's New type).
          */
         get: operations["document_types_list_types"];
         put?: never;
@@ -330,7 +331,8 @@ export interface paths {
         };
         /**
          * File Extractions
-         * @description A file's extractions by the caller's team, newest first; a file the team cannot see is 404.
+         * @description A file's extractions by the caller's team on the shared list contract, newest first; a file the team
+         *     cannot see is 404.
          */
         get: operations["documents_file_extractions"];
         put?: never;
@@ -894,12 +896,22 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
-        /** DocumentTypeList */
+        /**
+         * DocumentTypeList
+         * @description A page of the team's types on the shared list contract.
+         */
         DocumentTypeList: {
             /** Cancreate */
             canCreate: boolean;
-            /** Items */
-            items: components["schemas"]["DocumentTypeRow"][];
+            /** Data */
+            data: components["schemas"]["DocumentTypeRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /** DocumentTypeRef */
         DocumentTypeRef: {
@@ -1997,7 +2009,14 @@ export interface operations {
     };
     document_types_list_types: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3662,7 +3681,11 @@ export interface operations {
             query: {
                 fileId: string;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

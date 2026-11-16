@@ -76,7 +76,7 @@ await withUiStack(
         const listed = await data(await fetch(`${documents}/v1/document-types`, { headers: J }));
         const newType = await page.getByTestId('new-document-type-button').count();
         await shots(page, 'list');
-        check('1 the list shows the team types and New type, because the server says the builder may create', listed.canCreate === true && newType === 1, { canCreate: listed.canCreate, newType, types: listed.items.map((t) => t.id) });
+        check('1 the list shows the team types and New type, because the server says the builder may create', listed.canCreate === true && newType === 1, { canCreate: listed.canCreate, newType, types: listed.data.map((t) => t.id) });
       });
 
       await step("2 the type page loads with its own skeleton, not the record skeleton's rail", async () => {

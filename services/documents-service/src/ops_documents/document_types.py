@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypedDict, cast
 
 import httpx
 
@@ -43,6 +43,8 @@ from ops_extract import boxes, rules, templates
 from ops_extract.checks import fold
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable, segment
 from ops_pii import mask
+from ops_service_kit.http import PageJSON
+from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
@@ -102,6 +104,24 @@ def carried(template: dict[str, Any], keys: set[str]) -> dict[str, Any]:
 def dated(fields: list[dict[str, Any]], order: str | None) -> list[dict[str, Any]]:
     """The version's fields with its date order on each date field, so reading and scoring agree on 03/04/2026."""
     return [{**f, "dateOrder": order or DEFAULT_DATE_ORDER} if f.get("type") == "date" else f for f in fields]
+
+
+class TypeSummary(TypedDict):
+    """A type as the list answers it (`DocumentTypeRow`)."""
+
+    id: str
+    name: str
+    description: str | None
+    latestVersion: int
+
+
+class TypePage(TypedDict):
+    """A page of the team's types (`DocumentTypeList`)."""
+
+    data: list[TypeSummary]
+    pagination: PageJSON
+    facets: dict[str, dict[str, int]]
+    canCreate: bool
 
 
 def _version_view(v: VersionRow) -> dict[str, Any]:
@@ -333,8 +353,16 @@ class DocumentTypes:
     async def list(self, who: Who) -> list[dict[str, Any]]:
         return [
             {"id": r.id, "name": r.name, "description": r.description, "latestVersion": r.latest_version}
-            for r in await self.store.list(who.team)
+            for r in await self.store.every(who.team)
         ]
+
+    async def page(self, who: Who, params: ListParams) -> TypePage:
+        """One page of the team's types, and whether the caller may add one (the console's New type)."""
+        rows, page = await self.store.list(who.team, params)
+        listed = [
+            TypeSummary(id=r.id, name=r.name, description=r.description, latestVersion=r.latest_version) for r in rows
+        ]
+        return TypePage(data=listed, pagination=page["pagination"], facets=page["facets"], canCreate=who.creates)
 
     async def name(self, who: Who, type_id: str) -> str | None:
         row = await self._own(who, type_id)

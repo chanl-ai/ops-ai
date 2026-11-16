@@ -11,7 +11,7 @@ from pydantic import Field
 
 from ops_ingest.reading import FileFacts, OcrMode
 from ops_ingest.reading import Page as ReadingPage
-from ops_service_kit.http import In, Out
+from ops_service_kit.http import In, ListResult, Out
 
 
 class ExtractionRequest(In):
@@ -258,8 +258,9 @@ class DocumentTypeRow(Out):
     latest_version: int
 
 
-class DocumentTypeList(Out):
-    items: list[DocumentTypeRow]
+class DocumentTypeList(ListResult[DocumentTypeRow]):
+    """A page of the team's types on the shared list contract."""
+
     # Whether the caller may add a type in the team, so the console never decides it from a role.
     can_create: bool
 

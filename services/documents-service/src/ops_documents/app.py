@@ -81,8 +81,8 @@ from ops_service_kit.http import (
     install_error_handlers,
     ok,
     operation_id,
-    paged,
 )
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_store import background as background_tasks
@@ -295,13 +295,12 @@ def create_documents_app(
     async def file_extractions(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
         _: Tx,
+        q: ListQuery,
         file_id: str = Query(alias="fileId", min_length=1, max_length=64),
-        page: int = Query(1, ge=1),
-        page_size: int = Query(20, alias="pageSize", ge=1, le=100),
     ) -> JSONResponse:
-        """A file's extractions by the caller's team, newest first; a file the team cannot see is 404."""
-        rows, total = await extractor.for_file(who, file_id, page=page, page_size=page_size)
-        return ok(paged(rows, total, page, page_size))
+        """A file's extractions by the caller's team on the shared list contract, newest first; a file the team
+        cannot see is 404."""
+        return ok(await extractor.for_file(who, file_id, q))
 
     @docs.post("/classifications", response_model=Envelope[Classification], dependencies=[service_scope("run")])
     async def classify_file(body: ClassifyIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -442,9 +441,10 @@ def create_documents_app(
         return ok(made, 201)
 
     @types.get("", response_model=Envelope[DocumentTypeList], dependencies=[service_scope("view")])
-    async def list_types(who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The team's types, and whether the caller may add one (the console's New type)."""
-        return ok({"items": await document_types.list(who), "canCreate": who.creates})
+    async def list_types(who: Caller, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The team's types on the shared list contract, by name and searched on it, and whether the caller may add
+        one (the console's New type)."""
+        return ok(await document_types.page(who, q))
 
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])
     async def get_type(type_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

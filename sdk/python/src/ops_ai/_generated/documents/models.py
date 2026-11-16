@@ -472,7 +472,9 @@ class DocumentType(TypedDict, closed=True):
 
 class DocumentTypeList(TypedDict, closed=True):
     canCreate: bool
-    items: list[DocumentTypeRow]
+    data: list[DocumentTypeRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
 
 
 class EnvelopeDocumentTypeList(TypedDict, closed=True):

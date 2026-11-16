@@ -26,8 +26,9 @@ queries = 0
 ["GET /v1/documents/layout/{file_id}"]
 queries = 2
 
+# The shared list contract: the count, then the page.
 ["GET /v1/document-types"]
-queries = 2
+queries = 3
 
 ["GET /v1/document-types/{type_id}"]
 queries = 4

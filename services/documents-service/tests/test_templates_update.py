@@ -126,6 +126,4 @@ async def test_add_after_the_pin_moves_answers_the_copy_the_team_holds(make: Mak
     again = await install(svc)
     assert again.status_code == 200, again.text
     assert again.json()["data"]["copy"]["id"] == first["id"]
-    assert [t["name"] for t in data(await svc.client.get("/v1/document-types", headers=OPS))["items"]] == [
-        "Case letter"
-    ]
+    assert [t["name"] for t in data(await svc.client.get("/v1/document-types", headers=OPS))["data"]] == ["Case letter"]

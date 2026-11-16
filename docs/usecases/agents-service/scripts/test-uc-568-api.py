@@ -491,7 +491,7 @@ def proposed(documents: httpx.Client, scan: str) -> None:
     held = got(documents.get(f"/v1/document-types/{type_id}")) or {}
     samples = [s.get("fileId") for s in held.get("samples") or []]
     listed = got(documents.get("/v1/document-types", headers=NADIA)) or {}
-    elsewhere = [t.get("id") for t in listed.get("items") or []]
+    elsewhere = [t.get("id") for t in listed.get("data") or []]
     _, again = read(documents, scan, {"documentTypeId": type_id, "ocr": True})
     values = {k: (v or {}).get("value") for k, v in (again.get("fields") or {}).items()}
     want = {k: v["value"] for k, v in RENAMED.items()}

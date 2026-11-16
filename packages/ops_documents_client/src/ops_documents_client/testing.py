@@ -8,16 +8,32 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
 
 from ops_documents_client import DocumentsClient
 from ops_identity import ServiceClient, dev_service_signer
+from ops_service_kit.http import PageJSON
 
 
 def _error(status: int, code: str, message: str) -> httpx.Response:
     return httpx.Response(status, json={"success": False, "error": {"code": code, "message": message}})
+
+
+class FakeType(TypedDict):
+    """A document type as the list answers it."""
+
+    id: str
+    name: str
+    description: str | None
+    latestVersion: int
+
+
+class FakeTypesPage(TypedDict):
+    data: list[FakeType]
+    pagination: PageJSON
+    facets: dict[str, dict[str, int]]
 
 
 @dataclass
@@ -32,6 +48,9 @@ class FakeDocumentsService:
     # Readings made, by (file id, OCR mode); a second ask for the same pair reads nothing.
     readings: dict[tuple[str, str], int] = field(default_factory=dict[tuple[str, str], int])
     reads: int = 0
+    # The team's document types, answered a page of `type_page_size` at a time as the real list is.
+    types: list[FakeType] = field(default_factory=list[FakeType])
+    type_page_size: int = 20
     _running: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
 
     def _reading(self, file_id: str, ocr: str) -> dict[str, Any]:
@@ -60,10 +79,20 @@ class FakeDocumentsService:
             return {"id": extraction_id, "status": "unreadable", "outcome": "unreadable", "fileId": file_id}
         return {"id": extraction_id, "status": "done", "outcome": "ok", "fileId": file_id}
 
+    def _types_page(self, page: int) -> FakeTypesPage:
+        size, total = self.type_page_size, len(self.types)
+        pages = max(1, -(-total // size))
+        window = PageJSON(
+            page=page, pageSize=size, total=total, totalPages=pages, hasNext=page < pages, hasPrev=page > 1
+        )
+        return FakeTypesPage(data=self.types[(page - 1) * size : page * size], pagination=window, facets={})
+
     def handle(self, request: httpx.Request) -> httpx.Response:
         if self.refuse is not None:
             return _error(*self.refuse)
         path = request.url.path
+        if request.method == "GET" and path == "/v1/document-types":
+            return httpx.Response(200, json={"data": self._types_page(int(request.url.params.get("page", "1")))})
         if request.method == "POST" and path == "/v1/documents/readings":
             body = json.loads(request.content)
             asked = (str(body["fileId"]), str(body.get("ocr") or "auto"))

@@ -42,9 +42,11 @@ from ops_extract.pages import Pages
 from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_ingest.reading import Reading, read
+from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
+from ops_store.listing import ListPage
 
 log = get_logger("ops_documents.extraction")
 
@@ -654,11 +656,12 @@ class Extractor:
         ]
         return answer_of(row) | {"corrections": corrections}
 
-    async def for_file(self, who: Who, file_id: str, *, page: int, page_size: int) -> tuple[list[dict[str, Any]], int]:
+    async def for_file(self, who: Who, file_id: str, params: ListParams) -> ListPage:
         """One page of the team's extractions of a file it can see, newest first (the file page's Fields tab)."""
         await self.files.readable(who, file_id)
-        rows, total = await self.store.for_file(who.team, file_id, offset=(page - 1) * page_size, limit=page_size)
-        return [answer_of(r) for r in rows], total
+        rows, page = await self.store.for_file(who.team, file_id, params)
+        page["data"] = [answer_of(r) for r in rows]
+        return page
 
     async def correct(
         self, who: Who, extraction_id: str, key: str, value: Any, *, record: int | None = None
@@ -761,7 +764,7 @@ class Extractor:
         doc_type = cast(dict[str, Any] | None, row.request.get("documentType"))
         if not doc_type:
             return None
-        newest, _ = await self.store.for_file(who.team, row.file_id, offset=0, limit=1)
+        newest, _ = await self.store.for_file(who.team, row.file_id, ListParams(page_size=1))
         if not newest or newest[0].id != row.id:
             return None
         name = await self.types.name(who, str(doc_type.get("id"))) if self.types is not None else None

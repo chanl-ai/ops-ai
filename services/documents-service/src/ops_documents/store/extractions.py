@@ -23,7 +23,9 @@ from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.document_types import EXAMPLES_KEPT_PER_FIELD, document_type_examples
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
 from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
+from ops_store.listing import ListPage, list_page
 from ops_store.outbox import add, outbox_table
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
@@ -356,25 +358,16 @@ class ExtractionsStore(Store):
         async with self.system_tx(RECOVER_PENDING) as c:
             return await rows(c, query, ExtractionRow)
 
-    async def for_file(self, team: str, file_id: str, *, offset: int, limit: int) -> tuple[list[ExtractionRow], int]:
-        """One page of the team's extractions of one file, newest first, and how many there are."""
-        tenant = isolation.tenant()
-        where = (extractions.c.tenant_id == tenant, extractions.c.team == team, extractions.c.file_id == file_id)
-        query = (
-            sa.select(*ROW)
-            .where(*where, team_visible(extractions))
-            .order_by(extractions.c.asked_at.desc(), extractions.c.id)
+    async def for_file(self, team: str, file_id: str, params: ListParams) -> tuple[list[ExtractionRow], ListPage]:
+        """One page of the team's extractions of one file on the shared list contract, newest first; the rows, and
+        the page whose `data` the caller fills with their answers."""
+        t = extractions.c
+        query = sa.select(*ROW).where(
+            t.tenant_id == isolation.tenant(), t.team == team, t.file_id == file_id, team_visible(extractions)
         )
         async with self.tx() as c:
-            found = await rows(c, query.offset(offset).limit(limit), ExtractionRow)
-            total = int(
-                (
-                    await c.execute(
-                        sa.select(sa.func.count()).select_from(extractions).where(*where, team_visible(extractions))
-                    )
-                ).scalar_one()
-            )
-        return found, total
+            page = await list_page(c, query, params, default_sort=t.asked_at.desc())
+        return [ExtractionRow.model_validate(r) for r in page["data"]], page
 
     async def correct(
         self,

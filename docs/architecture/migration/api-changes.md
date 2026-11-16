@@ -41,11 +41,12 @@ that has not changed still gets the same answer.
 | `GET /health/background` | new route | absent | the service's background processes (`models_spend_retention`, the sweep of idle key spend) and their state, as every service answers it | Nothing; new | Yes |
 | `GET /health` | reply model | an open object | `Health`: `status` only, no other field | Nothing | Yes |
 | `POST /v1/models/chat/completions` | reply field `choices[].message.tool_calls` | each call passed on as the provider sent it, any key included | `ToolCall`: `id`, `type` `function`, `function` {`name`, `arguments`}, OpenAI's names unchanged; a key outside OpenAI's format is not passed on | Nothing for an OpenAI client | Yes |
-| `GET /health` | reply model | an untyped object `{status, reason?}`; the 503 body was written by hand | `Health`: `status` `ok` or `degraded`, `reason` `database` or `ocr` or absent, no other field; the same bodies on 200 and 503 | Nothing | Yes |
 
 ## documents-service
 
 | Route | What changed | Before | After | What a caller must change | Old form works |
 |---|---|---|---|---|---|
 | `POST /v1/documents/extractions` | behaviour: files-service fails after the extraction is saved | the request failed and the row stayed `queued`, so a retry with the same `Idempotency-Key` answered 202 `queued` until the process restarted | the row is settled `failed` (`error.code` `failed`), so a retry with the same key runs it again at once | Nothing | Yes |
+| `GET /v1/document-types` | shared list contract | `{items, canCreate}`, every type of the team | `DocumentTypeList`: `{data, pagination, facets, canCreate}`, one page (`page`, `pageSize`, `search` on the name, `ids`), by name then key | Read `data` and page with `pagination.hasNext`. Follow: console `apps/console/src/hooks/document-type-queries.ts`, `apps/console/src/lib/types/document-types.ts` (`items` to `data`); `ops_documents_client.document_types()` pages (done) | No |
+| `GET /v1/documents/extractions` | shared list contract | `page`, `pageSize` 1 to 100 (above refused), ties by asked time then id ascending | `ListQuery`: `pageSize` above the install maximum (50 by default) answers at the maximum; `search`, `sortBy`, `ids` accepted; ties by id descending; the reply shape is unchanged | Nothing unless asking for more than 50 a page. Follow: console `apps/console/src/lib/types/extractions.ts` (check its page size) | Yes |
 | `GET /health` | reply model | an untyped object `{status, reason?}`; the 503 body was written by hand | `Health`: `status` `ok` or `degraded`, `reason` `database` or `ocr` or absent, no other field; the same bodies on 200 and 503 | Nothing | Yes |
