@@ -90,6 +90,9 @@ users = sa.Table(
     info=TENANT_SCOPED,
 )
 
+# Tenant-scoped, not team-owned: a membership is the account's record of who is in which team ("The tenant holds
+# people, not work", docs/architecture/identity-and-tenancy.md), read across teams by the account's access pages
+# (TENANT_HELD in scripts/tests/test_team_boundary.py, which fails on a team column that is neither).
 members = sa.Table(
     "members",
     metadata,
