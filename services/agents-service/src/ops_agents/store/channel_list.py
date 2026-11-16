@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_definitions, engine_runs
 from ops_store import Guarantee
@@ -21,7 +20,7 @@ from .agent_registry import registry_agent_versions, registry_agents
 from .graphs import graph_threads
 from .mailboxes import mailboxes
 from .poll_cursors import poll_cursors
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 from .trigger_events import trigger_events
 from .widget_deployments import widget_deployments
 
@@ -64,11 +63,8 @@ def watched_address(definition: dict[str, Any] | None) -> str | None:
     return None
 
 
-class ChannelList:
+class ChannelList(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def live_definitions(self) -> list[dict[str, Any]]:
         """The tenant's live workflow versions, with their definitions."""
@@ -76,14 +72,13 @@ class ChannelList:
         q = sa.select(d.c.workflow_id, d.c.name, d.c.version, d.c.definition, d.c.team_id).where(
             d.c.tenant_id == current_tenant(), d.c.stage == "live", d.c.archived_at.is_(None)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def published_version(self, agent_id: str) -> Any:
-        """The agent's published version, None when it has none, NOT_FOUND when there is no such agent. The registry is
-        not a tenant table, so it is read on its own connection."""
+        """The agent's published version, None when it has none, NOT_FOUND when there is no such agent."""
         a = registry_agents
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             row = (await c.execute(sa.select(a.c.published_version).where(a.c.id == agent_id, team_visible(a)))).first()
         return NOT_FOUND if row is None else row[0]
 
@@ -99,7 +94,7 @@ class ChannelList:
         counts: dict[str, Counts] = {s: Counts() for s in starters}
         r, t, d = engine_runs, graph_threads, engine_definitions
         thread_starter = t.c.meta["startedBy"].as_string()
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             for who, n_day, n_err, n_week, last in (
                 await c.execute(
                     sa.select(
@@ -151,9 +146,9 @@ class ChannelList:
             q = (
                 sa.select(a.c.id, v.c.spec["name"].as_string(), a.c.published_version)
                 .select_from(a.join(v, sa.and_(v.c.agent_id == a.c.id, v.c.version == a.c.version)))
-                .where(a.c.id.in_(agent_ids))
+                .where(a.c.id.in_(agent_ids), team_visible(a))
             )
-            async with self.engine.connect() as c:
+            async with self.tx() as c:
                 agents = {str(i): (str(n or i), pv) for i, n, pv in (await c.execute(q)).all()}
         out: list[dict[str, Any]] = []
         for k in keys:
@@ -178,7 +173,7 @@ class ChannelList:
         day, week = _iso(at - timedelta(days=1)), _iso(at - timedelta(days=7))
         tenant = current_tenant()
         out = Listed()
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             m = mailboxes
             boxes = [
                 dict(r)
@@ -295,14 +290,13 @@ class ChannelList:
                 )
         agent_ids = {str(dep["agent_id"]) for dep in out.chat}
         if agent_ids:
-            # The registry is not a tenant table: the tenant role cannot read it, so it is read on its own connection.
             a, v = registry_agents, registry_agent_versions
             q = (
                 sa.select(a.c.id, v.c.spec["name"].as_string(), a.c.published_version)
                 .select_from(a.join(v, sa.and_(v.c.agent_id == a.c.id, v.c.version == a.c.version)))
-                .where(a.c.id.in_(agent_ids))
+                .where(a.c.id.in_(agent_ids), team_visible(a))
             )
-            async with self.engine.connect() as c:
+            async with self.tx() as c:
                 agents = {str(i): (str(n or i), p) for i, n, p in (await c.execute(q)).all()}
             for dep in out.chat:
                 dep["agent_name"], dep["published_version"] = agents.get(
