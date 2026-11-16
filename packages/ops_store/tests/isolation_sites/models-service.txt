@@ -1,4 +1,1 @@
-# models-service: 18 raw transactions and 0 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
-5 raw services/models-service/src/ops_models/store/aliases.py
-4 raw services/models-service/src/ops_models/store/calls.py
-9 raw services/models-service/src/ops_models/store/keys.py
+# models-service: 0 raw transactions and 0 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.

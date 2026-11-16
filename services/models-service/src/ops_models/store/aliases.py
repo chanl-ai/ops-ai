@@ -18,6 +18,10 @@ from ops_store.store import Store
 from .tables import model_aliases as t
 from .tables import provider_connections as p
 
+# Why aliases are read and written with no tenant (`Store.install_tx`): the install's, serving every tenant's calls,
+# including a completion that authenticates by a model key and names no tenant.
+ALIASES = "model_aliases"
+
 SENSITIVITY = ("public", "internal", "confidential", "restricted")
 
 
@@ -72,21 +76,21 @@ class Aliases(Store):
 
     async def current(self, name: str) -> ServingAlias | None:
         """The version serving `name`, with its connection's type, base URL, key name, api-version and regions."""
-        async with self.engine.connect() as c:
+        async with self.install_tx(ALIASES) as c:
             q = SERVING.where(t.c.name == name).order_by(t.c.version.desc()).limit(1)
             return await one(c, q, ServingAlias)
 
     async def all_current(self) -> list[ServingAlias]:
-        async with self.engine.connect() as c:
+        async with self.install_tx(ALIASES) as c:
             return await rows(c, SERVING.order_by(t.c.name), ServingAlias)
 
     async def versions(self, name: str) -> list[AliasRow]:
-        async with self.engine.connect() as c:
+        async with self.install_tx(ALIASES) as c:
             return await rows(c, t.select().where(t.c.name == name).order_by(t.c.version), AliasRow)
 
     async def create(self, name: str, kind: str, fields: Mapping[str, Any]) -> bool:
         """Version 1 of a new alias; False, and nothing written, when the alias exists."""
-        async with self.engine.begin() as c:
+        async with self.install_tx(ALIASES) as c:
             if (await c.execute(sa.select(t.c.name).where(t.c.name == name))).first():
                 return False
             await c.execute(t.insert().values(**_row(name, 1, kind, fields)))
@@ -94,16 +98,16 @@ class Aliases(Store):
 
     async def add_version(self, name: str, fields: Mapping[str, Any]) -> int | None:
         """The next version of `name`, which replaces the one serving; None when there is no such alias."""
-        async with self.engine.begin() as c:
+        async with self.install_tx(ALIASES) as c:
             newest = t.select().where(t.c.name == name).order_by(t.c.version.desc()).limit(1)
-            last = (await c.execute(locked(newest, t))).first()
+            last = await one(c, locked(newest, t), AliasRow)
             if last is None:
                 return None
-            version = int(last.version) + 1
+            version = last.version + 1
             # One version of an alias is current at a time (ux_model_aliases_current), so the old one is retired in
             # this transaction.
             await c.execute(t.update().where(t.c.name == name, t.c.status == "current").values(status="retired"))
-            await c.execute(t.insert().values(**_row(name, version, str(last.kind), fields)))
+            await c.execute(t.insert().values(**_row(name, version, last.kind, fields)))
         return version
 
 

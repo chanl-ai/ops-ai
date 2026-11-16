@@ -101,6 +101,10 @@ WIDENINGS: dict[str, set[str]] = {
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
     # The install's model provider connections, read by every tenant's calls (`Store.install_tx`, no tenant).
     "CONNECTIONS": {"services/models-service/src/ops_models/store/providers.py"},
+    # Its aliases, model keys and call log, read by a completion that authenticates by a model key and names no tenant.
+    "ALIASES": {"services/models-service/src/ops_models/store/aliases.py"},
+    "MODEL_KEYS": {"services/models-service/src/ops_models/store/keys.py"},
+    "CALL_LOG": {"services/models-service/src/ops_models/store/calls.py"},
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
     "BACKGROUND_PAGE": {"services/agents-service/src/ops_agents/store/background.py"},

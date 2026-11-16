@@ -75,6 +75,7 @@ from .schemas import (
 )
 from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, ProviderKeyStore, Providers, cleared
 from .store.aliases import AliasRow, ServingAlias
+from .store.keys import KeyRow
 from .store.providers import ProviderRow
 
 
@@ -234,17 +235,17 @@ def _iso(v: datetime | None) -> str | None:
     return v.isoformat() if v is not None else None
 
 
-def _key_view(r: Mapping[str, Any]) -> dict[str, Any]:
+def _key_view(r: KeyRow) -> dict[str, Any]:
     return {
-        "id": r["id"],
-        "kind": r["kind"],
-        "budget": str(r["budget"]),
-        "spent": str(r["spent"]),
-        "rateLimitPerMinute": r["rate_limit_per_minute"],
-        "expiresAt": _iso(r["expires_at"]),
-        "status": r["status"],
-        "rotatedAt": _iso(r["rotated_at"]),
-        "previousValidUntil": _iso(r["previous_valid_until"]),
+        "id": r.id,
+        "kind": r.kind,
+        "budget": str(r.budget),
+        "spent": str(r.spent),
+        "rateLimitPerMinute": r.rate_limit_per_minute,
+        "expiresAt": _iso(r.expires_at),
+        "status": r.status,
+        "rotatedAt": _iso(r.rotated_at),
+        "previousValidUntil": _iso(r.previous_valid_until),
     }
 
 
@@ -288,14 +289,14 @@ def _provider_key_view(r: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _key_refusal(key: Mapping[str, Any], now: datetime) -> tuple[int, str, str] | None:
+def _key_refusal(key: KeyRow, now: datetime) -> tuple[int, str, str] | None:
     """Why a key may not spend right now: revoked, expired or at its budget. None when it may."""
-    if key["status"] != "active":
-        return 403, "key_revoked", f"Model key {key['id']} is revoked."
-    if key["expires_at"] is not None and key["expires_at"] <= now:
-        return 403, "key_expired", f"Model key {key['id']} expired at {key['expires_at'].isoformat()}."
-    if key["spent"] >= key["budget"]:
-        return 429, "key_budget_exhausted", f"Model key {key['id']} has spent its budget of {key['budget']}."
+    if key.status != "active":
+        return 403, "key_revoked", f"Model key {key.id} is revoked."
+    if key.expires_at is not None and key.expires_at <= now:
+        return 403, "key_expired", f"Model key {key.id} expired at {key.expires_at.isoformat()}."
+    if key.spent >= key.budget:
+        return 429, "key_budget_exhausted", f"Model key {key.id} has spent its budget of {key.budget}."
     return None
 
 
@@ -689,27 +690,27 @@ def create_models_app(
         )
         items = [
             {
-                "id": r["id"],
-                "keyId": r["key_id"],
-                "alias": r["alias"],
-                "aliasVersion": r["alias_version"],
-                "providerModel": r["provider_model"],
-                "inputTokens": r["input_tokens"],
-                "outputTokens": r["output_tokens"],
-                "cost": str(r["cost"]),
-                "latencyMs": r["latency_ms"],
-                "outcome": r["outcome"],
-                "reason": r["reason"],
-                "runId": r["run_id"],
-                "stepId": r["step_id"],
-                "threadId": r["thread_id"],
-                "requestHash": r["request_hash"],
-                "createdAt": _iso(r["created_at"]),
-                "images": r["images"],
+                "id": r.id,
+                "keyId": r.key_id,
+                "alias": r.alias,
+                "aliasVersion": r.alias_version,
+                "providerModel": r.provider_model,
+                "inputTokens": r.input_tokens,
+                "outputTokens": r.output_tokens,
+                "cost": str(r.cost),
+                "latencyMs": r.latency_ms,
+                "outcome": r.outcome,
+                "reason": r.reason,
+                "runId": r.run_id,
+                "stepId": r.step_id,
+                "threadId": r.thread_id,
+                "requestHash": r.request_hash,
+                "createdAt": _iso(r.created_at),
+                "images": r.images,
             }
             for r in rows
         ]
-        by_key = [{"keyId": k, "calls": n, "cost": str(c)} for k, n, c in totals]
+        by_key = [{"keyId": t.key_id, "calls": t.calls, "cost": str(t.cost)} for t in totals]
         return ok({"items": items, "byKey": by_key})
 
     @app.post(
@@ -727,7 +728,7 @@ def create_models_app(
             return refused(403, "key_not_registered", f"No model key is registered for {body.key_id}.")
         if (why := _key_refusal(key, datetime.now(UTC))) is not None:
             return refused(*why)
-        remaining: Decimal = key["budget"] - key["spent"]
+        remaining: Decimal = key.budget - key.spent
         if body.alias and body.estimated_tokens:
             alias_row = await aliases.current(body.alias)
             if alias_row is not None:
@@ -740,7 +741,7 @@ def create_models_app(
         """One authenticated call on its way to a provider: the key, the alias version it is served by, its price, and
         the one call-log row it writes, whether it is refused here, fails at the provider or settles."""
 
-        def __init__(self, key: Mapping[str, Any], row: dict[str, Any], tenant: str | None) -> None:
+        def __init__(self, key: KeyRow, row: dict[str, Any], tenant: str | None) -> None:
             self.key, self.row, self.tenant = key, row, tenant
             self.started = time.perf_counter()
             self.version: dict[str, Any] = {}
@@ -769,12 +770,12 @@ def create_models_app(
 
         async def settle(self, input_tokens: int, output_tokens: int) -> None:
             spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), self.price)
-            tenant = self.tenant if self.key["tenant_budget"] is not None else None
+            tenant = self.tenant if self.key.tenant_budget is not None else None
             if tenant is not None:
                 with isolation.scope(tenant, None):
-                    await key_store.spend(self.key["id"], spend, tenant_id=tenant)
+                    await key_store.spend(self.key.id, spend, tenant_id=tenant)
             else:
-                await key_store.spend(self.key["id"], spend)
+                await key_store.spend(self.key.id, spend)
             # An Azure answer from another region than its connection names is recorded on the row, not refused.
             provider = self.provider
             mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
@@ -822,46 +823,46 @@ def create_models_app(
         key = await key_store.by_secret(secret_hash(presented) if presented else "", now)
         if key is None:
             return refused(401, "invalid_key", "The model key is unknown, or a rotated secret past its overlap.")
-        row_values = {"key_id": key["id"], "alias": alias_name, "sensitivity": sensitivity, "tenant_id": tenant}
+        row_values = {"key_id": key.id, "alias": alias_name, "sensitivity": sensitivity, "tenant_id": tenant}
         gate = Gate(key, {**row_values, **row, "images": images}, tenant)
         if (why := _key_refusal(key, now)) is not None:
             return await gate.refuse(*why)
-        if key["tenant_budget"] is not None:
+        if key.tenant_budget is not None:
             # A key one service spends for many tenants: the tenant names its own budget row.
             if not tenant:
                 return await gate.refuse(
-                    400, "tenant_required", f"Model key {key['id']} spends per tenant; send X-Tenant-Id."
+                    400, "tenant_required", f"Model key {key.id} spends per tenant; send X-Tenant-Id."
                 )
             # The share is the named tenant's: read as that tenant, which the database holds the row to.
             with isolation.scope(tenant, None):
-                share = await key_store.tenant_share(key["id"], tenant, key["tenant_budget"])
-            if share["spent"] >= share["budget"]:
+                share = await key_store.tenant_share(key.id, tenant, key.tenant_budget)
+            if share.spent >= share.budget:
                 return await gate.refuse(
                     429,
                     "tenant_budget_exhausted",
-                    f"Tenant {tenant} has spent its budget of {share['budget']} on model key {key['id']}.",
+                    f"Tenant {tenant} has spent its budget of {share.budget} on model key {key.id}.",
                 )
-        if key.get("daily_cap") is not None:
+        if key.daily_cap is not None:
             today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            if await call_log.spent(key["id"], since=today) >= key["daily_cap"]:
+            if await call_log.spent(key.id, since=today) >= key.daily_cap:
                 return await gate.refuse(
-                    429, "daily_spend_cap", f"Model key {key['id']} has spent its {key['daily_cap']} for today."
+                    429, "daily_spend_cap", f"Model key {key.id} has spent its {key.daily_cap} for today."
                 )
         if run_cap is not None and row.get("run_id"):
             try:
                 cap = Decimal(run_cap)
             except InvalidOperation:
                 return await gate.refuse(400, "invalid_spend_cap", "X-Run-Spend-Cap is an amount, such as 5.00.")
-            if await call_log.spent(key["id"], run_id=row["run_id"]) >= cap:
+            if await call_log.spent(key.id, run_id=row["run_id"]) >= cap:
                 return await gate.refuse(
-                    429, "run_spend_cap", f"Run {row['run_id']} has spent its {cap} on model key {key['id']}."
+                    429, "run_spend_cap", f"Run {row['run_id']} has spent its {cap} on model key {key.id}."
                 )
         # The log's times are the database's, so the one-minute window is measured on the database's clock too.
-        recent = await call_log.recent(key["id"])
+        recent = await call_log.recent(key.id)
         alias_row = await aliases.current(alias_name)
-        if recent >= key["rate_limit_per_minute"]:
+        if recent >= key.rate_limit_per_minute:
             return await gate.refuse(
-                429, "rate_limited", f"Model key {key['id']} is over {key['rate_limit_per_minute']} calls a minute."
+                429, "rate_limited", f"Model key {key.id} is over {key.rate_limit_per_minute} calls a minute."
             )
         if alias_row is None:
             return await gate.refuse(404, "alias_not_found", f"No current version of alias {alias_name}.")
