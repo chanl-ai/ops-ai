@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ops_agents.graphs.definition import WorkflowDefinition
+from ops_agents.store.agent_registry import registry_agents
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
@@ -125,7 +126,9 @@ async def _owners(
 ) -> list[str | None]:
     """subject_team of each request, with agents read in one query and workflows from the versions already read
     (`versions`, the requested versions), so a list's reads do not grow with its requests."""
-    agents = await registry(rt).owner_teams({str(r["subject_id"]) for r in requests if r["kind"] == "agent"})
+    reg, asked = registry(rt), {str(r["subject_id"]) for r in requests if r["kind"] == "agent"}
+    async with reg.tx() as c:
+        agents = await reg.owner_teams(c, registry_agents, asked, "the team each publish request is a task of")
     out: list[str | None] = []
     for r in requests:
         if r["kind"] == "agent":

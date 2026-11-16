@@ -1,4 +1,4 @@
-# agents-service: 84 raw transactions and 10 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+# agents-service: 70 raw transactions and 10 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
 2 caught services/agents-service/src/ops_agents/store/agent_registry.py
 1 caught services/agents-service/src/ops_agents/store/cases.py
 1 caught services/agents-service/src/ops_agents/store/events.py
@@ -12,7 +12,6 @@
 2 install services/agents-service/src/ops_agents/store/timers.py
 1 raw services/agents-service/src/ops_agents/api/channels/inbox.py
 1 raw services/agents-service/src/ops_agents/store/actor_names.py
-14 raw services/agents-service/src/ops_agents/store/agent_registry.py
 1 raw services/agents-service/src/ops_agents/store/base.py
 3 raw services/agents-service/src/ops_agents/store/channel_list.py
 10 raw services/agents-service/src/ops_agents/store/channels.py
