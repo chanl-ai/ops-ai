@@ -1,7 +1,8 @@
 """`/v1/me` reads its answer in its own few statements; `/v1/me/permissions` and `/v1/teams` read theirs through
-`holdings_in` and `teams_of`. By failure mode: an assignment in an archived team counted, a team only an assignment
-names left out or unnamed, a team-subject assignment missed, a `*` role missed, or a workspace admin's other teams
-missing or given another role. Each answer must equal the other routes' for a person holding all of these."""
+`holdings_in` and `teams_of`. By failure mode: an assignment in an archived team or one whose row is gone counted, a
+team only an assignment names left out or unnamed, a team-subject assignment missed, a `*` role missed, or a workspace
+admin's other teams missing or given another role. Each answer must equal the other routes' for a person holding all
+of these."""
 
 from __future__ import annotations
 
@@ -69,11 +70,14 @@ async def test_me_answers_as_the_permissions_and_teams_routes_do(platform: Platf
     await _assign(platform, admin, "viewer", also_named)
     await _assign(platform, admin, "reviewer", member_viewer, subject=("team", member_viewer))
     await _assign(platform, admin, "admin", ANY_TEAM)
+    # A team whose row is gone: acting there answers 403, so neither answer names it.
+    gone = new_id("team")
+    await _assign(platform, admin, "builder", gone)
     me = await _same_answers(platform, admin)
     # The workspace admin sees every active team, the untouched one as admin, and nothing of the archived one.
     assert {t["id"]: t["role"] for t in me["teams"]}[untouched] == "admin"
     assert archived not in {t["id"] for t in me["teams"]}
-    assert archived not in {t["teamId"] for t in me["permissions"]["teams"]}
+    assert not {archived, gone} & {t["teamId"] for t in me["permissions"]["teams"]}
     assert {named_only, also_named} <= {t["teamId"] for t in me["permissions"]["teams"]}
 
     builder = await platform.person(roles=("builder",), tenant_id=tenant)

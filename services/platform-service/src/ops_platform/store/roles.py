@@ -634,46 +634,20 @@ async def access_from(
 
 
 async def holdings_in(c: AsyncConnection, user_id: str) -> Holdings:
-    """`RoleStore.holdings` on the caller's transaction."""
+    """`RoleStore.holdings` on the caller's transaction: the person's active member teams, then `holdings_with`."""
     mine = (
         sa.select(teams.c.id, teams.c.name)
         .join(members, members.c.team_id == teams.c.id)
         .where(members.c.user_id == user_id, members.c.status == "active", teams.c.status == "active")
     )
-    names = {str(r[0]): str(r[1]) for r in (await c.execute(mine)).all()}
-    subject = sa.or_(
-        sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
-        sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
-    )
-    q = (
-        sa.select(
-            role_assignments.c.role_id,
-            roles.c.name,
-            role_assignments.c.team_id,
-            role_assignments.c.subject_kind,
-            role_assignments.c.expires_at,
-        )
-        .join(roles, roles.c.id == role_assignments.c.role_id)
-        .where(subject)
-        .order_by(role_assignments.c.created_at, role_assignments.c.id)
-    )
-    rows = (await c.execute(q)).all()
-    # An assignment in an archived team grants nothing there.
-    archived = {str(t) for t in (await c.execute(sa.select(teams.c.id).where(teams.c.status != "active"))).scalars()}
-    rows = [r for r in rows if str(r[2]) not in archived]
-    # A team named by an assignment but not a membership still needs its name.
-    extra = {str(r[2]) for r in rows} - set(names) - {"*"}
-    if extra:
-        more = await c.execute(sa.select(teams.c.id, teams.c.name).where(teams.c.id.in_(sorted(extra))))
-        names |= {str(r[0]): str(r[1]) for r in more.all()}
-    assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
-    return Holdings(teams=names, assignments=assignments)
+    return await holdings_with(c, user_id, {str(r[0]): str(r[1]) for r in (await c.execute(mine)).all()})
 
 
 async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str]) -> Holdings:
-    """`holdings_in` in one statement, given the person's active member teams (id to name): the assignments made to them
-    or to one of those teams, an archived team's left out, and the names of teams only an assignment names. `/v1/me`
-    reads it this way; tests/test_me_reads.py holds it to `holdings_in`'s answer."""
+    """The one holdings read, in one statement, given the person's active member teams (id to name): the assignments
+    made to them or to one of those teams, and the names of teams only an assignment names. An assignment counts only
+    in every team (`*`) or in an active team: an archived team's, or one whose row is gone, grants nothing, since
+    acting there answers 403. `/v1/me` and `/v1/me/permissions` both read it."""
     subject = sa.or_(
         sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
         sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
@@ -689,8 +663,7 @@ async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str])
         )
         .join(roles, roles.c.id == role_assignments.c.role_id)
         .outerjoin(teams, teams.c.id == role_assignments.c.team_id)
-        # An assignment in an archived team grants nothing there.
-        .where(subject, sa.or_(teams.c.status.is_(None), teams.c.status == "active"))
+        .where(subject, sa.or_(role_assignments.c.team_id == ANY_TEAM, teams.c.status == "active"))
         .order_by(role_assignments.c.created_at, role_assignments.c.id)
     )
     rows = (await c.execute(q)).all()
