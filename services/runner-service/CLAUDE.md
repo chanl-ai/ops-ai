@@ -37,7 +37,8 @@ From this folder (`make help` lists every target):
 | Its tests (real guests on the pinned build; no database) | `make test`, or from the root `make test PKG=services/runner-service` |
 | One test file | `PYTEST_ADDOPTS=tests/test_app.py make test`: this Makefile ignores `T=` |
 | Lint, types | `make lint`, `make typecheck` |
-| Everything | `make verify` (lint, typecheck, test; there is no OpenAPI document or gate) |
+| Everything | `make verify` (lint, typecheck, test and the OpenAPI gate) |
+| The committed contract | `make openapi-check`; `make openapi` rewrites `openapi.json` after a route change |
 | Logs and health | from the root: `make logs SVC=runner FOLLOW=0`, `make health` |
 
 `make api` cannot reach this service: its route answers service tokens only, and `scripts/api_as.py` has no address
