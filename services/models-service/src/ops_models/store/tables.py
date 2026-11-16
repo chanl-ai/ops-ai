@@ -77,6 +77,7 @@ model_aliases = sa.Table(
         postgresql_where=sa.text("status = 'current'"),
         mssql_where=sa.text("status = 'current'"),
     ),
+    info=system("an install's alias versions: every tenant's calls are served by them, and none names a tenant"),
 )
 
 model_keys = sa.Table(
@@ -138,4 +139,7 @@ model_call_log = sa.Table(
     sa.Column("images", sa.Integer, nullable=False, server_default="0"),
     # A run's spend, which a caller's per-run cap (X-Run-Spend-Cap) reads before each call.
     sa.Index("ix_model_call_log_key_run", "key_id", "run_id"),
+    # A key's rate limit and daily and run caps sum its rows across every tenant, and a refusal before any tenant is
+    # known still writes its row, so the log is the install's; tenant_id records whose share paid and polices nothing.
+    info=system("a model key's call log, summed per key across tenants; read only by service tokens"),
 )

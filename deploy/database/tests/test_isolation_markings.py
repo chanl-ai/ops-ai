@@ -64,10 +64,6 @@ WAITING: dict[str, set[str]] = {
         "team_defaults",
         "tool_modules",
     },
-    "models": {
-        "model_aliases",
-        "model_call_log",
-    },
 }
 
 
