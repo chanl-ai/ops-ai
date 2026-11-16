@@ -1,0 +1,88 @@
+# Production gets a tag `vYYYY-MM-DD.N` on content staging ran, and only after a person approves it on the `production`
+# environment (DL5). A tag pushed by release-tag.yml does not start another workflow (events made with the repository's
+# own token never do), so the run also starts by hand with the tag. Nothing here runs until the repository variable
+# PROD_DEPLOY_ENABLED is "true", which the owner sets once the `production` environment exists with required reviewers:
+# an environment named in a workflow that does not exist yet is created with no reviewers, and would deploy unasked.
+#
+# The deploy is the staging deploy (.github/actions/stg-deploy, `make stg-deploy`) aimed at the production apps, which
+# the `production` environment names: variables PROD_APP, PROD_DB_APP and PROD_APP_PREFIX, secrets FLY_API_TOKEN,
+# PROD_DB_URL and PROD_ADMIN_ENV. Migrations run in the release command before the new machine takes traffic. A failed
+# check after the machine was replaced leaves it replaced; `make stg-rollback` with the production app is the way back.
+name: deploy-prod
+
+on:
+  push:
+    tags: ["v20*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to deploy (vYYYY-MM-DD.N)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    # Before anyone is asked to approve: the tag is a release tag, it is on main, and staging ran the same content.
+    if: ${{ vars.PROD_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      sha: ${{ steps.tag.outputs.sha }}
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - id: tag
+        run: |
+          case "$TAG" in v20[0-9][0-9]-[0-9][0-9]-[0-9][0-9].[0-9]*) ;; *) echo "::error::$TAG is not a release tag"; exit 1 ;; esac
+          sha=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
+          git merge-base --is-ancestor "$sha" origin/main || { echo "::error::$TAG is not on main"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: superfly/flyctl-actions/setup-flyctl@98172f70657cb3e15db199af139be99bd3e61200 # master
+      - name: Staging ran this content
+        env:
+          FLY_API_TOKEN: ${{ secrets.STAGING_FLY_API_TOKEN }}
+          STG_APP: ${{ vars.STG_APP }}
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          # A release PR merge makes a commit of its own, so the proof is the tree: some release staging ran holds
+          # exactly the tagged content. Staging's image labels are the short commits it ran.
+          want=$(git rev-parse "$SHA^{tree}")
+          fly releases -a "$STG_APP" --json | python3 -c "import json,sys;[print(r['ImageRef'].rsplit(':',1)[1]) for r in json.load(sys.stdin) if r.get('Status')=='complete' and ':' in r.get('ImageRef','')]" \
+            | while read -r short; do git rev-parse --verify -q "$short^{tree}" || true; done | grep -qx "$want" \
+            || { echo "::error::No staging release ran the content of $TAG. Deploy it to staging first (make stg-deploy-ci REF=$TAG)."; exit 1; }
+
+  deploy:
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    # The approval: the environment's required reviewers hold this job until a person accepts it.
+    environment:
+      name: production
+      url: https://${{ vars.PROD_APP }}.fly.dev
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      STG_APP: ${{ vars.PROD_APP }}
+      STG_DB_APP: ${{ vars.PROD_DB_APP }}
+      STG_APP_PREFIX: ${{ vars.PROD_APP_PREFIX }}
+      STAGING_DB_URL: ${{ secrets.PROD_DB_URL }}
+      STAGING_ADMIN_ENV: ${{ secrets.PROD_ADMIN_ENV }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Deploy the tagged commit
+        uses: ./.github/actions/stg-deploy
+        with:
+          sha: ${{ needs.guard.outputs.sha }}
