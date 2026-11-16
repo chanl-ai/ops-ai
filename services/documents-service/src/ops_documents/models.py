@@ -7,18 +7,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_ingest.reading import FileFacts, OcrMode
 from ops_ingest.reading import Page as ReadingPage
+from ops_service_kit.http import In, Out
 
 
-class Model(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
-class ExtractionRequest(Model):
+class ExtractionRequest(In):
     """`fields` follow the Extract from file step's schema (key, label, type, required, description, enum,
     reviewBelow, alwaysReview); `many` answers one record per thing the document names."""
 
@@ -47,26 +43,26 @@ class ExtractionRequest(Model):
     max_tokens: int | None = Field(default=None, ge=1)
 
 
-class CorrectionIn(Model):
+class CorrectionIn(In):
     value: Any
     # The record's position, for an extraction of several records.
     record: int | None = Field(default=None, ge=0)
 
 
-class DocumentTypeRef(Model):
+class DocumentTypeRef(Out):
     id: str
     version: int
     # The type's name when it was read, so whatever records the read names it without asking again.
     name: str | None = None
 
 
-class ExtractionError(Model):
+class ExtractionError(Out):
     code: str | None
     message: str | None
     details: list[str] | None = None
 
 
-class Classification(Model):
+class Classification(Out):
     """Which of the team's document types a file is: the model's choice and how sure it is, or none.
     `needsReview` when none fits or the confidence is under the floor."""
 
@@ -78,13 +74,13 @@ class Classification(Model):
     floor: float
 
 
-class TemplateMiss(Model):
+class TemplateMiss(Out):
     template_id: str
     score: float
     missing_anchors: list[str]
 
 
-class Extraction(Model):
+class Extraction(Out):
     """An extraction's state, and its scored answer once done: what the Extract from file step's outputs carry."""
 
     id: str
@@ -123,12 +119,12 @@ class Extraction(Model):
     reread_tokens: dict[str, int] | None = None
 
 
-class ClassifyIn(Model):
+class ClassifyIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     ocr: bool = False
 
 
-class DocumentTypeIn(Model):
+class DocumentTypeIn(In):
     """A new document type and its version 1. `id` is the caller's (lowercase, e.g. levy_notice) or generated."""
 
     id: str | None = Field(default=None, max_length=64)
@@ -159,7 +155,7 @@ class DocumentTypeIn(Model):
     sample_file_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
-class DocumentTypeVersionIn(Model):
+class DocumentTypeVersionIn(In):
     fields: list[dict[str, Any]] = Field(
         min_length=1,
         description=(
@@ -189,7 +185,7 @@ class DocumentTypeVersionIn(Model):
     note: str | None = Field(default=None, max_length=500)
 
 
-class DocumentTypeVersion(Model):
+class DocumentTypeVersion(Out):
     version: int
     fields: list[dict[str, Any]]
     many: bool
@@ -204,13 +200,13 @@ class DocumentTypeVersion(Model):
     created_at: datetime
 
 
-class TemplateSuggestIn(Model):
+class TemplateSuggestIn(In):
     """The team's finished reads of the type a suggestion is drawn from."""
 
     extraction_ids: list[str] = Field(min_length=1, max_length=20)
 
 
-class TemplateSuggestion(Model):
+class TemplateSuggestion(Out):
     """A draft template, saved by nobody until a builder posts it as a new version, and how it reads each read it came
     from: matched or the anchors it missed, and per field the read's value against the template's."""
 
@@ -218,7 +214,7 @@ class TemplateSuggestion(Model):
     checks: list[dict[str, Any]]
 
 
-class TemplateOffer(Model):
+class TemplateOffer(Out):
     """Checked model reads of the type that share one layout no current template reads."""
 
     fingerprint: str
@@ -226,13 +222,13 @@ class TemplateOffer(Model):
     count: int
 
 
-class SampleIn(Model):
+class SampleIn(In):
     file_id: str
     # {field: value}, or a list of them in order for a type reading several records.
     expected: Any
 
 
-class DocumentTypeExample(Model):
+class DocumentTypeExample(Out):
     """A correction a person made on a read of the type, which later reads of it are given. `line` is where the
     value was printed, masked as the team masks personal data; `record` is the record's position, for several."""
 
@@ -246,7 +242,7 @@ class DocumentTypeExample(Model):
     created_at: datetime
 
 
-class Sample(Model):
+class Sample(Out):
     id: str
     file_id: str
     name: str
@@ -255,14 +251,14 @@ class Sample(Model):
     added_at: datetime
 
 
-class DocumentTypeRow(Model):
+class DocumentTypeRow(Out):
     id: str
     name: str
     description: str | None
     latest_version: int
 
 
-class DocumentTypeList(Model):
+class DocumentTypeList(Out):
     items: list[DocumentTypeRow]
     # Whether the caller may add a type in the team, so the console never decides it from a role.
     can_create: bool
@@ -278,7 +274,7 @@ class DocumentType(DocumentTypeRow):
     can_edit: bool
 
 
-class TestEstimate(Model):
+class TestEstimate(Out):
     """What testing a version spends, before it runs: priced at the type's measured tokens per call, the
     tenant's when the type has none yet, else a fixed guess; `basis` says which."""
 
@@ -292,13 +288,13 @@ class TestEstimate(Model):
     basis: Literal["type", "tenant", "default"] = "default"
 
 
-class LayoutIn(Model):
+class LayoutIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     # Read a page with no text layer through OCR; a layout read with OCR is cached apart from one read without.
     ocr: bool = False
 
 
-class LayoutPage(Model):
+class LayoutPage(Out):
     number: int
     # Points; None for formats with no pages (DOCX, HTML).
     width: float | None
@@ -306,7 +302,7 @@ class LayoutPage(Model):
     source: Literal["text", "ocr", "mixed", "none"]
 
 
-class LayoutCell(Model):
+class LayoutCell(Out):
     id: str
     row: int
     col: int
@@ -317,7 +313,7 @@ class LayoutCell(Model):
     box: list[float] | None
 
 
-class LayoutBlock(Model):
+class LayoutBlock(Out):
     id: str
     page: int
     kind: Literal["title", "heading", "line", "paragraph", "table"]
@@ -327,7 +323,7 @@ class LayoutBlock(Model):
     cells: list[LayoutCell] | None = None
 
 
-class LayoutWord(Model):
+class LayoutWord(Out):
     page: int
     text: str
     box: list[float]
@@ -335,7 +331,7 @@ class LayoutWord(Model):
     conf: float
 
 
-class Layout(Model):
+class Layout(Out):
     """A file's layout: pages, blocks in reading order with their table cells, and words."""
 
     engine: str
@@ -344,7 +340,7 @@ class Layout(Model):
     words: list[LayoutWord]
 
 
-class TestRun(Model):
+class TestRun(Out):
     id: str
     type_id: str
     version: int
@@ -356,7 +352,7 @@ class TestRun(Model):
     error: str | None = None
 
 
-class ReadingIn(Model):
+class ReadingIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     # off: text layers only; auto: scans and the picture parts of mixed pages; always: every page, for a bad text layer.
     ocr: OcrMode = "auto"
@@ -364,17 +360,17 @@ class ReadingIn(Model):
     language: str = Field("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$")
 
 
-class ReadingSettingsOut(Model):
+class ReadingSettingsOut(Out):
     ocr: OcrMode
     language: str
 
 
-class ReadingError(Model):
+class ReadingError(Out):
     code: str
     message: str
 
 
-class FileReading(Model):
+class FileReading(Out):
     """A file's reading: queued, reading or none (never asked) with its progress, failed with the reason, or done with
     the file's facts and its pages (all of them, or the one asked for). Keyed by the file's bytes and settings, so every
     caller that reads the same file gets this one reading."""
@@ -392,11 +388,11 @@ class FileReading(Model):
     pages: list[ReadingPage] | None = None
 
 
-class PurgeIn(Model):
+class PurgeIn(In):
     file_id: str = Field(min_length=1, max_length=64)
 
 
-class Purged(Model):
+class Purged(Out):
     """What was removed for a deleted file: its extractions (with their corrections), the samples naming it, and the
     readings of its bytes once no other file of the workspace holds them."""
 

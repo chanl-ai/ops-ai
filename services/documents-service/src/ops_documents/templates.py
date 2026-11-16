@@ -28,13 +28,13 @@ from ops_contracts.field_values import DEFAULT_DATE_ORDER
 from ops_documents.document_types import DocumentTypes
 from ops_documents.extraction import request_of
 from ops_documents.files import Who
-from ops_documents.models import DocumentTypeIn, DocumentTypeVersionIn, Model
+from ops_documents.models import DocumentTypeIn, DocumentTypeVersionIn
 from ops_documents.store import NameTakenError, TemplateCopies
 from ops_documents.store.template_copies import CopyRow
 from ops_documents.tools_client import PluginTemplates
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, ok
+from ops_service_kit.http import Envelope, In, Out, ok
 from ops_service_kit.template_merge import FieldOutcome, apply, merge
 
 Kind = Literal["document_type"]
@@ -54,19 +54,19 @@ MERGED: dict[str, str] = {
 FIELD = "field:"
 
 
-class TemplatePlugin(Model):
+class TemplatePlugin(Out):
     id: str
     title: str
     version: str
 
 
-class TemplateRequires(Model):
+class TemplateRequires(Out):
     tools: list[str]
     bind: list[dict[str, str]]
     resources: list[str] = Field(default_factory=list[str])
 
 
-class Installed(Model):
+class Installed(Out):
     # Live copies the team holds of this template, the newest version among them, and whether the source ships a
     # newer one. A copy never changes by itself; updating one is a later card.
     copies: int
@@ -76,7 +76,7 @@ class Installed(Model):
     changed: bool = False
 
 
-class CopyRef(Model):
+class CopyRef(Out):
     id: str
     kind: Kind
     record_id: str
@@ -87,13 +87,13 @@ class CopyRef(Model):
     detached_at: str | None = None
 
 
-class AddCell(Model):
+class AddCell(Out):
     # The roles grid cell a person needs to add this resource, so another service listing it says the same.
     area: str
     action: str
 
 
-class TemplateView(Model):
+class TemplateView(Out):
     source: str
     plugin: TemplatePlugin
     kind: Kind
@@ -114,27 +114,27 @@ class TemplateView(Model):
     copy_: CopyRef | None = Field(default=None, alias="copy")
 
 
-class InstallInput(Model):
+class InstallInput(In):
     # The version listed now when left out; another one is 404 template_version_not_found.
     version: int | None = Field(default=None, ge=1)
     # The copy's name; the template's when left out. Unique in the team, as on create (409 name_taken).
     name: str | None = Field(default=None, min_length=1, max_length=200)
 
 
-class Installation(Model):
+class Installation(Out):
     copy_: CopyRef = Field(alias="copy")
     created: bool
     # Bindings the install left for the person; a document type template names none.
     needs: list[dict[str, str]]
 
 
-class UpdateExpect(Model):
+class UpdateExpect(In):
     # The template digest and the type's newest version digest the person reviewed; a take whose either moved is 409.
     digest: str | None = None
     record_digest: str | None = None
 
 
-class UpdateInput(Model):
+class UpdateInput(In):
     # merge (the default) keeps the team's edits field by field; reset makes the next version from the template and
     # drops them. Left out with `confirm`, the call is a reset: an older console's "take the template as it is".
     mode: Literal["merge", "reset"] | None = None
@@ -146,7 +146,7 @@ class UpdateInput(Model):
     confirm: bool = False
 
 
-class FieldReview(Model):
+class FieldReview(Out):
     field: str
     label: str
     # kept: only the team changed it; taken: only the template did; conflict: both did, the team's unless chosen.
@@ -155,7 +155,7 @@ class FieldReview(Model):
     template: Any = None
 
 
-class UpdateReview(Model):
+class UpdateReview(Out):
     copy_: CopyRef = Field(alias="copy")
     # The template version the copy was made from, and the one the app ships now.
     from_version: int
