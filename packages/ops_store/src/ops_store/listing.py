@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, NotRequired, TypedDict, cast
 
@@ -39,6 +40,17 @@ _NONE: Mapping[str, Any] = MappingProxyType({})
 Rows = sa.Select[*tuple[Any, ...]]
 
 
+@dataclass(frozen=True)
+class Several:
+    """A field a row holds several values of (a source's tags on each of its documents), as a filter and a facet:
+    `values` selects (key, value) pairs, one per value a row holds, and `key` is the column of the list's query the
+    pairs' key names a row by. The filter keeps a row holding any value asked for; the facet counts each value once
+    per row holding it, so a row counts under each of its values and once in the total."""
+
+    key: sa.ColumnElement[Any]
+    values: Rows
+
+
 class ListPage(TypedDict):
     """The `ListResult` JSON (`ops_service_kit.http`), or `LabelledListResult` when the caller asked for labels."""
 
@@ -59,6 +71,7 @@ async def list_page(
     filters: Mapping[str, sa.ColumnElement[Any]] = _NONE,
     facets: Mapping[str, sa.ColumnElement[Any]] = _NONE,
     labels: Mapping[str, Rows] = _NONE,
+    several: Mapping[str, Several] = _NONE,
 ) -> ListPage:
     """count(*), ORDER BY, LIMIT and OFFSET, one GROUP BY per facet, all on `query`; `labels` maps each facet value to
     its label in the same transaction. default_sort is required: SQL Server's OFFSET needs an ORDER BY.
@@ -71,9 +84,12 @@ async def list_page(
     query keys may use, and a key they do not name is ignored; `params.ids` answers exactly those rows by the
     primary key of `query`'s first table, whatever the search says, with the context's tenant for a (tenant_id, id) key
     (a key of more than one other column raises ValueError).
-    A `labels` entry is a select of (value, label), read for the values its facet counted."""
-    _declared({**sortable, **filters})
-    chosen, wanted = _narrowing(query, params, search, filters)
+    A `labels` entry is a select of (value, label), read for the values its facet counted. A `several` entry is a
+    filter and a facet of a field each row holds several values of (`Several`). A facet may be an expression (a CASE
+    of a code's label): it is grouped by name in a subquery, which SQL Server needs when the expression has bound
+    values."""
+    _declared({**sortable, **filters, **{name: f.key for name, f in several.items()}})
+    chosen, wanted = _narrowing(query, params, search, filters, several)
     listed = query.where(*chosen, *wanted.values())
 
     # The FROM is kept: a table only the columns named would drop with them and the count would be one row.
@@ -95,8 +111,20 @@ async def list_page(
     counted: dict[str, dict[str, int]] = {}
     for name, column in facets.items():
         others = [clause for key, clause in wanted.items() if key != name]
-        q = query.where(*chosen, *others).with_only_columns(column, sa.func.count(), maintain_column_froms=True)
-        q = q.group_by(column).order_by(None)
+        inner = query.where(*chosen, *others).with_only_columns(column.label("value"), maintain_column_froms=True)
+        grouped = inner.order_by(None).subquery()
+        q = sa.select(grouped.c.value, sa.func.count()).group_by(grouped.c.value)
+        counted[name] = {str(value): int(n) for value, n in await conn.execute(q) if value is not None}
+    for name, field in several.items():
+        others = [clause for key, clause in wanted.items() if key != name]
+        keys = query.where(*chosen, *others).with_only_columns(field.key.label("key"), maintain_column_froms=True)
+        listed_keys = keys.order_by(None).subquery()
+        pairs = _pairs(field)
+        q = (
+            sa.select(pairs.c.value, sa.func.count())
+            .select_from(listed_keys.join(pairs, pairs.c.key == listed_keys.c.key))
+            .group_by(pairs.c.value)
+        )
         counted[name] = {str(value): int(n) for value, n in await conn.execute(q) if value is not None}
 
     named = {name: await _labels(conn, read, sorted(counted.get(name, {}))) for name, read in labels.items()}
@@ -111,6 +139,7 @@ def listed_rows(
     *,
     search: Sequence[sa.ColumnElement[Any]] = (),
     filters: Mapping[str, sa.ColumnElement[Any]] = _NONE,
+    several: Mapping[str, Several] = _NONE,
 ) -> Rows:
     """`query` narrowed exactly as `list_page` narrows it before counting and paging (`ids`, else the search, and the
     filters), for a caller that needs another aggregate over the same rows, such as a count per view:
@@ -118,8 +147,8 @@ def listed_rows(
       rows = listed_rows(sa.select(sa.func.count()).select_from(files).where(*base), q, search=..., filters=FACETS)
       quarantined = (await conn.execute(rows.where(files.c.scan_status == "infected"))).scalar_one()
     """
-    _declared(filters)
-    chosen, wanted = _narrowing(query, params, search, filters)
+    _declared({**filters, **{name: f.key for name, f in several.items()}})
+    chosen, wanted = _narrowing(query, params, search, filters, several)
     return query.where(*chosen, *wanted.values())
 
 
@@ -128,6 +157,7 @@ def _narrowing(
     params: ListParams,
     search: Sequence[sa.ColumnElement[Any]],
     filters: Mapping[str, sa.ColumnElement[Any]],
+    several: Mapping[str, Several] = _NONE,
 ) -> tuple[list[sa.ColumnElement[bool]], dict[str, sa.ColumnElement[bool]]]:
     """The rows asked for (`ids`, else the search) and each filter by its key, kept apart so a facet can leave its
     own filter out."""
@@ -140,7 +170,17 @@ def _narrowing(
     wanted: dict[str, sa.ColumnElement[bool]] = {
         key: filters[key].in_(values) for key, values in params.filters.items() if key in filters and values
     }
+    for key, values in params.filters.items():
+        if key in several and values:
+            pairs = _pairs(several[key])
+            wanted[key] = several[key].key.in_(sa.select(pairs.c.key).where(pairs.c.value.in_(values)))
     return chosen, wanted
+
+
+def _pairs(field: Several) -> sa.Subquery:
+    """A `Several`'s (key, value) pairs by those names, each pair once, so a row counts once under a value."""
+    key, value = list(field.values.selected_columns)[:2]
+    return field.values.with_only_columns(key.label("key"), value.label("value")).distinct().subquery()
 
 
 async def _labels(conn: AsyncConnection, read: Rows, values: list[str]) -> dict[str, str]:
@@ -191,12 +231,15 @@ def _column(term: sa.ColumnElement[Any]) -> Any:
 
 
 def _declared(columns: Mapping[str, sa.ColumnElement[Any]]) -> None:
-    """A table column a list filters or sorts on says so where it is defined, which is what the index test reads."""
+    """A table column a list filters or sorts on says so where it is defined, which is what the index test reads. A
+    primary key column is its key's index's."""
     missing = sorted(
-        f"{c.table.name}.{c.name}" for c in columns.values() if isinstance(c, sa.Column) and not c.info.get(LISTED_KEY)
+        f"{c.table.name}.{c.name}"
+        for c in columns.values()
+        if isinstance(c, sa.Column) and not c.primary_key and not c.info.get(LISTED_KEY)
     )
     if missing:
         raise ValueError(f"list_page filters or sorts on {', '.join(missing)}: declare each with info=LISTED")
 
 
-__all__ = ["LISTED", "LISTED_KEY", "ListPage", "list_page", "listed_rows"]
+__all__ = ["LISTED", "LISTED_KEY", "ListPage", "Several", "list_page", "listed_rows"]

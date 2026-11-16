@@ -23,7 +23,7 @@ from ops_store import isolation
 from ops_store.backends import backends
 from ops_store.conformance import engine_for, sql_server_database
 from ops_store.database import open_database
-from ops_store.listing import LISTED, list_page
+from ops_store.listing import LISTED, Several, list_page
 
 SQL_SERVER = (os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD"))
 meta = sa.MetaData()
@@ -65,6 +65,13 @@ pairs = sa.Table(
     meta,
     sa.Column("tenant", sa.String(32), primary_key=True),
     sa.Column("name", sa.String(32), primary_key=True),
+)
+# Several tags to a run, as a source's tags are on each of its documents.
+run_tags = sa.Table(
+    "store_test_list_run_tags",
+    meta,
+    sa.Column("run_id", sa.String(32), primary_key=True),
+    sa.Column("tag", sa.String(32), primary_key=True),
 )
 LIST = sa.select(runs.c.id, runs.c.title, runs.c.status, agents.c.name.label("agent")).join(
     agents, agents.c.id == runs.c.agent_id
@@ -282,3 +289,47 @@ async def test_rows_sharing_a_sort_value_appear_once_across_pages_ordered_by_pri
 async def test_a_filter_or_sort_column_nobody_declared_is_refused() -> None:
     with pytest.raises(ValueError, match=r"store_test_list_runs\.note: declare"):
         await list_page(None, LIST, ListParams(), default_sort=runs.c.id, filters={"note": runs.c.note})  # pyright: ignore[reportArgumentType]
+
+
+async def test_a_field_of_several_values_filters_and_counts_each_row_once_per_value(engine: AsyncEngine) -> None:
+    """r01..r06: every run is tagged `card`, the even ones `dispute` too. A run with two tags counts under both and
+    once in the total; the tag facet leaves its own filter out. The shown-status facet is a CASE with bound values,
+    which SQL Server refuses to group by when the select and the GROUP BY carry it as two sets of parameters."""
+    await seed(engine, 6)
+    async with engine.begin() as c:
+        await c.execute(run_tags.delete())
+        await c.execute(
+            run_tags.insert(),
+            [{"run_id": f"r{i:02d}", "tag": "card"} for i in range(1, 7)]
+            + [{"run_id": f"r{i:02d}", "tag": "dispute"} for i in range(2, 7, 2)],
+        )
+    shown = sa.case((runs.c.status == "held", "on hold"), else_=runs.c.status)
+    shape: dict[str, Any] = {
+        "default_sort": runs.c.id,
+        "filters": {"status": shown},
+        "facets": {"status": shown},
+        "several": {"tags": Several(runs.c.id, sa.select(run_tags.c.run_id, run_tags.c.tag))},
+    }
+    cases: list[tuple[dict[str, list[str]], list[str], dict[str, dict[str, int]]]] = [
+        (
+            {},
+            ["r01", "r02", "r03", "r04", "r05", "r06"],
+            {"status": {"open": 4, "on hold": 2}, "tags": {"card": 6, "dispute": 3}},
+        ),
+        (
+            {"tags": ["dispute"]},
+            ["r02", "r04", "r06"],
+            {"status": {"open": 2, "on hold": 1}, "tags": {"card": 6, "dispute": 3}},
+        ),
+        (
+            {"tags": ["dispute", "card"], "status": ["on hold"]},
+            ["r03", "r06"],
+            {"status": {"open": 4, "on hold": 2}, "tags": {"card": 2, "dispute": 1}},
+        ),
+        ({"tags": ["none"]}, [], {"status": {}, "tags": {"card": 6, "dispute": 3}}),
+    ]
+    async with engine.connect() as c:
+        for filters, ids, facets in cases:
+            page = await list_page(c, sa.select(runs.c.id), ListParams(filters=filters), **shape)
+            assert ([r["id"] for r in page["data"]], page["pagination"]["total"]) == (ids, len(ids)), filters
+            assert page["facets"] == facets, filters
