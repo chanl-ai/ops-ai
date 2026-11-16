@@ -62,7 +62,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
-from .store.knowledge import BaseRow, ChangeRow, ChunkRow, ItemRow, RunRow, SourceRow
+from .store.knowledge import BaseRow, ChangeRow, ChunkRow, ItemRow, PieceWrite, RunRow, SourceRow, UnitWrite
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -1504,7 +1504,7 @@ class KnowledgeService:
 
     async def _chunks(
         self, who: Who, s: SourceRow, doc: ParsedDocument, *, item_id: str, version: int, title: str
-    ) -> tuple[list[dict[str, Any]], SplitResult]:
+    ) -> tuple[list[PieceWrite], SplitResult]:
         """The item's pieces under the source's settings, each with its index units and its mapped metadata. With an
         approved AI step the split asks the model in a worker thread, on the run's client and ceiling, and only for
         pieces whose text has no questions yet."""
@@ -1535,7 +1535,7 @@ class KnowledgeService:
         return [d for d in await self.store.drafts(who.tenant_id, item_id) if d.status != "superseded"]
 
     async def _settle_drafts(
-        self, who: Who, s: SourceRow, item_id: str, rows: list[dict[str, Any]], result: SplitResult
+        self, who: Who, s: SourceRow, item_id: str, rows: list[PieceWrite], result: SplitResult
     ) -> None:
         """After a split: new drafts wait for review; a section whose text changed supersedes its pending drafts and
         marks its approved ones source_changed for a second look; every approved pair whose quote is still in a live
@@ -1552,16 +1552,16 @@ class KnowledgeService:
                 await self.store.update_change(who.tenant_id, d.id, {"status": "superseded"})
             elif d.status == "approved":
                 await self.store.update_change(who.tenant_id, d.id, {"status": "source_changed"})
-        rows_by_index = {int(r["position"]): r for r in rows}
+        rows_by_index = {r["position"]: r for r in rows}
         drafts = [
             {
                 "id": new_id("chg"),
                 "item_id": item_id,
                 "source_id": str(s.id),
-                "title": str(rows_by_index[p.chunk_index]["title"]),
+                "title": rows_by_index[p.chunk_index]["title"],
                 "section": " > ".join(p.section_path)[:400],
-                "from_version": int(rows_by_index[p.chunk_index]["version"]),
-                "to_version": int(rows_by_index[p.chunk_index]["version"]),
+                "from_version": rows_by_index[p.chunk_index]["version"],
+                "to_version": rows_by_index[p.chunk_index]["version"],
                 "before": "",
                 "after": f"Q: {p.question}\nA: {p.answer}",
                 "changed_by": "FAQ drafts",
@@ -1878,7 +1878,7 @@ class KnowledgeService:
             return existing.model_dump() | kept | {"unchanged": True}
         item_id = existing.id if existing else new_id("itm")
         version = (existing.version + 1) if existing else 1
-        chunks: list[dict[str, Any]] = []
+        chunks: list[PieceWrite] = []
         error: tuple[str, str] | None = None
         warning: str | None = None
         settings = self.settings_of(s)
@@ -1948,7 +1948,7 @@ class KnowledgeService:
         existing: ItemRow,
         item: dict[str, Any],
         version_row: dict[str, Any],
-        chunks: list[dict[str, Any]],
+        chunks: list[PieceWrite],
         change: dict[str, Any],
     ) -> dict[str, Any]:
         """A changed version a base feeding this source reviews: kept in Changes as a pending change with the version
@@ -2823,7 +2823,7 @@ def _change(  # noqa: PLR0917 - one call site, every argument a different part o
     item: dict[str, Any],
     from_version: int,
     before: list[ChunkRow],
-    after: list[dict[str, Any]],
+    after: list[PieceWrite],
     at: datetime,
 ) -> dict[str, Any]:
     """The change a re-sync made: the first section whose text differs, before and after."""
@@ -2888,44 +2888,44 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
 
 def pieces(  # noqa: PLR0917 - each argument a different part of the piece rows
     tenant: str, item_id: str, version: int, title: str, result: SplitResult, metadata: dict[str, str]
-) -> list[dict[str, Any]]:
+) -> list[PieceWrite]:
     """A split as the rows kb_chunks and kb_units hold: each piece once, with the units it is searched as (its own
     text with its context header, its children, its questions), so a match on any unit cites the piece."""
-    rows: list[dict[str, Any]] = []
+    rows: list[PieceWrite] = []
     ids = [new_id("chk") for _ in result.chunks]
-    units: dict[int, list[dict[str, Any]]] = {}
+    units: dict[int, list[UnitWrite]] = {}
     for unit in result.index_units():
         chunk = result.chunks[unit.chunk_index]
         heading = " ".join(p for p in (title, " > ".join(chunk.section_path)) if p)
         mine = units.setdefault(unit.chunk_index, [])
         mine.append(
-            {
-                "tenant_id": tenant,
-                "id": new_id("unt"),
-                "chunk_id": ids[unit.chunk_index],
-                "item_id": item_id,
-                "kind": unit.kind,
-                "position": len(mine),
-                "heading": heading[:800],
-                "text": unit.indexed_text,
-            }
+            UnitWrite(
+                tenant_id=tenant,
+                id=new_id("unt"),
+                chunk_id=ids[unit.chunk_index],
+                item_id=item_id,
+                kind=unit.kind,
+                position=len(mine),
+                heading=heading[:800],
+                text=unit.indexed_text,
+            )
         )
     for n, c in enumerate(result.chunks):
         rows.append(
-            {
-                "tenant_id": tenant,
-                "id": ids[n],
-                "item_id": item_id,
-                "version": version,
-                "position": n,
-                "title": title,
-                "section": " > ".join(c.section_path),
-                "page": c.page,
-                "tokens": c.tokens,
-                "text": c.text,
-                "metadata": {**metadata, **c.metadata} or None,
-                "units": units.get(c.index, []),
-            }
+            PieceWrite(
+                tenant_id=tenant,
+                id=ids[n],
+                item_id=item_id,
+                version=version,
+                position=n,
+                title=title,
+                section=" > ".join(c.section_path),
+                page=c.page,
+                tokens=c.tokens,
+                text=c.text,
+                metadata={**metadata, **c.metadata} or None,
+                units=units.get(c.index, []),
+            )
         )
     return rows
 

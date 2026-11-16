@@ -1,4 +1,4 @@
-# 370 boundaries crossed without a model in services/kb-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 346 boundaries crossed without a model in services/kb-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body changes_decide_changes
 1 reply changes_decide_changes
 1 body changes_edit_change
@@ -39,13 +39,12 @@
 5 dict-any services/kb-service/src/ops_kb/retrieval.py
 5 dict-any services/kb-service/src/ops_kb/schemas.py
 2 dict-any services/kb-service/src/ops_kb/search.py
-181 dict-any services/kb-service/src/ops_kb/service.py
+173 dict-any services/kb-service/src/ops_kb/service.py
 2 task services/kb-service/src/ops_kb/service.py
 8 dict-any services/kb-service/src/ops_kb/source_settings.py
 4 dict-any services/kb-service/src/ops_kb/store/fulltext.py
 3 store-dict services/kb-service/src/ops_kb/store/fulltext.py
-33 dict-any services/kb-service/src/ops_kb/store/knowledge.py
-2 store-dict services/kb-service/src/ops_kb/store/knowledge.py
+19 dict-any services/kb-service/src/ops_kb/store/knowledge.py
 3 dict-any services/kb-service/src/ops_kb/store/vectors.py
 2 store-dict services/kb-service/src/ops_kb/store/vectors.py
 42 dict-any services/kb-service/src/ops_kb/tool_sources.py

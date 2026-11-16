@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, ClassVar, NamedTuple, cast
+from typing import Annotated, Any, ClassVar, Literal, NamedTuple, TypedDict, cast
 
 import sqlalchemy as sa
 from pydantic import BeforeValidator, JsonValue
@@ -413,19 +413,84 @@ def outbox_relay(engine: AsyncEngine, targets: Mapping[str, Poster]) -> Relay:
     )
 
 
-def _with_team(chunks: list[dict[str, Any]], team: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+class UnitWrite(TypedDict):
+    """One way a new piece is searched (its own text, a child, a question), as `pieces` builds it."""
+
+    tenant_id: str
+    id: str
+    chunk_id: str
+    item_id: str
+    kind: str
+    position: int
+    heading: str
+    text: str
+
+
+class UnitStored(UnitWrite):
+    team_id: str
+
+
+class PieceFields(TypedDict):
+    tenant_id: str
+    id: str
+    item_id: str
+    version: int
+    position: int
+    title: str
+    section: str
+    page: int | None
+    tokens: int
+    text: str
+    metadata: dict[str, str] | None
+
+
+class PieceWrite(PieceFields):
+    """A new piece of an item with the units it is searched as, as `pieces` builds it."""
+
+    units: list[UnitWrite]
+
+
+class PieceStored(PieceFields):
+    """A piece as kb_chunks holds it, in the team it is written in."""
+
+    team_id: str
+
+
+def _with_team(chunks: list[PieceWrite], team: str) -> tuple[list[PieceStored], list[UnitStored]]:
     """Pieces and their index units (each piece's `units`), both in the team they are written in."""
-    rows: list[dict[str, Any]] = []
-    units: list[dict[str, Any]] = []
+    rows: list[PieceStored] = []
+    units: list[UnitStored] = []
     for ch in chunks:
-        row = {k: v for k, v in ch.items() if k != "units"}
-        rows.append({**row, "team_id": team})
-        units += [{**u, "team_id": team} for u in cast(list[dict[str, Any]], ch.get("units") or [])]
+        rows.append(
+            PieceStored(
+                tenant_id=ch["tenant_id"],
+                id=ch["id"],
+                item_id=ch["item_id"],
+                version=ch["version"],
+                position=ch["position"],
+                title=ch["title"],
+                section=ch["section"],
+                page=ch["page"],
+                tokens=ch["tokens"],
+                text=ch["text"],
+                metadata=ch["metadata"],
+                team_id=team,
+            )
+        )
+        units += [UnitStored(**u, team_id=team) for u in ch["units"]]
     return rows, units
 
 
 # What a kept piece takes from the new split: where it sits and the version it now belongs to.
-MOVED = ("version", "position", "title", "section", "page", "metadata", "tokens")
+MOVED: tuple[Literal["version", "position", "title", "section", "page", "metadata", "tokens"], ...] = (
+    "version",
+    "position",
+    "title",
+    "section",
+    "page",
+    "metadata",
+    "tokens",
+)
 
 
 def _piece_key(text: str, units: list[tuple[str, str]]) -> str:
@@ -436,8 +501,8 @@ def _piece_key(text: str, units: list[tuple[str, str]]) -> str:
 
 
 async def _keep_unchanged(
-    c: AsyncConnection, tenant: str, item_id: str, chunks: list[dict[str, Any]], units: list[dict[str, Any]]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    c: AsyncConnection, tenant: str, item_id: str, chunks: list[PieceStored], units: list[UnitStored]
+) -> tuple[list[PieceStored], list[UnitStored]]:
     """Withdraws the item's live pieces a new split does not keep, and keeps those it does: a new piece with the same
     text and units as a live one takes over that row (its id, units and vectors), with its new place and version, so a
     changed page re-embeds only the pieces that changed. Returns the pieces and units still to insert."""
@@ -461,10 +526,10 @@ async def _keep_unchanged(
     free: dict[str, list[str]] = {}
     for chunk_id, text in live:
         free.setdefault(_piece_key(str(text), held.get(str(chunk_id), [])), []).append(str(chunk_id))
-    units_of: dict[str, list[dict[str, Any]]] = {}
+    units_of: dict[str, list[UnitStored]] = {}
     for unit in units:
         units_of.setdefault(str(unit["chunk_id"]), []).append(unit)
-    insert: list[dict[str, Any]] = []
+    insert: list[PieceStored] = []
     kept: set[str] = set()
     for row in chunks:
         mine = units_of.get(str(row["id"]), [])
@@ -472,9 +537,7 @@ async def _keep_unchanged(
         if same:
             old = same.pop()
             kept.add(old)
-            moved = {
-                k: row[k] for k in ("version", "position", "title", "section", "page", "metadata", "tokens") if k in row
-            }
+            moved = {k: row[k] for k in MOVED}
             await c.execute(sa.update(ch).where(ch.c.tenant_id == tenant, ch.c.id == old).values(**moved))
         else:
             insert.append(row)
@@ -973,7 +1036,7 @@ class KnowledgeStore(Store):
         tenant: str,
         item: dict[str, Any],
         version: dict[str, Any],
-        chunks: list[dict[str, Any]],
+        chunks: list[PieceWrite],
         *,
         new: bool,
         change: dict[str, Any] | None = None,
@@ -986,7 +1049,7 @@ class KnowledgeStore(Store):
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
             item = {**item, "team_id": team}
             version = {**version, "team_id": team}
-            chunks, units = _with_team(chunks, team)
+            stored, units = _with_team(chunks, team)
             change = {**change, "team_id": team} if change is not None else None
             replaced: int | None = None
             if new:
@@ -1002,10 +1065,10 @@ class KnowledgeStore(Store):
                     .where(kb_item_versions.c.tenant_id == tenant, kb_item_versions.c.item_id == item["id"])
                     .values(status="superseded")
                 )
-                chunks, units = await _keep_unchanged(c, tenant, str(item["id"]), chunks, units)
+                stored, units = await _keep_unchanged(c, tenant, str(item["id"]), stored, units)
             await c.execute(sa.insert(kb_item_versions).values(**version))
-            if chunks:
-                await c.execute(sa.insert(kb_chunks), chunks)
+            if stored:
+                await c.execute(sa.insert(kb_chunks), stored)
             if units:
                 await c.execute(sa.insert(kb_units), units)
             if change is not None:
@@ -1119,18 +1182,18 @@ class KnowledgeStore(Store):
                 .values(last_refreshed_at=db_now())
             )
 
-    async def reindex(self, tenant: str, item_id: str, values: dict[str, Any], chunks: list[dict[str, Any]]) -> None:
+    async def reindex(self, tenant: str, item_id: str, values: dict[str, Any], chunks: list[PieceWrite]) -> None:
         """Rebuilds an item's chunks from the same content, keeping its version: the old chunks are withdrawn in the
         transaction that inserts the new ones."""
         async with self.tx() as c:
             team = await self._team_of(c, kb_items, tenant, item_id)
-            chunks, units = _with_team(chunks, team)
+            stored, units = _with_team(chunks, team)
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
-            chunks, units = await _keep_unchanged(c, tenant, item_id, chunks, units)
-            if chunks:
-                await c.execute(sa.insert(kb_chunks), chunks)
+            stored, units = await _keep_unchanged(c, tenant, item_id, stored, units)
+            if stored:
+                await c.execute(sa.insert(kb_chunks), stored)
             if units:
                 await c.execute(sa.insert(kb_units), units)
 
