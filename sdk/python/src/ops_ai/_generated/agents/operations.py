@@ -232,7 +232,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/agents",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "templateId"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "agents_list_guardrails": {
@@ -1981,7 +1981,7 @@ class Operations:
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
-        template_id: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultAgent:
         "List Agents"
         return self._t.call(
@@ -1994,7 +1994,7 @@ class Operations:
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
-                "templateId": template_id,
+                "ids": ids,
             },
             {},
             None,
@@ -3370,7 +3370,7 @@ class AsyncOperations:
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
-        template_id: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultAgent:
         "List Agents"
         return await self._t.call(
@@ -3383,7 +3383,7 @@ class AsyncOperations:
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
-                "templateId": template_id,
+                "ids": ids,
             },
             {},
             None,

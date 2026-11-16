@@ -291,7 +291,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Agents */
+        /**
+         * List Agents
+         * @description One page of the team's agents on the shared list contract, by name: `search` matches the name, role and slug;
+         *     `sortBy` is one of name, updatedAt, tasks24h, version, teamId and availability; the filters `availability`,
+         *     `teamId` and `templateId` narrow the page, and the first two are counted in `facets`.
+         */
         get: operations["agents_list_agents"];
         put?: never;
         /** Create Agent */
@@ -12903,11 +12908,11 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
                 search?: string | null;
                 sortBy?: string | null;
                 sortOrder?: "asc" | "desc";
-                templateId?: string | null;
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

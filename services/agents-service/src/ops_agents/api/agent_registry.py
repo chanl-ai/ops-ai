@@ -378,10 +378,15 @@ async def serve_published(rt: Runtime) -> None:
             go_live(rt, aid, n, spec)
 
 
+def a_day_ago() -> str:
+    """The start of an agent's `tasks24h` window, as thread times are written."""
+    return (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 async def tasks_24h(rt: Runtime) -> dict[str, int]:
     """Threads started in the last day, by agent id: chats (`agent_wrapper` threads naming the agent in their meta) and
     threads on the agent's own graph."""
-    since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    since = a_day_ago()
     out: dict[str, int] = {}
     for graph, meta in await GraphStore(rt.db).agent_threads_since(since):
         if meta.get("test"):

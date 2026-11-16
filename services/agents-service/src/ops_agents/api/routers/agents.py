@@ -13,9 +13,9 @@ ask models-service for the aliases, and the test, eval and job routes run the mo
 from __future__ import annotations
 
 import time
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Any, Literal, NotRequired, TypeAlias, TypedDict, cast
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
@@ -29,12 +29,14 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, In, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListQuery
 
 from ...store.evals import EvalStore
 from ...store.template_copies import TemplateCopies
 from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
+    a_day_ago,
     agent_review_body,
     agent_view,
     go_live,
@@ -52,7 +54,6 @@ from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..guardrails import resolve_pins
-from ..hitl_facade import page
 from ..model_aliases import chat_aliases
 from ..publish_policy import Decision, decide
 from ..review_sla import sla_hours
@@ -217,9 +218,6 @@ class JobArmed(Out):
     run_id: str | None = None
 
 
-SORTS = {"name", "updatedAt", "tasks24h", "version", "teamId", "availability"}
-
-
 async def _offered(rt: Runtime) -> set[str] | None:
     """The tool ids the directory offers now; None when tools-service cannot answer."""
     try:
@@ -243,7 +241,17 @@ def _agent_nodes(definition: dict[str, Any]) -> list[dict[str, Any]]:
     return [cast(dict[str, Any], n["config"]["agent"]) for n in nodes if n.get("kind") == "agent_turn"]
 
 
-async def used_in_all(rt: Runtime) -> dict[str, list[dict[str, Any]]]:
+class WorkflowUse(TypedDict):
+    """A workflow that runs an agent: `own` marks the agent's own one-step workflow."""
+
+    workflowId: str
+    workflowName: str
+    pinnedVersion: int
+    status: str
+    own: NotRequired[bool]
+
+
+async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
     """By agent id, the workflows that run it: its own one-step workflow once published (`agent:<id>`, the one its
     deployments go through), v1 workflows whose published version pins it (at the version pinned then), drafts naming
     its slug, and v2 workflows whose latest version has an agent step on it, which runs the agent's published version.
@@ -251,10 +259,10 @@ async def used_in_all(rt: Runtime) -> dict[str, list[dict[str, Any]]]:
     agents = await registry(rt).rows()
     by_slug = {r["slug"]: r for r in agents}
     published = {r["id"]: r["published_version"] for r in agents}
-    out: dict[str, list[dict[str, Any]]] = {}
+    out: dict[str, list[WorkflowUse]] = {}
     for r in agents:
         if r["published_version"] is not None:
-            use = {
+            use: WorkflowUse = {
                 "workflowId": f"agent:{r['id']}",
                 "workflowName": "Its own one-step workflow",
                 "pinnedVersion": int(r["published_version"]),
@@ -268,8 +276,9 @@ async def used_in_all(rt: Runtime) -> dict[str, list[dict[str, Any]]]:
     def add(agent_id: str, workflow_id: str, name: str, version: int | None, status: str) -> None:
         if version is None or any(u["workflowId"] == workflow_id for u in out.get(agent_id, [])):
             return
-        use = {"workflowId": workflow_id, "workflowName": name, "pinnedVersion": int(version), "status": status}
-        out.setdefault(agent_id, []).append(use)
+        out.setdefault(agent_id, []).append(
+            {"workflowId": workflow_id, "workflowName": name, "pinnedVersion": int(version), "status": status}
+        )
 
     assert rt.graph_store is not None
     for w in await workflow_registry(rt).rows():
@@ -294,20 +303,19 @@ async def used_in_all(rt: Runtime) -> dict[str, list[dict[str, Any]]]:
     return out
 
 
-async def _view(
-    rt: Runtime,
-    agent_id: str,
-    tasks: dict[str, int] | None = None,
-    offered: set[str] | None = None,
-    used: dict[str, list[dict[str, Any]]] | None = None,
-) -> dict[str, Any]:
+async def _view(rt: Runtime, agent_id: str) -> dict[str, Any]:
     reg = registry(rt)
     row = await reg.row(agent_id)
     spec = (await reg.version(agent_id, int(row["version"])))["spec"]
-    counts = tasks if tasks is not None else await tasks_24h(rt)
-    view = agent_view(row, spec, counts.get(agent_id, 0))
-    view["staleToolIds"] = _stale(view["toolIds"], offered if offered is not None else await _offered(rt))
-    uses = (used if used is not None else await used_in_all(rt)).get(agent_id, [])
+    tasks = (await tasks_24h(rt)).get(agent_id, 0)
+    listed = {**row, "spec": spec, "tasks_24h": tasks}
+    return _decorated(listed, await _offered(rt), (await used_in_all(rt)).get(agent_id, []))
+
+
+def _decorated(row: dict[str, Any], offered: set[str] | None, uses: list[WorkflowUse]) -> dict[str, Any]:
+    """An agent's reply from its row joined to its newest version's `spec` and its `tasks_24h`."""
+    view = agent_view(row, row["spec"], int(row["tasks_24h"]))
+    view["staleToolIds"] = _stale(view["toolIds"], offered)
     view["usedIn"] = sorted(uses, key=lambda u: u["workflowName"])
     view["workflowIds"] = sorted({u["workflowId"] for u in uses if not u.get("own")})
     view["templateId"], view["protection"] = row.get("template_id"), row.get("protection")
@@ -360,39 +368,15 @@ async def require_known_alias(rt: Runtime, alias: str) -> None:
 
 
 @router.get("", response_model=Envelope[ListResult[Agent]])
-async def list_agents(
-    *,
-    request: Request,
-    rt: Rt,
-    _: Reader,
-    page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
-    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
-    search: str | None = None,
-    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,
-    sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "asc",
-    template_id: Annotated[str | None, Query(alias="templateId")] = None,
-) -> JSONResponse:
-    reg = registry(rt)
-    tasks = await tasks_24h(rt)
-    offered = await _offered(rt)
-    used = await used_in_all(rt)
-    held = [r for r in await reg.rows() if template_id is None or r.get("template_id") == template_id]
-    rows = [await _view(rt, r["id"], tasks, offered, used) for r in held]
-    if search:
-        s = search.lower()
-        rows = [a for a in rows if s in a["name"].lower() or s in a["role"].lower() or s in a["slug"]]
-    facet_cols = ("availability", "teamId")
-    facets: dict[str, dict[str, int]] = {c: {} for c in facet_cols}
-    for a in rows:
-        for c in facet_cols:
-            facets[c][a[c]] = facets[c].get(a[c], 0) + 1
-    for c in facet_cols:
-        wanted = request.query_params.getlist(c)
-        if wanted:
-            rows = [a for a in rows if a[c] in wanted]
-    key = sort_by if sort_by in SORTS else "name"
-    rows.sort(key=lambda a: (a[key] is None, a[key]), reverse=sort_order == "desc")
-    return ok({**page(rows, page_no, page_size), "facets": facets})
+async def list_agents(*, rt: Rt, _: Reader, q: ListQuery) -> JSONResponse:
+    """One page of the team's agents on the shared list contract, by name: `search` matches the name, role and slug;
+    `sortBy` is one of name, updatedAt, tasks24h, version, teamId and availability; the filters `availability`,
+    `teamId` and `templateId` narrow the page, and the first two are counted in `facets`."""
+    listed = await registry(rt).page(q, since=a_day_ago())
+    offered = await _offered(rt) if listed["data"] else None
+    used = await used_in_all(rt) if listed["data"] else {}
+    views = [_decorated(r, offered, used.get(str(r["id"]), [])) for r in listed["data"]]
+    return ok({**listed, "data": views})
 
 
 async def changeable(rt: Runtime, me: Principal, agent_id: str, action: str) -> dict[str, Any]:

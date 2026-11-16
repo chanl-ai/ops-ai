@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0109_registry_policies
+-- agents-service, stamped at 0110_agents_list_indexes
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -191,6 +191,10 @@ CREATE TABLE registry_agents (
 	CONSTRAINT registry_agents_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_registry_agents_tenant_slug UNIQUE (tenant_id, slug)
 );
+GO
+CREATE INDEX ix_registry_agents_team_updated ON registry_agents (tenant_id, team_id, updated_at);
+GO
+CREATE INDEX ix_registry_agents_team_version ON registry_agents (tenant_id, team_id, version);
 GO
 CREATE INDEX ix_registry_agents_template_id ON registry_agents (template_id);
 GO
@@ -1461,5 +1465,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0109_registry_policies');
+INSERT INTO alembic_version (version_num) VALUES ('0110_agents_list_indexes');
 GO

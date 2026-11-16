@@ -80,6 +80,11 @@ def listed(c: httpx.Client, who: dict[str, str], kind: str | None = None) -> lis
     return list(data(r) or []) if r.status_code == 200 else [{"error": said(r)}]
 
 
+def agent_total(c: httpx.Client) -> int:
+    """How many agents the team has, from the list's total rather than one page of rows."""
+    return int(((data(c.get("/v1/agents", params={"pageSize": 1}, headers=OPS)) or {}).get("pagination") or {})["total"])
+
+
 def plugins(*folders: Path) -> dict[str, str]:
     return {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(f) for f in folders])}
 
@@ -227,9 +232,9 @@ def main() -> None:
 
         # 11. A model alias nobody serves is refused as on create, and no agent is made.
         api.delete(f"/v1/agents/{fresh_id}", headers=OPS)
-        before = len((data(api.get("/v1/agents", params={"pageSize": 100}, headers=OPS)) or {}).get("data") or [])
+        before = agent_total(api)
         bad = install(api, "case-helper", modelAlias="nobody-serves-this")
-        after = len((data(api.get("/v1/agents", params={"pageSize": 100}, headers=OPS)) or {}).get("data") or [])
+        after = agent_total(api)
         check(
             "11 a model alias nobody serves is refused as on create, and nothing is made",
             bad.status_code == 422 and code(bad) == "unknown_model_alias" and after == before,

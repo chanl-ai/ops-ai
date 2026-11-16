@@ -172,8 +172,10 @@ with ExitStack() as stack:
         )  # fmt: skip
 
         # 6. Who uses the changed and removed tools: an agent of team ops granted post_message and transfer.
-        agents_list = (data(ag.get("/v1/agents", params={"pageSize": 200}, headers=priya)) or {}).get("data", [])
-        agent = next((a for a in agents_list if a.get("teamId", "team_ops") == "team_ops"), {})
+        agents_list = (data(ag.get("/v1/agents", params={"teamId": "team_ops", "pageSize": 1}, headers=priya)) or {}).get(
+            "data", []
+        )
+        agent = next(iter(agents_list), {})
         granted = ag.patch(
             f"/v1/agents/{agent.get('id')}",
             json={"toolIds": [*agent.get("toolIds", []), "fields_post_message", "fields_transfer"]},

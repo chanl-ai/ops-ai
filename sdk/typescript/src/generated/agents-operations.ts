@@ -286,7 +286,7 @@ export const agentsOperations = {
       "search",
       "sortBy",
       "sortOrder",
-      "templateId"
+      "ids"
     ],
     "stream": false
   },

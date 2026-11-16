@@ -14,8 +14,8 @@ AGENT = "ag_branch"
 
 
 def agent_tasks(agents: httpx.Client, who: dict[str, str]) -> int:
-    rows = data(agents.get("/v1/agents", params={"pageSize": 100}, headers=who))["data"]
-    return int(next(a for a in rows if a["id"] == AGENT)["tasks24h"])
+    rows = data(agents.get("/v1/agents", params={"ids": [AGENT]}, headers=who))["data"]
+    return int(rows[0]["tasks24h"])
 
 
 def thread(agents: httpx.Client, who: dict[str, str], *, test: bool) -> httpx.Response:

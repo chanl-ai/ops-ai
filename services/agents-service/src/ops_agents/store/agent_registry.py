@@ -14,12 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import canonical_json, new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
+from ops_store.dialect import json_text
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
-from .graphs import mine
+from .graphs import graph_threads, mine
 from .tenancy import OWNER, SERVE_PUBLISHED, UNIQUE_KEY, RuntimeStore, current_tenant
 
 registry_agents = sa.Table(
@@ -29,20 +32,23 @@ registry_agents = sa.Table(
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("slug", sa.String(120), nullable=False),
-    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("team_id", sa.String(64), nullable=False, info=LISTED),
     # Newest saved version, draft or published.
-    sa.Column("version", sa.Integer, nullable=False),
+    sa.Column("version", sa.Integer, nullable=False, info=LISTED),
     # The version the runtime serves; null until the first publish.
     sa.Column("published_version", sa.Integer),
     sa.Column("paused", sa.Boolean, nullable=False, default=False),
     sa.Column("created_at", sa.String(32), nullable=False),
-    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False, info=LISTED),
     # The template the provisioning service made it from, and how the platform protects it: `system` cannot be
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
-    sa.Column("template_id", sa.String(120), index=True),
+    sa.Column("template_id", sa.String(120), index=True, info=LISTED),
     sa.Column("protection", sa.String(16)),
     # A slug is unique within its tenant only.
     sa.UniqueConstraint("tenant_id", "slug", name="uq_registry_agents_tenant_slug"),
+    # The agents list, one team's page by update time or version.
+    sa.Index("ix_registry_agents_team_updated", "tenant_id", "team_id", "updated_at"),
+    sa.Index("ix_registry_agents_team_version", "tenant_id", "team_id", "version"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -122,6 +128,14 @@ SPEC_FIELDS = (
 
 # (agent, version) pairs per statement of published_specs: two parameters each, under SQL Server's 2100.
 PAIRS_PER_QUERY = 500
+# A JSON boolean as text: 'true' on PostgreSQL and SQL Server, '1' on SQLite.
+_TRUE = ("true", "1")
+
+
+def _word(word: str) -> sa.ColumnClause[str]:
+    """A fixed word written into the statement, not bound: a GROUP BY must name the same expression the select does,
+    and two bound copies of one value are two parameters to SQL Server."""
+    return sa.literal_column(f"'{word}'", sa.String())
 
 
 def digest_of(spec: dict[str, Any]) -> str:
@@ -265,6 +279,57 @@ class AgentRegistry(RuntimeStore):
         if r is None:
             raise NotFound(f"Agent {agent_id}")
         return dict(r)
+
+    async def page(self, params: ListParams, *, since: str) -> ListPage:
+        """One page of the acting team's agents, each row with its newest version's spec and `tasks_24h`, the threads
+        started on it since `since` (chats naming it and threads on its own graph, a builder's test left out). Sorted
+        by name, then the key; `search` matches name, role and slug; `availability`, `teamId` and `templateId` filter,
+        and the first two are counted."""
+        a, v, t = registry_agents, registry_agent_versions, graph_threads
+        name, role = json_text(v.c.spec, "name"), json_text(v.c.spec, "role")
+        tasks = (
+            sa.select(sa.func.count())
+            .select_from(t)
+            .where(
+                mine(t),
+                team_visible(t),
+                t.c.created_at >= since,
+                sa.or_(
+                    t.c.graph == sa.literal("agent:") + a.c.id,
+                    sa.and_(t.c.graph == "agent_wrapper", json_text(t.c.meta, "agentId") == a.c.id),
+                ),
+                sa.func.coalesce(json_text(t.c.meta, "test"), "false").not_in(_TRUE),
+            )
+            .scalar_subquery()
+        )
+        availability = sa.case(
+            (a.c.paused == sa.true(), _word("paused")),
+            (a.c.published_version.is_not(None), _word("published")),
+            else_=_word("not_published"),
+        )
+        q = (
+            sa.select(a, v.c.spec, tasks.label("tasks_24h"))
+            .join(v, sa.and_(v.c.tenant_id == a.c.tenant_id, v.c.agent_id == a.c.id, v.c.version == a.c.version))
+            .where(a.c.tenant_id == current_tenant(), team_visible(a), team_visible(v))
+        )
+        async with self.tx() as c:
+            return await list_page(
+                c,
+                q,
+                params,
+                search=[name, role, a.c.slug],
+                sortable={
+                    "name": name,
+                    "updatedAt": a.c.updated_at,
+                    "tasks24h": tasks,
+                    "version": a.c.version,
+                    "teamId": a.c.team_id,
+                    "availability": availability,
+                },
+                default_sort=name.asc(),
+                filters={"availability": availability, "teamId": a.c.team_id, "templateId": a.c.template_id},
+                facets={"availability": availability, "teamId": a.c.team_id},
+            )
 
     async def versions(self, agent_id: str) -> list[dict[str, Any]]:
         q = (
