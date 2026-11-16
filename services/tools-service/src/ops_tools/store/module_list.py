@@ -231,7 +231,8 @@ class ModuleList(Store):
         t = tool_modules.c
         views = _views(d, w)
         joined = tool_modules.join(d, sa.and_(d.c.tenant_id == t.tenant_id, d.c.id == t.id))
-        base = sa.select(t.id, d.c.connection_id).select_from(joined).where(team_visible(tool_modules))
+        seen = sa.or_(team_visible(tool_modules), granted(tenant_id))
+        base = sa.select(t.id, d.c.connection_id).select_from(joined).where(seen)
         in_view = base.where(views[view]) if view != "all" else base
         wanted = set(q.filters.get("access") or [])
         access = [d.c.reads == 1] * ("read" in wanted) + [d.c.writes == 1] * ("write" in wanted)
