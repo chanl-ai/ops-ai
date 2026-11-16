@@ -60,7 +60,7 @@ graph_versions = sa.Table(
     "graph_versions",
     metadata,
     # The workflow's tenant (agents 0106); "local" until the registry stores write the caller's.
-    sa.Column("tenant_id", sa.String(64), primary_key=True, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
     sa.Column("name", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("digest", sa.String(64), nullable=False),

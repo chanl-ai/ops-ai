@@ -24,7 +24,7 @@ registry_agents = sa.Table(
     "registry_agents",
     metadata,
     # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("slug", sa.String(120), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
@@ -48,7 +48,7 @@ registry_agent_versions = sa.Table(
     "registry_agent_versions",
     metadata,
     # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("agent_id", sa.String(64), sa.ForeignKey("registry_agents.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("spec", sa.JSON, nullable=False),

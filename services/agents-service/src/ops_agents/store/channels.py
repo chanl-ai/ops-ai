@@ -17,7 +17,7 @@ from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .graphs import graph_threads
-from .tenancy import RuntimeStore
+from .tenancy import RuntimeStore, current_tenant
 
 Multitask = Literal["enqueue", "reject"]
 
@@ -25,7 +25,7 @@ deployments = sa.Table(
     "deployments",
     metadata,
     # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("graph", sa.String(64), nullable=False),
     sa.Column("channel", sa.String(32), nullable=False),
@@ -45,7 +45,7 @@ channel_messages = sa.Table(
     "channel_messages",
     metadata,
     # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("deployment_id", sa.String(64), primary_key=True),
     # Normalised Message-ID, or a synthetic key when the message has none.
     sa.Column("message_key", sa.String(512), primary_key=True),
@@ -61,7 +61,7 @@ channel_cursors = sa.Table(
     "channel_cursors",
     metadata,
     # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("deployment_id", sa.String(64), primary_key=True),
     sa.Column("delta_link", sa.Text, nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
@@ -71,7 +71,7 @@ thread_inbox = sa.Table(
     "thread_inbox",
     metadata,
     # The tenant the row belongs to; "local" until the channel stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("thread_id", sa.String(64), primary_key=True),
     sa.Column("message_key", sa.String(512), primary_key=True),
     sa.Column("seq", sa.BigInteger, nullable=False),

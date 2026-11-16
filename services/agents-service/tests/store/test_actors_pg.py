@@ -25,7 +25,17 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
 
 
 async def test_a_person_asking_through_an_agent_names_the_agent(engine: AsyncEngine) -> None:
-    agent = f"ag_{uuid4().hex[:10]}"
+    agent, tenant = f"ag_{uuid4().hex[:10]}", f"t-{uuid4().hex[:6]}"
+    with tenant_scope(tenant):
+        await _agent(engine, agent)
+    rt: Any = SimpleNamespace(db=engine)
+    raw = f"james@harborpine.example via agent:{agent}"
+    with tenant_scope(tenant):
+        who = await actors(rt, [raw])
+    assert who[raw]["via"] == {"kind": "agent", "id": agent, "name": "Advisor's Helper"}, who
+
+
+async def _agent(engine: AsyncEngine, agent: str) -> None:
     async with engine.begin() as c:
         await c.execute(
             registry_agents.insert().values(
@@ -44,8 +54,3 @@ async def test_a_person_asking_through_an_agent_names_the_agent(engine: AsyncEng
                 saved_by="b",
             )
         )
-    rt: Any = SimpleNamespace(db=engine)
-    raw = f"james@harborpine.example via agent:{agent}"
-    with tenant_scope(f"t-{uuid4().hex[:6]}"):
-        who = await actors(rt, [raw])
-    assert who[raw]["via"] == {"kind": "agent", "id": agent, "name": "Advisor's Helper"}, who

@@ -23,13 +23,13 @@ from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
-from .tenancy import OWNER, RuntimeStore
+from .tenancy import OWNER, RuntimeStore, current_tenant
 
 registry_widgets = sa.Table(
     "registry_widgets",
     metadata,
     # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     # The widget id agents pin, a slug of its first name (hold-review).
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
@@ -50,7 +50,7 @@ registry_widget_versions = sa.Table(
     "registry_widget_versions",
     metadata,
     # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("widget_id", sa.String(64), sa.ForeignKey("registry_widgets.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("content", sa.JSON, nullable=False),

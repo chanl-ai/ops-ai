@@ -15,13 +15,13 @@ from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
-from .tenancy import OWNER, RuntimeStore
+from .tenancy import OWNER, RuntimeStore, current_tenant
 
 registry_workflows = sa.Table(
     "registry_workflows",
     metadata,
     # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
@@ -44,7 +44,7 @@ registry_workflow_versions = sa.Table(
     "registry_workflow_versions",
     metadata,
     # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column(
         "workflow_id", sa.String(64), sa.ForeignKey("registry_workflows.id", ondelete="CASCADE"), primary_key=True
     ),
@@ -63,7 +63,7 @@ registry_validations = sa.Table(
     "registry_validations",
     metadata,
     # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("workflow_id", sa.String(64), nullable=False, index=True),
     sa.Column("ran_at", sa.String(32), nullable=False),
