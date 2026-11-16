@@ -1,8 +1,8 @@
 """One transaction per request, through the real `Tx` dependency, auth dependency and timing middleware, on each
 database, by failure mode: store calls of one request each paying their own transaction; a widened read leaving the
 connection wide for the read after it; a caught database error ending the request's transaction; a stream holding
-the request's transaction while it sends; two tasks sharing one connection; and a request that waits on the pool for
-a second connection while it holds one."""
+the request's transaction while it sends; two tasks sharing one connection; a request that waits on the pool for
+a second connection while it holds one; and a call to another service while the transaction is open, unrecorded."""
 
 # No `from __future__ import annotations`: the test routes name local objects in Depends().
 
@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
@@ -23,7 +24,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_identity import Auth, CurrentPrincipal, Identity, ServiceAuth, install_auth
+from ops_identity import Auth, CurrentPrincipal, Identity, ServiceAuth, ServiceClient, dev_service_signer, install_auth
 from ops_identity.fastapi import Tx
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import Ed25519Signer, mint
@@ -257,6 +258,23 @@ def build(engine: AsyncEngine) -> tuple[FastAPI, Notes]:
             await asyncio.sleep(0.01)  # every request holds its connection while the others arrive
             return await st.ids()
 
+    def answered(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"success": True, "data": []})
+
+    kb = ServiceClient(
+        httpx.AsyncClient(transport=httpx.MockTransport(answered), base_url="http://kb"),
+        dev_service_signer(),
+        "agents",
+        "kb",
+    )
+
+    @app.post("/hop")
+    async def hop(p: CurrentPrincipal, _: Tx) -> list[str]:  # pyright: ignore[reportUnusedFunction]
+        await kb.get("/v1/refs")  # before any store call: no transaction is open yet
+        await st.add("hopped")
+        await kb.get("/v1/refs")  # the request's transaction is open until the route returns
+        return await st.ids()
+
     return app, st
 
 
@@ -284,6 +302,7 @@ async def test_store_calls_of_one_request_share_one_transaction_and_a_refusal_un
     assert rolled_back["db.tx_count"] == 1, rolled_back
     assert committed["db.tx_count"] == 1, committed
     assert committed["db.pool.in_use"] == 1 and committed["db.pool.limit"] == POOL and committed["db.tx_open_ms"] > 0
+    assert committed["db.connection_count"] == 1, committed
     with isolation.tenant_wide("test", tenant_id="-"):
         async with isolation.isolated_tx(engine) as conn:
             tenants = set((await conn.execute(sa.select(notes.c.tenant_id))).scalars())
@@ -363,7 +382,18 @@ async def test_a_gather_branch_and_a_child_task_each_open_their_own_transaction(
     assert r.status_code == 200, r.text
     assert r.json() == {"results": [[], [], [], []], "own_connections": 3, "shared": [False] * 3, "rejoined": True}
     (line,) = request_lines(out, "/fan")
-    assert line["db.tx_count"] == 4, line
+    assert (line["db.tx_count"], line["db.connection_count"]) == (4, 4), line
+
+
+async def test_a_service_call_while_the_request_transaction_is_open_is_on_its_line(
+    engine: AsyncEngine, out: io.StringIO
+) -> None:
+    app, _ = build(engine)
+    async with client(app) as c:
+        r = await c.post("/hop", headers=headers(f"ten_{uuid4().hex[:8]}"))
+    assert (r.status_code, r.json()) == (200, ["hopped"]), r.text
+    (line,) = request_lines(out, "/hop")
+    assert (line["http.client.call_count"], line["http.client.calls_in_tx"]) == (2, 1), line
 
 
 async def test_fifty_concurrent_requests_each_hold_one_connection_of_a_pool_of_five(

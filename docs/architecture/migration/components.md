@@ -63,13 +63,14 @@ CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 # packages/ops_store/src/ops_store/database.py
 def open_database(url: str, *, pool: PoolSettings) -> Database: ...   # OPS_DB__POOL_SIZE, __POOL_OVERFLOW, __POOL_WAIT_S
 
-# packages/ops_service_kit/src/ops_service_kit/testing.py
-@pytest.fixture
-def statement_budget(app, seed_team):
+# packages/ops_service_kit/src/ops_service_kit/testing.py (no pytest import: a service's conftest makes the fixture,
+# statement_budget = pytest.fixture(budget_check))
+def budget_check(app, client, seed_team):
     """Seeds a team at 5 and 50 rows per list, calls every GET through the real middleware, reads db.query_count,
-    db.tx_count and db.tx_open_ms from the request line, and fails on a count that grows with rows, exceeds the
-    budget in budgets.toml, opens more than one transaction (unless listed), holds it across a service hop, or keeps
-    it open longer than 2 s. Runs on both databases."""
+    db.tx_count, db.connection_count, http.client.calls_in_tx and db.tx_open_ms from the request line, and fails on a
+    count that grows with rows, exceeds the budget in budgets.toml, opens more than one transaction or checks out more
+    than one connection (unless listed), holds a transaction across a service hop (unless listed), or keeps it open
+    longer than 2 s. Runs on both databases."""
 ```
 
 Design points: a caught database error runs its statement inside `attempt()`, because PostgreSQL aborts the whole
@@ -82,9 +83,12 @@ savepoint, so they commit or roll back with the change (`SC2`). `system_tx` and 
 
 ```python
 # packages/ops_service_kit/src/ops_service_kit/listing.py
+@cache
+def page_sizes() -> tuple[int, int]: ...   # Settings read once, when install_error_handlers builds the app
+
 class ListParams(BaseModel):
     page: int = Field(1, ge=1)
-    page_size: int = Field(default_factory=lambda: Settings().page_size_default, ge=1)   # capped at page_size_max
+    page_size: int = Field(default_factory=lambda: page_sizes()[0], ge=1)   # capped at page_sizes()[1]
     search: str | None = None
     sort_by: str | None = None
     sort_order: Literal["asc", "desc"] = "desc"

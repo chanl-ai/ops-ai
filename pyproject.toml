@@ -106,8 +106,6 @@ ignore = ["PLR0913", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "N818"]
 "**/experiments/**" = ["T20", "S608", "ASYNC"]
 # A migration builds its DDL from the chain's own table and role names, never from input.
 "**/migrations/**" = ["T20", "S608"]
-# Held by another change while it lands; its one blocking read moves with it.
-"packages/ops_service_kit/src/ops_service_kit/testing.py" = ["ASYNC240"]
 # SQL Server statements built from the module's own identifiers; another change owns these files now.
 "packages/ops_store/src/ops_store/dialect.py" = ["S608"]
 "packages/ops_store/src/ops_store/schema.py" = ["S608"]

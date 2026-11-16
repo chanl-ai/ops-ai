@@ -126,6 +126,7 @@ def _transaction_began(conn: sa.Connection) -> None:
     # Counted to the request whose task began it, so a transaction a stream's generator opens later still counts.
     request = current_request()
     if request is not None:
+        request.begin_transaction()
         conn.info[_TX] = (request, time.perf_counter())
 
 

@@ -28,7 +28,7 @@ import httpx
 
 from ops_policy import Ed25519Signer
 from ops_service_kit.errors import ApiError, ServiceUnavailable
-from ops_service_kit.request_timing import current_request_id
+from ops_service_kit.request_timing import current, current_request_id
 from ops_service_kit.settings import Settings
 
 from .resolve import mint_service_token
@@ -141,6 +141,9 @@ class ServiceClient:
     ) -> Any:
         """The callee's `data`, or ServiceCallError / ServiceUnreachable."""
         tries = 1 + self.retries if method.upper() == "GET" else 1
+        # On the request's line, so a call made while its transaction is open is seen (the statement budget fails it).
+        if (timing := current()) is not None:
+            timing.add_service_call()
         for attempt in range(tries):
             try:
                 r = await self.http.request(
