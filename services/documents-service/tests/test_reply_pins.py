@@ -14,10 +14,13 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_documents.store.document_types import document_type_versions, document_types
+from ops_identity import dev_service_signer, mint_service_token
 
 from .conftest import OPS, Make
+from .test_classify import Models as Classifier
 from .test_document_types import FIELDS, TYPE, Models, Prices
 from .test_extractions import NOTICE, Floor
+from .test_templates_install import LETTER, SOURCE, install, listed, wire
 
 PINS = Path(__file__).parent / "fixtures" / "reply-pins.json"
 _TIME = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(\+00:00|Z)?$")
@@ -124,3 +127,108 @@ async def test_a_version_saved_before_its_options_existed_reads_as_their_default
         "createdBy": "j.richardson@harborpine.example",
         "createdAt": "<time+00:00>",
     }, version
+
+
+ROUTE_PINS = Path(__file__).parent / "fixtures" / "reply-pins-routes.json"
+
+
+async def test_the_layout_purge_classify_and_template_replies_keep_every_key_and_value(make: Make) -> None:
+    """The routes the first pin leaves out: a read's own reply, classify, layout, purge, delete, and the template
+    copy routes, with each status."""
+    s = make(Classifier("invoice_notice", 0.95), Floor(0.5), Prices())
+    wire(s, [LETTER])
+    seen: dict[str, Any] = {}
+    token = mint_service_token(
+        dev_service_signer(),
+        service="agents",
+        audience="documents",
+        tenant_id=s.tenant,
+        scopes=["documents:delete"],
+        team_id="team_ops",
+    )
+    async with s.client as c:
+        data(await c.post("/v1/document-types", json=TYPE, headers=OPS), 201)
+        fid = await s.stored(NOTICE)
+        read = {"fileId": fid, "documentTypeId": "invoice_notice"}
+        seen["extract"] = data(await c.post("/v1/documents/extractions", json=read, headers=OPS))
+        seen["classify"] = data(await c.post("/v1/documents/classifications", json={"fileId": fid}, headers=OPS))
+        seen["layoutBefore"] = data(await c.get(f"/v1/documents/layout/{fid}", headers=OPS))
+        seen["layout"] = data(await c.post("/v1/documents/layout", json={"fileId": fid}, headers=OPS))
+        seen["layoutPage"] = data(await c.get(f"/v1/documents/layout/{fid}", params={"page": 1}, headers=OPS))
+        seen["offers"] = data(await c.get("/v1/document-types/invoice_notice/template-offers", headers=OPS))
+        seen["templates"] = await listed(s)
+        copy = await install(s)
+        seen["copy"] = data(copy, 201)
+        made = copy.json()["data"]["copy"]["recordId"]
+        seen["copyAgain"] = data(await install(s))
+        path = f"/v1/resources/{SOURCE}:case-letter/copies/{made}"
+        review = await c.get(f"{path}/update", headers=OPS)
+        seen["review"] = data(review)
+        seen["take"] = data(
+            await c.post(f"{path}/update", json={"expect": review.json()["data"]["expect"]}, headers=OPS)
+        )
+        seen["detach"] = data(await c.post(f"{path}/detach", headers=OPS))
+        gone = await c.delete(f"/v1/document-types/{made}", headers=OPS)
+        seen["delete"] = [gone.status_code, gone.text]
+        s.files.files.pop(fid)
+        seen["purge"] = data(
+            await c.post("/v1/documents/purge", json={"fileId": fid}, headers={"Authorization": f"Bearer {token}"})
+        )
+    assert seen == json.loads(ROUTE_PINS.read_text()), json.dumps(seen, indent=2, sort_keys=True)
+
+
+_MISSING = "fil_missing0000000000000000000000"
+_TYPES = "/v1/document-types/no_such_type"
+# The bodies the routes accept: (path, method, body, the status a parsed body gets). A body model moved to another base
+# that stops taking a field's camelCase or snake_case name, or takes a field it never named, fails here. A parsed body
+# reaches the route, which answers the missing file or type.
+_BODIES: list[tuple[str, str, dict[str, Any], int]] = [
+    (
+        "/v1/documents/extractions",
+        "post",
+        {"fileId": _MISSING, "fields": FIELDS, "reviewBelow": 0.5, "maxPages": 1},
+        404,
+    ),
+    (
+        "/v1/documents/extractions",
+        "post",
+        {"file_id": _MISSING, "fields": FIELDS, "review_below": 0.5, "max_pages": 1},
+        404,
+    ),
+    ("/v1/documents/classifications", "post", {"fileId": _MISSING}, 404),
+    ("/v1/documents/classifications", "post", {"file_id": _MISSING}, 404),
+    ("/v1/documents/readings", "post", {"fileId": _MISSING, "language": "eng"}, 404),
+    ("/v1/documents/readings", "post", {"file_id": _MISSING, "language": "eng"}, 404),
+    ("/v1/documents/layout", "post", {"fileId": _MISSING}, 404),
+    ("/v1/documents/layout", "post", {"file_id": _MISSING}, 404),
+    ("/v1/documents/extractions/ext_missing/fields/invoice", "patch", {"value": "1"}, 404),
+    (
+        "/v1/document-types",
+        "post",
+        {**TYPE, "id": "pinned_a", "name": "A", "reviewBelow": 0.5, "dateOrder": "DMY"},
+        201,
+    ),
+    (
+        "/v1/document-types",
+        "post",
+        {**TYPE, "id": "pinned_b", "name": "B", "review_below": 0.5, "date_order": "DMY"},
+        201,
+    ),
+    (f"{_TYPES}/versions", "post", {"fields": FIELDS, "offerAt": 5, "pageImages": False}, 404),
+    (f"{_TYPES}/versions", "post", {"fields": FIELDS, "offer_at": 5, "page_images": False}, 404),
+    (f"{_TYPES}/templates/suggest", "post", {"extractionIds": ["ext_1"]}, 404),
+    (f"{_TYPES}/templates/suggest", "post", {"extraction_ids": ["ext_1"]}, 404),
+    (f"{_TYPES}/samples", "post", {"fileId": _MISSING, "expected": {}}, 404),
+    (f"{_TYPES}/samples", "post", {"file_id": _MISSING, "expected": {}}, 404),
+]
+
+
+async def test_each_body_takes_both_names_of_a_field_and_refuses_an_unknown_one(make: Make) -> None:
+    s = make(Models(), Floor(0.5), Prices())
+    got: list[tuple[str, int, int]] = []
+    async with s.client as c:
+        for path, method, body, _ in _BODIES:
+            known = await c.request(method, path, json=body, headers=OPS)
+            unknown = await c.request(method, path, json={**body, "teamName": "ops"}, headers=OPS)
+            got.append((path, known.status_code, unknown.status_code))
+    assert got == [(path, parsed, 400) for path, _, _, parsed in _BODIES], got
