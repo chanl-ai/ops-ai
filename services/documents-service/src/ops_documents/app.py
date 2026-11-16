@@ -69,6 +69,7 @@ from ops_documents.tools_client import PluginTemplates
 from ops_extract import page_images
 from ops_extract.layout import layout_of
 from ops_identity import Auth, CurrentCaller, Principal, install_auth
+from ops_identity.fastapi import Tx
 from ops_ingest.reading import OcrMode, ocr_installed
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
@@ -249,6 +250,10 @@ def create_documents_app(
             raise NotFound(what)
         return value
 
+    # A route that reads or writes only rows, or asks files-service or tools-service before its first row, takes `Tx`:
+    # one transaction, opened at its first row. A route that reads a row and then asks another service or the model,
+    # or saves a row a background task then picks up, keeps a transaction per store call, so none is open while the
+    # other service works and the task finds its row committed.
     docs = APIRouter(prefix="/v1/documents", tags=["documents"], responses=errors)
 
     @docs.post(
@@ -270,6 +275,7 @@ def create_documents_app(
     @docs.get("/extractions", response_model=Envelope[ListResult[Extraction]], dependencies=[service_scope("view")])
     async def file_extractions(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
+        _: Tx,
         file_id: str = Query(alias="fileId", min_length=1, max_length=64),
         page: int = Query(1, ge=1),
         page_size: int = Query(20, alias="pageSize", ge=1, le=100),
@@ -304,6 +310,7 @@ def create_documents_app(
     async def get_reading(  # pyright: ignore[reportUnusedFunction]
         file_id: str,
         who: Caller,
+        _: Tx,
         ocr: OcrMode = "auto",
         language: str = Query("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$"),
         page: int | None = Query(None, ge=1),
@@ -352,6 +359,7 @@ def create_documents_app(
     async def get_layout(  # pyright: ignore[reportUnusedFunction]
         file_id: str,
         who: Caller,
+        _: Tx,
         page: int | None = Query(None, ge=1),
         ocr: bool = False,
     ) -> JSONResponse:
@@ -364,7 +372,7 @@ def create_documents_app(
         return ok(_page_of(found, page) if page is not None else found)
 
     @docs.get("/extractions/{extraction_id}", response_model=Envelope[Extraction], dependencies=[service_scope("view")])
-    async def get_extraction(extraction_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_extraction(extraction_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await extractor.get(who, extraction_id), "Extraction"))
 
     @docs.patch(
@@ -372,14 +380,14 @@ def create_documents_app(
         response_model=Envelope[Extraction],
         dependencies=[service_scope("edit")],
     )
-    async def correct_field(extraction_id: str, key: str, body: CorrectionIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def correct_field(extraction_id: str, key: str, body: CorrectionIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A checker's value for one field; the original value and confidence are kept beside it."""
         if not who.edits:
             raise CreateNotAllowedError("Your role in this team cannot correct documents.")
         return ok(found(await extractor.correct(who, extraction_id, key, body.value, record=body.record), "Extraction"))
 
     @docs.post("/purge", response_model=Envelope[Purged], dependencies=[service_scope("delete", services_only=True)])
-    async def purge(body: PurgeIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def purge(body: PurgeIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Removes what the token's team derived from a deleted file: its extractions with their corrections, and the
         samples naming it. A workflow on the file-deleted trigger calls this; files-service never does. A file
         files-service still serves the team is refused (409), so a purge can never remove the reads of a live file."""
@@ -413,12 +421,12 @@ def create_documents_app(
         return ok(made, 201)
 
     @types.get("", response_model=Envelope[DocumentTypeList], dependencies=[service_scope("view")])
-    async def list_types(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_types(who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The team's types, and whether the caller may add one (the console's New type)."""
         return ok({"items": await document_types.list(who), "canCreate": who.creates})
 
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])
-    async def get_type(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_type(type_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get(who, type_id), "Document type"))
 
     @types.delete("/{type_id}", status_code=204, response_class=Response, dependencies=[service_scope("edit")])
@@ -447,7 +455,7 @@ def create_documents_app(
         response_model=Envelope[DocumentTypeVersion],
         dependencies=[service_scope("edit")],
     )
-    async def add_version(type_id: str, body: DocumentTypeVersionIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def add_version(type_id: str, body: DocumentTypeVersionIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The type's next version; earlier versions stay as they were."""
         made = await document_types.add_version(who, type_id, body.model_dump(mode="json", by_alias=True))
         return ok(found(made, "Document type"), 201)
@@ -457,7 +465,7 @@ def create_documents_app(
         response_model=Envelope[DocumentTypeVersion],
         dependencies=[service_scope("view")],
     )
-    async def get_version(type_id: str, version: int, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_version(type_id: str, version: int, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get_version(who, type_id, version), "Document type version"))
 
     @types.post(
@@ -494,7 +502,7 @@ def create_documents_app(
         response_class=Response,
         dependencies=[service_scope("edit")],
     )
-    async def remove_example(type_id: str, example_id: str, who: Caller) -> Response:  # pyright: ignore[reportUnusedFunction]
+    async def remove_example(type_id: str, example_id: str, who: Caller, _: Tx) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Later reads of the type are no longer given this example."""
         if not await document_types.remove_example(who, type_id, example_id):
             raise NotFound("Example")
@@ -536,7 +544,7 @@ def create_documents_app(
         return ok(found(await document_types.start_test(who, type_id, version), "Document type version"), 202)
 
     @types.get("/{type_id}/test-runs/{test_id}", response_model=Envelope[TestRun], dependencies=[service_scope("view")])
-    async def get_test(type_id: str, test_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_test(type_id: str, test_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get_test(who, type_id, test_id), "Test run"))
 
     app.include_router(docs)

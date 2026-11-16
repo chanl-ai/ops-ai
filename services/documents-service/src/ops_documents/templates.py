@@ -33,6 +33,7 @@ from ops_documents.store import NameTakenError, TemplateCopies
 from ops_documents.store.template_copies import CopyRow
 from ops_documents.tools_client import PluginTemplates
 from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, In, Out, ok
 from ops_service_kit.template_merge import FieldOutcome, apply, merge
@@ -397,12 +398,13 @@ def templates_router(
         who: Annotated[Who, Depends(caller)],
         resource: str,
         body: InstallInput,
+        _: Tx,
     ) -> JSONResponse:
         """Add to team: makes the team's own copy of the document type, 201 with it, or 200 with the copy the team
         already holds of this version. `resource` is `<source>:<template id>`; the source has a colon of its own
         (`plugin:<id>`), so the template id follows the last one. 404 `template_not_found` when the team's apps bring
         no such resource, `template_version_not_found` for a version they do not ship."""
-        source, _, template_id = resource.rpartition(":")
+        source, template_id = resource.rpartition(":")[::2]
         t = next((x for x in await listed(request, who) if x["source"] == source and x["id"] == template_id), None)
         if t is None:
             raise TemplateNotFound(
@@ -504,13 +506,13 @@ def templates_router(
         dependencies=[scope("view")],
     )
     async def review_update(  # pyright: ignore[reportUnusedFunction]
-        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str
+        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str, _: Tx
     ) -> JSONResponse:
         """Review update: field by field, what taking the app's current template does to the team's type (`copy` is the
         type's id): the team's edits kept, the template's changes taken, and the fields both changed, which keep the
         team's value unless the person chooses. Each extracted field is compared by its key. 409 `detached` for a copy
         the team made its own."""
-        _, _, view, _, _, _ = await review(request, who, resource, copy)
+        view = (await review(request, who, resource, copy))[2]
         return ok(UpdateReview.model_validate(view).model_dump(by_alias=True))
 
     @router.post(
@@ -520,7 +522,7 @@ def templates_router(
         dependencies=[scope("edit")],
     )
     async def take_update(  # pyright: ignore[reportUnusedFunction]
-        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str, body: UpdateInput
+        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str, body: UpdateInput, _: Tx
     ) -> JSONResponse:
         """Take update. `merge` (the default) makes the type's next version keeping every field the team edited,
         taking every field only the template changed, and writing the template's value on a conflict only where
@@ -583,12 +585,12 @@ def templates_router(
         dependencies=[scope("edit")],
     )
     async def detach_copy(  # pyright: ignore[reportUnusedFunction]
-        who: Annotated[Who, Depends(caller)], resource: str, copy: str
+        who: Annotated[Who, Depends(caller)], resource: str, copy: str, _: Tx
     ) -> JSONResponse:
         """Detach: the team's type becomes its own, offered no update again, and the template is offered for a fresh
         copy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the team's copy
         of `resource`."""
-        source, _, template_id = resource.rpartition(":")
+        source, template_id = resource.rpartition(":")[::2]
         row = await copies.of_record(copy)
         if row is None or row.source != source or row.template_id != template_id:
             raise NotFound(f"The team's copy {copy} of {resource}")
