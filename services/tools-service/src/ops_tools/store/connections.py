@@ -35,7 +35,7 @@ from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 from .app_cards import forget_cards
-from .modules import metadata, module_operations, service_outbox, tool_modules
+from .modules import metadata, module_operations, service_outbox, team_modules, tool_modules
 from .team_defaults import team_defaults
 from .tenancy import ROLE
 
@@ -560,7 +560,7 @@ class ConnectionStore(Store):
         if not ids:
             return {}
         q = sa.select(tool_modules.c.connection_id, tool_modules.c.id, tool_modules.c.display_name).where(
-            tool_modules.c.tenant_id == tenant_id, tool_modules.c.connection_id.in_(ids), team_visible(tool_modules)
+            tool_modules.c.tenant_id == tenant_id, tool_modules.c.connection_id.in_(ids), team_modules()
         )
         out: dict[str, list[Row]] = {}
         for r in await c.execute(q.order_by(tool_modules.c.display_name)):
@@ -1148,7 +1148,7 @@ class ConnectionStore(Store):
         q = (
             sa.select(o.scopes)
             .join(tool_modules, sa.and_(m.tenant_id == o.tenant_id, m.id == o.module_id))
-            .where(o.tenant_id == tenant_id, m.connection_id == connection_id, team_visible(tool_modules))
+            .where(o.tenant_id == tenant_id, m.connection_id == connection_id, team_modules())
             .order_by(o.module_id, o.position)
         )
         async with self.tx() as c:

@@ -17,13 +17,7 @@ from models import chain_metadata, chains
 from ops_store.schema import isolation_ddl, isolation_kind
 
 # Area -> tables the database does not isolate yet.
-WAITING: dict[str, set[str]] = {
-    "tools": {
-        # A module with no team is read and called by every team, and the generated team policy reads only the
-        # acting team's rows; it waits for a marking whose policy also reads the tenant's no-team rows.
-        "tool_modules",
-    },
-}
+WAITING: dict[str, set[str]] = {}
 
 
 def _tables() -> dict[str, sa.Table]:

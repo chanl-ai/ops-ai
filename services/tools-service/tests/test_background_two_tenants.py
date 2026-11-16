@@ -9,6 +9,7 @@ logs no error can still have done any of these, which is what each test reads ba
 from __future__ import annotations
 
 import time
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -43,6 +44,11 @@ def engine(both_engine: AsyncEngine) -> AsyncEngine:
 
 def _other() -> str:
     return f"t_{uuid4().hex[:10]}"
+
+
+def _in(tenant: str) -> AbstractContextManager[object]:
+    """A test's read of `tenant`'s rows, in that tenant, as the store reads them for it."""
+    return isolation.tenant_wide("TESTS", tenant_id=tenant)
 
 
 class Agents:
@@ -147,9 +153,12 @@ async def test_the_seed_load_writes_each_tenants_modules_and_leaves_the_others(
     first = await load(store, seed, tenant_id=tenant, now=now)
     assert first > 0
     assert await load(store, seed, tenant_id=other, now=now) == first, "the second tenant found the first one's"
-    assert await store.count(tenant) == await store.count(other) == first
+    # Each tenant's modules are read in that tenant: the database shows a tenant only its own (tools_0086).
+    with _in(other):
+        assert await store.count(other) == first
+        core = await store.get(other, "mod_core_banking")
+    assert await store.count(tenant) == first
     assert await load(store, seed, tenant_id=tenant, now=now) == 0, "the second tenant's load changed the first's"
-    core = await store.get(other, "mod_core_banking")
     assert core is not None and core["tenant_id"] == other
 
 
@@ -163,7 +172,10 @@ async def test_the_catch_up_brings_each_tenants_teams_up_to_date_in_their_own_te
         await defaults.record(t, team, 0, datetime.now(UTC))
     assert behind <= set(await catch_up(store, defaults))
     for t, team in behind:
-        assert await defaults.version(t, team) == DEFAULTS_VERSION
-        assert await store.get(t, f"mod_builtin_knowledge_{team}") is not None
-    assert await store.get(other, "mod_builtin_knowledge_team_retail") is None, "a team's copy reached another tenant"
+        with _in(t):
+            assert await defaults.version(t, team) == DEFAULTS_VERSION
+            assert await store.get(t, f"mod_builtin_knowledge_{team}") is not None
+    with _in(other):
+        leaked = await store.get(other, "mod_builtin_knowledge_team_retail")
+    assert leaked is None, "a team's copy reached another tenant"
     assert await store.get(tenant, "mod_builtin_knowledge_team_ops") is None, "a team's copy reached another tenant"

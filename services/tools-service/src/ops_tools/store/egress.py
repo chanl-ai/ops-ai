@@ -26,9 +26,8 @@ from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.rows import rows
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
-from ops_store.team_scope import team_visible
 
-from .modules import metadata, module_egress_hosts, tool_modules
+from .modules import metadata, module_egress_hosts, team_modules, tool_modules
 from .tenancy import ROLE
 
 # Why the allow-list is read and written across the tenant's teams: it is the tenant's one list, never a team's, and
@@ -134,7 +133,7 @@ def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
             sa.and_(
                 tool_modules.c.tenant_id == module_egress_hosts.c.tenant_id,
                 tool_modules.c.id == module_egress_hosts.c.module_id,
-                team_visible(tool_modules),
+                team_modules(),
             ),
         )
         .where(module_egress_hosts.c.tenant_id == tenant_id)

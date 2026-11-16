@@ -49,7 +49,6 @@ TENANT_HELD = {
 }
 # Until each team has its own tool modules (keys per team, its own policies): then this list is empty.
 TOOLS_UNTIL_C509 = {
-    "tool_modules": "tools per team",
     "send_policies": "tools per team",
     "send_checks": "tools per team",
     "gateway_calls": "the call log records the acting team for Usage; the database lock on it comes later",
@@ -66,6 +65,8 @@ BACKGROUND = {
 REVIEWED_ACROSS_TEAMS = {
     "registry_publish_requests": "a publish request is read by reviewers outside its subject's team; can() checks the "
     "team, the tenant policy holds the tenant",
+    "tool_modules": "a module with no team is read by every team and one granted to another team's workflow by that "
+    "team; the store's team_modules and granted check the team, the tenant policy holds the tenant (tools_0086)",
 }
 ALLOWED_TABLES = TENANT_HELD | TOOLS_UNTIL_C509 | BACKGROUND | REVIEWED_ACROSS_TEAMS
 

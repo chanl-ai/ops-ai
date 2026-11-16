@@ -24,7 +24,15 @@ from ops_store.team_scope import team_visible
 
 from .calls import RAN, gateway_calls
 from .connections import connections
-from .modules import granted, module_approvals, module_operations, module_versions, seen_by, tool_modules
+from .modules import (
+    granted,
+    module_approvals,
+    module_operations,
+    module_versions,
+    seen_by,
+    team_modules,
+    tool_modules,
+)
 from .plugin_bindings import plugin_bindings
 from .tenancy import ROLE
 
@@ -198,7 +206,7 @@ def _derived(tenant_id: str, team_id: str, team: str | None, w: Window) -> sa.Su
         .select_from(joined)
         .where(
             t.tenant_id == tenant_id,
-            sa.or_(team_visible(tool_modules), granted(tenant_id)),
+            sa.or_(team_modules(), granted(tenant_id)),
             seen_by(tenant_id, team) if team is not None else sa.true(),
         )
         .subquery("d")
@@ -231,7 +239,7 @@ class ModuleList(Store):
         t = tool_modules.c
         views = _views(d, w)
         joined = tool_modules.join(d, sa.and_(d.c.tenant_id == t.tenant_id, d.c.id == t.id))
-        seen = sa.or_(team_visible(tool_modules), granted(tenant_id))
+        seen = sa.or_(team_modules(), granted(tenant_id))
         base = sa.select(t.id, d.c.connection_id).select_from(joined).where(seen)
         in_view = base.where(views[view]) if view != "all" else base
         wanted = set(q.filters.get("access") or [])
