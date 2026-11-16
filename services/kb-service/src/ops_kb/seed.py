@@ -77,7 +77,7 @@ async def seed_demo(service: KnowledgeService, tenant: str = TENANT) -> list[str
             continue
         # A base of this name under another id was made by hand or by the script before the ids were stable; it is
         # left alone, and the agents naming the stable id find nothing until the database is rebuilt.
-        if any(b["name"].lower() == d.name.lower() for b in await service.store.bases(tenant)):
+        if any(b.name.lower() == d.name.lower() for b in await service.store.bases(tenant)):
             log.warning("demo_kb_name_taken_not_seeded", name=d.name, id=d.id)
             continue
         # A source of a demo source's name belongs to someone; the seed never uploads into it.

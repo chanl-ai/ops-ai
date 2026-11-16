@@ -15,7 +15,7 @@ import contextlib
 import dataclasses
 import re
 import time
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -62,7 +62,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
-from .store.knowledge import ChangeRow, ChunkRow, ItemRow, RunRow
+from .store.knowledge import BaseRow, ChangeRow, ChunkRow, ItemRow, RunRow
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -519,7 +519,7 @@ class KnowledgeService:
 
     def _base(
         self,
-        b: dict[str, Any],
+        b: BaseRow,
         source_ids: list[str],
         counts: dict[str, dict[str, Any]],
         jobs: list[dict[str, Any]] | None = None,
@@ -530,7 +530,7 @@ class KnowledgeService:
         synced = max((c["synced"] for c in mine if c.get("synced")), default=None)
         documents = sum(c.get("indexed", 0) for c in mine)
         failures = sum(c.get("failed", 0) for c in mine)
-        if b["last_refreshed_at"] is None:
+        if b.last_refreshed_at is None:
             health, reasons = "never", ["Never indexed"]
         elif failures:
             health, reasons = "degraded", [f"{failures} document{'s' if failures != 1 else ''} failed to index"]
@@ -538,19 +538,19 @@ class KnowledgeService:
             health, reasons = "healthy", []
         settings = settings_of(b)
         return {
-            "id": b["id"],
-            "name": b["name"],
-            "slug": b["slug"],
-            "templateId": b.get("template_id"),
-            "protection": b.get("protection"),
-            "description": b["description"],
-            "color": b["color"],
-            "owner": b["owner"],
+            "id": b.id,
+            "name": b.name,
+            "slug": b.slug,
+            "templateId": b.template_id,
+            "protection": b.protection,
+            "description": b.description,
+            "color": b.color,
+            "owner": b.owner,
             "sources": [
                 {"sourceId": s, "itemsContributed": counts.get(s, {}).get("indexed", 0), "rules": []}
                 for s in source_ids
             ],
-            "collections": b["collections"],
+            "collections": b.collections,
             "precedence": PRECEDENCE,
             "metadataProfile": {"required": []},
             **{k: v for k, v in settings.items() if k != "access"},
@@ -561,7 +561,7 @@ class KnowledgeService:
                 "mcp": settings["access"]["mcp"],
                 "publicLink": {
                     "enabled": False,
-                    "slug": b["slug"].replace("_", "-"),
+                    "slug": b.slug.replace("_", "-"),
                     "answerStyle": "chat",
                     "rateLimit": 300,
                     "showSourceLinks": True,
@@ -582,10 +582,10 @@ class KnowledgeService:
             },
             "health": health,
             "healthReasons": reasons,
-            **({"lastRefreshedAt": _iso(b["last_refreshed_at"])} if b["last_refreshed_at"] else {}),
+            **({"lastRefreshedAt": _iso(b.last_refreshed_at)} if b.last_refreshed_at else {}),
             **({"lastSyncAt": _iso(synced)} if synced else {}),
             "jobs": jobs or [],
-            "createdAt": _iso(b["created_at"]),
+            "createdAt": _iso(b.created_at),
         }
 
     async def _joined(self, tenant: str) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
@@ -615,21 +615,19 @@ class KnowledgeService:
         self, who: Who, *, page: int, page_size: int, search: str | None, template_id: str | None = None
     ) -> dict[str, Any]:
         bases = [
-            b
-            for b in await self.store.bases(who.tenant_id)
-            if template_id is None or b.get("template_id") == template_id
+            b for b in await self.store.bases(who.tenant_id) if template_id is None or b.template_id == template_id
         ]
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
         by_kb, _ = await self._joined(who.tenant_id)
         using = await self.agents.usage(who.tenant_id, who.team_id)
         rows = [
             {
-                **self._base(b, by_kb.get(b["id"], []), await self._counts(who.tenant_id)),
-                "sourceNames": [sources[s]["name"] for s in by_kb.get(b["id"], []) if s in sources],
-                **_used_by(using, b["id"]),
+                **self._base(b, by_kb.get(b.id, []), await self._counts(who.tenant_id)),
+                "sourceNames": [sources[s]["name"] for s in by_kb.get(b.id, []) if s in sources],
+                **_used_by(using, b.id),
             }
-            for b in sorted(bases, key=lambda b: b["created_at"], reverse=True)
-            if _matches(search, b["name"], b["description"], b["owner"])
+            for b in sorted(bases, key=lambda b: b.created_at, reverse=True)
+            if _matches(search, b.name, b.description, b.owner)
         ]
         return page_of(rows, page=page, page_size=page_size, facets={"health": _facet(rows, "health")})
 
@@ -665,7 +663,7 @@ class KnowledgeService:
             "suggestedQuestions": [],
             "heldCount": 0,
             **({"embedding": cov} if (cov := await self.embedding_coverage(who, kb_id)) else {}),
-            **self._rights(who, b["team_id"], b["name"], b.get("protection")),
+            **self._rights(who, b.team_id, b.name, b.protection),
         }
 
     async def create_base(self, who: Who, i: dict[str, Any]) -> dict[str, Any]:
@@ -689,7 +687,7 @@ class KnowledgeService:
         await self._known_sources(who, source_ids)
         preset = PRESETS.get(str(i.get("preset") or "balanced"), PRESETS["balanced"])
         slug = _slug(name)
-        start = {k: {**v, **preset.get(k, {})} for k, v in settings_of({"slug": slug}).items()}
+        start = {k: {**v, **preset.get(k, {})} for k, v in sections_of(slug, {}, None).items()}
         chosen = settled(start, {k: i.get(k) for k in SECTIONS})
         row: dict[str, Any] = {
             "tenant_id": who.tenant_id,
@@ -710,7 +708,10 @@ class KnowledgeService:
             "protection": i.get("protection"),
         }
         await self.store.create_base(row, source_ids)
-        return self._base(row, source_ids, await self._counts(who.tenant_id))
+        made = BaseRow.model_validate(
+            {k: v for k, v in row.items() if k != "tenant_id"} | {"documents_source_id": None, "revision": 0}
+        )
+        return self._base(made, source_ids, await self._counts(who.tenant_id))
 
     @staticmethod
     def _may_change(
@@ -736,12 +737,12 @@ class KnowledgeService:
                 out[flag] = False
         return out
 
-    async def _changeable(self, who: Who, kb_id: str, step: str = "edit") -> dict[str, Any]:
+    async def _changeable(self, who: Who, kb_id: str, step: str = "edit") -> BaseRow:
         """The knowledge base, when the caller may change it (`_may_change`)."""
         b = await self.store.base(who.tenant_id, kb_id)
         if b is None:
             raise NotFound("No knowledge base with that id.")
-        self._may_change(who, b["team_id"], b["name"], step, protection=b.get("protection"))
+        self._may_change(who, b.team_id, b.name, step, protection=b.protection)
         return b
 
     async def update_base(self, who: Who, kb_id: str, patch: dict[str, Any]) -> dict[str, Any]:
@@ -772,16 +773,16 @@ class KnowledgeService:
         if any(v is not None for v in sections.values()):
             current = settings_of(b)
             after = settled(current, sections)
-            if after["retrieval"] != dict(b.get("retrieval") or {}):
+            if after["retrieval"] != dict(b.retrieval):
                 values["retrieval"] = after["retrieval"]
             rest = {k: v for k, v in after.items() if k != "retrieval"}
-            if rest != dict(b.get("settings") or {}):
+            if rest != dict(b.settings or {}):
                 values["settings"] = rest
         if values:
-            entry = audit_entry(who, "knowledge.base.settings", "knowledge_base", kb_id, b["name"], b, values)
+            entry = audit_entry(who, "knowledge.base.settings", "knowledge_base", kb_id, b.name, b.model_dump(), values)
             await self.store.update_base(who.tenant_id, kb_id, values, audit=entry)
         by_kb, _ = await self._joined(who.tenant_id)
-        return self._base({**b, **values}, by_kb.get(kb_id, []), await self._counts(who.tenant_id))
+        return self._base(b.model_copy(update=values), by_kb.get(kb_id, []), await self._counts(who.tenant_id))
 
     async def attach(self, who: Who, kb_id: str, source_ids: list[str]) -> dict[str, Any]:
         b = await self._changeable(who, kb_id)
@@ -807,7 +808,7 @@ class KnowledgeService:
         """How syncs of a source treat what they find, from the bases it feeds: when they differ the strictest wins
         (review over apply, keep over remove, the fewest days to stale, notify when any base asks)."""
         by_kb, _ = await self._joined(tenant)
-        bases = {str(b["id"]): b for b in await self.store.bases(tenant)}
+        bases = {b.id: b for b in await self.store.bases(tenant)}
         rules = [settings_of(bases[k])["sync"] for k, srcs in by_kb.items() if source_id in srcs and k in bases]
         if not rules:
             return dict(DEFAULT_SETTINGS["sync"])
@@ -827,13 +828,13 @@ class KnowledgeService:
 
     async def list_sources(self, who: Who, *, page: int, page_size: int, search: str | None) -> dict[str, Any]:
         sources = await self.store.sources(who.tenant_id)
-        bases = {b["id"]: b for b in await self.store.bases(who.tenant_id)}
+        bases = {b.id: b for b in await self.store.bases(who.tenant_id)}
         _, by_source = await self._joined(who.tenant_id)
         running = await self.store.running_sources(who.tenant_id)
         rows = [
             {
                 **self._source(s, by_source.get(s["id"], [])),
-                "usedBy": [{"id": k, "name": bases[k]["name"]} for k in by_source.get(s["id"], []) if k in bases],
+                "usedBy": [{"id": k, "name": bases[k].name} for k in by_source.get(s["id"], []) if k in bases],
                 "running": s["id"] in running,
             }
             for s in sorted(sources, key=lambda s: s["created_at"], reverse=True)
@@ -869,7 +870,7 @@ class KnowledgeService:
             raise NotFound("No source with that id.")
         s = found[0]
         _, by_source = await self._joined(who.tenant_id)
-        readers = [b for b in await self.store.bases(who.tenant_id) if b["id"] in by_source.get(source_id, [])]
+        readers = [b for b in await self.store.bases(who.tenant_id) if b.id in by_source.get(source_id, [])]
         recent = [_run(r) for r in (await self.store.runs(who.tenant_id, source_id=source_id))[:5]]
         items = await self.store.items(who.tenant_id, source_ids=[source_id])
         rules = await self.sync_rules(who.tenant_id, source_id)
@@ -881,10 +882,10 @@ class KnowledgeService:
             "notifyOnFailure": rules["notifyOnFailure"],
             "readers": [
                 {
-                    "id": b["id"],
-                    "name": b["name"],
-                    "slug": b["slug"],
-                    "color": b["color"],
+                    "id": b.id,
+                    "name": b.name,
+                    "slug": b.slug,
+                    "color": b.color,
                     "health": self._base(b, [], await self._counts(who.tenant_id))["health"],
                 }
                 for b in readers
@@ -2005,7 +2006,7 @@ class KnowledgeService:
 
     # ── Retrieval ────────────────────────────────────────────────────────
 
-    async def readable_bases(self, who: Who) -> list[dict[str, Any]]:
+    async def readable_bases(self, who: Who) -> list[BaseRow]:
         """Every base of the tenant for a service, which checks its callers' grants itself; for a person, those of
         their team and those no team owns."""
         if who.caller is not None and who.caller.kind == "service":
@@ -2020,7 +2021,7 @@ class KnowledgeService:
         and a base a person may not read is unknown to them; a retired base is skipped, so an agent that still names it
         answers from its other bases. `limit`, when given, caps the pieces below what the bases allow."""
         tenant = who.tenant_id
-        readable = {b["id"]: b for b in await self.readable_bases(who)}
+        readable = {b.id: b for b in await self.readable_bases(who)}
         retired = await self.store.retired(tenant, [k for k in kb_ids if k not in readable])
         if missing := [k for k in kb_ids if k not in readable and k not in retired]:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
@@ -2031,7 +2032,7 @@ class KnowledgeService:
     async def _retrieve(
         self,
         tenant: str,
-        bases: list[dict[str, Any]],
+        bases: list[BaseRow],
         question: str,
         *,
         limit: int | None = None,
@@ -2040,7 +2041,7 @@ class KnowledgeService:
         """The one search every caller goes through: the question rewritten when a base asks, the lanes, then the best
         fused pieces reranked when a base asks. A step that fails leaves the search as it was and says why."""
         how = search_settings(bases, limit=limit, collection=collection)
-        steps = steps_for([{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases], self.query_alias)
+        steps = steps_for([{**DEFAULT_RETRIEVAL, **b.retrieval} for b in bases], self.query_alias)
         searched: str = question
         rewrite: dict[str, Any] | None = None
         if steps.rewrite_alias is not None:
@@ -2057,7 +2058,7 @@ class KnowledgeService:
                 rewrite["skipped"] = e.reason
             rewrite["ms"] = ms_since(started)
         pool = dataclasses.replace(how, limit=max(how.limit, RERANK_POOL)) if steps.rerank_alias else how
-        found = await self.retriever.search(tenant, [b["id"] for b in bases], searched, pool)
+        found = await self.retriever.search(tenant, [b.id for b in bases], searched, pool)
         found = dataclasses.replace(found, rewrite=rewrite)
         if steps.rerank_alias is None:
             return found
@@ -2092,7 +2093,7 @@ class KnowledgeService:
         b = await self.store.base(who.tenant_id, kb_id)
         if b is None:
             raise NotFound("No knowledge base with that id.")
-        if b["last_refreshed_at"] is None:
+        if b.last_refreshed_at is None:
             raise Conflict("This knowledge base has not indexed anything yet; sync a source first.", code="not_indexed")
         started = datetime.now(UTC)
         found = await self._retrieve(who.tenant_id, [b], question, collection=collection)
@@ -2378,12 +2379,12 @@ class KnowledgeService:
         bases = await self.store.bases(who.tenant_id)
         sources = await self.store.sources(who.tenant_id)
         owners = (
-            {b["owner"] for b in bases}
+            {b.owner for b in bases}
             | {s["owner"] for s in sources}
             | {i.owner for i in await self.store.items(who.tenant_id)}
         )
         tags = {t for s in sources for t in s["tags"]}
-        collections = {c for b in bases for c in b["collections"]} | {s["collection"] for s in sources}
+        collections = {c for b in bases for c in b.collections} | {s["collection"] for s in sources}
         return {
             "owners": sorted(o for o in owners if o),
             "tags": sorted(tags),
@@ -2397,7 +2398,7 @@ class KnowledgeService:
         if not found:
             return []
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
-        bases = {b["id"]: b for b in await self.store.bases(who.tenant_id)}
+        bases = {b.id: b for b in await self.store.bases(who.tenant_id)}
         _, by_source = await self._joined(who.tenant_id)
         return [self._change_out(who, ch, sources, bases, by_source) for ch in found]
 
@@ -2406,11 +2407,11 @@ class KnowledgeService:
         who: Who,
         ch: ChangeRow,
         sources: dict[str, dict[str, Any]],
-        bases: dict[str, dict[str, Any]],
+        bases: dict[str, BaseRow],
         by_source: dict[str, list[str]],
     ) -> dict[str, Any]:
         s = sources.get(ch.source_id)
-        kbs = [{"id": k, "name": bases[k]["name"]} for k in by_source.get(ch.source_id, []) if k in bases]
+        kbs = [{"id": k, "name": bases[k].name} for k in by_source.get(ch.source_id, []) if k in bases]
         if ch.origin == "faq":
             # Deciding a draft is changing the source, so it takes the right the decide route checks.
             allowed = s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"]
@@ -2557,12 +2558,12 @@ class KnowledgeService:
             raise ValidationFailed("Write the page's text.")
         b = await self._changeable(who, kb_id)
         by_kb, _ = await self._joined(who.tenant_id)
-        name = f"{b['name']} pages"
+        name = f"{b.name} pages"
         attached = await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))
         source = next((x for x in attached if x["name"] == name), None)
         if source is None:
             source = await self.create_source(
-                who, {"type": "text", "name": name, "collection": "Pages", "owner": b["owner"], "kbIds": [kb_id]}
+                who, {"type": "text", "name": name, "collection": "Pages", "owner": b.owner, "kbIds": [kb_id]}
             )
         elif source["type"] == "file":
             # A base's pages source made before typed text existed holds its pages as files; it becomes the typed text
@@ -2631,7 +2632,7 @@ class KnowledgeService:
         time, then synced at once, which also activates the source. Returns the source id, the files and the run."""
         b = await self._changeable(who, kb_id)
         by_kb, _ = await self._joined(who.tenant_id)
-        own = b.get("documents_source_id")
+        own = b.documents_source_id
         source = None
         if own and own in by_kb.get(kb_id, []):
             source = (await self.store.sources(who.tenant_id, [str(own)]) or [None])[0]
@@ -2641,9 +2642,9 @@ class KnowledgeService:
                 who,
                 {
                     "type": "file",
-                    "name": f"{b['name']} documents",
+                    "name": f"{b.name} documents",
                     "collection": "Documents",
-                    "owner": b["owner"],
+                    "owner": b.owner,
                     "kbIds": [kb_id],
                 },
             )
@@ -3191,13 +3192,13 @@ def scope_of(r: dict[str, Any]) -> Scope:
     )
 
 
-def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None, collection: str | None = None) -> Search:
+def search_settings(bases: list[BaseRow], *, limit: int | None = None, collection: str | None = None) -> Search:
     """One search over several bases: the lanes any of them asks for, the lowest threshold, the mean weight toward
     meaning and the largest piece limit, so no base gets less than it asks; `limit` caps the pieces further. Scopes do
     not merge: each base keeps its own, and `collection` narrows them all."""
     if not bases:
         return Search(limit=limit or int(DEFAULT_RETRIEVAL["chunkLimit"]), collection=collection)
-    settings = [{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases]
+    settings: list[dict[str, Any]] = [{**DEFAULT_RETRIEVAL, **b.retrieval} for b in bases]
     lanes: tuple[Lane, ...] = tuple(dict.fromkeys(lane for r in settings for lane in lanes_for(str(r["searchMode"]))))
     most = max(int(r["chunkLimit"]) for r in settings)
     return Search(
@@ -3206,7 +3207,7 @@ def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None, co
         meaning_threshold=min(float(r["meaningThreshold"]) for r in settings),
         weight=sum(float(r["hybridWeight"]) for r in settings) / len(settings),
         limit=min(most, limit) if limit else most,
-        scopes={str(b["id"]): scope_of(r) for b, r in zip(bases, settings, strict=True)},
+        scopes={b.id: scope_of(r) for b, r in zip(bases, settings, strict=True)},
         collection=collection,
     )
 
@@ -3266,12 +3267,19 @@ def tool_name(slug: str) -> str:
     return f"search_{slug}"[:64].rstrip("_") or "search_knowledge"
 
 
-def settings_of(b: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def settings_of(b: BaseRow) -> dict[str, dict[str, Any]]:
+    """Every settings section of a base as it applies (`sections_of`)."""
+    return sections_of(b.slug, b.retrieval, b.settings)
+
+
+def sections_of(
+    slug: str, retrieval: Mapping[str, object], saved: Mapping[str, object] | None
+) -> dict[str, dict[str, Any]]:
     """Every settings section of a base as it applies: the defaults under what the base stored, with keys it no longer
     keeps left out. A base saved before the answer section existed keeps the answer shape and no-answer message it held
     in its retrieval settings."""
-    stored = dict(b.get("settings") or {})
-    held = dict(b.get("retrieval") or {})
+    stored: dict[str, Any] = dict(saved or {})
+    held: dict[str, Any] = dict(retrieval)
     out = {"retrieval": {k: v for k, v in {**DEFAULT_RETRIEVAL, **held}.items() if k in _keys(RetrievalSettings)}}
     earlier: dict[str, Any] = {}
     if held.get("answerShape") == "chunks":
@@ -3281,7 +3289,7 @@ def settings_of(b: dict[str, Any]) -> dict[str, dict[str, Any]]:
     for name, default in DEFAULT_SETTINGS.items():
         given = {**(earlier if name == "answer" else {}), **dict(stored.get(name) or {})}
         out[name] = {k: v for k, v in {**default, **given}.items() if k in _keys(SECTIONS[name])}
-    out["access"] = {"mcp": {"toolName": tool_name(str(b["slug"])), **dict(out["access"].get("mcp") or {})}}
+    out["access"] = {"mcp": {"toolName": tool_name(slug), **dict(out["access"].get("mcp") or {})}}
     return out
 
 

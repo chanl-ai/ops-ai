@@ -392,7 +392,7 @@ def create_kb_app(
     async def knowledge_base_refs(caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Knowledge bases by id and name, for agents-service's grant check and thread names, and for a person's picker
         or script: the tenant's for a service, the team's and unowned ones for a person."""
-        return ok([{"id": b["id"], "name": b["name"]} for b in await service.readable_bases(caller)])
+        return ok([{"id": b.id, "name": b.name} for b in await service.readable_bases(caller)])
 
     @kbs.post("/search", response_model=Envelope[SearchOut])
     async def search_knowledge(body: SearchIn, caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

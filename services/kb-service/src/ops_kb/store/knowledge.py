@@ -569,6 +569,32 @@ def _whole_counts(value: object) -> object:
     return out
 
 
+class BaseRow(Out):
+    """A knowledge base as stored, but the tenant, which the caller already holds."""
+
+    id: str
+    team_id: str
+    name: str
+    slug: str
+    description: str
+    color: str
+    owner: str
+    collections: list[str]
+    retrieval: dict[str, JsonValue]
+    settings: dict[str, JsonValue] | None
+    created_by: str
+    created_at: datetime
+    last_refreshed_at: datetime | None
+    template_id: str | None
+    protection: str | None
+    documents_source_id: str | None
+    revision: int
+
+
+# Every column of kb_bases but the tenant.
+BASE_COLUMNS = [c for c in kb_bases.c if c.name != "tenant_id"]
+
+
 class RunRow(Out):
     """One sync run of a source: running, or ended with its counts, errors and log."""
 
@@ -659,11 +685,10 @@ class KnowledgeStore(Store):
         q = sa.select(table.c.team_id).where(table.c.tenant_id == tenant, table.c.id == row_id, team_visible(table))
         return str((await c.execute(q)).scalar_one())
 
-    async def bases(self, tenant: str) -> list[dict[str, Any]]:
+    async def bases(self, tenant: str) -> list[BaseRow]:
         async with self.tx() as c:
-            q = sa.select(kb_bases).where(kb_bases.c.tenant_id == tenant, team_visible(kb_bases))
-            rows = (await c.execute(q)).mappings()
-            return [dict(r) for r in rows]
+            q = sa.select(*BASE_COLUMNS).where(kb_bases.c.tenant_id == tenant, team_visible(kb_bases))
+            return await rows(c, q, BaseRow)
 
     async def taken(self, tenant: str, *, name: str | None = None, kb_id: str | None = None) -> list[BaseName]:
         """The caller's team's bases holding `name` (any case) or `kb_id`. A name is unique in a team; an id another
@@ -677,15 +702,13 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             return await rows(c, q, BaseName)
 
-    async def team_bases(self, tenant: str, team: str | None) -> list[dict[str, Any]]:
+    async def team_bases(self, tenant: str, team: str | None) -> list[BaseRow]:
         """The bases a person in `team` reads: the team's and those no team owns, as the picker offers."""
         t = kb_bases.c
         scope = t.team_id.is_(None) if team is None else sa.or_(t.team_id.is_(None), t.team_id == team)
         async with self.tx() as c:
-            rows = (
-                await c.execute(sa.select(kb_bases).where(t.tenant_id == tenant, scope, team_visible(kb_bases)))
-            ).mappings()
-            return [dict(r) for r in rows]
+            q = sa.select(*BASE_COLUMNS).where(t.tenant_id == tenant, scope, team_visible(kb_bases))
+            return await rows(c, q, BaseRow)
 
     async def base_options(
         self, tenant: str, team: str | None, *, search: str, offset: int, limit: int, ids: list[str] | None = None
@@ -700,13 +723,12 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             return await rows(c, q, BaseOption)
 
-    async def base(self, tenant: str, kb_id: str) -> dict[str, Any] | None:
+    async def base(self, tenant: str, kb_id: str) -> BaseRow | None:
         async with self.tx() as c:
-            q = sa.select(kb_bases).where(
+            q = sa.select(*BASE_COLUMNS).where(
                 kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id, team_visible(kb_bases)
             )
-            row = (await c.execute(q)).mappings().first()
-            return dict(row) if row else None
+            return await one(c, q, BaseRow)
 
     async def tenants(self) -> list[str]:
         """Every tenant holding a source; only the start-up move between file stores reads across tenants."""
