@@ -62,7 +62,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
-from .store.knowledge import ChangeRow, ChunkRow, RunRow
+from .store.knowledge import ChangeRow, ChunkRow, ItemRow, RunRow
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -871,7 +871,7 @@ class KnowledgeService:
         _, by_source = await self._joined(who.tenant_id)
         readers = [b for b in await self.store.bases(who.tenant_id) if b["id"] in by_source.get(source_id, [])]
         recent = [_run(r) for r in (await self.store.runs(who.tenant_id, source_id=source_id))[:5]]
-        items = [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
+        items = await self.store.items(who.tenant_id, source_ids=[source_id])
         rules = await self.sync_rules(who.tenant_id, source_id)
         return {
             **self._source(s, by_source.get(source_id, [])),
@@ -901,7 +901,7 @@ class KnowledgeService:
             "governance": {
                 "excluded": 0,
                 "held": 0,
-                "duplicates": sum(1 for i in items if i.get("duplicate_of") or i["status"] == "skipped"),
+                "duplicates": sum(1 for i in items if i.duplicate_of or i.status == "skipped"),
                 "superseded": 0,
             },
         }
@@ -1278,9 +1278,7 @@ class KnowledgeService:
         no item needs it, or a sync holds the source now (that sync, or the next, rebuilds them)."""
         tenant, source_id = who.tenant_id, str(s["id"])
         stale = [
-            i
-            for i in [r.model_dump() for r in await self.store.items(tenant, source_ids=[source_id])]
-            if self.built_under_other_settings(s, i)
+            i for i in await self.store.items(tenant, source_ids=[source_id]) if self.built_under_other_settings(s, i)
         ]
         lease = await self.take_lease(tenant, source_id) if stale else None
         if lease is None:
@@ -1303,7 +1301,7 @@ class KnowledgeService:
         return _run(run_row(run))
 
     async def _rebuild(
-        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]], lease: Lease
+        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[ItemRow], lease: Lease
     ) -> None:
         # A run of its own for the AI steps: its task may be made inside a sync, whose run it must not share.
         try:
@@ -1318,7 +1316,7 @@ class KnowledgeService:
             await self.start_rebuild(who, found[0])
 
     async def _rebuild_items(
-        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]], lease: Lease
+        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[ItemRow], lease: Lease
     ) -> None:
         tenant, source_id, run_id = who.tenant_id, str(s["id"]), str(run["id"])
         counts: dict[str, int] = dict(run["counts"])
@@ -1333,17 +1331,14 @@ class KnowledgeService:
                     log.append(f"Cancelled by {current.cancelled_by} after {counts['checked']} of {counts['total']}.")
                     break
                 counts["checked"] += 1
-                if not item["file_id"]:
+                if not item.file_id:
                     # Content read through a connection's tools keeps no copy yet: it is rebuilt when next fetched.
                     counts["skipped"] += 1
-                    log.append(f"{item['title']}: rebuilt at the next sync, which fetches it again")
+                    log.append(f"{item.title}: rebuilt at the next sync, which fetches it again")
                 else:
-                    found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
-                                   str(item["digest"]), False)  # fmt: skip
-                    origin = Origin(str(item["path"]), str(item["title"])) if s["type"] == "tool" else None
-                    done = await self._read_file(
-                        who, s, item, name=str(item["path"]), found=found, rebuild=True, origin=origin
-                    )
+                    found = Stored(item.file_id, item.path, item.mime, item.size, item.digest, False)
+                    origin = Origin(item.path, item.title) if s["type"] == "tool" else None
+                    done = await self._read_file(who, s, item, name=item.path, found=found, rebuild=True, origin=origin)
                     outcome = {"indexed": "rebuilt", "reading": "reading"}.get(str(done["status"]), "failed")
                     counts[outcome] += 1
                     if outcome == "failed":
@@ -1404,10 +1399,9 @@ class KnowledgeService:
             raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
         started = datetime.now(UTC)
         settings = self.settings_of(s)
-        items = {
-            i["path"]: i
-            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
-        }
+        items = {i.path: i for i in await self.store.items(who.tenant_id, source_ids=[source_id])}
+        # Each name's digest, the store's or the one this run just read, for the same content under another name.
+        digests = {name: i.digest for name, i in items.items()}
         counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0, "excluded": 0}
         errors: list[dict[str, Any]] = []
         log: list[str] = []
@@ -1446,21 +1440,21 @@ class KnowledgeService:
                 counts["excluded"] += 1
                 log.append(f"{name}: {decision.excluded_by}")
                 if existing is not None:
-                    excluded.append(str(existing["id"]))
+                    excluded.append(existing.id)
                 continue
             # files-service's digest, the key documents-service keeps the file's reading under.
-            same = existing is not None and existing["digest"] == found.digest and existing["status"] != "reading"
+            same = existing is not None and existing.digest == found.digest and existing.status != "reading"
             stale = existing is not None and self.built_under_other_settings(s, existing)
-            if same and existing is not None and not (stale or full or (retry and existing["status"] == "failed")):
+            if same and existing is not None and not (stale or full or (retry and existing.status == "failed")):
                 counts["unchanged"] += 1
                 continue
-            if not same and any(i["digest"] == found.digest and i is not existing for i in items.values()):
+            if not same and any(d == found.digest and other != name for other, d in digests.items()):
                 # The same content under another name in this source: indexed once.
                 counts["skipped"] += 1
                 log.append(f"{name}: the same content is already indexed in this source")
                 continue
             item = await self._read_file(who, s, existing, name=name, found=found, rebuild=same)
-            items[name] = item
+            digests[name] = str(item["digest"])
             if item["status"] == "failed":
                 counts["failed"] += 1
                 errors.append(
@@ -1678,7 +1672,7 @@ class KnowledgeService:
         self,
         who: Who,
         s: dict[str, Any],
-        existing: dict[str, Any],
+        existing: ItemRow,
         *,
         name: str,
         doc: ParsedDocument,
@@ -1692,9 +1686,7 @@ class KnowledgeService:
         warning: str | None = None
         title, pages = title_given or doc.title or name, doc.source.page_count
         settings = self.settings_of(s)
-        chunks, result = await self._chunks(
-            who, s, doc, item_id=existing["id"], version=existing["version"], title=title
-        )
+        chunks, result = await self._chunks(who, s, doc, item_id=existing.id, version=existing.version, title=title)
         if chunks:
             warning = _unread(doc)
         else:
@@ -1713,18 +1705,18 @@ class KnowledgeService:
             "content_digest": None if error else document_digest(doc, split_settings(settings)),
             "processed_at": datetime.now(UTC),
         }
-        await self.store.reindex(who.tenant_id, existing["id"], values, chunks)
-        await self._settle_drafts(who, s, str(existing["id"]), chunks, result)
-        return await self._duplicates(who, s, {**existing, **values})
+        await self.store.reindex(who.tenant_id, existing.id, values, chunks)
+        await self._settle_drafts(who, s, existing.id, chunks, result)
+        return await self._duplicates(who, s, existing.model_dump() | values)
 
-    def built_under_other_settings(self, s: dict[str, Any], item: dict[str, Any]) -> bool:
+    def built_under_other_settings(self, s: dict[str, Any], item: ItemRow) -> bool:
         """Whether an indexed item's pieces were split, or its file read, under settings the source no longer has.
         An item indexed before items recorded their settings was split with its kind's defaults."""
-        if item["status"] != "indexed":
+        if item.status != "indexed":
             return False
         settings = self.settings_of(s)
-        built = item.get("indexed_with") or index_key(stored(kind_of(s), None, ocr=self.ocr))
-        read_ocr = str(item.get("read_with") or "").split(":")
+        built = item.indexed_with or index_key(stored(kind_of(s), None, ocr=self.ocr))
+        read_ocr = (item.read_with or "").split(":")
         reread = s["type"] != "tool" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
         return built != self.key_of(s) or reread
 
@@ -1732,7 +1724,7 @@ class KnowledgeService:
         self,
         who: Who,
         s: dict[str, Any],
-        existing: dict[str, Any] | None,
+        existing: ItemRow | None,
         *,
         name: str,
         found: Stored,
@@ -1763,7 +1755,7 @@ class KnowledgeService:
             return await self._failed(who, s, existing, name=name, found=found, error=("parse", reason), origin=origin)
         cleaning = self.settings_of(s).cleaning
         # A fetched item's fields (from its fetch, or kept on it for a rebuild) feed the metadata mapping.
-        fields = cast(dict[str, str] | None, origin.extra.get("fields") or (existing or {}).get("fields"))
+        fields = cast(dict[str, str] | None, origin.extra.get("fields") or (existing.fields if existing else None))
         doc = parsed_of(answer, fields=fields, furniture=cleaning.furniture, main_content=cleaning.main_content)
         # Each paragraph's digest is kept before lines repeated across the site are dropped, so they can be counted.
         lines = lines_of(doc)
@@ -1780,14 +1772,14 @@ class KnowledgeService:
         )  # fmt: skip
 
     async def _mark_reading(
-        self, who: Who, s: dict[str, Any], existing: dict[str, Any] | None, *, name: str, found: Stored, origin: Origin
+        self, who: Who, s: dict[str, Any], existing: ItemRow | None, *, name: str, found: Stored, origin: Origin
     ) -> dict[str, Any]:
         """The item waits for its reading; an indexed version keeps answering until the new one is indexed."""
         values = {"status": "reading", "digest": found.digest, "file_id": found.file_id, "mime": found.mime,
                   "size": found.size, "error_class": None, "error": None}  # fmt: skip
         if existing is not None:
-            await self.store.update_item(who.tenant_id, existing["id"], values)
-            return {**existing, **values}
+            await self.store.update_item(who.tenant_id, existing.id, values)
+            return existing.model_dump() | values
         item = self._placeholder(who, s, name, found, origin) | values
         await self.store.add_item(who.tenant_id, item)
         return item
@@ -1796,7 +1788,7 @@ class KnowledgeService:
         self,
         who: Who,
         s: dict[str, Any],
-        existing: dict[str, Any] | None,
+        existing: ItemRow | None,
         *,
         name: str,
         found: Stored,
@@ -1806,8 +1798,8 @@ class KnowledgeService:
         values = {"status": "failed", "error_class": error[0], "error": error[1], "digest": found.digest,
                   "file_id": found.file_id, "processed_at": datetime.now(UTC)}  # fmt: skip
         if existing is not None:
-            await self.store.update_item(who.tenant_id, existing["id"], values)
-            return {**existing, **values}
+            await self.store.update_item(who.tenant_id, existing.id, values)
+            return existing.model_dump() | values
         item = self._placeholder(who, s, name, found, origin or Origin(name)) | values
         await self.store.add_item(who.tenant_id, item)
         return item
@@ -1825,18 +1817,15 @@ class KnowledgeService:
         """Indexes the source items waiting on this file's reading, once documents-service has it (its
         reading.finished event, or the knowledge schedule asking again); the number of items it settled."""
         settled = 0
-        for item in [r.model_dump() for r in await self.store.reading_items(who.tenant_id, file_id=file_id)]:
-            found_sources = await self.store.sources(who.tenant_id, [str(item["source_id"])])
+        for item in await self.store.reading_items(who.tenant_id, file_id=file_id):
+            found_sources = await self.store.sources(who.tenant_id, [item.source_id])
             if not found_sources:
                 continue
             source = found_sources[0]
-            found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
-                           str(item["digest"]), False)  # fmt: skip
+            found = Stored(item.file_id, item.path, item.mime, item.size, item.digest, False)
             # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
-            origin = Origin(str(item["path"]), str(item["title"])) if source["type"] == "tool" else None
-            done = await self._read_file(
-                who, source, item, name=str(item["path"]), found=found, rebuild=False, origin=origin
-            )
+            origin = Origin(item.path, item.title) if source["type"] == "tool" else None
+            done = await self._read_file(who, source, item, name=item.path, found=found, rebuild=False, origin=origin)
             if done["status"] != "reading":
                 settled += 1
                 if done["status"] == "indexed":
@@ -1849,7 +1838,7 @@ class KnowledgeService:
         self,
         who: Who,
         s: dict[str, Any],
-        existing: dict[str, Any] | None,
+        existing: ItemRow | None,
         *,
         file_id: str,
         name: str,
@@ -1871,8 +1860,8 @@ class KnowledgeService:
         cleaned = document_digest(doc, split_settings(self.settings_of(s)))
         if (
             existing is not None
-            and existing["status"] == "indexed"
-            and existing.get("content_digest") == cleaned
+            and existing.status == "indexed"
+            and existing.content_digest == cleaned
             and not self.built_under_other_settings(s, existing)
         ):
             # The same text after cleaning (a page with no change signal, served with a new timestamp or token): no new
@@ -1883,10 +1872,10 @@ class KnowledgeService:
                 "size": size,
                 **{k: v for k, v in (extra or {}).items() if k in KEPT_EXTRA},
             }
-            await self.store.update_item(who.tenant_id, str(existing["id"]), kept)
-            return {**existing, **kept, "unchanged": True}
-        item_id = existing["id"] if existing else new_id("itm")
-        version = (existing["version"] + 1) if existing else 1
+            await self.store.update_item(who.tenant_id, existing.id, kept)
+            return existing.model_dump() | kept | {"unchanged": True}
+        item_id = existing.id if existing else new_id("itm")
+        version = (existing.version + 1) if existing else 1
         chunks: list[dict[str, Any]] = []
         error: tuple[str, str] | None = None
         warning: str | None = None
@@ -1915,7 +1904,7 @@ class KnowledgeService:
             "page_count": pages,
             "chunk_count": len(chunks),
             "owner": s["owner"],
-            "created_at": existing["created_at"] if existing else now,
+            "created_at": existing.created_at if existing else now,
             "processed_at": now,
             "read_with": read_with,
             "indexed_with": None if error else self.key_of(s),
@@ -1936,14 +1925,14 @@ class KnowledgeService:
         }
         change = None
         # An item that was only waiting for its first reading (version 0) has nothing to compare.
-        if existing is not None and existing["version"] > 0:
+        if existing is not None and existing.version > 0:
             before = await self.store.chunks(who.tenant_id, item_id)
-            change = _change(who, s, item, existing["version"], before, chunks, now)
+            change = _change(who, s, item, existing.version, before, chunks, now)
         if (
             change is not None
             and existing is not None
             and not error
-            and existing.get("content_digest") != item["content_digest"]
+            and existing.content_digest != item["content_digest"]
             and (await self.sync_rules(who.tenant_id, str(s["id"])))["changes"] == "review"
         ):
             return await self._hold(who, existing, item, version_row, chunks, change)
@@ -1954,7 +1943,7 @@ class KnowledgeService:
     async def _hold(  # noqa: PLR0917 - one call site, every argument a different part of the version
         self,
         who: Who,
-        existing: dict[str, Any],
+        existing: ItemRow,
         item: dict[str, Any],
         version_row: dict[str, Any],
         chunks: list[dict[str, Any]],
@@ -1963,10 +1952,10 @@ class KnowledgeService:
         """A changed version a base feeding this source reviews: kept in Changes as a pending change with the version
         built, while search keeps serving the current one. Approving it indexes the version as built. The same content
         found again (still waiting, or rejected) is not held twice."""
-        held = [c for c in await self.store.changes(who.tenant_id) if c.item_id == existing["id"]]
+        held = [c for c in await self.store.changes(who.tenant_id) if c.item_id == existing.id]
         digest = str(item["content_digest"])
         if any(c.origin == "sync" and detail_of(c).get("digest") == digest for c in held):
-            return {**existing, "unchanged": True}
+            return existing.model_dump() | {"unchanged": True}
         for c in held:
             if c.origin == "sync" and c.status == "pending":
                 await self.store.update_change(who.tenant_id, str(c.id), {"status": "superseded"})
@@ -1974,15 +1963,15 @@ class KnowledgeService:
         detail = {"digest": digest, "held": _json_safe(payload)}
         # Written with the drafts' insert: one change row, waiting for a decision.
         await self.store.add_drafts(who.tenant_id, [{**change, "status": "pending", "detail": detail}])
-        return {**existing, "unchanged": True}
+        return existing.model_dump() | {"unchanged": True}
 
     async def _apply_held(self, who: Who, change: ChangeRow) -> bool:
         """Indexes the version a held change carries, as a sync would have when it found it; False when the document
         moved on since (its version is no longer the one the change started from), and nothing is indexed."""
         held = cast(dict[str, Any], _from_json_safe(detail_of(change)["held"]))
-        current = [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[str(change.source_id)])]
-        now = next((i for i in current if i["id"] == change.item_id), None)
-        if now is None or int(now["version"]) != int(change.from_version):
+        current = await self.store.items(who.tenant_id, source_ids=[change.source_id])
+        now = next((i for i in current if i.id == change.item_id), None)
+        if now is None or now.version != change.from_version:
             return False
         await self.store.index_version(
             who.tenant_id, held["item"], held["version"], held["chunks"], new=False, change=None
@@ -2775,11 +2764,12 @@ class KnowledgeService:
         return {"readerVersion": answer.get("readerVersion"), "ocr": ocr, "pages": out}
 
     async def item(self, who: Who, item_id: str) -> dict[str, Any]:
-        found = [r.model_dump() for r in await self.store.items(who.tenant_id, item_id=item_id)]
+        found = await self.store.items(who.tenant_id, item_id=item_id)
         if not found:
             raise NotFound("No item with that id.")
-        i = found[0]
-        s = await self._source_row(who, i["source_id"])
+        row = found[0]
+        i = row.model_dump()
+        s = await self._source_row(who, row.source_id)
         chunks = await self.store.chunks(who.tenant_id, item_id)
         searched: dict[str, list[dict[str, str]]] = {}
         for u in await self.store.units(who.tenant_id, item_id):
@@ -2792,8 +2782,8 @@ class KnowledgeService:
             "settingsUsed": {
                 "preset": settings.ingest.preset,
                 "strategies": settings.ingest.strategies,
-                "indexedWith": i.get("indexed_with"),
-                "current": not self.built_under_other_settings(s, i),
+                "indexedWith": row.indexed_with,
+                "current": not self.built_under_other_settings(s, row),
             },
             "sourceName": s["name"],
             "sourceType": s["type"],

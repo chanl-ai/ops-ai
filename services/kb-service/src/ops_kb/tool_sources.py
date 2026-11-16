@@ -25,6 +25,7 @@ from ops_service_kit.ids import new_id
 from .ai import spent_on
 from .files import FileNotScanned, Stored
 from .origin import Origin, source_team
+from .store.knowledge import ItemRow
 
 if TYPE_CHECKING:
     from .service import KnowledgeService, Who
@@ -321,9 +322,7 @@ async def sync_tool_source(
     whole = from_start or "seenSoFar" in cfg
     if from_start:
         cfg.pop("seenSoFar", None)
-    known = {
-        str(i["path"]): i for i in [r.model_dump() for r in await service.store.items(tenant, source_ids=[source_id])]
-    }
+    known = {i.path: i for i in await service.store.items(tenant, source_ids=[source_id])}
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
     errors: list[dict[str, Any]] = []
     log: list[str] = []
@@ -403,7 +402,7 @@ async def sync_tool_source(
                 log.append(f"{r.get('title') or item_id}: {r['skipped']}")
                 continue
             ex = known.get(item_id)
-            if ex is not None and ex.get("marker") == marker and ex["status"] == "indexed":
+            if ex is not None and ex.marker == marker and ex.status == "indexed":
                 counts["unchanged"] += 1
             else:
                 changed.append({**r, "marker": marker})
@@ -427,7 +426,7 @@ async def sync_tool_source(
     if not resumes:
         seen |= carried
         cfg.pop("seenSoFar", None)
-    gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full and whole else []
+    gone = [i.path for i in known.values() if not i.parent_id] if full and whole else []
     if status == "success" or resumes:
         lock = asyncio.Semaphore(int(cfg.get("fetchAtOnce") or AT_ONCE))
         paced = Pacer(pace)
@@ -435,7 +434,7 @@ async def sync_tool_source(
         async def fetch(item_id: str) -> Answer:
             # The version tag held for the item lets the system answer `unchanged` without sending it again.
             held = known.get(item_id)
-            tag = {"tag": held["tag"]} if cfg.get("getTakesTag") and held and held.get("tag") else {}
+            tag = {"tag": held.tag} if cfg.get("getTakesTag") and held and held.tag else {}
             async with lock:
                 await paced.turn()
                 return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
@@ -449,8 +448,8 @@ async def sync_tool_source(
         for r, got in zip(changed, answers, strict=True):
             if not got.ok and got.code == "NOT_FOUND" and (held := known.get(str(r["id"]))) is not None:
                 # Gone at the source: removed on the second sync in a row that finds it gone, then tombstoned.
-                count = int(held.get("gone_count") or 0) + 1
-                await service.store.update_item(tenant, str(held["id"]), {"gone_count": count})
+                count = held.gone_count + 1
+                await service.store.update_item(tenant, held.id, {"gone_count": count})
                 if count >= GONE_TWICE:
                     gone_now.append(str(r["id"]))
                     tombstones[str(r["id"])] = {
@@ -458,7 +457,7 @@ async def sync_tool_source(
                         "reason": got.message or "Gone at the source",
                     }
                 else:
-                    log.append(f"{held['title']}: answered gone once; removed if it answers so again")
+                    log.append(f"{held.title}: answered gone once; removed if it answers so again")
                 continue
             if not got.ok:
                 counts["failed"] += 1
@@ -472,7 +471,7 @@ async def sync_tool_source(
             if item.get("unchanged") is True:
                 held = known.get(str(r["id"]))
                 if held is not None:
-                    await service.store.update_item(tenant, str(held["id"]), {"marker": str(r["marker"])})
+                    await service.store.update_item(tenant, held.id, {"marker": str(r["marker"])})
                 counts["unchanged"] += 1
                 continue
             await _put(service, who, s, known, item, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
@@ -482,7 +481,7 @@ async def sync_tool_source(
                 marker = str(child.get("marker") or child.get("updated_at") or "")
                 # An attachment is fetched only when its own marker moved, not each time its parent changes.
                 ex = known.get(kid_id)
-                if marker and ex is not None and ex.get("marker") == marker and ex["status"] == "indexed":
+                if marker and ex is not None and ex.marker == marker and ex.status == "indexed":
                     counts["unchanged"] += 1
                     continue
                 kid = await fetch(kid_id)
@@ -503,8 +502,8 @@ async def sync_tool_source(
         # A base this source feeds may keep what its source removed: then it stays searchable and says so.
         keep = (await service.sync_rules(tenant, str(s["id"])))["removedAtSource"] == "keep"
         if gone_now:
-            gone_ids = [str(known[p]["id"]) for p in gone_now]
-            gone_files = [str(known[p]["file_id"]) for p in gone_now]
+            gone_ids = [known[p].id for p in gone_now]
+            gone_files = [known[p].file_id for p in gone_now]
             if keep:
                 await _flag_removed(service, tenant, gone_ids)
                 for p in gone_now:
@@ -513,25 +512,25 @@ async def sync_tool_source(
                 counts["deleted"] += await service.store.remove_items(tenant, gone_ids)
                 await release_snapshots(service, who, s, gone_files)
             done = "kept and flagged" if keep else "removed and tombstoned"
-            log += [f"{known[p]['title']}: gone at the source twice, {done}" for p in gone_now]
+            log += [f"{known[p].title}: gone at the source twice, {done}" for p in gone_now]
         if removed_at_source:
             # Items the system says it deleted (in a changes listing) leave search at once, with their attachments.
-            out_ids = [str(known[p]["id"]) for p in removed_at_source if p in known]
-            out_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(out_ids)]
-            files_out = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(out_ids)]
+            out_ids = [known[p].id for p in removed_at_source if p in known]
+            out_ids += [i.id for i in known.values() if i.parent_id in set(out_ids)]
+            files_out = [i.file_id for i in known.values() if i.id in set(out_ids)]
             if keep:
                 await _flag_removed(service, tenant, out_ids)
             else:
                 counts["deleted"] += await service.store.remove_items(tenant, out_ids)
                 await release_snapshots(service, who, s, files_out)
             done = "kept and flagged" if keep else "removed"
-            log += [f"{known[p]['title']}: deleted at the source, {done}" for p in removed_at_source if p in known]
+            log += [f"{known[p].title}: deleted at the source, {done}" for p in removed_at_source if p in known]
         if full and not resumes:
             dropped = [p for p in gone if p not in seen]
-            removed_ids = [str(known[p]["id"]) for p in dropped]
+            removed_ids = [known[p].id for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
-            removed_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(removed_ids)]
-            gone_files = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(removed_ids)]
+            removed_ids += [i.id for i in known.values() if i.parent_id in set(removed_ids)]
+            gone_files = [i.file_id for i in known.values() if i.id in set(removed_ids)]
             if keep:
                 await _flag_removed(service, tenant, removed_ids)
             else:
@@ -539,7 +538,7 @@ async def sync_tool_source(
                 await release_snapshots(service, who, s, gone_files)
             for p in dropped:
                 log.append(
-                    f"{known[p]['title']}: no longer listed by the system, {'kept and flagged' if keep else 'removed'}"
+                    f"{known[p].title}: no longer listed by the system, {'kept and flagged' if keep else 'removed'}"
                 )
         if status == "success":
             cfg["watermark"] = watermark
@@ -579,7 +578,7 @@ async def _put(
     service: KnowledgeService,
     who: Who,
     s: dict[str, Any],
-    known: dict[str, dict[str, Any]],
+    known: dict[str, ItemRow],
     item: dict[str, Any],
     *,
     marker: str,
@@ -605,8 +604,8 @@ async def _put(
         counts["failed"] += 1
         errors.append({"itemTitle": item.get("title"), "phase": "store", "errorClass": "snapshot", "message": str(e)})
         return
-    if ex is not None and ex["digest"] == stored.digest and ex["status"] == "indexed":
-        await service.store.update_item(tenant, str(ex["id"]), {"marker": marker})
+    if ex is not None and ex.digest == stored.digest and ex.status == "indexed":
+        await service.store.update_item(tenant, ex.id, {"marker": marker})
         counts["unchanged"] += 1
         return
     extra: dict[str, Any] = {
@@ -620,21 +619,17 @@ async def _put(
     }
     if parent is not None:
         parent_row = known.get(parent) or next(
-            (
-                i
-                for i in [r.model_dump() for r in await service.store.items(tenant, source_ids=[source_id])]
-                if i["path"] == parent
-            ),
-            None,
+            (i for i in await service.store.items(tenant, source_ids=[source_id]) if i.path == parent), None
         )
-        extra["parent_id"] = parent_row["id"] if parent_row else None
+        extra["parent_id"] = parent_row.id if parent_row else None
     found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
     allowed = cast(list[Any], item["allowed"]) if isinstance(item.get("allowed"), list) else None
     origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=[str(a) for a in allowed or []] or None)
     done = await service._read_file(who, s, ex, name=name, found=found, rebuild=False, origin=origin)  # pyright: ignore[reportPrivateUsage]
-    known[item_id] = done
-    if ex is not None and ex.get("file_id") and ex["file_id"] != stored.file_id:
-        await release_snapshots(service, who, s, [str(ex["file_id"])])
+    # The row as written, so a later look at this item in the run (its attachments, gone or removed) reads it.
+    known[item_id] = (await service.store.items(tenant, item_id=str(done["id"])))[0]
+    if ex is not None and ex.file_id and ex.file_id != stored.file_id:
+        await release_snapshots(service, who, s, [ex.file_id])
     if done["status"] == "failed":
         counts["failed"] += 1
         errors.append(
@@ -657,10 +652,7 @@ async def _put(
 
 async def release_snapshots(service: KnowledgeService, who: Who, s: dict[str, Any], file_ids: list[str]) -> None:
     """Lets go of snapshots no item of the source uses any more; files-service keeps each for its retention days."""
-    held = {
-        str(i["file_id"])
-        for i in [r.model_dump() for r in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])]
-    }
+    held = {i.file_id for i in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])}
     for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
         await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s["id"]))
 
