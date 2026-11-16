@@ -50,6 +50,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.review_assignments` | `ReviewAssignments` | none | `review_assignments` |
 | agents-service | `ops_agents.store.reviews` | `ReviewStore` | CAS, TRANSACTION | `review_approvals`, `review_decisions` |
 | agents-service | `ops_agents.store.service_events` | `ServiceEvents` | RLS, TRANSACTION | `service_events` |
+| agents-service | `ops_agents.store.skill_names` | `SkillNames` | none | none |
 | agents-service | `ops_agents.store.skills` | `SkillRegistry` | CAS, TRANSACTION | `registry_skill_versions`, `registry_skills` |
 | agents-service | `ops_agents.store.task_assists` | `TaskAssistStore` | CAS | `task_assists` |
 | agents-service | `ops_agents.store.task_types` | `TaskTypeStore` | CAS, TRANSACTION | `task_type_versions`, `task_types` |

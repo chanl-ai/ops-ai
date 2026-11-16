@@ -23,6 +23,7 @@ from ops_agents.domain.evals import (
 )
 
 from ..store.evals import EvalStore
+from ..store.skill_names import SkillNames
 from ..store.skills import SkillRegistry
 from .agent_registry import registry as agent_registry
 from .deps import Runtime
@@ -70,10 +71,8 @@ async def snapshot(rt: Runtime) -> Snapshot:
     names: dict[tuple[str, str], str] = {
         (ASSET_AGENT, i): agent_names.get((i, int(r["version"])), (str(r["slug"]), ""))[0] for i, r in agents.items()
     }
-    for i, r in skills.items():
-        version = await skills_reg.version(i, int(r["version"]))
-        content = cast(dict[str, Any], (version or {}).get("content") or {})
-        names[(ASSET_SKILL, i)] = str(content.get("name") or r["slug"])
+    skill_names = await SkillNames(rt.db).newest(set(skills))
+    names |= {(ASSET_SKILL, i): skill_names.get(i) or str(r["slug"]) for i, r in skills.items()}
     names |= {(ASSET_WORKFLOW, i): str(r["name"]) for i, r in workflows.items()}
     teams = (
         {(ASSET_AGENT, i): str(r["team_id"]) for i, r in agents.items()}
