@@ -42,15 +42,6 @@ def make_repo(tmp_path: Path) -> tuple[Path, str]:
     return repo, git(repo, "rev-parse", "HEAD")
 
 
-def test_an_unfinished_file_in_the_tree_does_not_block_a_push_of_clean_commits(tmp_path: Path) -> None:
-    repo, base = make_repo(tmp_path)
-    (repo / "ok.py").write_text("x = 2\n")
-    git(repo, "commit", "-qam", "clean")
-    (repo / "other.py").write_text("import os,sys\n" + "y = " + "1" * 200 + "\n")
-    done = push(repo, base, git(repo, "rev-parse", "HEAD"))
-    assert done.returncode == 0, done.stdout + done.stderr
-
-
 def test_a_lint_error_in_a_pushed_commit_blocks_the_push(tmp_path: Path) -> None:
     repo, base = make_repo(tmp_path)
     (repo / "bad.py").write_text("import os,sys\n")
@@ -60,3 +51,42 @@ def test_a_lint_error_in_a_pushed_commit_blocks_the_push(tmp_path: Path) -> None
     (repo / "bad.py").write_text("x = 1\n")
     done = push(repo, base, git(repo, "rev-parse", "HEAD"))
     assert done.returncode != 0 and "pushed files" in done.stdout, done.stdout + done.stderr
+
+
+def test_a_real_push_runs_the_trees_hook_and_skips_an_unfinished_change_to_a_pushed_file(tmp_path: Path) -> None:
+    # The installed hook was a copy made when hooks were last installed, so a fix to .githooks/pre-push never ran
+    # until someone reinstalled. Installed while the tree's hook is still a stub that refuses every push, then given
+    # the real hook: a push of clean commits passes although the same file carries an unfinished lint error.
+    repo, _ = make_repo(tmp_path)
+    (repo / "scripts").mkdir()
+    (repo / "scripts/install-hooks.sh").write_text((ROOT / "scripts/install-hooks.sh").read_text())
+    real = (repo / ".githooks/pre-push").read_text()
+    (repo / ".githooks/pre-push").write_text("#!/bin/sh\n# ops-ai hook: an old copy\necho old hook ran; exit 1\n")
+    for hook in ("pre-commit", "commit-msg"):
+        (repo / f".githooks/{hook}").write_text("#!/bin/sh\nexit 0\n")
+    subprocess.run(["sh", "scripts/install-hooks.sh"], cwd=repo, check=True, env={**GIT_ENV, "PATH": "/usr/bin:/bin"})
+    (repo / ".githooks/pre-push").write_text(real)
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "hooks")
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "init", "-q", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    env = {**GIT_ENV, "PATH": "/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo)}
+
+    def real_push() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "push", "-q", "origin", "HEAD:main"], cwd=repo, capture_output=True, text=True, env=env, check=False
+        )
+
+    assert real_push().returncode == 0
+    (repo / "ok.py").write_text("x = 3\n")
+    git(repo, "commit", "-qam", "clean change")
+    (repo / "ok.py").write_text("import os,sys\n" + "x = " + "1" * 200 + "\n")
+    done = real_push()
+    assert done.returncode == 0, done.stdout + done.stderr
+    (repo / "ok.py").write_text("x = 4\n")
+    (repo / "bad.py").write_text("import os,sys\n")
+    git(repo, "add", "bad.py", "ok.py")
+    git(repo, "commit", "-qm", "bad")
+    done = real_push()
+    assert done.returncode != 0 and "pushed files" in done.stdout + done.stderr, done.stdout + done.stderr

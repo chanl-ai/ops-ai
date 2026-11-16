@@ -21,9 +21,8 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sh
   # The pushed content, not the working tree: another builder's unfinished file must not block this push. The files are
   # exported from the pushed commit with the lint configuration, and ruff runs there.
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/ops-pre-push.XXXXXX")
-  # shellcheck disable=SC2086
+  # shellcheck disable=SC2046,SC2086
   git archive "$local_sha" pyproject.toml $(git ls-tree --name-only "$local_sha" ruff.toml .ruff.toml 2>/dev/null) $files | tar -x -C "$tmp"
-  # shellcheck disable=SC2086
   # shellcheck disable=SC2086
   (cd "$tmp" && $ruff check $files && $ruff format --check $files)
   status=$?
