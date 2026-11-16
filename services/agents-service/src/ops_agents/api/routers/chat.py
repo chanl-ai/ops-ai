@@ -54,6 +54,7 @@ from ops_contracts.chat import (
     ThreadList,
     WidgetAction,
 )
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -98,7 +99,7 @@ from ..chat_threads import (
 from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..memory import finish_learning, person_of, start_learning
+from ..memory import Extraction, finish_learning, person_of, start_learning
 from ..ops_tools import ensure_ops_assistant, fill_cards
 from ..review_text import tool_titles
 from ..runs import config, execute, graph_store, pending, require_graphs, resolve
@@ -109,6 +110,9 @@ log = get_logger("ops_agents.chat")
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 # A person asking for more thought in the quick reply's words: these two words matched, no reading of intent.
 THINK_HARDER_ASK = re.compile(r"\bthink harder\b", re.IGNORECASE)
+# The turns still running, held so none is collected mid-run. A turn outlives its request when the reader leaves; it
+# belongs on `ops_store.background.start` once this service's lifespan holds `background.supervisor()`.
+_TURNS: set[asyncio.Task[None]] = set()
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
@@ -161,7 +165,8 @@ async def _check_kbs(rt: Runtime, agent: AgentDefinition, kb_ids: list[str]) -> 
 async def agents(rt: Rt, me: Me) -> JSONResponse:
     """The live agents the caller's team may chat with: the catalogue serves every team's, so it is narrowed to the
     agents the team reads, and another team's agent is not offered. A person needs chat.run in the team, never
-    agents.view, so a Chat user still chats; an API key keeps its own path."""
+    agents.view, so a Chat user still chats; an API key keeps its own path. Off the request transaction: it asks
+    kb-service for the bases' names."""
     if not me.is_key:
         require_chat_use(me, team_id=me.team_id or None)
     ours = {r["id"] for r in await registry(rt).rows()}
@@ -231,6 +236,7 @@ async def list_threads(
     request: Request,
     rt: Rt,
     me: Me,
+    _: Tx,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
@@ -327,7 +333,7 @@ async def list_threads(
 
 
 @router.get("/default-agent", response_model=Envelope[TeamDefaultAgent])
-async def get_default_agent(rt: Rt, me: Me) -> JSONResponse:
+async def get_default_agent(rt: Rt, me: Me, _: Tx) -> JSONResponse:
     """The agent the caller's team starts chats on; its name is absent when that agent is no longer live."""
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
     agent = await live_agent(rt, agent_id) if agent_id else None
@@ -340,7 +346,7 @@ async def get_default_agent(rt: Rt, me: Me) -> JSONResponse:
 
 
 @router.put("/default-agent", response_model=Envelope[TeamDefaultAgent])
-async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput) -> JSONResponse:
+async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput, _: Tx) -> JSONResponse:
     """chat.manage (team admins): the default changes where every member's new chat starts. Provisioning sets
     a team's first one through this route; the agent must be live and belong to the team, or to no team."""
     can(caller_of(me), "chat", "manage", team=me.team_id, what="the team's default agent")
@@ -395,6 +401,7 @@ async def thread_agent(rt: Runtime, me: Principal, meta: dict[str, Any]) -> Agen
 
 @router.post("/threads")
 async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
+    """Off the request transaction: it asks kb-service which bases the thread may search."""
     if body.test:
         if body.agent_id is None:
             raise Unprocessable("A test names the agent it tests.")
@@ -455,7 +462,8 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
 async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """The conversation, for whoever may read it. A teammate's conversation that the reader may not read answers
     `{id, readable: false}` and nothing else, so a link to it says it is someone else's instead of failing; a
-    conversation that does not exist, or is another team's, is not found."""
+    conversation that does not exist, or is another team's, is not found. Off the request transaction: the cards it
+    fills read case pages, which ask other services for their files' names."""
     row = await chat_row(rt, thread_id, None)
     if row is None:
         # A link opened while acting in another team: the conversation may be in one of the reader's other teams. Its
@@ -486,6 +494,7 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
 
 @router.patch("/threads/{thread_id}")
 async def update_thread(rt: Rt, me: Me, thread_id: str, body: ChatThreadPatch) -> JSONResponse:
+    """Off the request transaction: a change of bases or agent asks kb-service, and the reply is the thread read."""
     row = await _thread_row(rt, me, thread_id)
     meta = _meta(row)
     patch: dict[str, Any] = {}
@@ -551,14 +560,14 @@ async def _handover(rt: Runtime, me: Principal, meta: dict[str, Any], agent_id: 
 
 
 @router.delete("/threads/{thread_id}")
-async def delete_thread(rt: Rt, me: Me, thread_id: str) -> Response:
+async def delete_thread(rt: Rt, me: Me, thread_id: str, _: Tx) -> Response:
     await _thread_row(rt, me, thread_id)
     await update_meta(rt, thread_id, hidden=True)
     return ok(None)
 
 
 @router.post("/threads/bulk-update")
-async def bulk_update(rt: Rt, me: Me, body: BulkUpdateInput) -> JSONResponse:
+async def bulk_update(rt: Rt, me: Me, body: BulkUpdateInput, _: Tx) -> JSONResponse:
     result = BulkResult(updated=[], skipped=[])
     patch = body.patch
     for tid in body.ids:
@@ -583,7 +592,7 @@ async def bulk_update(rt: Rt, me: Me, body: BulkUpdateInput) -> JSONResponse:
 
 
 @router.post("/threads/bulk-delete")
-async def bulk_delete(rt: Rt, me: Me, body: BulkDeleteInput) -> JSONResponse:
+async def bulk_delete(rt: Rt, me: Me, body: BulkDeleteInput, _: Tx) -> JSONResponse:
     result = BulkResult(updated=[], skipped=[])
     for tid in body.ids:
         row = await chat_row(rt, tid, me)
@@ -650,6 +659,8 @@ async def _compacted(
 
 @router.post("/threads/{thread_id}/messages", response_model=None)
 async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceResponse:
+    """Off the request transaction: a long history is summarised by a model and attachments are read before the
+    stream starts, and the stream holds nothing while the model answers."""
     row = await _thread_row(rt, me, thread_id)
     meta = _meta(row)
     if not body.content.strip() and not body.regenerate:
@@ -819,28 +830,60 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         rt.catalog, assistant, titles=await tool_titles(rt), think_alias=rt.settings.think_harder_alias
     )
 
-    # What the person said about themselves is read while the reply is written: the extraction needs only the
-    # messages so far, and run after the reply it held the reply's end back by a whole model call.
-    extraction = (
-        asyncio.ensure_future(
-            start_learning(
+    # A test remembers nothing about the builder.
+    learns = not body.regenerate and agent.memory_enabled and not test
+
+    async def learn(into: asyncio.Future[Extraction]) -> None:
+        """What the person said about themselves, read while the reply is written: the extraction needs only the
+        messages so far, and run after the reply it held the reply's end back by a whole model call. Its outcome,
+        failure included, is read by finish_learning, so it never fails the turn early."""
+        try:
+            found = await start_learning(
                 rt, me, agent, team_id=str(row["team_id"]), thread_id=thread_id, message=question, history=transcript
             )
-        )
-        # A test remembers nothing about the builder.
-        if not body.regenerate and agent.memory_enabled and not test
-        else None
-    )
+        except Exception as e:
+            if not into.done():
+                into.set_exception(e)
+        else:
+            if not into.done():
+                into.set_result(found)
+
+    async def run_turn(frames: asyncio.Queue[dict[str, str] | BaseException | None]) -> None:
+        """The reply, run to its end whether or not anyone still reads it: a reader who leaves (a closed tab, a dropped
+        connection) stops reading, never the run, so its model calls and cost are recorded and its lease let go."""
+        failed: BaseException | None = None
+        try:
+            async with asyncio.TaskGroup() as group:
+                extraction: asyncio.Future[Extraction] | None = None
+                child = None
+                if learns:
+                    extraction = asyncio.get_running_loop().create_future()
+                    child = group.create_task(learn(extraction))
+                try:
+                    async for frame in reply(extraction):
+                        frames.put_nowait(frame)
+                finally:
+                    if child is not None:
+                        child.cancel()
+        except BaseExceptionGroup as group_failed:
+            failed = group_failed.exceptions[0]
+        except Exception as e:
+            failed = e
+        if failed is not None:
+            log.warning("chat_turn_failed", thread_id=thread_id, run_id=run_id, error=type(failed).__name__)
+        frames.put_nowait(failed)
 
     async def stream() -> AsyncIterator[dict[str, str]]:
-        try:
-            async for frame in reply():
-                yield frame
-        finally:
-            if extraction is not None and not extraction.done():
-                extraction.cancel()
+        frames: asyncio.Queue[dict[str, str] | BaseException | None] = asyncio.Queue()
+        running = asyncio.create_task(run_turn(frames), name=f"chat_turn:{run_id}")
+        _TURNS.add(running)
+        running.add_done_callback(_TURNS.discard)
+        while (item := await frames.get()) is not None:
+            if isinstance(item, BaseException):
+                raise item
+            yield item
 
-    async def reply() -> AsyncIterator[dict[str, str]]:
+    async def reply(extraction: asyncio.Future[Extraction] | None) -> AsyncIterator[dict[str, str]]:
         yield _frame(StartEvent(user_message=user_message, message_id=assistant.id))
         # The turn runs for this person: a workflow tool is offered and started only if they may start it.
         with acting_for(me):
@@ -901,7 +944,7 @@ async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: C
 
 
 @router.put("/threads/{thread_id}/messages/{message_id}/feedback")
-async def feedback(rt: Rt, me: Me, thread_id: str, message_id: str, body: FeedbackInput) -> JSONResponse:
+async def feedback(rt: Rt, me: Me, thread_id: str, message_id: str, body: FeedbackInput, _: Tx) -> JSONResponse:
     row = await _thread_row(rt, me, thread_id)
     if not any(m.id == message_id for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]):
         raise NotFound("Message")
@@ -922,7 +965,8 @@ async def widget_action(
 ) -> JSONResponse:
     """An approval widget's decision goes through Reviews' decide, like every review-owned step: requester check,
     step-up for money, the approval token, then the resume, whose reply is a new assistant message. An approver who is
-    not the chat's owner decides here too, so the owner rule is left to the review policy; the team rule holds."""
+    not the chat's owner decides here too, so the owner rule is left to the review policy; the team rule holds. Off
+    the request transaction: the resume runs the model."""
     await _thread_row(rt, None, thread_id)
     message = next(
         (m for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id] if m.id == message_id), None

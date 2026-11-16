@@ -1,0 +1,336 @@
+{
+  "afterDelete": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "agentId": {},
+          "kbIds": {},
+          "state": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "bulkDelete": {
+    "body": {
+      "data": {
+        "skipped": [
+          {
+            "id": "<th>",
+            "reason": "Not found"
+          },
+          {
+            "id": "th_missing",
+            "reason": "Not found"
+          }
+        ],
+        "updated": [
+          "<th>"
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "bulkUpdate": {
+    "body": {
+      "data": {
+        "skipped": [
+          {
+            "id": "th_missing",
+            "reason": "Not found"
+          }
+        ],
+        "updated": [
+          "<th>"
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "cursorPage": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "agentVersion": 7,
+            "archived": false,
+            "citations": 0,
+            "createdAt": "<timeZ>",
+            "id": "<th>",
+            "kbIds": [
+              "kb_people"
+            ],
+            "kbNames": [
+              "Fraud & payments"
+            ],
+            "lastMessageAt": "<timeZ>",
+            "messageCount": 0,
+            "owner": "James Richardson",
+            "pinned": false,
+            "preview": "",
+            "test": false,
+            "title": "New chat",
+            "widgets": 0
+          }
+        ],
+        "facets": {
+          "agentId": {
+            "ag_fraud": 2
+          },
+          "kbIds": {
+            "kb_people": 2
+          },
+          "state": {
+            "active": 1,
+            "pinned": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 1,
+          "total": 2,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "cursorRefused": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "message": "That cursor is not one this list returned.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "default.notLive": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Agent ag_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "default.read": {
+    "body": {
+      "data": {
+        "canChange": true
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "default.readAfter": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "canChange": true
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "default.set": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "canChange": true
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "delete": {
+    "status": 200
+  },
+  "deleteMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Conversation was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "feedbackMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Message was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "patch": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "agentVersion": 7,
+        "archived": false,
+        "createdAt": "<timeZ>",
+        "id": "<th>",
+        "kbIds": [
+          "kb_people"
+        ],
+        "kbNames": [
+          "Fraud & payments"
+        ],
+        "lastMessageAt": "<timeZ>",
+        "messageCount": 0,
+        "messages": [],
+        "owner": "James Richardson",
+        "pinned": true,
+        "test": false,
+        "title": "Wire limits"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "patchMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Conversation was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "recent": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "agentVersion": 7,
+            "archived": false,
+            "citations": 0,
+            "createdAt": "<timeZ>",
+            "id": "<th>",
+            "kbIds": [
+              "kb_people"
+            ],
+            "kbNames": [
+              "Fraud & payments"
+            ],
+            "lastMessageAt": "<timeZ>",
+            "messageCount": 0,
+            "owner": "James Richardson",
+            "pinned": true,
+            "preview": "",
+            "test": false,
+            "title": "Wire limits",
+            "widgets": 0
+          },
+          {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "agentVersion": 7,
+            "archived": false,
+            "citations": 0,
+            "createdAt": "<timeZ>",
+            "id": "<th>",
+            "kbIds": [
+              "kb_people"
+            ],
+            "kbNames": [
+              "Fraud & payments"
+            ],
+            "lastMessageAt": "<timeZ>",
+            "messageCount": 0,
+            "owner": "James Richardson",
+            "pinned": false,
+            "preview": "",
+            "test": false,
+            "title": "New chat",
+            "widgets": 0
+          }
+        ],
+        "facets": {
+          "agentId": {
+            "ag_fraud": 2
+          },
+          "kbIds": {
+            "kb_people": 2
+          },
+          "state": {
+            "active": 1,
+            "pinned": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "recentRefused": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "message": "The sidebar slice has its own order; leave out sortBy and cursor.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "widgetMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}
