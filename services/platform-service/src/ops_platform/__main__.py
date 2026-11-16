@@ -16,6 +16,7 @@ from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import run as run_background
+from ops_store.outbox import run_relay
 from ops_store.schema_version import require_current_schema
 
 from .api.app import create_internal_app, create_public_app
@@ -25,10 +26,10 @@ from .signin_options import SignInOptions
 from .signin_settings import ProviderMetadata
 from .signin_watch import SecurityNotices, SignInWatch
 from .sso import guarded_get
-from .store.event_relay import SCOPES, keep_relaying
 from .store.holders import HolderStore
 from .store.identity import IdentityStore
 from .store.lifecycle import LifecycleStore
+from .store.relay import SCOPES, platform_relay
 from .store.signin import SignInStore
 from .store.workspace import WorkspaceStore
 from .workspace_lifecycle import WorkspacePurge
@@ -96,7 +97,7 @@ async def serve(settings: Settings) -> None:
         SecurityNotices(signin_store, HolderStore(store.db), WorkspaceStore(store.db), mail, settings.console_url),
     )
     watching = asyncio.create_task(run_background("signin_watch", watch.once, stop=stop, store=LOCAL_BEATS))
-    # Events other services act on (event_relay.py) go to each one this install runs; with no address for a service,
+    # Events other services act on (store/relay.py) go to each one this install runs; with no address for a service,
     # its events are delivered by doing nothing.
     urls = {"tools": settings.tools_url, "agents": settings.agents_url}
     clients = {
@@ -106,14 +107,14 @@ async def serve(settings: Settings) -> None:
         for name, scopes in SCOPES.items()
         if (url := urls.get(name))
     }
-    relaying = asyncio.create_task(keep_relaying(store.db.engine, clients))
+    relaying = asyncio.create_task(run_relay(platform_relay(store.db.engine, clients), key="platform_relay", stop=stop))
     try:
         await asyncio.gather(*(s.serve() for s in servers))
     finally:
         stop.set()
-        relaying.cancel()
         await purging
         await watching
+        await relaying
         await http.aclose()
         await store.close()
 

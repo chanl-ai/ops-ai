@@ -6,8 +6,11 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_store import Guarantee
+from ops_store.rows import Select, one, rows
 
 from .audit import record
 from .members import Actor
@@ -33,13 +36,30 @@ _LISTED = (
 )
 
 
-class KeyStore:
+class KeyRow(Out):
+    """A key as `_LISTED` selects it: never its secret's hash."""
+
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    created_by: str
+    created_at: str
+    last_used_at: str | None
+    expires_at: str | None
+    revoked_at: str | None
+    disabled_at: str | None
+    team: str
+    team_id: str
+    target_kind: str | None
+    target_id: str | None
+    target_version: int | None
+
+
+class KeyStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
-
-    def _listing(self, team_id: str | None) -> Any:
+    def _listing(self, team_id: str | None) -> Select:
         q = (
             sa.select(*_LISTED)
             .join(teams, teams.c.id == api_keys.c.team_id)
@@ -48,14 +68,14 @@ class KeyStore:
         )
         return q if team_id is None else q.where(api_keys.c.team_id == team_id)
 
-    async def list(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
-        async with self.db.tenant_tx(tenant_id) as c:
-            return [dict(r) for r in (await c.execute(self._listing(team_id))).mappings().all()]
+    async def list(self, tenant_id: str, team_id: str) -> list[KeyRow]:
+        async with self.tenant_tx(tenant_id) as c:
+            return await rows(c, self._listing(team_id), KeyRow)
 
-    async def every(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def every(self, tenant_id: str) -> list[KeyRow]:
         """Every team's keys in the workspace, for a service's list of API channels."""
-        async with self.db.tenant_tx(tenant_id) as c:
-            return [dict(r) for r in (await c.execute(self._listing(None))).mappings().all()]
+        async with self.tenant_tx(tenant_id) as c:
+            return await rows(c, self._listing(None), KeyRow)
 
     async def create(
         self,
@@ -68,8 +88,8 @@ class KeyStore:
         expires_at: str | None,
         at: str,
         target: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        async with self.db.tenant_tx(actor.tenant_id) as c:
+    ) -> KeyRow:
+        async with self.tenant_tx(actor.tenant_id) as c:
             await c.execute(
                 api_keys.insert().values(
                     id=key_id,
@@ -88,11 +108,13 @@ class KeyStore:
                 )
             )
             await _audit(c, actor, "key.create", key_id, {"name": name, "scopes": scopes, "target": target})
-            return dict((await c.execute(self._listing(actor.team_id).where(api_keys.c.id == key_id))).mappings().one())
+            made = await one(c, self._listing(actor.team_id).where(api_keys.c.id == key_id), KeyRow)
+            assert made is not None, key_id  # written above, in this transaction
+            return made
 
-    async def revoke(self, actor: Actor, key_id: str, *, at: str) -> dict[str, Any] | None:
+    async def revoke(self, actor: Actor, key_id: str, *, at: str) -> KeyRow | None:
         """None when the team has no such key; revoking a revoked key changes nothing and writes no entry."""
-        async with self.db.tenant_tx(actor.tenant_id) as c:
+        async with self.tenant_tx(actor.tenant_id) as c:
             done = await c.execute(
                 api_keys.update()
                 .where(api_keys.c.id == key_id, api_keys.c.team_id == actor.team_id, api_keys.c.revoked_at.is_(None))
@@ -100,11 +122,10 @@ class KeyStore:
             )
             if done.rowcount == 1:
                 await _audit(c, actor, "key.revoke", key_id, {})
-            row = (await c.execute(self._listing(actor.team_id).where(api_keys.c.id == key_id))).mappings().first()
-            return dict(row) if row else None
+            return await one(c, self._listing(actor.team_id).where(api_keys.c.id == key_id), KeyRow)
 
 
-async def _audit(c: Any, actor: Actor, action: str, key_id: str, detail: dict[str, Any]) -> None:
+async def _audit(c: AsyncConnection, actor: Actor, action: str, key_id: str, detail: dict[str, Any]) -> None:
     await record(
         c,
         tenant_id=actor.tenant_id,

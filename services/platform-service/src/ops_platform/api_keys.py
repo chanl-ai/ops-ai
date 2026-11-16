@@ -13,7 +13,7 @@ from typing import Any
 from ops_service_kit.errors import NotFound, ValidationFailed
 from ops_service_kit.ids import new_id
 
-from .store.keys import KeyStore
+from .store.keys import KeyRow, KeyStore
 from .store.members import Actor
 from .teams import Members
 
@@ -22,35 +22,35 @@ def _iso(t: datetime) -> str:
     return t.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def target_of(row: dict[str, Any]) -> dict[str, Any] | None:
-    if not row["target_kind"]:
+def target_of(row: KeyRow) -> dict[str, Any] | None:
+    if not row.target_kind:
         return None
-    return {"kind": row["target_kind"], "id": row["target_id"], "version": row["target_version"]}
+    return {"kind": row.target_kind, "id": row.target_id, "version": row.target_version}
 
 
-def shown(row: dict[str, Any]) -> dict[str, Any]:
-    status = "revoked" if row["revoked_at"] else "disabled" if row["disabled_at"] else "active"
+def shown(row: KeyRow) -> dict[str, Any]:
+    status = "revoked" if row.revoked_at else "disabled" if row.disabled_at else "active"
     out = {
-        "id": row["id"],
-        "name": row["name"],
-        "prefix": row["prefix"],
-        "scopes": list(row["scopes"]),
-        "createdBy": row["created_by"],
-        "createdAt": row["created_at"],
-        "lastUsedAt": row["last_used_at"],
-        "expiresAt": row["expires_at"],
-        "team": row["team"],
+        "id": row.id,
+        "name": row.name,
+        "prefix": row.prefix,
+        "scopes": list(row.scopes),
+        "createdBy": row.created_by,
+        "createdAt": row.created_at,
+        "lastUsedAt": row.last_used_at,
+        "expiresAt": row.expires_at,
+        "team": row.team,
         "status": status,
         "target": target_of(row),
     }
     return out
 
 
-def summary(row: dict[str, Any]) -> dict[str, Any]:
+def summary(row: KeyRow) -> dict[str, Any]:
     """A key as another service lists it: what it serves and whether it works, never its creator or secret."""
     out = shown(row)
     return {k: out[k] for k in ("id", "name", "prefix", "status", "target", "lastUsedAt", "expiresAt", "createdAt")} | {
-        "teamId": row["team_id"]
+        "teamId": row.team_id
     }
 
 
@@ -66,11 +66,7 @@ class ApiKeys:
         await self.members.require_admin(actor)
         rows = await self.store.list(actor.tenant_id, actor.team_id)
         if target_kind is not None:
-            rows = [
-                r
-                for r in rows
-                if r["target_kind"] == target_kind and (target_id is None or r["target_id"] == target_id)
-            ]
+            rows = [r for r in rows if r.target_kind == target_kind and (target_id is None or r.target_id == target_id)]
         return [shown(r) for r in rows]
 
     async def create(

@@ -16,11 +16,8 @@ from .tables import members, role_assignments, role_permissions, roles, teams, u
 from .tenancy import TenantDb
 
 
-class HolderStore:
+class HolderStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.RLS})
-
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
 
     async def holders(self, tenant_id: str, team_id: str, area: str, action: str) -> dict[str, Any]:
         """The roles granting `area.action` and the active people they reach in `team_id`: assigned there or in every
@@ -54,7 +51,7 @@ class HolderStore:
             )
         )
         held = sa.union(direct, via_team).subquery()
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             found = [(str(r[0]), str(r[1])) for r in (await c.execute(granting)).all()]
             ids = [i for i, _ in found]
             rows = (

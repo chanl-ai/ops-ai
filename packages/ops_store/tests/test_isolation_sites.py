@@ -45,7 +45,6 @@ WIDENINGS: dict[str, set[str]] = {
         "packages/ops_store/src/ops_store/store.py",
         "services/agents-service/src/ops_agents/store/engine.py",
         "services/agents-service/src/ops_agents/store/tenancy.py",
-        "services/platform-service/src/ops_platform/store/tenancy.py",
     },
     "SIGNIN_LOOKUP": {
         "services/platform-service/src/ops_platform/store/identity.py",

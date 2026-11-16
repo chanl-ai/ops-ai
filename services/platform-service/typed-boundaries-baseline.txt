@@ -1,4 +1,4 @@
-# 275 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 262 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body access_check_access
 1 body api_keys_create_api_key
 1 reply audit_read_audit
@@ -40,7 +40,7 @@
 4 dict-any services/platform-service/src/ops_platform/access_check.py
 27 dict-any services/platform-service/src/ops_platform/api/app.py
 8 dict-any services/platform-service/src/ops_platform/api/schemas.py
-11 dict-any services/platform-service/src/ops_platform/api_keys.py
+8 dict-any services/platform-service/src/ops_platform/api_keys.py
 5 dict-any services/platform-service/src/ops_platform/audit_log.py
 9 dict-any services/platform-service/src/ops_platform/auth.py
 1 dict-any services/platform-service/src/ops_platform/bootstrap.py
@@ -56,13 +56,11 @@
 3 dict-any services/platform-service/src/ops_platform/sso.py
 4 dict-any services/platform-service/src/ops_platform/store/audit.py
 1 store-dict services/platform-service/src/ops_platform/store/audit.py
-2 dict-any services/platform-service/src/ops_platform/store/event_relay.py
 2 dict-any services/platform-service/src/ops_platform/store/holders.py
 1 store-dict services/platform-service/src/ops_platform/store/holders.py
 2 dict-any services/platform-service/src/ops_platform/store/identity.py
 2 store-dict services/platform-service/src/ops_platform/store/identity.py
-6 dict-any services/platform-service/src/ops_platform/store/keys.py
-4 store-dict services/platform-service/src/ops_platform/store/keys.py
+2 dict-any services/platform-service/src/ops_platform/store/keys.py
 1 dict-any services/platform-service/src/ops_platform/store/lifecycle.py
 5 dict-any services/platform-service/src/ops_platform/store/members.py
 4 store-dict services/platform-service/src/ops_platform/store/members.py

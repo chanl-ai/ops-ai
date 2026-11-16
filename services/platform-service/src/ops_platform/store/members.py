@@ -28,7 +28,7 @@ from .tenancy import INVITE_LOOKUP, TenantDb
 from .workspace import security_team_in
 
 ADMIN = "admin"
-# Reported when a member is removed from a team (event_relay.py): tools-service deletes their own accounts on its apps.
+# Reported when a member is removed from a team (relay.py): tools-service deletes their own accounts on its apps.
 MEMBER_REMOVED = "member.removed"
 
 

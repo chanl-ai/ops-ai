@@ -8,11 +8,10 @@ from __future__ import annotations
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_platform.store.event_relay import sender
+from ops_platform.store.relay import platform_relay
 from ops_platform.store.tables import platform_outbox
-from ops_platform.store.tenancy import ROLE
-from ops_store.outbox import Relay
 
 from .conftest import Platform, SignInRig
 from .test_members import as_admin, join, member_rows
@@ -43,9 +42,11 @@ class Client:
         return {}
 
 
-async def test_the_relay_sends_each_event_to_the_services_that_act_on_it_in_its_tenant_and_team() -> None:
+async def test_the_relay_sends_each_event_to_the_services_that_act_on_it_in_its_tenant_and_team(
+    engine: AsyncEngine,
+) -> None:
     tools, agents = Client(), Client()
-    send = sender({"tools": tools, "agents": agents})  # pyright: ignore[reportArgumentType]
+    send = platform_relay(engine, {"tools": tools, "agents": agents}).send
     body = {"name": "member.removed", "key": "mem_1:t", "teamId": "team_ops", "payload": {"personId": "usr_1"}}
     await send({"tenantId": "t_1", "body": body})
     await send({"tenantId": "t_1", "body": {**body, "name": "team.renamed"}})
@@ -59,7 +60,7 @@ async def test_the_relay_reads_the_outbox_as_this_service_and_delivers_the_remov
     [row] = await member_rows(platform, h, role="builder")
     await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [row["id"]]})
     tools = Client()
-    delivered = await Relay(platform.engine, platform_outbox, sender({"tools": tools}), role=ROLE).once()  # pyright: ignore[reportArgumentType]
+    delivered = await platform_relay(platform.engine, {"tools": tools}).once()
     assert delivered >= 1 and [s[1]["name"] for s in tools.sent if s[2] == admin.tenant_id] == ["member.removed"]
 
 
@@ -84,6 +85,6 @@ async def test_a_new_team_reports_team_created_in_the_transaction_that_makes_it(
     team = str(made.json()["data"]["id"])
     assert await created(signin) - before == {team}
     tools, agents = Client(), Client()
-    send = sender({"tools": tools, "agents": agents})  # pyright: ignore[reportArgumentType]
+    send = platform_relay(signin.engine, {"tools": tools, "agents": agents}).send
     await send({"tenantId": signin.tenant, "body": {"name": "team.created", "key": team, "teamId": team}})
     assert [s[3] for s in tools.sent] == [team] and [s[3] for s in agents.sent] == [team]

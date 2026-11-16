@@ -573,7 +573,7 @@ TENANT_TABLES = (
 )
 
 # What platform-service tells other services (on the outbox): written in the transaction that makes the
-# change, delivered by its relay (event_relay.py) to each service that acts on the event. platform-service never
+# change, delivered by its relay (relay.py) to each service that acts on the event. platform-service never
 # touches another service's tables. Read by the relay across tenants.
 platform_outbox = outbox_table(
     metadata, "platform_outbox", info=system("platform event outbox, read by its relay across tenants")
