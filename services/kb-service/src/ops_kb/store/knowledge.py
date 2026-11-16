@@ -569,6 +569,50 @@ class RunRow(Out):
     cancelled_by: str | None = None
 
 
+class ItemRow(Out):
+    """A document of a source: its file, current version, reading state and what its fetch and index were built
+    from. `team_id` stays: the schedule reads which team's file each waiting item belongs to."""
+
+    team_id: str
+    id: str
+    source_id: str
+    path: str
+    title: str
+    mime: str
+    size: int
+    file_id: str
+    digest: str
+    version: int
+    status: str
+    error_class: str | None
+    error: str | None
+    warning: str | None
+    page_count: int | None
+    chunk_count: int
+    owner: str
+    verified: bool
+    verified_by: str | None
+    verified_at: datetime | None
+    created_at: datetime
+    processed_at: datetime | None
+    marker: str | None
+    parent_id: str | None
+    url: str | None
+    read_with: str | None
+    indexed_with: str | None
+    content_digest: str | None
+    duplicate_of: str | None
+    folder: str | None
+    fields: dict[str, JsonValue] | None
+    tag: str | None
+    lines: list[JsonValue] | None
+    gone_count: int
+
+
+# Every column of kb_items but the tenant, which the caller already holds.
+ITEM_COLUMNS = [c for c in kb_items.c if c.name != "tenant_id"]
+
+
 class SameText(Out):
     """An indexed document of a base this one shares, holding the same text."""
 
@@ -787,14 +831,14 @@ class KnowledgeStore(Store):
 
     async def items(
         self, tenant: str, *, source_ids: list[str] | None = None, item_id: str | None = None
-    ) -> list[dict[str, Any]]:
-        q = sa.select(kb_items).where(kb_items.c.tenant_id == tenant, team_visible(kb_items))
+    ) -> list[ItemRow]:
+        q = sa.select(*ITEM_COLUMNS).where(kb_items.c.tenant_id == tenant, team_visible(kb_items))
         if source_ids is not None:
             q = q.where(kb_items.c.source_id.in_(source_ids))
         if item_id is not None:
             q = q.where(kb_items.c.id == item_id)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.order_by(kb_items.c.created_at))).mappings()]
+            return await rows(c, q.order_by(kb_items.c.created_at, kb_items.c.id), ItemRow)
 
     async def versions(self, tenant: str, item_id: str) -> list[VersionRow]:
         v = kb_item_versions.c
@@ -1024,15 +1068,15 @@ class KnowledgeStore(Store):
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
             await c.execute(sa.insert(kb_items).values(**{**item, "team_id": team}))
 
-    async def reading_items(self, tenant: str, *, file_id: str | None = None) -> list[dict[str, Any]]:
+    async def reading_items(self, tenant: str, *, file_id: str | None = None) -> list[ItemRow]:
         """The visible items waiting for their file's reading, one file's or all of them."""
-        q = sa.select(kb_items).where(
+        q = sa.select(*ITEM_COLUMNS).where(
             kb_items.c.tenant_id == tenant, kb_items.c.status == "reading", team_visible(kb_items)
         )
         if file_id is not None:
             q = q.where(kb_items.c.file_id == file_id)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.order_by(kb_items.c.created_at))).mappings()]
+            return await rows(c, q.order_by(kb_items.c.created_at, kb_items.c.id), ItemRow)
 
     async def update_item(self, tenant: str, item_id: str, values: dict[str, Any]) -> None:
         async with self.tx() as c:

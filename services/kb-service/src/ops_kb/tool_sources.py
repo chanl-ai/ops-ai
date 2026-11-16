@@ -321,7 +321,9 @@ async def sync_tool_source(
     whole = from_start or "seenSoFar" in cfg
     if from_start:
         cfg.pop("seenSoFar", None)
-    known = {str(i["path"]): i for i in await service.store.items(tenant, source_ids=[source_id])}
+    known = {
+        str(i["path"]): i for i in [r.model_dump() for r in await service.store.items(tenant, source_ids=[source_id])]
+    }
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
     errors: list[dict[str, Any]] = []
     log: list[str] = []
@@ -618,7 +620,12 @@ async def _put(
     }
     if parent is not None:
         parent_row = known.get(parent) or next(
-            (i for i in await service.store.items(tenant, source_ids=[source_id]) if i["path"] == parent), None
+            (
+                i
+                for i in [r.model_dump() for r in await service.store.items(tenant, source_ids=[source_id])]
+                if i["path"] == parent
+            ),
+            None,
         )
         extra["parent_id"] = parent_row["id"] if parent_row else None
     found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
@@ -650,7 +657,10 @@ async def _put(
 
 async def release_snapshots(service: KnowledgeService, who: Who, s: dict[str, Any], file_ids: list[str]) -> None:
     """Lets go of snapshots no item of the source uses any more; files-service keeps each for its retention days."""
-    held = {str(i["file_id"]) for i in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])}
+    held = {
+        str(i["file_id"])
+        for i in [r.model_dump() for r in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])]
+    }
     for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
         await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s["id"]))
 

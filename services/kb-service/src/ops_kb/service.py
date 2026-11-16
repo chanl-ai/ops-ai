@@ -871,7 +871,7 @@ class KnowledgeService:
         _, by_source = await self._joined(who.tenant_id)
         readers = [b for b in await self.store.bases(who.tenant_id) if b["id"] in by_source.get(source_id, [])]
         recent = [_run(r) for r in (await self.store.runs(who.tenant_id, source_id=source_id))[:5]]
-        items = await self.store.items(who.tenant_id, source_ids=[source_id])
+        items = [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
         rules = await self.sync_rules(who.tenant_id, source_id)
         return {
             **self._source(s, by_source.get(source_id, [])),
@@ -1229,7 +1229,11 @@ class KnowledgeService:
         s = await self._source_row(who, source_id)
         if not self.settings_of(s).cleaning.site_repeats:
             return
-        items = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i["status"] == "indexed"]
+        items = [
+            i
+            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
+            if i["status"] == "indexed"
+        ]
         found = repeated(i.get("lines") for i in items)
         cfg = dict(s.get("config") or {})
         if found == list(cfg.get("repeats") or []):
@@ -1278,7 +1282,9 @@ class KnowledgeService:
         no item needs it, or a sync holds the source now (that sync, or the next, rebuilds them)."""
         tenant, source_id = who.tenant_id, str(s["id"])
         stale = [
-            i for i in await self.store.items(tenant, source_ids=[source_id]) if self.built_under_other_settings(s, i)
+            i
+            for i in [r.model_dump() for r in await self.store.items(tenant, source_ids=[source_id])]
+            if self.built_under_other_settings(s, i)
         ]
         lease = await self.take_lease(tenant, source_id) if stale else None
         if lease is None:
@@ -1402,7 +1408,10 @@ class KnowledgeService:
             raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
         started = datetime.now(UTC)
         settings = self.settings_of(s)
-        items = {i["path"]: i for i in await self.store.items(who.tenant_id, source_ids=[source_id])}
+        items = {
+            i["path"]: i
+            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
+        }
         counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0, "excluded": 0}
         errors: list[dict[str, Any]] = []
         log: list[str] = []
@@ -1820,7 +1829,7 @@ class KnowledgeService:
         """Indexes the source items waiting on this file's reading, once documents-service has it (its
         reading.finished event, or the knowledge schedule asking again); the number of items it settled."""
         settled = 0
-        for item in await self.store.reading_items(who.tenant_id, file_id=file_id):
+        for item in [r.model_dump() for r in await self.store.reading_items(who.tenant_id, file_id=file_id)]:
             found_sources = await self.store.sources(who.tenant_id, [str(item["source_id"])])
             if not found_sources:
                 continue
@@ -1975,7 +1984,7 @@ class KnowledgeService:
         """Indexes the version a held change carries, as a sync would have when it found it; False when the document
         moved on since (its version is no longer the one the change started from), and nothing is indexed."""
         held = cast(dict[str, Any], _from_json_safe(detail_of(change)["held"]))
-        current = await self.store.items(who.tenant_id, source_ids=[str(change.source_id)])
+        current = [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[str(change.source_id)])]
         now = next((i for i in current if i["id"] == change.item_id), None)
         if now is None or int(now["version"]) != int(change.from_version):
             return False
@@ -2104,7 +2113,7 @@ class KnowledgeService:
         found = await self._retrieve(who.tenant_id, [b], question, collection=collection)
         passages = found.passages
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
-        items = {i["id"]: i for i in await self.store.items(who.tenant_id)}
+        items = {i["id"]: i for i in [r.model_dump() for r in await self.store.items(who.tenant_id)]}
 
         def source_name(p: Passage) -> str:
             item = items.get(p.item_id)
@@ -2249,7 +2258,11 @@ class KnowledgeService:
         s = await self._source_row(who, source_id)
         settings = split_settings(self.settings_of(s))
         steps = [step for step in settings.strategies if step in AI_STEPS]
-        indexed = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i["status"] == "indexed"]
+        indexed = [
+            i
+            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
+            if i["status"] == "indexed"
+        ]
         sample = indexed[:ESTIMATE_SAMPLE]
         counter = CountingModel()
         read = 0
@@ -2355,7 +2368,7 @@ class KnowledgeService:
     # ── Item review and lookups ──────────────────────────────────────────
 
     async def _changeable_item(self, who: Who, item_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
-        found = await self.store.items(who.tenant_id, item_id=item_id)
+        found = [r.model_dump() for r in await self.store.items(who.tenant_id, item_id=item_id)]
         if not found:
             raise NotFound("No item with that id.")
         i = found[0]
@@ -2383,7 +2396,7 @@ class KnowledgeService:
     async def lookups(self, who: Who) -> dict[str, list[str]]:
         bases = await self.store.bases(who.tenant_id)
         sources = await self.store.sources(who.tenant_id)
-        items = await self.store.items(who.tenant_id)
+        items = [r.model_dump() for r in await self.store.items(who.tenant_id)]
         owners = {b["owner"] for b in bases} | {s["owner"] for s in sources} | {i["owner"] for i in items}
         tags = {t for s in sources for t in s["tags"]}
         collections = {c for b in bases for c in b["collections"]} | {s["collection"] for s in sources}
@@ -2544,7 +2557,7 @@ class KnowledgeService:
         s = await self._source_row(who, source_id)
         rows = [
             self._item(i, s)
-            for i in await self.store.items(who.tenant_id, source_ids=[source_id])
+            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
             if _matches(search, i["title"], i["path"])
         ]
         return page_of(rows, page=page, page_size=page_size, facets={"status": _facet(rows, "status")})
@@ -2596,7 +2609,12 @@ class KnowledgeService:
             # The reader takes a written item's type from its name, as it does an upload's.
             name = f"{name}{WRITTEN_TEXT_MIMES[mime]}"
         before = next(
-            (x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name), None
+            (
+                x
+                for x in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
+                if x["path"] == name
+            ),
+            None,
         )
         stored_file = await self.upload(who, source_id, data, name=name, mime=mime)
         same = before is not None and before["digest"] == stored_file["digest"] and before["status"] == "indexed"
@@ -2607,7 +2625,12 @@ class KnowledgeService:
             log = [str(x) for x in cast(list[object], run.get("log") or [])]
         found = (await self.store.sources(who.tenant_id, [source_id]))[0]
         item = next(
-            (x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x["path"] == name), None
+            (
+                x
+                for x in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
+                if x["path"] == name
+            ),
+            None,
         )
         if item is None:
             # Stored, but the run made no item: files-service holds a new file unreadable until its scan says clean
@@ -2685,7 +2708,7 @@ class KnowledgeService:
                 "sourceName": sources[i["source_id"]]["name"],
                 "docType": doc_type(i["mime"], sources[i["source_id"]]["type"], bool(i.get("url"))),
             }
-            for i in await self.store.items(who.tenant_id, source_ids=list(sources))
+            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=list(sources))]
             if _matches(search, i["title"], i["path"])
         ]
         chosen = filters or {}
@@ -2753,7 +2776,7 @@ class KnowledgeService:
         return {"readerVersion": answer.get("readerVersion"), "ocr": ocr, "pages": out}
 
     async def item(self, who: Who, item_id: str) -> dict[str, Any]:
-        found = await self.store.items(who.tenant_id, item_id=item_id)
+        found = [r.model_dump() for r in await self.store.items(who.tenant_id, item_id=item_id)]
         if not found:
             raise NotFound("No item with that id.")
         i = found[0]
