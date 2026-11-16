@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 
 from ops_agent_kernel import search
@@ -61,6 +62,8 @@ async def test_kind_keeps_only_the_kinds_asked_for(stack: tuple[AsyncClient, Run
     assert every > kinds, every
 
 
+# A graph run calls `offers` inside its run's tenant.
+@pytest.mark.usefixtures("local_tenant")
 async def test_search_tools_finds_a_granted_workflow_by_its_words(stack: tuple[AsyncClient, Runtime]) -> None:  # noqa: F811
     client, rt = stack
     (offer,) = await ChildRuns(rt).offers(["workflow:dispute_email"])
@@ -98,6 +101,8 @@ async def test_granting_an_unpublished_or_paused_workflow_is_refused_with_the_re
     assert kept.status_code == 200 and "workflow:dispute_email" in kept.json()["data"]["toolIds"], kept.text
 
 
+# A graph run calls `offers` inside its run's tenant.
+@pytest.mark.usefixtures("local_tenant")
 async def test_a_workflow_paused_between_offer_and_call_is_refused_with_the_reason(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
 ) -> None:

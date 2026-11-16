@@ -50,6 +50,8 @@ async def agent_turn(client: AsyncClient, message: str) -> tuple[str, list[dict[
     return tid, sse_events(res.text)
 
 
+# A graph run calls `offers` inside its run's tenant.
+@pytest.mark.usefixtures("local_tenant")
 async def test_only_granted_published_workflows_are_offered(stack: tuple[AsyncClient, Runtime]) -> None:
     _, rt = stack
     offers = await ChildRuns(rt).offers(["workflow:dispute_email", "workflow:never_published"])

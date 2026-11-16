@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import NotFound
 from ops_service_kit.ids import now_iso
@@ -15,6 +15,7 @@ from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
+from .tenancy import OWNER, RuntimeStore
 
 registry_workflows = sa.Table(
     "registry_workflows",
@@ -72,26 +73,23 @@ registry_validations = sa.Table(
 )
 
 
-class WorkflowRegistry:
+class WorkflowRegistry(RuntimeStore):
     # One version row per (workflow, version), inserted only when missing (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def ids(self) -> set[str]:
         """Every row's id, deleted ones included, in every team: a new workflow's id is unique across the workspace."""
         q = sa.select(registry_workflows.c.id).where(
             any_team(registry_workflows, "a workflow id is unique across every team")
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return {str(i) for i in (await c.execute(q)).scalars()}
 
     async def rows(self) -> list[dict[str, Any]]:
         q = sa.select(registry_workflows).where(
             registry_workflows.c.status != "deleted", team_visible(registry_workflows)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def refs_every_team(self) -> list[dict[str, Any]]:
@@ -101,26 +99,20 @@ class WorkflowRegistry:
             registry_workflows.c.status != "deleted",
             any_team(registry_workflows, "a service checks a workflow's team for a tool grant"),
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
-    async def owner_team(self, workflow_id: str) -> str | None:
+    async def owner_team(self, workflow_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
         owning team, never for showing the record."""
-        q = sa.select(registry_workflows.c.team_id).where(
-            registry_workflows.c.id == workflow_id,
-            any_team(registry_workflows, "the owning team a refusal is decided on"),
-        )
-        async with self.engine.connect() as c:
-            team = (await c.execute(q)).scalar()
-        return str(team) if team else None
+        return (await self.owner_teams(conn, registry_workflows, {workflow_id}, OWNER)).get(workflow_id)
 
     async def find(self, workflow_id: str) -> dict[str, Any] | None:
         """The row, deleted or not."""
         q = sa.select(registry_workflows).where(
             registry_workflows.c.id == workflow_id, team_visible(registry_workflows)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r else None
 
@@ -136,15 +128,15 @@ class WorkflowRegistry:
             .where(registry_workflow_versions.c.workflow_id == workflow_id, team_visible(registry_workflow_versions))
             .order_by(registry_workflow_versions.c.version.desc())
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def create(self, row: dict[str, Any]) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(registry_workflows.insert().values(**row))
 
     async def update(self, workflow_id: str, **values: Any) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_workflows.update()
                 .where(registry_workflows.c.id == workflow_id)
@@ -152,7 +144,7 @@ class WorkflowRegistry:
             )
 
     async def add_version(self, row: dict[str, Any]) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             exists = (
                 await c.execute(
                     sa.select(registry_workflow_versions.c.version).where(
@@ -170,7 +162,7 @@ class WorkflowRegistry:
         await self.update(workflow_id, status="deleted", draft=None)
 
     async def save_validation(self, row: dict[str, Any]) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(registry_validations.insert().values(**row))
 
     async def validations(self, workflow_ids: set[str]) -> list[dict[str, Any]]:
@@ -182,7 +174,7 @@ class WorkflowRegistry:
             .where(registry_validations.c.workflow_id.in_(sorted(workflow_ids)))
             .order_by(registry_validations.c.ran_at.desc(), registry_validations.c.id.desc())
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def last_validation(self, workflow_id: str) -> dict[str, Any] | None:
@@ -192,6 +184,6 @@ class WorkflowRegistry:
             .order_by(registry_validations.c.ran_at.desc())
             .limit(1)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r else None
