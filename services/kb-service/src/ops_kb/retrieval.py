@@ -119,7 +119,11 @@ class Found:
 
 
 class Retriever(Protocol):
-    async def search(self, tenant: str, kb_ids: list[str], question: str, how: Search) -> Found: ...
+    async def search(
+        self, tenant: str, kb_ids: list[str], question: str, how: Search, *, deadline: float | None = None
+    ) -> Found:
+        """`deadline` (the event loop's clock) bounds the question's embedding; a lane past it is skipped."""
+        ...
 
 
 def snippet(text: str, width: int = 280) -> str:

@@ -372,6 +372,10 @@ class Settings(BaseSettings):
     # How long kb-service waits for agents-service's "used by" on a knowledge base list or page, asked once: the page
     # answers without it (usage unknown) rather than hold the console for the agents endpoint's tries and timeout.
     kb_used_by_timeout_s: float = Field(default=5.0, gt=0)
+    # The time one knowledge search's model steps share (rewrite, the question's embedding, rerank, in sequence); a
+    # step past it is skipped and the answer says so. Below the shortest wait of a caller of the search (tools-service
+    # 5 s, agents-service 10 s), so a slow model never fails the caller's request. Ingest-time embedding is not bound.
+    kb_search_wait_s: float = Field(default=4.0, gt=0)
     embedding_width: int = 1536
     # The share of saved eval cases a version must pass before a publish check passes (0-1); the check blocks the
     # publish at the risk tiers whose steps are blocking (agents-service domain.evals).

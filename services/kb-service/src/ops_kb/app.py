@@ -344,6 +344,7 @@ def create_kb_app(
         ai_clients=ai_clients,
         query_model=query_model,
         query_alias=Settings().kb_query_alias,
+        search_wait_s=Settings().kb_search_wait_s,
     )
     errors = error_responses()
 

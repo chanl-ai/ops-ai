@@ -4,6 +4,7 @@ it cannot, the result says why and the keyword lane answers alone."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from .embedding import Embedder, EmbedFailed
@@ -19,7 +20,9 @@ class HybridRetriever:
         self.vectors = PgVectorStore(engine)
         self.embedder = embedder
 
-    async def search(self, tenant: str, kb_ids: list[str], question: str, how: Search) -> Found:
+    async def search(
+        self, tenant: str, kb_ids: list[str], question: str, how: Search, *, deadline: float | None = None
+    ) -> Found:
         asked = list(how.lanes)
         ran: dict[str, list[dict[str, Any]]] = {}
         skipped: dict[str, str] = {}
@@ -34,7 +37,7 @@ class HybridRetriever:
             else:
                 skipped["keyword"] = "no_full_text"
         if "meaning" in how.lanes:
-            why, hits, tokens = await self._meaning(tenant, kb_ids, question, how)
+            why, hits, tokens = await self._meaning(tenant, kb_ids, question, how, deadline)
             if why:
                 skipped["meaning"] = why
             else:
@@ -42,7 +45,7 @@ class HybridRetriever:
         return Found(fuse(ran, how), list(asked), list(ran), skipped, tokens)
 
     async def _meaning(
-        self, tenant: str, kb_ids: list[str], question: str, how: Search
+        self, tenant: str, kb_ids: list[str], question: str, how: Search, deadline: float | None
     ) -> tuple[str | None, list[dict[str, Any]], int]:
         """(why it did not run, the hits above the threshold, the question's embedding tokens)."""
         embedder = self.embedder
@@ -54,9 +57,12 @@ class HybridRetriever:
         if embedded == 0:
             return "no_vectors", [], 0
         try:
-            [vector], tokens = await embedder.embed([question], tenant=tenant)
+            async with asyncio.timeout_at(deadline):
+                [vector], tokens = await embedder.embed([question], tenant=tenant)
         except EmbedFailed as e:
             return f"embedding_unavailable: {e.code}", [], 0
+        except TimeoutError:
+            return "embedding_unavailable: timeout", [], 0
         rows = await self.vectors.nearest(
             tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit, how=how
         )

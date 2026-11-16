@@ -37,6 +37,7 @@ from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.settings import Settings
 from ops_store.listing import ListPage
 from ops_store.schedule import last_slot, next_run
 
@@ -362,6 +363,7 @@ class KnowledgeService:
         ai_clients: AiClients | None = None,
         query_model: QueryModel | None = None,
         query_alias: str = "default",
+        search_wait_s: float | None = None,
     ) -> None:
         """`tools` reads "tool" sources through tools-service's gateway; without it none can be made. `readings` gives
         each file's reading from documents-service, read with OCR mode `ocr` (settings.kb_ocr); without it a file
@@ -383,6 +385,9 @@ class KnowledgeService:
         # chat-model alias for both, used by a base that names none.
         self.query_model = query_model
         self.query_alias = query_alias
+        # The time a search's model steps (rewrite, the question's embedding, rerank) share, in sequence: a step
+        # past it is skipped and says so, so a slow model never holds a caller past its own wait for this service.
+        self.search_wait_s = Settings().kb_search_wait_s if search_wait_s is None else search_wait_s
         # Rebuilds running in this process, so stopping the service ends them and their runs say why.
         self.rebuilds: set[asyncio.Task[None]] = set()
 
@@ -2037,27 +2042,34 @@ class KnowledgeService:
         steps = steps_for([{**DEFAULT_RETRIEVAL, **b.retrieval} for b in bases], self.query_alias)
         searched: str = question
         rewrite: dict[str, Any] | None = None
+        deadline = asyncio.get_running_loop().time() + self.search_wait_s
         if steps.rewrite_alias is not None:
             started = time.monotonic()
             rewrite = {"asked": question, "rewritten": None}
             try:
                 if self.query_model is None:
                     raise QueryStepFailed("no_query_model")
-                searched = await self.query_model.rewrite(
-                    question, steps.instruction, alias=steps.rewrite_alias, tenant=tenant
-                )
+                async with asyncio.timeout_at(deadline):
+                    searched = await self.query_model.rewrite(
+                        question, steps.instruction, alias=steps.rewrite_alias, tenant=tenant
+                    )
                 rewrite["rewritten"] = searched
             except QueryStepFailed as e:
                 rewrite["skipped"] = e.reason
+            except TimeoutError:
+                searched = question
+                rewrite["skipped"] = "timeout"
             rewrite["ms"] = ms_since(started)
         pool = dataclasses.replace(how, limit=max(how.limit, RERANK_POOL)) if steps.rerank_alias else how
-        found = await self.retriever.search(tenant, [b.id for b in bases], searched, pool)
+        found = await self.retriever.search(tenant, [b.id for b in bases], searched, pool, deadline=deadline)
         found = dataclasses.replace(found, rewrite=rewrite)
         if steps.rerank_alias is None:
             return found
-        return await self._reranked(tenant, found, searched, steps.rerank_alias, how.limit)
+        return await self._reranked(tenant, found, searched, steps.rerank_alias, how.limit, deadline=deadline)
 
-    async def _reranked(self, tenant: str, found: Found, question: str, alias: str, limit: int) -> Found:
+    async def _reranked(
+        self, tenant: str, found: Found, question: str, alias: str, limit: int, *, deadline: float
+    ) -> Found:
         """The fused pieces in the order the reranker scores them, cut to the bases' limit; the fused order cut to it
         when the reranker cannot answer."""
         started = time.monotonic()
@@ -2068,7 +2080,8 @@ class KnowledgeService:
             try:
                 if self.query_model is None:
                     raise QueryStepFailed("no_query_model")
-                scores = await self.query_model.scores(question, [p.text for p in pool], alias=alias, tenant=tenant)
+                async with asyncio.timeout_at(deadline):
+                    scores = await self.query_model.scores(question, [p.text for p in pool], alias=alias, tenant=tenant)
                 ranked = sorted(
                     zip(pool, scores, strict=True), key=lambda ps: ps[1], reverse=True
                 )  # sorted is stable, so equal scores keep the fused order
@@ -2076,6 +2089,8 @@ class KnowledgeService:
                 rerank |= {"ran": True, "scored": len(pool)}
             except QueryStepFailed as e:
                 rerank["skipped"] = e.reason
+            except TimeoutError:
+                rerank["skipped"] = "timeout"
         rerank["ms"] = ms_since(started)
         return dataclasses.replace(found, passages=passages, rerank=rerank)
 

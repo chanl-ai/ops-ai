@@ -6,6 +6,7 @@ source taken out of a base is still found by its vectors."""
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -258,3 +259,26 @@ async def test_off_postgresql_the_keyword_lane_says_it_was_skipped(tmp_path: Pat
     finally:
         await other.dispose()
     assert found.ran == [] and found.skipped == {"keyword": "no_full_text"}
+
+
+@pytest.fixture
+def short_search_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPS_KB_SEARCH_WAIT_S", "0.5")
+
+
+async def test_a_slow_embedding_model_skips_the_meaning_lane_at_the_search_wait(
+    short_search_wait: None, stack: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The question's embedding is bound by the search's wait, not the models endpoint's 120 s: past it the meaning
+    lane is skipped as when the model is down, and the keyword lane answers."""
+    _, kb = await stack.base()
+    embed = stack.embedder.embed
+
+    async def slow(texts: list[str], *, tenant: str) -> tuple[list[list[float]], int]:
+        await asyncio.sleep(60)
+        return await embed(texts, tenant=tenant)
+
+    monkeypatch.setattr(stack.embedder, "embed", slow)
+    found = await asyncio.wait_for(stack.search(kb["id"], "early repayment charge on my loan"), 5)
+    assert found["lanes"]["skipped"] == [{"lane": "meaning", "reason": "embedding_unavailable: timeout"}], found
+    assert sections(found)[:1] == ["Early repayment"]
