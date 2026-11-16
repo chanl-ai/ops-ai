@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import sqlalchemy as sa
@@ -28,9 +28,10 @@ def scrubbed(value: Any) -> Any:
     """`value` with every time, duration and generated id replaced by its kind, so two runs answer the same."""
     if isinstance(value, dict):
         # How long a read took is measured, so only its being a number is compared.
-        return {k: "<ms>" if k == "durationMs" and isinstance(v, int) else scrubbed(v) for k, v in value.items()}
+        held = cast(dict[str, object], value)
+        return {k: "<ms>" if k == "durationMs" and isinstance(v, int) else scrubbed(v) for k, v in held.items()}
     if isinstance(value, list):
-        return [scrubbed(v) for v in value]
+        return [scrubbed(v) for v in cast(list[object], value)]
     if isinstance(value, str) and (m := _TIME.match(value)):
         return f"<time{m.group(2) or ''}>"
     if isinstance(value, str) and (m := _ID.match(value)):
