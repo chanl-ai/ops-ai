@@ -10,10 +10,9 @@ from typing import Any, cast
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_files.store.event_relay import sender
 from ops_files.store.files import service_outbox
 from ops_files.store.read_requests import ReadRequestsStore
-from ops_store.outbox import Relay
+from ops_store.outbox import Relay, relay
 from tests import test_api
 from tests.test_api import OPS, PDF, Client, _data, _upload  # pyright: ignore[reportPrivateUsage]
 
@@ -51,13 +50,21 @@ async def test_a_deleted_file_reports_file_deleted_and_a_refused_delete_reports_
     assert payload["digest"], payload
 
 
+def files_relay(engine: AsyncEngine, agents: Agents) -> Relay:
+    """The relay as files-service wires it: every event to agents-service, a read request's run recorded on it."""
+    enrich = ReadRequestsStore(engine).record_run
+    return relay(
+        engine, service_outbox, routes={"*": ("agents",)}, targets={"agents": agents}, role=None, enrich=enrich
+    )
+
+
 class Agents:
     """agents-service's POST /v1/events, answering the run a read request's event started."""
 
     def __init__(self) -> None:
         self.sent: list[dict[str, Any]] = []
 
-    async def post(self, path: str, body: dict[str, Any], **kw: Any) -> dict[str, Any]:
+    async def post(self, path: str, body: dict[str, Any], /, *, tenant: str, team: str) -> dict[str, Any]:
         self.sent.append(body)
         return {"status": "started", "runIds": ["wfrun_1"]}
 
@@ -75,7 +82,7 @@ async def test_a_read_request_is_one_request_per_key_and_names_its_run_once_deli
         first = _data(posted)
         again = _data(await c.post(f"/v1/files/{fid}/read-requests", json=ask, headers=key))
         agents = Agents()
-        await Relay(engine, service_outbox, sender(agents, ReadRequestsStore(engine))).once()  # type: ignore[arg-type]
+        await files_relay(engine, agents).once()
         followed = _data(await c.get(f"/v1/files/{fid}/read-requests/{first['key']}", headers=OPS))
     async with client(role="chat_user") as chatter:
         refused = await chatter.post(f"/v1/files/{fid}/read-requests", json=ask, headers=OPS)
@@ -98,7 +105,7 @@ async def test_a_read_request_with_no_type_asks_for_detect_and_a_read_with_no_ty
         fid = _data(await c.post(f"/v1/files/uploads/{ticket['fileId']}/complete", headers=OPS))["file"]["id"]
         posted = await c.post(f"/v1/files/{fid}/read-requests", json={}, headers={**OPS, "Idempotency-Key": "d1"})
         agents = Agents()
-        await Relay(engine, service_outbox, sender(agents, ReadRequestsStore(engine))).once()  # type: ignore[arg-type]
+        await files_relay(engine, agents).once()
         unread = {"path": "model", "fieldsToCheck": 0, "extractionId": "ext_9", "readAt": "2026-10-19T12:00:00Z"}
         saved = await c.put(f"/v1/files/{fid}/data", json=unread, headers=OPS)
     assert posted.status_code == 202 and _data(posted)["documentTypeId"] is None, posted.text

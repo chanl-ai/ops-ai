@@ -3,7 +3,7 @@
 """files-service's door to its database; only this package imports the driver."""
 
 from ops_files.store.files import AsyncEngine, FileRow, FilesStore, HoldRow, Page, engine_for, metadata, reachable
-from ops_files.store.read_requests import ReadRequestsStore
+from ops_files.store.read_requests import ReadRequestRow, ReadRequestsStore
 from ops_files.store.settings import CredentialRow, SavedSettings, SettingsStore, StaleVersionError
 
 __all__ = [
@@ -13,6 +13,7 @@ __all__ = [
     "FilesStore",
     "HoldRow",
     "Page",
+    "ReadRequestRow",
     "ReadRequestsStore",
     "SavedSettings",
     "SettingsStore",

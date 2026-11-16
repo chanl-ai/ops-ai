@@ -1,5 +1,4 @@
-# files-service: 1 raw, 4 caught, 1 broad outside Store.tx() or with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+# files-service: 1 raw, 3 caught, 1 broad outside Store.tx() or with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
 1 broad services/files-service/src/ops_files/store/files.py
 3 caught services/files-service/src/ops_files/store/files.py
-1 caught services/files-service/src/ops_files/store/read_requests.py
 1 raw services/files-service/src/ops_files/store/files.py

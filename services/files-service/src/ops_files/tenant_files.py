@@ -67,7 +67,7 @@ from ops_files.service import (
     retain_until,
 )
 from ops_files.sniffing import SNIFF_BYTES, prove
-from ops_files.store import AsyncEngine, FileRow, FilesStore, HoldRow, ReadRequestsStore
+from ops_files.store import AsyncEngine, FileRow, FilesStore, HoldRow, ReadRequestRow, ReadRequestsStore
 from ops_service_kit.http import options_page, options_window
 from ops_storage.base import ObjectExistsError, StreamingObjectStore
 from ops_store import isolation
@@ -125,16 +125,16 @@ class Who:
     edits: bool = True
 
 
-def _read_request(row: Mapping[str, Any]) -> ReadRequest:
+def _read_request(row: ReadRequestRow) -> ReadRequest:
     return ReadRequest(
-        key=row["request_key"],
-        file_id=row["file_id"],
-        document_type_id=row["document_type_id"],
-        version=row["version"],
-        status=row["status"],
-        run_id=row["run_id"],
-        requested_by=row["requested_by"],
-        requested_at=row["requested_at"],
+        key=row.request_key,
+        file_id=row.file_id,
+        document_type_id=row.document_type_id,
+        version=row.version,
+        status=row.status,
+        run_id=row.run_id,
+        requested_by=row.requested_by,
+        requested_at=row.requested_at,
     )
 
 
@@ -261,7 +261,7 @@ class TenantFiles:
     async def read_request(self, who: Who, file_id: str, key: str) -> ReadRequest:
         await self._owned(who, file_id)
         found = await ReadRequestsStore(self._files.engine).get(key)
-        if found is None or found["file_id"] != file_id:
+        if found is None or found.file_id != file_id:
             raise FileMissingError(key)
         return _read_request(found)
 

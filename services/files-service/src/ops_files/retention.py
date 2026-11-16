@@ -12,11 +12,11 @@ from .tenant_files import TenantFiles
 EVERY_S = 3600.0
 
 
-async def keep_purging(files: TenantFiles, stop: asyncio.Event | None = None) -> None:
-    """The listed `files_retention` process: one pass an hour through the shared runner, reported on
-    /health/background."""
+async def keep_purging(files: TenantFiles, stop: asyncio.Event | None = None, *, every_s: float | None = None) -> None:
+    """The listed `files_retention` process: one pass an hour (or every `every_s`) through the shared runner,
+    reported on /health/background."""
 
     async def once() -> int:
         return await files.purge_released()
 
-    await background.run("files_retention", once, stop=stop or asyncio.Event(), store=background.LOCAL)
+    await background.run("files_retention", once, stop=stop or asyncio.Event(), store=background.LOCAL, every_s=every_s)

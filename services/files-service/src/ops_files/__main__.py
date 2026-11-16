@@ -5,6 +5,7 @@ settings.files_dir until a tenant's storage settings name another target (ops_fi
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
@@ -20,13 +21,14 @@ from ops_files.scanning import EicarScanner
 from ops_files.secrets import CredentialCipher
 from ops_files.service import FilesConfig
 from ops_files.settings import StorageSettings, build_store
-from ops_files.store import FilesStore, SettingsStore, engine_for
-from ops_files.store.event_relay import keep_relaying
+from ops_files.store import FilesStore, ReadRequestsStore, SettingsStore, engine_for
+from ops_files.store.files import SYSTEM_ROLE, service_outbox
 from ops_files.tenant_files import TenantFiles
 from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
 from ops_storage.local import LocalObjectStore
+from ops_store.outbox import relay, run_relay
 from ops_store.schema_version import require_current_schema
 
 # The classes files.md 4.4 names for the purposes this slice serves; a retention settings page replaces this list.
@@ -104,7 +106,13 @@ def main() -> None:
         # A deleted file's file.deleted reaches agents-service, which runs the purge workflow.
         http = httpx.AsyncClient(base_url=settings.agents_url, timeout=5)
         agents = ServiceClient.for_settings(settings, http, service="files", audience="agents", scopes=["events:emit"])
-        background.append(lambda: keep_relaying(files.engine, agents))
+        # A read request's event records the run it started on the request, which the console follows.
+        enrich = ReadRequestsStore(files.engine).record_run
+        targets = {"agents": agents}
+        events = relay(
+            files.engine, service_outbox, routes={"*": ("agents",)}, targets=targets, role=SYSTEM_ROLE, enrich=enrich
+        )
+        background.append(lambda: run_relay(events, key="files_relay", stop=asyncio.Event()))
     app = create_files_app(
         files,
         engine=files.engine,

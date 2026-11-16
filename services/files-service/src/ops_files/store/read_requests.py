@@ -7,16 +7,20 @@ A repeat with the same key returns the first request and writes no second event.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal, cast
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_files.store.files import ROLE, metadata, service_outbox
+from ops_service_kit.http import Out
 from ops_store import isolation
 from ops_store.outbox import add as add_event
+from ops_store.rows import one
 from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
 read_requests = sa.Table(
@@ -42,44 +46,70 @@ read_requests = sa.Table(
 EVENT = "file.read_requested"
 
 
-class ReadRequestsStore:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+class ReadRequestRow(Out):
+    tenant_id: str
+    request_key: str
+    file_id: str
+    team: str
+    requested_by: str
+    document_type_id: str | None
+    version: int | None
+    type_name: str | None
+    status: Literal["queued", "started", "unhandled"]
+    run_id: str | None
+    requested_at: datetime
 
-    async def request(self, values: Mapping[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+
+class ReadRequestsStore(Store):
+    role = ROLE
+
+    async def request(self, values: Mapping[str, Any], payload: Mapping[str, object]) -> ReadRequestRow:
         """The request, new with its event, or the one already holding its key."""
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.insert(read_requests).values(**values, status="queued"))
-                await add_event(
-                    c,
-                    service_outbox,
-                    tenant_id=str(values["tenant_id"]),
-                    team_id=str(values["team"]),
-                    name=EVENT,
-                    key=str(values["request_key"]),
-                    payload=payload,
-                    actor=str(values["requested_by"]),
-                )
-        except IntegrityError:
-            pass
-        found = await self.get(str(values["request_key"]))
+        key = str(values["request_key"])
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(read_requests).values(**values, status="queued"))
+                    await add_event(
+                        c,
+                        service_outbox,
+                        tenant_id=str(values["tenant_id"]),
+                        team_id=str(values["team"]),
+                        name=EVENT,
+                        key=key,
+                        payload=dict(payload),
+                        actor=str(values["requested_by"]),
+                    )
+            except IntegrityError:
+                pass
+            found = await self._get(c, key)
         assert found is not None
         return found
 
-    async def get(self, key: str) -> dict[str, Any] | None:
-        tenant = isolation.tenant()
+    async def get(self, key: str) -> ReadRequestRow | None:
+        async with self.tx() as c:
+            return await self._get(c, key)
+
+    @staticmethod
+    async def _get(c: AsyncConnection, key: str) -> ReadRequestRow | None:
         t = read_requests
-        query = sa.select(t).where(t.c.tenant_id == tenant, t.c.request_key == key, team_visible(t))
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            row = (await c.execute(query)).mappings().first()
-        return dict(row) if row is not None else None
+        query = sa.select(t).where(t.c.tenant_id == isolation.tenant(), t.c.request_key == key, team_visible(t))
+        return await one(c, query, ReadRequestRow)
 
     async def started(self, key: str, *, status: str, run_id: str | None) -> None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(read_requests)
                 .where(read_requests.c.tenant_id == tenant, read_requests.c.request_key == key)
                 .values(status=status, run_id=run_id)
             )
+
+    async def record_run(self, body: Mapping[str, object], service: str, answer: object) -> None:
+        """The relay's `enrich`: a delivered read request's event names the run agents-service started, recorded on
+        the request so the console follows it. Runs inside the event's tenant and team."""
+        if body["name"] != EVENT or service != "agents" or not isinstance(answer, dict):
+            return
+        done = cast(Mapping[str, object], answer)
+        runs = cast(list[str], done.get("runIds") or [])
+        await self.started(str(body["key"]), status=str(done.get("status")), run_id=next(iter(runs), None))
