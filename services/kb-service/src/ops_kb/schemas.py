@@ -388,7 +388,7 @@ class Item(Out):
 
 class DocumentRow(Item):
     source_name: str
-    # What the document is, for the Documents table's Type column and filter (service.doc_type).
+    # What the document is, for the Documents table's Type column and filter (store.document_list.doc_type).
     doc_type: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
 
 

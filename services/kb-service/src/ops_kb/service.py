@@ -65,6 +65,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
+from .store.document_list import SHOWN_STATUS, doc_type, document_page
 from .store.knowledge import BaseRow, ChangeRow, ChunkRow, ItemRow, PieceWrite, RunRow, SourceRow, UnitWrite
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
@@ -169,15 +170,6 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
-def page_of(
-    rows: list[dict[str, Any]], *, page: int, page_size: int, facets: dict[str, dict[str, int]]
-) -> dict[str, Any]:
-    page_size = max(1, min(page_size, MAX_PAGE_SIZE))
-    shown = pagination(len(rows), page, page_size)
-    start = (shown["page"] - 1) * page_size
-    return {"data": rows[start : start + page_size], "pagination": shown, "facets": facets}
-
-
 def pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
     """The pagination block for `total` rows, `page` held to the pages there are (a store pages the same way)."""
     total_pages = max(1, -(-total // page_size))
@@ -194,44 +186,6 @@ def pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
 
 # The Documents table's filters that are facets, by the row field each counts.
 DOCUMENT_FACETS = ("sourceId", "status", "collection", "docType", "freshness", "sensitivity", "tags")
-WORD_MIMES = {"application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-SHEET_MIMES = {
-    "text/csv",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-}
-SLIDE_MIMES = {
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-}
-
-
-def doc_type(mime: str, source_type: str, has_url: bool) -> str:
-    """What a document is, as the Documents table's Type names it: written in the console, from an app, a web page (a
-    pushed page with its address counts), or by its file type."""
-    if source_type == "text":
-        return "typed"
-    if source_type == "tool":
-        return "app"
-    if mime == "text/html" or source_type == "web" or has_url:
-        return "web"
-    if mime == "application/pdf":
-        return "pdf"
-    if mime in WORD_MIMES:
-        return "word"
-    if mime in SHEET_MIMES:
-        return "spreadsheet"
-    if mime in SLIDE_MIMES:
-        return "slides"
-    if mime.startswith("text/"):
-        return "text"
-    return "other"
-
-
-def _matches(search: str | None, *texts: str) -> bool:
-    return not search or any(search.lower() in t.lower() for t in texts)
-
-
 # The settings a source's patch may change, each validated and applied by its stage (source_settings.py).
 SETTINGS_KEYS = ("parsing", "cleaning", "ingest", "rules", "metadataMapping", "schedule", "aiCeiling")
 # The service event a source raises when it keeps failing, so a workflow can tell its owner.
@@ -241,7 +195,6 @@ FAILING_AFTER = timedelta(days=1)
 
 
 # An item's status as the console names it: an item waiting for its file's reading is processing there.
-SHOWN_STATUS = {"reading": "processing"}
 # A file source's item when no documents-service is configured: kb-service reads no file itself.
 NO_READER = ("parse", "Files are read by documents-service, which this installation does not run.")
 
@@ -2681,51 +2634,26 @@ class KnowledgeService:
         run = await self.sync(who, source_id)
         return {"sourceId": source_id, "files": added, "run": run}
 
-    async def documents(
-        self,
-        who: Who,
-        kb_id: str,
-        *,
-        page: int,
-        page_size: int,
-        search: str | None,
-        filters: dict[str, set[str]] | None = None,
-    ) -> dict[str, Any]:
+    async def documents(self, who: Who, kb_id: str, q: ListParams) -> ListPage:
+        """The base's documents, chosen, counted and paged in SQL; a source's freshness and tags, which the filters and
+        facets read, are worked out here from the base's sources."""
         if await self.store.base(who.tenant_id, kb_id) is None:
             raise NotFound("No knowledge base with that id.")
         by_kb, _ = await self._joined(who.tenant_id)
         sources = {s.id: s for s in await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))}
-        rows = [
+        freshness = {sid: self.freshness_of(s) for sid, s in sources.items()}
+        tags = {sid: s.tags for sid, s in sources.items()}
+        page, items = await document_page(self.store, who.tenant_id, kb_id, q, freshness=freshness, tags=tags)
+        page["data"] = [
             {
                 **self._item(i, sources[i.source_id]),
                 "sourceName": sources[i.source_id].name,
                 "docType": doc_type(i.mime, sources[i.source_id].type, bool(i.url)),
             }
-            for i in await self.store.items(who.tenant_id, source_ids=list(sources))
-            if _matches(search, i.title, i.path)
+            for i in items
         ]
-        chosen = filters or {}
-
-        def keeps(r: dict[str, Any], skip: str | None = None) -> bool:
-            for key, values in chosen.items():
-                if key == skip:
-                    continue
-                have = set(r["tags"]) if key == "tags" else {str(r.get(key) or "")}
-                if not have & values:
-                    return False
-            return True
-
-        facets: dict[str, dict[str, int]] = {}
-        for key in DOCUMENT_FACETS:
-            # Each facet counts over the rows the other filters keep, so its counts say what choosing a value shows.
-            counted: dict[str, int] = {}
-            for r in rows:
-                if keeps(r, skip=key):
-                    for v in r["tags"] if key == "tags" else [str(r.get(key) or "")]:
-                        if v:
-                            counted[v] = counted.get(v, 0) + 1
-            facets[key] = counted
-        return page_of([r for r in rows if keeps(r)], page=page, page_size=page_size, facets=facets)
+        page["facets"] = {key: page["facets"].get(key, {}) for key in DOCUMENT_FACETS}
+        return page
 
     async def _reading_summary(self, who: Who, s: SourceRow, i: ItemRow) -> dict[str, Any] | None:
         """How the item's file was read and what cleaning removed, page by page, from its stored reading; None for an

@@ -174,7 +174,8 @@ kb_items = sa.Table(
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("source_id", sa.String(64), nullable=False),
+    # The Documents table filters on it (uq_kb_items_path leads with it after the tenant).
+    sa.Column("source_id", sa.String(64), nullable=False, info=LISTED),
     # One document per name in a source: a file uploaded again under the same name is its next version.
     sa.Column("path", sa.String(400), nullable=False),
     sa.Column("title", sa.String(400), nullable=False),

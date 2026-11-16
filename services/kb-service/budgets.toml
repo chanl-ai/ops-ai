@@ -31,7 +31,9 @@ transactions = 6
 connections = 6
 
 ["GET /v1/knowledge-bases/{kb_id}/documents"]
-queries = 5
+# The base, its links and sources, then the page in SQL: a count, the page, and one per facet (seven); rows are no
+# longer all read, so the number holds at any size.
+queries = 13
 
 ["GET /v1/knowledge-changes"]
 queries = 8

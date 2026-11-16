@@ -41,7 +41,7 @@ from ops_service_kit.http import (
     ok,
     operation_id,
 )
-from ops_service_kit.listing import ListQuery
+from ops_service_kit.listing import ListParams, ListQuery
 from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -466,8 +466,9 @@ def create_kb_app(
             "sensitivity": sensitivity,
             "tags": tags,
         }
-        chosen = {k: set(v) for k, v in filters.items() if v}
-        return ok(await service.documents(who, kb_id, page=page, page_size=page_size, search=search, filters=chosen))
+        chosen = {k: v for k, v in filters.items() if v}
+        q = ListParams(page=page, page_size=page_size, search=search or None, filters=chosen)
+        return ok(await service.documents(who, kb_id, q))
 
     @kbs.post("/{kb_id}/pages", status_code=201, response_model=Envelope[Item])
     async def add_page(kb_id: str, body: PageIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

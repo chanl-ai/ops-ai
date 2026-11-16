@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.store import KnowledgeStore
+from ops_kb.store.document_list import document_page
 from ops_kb.store.knowledge import kb_items, kb_runs
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
@@ -311,6 +312,25 @@ async def test_item_page_keeps_another_teams_rows_out_by_its_own_predicate(engin
         page, _ = await KnowledgeStore(engine).item_page(tenant, sid, ListParams())
     assert [r["id"] for r in page["data"]] == sorted(mine)
     assert (page["pagination"]["total"], page["facets"]) == (2, {"status": {"indexed": 2}})
+
+
+async def test_document_page_keeps_another_teams_rows_out_by_its_own_predicate(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    store = KnowledgeStore(engine)
+    [sid] = await _seed_sources(engine, tenant, "team_ops", "Rates")
+    base = base_row(tenant, "team_ops", "Rates")
+    with isolation.scope(tenant, "team_ops"):
+        await store.create_base(base, [sid])
+    mine = await insert_rows(engine, tenant, "team_ops", kb_items, item_row(sid, "Rate sheet"), item_row(sid, "Fees"))
+    await insert_rows(engine, tenant, "team_lending", kb_items, item_row(sid, "Lending sheet", "failed"))
+    with isolation.tenant_wide(WIDE, tenant_id=tenant), acting_as("team_ops"):
+        page, _ = await document_page(
+            store, tenant, base["id"], ListParams(), freshness={sid: "fresh"}, tags={sid: ["rates"]}
+        )
+    assert [r["id"] for r in page["data"]] == sorted(mine)
+    assert page["pagination"]["total"] == 2
+    assert (page["facets"]["status"], page["facets"]["tags"]) == ({"indexed": 2}, {"rates": 2})
 
 
 async def test_documents_list_only_the_bases_team_rows_with_tags_and_shown_status_faceted(
