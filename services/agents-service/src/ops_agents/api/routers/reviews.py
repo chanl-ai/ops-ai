@@ -4,6 +4,12 @@ with the token in its decision, so it lands in the checkpoint and a resume after
 
 The call comes from the interrupt (`payload.call = {tool, input, step}`), the call the node will make on resume, so
 the token is bound to what will run, not to a summary of it.
+
+No route here takes the request transaction (`Tx`): each builds a review, which asks tools-service for the held
+write's policy (`tool_access.policy_of`), and a decision resumes the run, which calls models and tools. Each store
+read opens and closes its own transaction around those calls, so no connection is held while another service answers
+(`tests/api/test_review_routes_hold_nothing.py`). A bulk decision or assignment answers per id, so one id's refusal
+leaves the others decided.
 """
 
 from __future__ import annotations
@@ -14,11 +20,10 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ops_contracts.chat import WireModel
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, Out
 
 from ...store.review_assignments import ReviewAssignments
 from ...store.reviews import ReviewStore
@@ -44,7 +49,7 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-class ApprovalInput(WireModel):
+class ApprovalInput(In):
     step_up_token: str | None = None
 
 
@@ -103,7 +108,7 @@ async def record_approval(
 console_router = APIRouter(prefix="/reviews", dependencies=[Depends(principal)])
 
 
-class ReviewDecisionInput(WireModel):
+class ReviewDecisionInput(In):
     """The console's `ReviewDecisionInput`. Conditions, acting-as and test cases apply to other review kinds and are
     accepted and ignored here, so one decide call serves every kind."""
 
@@ -217,14 +222,14 @@ async def run_as_team_account(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     return ok(await engine_reviews.run_as_team_account(rt, me, thread_id))
 
 
-class BulkDecisionInput(WireModel):
+class BulkDecisionInput(In):
     ids: list[str]
     decision: str
     reason: str | None = None
     step_up_token: str | None = None
 
 
-class AssignInput(WireModel):
+class AssignInput(In):
     ids: list[str] = Field(min_length=1, max_length=200)
     # A person's email; the caller when left out (Assign to me).
     assignee: str | None = Field(default=None, min_length=3, max_length=320)
