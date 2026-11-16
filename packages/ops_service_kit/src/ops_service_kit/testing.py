@@ -10,6 +10,11 @@
   ["GET /v1/cases/{case_id}"]
   queries = 4
   hops_in_transaction = 1   # listed: a call to another service while the request's transaction is open
+  ["GET /v1/auth/oidc/callback"]
+  queries = 2
+  status = 303              # listed: the status it answers by design, when not 200
+  ["GET /v1/events"]
+  not_budgeted = "a stream that never ends: no request line to read"   # not called; the reason is required
 
   # services/<x>/tests/conftest.py: the kit does not depend on pytest, so the service makes the fixture
   statement_budget = pytest.fixture(budget_check)
@@ -76,30 +81,38 @@ def get_routes(app: FastAPI) -> list[str]:
 async def over_budget(
     app: FastAPI, client: Client, seed_team: SeedTeam, budgets: Path, stream: io.StringIO
 ) -> list[str]:
-    """One line per GET route that has no budget row, runs more statements at 50 rows than at 5, exceeds its row,
-    opens more transactions or checks out more connections than its row lists (one of each unless it says otherwise),
-    calls another service while a transaction is open (none unless listed) or keeps a transaction open too long."""
+    """One line per GET route that has no budget row, answers other than its row's `status` (200 unless listed), runs
+    more statements at 50 rows than at 5, exceeds its row, opens more transactions or checks out more connections than
+    its row lists (one of each unless it says otherwise), calls another service while a transaction is open (none
+    unless listed) or keeps a transaction open too long. A row with `not_budgeted = "<reason>"` is not called, and
+    needs its reason."""
     rows: dict[str, dict[str, Any]] = tomllib.loads(await asyncio.to_thread(budgets.read_text))
     seen: dict[str, list[dict[str, Any]]] = {}
     problems: list[str] = []
     for size in SIZES:
         seeded = await seed_team(size)
         for route in get_routes(app):
-            if f"GET {route}" not in rows:
+            row = rows.get(f"GET {route}")
+            if row is None or "not_budgeted" in row:
                 continue
             stream.seek(0)
             stream.truncate()
             answer = await client.get(route.format(**seeded.ids), headers=dict(seeded.headers))
             lines = [json.loads(line) for line in stream.getvalue().splitlines()]
             line = next((x for x in lines if x.get("event") == "http.request"), None)
-            if answer.status_code != 200 or line is None:
-                problems.append(f"GET {route}: answered {answer.status_code} at {size} rows")
+            expected = int(row.get("status", 200))
+            if answer.status_code != expected or line is None:
+                problems.append(f"GET {route}: answered {answer.status_code} at {size} rows, {expected} listed")
                 continue
             seen.setdefault(route, []).append(line)
     for route in get_routes(app):
         row = rows.get(f"GET {route}")
         if row is None:
             problems.append(f"GET {route}: no row in {budgets.name}")
+            continue
+        if "not_budgeted" in row:
+            if not str(row["not_budgeted"]).strip():
+                problems.append(f"GET {route}: not_budgeted needs a reason")
             continue
         measured = seen.get(route, [])
         if len(measured) != len(SIZES):

@@ -1,6 +1,7 @@
 """The statement budget fixture on a small app, by failure mode: a route whose statements grow with its rows, one
 over its budget, one that opens a second transaction or checks out a second connection nobody listed, one that calls
-another service while its transaction is open, and a GET with no budget row."""
+another service while its transaction is open, a GET with no budget row, one that answers other than 200 or than the
+status its row lists, and one left out of the budget with no reason."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
 from ops_service_kit.http import install_error_handlers
 from ops_service_kit.request_timing import current
@@ -38,6 +40,15 @@ queries = 3
 hops_in_transaction = 1
 ["GET /v1/hop-after"]
 queries = 3
+["GET /v1/redirect"]
+queries = 3
+status = 303
+["GET /v1/moved"]
+queries = 3
+["GET /v1/callback"]
+not_budgeted = "a sign-in callback: answers only with the provider's code"
+["GET /v1/no-reason"]
+not_budgeted = " "
 """
 
 
@@ -83,6 +94,13 @@ def app(seeded: dict[str, int]) -> FastAPI:
     app.get("/v1/hop")(lambda: spend(2, hop="inside"))
     app.get("/v1/hop-listed")(lambda: spend(2, hop="inside"))
     app.get("/v1/hop-after")(lambda: spend(2, hop="after"))
+
+    def redirect() -> RedirectResponse:
+        spend(2)
+        return RedirectResponse("/v1/flat", status_code=303)
+
+    for path in ("/v1/redirect", "/v1/moved", "/v1/callback", "/v1/no-reason"):
+        app.get(path)(redirect)
     return app
 
 
@@ -107,8 +125,11 @@ async def test_each_route_outside_its_budget_is_named_and_one_inside_it_is_not(
     budgets = tmp_path / "budgets.toml"
     budgets.write_text(BUDGETS)
     assert await statement_budget(budgets) == [
+        "GET /v1/moved: answered 303 at 5 rows, 200 listed",
+        "GET /v1/moved: answered 303 at 50 rows, 200 listed",
         "GET /v1/heavy/{item_id}: 9 statements, budget 3",
         "GET /v1/hop: 1 service call while a transaction was open, 0 listed",
+        "GET /v1/no-reason: not_budgeted needs a reason",
         "GET /v1/per-row: 6 statements at 5 rows, 51 at 50",
         "GET /v1/twice: 2 transactions, 1 listed",
         "GET /v1/two-connections: 2 connection checkouts, 1 listed",
