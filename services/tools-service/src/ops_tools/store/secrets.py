@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.http import Out
 from ops_store import Guarantee, background
 from ops_store.dialect import locked
-from ops_store.rows import rows
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
 from ops_store.store import Store
@@ -162,6 +162,12 @@ class SecretStore(Store):
         q = sa.select(*_META).where(_of(tenant_id, team_id)).order_by(tool_secrets.c.name)
         async with self.tx() as c:
             return await rows(c, q, SecretMeta)
+
+    async def meta(self, tenant_id: str, team_id: str, name: str) -> SecretMeta | None:
+        """One of the team's secrets' metadata by name; the ciphertext is not selected."""
+        q = sa.select(*_META).where(_of(tenant_id, team_id), tool_secrets.c.name == name)
+        async with self.tx() as c:
+            return await one(c, q, SecretMeta)
 
     async def page(
         self,

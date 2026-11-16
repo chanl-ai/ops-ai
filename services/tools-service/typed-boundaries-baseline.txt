@@ -1,4 +1,4 @@
-# 1158 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 1155 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body apps_add_account
 1 reply apps_add_account
 1 body apps_add_app
@@ -57,9 +57,6 @@
 1 reply mailboxes_wait
 1 reply plugins_list_app_resources
 1 reply plugins_list_plugin_templates
-1 body secrets_create_secret
-1 body secrets_rename_secret
-1 body secrets_rotate_secret
 2 dict-any services/tools-service/src/ops_tools/__main__.py
 12 dict-any services/tools-service/src/ops_tools/app.py
 1 task services/tools-service/src/ops_tools/app.py

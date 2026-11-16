@@ -13,13 +13,13 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_access import Access, policy, reader_of, require_provisioner
 from ops_identity import Principal
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
+from ops_service_kit.http import Envelope, In, ListResult, Out, error_responses, ok, page_window, paged
 from ops_store import isolation
 from ops_store.team_scope import acting_as
 
@@ -30,17 +30,12 @@ from ..store.modules import ModuleStore
 from ..store.secrets import SecretMeta as StoredSecret
 from . import SecretResolver
 
-
-class _In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
 Team = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
 # Another team whose secrets a Security admin reads or writes (`_team` in secrets_router).
 TeamQuery = Annotated[str | None, Query(alias="teamId", pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
 
 
-class SecretIn(_In):
+class SecretIn(In):
     # A new name is upper snake case up to 64 characters, the rule files-service's storage credentials share;
     # a secret created under the older 120-character cap keeps its name and stays usable and editable.
     name: str = Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=64)
@@ -55,11 +50,11 @@ class SecretIn(_In):
     protection: Literal["system", "managed"] | None = None
 
 
-class RotateIn(_In):
+class RotateIn(In):
     value: str = Field(min_length=1, max_length=8192)
 
 
-class RenameIn(_In):
+class RenameIn(In):
     # The same rule as a new secret's name.
     name: str = Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=64)
 
@@ -216,7 +211,7 @@ def secrets_router(
             return users_of(await modules.secret_readers(tenant_id))
 
     async def _row(who: Person, owner: str, name: str) -> StoredSecret:
-        row = next((x for x in await store.listed(who.tenant_id, owner) if x.name == name), None)
+        row = await store.meta(who.tenant_id, owner, name)
         if row is None:
             raise NotFound(f"Secret {name}")
         return row
@@ -268,6 +263,7 @@ def secrets_router(
     )
     async def list_secrets(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Person, Depends(caller)],
+        _: Tx,
         *,
         page: Annotated[int | None, Query(ge=1)] = None,
         page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
@@ -295,7 +291,7 @@ def secrets_router(
             return ok(paged([_meta(x, users, configs) for x in found], total, page, page_size))
 
     @r.post("", response_model=Envelope[SecretMeta], status_code=201)
-    async def create_secret(body: SecretIn, who: Annotated[Person, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def create_secret(body: SecretIn, who: Annotated[Person, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         if "teams" in body.model_fields_set:
             raise ValidationFailed(
                 "A secret belongs to one team: name it with teamId, and add it in each team that needs it under the "
@@ -317,7 +313,7 @@ def secrets_router(
 
     @r.post("/{name}/rotate", response_model=Envelope[SecretMeta])
     async def rotate_secret(  # pyright: ignore[reportUnusedFunction]
-        name: str, body: RotateIn, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
+        name: str, body: RotateIn, who: Annotated[Person, Depends(caller)], _: Tx, team_id: TeamQuery = None
     ) -> JSONResponse:
         # Setting the value is not an edit of the slot, so a system secret's protection does not apply.
         owner = _team(who, team_id)
@@ -334,7 +330,7 @@ def secrets_router(
 
     @r.post("/{name}/rename", response_model=Envelope[SecretMeta])
     async def rename_secret(  # pyright: ignore[reportUnusedFunction]
-        name: str, body: RenameIn, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
+        name: str, body: RenameIn, who: Annotated[Person, Depends(caller)], _: Tx, team_id: TeamQuery = None
     ) -> JSONResponse:
         """A new name, the value kept. Operations name a secret by `{{name}}`, so one an operation reads is not
         renamed: the answer names those operations, as a delete does."""
@@ -360,7 +356,7 @@ def secrets_router(
 
     @r.delete("/{name}", status_code=204, response_class=Response)
     async def delete_secret(  # pyright: ignore[reportUnusedFunction]
-        name: str, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
+        name: str, who: Annotated[Person, Depends(caller)], _: Tx, team_id: TeamQuery = None
     ) -> Response:
         owner = _team(who, team_id)
         with _in(who, owner):

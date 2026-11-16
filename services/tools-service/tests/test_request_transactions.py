@@ -29,6 +29,12 @@ ROUTES = [
     ("POST", "/v1/egress/ranges/remove", {"value": "10.71.0.0/16"}),
     ("PUT", "/v1/send-policy", {"text": "Never send a card number."}),
     ("GET", "/v1/send-policy", None),
+    ("POST", "/v1/secrets", {"name": "TX_KEY", "value": "tx-value-1"}),
+    ("GET", "/v1/secrets", None),
+    ("GET", "/v1/secrets?page=1&pageSize=5", None),
+    ("POST", "/v1/secrets/TX_KEY/rotate", {"value": "tx-value-2"}),
+    ("POST", "/v1/secrets/TX_KEY/rename", {"name": "TX_KEY_2"}),
+    ("DELETE", "/v1/secrets/TX_KEY_2", None),
 ]
 
 
@@ -48,7 +54,7 @@ async def test_each_route_answers_in_one_transaction(
     counts: dict[str, int] = {}
     for method, path, body in ROUTES:
         r, counts[f"{method} {path}"] = await _counted(client, method, path, body, sam)
-        assert r.status_code in (200, 201), (path, r.text)
+        assert r.status_code in (200, 201, 204), (path, r.text)
     assert counts == {f"{m} {p}": 1 for m, p, _ in ROUTES}, counts
 
 
