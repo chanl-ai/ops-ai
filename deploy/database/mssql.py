@@ -89,11 +89,32 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
     "tools": (
         "ops_tools_system",
         {
-            "team_defaults": (("SELECT",), ()),
-            "tool_modules": (("SELECT",), ()),
-            "module_versions": (("SELECT",), ()),
-            "module_approvals": (("SELECT",), ()),
-            "module_operations": (("SELECT",), ()),
+            # Columns only, as tools_0083 grants: a module's headers, sign-in and baseline can hold a credential.
+            "team_defaults": (("SELECT",), ("tenant_id", "team_id", "version")),
+            "tool_modules": (("SELECT",), ("tenant_id", "id", "team_id", "display_name")),
+            "module_versions": (
+                ("SELECT",),
+                ("tenant_id", "module_id", "version", "status", "review_id", "published_by"),
+            ),
+            "module_approvals": (
+                ("SELECT",),
+                (
+                    "tenant_id",
+                    "module_id",
+                    "id",
+                    "status",
+                    "review_id",
+                    "decider_team",
+                    "workflow_id",
+                    "workflow_name",
+                    "operations",
+                    "environment",
+                    "expires_at",
+                    "justification",
+                    "requested_by",
+                    "requested_by_email",
+                ),
+            ),
             "service_outbox": (("SELECT", "UPDATE", "DELETE"), ()),
             "secret_audit": (("SELECT", "DELETE"), ()),
         },

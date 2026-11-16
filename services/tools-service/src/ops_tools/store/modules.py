@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql.schema import SchemaItem
 
 from ops_service_kit.ids import new_id
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -533,17 +533,29 @@ class ModuleStore(Store):
     async def header_holders(self, tenant_id: str | None = None) -> list[Aggregate]:
         """Every team module's operation that carries a header, every tenant's or `tenant_id`'s: its tenant, team,
         module and headers."""
-        ops = module_operations.c
-        on = sa.and_(ops.tenant_id == tool_modules.c.tenant_id, ops.module_id == tool_modules.c.id)
-        q = (
-            sa.select(tool_modules.c.tenant_id, tool_modules.c.team_id, ops.module_id, ops.headers)
-            .select_from(tool_modules.join(module_operations, on))
-            .where(tool_modules.c.team_id.is_not(None), any_team(tool_modules, HEADER_KEYS))
-        )
+        m, ops = tool_modules.c, module_operations.c
+        team_module = sa.and_(m.team_id.is_not(None), any_team(tool_modules, HEADER_KEYS))
         if tenant_id is not None:
-            q = q.where(tool_modules.c.tenant_id == tenant_id)
-        async with self.system_tx(HEADER_KEYS) as c:
-            return [dict(r) for r in (await c.execute(q)).mappings() if r["headers"]]
+            tenants = [tenant_id]
+        else:
+            # The system role reads no header (tools_0083): it lists the tenants, and each tenant's headers are read
+            # in that tenant. One read per tenant, once at start.
+            async with self.system_tx(HEADER_KEYS) as c:
+                q = sa.select(m.tenant_id).where(team_module).distinct().order_by(m.tenant_id)
+                tenants = [str(t) for t in (await c.execute(q)).scalars()]
+        on = sa.and_(ops.tenant_id == m.tenant_id, ops.module_id == m.id)
+        found: list[Aggregate] = []
+        for tenant in tenants:
+            q = (
+                sa.select(m.tenant_id, m.team_id, ops.module_id, ops.headers)
+                .select_from(tool_modules.join(module_operations, on))
+                .where(m.tenant_id == tenant, team_module)
+                .order_by(ops.module_id, ops.id)
+            )
+            with isolation.tenant_wide(HEADER_KEYS, tenant_id=tenant):
+                async with self.tx() as c:
+                    found += [dict(r) for r in (await c.execute(q)).mappings() if r["headers"]]
+        return found
 
     async def names(self, tenant_id: str, team_id: str | None = None) -> set[str]:
         """Module names of the acting team (or `team_id`), plus workspace-level names: a name is unique per team, so the

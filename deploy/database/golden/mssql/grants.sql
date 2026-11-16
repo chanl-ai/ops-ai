@@ -123,11 +123,10 @@ GRANT SELECT ON dbo.alembic_version_tools TO ops_tools_runtime;
 GO
 IF USER_ID(N'ops_tools_system') IS NULL CREATE USER ops_tools_system WITHOUT LOGIN;
 GO
-GRANT SELECT ON dbo.team_defaults TO ops_tools_system;
-GRANT SELECT ON dbo.tool_modules TO ops_tools_system;
-GRANT SELECT ON dbo.module_versions TO ops_tools_system;
-GRANT SELECT ON dbo.module_approvals TO ops_tools_system;
-GRANT SELECT ON dbo.module_operations TO ops_tools_system;
+GRANT SELECT ON dbo.team_defaults (tenant_id, team_id, version) TO ops_tools_system;
+GRANT SELECT ON dbo.tool_modules (tenant_id, id, team_id, display_name) TO ops_tools_system;
+GRANT SELECT ON dbo.module_versions (tenant_id, module_id, version, status, review_id, published_by) TO ops_tools_system;
+GRANT SELECT ON dbo.module_approvals (tenant_id, module_id, id, status, review_id, decider_team, workflow_id, workflow_name, operations, environment, expires_at, justification, requested_by, requested_by_email) TO ops_tools_system;
 GRANT SELECT, UPDATE, DELETE ON dbo.service_outbox TO ops_tools_system;
 GRANT SELECT, DELETE ON dbo.secret_audit TO ops_tools_system;
 GRANT IMPERSONATE ON USER::ops_tools_system TO ops_tools_runtime;
