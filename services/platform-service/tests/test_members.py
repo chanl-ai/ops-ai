@@ -9,7 +9,10 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 
+from ops_platform.store.roles import mirror_membership
 from ops_platform.store.tables import audit_entries, members, role_assignments, tenants
+from ops_platform.store.workspace import security_team_in
+from ops_service_kit.ids import now_iso
 
 from .conftest import SERVICE, Person, Platform
 from .test_permissions import grant
@@ -48,6 +51,12 @@ async def join(platform: Platform, admin: Person, role: str) -> Person:
                 updated_at="2026-01-01T00:00:00.000Z",
             )
         )
+        # As every writer of a membership does: its role assignments follow it in the same transaction.
+        await mirror_membership(
+            c, tenant_id=admin.tenant_id, team_id=team, user_id=other.user_id, member_role=role,
+            security_team=await security_team_in(c, admin.tenant_id),
+            granted_by="test", at=now_iso(),
+        )  # fmt: skip
     other.teams[team] = role
     return other
 
@@ -171,6 +180,31 @@ async def test_the_last_admin_is_skipped_with_a_reason(platform: Platform) -> No
     assert r.json()["data"] == {"updated": [], "skipped": [{"id": me["id"], "reason": "last_admin"}]}
     r = await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [me["id"]]})
     assert r.json()["data"] == {"updated": [], "skipped": [{"id": me["id"], "reason": "last_admin"}]}
+
+
+async def test_only_an_active_membership_as_admin_makes_a_team_admin(platform: Platform) -> None:
+    # The last-admin guards count a team's admins by membership: Admin given by a grant, an invite as admin and a
+    # removed admin each leave the one admin the last, for a role change, a removal and leaving the team alike.
+    admin, h = await as_admin(platform)
+    team = team_of(admin)
+    granted = await join(platform, admin, "viewer")
+    await grant(platform, granted, team, "admin")
+    r = await platform.public.post(
+        "/v1/settings/members/invite", headers=h, json={"emails": [f"inv@{admin.email.split('@')[1]}"], "role": "admin"}
+    )
+    assert r.status_code == 200 and r.json()["data"]["updated"], r.text
+    removed = await join(platform, admin, "admin")
+    [gone] = [m["id"] for m in await member_rows(platform, h) if m["email"] == removed.email]
+    r = await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [gone]})
+    assert r.json()["data"] == {"updated": [gone], "skipped": []}, r.text
+    [me] = [m["id"] for m in await member_rows(platform, h) if m["email"] == admin.email]
+    last = {"updated": [], "skipped": [{"id": me, "reason": "last_admin"}]}
+    r = await platform.public.post("/v1/settings/members/role", headers=h, json={"ids": [me], "role": "viewer"})
+    assert r.json()["data"] == last, r.text
+    r = await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [me]})
+    assert r.json()["data"] == last, r.text
+    r = await platform.public.post(f"/v1/settings/teams/{team}/leave", headers=h)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "last_admin", r.text
 
 
 async def test_demoting_both_of_two_admins_keeps_one(platform: Platform) -> None:

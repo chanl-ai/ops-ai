@@ -102,15 +102,16 @@ async def test_sign_ins_have_their_own_view_and_stay_out_of_changes(platform: Pl
     assert changes["viewCounts"]["sign_ins"] == 2 and changes["viewCounts"]["changes"] == changes["pagination"]["total"]
 
 
-async def test_only_an_admin_reads_the_audit(platform: Platform) -> None:
+async def test_only_a_role_holding_audit_view_reads_the_audit(platform: Platform) -> None:
+    # Admin and Builder hold audit.view on the grid (docs/architecture/roles-and-permissions.md); the others do not.
     admin, h = await as_admin(platform)
-    for role in ("viewer", "builder", "approver"):
+    for role, status in (("viewer", 403), ("builder", 200), ("approver", 403)):
         other = await join(platform, admin, role)
         token = (await platform.sign_in(other)).json()["data"]["token"]
         r = await platform.public.get(
             "/v1/audit", headers={"Authorization": f"Bearer {token}", "X-Team-Id": h["X-Team-Id"]}
         )
-        assert r.status_code == 403, role
+        assert r.status_code == status, role
 
 
 async def test_filters_and_pages(platform: Platform) -> None:
