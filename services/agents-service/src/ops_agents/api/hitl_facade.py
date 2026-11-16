@@ -571,7 +571,7 @@ async def all_reviews(rt: Runtime) -> list[dict[str, Any]]:
             out.append(_decided(d))
     # Agent and workflow publish requests are reviews too: one list, counted and filtered with the rest.
     rows = out + await publish_reviews.all_views(rt) + await engine_reviews.all_rows(rt)
-    assigned = await ReviewAssignments(rt.db).current()
+    assigned = await ReviewAssignments(rt.db).current([str(r["id"]) for r in rows])
     return [r | {"assignee": assigned.get(str(r["id"]), r.get("assignee"))} for r in rows]
 
 
@@ -623,7 +623,7 @@ async def _thread_reviews(
 
 async def with_assignee(rt: Runtime, review: dict[str, Any]) -> dict[str, Any]:
     """One review with who it is assigned to now."""
-    assigned = await ReviewAssignments(rt.db).current()
+    assigned = await ReviewAssignments(rt.db).current([str(review["id"])])
     return review | {"assignee": assigned.get(str(review["id"]), review.get("assignee"))}
 
 

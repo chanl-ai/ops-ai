@@ -4,6 +4,7 @@ change who may decide it."""
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import ClassVar
 
 import sqlalchemy as sa
@@ -41,6 +42,9 @@ class AssignmentOut(Out):
     assigned_at: str
 
 
+IDS_PER_QUERY = 1000
+
+
 class ReviewAssignments(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
@@ -52,14 +56,20 @@ class ReviewAssignments(RuntimeStore):
             await c.execute(review_assignments.insert().values(**row.model_dump()))
         return row
 
-    async def current(self) -> dict[str, str]:
-        """Each assigned review's assignee now: the latest assignment of each, in the caller's tenant."""
+    async def current(self, review_ids: Collection[str]) -> dict[str, str]:
+        """The assignee now of each of `review_ids` that was assigned: its latest assignment, in the caller's tenant.
+        Read in queries of at most IDS_PER_QUERY ids, since SQL Server takes at most 2100 parameters a statement."""
         t = review_assignments
+        wanted = sorted(set(review_ids))
+        out: dict[str, str] = {}
         async with self.tx() as c:
-            # Filtered here as well as by row-level security: SQLite, the tests' and a laptop's store, has none.
-            q = (
-                sa.select(t.c.review_id, t.c.assignee)
-                .where(t.c.tenant_id == current_tenant())
-                .order_by(t.c.assigned_at, t.c.id)
-            )
-            return {str(r.review_id): str(r.assignee) for r in (await c.execute(q)).all()}
+            # One query even for no ids, so a page's statement count does not depend on how many of its tasks are open.
+            for i in range(0, len(wanted) or 1, IDS_PER_QUERY):
+                # Filtered here as well as by row-level security: SQLite, the tests' and a laptop's store, has none.
+                q = (
+                    sa.select(t.c.review_id, t.c.assignee)
+                    .where(t.c.tenant_id == current_tenant(), t.c.review_id.in_(wanted[i : i + IDS_PER_QUERY]))
+                    .order_by(t.c.assigned_at, t.c.id)
+                )
+                out.update({str(r.review_id): str(r.assignee) for r in (await c.execute(q)).all()})
+        return out

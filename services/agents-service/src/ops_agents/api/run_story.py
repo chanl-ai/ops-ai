@@ -362,7 +362,8 @@ async def children_of(
     cases = CaseStore(rt.db)
     on_case = await cases.cases_of_runs(ids)
     summaries = await cases.summaries(list(dict.fromkeys(on_case.values())), [str(run["team_id"])])
-    assigned = await ReviewAssignments(rt.db).current() if ids else {}
+    open_reviews = [f"{rid}:{w['node']}:{w.get('iteration', 0)}" for rid in ids if (w := found[rid].get("waiting"))]
+    assigned = await ReviewAssignments(rt.db).current(open_reviews)
     decided = {rid: decisions_in(rid, steps_by_run.get(rid, [])) for rid in ids}
     people = await actors(
         rt,
