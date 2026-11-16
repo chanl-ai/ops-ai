@@ -7,14 +7,13 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 widget_deployments = sa.Table(
     "widget_deployments",
@@ -38,15 +37,12 @@ widget_deployments = sa.Table(
 )
 
 
-class WidgetDeployments:
+class WidgetDeployments(RuntimeStore):
     # Retiring is a compare-and-set on `retired_at` being empty, so two retires record one time.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
     async def add(self, row: dict[str, Any]) -> None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(widget_deployments.insert().values(**row))
 
     async def get(self, deployment_id: str) -> dict[str, Any] | None:
@@ -55,7 +51,7 @@ class WidgetDeployments:
             widget_deployments.c.tenant_id == current_tenant(),
             team_visible(widget_deployments),
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r is not None else None
 
@@ -65,7 +61,7 @@ class WidgetDeployments:
         )
         if team_id is not None:
             q = q.where(widget_deployments.c.team_id == team_id)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(widget_deployments.c.created_at.desc()))).mappings()]
 
     async def update(self, deployment_id: str, **values: Any) -> None:
@@ -74,7 +70,7 @@ class WidgetDeployments:
             .where(widget_deployments.c.id == deployment_id, widget_deployments.c.tenant_id == current_tenant())
             .values(**values)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(q)
 
     async def retire(self, deployment_id: str, at: str) -> bool:
@@ -88,5 +84,5 @@ class WidgetDeployments:
             )
             .values(retired_at=at, updated_at=at)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return (await c.execute(q)).rowcount == 1
