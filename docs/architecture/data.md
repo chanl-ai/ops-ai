@@ -60,6 +60,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.usage` | `UsageLedger` | TRANSACTION | `thread_budgets` |
 | agents-service | `ops_agents.store.widget_deployments` | `WidgetDeployments` | CAS | `widget_deployments` |
 | agents-service | `ops_agents.store.widget_keys` | none: no repository class | | `widget_mint_key_audit`, `widget_mint_keys` |
+| agents-service | `ops_agents.store.widget_picker` | `WidgetPicker` | none | none |
 | agents-service | `ops_agents.store.widgets` | `WidgetRegistry` | CAS, TRANSACTION | `registry_widget_versions`, `registry_widgets` |
 | agents-service | `ops_agents.store.workflow_registry` | `WorkflowRegistry` | CAS | `registry_validations`, `registry_workflow_versions`, `registry_workflows` |
 | documents-service | `ops_documents.store.document_types` | none: no repository class | | `document_type_examples`, `document_type_samples`, `document_type_tests`, `document_type_versions`, `document_types` |

@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from ops_agent_kernel import layout
 from ops_agents.activities.catalog import WidgetPinRule
+from ops_agents.store.widget_picker import WidgetPicker
 from ops_agents.store.widgets import WidgetRegistry
 from ops_service_kit.errors import Unprocessable
 
@@ -22,6 +23,10 @@ MAX_WIDGET_ID = 64
 
 def widgets(rt: Runtime) -> WidgetRegistry:
     return WidgetRegistry(rt.db)
+
+
+def picker(rt: Runtime) -> WidgetPicker:
+    return WidgetPicker(rt.db)
 
 
 def widget_id_of(name: str) -> str:

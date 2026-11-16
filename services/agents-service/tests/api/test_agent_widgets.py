@@ -37,7 +37,7 @@ async def _ask(c: Any, tid: str, args: dict[str, Any]) -> list[dict[str, Any]]:
 
 async def test_the_library_lists_each_published_widget_with_its_schema_and_sample(tmp_path: Path) -> None:
     async with _app(tmp_path) as (c, _):
-        listed = _data(await c.get("/v1/widgets"))
+        listed = _data(await c.get("/v1/widgets"))["data"]
         assert [w["widgetId"] for w in listed] == ["account-snapshot", "case-summary", "hold-review"]
         hold = next(w for w in listed if w["widgetId"] == "hold-review")
         assert hold["dataSchema"]["required"][0] == "holdId" and hold["sample"]["holdId"] == "hold_204"
