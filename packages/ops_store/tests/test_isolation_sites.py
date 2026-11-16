@@ -86,6 +86,11 @@ WIDENINGS: dict[str, set[str]] = {
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
     "ASSISTANT_TEAMS": {"services/agents-service/src/ops_agents/store/team_defaults.py"},
     "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
+    # Start-up: every tenant's published agent pointers past the tenant, then each tenant's specs under its own.
+    "SERVE_PUBLISHED": {
+        "services/agents-service/src/ops_agents/api/agent_registry.py",
+        "services/agents-service/src/ops_agents/store/agent_registry.py",
+    },
     "EVERY_TEAM": {"services/tools-service/src/ops_tools/store/team_defaults.py"},
     "CATCH_UP": {"services/tools-service/src/ops_tools/store/team_defaults.py"},
     "HANDOFF_LIST": {"services/tools-service/src/ops_tools/store/review_handoffs.py"},

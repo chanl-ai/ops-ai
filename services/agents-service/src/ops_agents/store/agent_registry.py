@@ -8,6 +8,7 @@ import re
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -18,7 +19,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
-from .tenancy import LOCAL_TENANT, OWNER, RuntimeStore, current_tenant
+from .tenancy import LOCAL_TENANT, OWNER, SERVE_PUBLISHED, RuntimeStore, current_tenant
 
 registry_agents = sa.Table(
     "registry_agents",
@@ -118,6 +119,10 @@ SPEC_FIELDS = (
 )
 
 
+# (agent, version) pairs per statement of published_specs: two parameters each, under SQL Server's 2100.
+PAIRS_PER_QUERY = 500
+
+
 def digest_of(spec: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json(spec).encode()).hexdigest()
 
@@ -189,10 +194,40 @@ class AgentRegistry(RuntimeStore):
                 await c.execute(registry_agents.update().where(registry_agents.c.id == agent_id).values(**values))
 
     async def rows(self) -> list[dict[str, Any]]:
-        """The acting team's agents (every agent with no acting team: a loop or the dev header caller)."""
-        q = sa.select(registry_agents).where(team_visible(registry_agents))
+        """The acting team's agents of the caller's tenant (every team's with no acting team: a loop or the seed)."""
+        q = sa.select(registry_agents).where(
+            registry_agents.c.tenant_id == current_tenant(), team_visible(registry_agents)
+        )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def published_pointers(self) -> list[tuple[str, str, int | None, bool]]:
+        """Every tenant's agents as (tenant, id, published version, paused), read past the tenant at start: the system
+        role is granted these four columns of the table only (agents 0107), never a spec."""
+        a = registry_agents
+        q = sa.select(a.c.tenant_id, a.c.id, a.c.published_version, a.c.paused).where(
+            any_team(a, "the start-up serves every team's published agents")
+        )
+        async with self.system_tx(SERVE_PUBLISHED) as c:
+            rows = (await c.execute(q)).all()
+        return [(str(t), str(i), None if v is None else int(v), bool(p)) for t, i, v, p in rows]
+
+    async def published_specs(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], dict[str, JsonValue]]:
+        """The spec of each (agent, version) of `keys` in the caller's tenant, in queries of at most PAIRS_PER_QUERY
+        pairs (SQL Server takes at most 2100 parameters a statement)."""
+        v = registry_agent_versions
+        ordered = sorted(keys)
+        out: dict[tuple[str, int], dict[str, JsonValue]] = {}
+        async with self.tx() as c:
+            for i in range(0, len(ordered), PAIRS_PER_QUERY):
+                chunk = ordered[i : i + PAIRS_PER_QUERY]
+                pairs = sa.or_(*(sa.and_(v.c.agent_id == agent, v.c.version == n) for agent, n in chunk))
+                q = sa.select(v.c.agent_id, v.c.version, v.c.spec).where(
+                    v.c.tenant_id == current_tenant(), pairs, team_visible(v)
+                )
+                for agent, n, spec in (await c.execute(q)).all():
+                    out[(str(agent), int(n))] = dict(spec)
+        return out
 
     async def owner_team(self, agent_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns an agent, whoever is acting; None when there is no such agent. Only for deciding a

@@ -51,6 +51,8 @@ OWNER = "owner_team"  # a registry record's owning team, read across teams only 
 CLAIM_THREAD = "claim_thread"  # GraphStore.owner_of, for the sweeper and the timer poller
 RETENTION_TENANTS = "retention_tenants"  # Memories.tenants, for the retention sweep
 ASSISTANT_TEAMS = "assistant_teams"  # TeamDefaults.on_agents, for the start-up Ops Assistant catch-up
+# Start-up: every tenant's published agent pointers (AgentRegistry.published_pointers), then each tenant's specs.
+SERVE_PUBLISHED = "serve_published"
 
 # Why a path reaches the install's own tables with no tenant (`Store.install_tx`): both are marked `system(...)`.
 THREAD_LEASES = "thread_leases"  # a thread's lease, taken, renewed, swept and fenced by thread id before its tenant
@@ -71,6 +73,7 @@ __all__ = [
     "RETENTION_TENANTS",
     "RUN_RECONCILER",
     "SEED",
+    "SERVE_PUBLISHED",
     "SYSTEM_ROLE",
     "TENANT_ROLE",
     "TESTS",

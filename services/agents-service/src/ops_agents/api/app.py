@@ -465,6 +465,8 @@ def create_app(
                 await workflow_registry.follow_seed(rt, seeded)
                 if rt.channels is not None:
                     await seed_deployments(rt.channels, settings.deployments_seed_file)
+            # Every tenant's published agents, after the seed above made or moved the local tenant's.
+            await agent_registry.serve_published(rt)
             # Each team's Ops Assistant nobody changed takes the declared one (team defaults).
             await catch_up_assistants(rt)
             await seed_mailboxes(db, settings.mailboxes_seed_file)

@@ -1,6 +1,7 @@
 """The serving catalogue holds every tenant's live agents by id, so a route that takes an agent id from a caller must
 find that agent in the caller's tenant first, by failure mode: a caller in another tenant chats with, sets as its
-team's default, or reads the connectors of an agent it cannot see, because the two tenants' teams share an id."""
+team's default, reads the connectors of, or is offered an agent it cannot see, because the two tenants' teams share an
+id."""
 
 from __future__ import annotations
 
@@ -25,6 +26,9 @@ async def test_another_tenants_agent_id_is_not_found_on_every_chat_route(databas
         assert default.status_code == 404, default.text
         connectors = await client.get("/v1/chat/connectors", params={"agentId": agent}, headers=theirs)
         assert connectors.status_code == 404, connectors.text
+        offered = await client.get("/v1/chat/agents", headers=theirs)
+        assert offered.status_code == 200, offered.text
+        assert agent not in [a["id"] for a in offered.json()["data"]], "another tenant's agent is offered to chat with"
         mine = await client.post("/v1/chat/threads", json={"agentId": agent, "kbIds": []}, headers=person(a))
         assert mine.status_code == 201, mine.text
 

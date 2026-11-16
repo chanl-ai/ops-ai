@@ -88,6 +88,7 @@ GRANT SELECT ON dbo.background_jobs TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batches TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batch_rows TO ops_runtime_system;
 GRANT SELECT ON dbo.team_default_agents TO ops_runtime_system;
+GRANT SELECT ON dbo.registry_agents (tenant_id, id, published_version, paused) TO ops_runtime_system;
 GRANT IMPERSONATE ON USER::ops_runtime_system TO ops_agents_runtime;
 GO
 -- tools-service

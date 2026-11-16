@@ -72,6 +72,8 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "run_batch_rows": (("SELECT",), ()),
     # The start-up catch-up finds every team whose default agent is its Ops Assistant (agents 0096).
     "team_default_agents": (("SELECT",), ()),
+    # The start-up serving reload finds every tenant's published agents (agents 0107); never a name or a spec.
+    "registry_agents": (("SELECT",), ("tenant_id", "id", "published_version", "paused")),
 }
 Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 # Each chain's system principal (a user without a login its runtime user alone may impersonate) and what it reads, as

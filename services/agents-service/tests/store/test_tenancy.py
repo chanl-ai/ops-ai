@@ -149,6 +149,9 @@ def test_only_the_two_loops_reach_past_rls() -> None:
         # store/registry_tenants.py: the pre-migration check reads every registry row's team to find the tenant each
         # belongs to, before any tenant is known.
         "store/registry_tenants.py",
+        # store/agent_registry.py: the start-up serving reload reads every tenant's published agent pointers, then
+        # each tenant's specs under its own (api/agent_registry.py serve_published).
+        "store/agent_registry.py",
     }
     # Memories.tenants() lists tenants past RLS for the retention loop alone, which then works each under its own.
     tenants_users = {p.relative_to(SRC).as_posix() for p in SRC.rglob("*.py") if ".tenants()" in p.read_text()}

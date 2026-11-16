@@ -21,11 +21,13 @@ from ops_agents.activities.agent_limits import limits_of
 from ops_agents.activities.catalog import AgentDefinition, Catalog, Fragment, GuardrailRule, SkillPinRule, WidgetPinRule
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..store.agent_registry import (
     AgentRegistry,
 )
 from ..store.graphs import GraphStore
+from ..store.tenancy import SERVE_PUBLISHED
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_text import requester
@@ -339,9 +341,9 @@ async def follow_seed(rt: Runtime, a: AgentDefinition, row: dict[str, Any]) -> N
 
 
 async def load(rt: Runtime, seed: Catalog) -> None:
-    """At start: seeds a row for each catalogue agent that has none, brings a seeded agent the seed still owns up to
-    its seed file (`follow_seed`; one a person has published is left alone), then serves exactly the published,
-    unpaused versions, so a seeded agent that was paused or deleted stays that way across a restart."""
+    """At start, inside the seed's tenant: seeds a row for each catalogue agent that has none and brings a seeded agent
+    the seed still owns up to its seed file (`follow_seed`; one a person has published is left alone). Serving is
+    `serve_published`, for every tenant."""
     reg = registry(rt)
     have = {r["id"]: r for r in await reg.rows()}
     for a in list(seed.agents):
@@ -350,16 +352,30 @@ async def load(rt: Runtime, seed: Catalog) -> None:
             await reg.create(spec, by="seed", team_id=SEED_TEAM, agent_id=a.id, version=a.version, published=True)
         else:
             await follow_seed(rt, a, have[a.id])
-    rows = {r["id"]: r for r in await reg.rows()}
+
+
+async def serve_published(rt: Runtime) -> None:
+    """At start: serves exactly every tenant's published, unpaused versions, so an agent that was paused or deleted
+    stays that way across a restart. One read past the tenant finds the pointers, then each tenant's specs are read
+    under its own; a failure in one tenant is logged and the others are served."""
+    reg = registry(rt)
+    wanted: dict[str, set[tuple[str, int]]] = {}
+    for tenant_id, aid, published, paused in await reg.published_pointers():
+        if published is not None and not paused:
+            wanted.setdefault(tenant_id, set()).add((aid, published))
+    served = {aid for keys in wanted.values() for aid, _ in keys}
     for a in list(rt.catalog.agents):
-        if a.id not in rows:
+        if a.id not in served:
             take_down(rt, a.id)
-    for aid, r in rows.items():
-        if r["published_version"] is None or r["paused"]:
-            take_down(rt, aid)
+    for tenant_id, keys in wanted.items():
+        try:
+            with isolation.tenant_wide(SERVE_PUBLISHED, tenant_id=tenant_id):
+                specs = await reg.published_specs(keys)
+        except Exception as e:  # one tenant's failure must not stop the others, nor the service's start
+            log.warning("serve_published_failed", tenant=tenant_id, error=type(e).__name__)
             continue
-        v = await reg.version(aid, int(r["published_version"]))
-        go_live(rt, aid, int(r["published_version"]), v["spec"])
+        for (aid, n), spec in specs.items():
+            go_live(rt, aid, n, spec)
 
 
 async def tasks_24h(rt: Runtime) -> dict[str, int]:
