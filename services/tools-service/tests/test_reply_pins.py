@@ -29,9 +29,8 @@ _DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _ID = re.compile(r"\b([a-z][a-z0-9]*)_[0-9a-f]{12}\b")
 _UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 _HEX = re.compile(r"\b[0-9a-f]{32,64}\b")
-# Measured, not decided: a timing differs on every run. The registry's expiring counts follow the session's shared seed,
-# which earlier tests in a full run change, so they are pinned by type.
-_TIMINGS = {"latencyMs", "latency_ms", "p95Ms", "durationMs", "elapsedMs", "expiringApprovals", "expiringModules"}
+# Measured, not decided: a timing differs on every run.
+_TIMINGS = {"latencyMs", "latency_ms", "p95Ms", "durationMs", "elapsedMs"}
 
 
 def _text(value: str, tenant: str) -> str:

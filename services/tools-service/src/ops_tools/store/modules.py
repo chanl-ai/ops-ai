@@ -510,7 +510,7 @@ class ModuleStore(Store):
             q = (
                 tool_modules.select()
                 .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
-                .order_by(tool_modules.c.created_at.desc())
+                .order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
             )
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             kids = await self._children(c, tenant_id, [r["id"] for r in rows])
@@ -524,7 +524,7 @@ class ModuleStore(Store):
             q = (
                 tool_modules.select()
                 .where(tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, RUN_PATHS))
-                .order_by(tool_modules.c.created_at.desc())
+                .order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
             )
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             kids = await self._children(c, tenant_id, [r["id"] for r in rows])

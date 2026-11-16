@@ -211,3 +211,15 @@ async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebu
         with pytest.raises(subprocess.CalledProcessError) as kept:
             _alembic(target, "upgrade", "head")
         assert b"ck_module_operations_access" in kept.value.stderr
+
+
+async def test_modules_made_at_the_same_moment_list_in_id_order(store: ModuleStore, tenant: str) -> None:
+    """The list is newest first, then by id: two modules with one creation time keep one order, so a page never
+    repeats or skips one of them."""
+    at = datetime(2026, 1, 1, tzinfo=UTC)
+    for module_id in ("mod_a_same", "mod_z_same"):
+        draft = {"displayName": module_id, "name": module_id.replace("_", "-")}
+        mod = blank(module_id=module_id, tenant_id=tenant, team_id=None, owner="Ops", me="t", at=at, input=draft)
+        assert await store.insert_if_missing(mod)
+    ids = [m["id"] for m in await store.all(tenant) if m["id"].endswith("_same")]
+    assert ids == ["mod_z_same", "mod_a_same"]

@@ -139,8 +139,9 @@ def _acting_for_the_tests_tenant(request: pytest.FixtureRequest) -> Iterator[Non
         yield
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def seed() -> dict[str, Any]:
+    # A fresh copy per test: a test that edits the seed (a module, an approval) never changes the next test's.
     return json.loads((FIXTURES / "tool_modules.json").read_text())
 
 
