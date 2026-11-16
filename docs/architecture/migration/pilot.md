@@ -317,7 +317,7 @@ calls tools-service.
 | Measure | Status | What would measure it |
 |---|---|---|
 | Routes and store functions reached by a use case or test (`coverage-before`) | not measured on `develop` before the rewrite | `make usecase-coverage SERVICE=<service>` and `uv run python scripts/store_inventory.py --check` on `origin/develop` |
-| Statements and transactions per route on SQL Server | not measured: every budget row was measured on PostgreSQL, and the `store-mssql` job runs the store, kit and identity suites, not the services' budget tests | Run each service's `tests/test_statement_budget.py` with `OPS_MSSQL_SERVER` and `MSSQL_SA_PASSWORD` set; the service conftest then installs the golden schema |
+| Statements and transactions per route on SQL Server | not measured: every budget row was measured on PostgreSQL, and the `store-mssql` job runs the store, kit and identity suites and a few store and isolation test files of models, documents and files, not their budget tests | Run each service's `tests/test_statement_budget.py` with `OPS_MSSQL_SERVER` and `MSSQL_SA_PASSWORD` set; the service conftest then installs the golden schema |
 | Pool wait under 50 concurrent GETs | not measured: no load run exists; the request line carries `db.pool.wait_ms`, `db.pool.in_use` and `db.pool.limit` | 50 concurrent GETs against one running service, reading `db.pool.wait_ms` from its `http.request` lines |
 | Longest `db.tx_open_ms` | not measured: committed tests assert that it is positive and that no transaction is open at an outside call, and record no maximum | The same load run, taking the maximum of `db.tx_open_ms` |
 | Hours for the budgets file | not measured separately | A recorded start time for the budgets commit |
