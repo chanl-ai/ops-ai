@@ -7,8 +7,10 @@ with the tree.
 ## Classification
 
 - Tenant-scoped and team-owned (team policy): `registry_agents`, `registry_guardrails`, `registry_skills`,
-  `registry_widgets`, `registry_workflows`, `deployments`, `registry_publish_requests` (already has a tenant; gains
-  `team_id` from its subject's team).
+  `registry_widgets`, `registry_workflows`, `deployments`.
+- `registry_publish_requests`: tenant policy only. It gains `team_id` from its subject's team, but reviewers outside
+  the owning team (the security team, for one) must still read a request, so the team is checked in code through
+  `can()`, not by the row policy.
 - Tenant-scoped through a parent (`team_owned_via`, tenant policy): the five `*_versions` tables and
   `registry_validations` (through `workflow_id`).
 - `graph_versions`: tenant-scoped, owned through `registry_workflows` (`name` is the workflow id).
@@ -101,8 +103,8 @@ One Alembic chain (`CHAIN="agents"`).
   - No row policy, and the markings are unchanged, so the tables stay on `WAITING`. The model columns default to
     `local` on the server, so the stores of today keep working unchanged.
 - Commit B (one commit): the five registry stores and the other registry readers (`store/channel_list.py`,
-  `store/actor_names.py`) become `Store` classes on `self.tx()` or `conn`, with `team_visible`, `owner_teams()`
-  (`owner_team` deleted), and columns defaulting to the current tenant; the start-up and seed fixes above; markings;
+  `store/actor_names.py`) become `Store` classes on `self.tx()` or `conn`, with `team_visible`, `attempt()` at caught
+  sites, and columns defaulting to the current tenant; the start-up and seed fixes above; markings;
   Migration C; `WAITING` removals; tests. These key changes wait for B, because today's stores name the current keys:
   - `registry_workflows` `(tenant_id, id)`, with the seed copies that need it (`store/graphs.py:208` would return each
     copied version twice) and a composite foreign key from its versions;
@@ -113,6 +115,12 @@ One Alembic chain (`CHAIN="agents"`).
 - Migration C: re-run the backfill idempotently for rows written as `local` between A and B; the seed copies; the key
   changes above; then `isolation_ddl` and `mssql_predicates_ddl` as 0104 does. C never ships ahead of B, because the old
   code writes as a role that bypasses the policy.
+- Every backfill in A and C runs in committed batches (as 0104 does), so no lock lasts the whole fill. C drops the
+  `local` server default A gave each `tenant_id` column, once the stores write the caller's tenant, so a write that
+  names no tenant is refused instead of landing in `local`. Each down path drops the column with
+  `mssql_drop_default=True`, since SQL Server refuses to drop a column that still has a default.
+- `owner_team()` stays on the four registry stores until the shared `Store.owner_teams` uses the connection it is
+  given; then the copies are deleted.
 - Down: A refuses with a count while two tenants hold one agent slug, graph version or digest, and otherwise restores
   the install-wide keys, recreates `channel_files` empty and drops the columns. C's down drops policies and grants and
   deletes per-tenant seed copies whose `(name, digest)` matches the `local` row.
