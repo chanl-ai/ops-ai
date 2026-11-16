@@ -126,10 +126,13 @@ class Readings:
         (200, failed with the reason) for a file that cannot be read at all."""
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
-        await self.store.link(file.id, who.team, digest, self.clock())
-        row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
-        if row is not None and row.status == "done":
-            return 200, answer_of(row, file_id, await self.store.pages(who.team, digest, READER_VERSION, settings.key))
+        # Gate: the file's link and its stored reading in one transaction, closed before the bytes are read.
+        async with isolation.request_transaction():
+            await self.store.link(file.id, who.team, digest, self.clock())
+            row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
+            if row is not None and row.status == "done":
+                pages = await self.store.pages(who.team, digest, READER_VERSION, settings.key)
+                return 200, answer_of(row, file_id, pages)
         if row is not None and row.status in PENDING:
             return 202, answer_of(row, file_id)
         if file.size <= SYNC_BYTES:
@@ -137,16 +140,20 @@ class Readings:
             try:
                 made = await asyncio.to_thread(_read_now, data, file, settings)
             except ReadingError as e:
-                failed = await self._failed_now(who, file, settings, e)
+                async with isolation.request_transaction():
+                    failed = await self._failed_now(who, file, settings, e)
                 return 200, answer_of(failed, file_id)
             if made is not None:
-                await self._keep(who, file, made)
-                row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
+                async with isolation.request_transaction():
+                    await self._keep(who, file, made)
+                    row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
                 assert row is not None
                 return 200, answer_of(row, file_id, [p.model_dump(mode="json", by_alias=True) for p in made.pages])
-        row = await self.store.queue(
-            digest, READER_VERSION, settings.key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock()
-        )
+        # The queued row commits before the task that reads it starts, so the task finds it.
+        async with isolation.request_transaction():
+            row = await self.store.queue(
+                digest, READER_VERSION, settings.key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock()
+            )
         if row.status in PENDING:
             self._later(row)
         return 202, answer_of(row, file_id)
@@ -173,21 +180,25 @@ class Readings:
         """The file's reading for a caller inside this service (an extraction already running in the background): the
         stored one, or read now and kept."""
         digest = self._digest(file)
-        await self.store.link(file.id, who.team, digest, self.clock())
-        stored = await self.stored_of(who.team, digest, settings)
+        # Gate and settle: the stored reading in one transaction, the bytes read with none open, then the reading kept.
+        async with isolation.request_transaction():
+            await self.store.link(file.id, who.team, digest, self.clock())
+            stored = await self.stored_of(who.team, digest, settings)
         if stored is not None:
             return stored
         data = await self.files.read(who, file)
         made = await asyncio.to_thread(read, data, filename=file.name, mime_type=file.mime, settings=settings)
-        await self._keep(who, file, made)
+        async with isolation.request_transaction():
+            await self._keep(who, file, made)
         return made
 
     async def stored_of(self, team: str, digest: str, settings: ReadingSettings) -> Reading | None:
         """The team's finished reading of these bytes under these settings, without reading anything."""
-        row = await self.store.get(team, digest, READER_VERSION, settings.key)
-        if row is None or row.status != "done" or row.facts is None:
-            return None
-        pages = await self.store.pages(team, digest, READER_VERSION, settings.key)
+        async with isolation.request_transaction():
+            row = await self.store.get(team, digest, READER_VERSION, settings.key)
+            if row is None or row.status != "done" or row.facts is None:
+                return None
+            pages = await self.store.pages(team, digest, READER_VERSION, settings.key)
         return Reading(
             settings=settings,
             facts=FileFacts.model_validate(row.facts),

@@ -425,13 +425,16 @@ class DocumentTypes:
     async def template_offers(self, who: Who, type_id: str) -> list[dict[str, Any]] | None:
         """Groups of at least the version's offerAt checked model reads of the type that share a layout and that no
         template of the latest version reads: where suggesting a template pays."""
-        if await self._own(who, type_id) is None:
-            return None
-        version = await self.resolve(who, type_id, None)
-        current = cast(list[dict[str, Any]], version.get("templates") or [])
         store = self.extractor.store
+        # The type, its version and its reads in one transaction, closed before a layout is read from files-service.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return None
+            version = await self.resolve(who, type_id, None)
+            recent = await store.recent_reads(who.team, type_id, last=TEMPLATE_OFFER_READS)
+        current = cast(list[dict[str, Any]], version.get("templates") or [])
         groups: dict[str, list[ExtractionRow]] = {}
-        for row in await store.recent_reads(who.team, type_id, last=TEMPLATE_OFFER_READS):
+        for row in recent:
             result = row.result or {}
             if result.get("path") == PATH_TEMPLATE or result.get("needsReview") or "records" in result:
                 continue
@@ -456,12 +459,14 @@ class DocumentTypes:
 
     async def add_sample(self, who: Who, type_id: str, body: dict[str, Any]) -> dict[str, Any] | None:
         self._may_write(who)
-        row = await self._own(who, type_id)
-        if row is None:
-            return None
         file_id = str(body.get("fileId") or "")
         expected = body.get("expected")
-        latest = await self.store.version(type_id, row.latest_version)
+        # Gate: the type and its latest version, in one transaction closed before files-service is asked.
+        async with isolation.request_transaction():
+            row = await self._own(who, type_id)
+            if row is None:
+                return None
+            latest = await self.store.version(type_id, row.latest_version)
         assert latest is not None
         keys = {str(f["key"]) for f in latest.fields}
         records = cast(list[Any], expected) if latest.many and isinstance(expected, list) else [expected]
@@ -487,14 +492,17 @@ class DocumentTypes:
             added_by=who.actor,
             added_at=self.clock(),
         )
-        await self.store.add_sample({"tenant_id": who.tenant_id, **sample.model_dump()})
+        async with isolation.request_transaction():
+            await self.store.add_sample({"tenant_id": who.tenant_id, **sample.model_dump()})
         return _sample_view(sample)
 
     async def remove_sample(self, who: Who, type_id: str, sample_id: str) -> bool:
         self._may_write(who)
-        if await self._own(who, type_id) is None:
-            return False
-        gone = await self.store.remove_sample(type_id, sample_id)
+        # The sample's row goes in one transaction, committed before files-service is told to let the file go.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return False
+            gone = await self.store.remove_sample(type_id, sample_id)
         if gone is None:
             return False
         await self.files.release(who, gone.file_id, ref_id=sample_id)
@@ -512,9 +520,10 @@ class DocumentTypes:
     async def list_examples(self, who: Who, type_id: str) -> list[dict[str, Any]] | None:
         """The type's examples in the caller's team, newest first, each printed line masked as the team masks personal
         data in what people see, and its corrected value too; the stored example, which reads are given, stays real."""
-        if await self._own(who, type_id) is None:
-            return None
-        rows = [example_view(e) for e in await self.store.examples(who.team, type_id)]
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return None
+            rows = [example_view(e) for e in await self.store.examples(who.team, type_id)]
         if await self.extractor.masks(who):
             rows = [{**r, "line": masked(r["line"]), "value": masked(r["value"])} for r in rows]
         return rows
@@ -530,18 +539,20 @@ class DocumentTypes:
     async def estimate(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
         """What testing the version spends before it is run: one model call per sample (two when a re-ask is
         needed), at most MAX_TEST_SAMPLES samples, priced at the extract alias's current price when it is known."""
-        if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
-            return None
-        samples = min(len(await self.store.samples(type_id)), MAX_TEST_SAMPLES)
+        # Every row it reads in one transaction, closed before models-service is asked for the price.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
+                return None
+            samples = min(len(await self.store.samples(type_id)), MAX_TEST_SAMPLES)
+            # A reasoning model's output dwarfs a fixed guess (2,300 tokens a call against 600 on the baseline), so a
+            # type read before is priced at what reading it measured, then the tenant's reads, then the guess.
+            tokens, basis = (float(TOKENS_IN_PER_CALL), float(TOKENS_OUT_PER_CALL)), "default"
+            extractions = self.extractor.store
+            if (measured := await extractions.tokens_per_call(type_id)) is not None:
+                tokens, basis = measured, "type"
+            elif (measured := await extractions.tokens_per_call(None)) is not None:
+                tokens, basis = measured, "tenant"
         price = await self.prices.price(ALIAS, tenant=who.tenant_id) if self.prices is not None else None
-        # A reasoning model's output dwarfs a fixed guess (2,300 tokens a call against 600 on the baseline), so a type
-        # that was read before is priced at what reading it measured, then the tenant's reads, then the guess.
-        tokens, basis = (float(TOKENS_IN_PER_CALL), float(TOKENS_OUT_PER_CALL)), "default"
-        extractions = self.extractor.store
-        if (measured := await extractions.tokens_per_call(type_id)) is not None:
-            tokens, basis = measured, "type"
-        elif (measured := await extractions.tokens_per_call(None)) is not None:
-            tokens, basis = measured, "tenant"
         out: dict[str, Any] = {
             "samples": samples,
             "calls": samples,
@@ -559,26 +570,28 @@ class DocumentTypes:
 
     async def start_test(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
         self._may_write(who)
-        if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
-            return None
-        samples = await self.store.samples(type_id)
-        if not samples:
-            raise InvalidRequestError("add a sample before testing a version")
-        test = TestRow(
-            tenant_id=who.tenant_id,
-            id=f"dtt_{uuid.uuid4().hex[:12]}",
-            type_id=type_id,
-            version=version,
-            team=who.team,
-            status="queued",
-            samples=min(len(samples), MAX_TEST_SAMPLES),
-            result=None,
-            error=None,
-            asked_by=who.actor,
-            asked_at=self.clock(),
-            finished_at=None,
-        )
-        await self.store.insert_test(test)
+        # The run's row commits before the task that runs it starts, so the task finds it.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
+                return None
+            samples = await self.store.samples(type_id)
+            if not samples:
+                raise InvalidRequestError("add a sample before testing a version")
+            test = TestRow(
+                tenant_id=who.tenant_id,
+                id=f"dtt_{uuid.uuid4().hex[:12]}",
+                type_id=type_id,
+                version=version,
+                team=who.team,
+                status="queued",
+                samples=min(len(samples), MAX_TEST_SAMPLES),
+                result=None,
+                error=None,
+                asked_by=who.actor,
+                asked_at=self.clock(),
+                finished_at=None,
+            )
+            await self.store.insert_test(test)
         self._later(test)
         return _test_view(test)
 

@@ -85,6 +85,7 @@ from ops_service_kit.http import (
 )
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
@@ -424,7 +425,9 @@ def create_documents_app(
         """A document type and its version 1; the name is unique in the team."""
         try:
             asked = body.model_dump(mode="json", by_alias=True, exclude={"sample_file_id"})
-            made = await document_types.create(who, asked)
+            # The type and its version 1 in one transaction, committed before a sample asks files-service.
+            async with isolation.request_transaction():
+                made = await document_types.create(who, asked)
         except NameTakenError as e:
             raise Conflict(f"A document type named {body.name} or with id {body.id} exists.", code="name_taken") from e
         if body.sample_file_id:
@@ -446,8 +449,10 @@ def create_documents_app(
         """Deletes the team's type with its versions and samples; reads already made keep their fields. 409 `in_use`
         while a workflow of the team reads it, naming each in `details.usedBy`. An app's resource row reads not added
         again once its copy is deleted."""
-        if await document_types.get(who, type_id) is None:
-            raise NotFound(f"Document type {type_id}")
+        # Gate: the type read in one transaction, closed before agents-service is asked; settle: the delete in another.
+        async with isolation.request_transaction():
+            if await document_types.get(who, type_id) is None:
+                raise NotFound(f"Document type {type_id}")
         if type_uses is not None and (users := await type_uses.of(who, type_id)):
             names = ", ".join(u["name"] for u in users)
             raise Conflict(
@@ -456,9 +461,10 @@ def create_documents_app(
                 code="in_use",
                 details={"usedBy": users},
             )
-        if not await document_types.delete(who, type_id):
-            raise NotFound(f"Document type {type_id}")
-        await copies.removed_record(type_id)
+        async with isolation.request_transaction():
+            if not await document_types.delete(who, type_id):
+                raise NotFound(f"Document type {type_id}")
+            await copies.removed_record(type_id)
         return Response(status_code=204)
 
     @types.post(

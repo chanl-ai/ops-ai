@@ -38,23 +38,20 @@ queries = 3
 ["GET /v1/document-types/{type_id}/test-runs/{test_id}"]
 queries = 3
 
-# Not yet on one transaction: a transaction per store call (the type, then its examples).
+# The type and its examples in one transaction, closed before platform-service says whether the team masks them.
 ["GET /v1/document-types/{type_id}/examples"]
 queries = 4
+
+# Listed: the type, its version and its reads in one transaction, closed before each offered group's layout is read,
+# which reads files-service when the layout is not stored; a stored one is a second transaction of its own.
+["GET /v1/document-types/{type_id}/template-offers"]
+queries = 12
 transactions = 2
 connections = 2
 
-# Not yet on one transaction: a transaction per store call (the type, its reads, its versions).
-["GET /v1/document-types/{type_id}/template-offers"]
-queries = 12
-transactions = 6
-connections = 6
-
-# Not yet on one transaction: the type and its samples in a transaction per store call, then models-service prices it.
+# Every row in one transaction, closed before models-service prices the alias.
 ["GET /v1/document-types/{type_id}/versions/{version}/test-estimate"]
 queries = 8
-transactions = 4
-connections = 4
 
 # The team's copies in one transaction, closed before tools-service is asked for the team's templates.
 ["GET /v1/templates"]
