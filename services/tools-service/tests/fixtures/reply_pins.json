@@ -1,0 +1,1123 @@
+{
+ "apps_and_accounts": {
+  "accounts": {
+   "body": {
+    "data": [
+     {
+      "appId": "<id:con>",
+      "default": true,
+      "id": "<id:con>",
+      "identity": [],
+      "missingObjects": [],
+      "name": "Ledger",
+      "own": false,
+      "pointsAt": null,
+      "sandbox": false
+     }
+    ],
+    "success": true
+   },
+   "status": 200
+  },
+  "create": {
+   "body": {
+    "data": {
+     "accountName": null,
+     "activity": [
+      {
+       "action": "created",
+       "actor": "James Richardson",
+       "at": "<datetime>",
+       "detail": {
+        "kind": "api_key"
+       }
+      }
+     ],
+     "appId": "<id:con>",
+     "authKind": "api_key",
+     "category": null,
+     "credentialId": null,
+     "description": null,
+     "docsUrl": null,
+     "health": null,
+     "id": "<id:con>",
+     "kindLabel": "API key",
+     "mayManage": true,
+     "name": "Ledger",
+     "people": [],
+     "platformApp": null,
+     "redirectUri": null,
+     "revision": 1,
+     "sandbox": false,
+     "secrets": {
+      "clientKey": {
+       "set": false
+      },
+      "key": {
+       "set": false
+      }
+     },
+     "settings": {},
+     "signIn": "team",
+     "signedIn": null,
+     "status": "draft",
+     "statusDetail": null,
+     "teamBackup": false,
+     "teamId": "team_ops",
+     "updatedAt": "<datetime>",
+     "usedBy": []
+    },
+    "success": true
+   },
+   "sent": [
+    "authKind",
+    "name"
+   ],
+   "status": 201
+  },
+  "create same name": {
+   "body": {
+    "data": {
+     "accountName": null,
+     "activity": [
+      {
+       "action": "created",
+       "actor": "James Richardson",
+       "at": "<datetime>",
+       "detail": {
+        "kind": "api_key"
+       }
+      }
+     ],
+     "appId": "<id:con>",
+     "authKind": "api_key",
+     "category": null,
+     "credentialId": null,
+     "description": null,
+     "docsUrl": null,
+     "health": null,
+     "id": "<id:con>",
+     "kindLabel": "API key",
+     "mayManage": true,
+     "name": "Ledger",
+     "people": [],
+     "platformApp": null,
+     "redirectUri": null,
+     "revision": 1,
+     "sandbox": false,
+     "secrets": {
+      "clientKey": {
+       "set": false
+      },
+      "key": {
+       "set": false
+      }
+     },
+     "settings": {},
+     "signIn": "team",
+     "signedIn": null,
+     "status": "draft",
+     "statusDetail": null,
+     "teamBackup": false,
+     "teamId": "team_ops",
+     "updatedAt": "<datetime>",
+     "usedBy": []
+    },
+    "success": true
+   },
+   "sent": [
+    "authKind",
+    "name"
+   ],
+   "status": 201
+  },
+  "delete": {
+   "body": {
+    "data": {
+     "accounts": [
+      "Ledger"
+     ]
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list": {
+   "body": {
+    "data": [],
+    "success": true
+   },
+   "status": 200
+  },
+  "missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "App app_nobody was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "my connections": {
+   "body": {
+    "data": [],
+    "success": true
+   },
+   "status": 200
+  },
+  "one": {
+   "body": {
+    "data": {
+     "accounts": [
+      {
+       "account": null,
+       "actions": [
+        "rename",
+        "sign_in",
+        "delete"
+       ],
+       "configId": null,
+       "configName": null,
+       "default": true,
+       "health": null,
+       "id": "<id:con>",
+       "identity": [],
+       "kind": "team",
+       "mine": false,
+       "myDefault": null,
+       "name": "Ledger",
+       "owner": {
+        "kind": "team",
+        "name": "Operations"
+       },
+       "peopleSignedIn": 0,
+       "pointsAt": null,
+       "revision": 1,
+       "rowId": "<id:con>",
+       "samePlaceAs": null,
+       "sandbox": false,
+       "signIn": "team",
+       "signInValues": [],
+       "state": "not_signed_in",
+       "stateReason": null,
+       "status": "draft",
+       "statusDetail": null,
+       "test": null
+      }
+     ],
+     "authConfigs": [
+      {
+       "accountCount": 1,
+       "canDelete": false,
+       "canEdit": false,
+       "clientId": null,
+       "default": true,
+       "fields": [],
+       "id": "",
+       "name": "API key",
+       "permissions": [],
+       "secretEnds": null,
+       "signInPlace": null,
+       "type": "account"
+      }
+     ],
+     "card": {
+      "accountsCount": 1,
+      "appGroup": "needs_admin",
+      "appState": "off",
+      "appStateReason": null,
+      "authKind": "api_key",
+      "category": null,
+      "connectionId": "<id:con>",
+      "credential": null,
+      "description": null,
+      "docsUrl": null,
+      "href": null,
+      "id": "<id:con>",
+      "kind": "connection",
+      "kindLabel": "API key",
+      "logo": null,
+      "managedClient": false,
+      "mayManage": true,
+      "moduleIds": [],
+      "name": "Ledger",
+      "ownSignIn": null,
+      "plugin": null,
+      "pluginId": null,
+      "sandboxId": null,
+      "signIn": "team",
+      "state": "not_signed_in",
+      "status": "draft",
+      "toolsAdded": null,
+      "toolsCount": 0
+     },
+     "connection": {
+      "accountName": null,
+      "activity": [
+       {
+        "action": "created",
+        "actor": "James Richardson",
+        "at": "<datetime>",
+        "detail": {
+         "kind": "api_key"
+        }
+       }
+      ],
+      "appId": "<id:con>",
+      "authKind": "api_key",
+      "category": null,
+      "certificate": null,
+      "credentialId": null,
+      "description": null,
+      "docsUrl": null,
+      "health": null,
+      "id": "<id:con>",
+      "kindLabel": "API key",
+      "mayManage": true,
+      "name": "Ledger",
+      "people": [],
+      "platformApp": null,
+      "pluginSecrets": null,
+      "pluginSettings": null,
+      "redirectUri": null,
+      "revision": 1,
+      "sandbox": false,
+      "secrets": {
+       "clientKey": {
+        "set": false,
+        "setAt": null,
+        "setBy": null
+       },
+       "key": {
+        "set": false,
+        "setAt": null,
+        "setBy": null
+       }
+      },
+      "settings": {},
+      "signIn": "team",
+      "signedIn": null,
+      "status": "draft",
+      "statusDetail": null,
+      "teamBackup": false,
+      "teamId": "team_ops",
+      "updatedAt": "<datetime>",
+      "usedBy": []
+     },
+     "me": {
+      "account": null,
+      "connected": false,
+      "signIns": 0
+     },
+     "peopleCount": 0,
+     "skills": [],
+     "tools": [],
+     "usage": []
+    },
+    "success": true
+   },
+   "status": 200
+  }
+ },
+ "gateway_and_executions": {
+  "call ok": {
+   "body": {
+    "data": {
+     "callId": "<id:gwc>",
+     "decision": "allow",
+     "ok": true,
+     "output": {
+      "accountId": "CHQ-1",
+      "balance": 1200.5,
+      "holder": {
+       "name": "Marcus Webb",
+       "sin": "123-456-789"
+      }
+     },
+     "view": null
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "call refused for a missing secret": {
+   "body": {
+    "data": {
+     "callId": "<id:gwc>",
+     "decision": "allow",
+     "ok": false,
+     "output": {
+      "error": {
+       "code": "SECRET_MISSING",
+       "message": "The secret STATEMENTS_KEY is not set for this module's team."
+      }
+     },
+     "view": null
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "call unknown tool": {
+   "body": {
+    "error": {
+     "code": "gateway_refused",
+     "details": {
+      "callId": "<id:gwc>",
+      "reasons": [
+       "tool is not registered with the gateway"
+      ]
+     },
+     "message": "tool is not registered with the gateway",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "status": 403
+  },
+  "call without its key": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "key"
+       ],
+       "msg": "Field required"
+      },
+      {
+       "loc": [
+        "body",
+        "runContext"
+       ],
+       "msg": "Field required"
+      }
+     ],
+     "message": "key: Field required",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "input",
+    "tool"
+   ],
+   "status": 400
+  },
+  "execution missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Call was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "execution one": {
+   "body": {
+    "data": {
+     "actor": {
+      "id": "dispute_email",
+      "kind": "workflow",
+      "name": "dispute_email"
+     },
+     "agentName": "",
+     "agentSlug": "",
+     "app": "Document service",
+     "approval": {
+      "kind": "none"
+     },
+     "at": "<datetime>",
+     "channel": "api",
+     "connectionId": "<id:con>",
+     "decision": "allow",
+     "effect": false,
+     "environment": "test",
+     "gateway": "data",
+     "id": "<id:gwc>",
+     "latencyMs": "<timing>",
+     "operation": "read",
+     "outcome": "ok",
+     "runAs": {
+      "kind": "team"
+     },
+     "runId": "",
+     "status": "ok",
+     "subject": {
+      "id": "service:agents",
+      "kind": "service",
+      "name": "service:agents"
+     },
+     "system": "Document service",
+     "target": "get_account",
+     "title": "Get account",
+     "workflowId": "dispute_email",
+     "workflowName": "dispute_email"
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "executions list": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "actor": {
+        "id": "dispute_email",
+        "kind": "workflow",
+        "name": "dispute_email"
+       },
+       "agentName": "",
+       "agentSlug": "",
+       "app": "Document service",
+       "approval": {
+        "kind": "none"
+       },
+       "at": "<datetime>",
+       "channel": "api",
+       "connectionId": "<id:con>",
+       "decision": "allow",
+       "effect": false,
+       "environment": "test",
+       "gateway": "data",
+       "id": "<id:gwc>",
+       "latencyMs": "<timing>",
+       "operation": "read",
+       "outcome": "ok",
+       "runAs": {
+        "kind": "team"
+       },
+       "runId": "",
+       "status": "ok",
+       "subject": {
+        "id": "service:agents",
+        "kind": "service",
+        "name": "service:agents"
+       },
+       "system": "Document service",
+       "target": "get_account",
+       "title": "Get account",
+       "workflowId": "dispute_email",
+       "workflowName": "dispute_email"
+      },
+      {
+       "actor": {
+        "id": "dispute_email",
+        "kind": "workflow",
+        "name": "dispute_email"
+       },
+       "agentName": "",
+       "agentSlug": "",
+       "app": "Document service",
+       "approval": {
+        "kind": "none"
+       },
+       "at": "<datetime>",
+       "channel": "api",
+       "connectionId": "<id:con>",
+       "decision": "allow",
+       "effect": false,
+       "environment": "test",
+       "errorCode": "SECRET_MISSING",
+       "errorMessage": "The secret STATEMENTS_KEY is not set for this module's team.",
+       "gateway": "data",
+       "id": "<id:gwc>",
+       "latencyMs": "<timing>",
+       "operation": "read",
+       "outcome": "error",
+       "runAs": {
+        "kind": "team"
+       },
+       "runId": "",
+       "status": "error",
+       "subject": {
+        "id": "service:agents",
+        "kind": "service",
+        "name": "service:agents"
+       },
+       "system": "Document service",
+       "target": "get_account",
+       "title": "Get account",
+       "workflowId": "dispute_email",
+       "workflowName": "dispute_email"
+      }
+     ],
+     "facets": {},
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 50,
+      "total": 2,
+      "totalPages": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  }
+ },
+ "secrets": {
+  "create": {
+   "body": {
+    "data": {
+     "authConfig": null,
+     "connectionId": null,
+     "createdAt": "<datetime>",
+     "createdBy": "James Richardson",
+     "credentialId": null,
+     "ends": "er-1",
+     "label": null,
+     "name": "LEDGER_KEY",
+     "protection": null,
+     "readOnly": false,
+     "teamId": "team_lending",
+     "teams": [
+      "team_lending"
+     ],
+     "templateId": null,
+     "usedBy": [],
+     "version": 1
+    },
+    "success": true
+   },
+   "sent": [
+    "name",
+    "teamId",
+    "value"
+   ],
+   "status": 201
+  },
+  "create again": {
+   "body": {
+    "error": {
+     "code": "conflict",
+     "message": "A secret named LEDGER_KEY already exists. Rotate it to change its value.",
+     "requestId": "<id:req>",
+     "status": 409
+    },
+    "success": false
+   },
+   "sent": [
+    "name",
+    "teamId",
+    "value"
+   ],
+   "status": 409
+  },
+  "delete": {
+   "body": "",
+   "status": 204
+  },
+  "delete missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Secret LEDGER_API_KEY was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "list": {
+   "body": {
+    "data": [
+     {
+      "authConfig": null,
+      "connectionId": null,
+      "createdAt": "<datetime>",
+      "createdBy": "James Richardson",
+      "credentialId": null,
+      "ends": "er-1",
+      "label": null,
+      "name": "LEDGER_KEY",
+      "protection": null,
+      "readOnly": false,
+      "teamId": "team_lending",
+      "teams": [
+       "team_lending"
+      ],
+      "templateId": null,
+      "usedBy": [],
+      "version": 1
+     }
+    ],
+    "success": true
+   },
+   "status": 200
+  },
+  "rename": {
+   "body": {
+    "data": {
+     "authConfig": null,
+     "connectionId": null,
+     "createdAt": "<datetime>",
+     "createdBy": "James Richardson",
+     "credentialId": null,
+     "ends": "er-2",
+     "label": null,
+     "name": "LEDGER_API_KEY",
+     "protection": null,
+     "readOnly": false,
+     "rotatedAt": "<datetime>",
+     "teamId": "team_lending",
+     "teams": [
+      "team_lending"
+     ],
+     "templateId": null,
+     "usedBy": [],
+     "version": 2
+    },
+    "success": true
+   },
+   "sent": [
+    "name"
+   ],
+   "status": 200
+  },
+  "rotate": {
+   "body": {
+    "data": {
+     "authConfig": null,
+     "connectionId": null,
+     "createdAt": "<datetime>",
+     "createdBy": "James Richardson",
+     "credentialId": null,
+     "ends": "er-2",
+     "label": null,
+     "name": "LEDGER_KEY",
+     "protection": null,
+     "readOnly": false,
+     "rotatedAt": "<datetime>",
+     "teamId": "team_lending",
+     "teams": [
+      "team_lending"
+     ],
+     "templateId": null,
+     "usedBy": [],
+     "version": 2
+    },
+    "success": true
+   },
+   "sent": [
+    "value"
+   ],
+   "status": 200
+  },
+  "rotate missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Secret NO_SUCH was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  }
+ },
+ "tool_modules": {
+  "activity": {
+   "body": {
+    "data": {
+     "days": [
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      }
+     ],
+     "denied24h": 0,
+     "recent": []
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "grants": {
+   "body": {
+    "error": {
+     "code": "team_required",
+     "message": "A service token on this route names its team.",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "status": 403
+  },
+  "list": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [],
+       "approvalState": "draft",
+       "calls24h": 0,
+       "connection": null,
+       "description": "Fetches signed loan documents for the lending inbox.",
+       "displayName": "Document service",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_document_service",
+       "major": 0,
+       "name": "document-service",
+       "operationCount": 0,
+       "ownerTeam": "Lending Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "draft",
+       "system": "Document service",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.1.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "connection": {
+        "baseUrl": "https://casemgmt.harborpine.internal/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_case_mgmt_team_platform",
+        "kind": "none",
+        "name": "Case management system",
+        "status": "healthy"
+       },
+       "connectionId": "int_case_mgmt_team_platform",
+       "description": "The bank\u2019s case management system: signed agreements, statements and identity documents held on customer cases.",
+       "displayName": "Case management system",
+       "drift": false,
+       "endpoint": "https://casemgmt.harborpine.internal/mcp",
+       "errorRate": 0,
+       "id": "mod_case_mgmt",
+       "major": 0,
+       "name": "case-management",
+       "operationCount": 2,
+       "ownerTeam": "Enterprise Data",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": {
+        "id": "TMP-mod_case_mgmt_rev0",
+        "requestedAt": "<datetime>",
+        "requestedBy": "Anika Singh",
+        "version": "0.9.0"
+       },
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "in_review",
+       "system": "Case management system",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.9.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "connection": null,
+       "description": "Tools the Runtime runs in process for its demo agents and workflows.",
+       "displayName": "Runtime demo tools",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_runtime_demo",
+       "major": 1,
+       "name": "runtime-demo-tools",
+       "operationCount": 4,
+       "ownerTeam": "Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Runtime demo tools",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.0.0",
+       "workflows": []
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 12,
+       "write": 8
+      },
+      "approvalState": {
+       "approved": 9,
+       "draft": 1,
+       "expired": 1,
+       "expiring": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 4,
+       "http": 11
+      }
+     },
+     "pagination": {
+      "hasNext": true,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 3,
+      "total": 15,
+      "totalPages": 5
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Module was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "one": {
+   "body": {
+    "data": {
+     "accessClasses": [],
+     "approvalState": "draft",
+     "approvals": [],
+     "auth": {
+      "kind": "none"
+     },
+     "calls24h": 0,
+     "canDelete": true,
+     "canEdit": true,
+     "canPublish": true,
+     "connection": null,
+     "dataClassification": "confidential",
+     "description": "Fetches signed loan documents for the lending inbox.",
+     "displayName": "Document service",
+     "drift": false,
+     "egressHosts": [],
+     "endpoint": "",
+     "errorRate": 0,
+     "id": "mod_document_service",
+     "major": 0,
+     "name": "document-service",
+     "operationCount": 0,
+     "operations": [],
+     "ownerContacts": [
+      "James Richardson"
+     ],
+     "ownerTeam": "Lending Ops",
+     "p95Ms": "<timing>",
+     "pendingApprovals": 0,
+     "pendingChanges": [],
+     "pendingReview": null,
+     "protection": null,
+     "reachable": true,
+     "runContexts": [
+      {
+       "bindings": {},
+       "caseId": "sample",
+       "id": "owner",
+       "label": "Owner, no case",
+       "workflowId": "",
+       "workflowName": ""
+      }
+     ],
+     "signIn": "person_or_team",
+     "status": "draft",
+     "system": "Document service",
+     "templateId": null,
+     "timeoutMs": 8000,
+     "type": "http",
+     "unsetSecrets": 0,
+     "updatedAt": "<datetime>",
+     "version": "0.1.0",
+     "versions": [
+      {
+       "changes": [],
+       "major": 0,
+       "note": "First version",
+       "pinnedBy": [],
+       "publishedBy": "James Richardson",
+       "reachability": [],
+       "status": "draft",
+       "version": "0.1.0"
+      }
+     ],
+     "workflows": []
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "tool": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "details": {
+      "callId": "",
+      "reasons": [
+       "tool lookup_case is not registered with the gateway"
+      ]
+     },
+     "message": "tool lookup_case is not registered with the gateway",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "tool missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "details": {
+      "callId": "",
+      "reasons": [
+       "tool no_such_tool is not registered with the gateway"
+      ]
+     },
+     "message": "tool no_such_tool is not registered with the gateway",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  }
+ }
+}
