@@ -70,12 +70,7 @@ async def list_page(
     primary key of `query`'s first table, whatever the search says (a key of more than one column raises ValueError).
     A `labels` entry is a select of (value, label), read for the values its facet counted."""
     _declared({**sortable, **filters})
-    if params.ids is not None:
-        chosen = [_id_column(query).in_(params.ids)]
-    else:
-        words = (params.search or "").strip()
-        chosen = [sa.or_(*(contains(c, words) for c in search))] if words and search else []
-    wanted = {key: filters[key].in_(values) for key, values in params.filters.items() if key in filters and values}
+    chosen, wanted = _narrowing(query, params, search, filters)
     listed = query.where(*chosen, *wanted.values())
 
     # The FROM is kept: a table only the columns named would drop with them and the count would be one row.
@@ -105,6 +100,44 @@ async def list_page(
     data = [dict(r) for r in rows.mappings()]
     out = paged(data, total, page, params.page_size, facets=counted, labels=named or None)
     return cast(ListPage, out)
+
+
+def listed_rows(
+    query: Rows,
+    params: ListParams,
+    *,
+    search: Sequence[sa.ColumnElement[Any]] = (),
+    filters: Mapping[str, sa.ColumnElement[Any]] = _NONE,
+) -> Rows:
+    """`query` narrowed exactly as `list_page` narrows it before counting and paging (`ids`, else the search, and the
+    filters), for a caller that needs another aggregate over the same rows, such as a count per view:
+
+      rows = listed_rows(sa.select(sa.func.count()).select_from(files).where(*base), q, search=..., filters=FACETS)
+      quarantined = (await conn.execute(rows.where(files.c.scan_status == "infected"))).scalar_one()
+    """
+    _declared(filters)
+    chosen, wanted = _narrowing(query, params, search, filters)
+    return query.where(*chosen, *wanted.values())
+
+
+def _narrowing(
+    query: Rows,
+    params: ListParams,
+    search: Sequence[sa.ColumnElement[Any]],
+    filters: Mapping[str, sa.ColumnElement[Any]],
+) -> tuple[list[sa.ColumnElement[bool]], dict[str, sa.ColumnElement[bool]]]:
+    """The rows asked for (`ids`, else the search) and each filter by its key, kept apart so a facet can leave its
+    own filter out."""
+    chosen: list[sa.ColumnElement[bool]]
+    if params.ids is not None:
+        chosen = [_id_column(query).in_(params.ids)]
+    else:
+        words = (params.search or "").strip()
+        chosen = [sa.or_(*(contains(c, words) for c in search))] if words and search else []
+    wanted: dict[str, sa.ColumnElement[bool]] = {
+        key: filters[key].in_(values) for key, values in params.filters.items() if key in filters and values
+    }
+    return chosen, wanted
 
 
 async def _labels(conn: AsyncConnection, read: Rows, values: list[str]) -> dict[str, str]:
@@ -157,4 +190,4 @@ def _declared(columns: Mapping[str, sa.ColumnElement[Any]]) -> None:
         raise ValueError(f"list_page filters or sorts on {', '.join(missing)}: declare each with info=LISTED")
 
 
-__all__ = ["LISTED", "LISTED_KEY", "ListPage", "list_page"]
+__all__ = ["LISTED", "LISTED_KEY", "ListPage", "list_page", "listed_rows"]

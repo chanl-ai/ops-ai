@@ -23,7 +23,7 @@ from ops_service_kit.http import Out
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
 from ops_store.database import open_database, reachable
-from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.listing import LISTED, ListPage, list_page, listed_rows
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.rows import one, rows
@@ -428,19 +428,12 @@ class FilesStore(Store):
                 facets=FACETS,
             )
             # The views' counts under the page's own search and filters: the same rows list_page counted, by view.
-            words = (params.search or "").strip()
-            chosen = (
-                [files.c.id.in_(params.ids)]
-                if params.ids is not None
-                else [sa.or_(*(contains(col, words) for col in search))]
-                if words
-                else []
+            rows = listed_rows(
+                sa.select(sa.func.count()).select_from(files).where(*base), params, search=search, filters=FACETS
             )
-            wanted = [FACETS[k].in_(v) for k, v in params.filters.items() if k in FACETS and v]
             counts: dict[str, int] = {}
             for v in VIEWS:
-                q = sa.select(sa.func.count()).select_from(files).where(*base, *chosen, *wanted)
-                counts[v] = int((await c.execute(q.where(self._in_view(v, tenant, at)))).scalar_one())
+                counts[v] = int((await c.execute(rows.where(self._in_view(v, tenant, at)))).scalar_one())
         return page, counts
 
     @staticmethod
