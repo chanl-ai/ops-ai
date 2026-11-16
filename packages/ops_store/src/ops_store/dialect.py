@@ -60,22 +60,28 @@ def claim[S: sa.Select[Any]](query: S, table: sa.FromClause) -> S:
     return query.with_for_update(skip_locked=True).with_hint(table, _CLAIM_LOCK, "mssql")
 
 
+_PG_KEY_LOCK = sa.select(
+    sa.func.pg_advisory_xact_lock(sa.func.hashtextextended(sa.bindparam("key", type_=sa.String), 0))
+)
+# sp_getapplock answers below zero when it did not get the lock; THROW turns that into an error.
+_MS_KEY_LOCK = sa.text(
+    "DECLARE @granted int; EXEC @granted = sp_getapplock @Resource = :key, @LockMode = 'Exclusive', "
+    "@LockOwner = 'Transaction', @LockTimeout = -1; "
+    "IF @granted < 0 THROW 51000, 'ops_store.lock_key: lock not granted', 1;"
+)
+# The statements `lock_key` sends, built once here. An install-wide block lets these objects through by identity
+# (`isolation`), so an equal statement built anywhere else, or the same text, is still refused; only the key varies.
+KEY_LOCKS = (_PG_KEY_LOCK, _MS_KEY_LOCK)
+
+
 async def lock_key(conn: AsyncConnection, key: str) -> None:
     """Serialises every transaction that locks `key` until it ends: an advisory lock on PostgreSQL, an application
     lock on SQL Server. SQLite runs one writer at a time, so it needs none."""
     match dialect_of(conn):
         case "postgresql":
-            await conn.execute(sa.select(sa.func.pg_advisory_xact_lock(sa.func.hashtextextended(key, 0))))
+            await conn.execute(_PG_KEY_LOCK, {"key": key})
         case "mssql":
-            # sp_getapplock answers below zero when it did not get the lock; THROW turns that into an error.
-            await conn.execute(
-                sa.text(
-                    "DECLARE @granted int; EXEC @granted = sp_getapplock @Resource = :key, @LockMode = 'Exclusive', "
-                    "@LockOwner = 'Transaction', @LockTimeout = -1; "
-                    "IF @granted < 0 THROW 51000, 'ops_store.lock_key: lock not granted', 1;"
-                ),
-                {"key": key[:255]},
-            )
+            await conn.execute(_MS_KEY_LOCK, {"key": key[:255]})
         case _:
             return
 

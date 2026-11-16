@@ -552,10 +552,11 @@ def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> Non
     table is refused even where the statement's tree does not hold that table. Raw SQL (a text clause, a literal
     column, a custom operator, a prefix, suffix or hint other than the dialect's lock hints, a collation or EXTRACT
     field, an unquoted name, a string for the driver) names no table the check can read, so it is refused rather than
-    parsed; the mechanism's own context statements are the exceptions. A function runs only when it is listed
-    (`INSTALL_FUNCTIONS`) or is the database's clock. Each statement is checked as written, so a cached compile does
-    not skip it."""
-    if not conn.info.get(_INSTALL) or statement is _MS_SET:
+    parsed; the mechanism's own context statements and `dialect.lock_key`'s statements (`dialect.KEY_LOCKS`, matched
+    by identity, so the same SQL built elsewhere is still refused) are the exceptions. A function runs only when it is
+    listed (`INSTALL_FUNCTIONS`) or is the database's clock. Each statement is checked as written, so a cached compile
+    does not skip it."""
+    if not conn.info.get(_INSTALL) or statement is _MS_SET or any(statement is lock for lock in dialect.KEY_LOCKS):
         return
     kind: type[object] = type(cast(object, statement))
     if not issubclass(kind, _STATEMENTS):

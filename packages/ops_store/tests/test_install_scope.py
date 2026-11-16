@@ -26,7 +26,7 @@ from ops_store import isolation
 from ops_store.backends import backends
 from ops_store.conformance import engine_for, sql_server_database
 from ops_store.database import open_database
-from ops_store.dialect import db_epoch, db_now, dialect_of
+from ops_store.dialect import db_epoch, db_now, dialect_of, lock_key
 from ops_store.isolation import InstallScopeError, NoTenantError
 from ops_store.listing import LISTED, list_page
 from ops_store.schema import (
@@ -392,6 +392,55 @@ async def test_an_install_block_calls_only_the_listed_functions(engine: AsyncEng
     ]
     out = await _outcomes(st, [*allowed, *refused])
     assert out == ["ran"] * len(allowed) + ["refused"] * len(refused), out
+
+
+async def test_an_install_block_takes_the_dialects_key_lock_and_nothing_written_like_it(engine: AsyncEngine) -> None:
+    """`lock_key` runs inside an install block and holds a second block on the same key until the first ends. The
+    same call written by hand (the function, the procedure, its exact text) and any other procedure stay refused."""
+    st = Install(engine)
+    held, release = asyncio.Event(), asyncio.Event()
+    order: list[str] = []
+
+    async def first() -> None:
+        async with st.install_tx(SETTINGS, tables=(settings,)) as c:
+            await lock_key(c, "thread:t1")
+            order.append("first locked")
+            held.set()
+            await release.wait()
+            order.append("first ends")
+
+    async def second() -> None:
+        await held.wait()
+        async with st.install_tx(SETTINGS, tables=(settings,)) as c:
+            await lock_key(c, "thread:t1")
+            order.append("second locked")
+
+    one, two = asyncio.create_task(first()), asyncio.create_task(second())
+    locked = asyncio.create_task(held.wait())
+    await asyncio.wait({one, locked}, timeout=10, return_when=asyncio.FIRST_COMPLETED)
+    if one.done():
+        two.cancel()
+        locked.cancel()
+        one.result()  # the first block failed before it held the key: raise what refused it
+    await asyncio.sleep(0.5)
+    assert not two.done(), "the second block waits on the key"
+    release.set()
+    await asyncio.wait_for(asyncio.gather(one, two), 10)
+    assert order == ["first locked", "first ends", "second locked"]
+    applock = (
+        "DECLARE @granted int; EXEC @granted = sp_getapplock @Resource = 'k', @LockMode = 'Exclusive', "
+        "@LockOwner = 'Transaction', @LockTimeout = -1; "
+        "IF @granted < 0 THROW 51000, 'ops_store.lock_key: lock not granted', 1;"
+    )
+    refused: list[sa.Executable] = [
+        sa.select(sa.func.pg_advisory_xact_lock(sa.func.hashtextextended("k", 0))),
+        sa.select(sa.func.pg_advisory_xact_lock(1)),
+        sa.text(applock),
+        sa.text("EXEC sp_executesql N'SELECT id FROM store_test_install_loose'"),
+        sa.text("EXEC xp_cmdshell 'dir'"),
+        sa.text("SELECT id FROM store_test_install_loose"),
+    ]
+    assert await _outcomes(st, refused) == ["refused"] * len(refused)
 
 
 async def test_a_list_over_a_system_table_is_searched_and_sorted_inside_an_install_block(engine: AsyncEngine) -> None:
