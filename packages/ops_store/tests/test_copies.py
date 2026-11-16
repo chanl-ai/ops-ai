@@ -223,6 +223,13 @@ async def test_a_resync_whose_insert_meets_an_event_for_the_same_key_completes(e
     await interleaved(engine, pass_writes, published("t1", "crm.find", 5, "Find a person"))
     assert await copied(engine, "t1") == {"crm.find": (5, "Find a person")}
 
+    async def lists_newer(c: AsyncConnection) -> None:
+        await reconcile(c, tools, [published("t1", "crm.send", 4, "Send")], {})
+
+    # An event below the listed revision, written while the pass ran, does not hold the row at the older revision.
+    await interleaved(engine, lists_newer, published("t1", "crm.send", 3, "Older"))
+    assert await copied(engine, "t1") == {"crm.find": (5, "Find a person"), "crm.send": (4, "Send")}
+
 
 @dataclass
 class Owner:

@@ -172,8 +172,9 @@ async def reconcile(
 
     `before` is the copy as read before the owner was asked (`held`); without it the copy as read now is used. Every
     write of a row in it is guarded on the revision and deleted flag read then, so a row an event changed while the
-    owner answered is kept; a row it lacked is inserted unless an event wrote it meanwhile. A tombstone is pruned once
-    TOMBSTONE_KEEP_S old and its record unlisted. Every write is one statement per kind, however many rows."""
+    owner answered is kept. A row it lacked is inserted or ignored, then set to the list over a lower revision, so an
+    event that wrote it meanwhile at or past the listed revision is kept. A tombstone is pruned once TOMBSTONE_KEEP_S
+    old and its record unlisted. Every write is one statement per kind, however many rows."""
     key_cols, copied = _key_cols(table), _copied(table)
     seen = await held(conn, table) if before is None else before
     wanted: dict[Key, dict[str, Any]] = {}
@@ -197,8 +198,17 @@ async def reconcile(
         # Every row has one shape: a typed payload dumps each of its fields, so one statement takes them all.
         cols = list(missing[0])
         params = {c: sa.bindparam(f"v_{c}", type_=table.c[c].type) for c in cols}
+        rows = [{f"v_{c}": r[c] for c in cols} for r in missing]
+        await conn.execute(insert_ignore(conn, table, params, keys=key_cols), rows)
+        # A row an event wrote meanwhile is kept only when it is at or past the listed revision, as `apply` would.
+        newer = [c for c in cols if c not in key_cols]
         await conn.execute(
-            insert_ignore(conn, table, params, keys=key_cols), [{f"v_{c}": r[c] for c in cols} for r in missing]
+            table.update()
+            .where(
+                *[table.c[k] == sa.bindparam(f"v_{k}") for k in key_cols], table.c.revision < sa.bindparam("v_revision")
+            )
+            .values({c: sa.bindparam(f"v_{c}") for c in newer}),
+            rows,
         )
     if differs:
         changed = [c for c in differs[0][2] if c not in key_cols and c not in ("deleted", "deleted_at")]
