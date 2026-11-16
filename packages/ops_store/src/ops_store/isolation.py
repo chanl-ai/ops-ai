@@ -36,7 +36,7 @@ from typing import Any, Literal, Protocol
 import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.engine import ExceptionContext
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 from sqlalchemy.sql import visitors
 
@@ -297,12 +297,11 @@ async def _end(state: _Request, *, commit: bool) -> None:
     state.closed = True
     if conn is None:
         return
-    conn.sync_connection.info.pop(_STATE, None)  # pyright: ignore[reportOptionalMemberAccess]
-    if tx is None:
-        # BEGIN failed after the connection was taken: it goes back to the pool, or the request leaks it.
-        await conn.close()
-        return
     try:
+        if not conn.invalidated:  # an invalidated connection's info raises; its DBAPI connection is discarded anyway
+            conn.info.pop(_STATE, None)
+        if tx is None:
+            return  # BEGIN failed after the connection was taken: it goes back to the pool below.
         if commit:
             # Cleared before the commit, so a transaction commits once.
             await leave_transaction(conn)
@@ -320,11 +319,15 @@ async def _roll_back(conn: AsyncConnection, tx: AsyncTransaction) -> None:
     after the rollback, in a transaction of its own."""
     cleared = False
     if tx.is_active:
-        with suppress(DBAPIError):
+        # A statement cancelled mid-flight leaves the transaction unusable: the clear raises PendingRollbackError (an
+        # InvalidRequestError), and the rollback below is what makes the connection usable again.
+        with suppress(DBAPIError, InvalidRequestError):
             await leave_transaction(conn)
             cleared = True
         await tx.rollback()
-    if not cleared:
+    # An invalidated connection (a statement cancelled mid-flight) is discarded with its session context, and touching
+    # it again would reconnect outside the driver's event loop bridge.
+    if not cleared and not conn.invalidated:
         await leave_transaction(conn)
         if conn.in_transaction():
             await conn.commit()
@@ -367,7 +370,9 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
             # The block around this one reads on with the settings it entered with. A restore that fails has failed
             # the request (`_on_error`), so nothing reads on with the wrong scope.
             state.carried = None
-            with suppress(DBAPIError):
+            # A cancelled statement leaves the transaction unusable, and the restore's PendingRollbackError would
+            # replace the cancellation; the request rolls back either way, since carried stays None.
+            with suppress(DBAPIError, InvalidRequestError):
                 tenant_id, team_id, scope_, role_ = before
                 back = Isolation(tenant_id, team_id, scope_, ctx.kind)  # pyright: ignore[reportArgumentType]
                 await enter_transaction(conn, back, role=role_, reset_role=role is not None)

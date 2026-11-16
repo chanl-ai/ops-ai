@@ -5,6 +5,7 @@ request's connection in its scope afterwards, and the guard on `Store.tx()` loos
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -15,6 +16,7 @@ from sqlalchemy import event
 from sqlalchemy.dialects import mssql
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.pool import QueuePool
 
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -231,3 +233,33 @@ async def test_inside_a_request_it_reuses_the_one_connection_and_restores_the_ca
         event.remove(engine.sync_engine.pool, "checkout", checked_out)
     assert (before, region, hidden, restored, after) == (["n1"], "eu", ["eu"], ["n1"], ["n1"])
     assert len(checkouts) == 1, f"{len(checkouts)} checkouts in one request on {dialect_of(engine)}"
+
+
+async def test_a_statement_cancelled_mid_flight_raises_the_cancellation_and_returns_the_connection(
+    engine: AsyncEngine,
+) -> None:
+    """Cancelled inside a block whose scope differs from the one around it: the restore that follows meets a
+    transaction the cancellation left unusable, and must neither replace the cancellation nor leak the connection."""
+    st = Install(engine)
+    sleep = (
+        sa.select(sa.func.pg_sleep(5)) if dialect_of(engine) == "postgresql" else sa.text("WAITFOR DELAY '00:00:05'")
+    )
+    started = asyncio.Event()
+
+    async def call() -> None:
+        with isolation.scope("t1", None):
+            async with isolation.request_transaction(), st.install_tx(SETTINGS):
+                with isolation.scope("t1", None):
+                    async with st.tx() as c:
+                        started.set()
+                        await c.execute(sleep)
+
+    task = asyncio.create_task(call())
+    await started.wait()
+    await asyncio.sleep(0.3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    pool = engine.sync_engine.pool
+    assert isinstance(pool, QueuePool)
+    assert pool.checkedout() == 0, "the cancelled request's connection went back to the pool"

@@ -131,6 +131,10 @@ def _transaction_began(conn: sa.Connection) -> None:
 
 
 def _transaction_ended(conn: sa.Connection) -> None:
+    if conn.invalidated:
+        # A statement cancelled mid-flight invalidates the connection, and reading its info then raises
+        # PendingRollbackError in place of the cancellation; the transaction goes uncounted.
+        return
     found: tuple[RequestTiming, float] | None = conn.info.pop(_TX, None)
     if found is not None:
         request, begun = found
