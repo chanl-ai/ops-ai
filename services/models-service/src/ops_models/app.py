@@ -43,6 +43,7 @@ from ops_service_kit.http import (
     operation_id,
 )
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.logging import get_logger
 from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -86,6 +87,7 @@ class _Wire(In):
 
 # The wire name of each field connection_problem names.
 _FIELD = {"endpoint": "baseUrl", "api_version": "apiVersion"}
+log = get_logger("ops_models.app")
 
 
 def connection_problem(kind: str, base_url: str | None, api_version: str | None, region: str | None) -> str | None:
@@ -782,20 +784,39 @@ def create_models_app(
         # one transaction of its own: none is open while the provider works, and the gate's committed before it.
 
         async def settle(self, input_tokens: int, output_tokens: int) -> None:
+            """Records what the provider charged, in a task of its own: a client gone or a cancel after the answer
+            does not roll it back. When the write fails, the usage is logged at error level, to recover the spend."""
             spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), self.price)
+            await asyncio.shield(asyncio.ensure_future(self._settle(input_tokens, output_tokens, spend)))
+
+        async def _settle(self, input_tokens: int, output_tokens: int, spend: Decimal) -> None:
             tenant = self.tenant if self.key.tenant_budget is not None else None
-            async with isolation.request_transaction():
-                await self.observed()
-                if tenant is not None:
-                    with isolation.scope(tenant, None):
-                        await key_store.spend(self.key.id, spend, tenant_id=tenant)
-                else:
-                    await key_store.spend(self.key.id, spend)
-                # An Azure answer from another region than its connection names is recorded on the row, not refused.
-                provider = self.provider
-                mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
-                values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
-                await self.log("ok", mismatch[:64] if mismatch else None, **values, **self.version)
+            try:
+                async with isolation.request_transaction():
+                    await self.observed()
+                    if tenant is not None:
+                        with isolation.scope(tenant, None):
+                            await key_store.spend(self.key.id, spend, tenant_id=tenant)
+                    else:
+                        await key_store.spend(self.key.id, spend)
+                    # An Azure answer from another region than its connection names is recorded on the row, not
+                    # refused.
+                    provider = self.provider
+                    mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
+                    values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+                    await self.log("ok", mismatch[:64] if mismatch else None, **values, **self.version)
+            except Exception:
+                log.exception(
+                    "model_call_settle_failed",
+                    key_id=self.key.id,
+                    tenant_id=self.tenant,
+                    alias=self.row.get("alias"),
+                    provider_model=self.version.get("provider_model"),
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost=str(spend),
+                )
+                raise
 
         async def broke(self, reason: str) -> None:
             """A stream that ended without settling: the provider failed part-way or the client went."""
@@ -976,7 +997,7 @@ def create_models_app(
                 return await failed(e)
 
             async def events() -> AsyncIterator[str]:
-                settling: asyncio.Task[None] | None = None
+                settled = False
                 reason = "provider_error"
                 try:
                     pending: dict[str, Any] | None = first
@@ -985,15 +1006,15 @@ def create_models_app(
                         yield f"data: {json.dumps(out)}\n\n"
                         pending = await anext(chunks, None)
                     # Spend and the log row are written before the client sees the end: once it has [DONE] it
-                    # disconnects, and Starlette cancels whatever this generator is still awaiting. A shielded task of
-                    # its own, not background.start: that hands back nothing to await before [DONE].
-                    settling = asyncio.ensure_future(settle(usage.input_tokens, usage.output_tokens))
-                    await asyncio.shield(settling)
+                    # disconnects, and Starlette cancels whatever this generator is still awaiting. The settle is
+                    # shielded, so it runs to its end even then.
+                    settled = True
+                    await settle(usage.input_tokens, usage.output_tokens)
                     yield "data: [DONE]\n\n"
                 except ProviderError as e:
                     reason = e.code
                 finally:
-                    if settling is None:
+                    if not settled:
                         # A provider failure or a client gone mid-stream: one error row, shielded from the cancel.
                         await asyncio.shield(broke(reason))
 
