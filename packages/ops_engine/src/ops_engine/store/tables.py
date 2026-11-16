@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 
+from ops_store.listing import LISTED
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 metadata = sa.MetaData()
@@ -68,7 +69,7 @@ engine_runs = sa.Table(
     sa.Column("run_key", sa.String(200), nullable=False),
     sa.Column("mode", sa.String(8), nullable=False),
     # queued, running, waiting, stuck (nothing behind it), succeeded, failed, cancelled
-    sa.Column("status", sa.String(16), nullable=False),
+    sa.Column("status", sa.String(16), nullable=False, info=LISTED),
     sa.Column("input", sa.JSON),
     sa.Column("outcome", sa.String(64)),
     sa.Column("output", sa.JSON),

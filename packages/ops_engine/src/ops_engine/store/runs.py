@@ -7,8 +7,10 @@ from typing import Any, ClassVar, cast
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
+from ops_store.listing import ListPage, list_page
 from ops_store.team_scope import team_visible
 
 from .clock import db_now, now_iso
@@ -162,14 +164,7 @@ class RunStore:
             base.append(engine_runs.c.team_id == team_id)
         where = [*base, engine_runs.c.status.in_(statuses)] if statuses else base
         # Each row carries its workflow version's display name, so a list names the workflow, not its id.
-        named = engine_runs.outerjoin(
-            engine_definitions,
-            sa.and_(
-                engine_definitions.c.tenant_id == engine_runs.c.tenant_id,
-                engine_definitions.c.workflow_id == engine_runs.c.workflow_id,
-                engine_definitions.c.version == engine_runs.c.version,
-            ),
-        )
+        named = _named(engine_runs)
         rows_q = (
             sa.select(*engine_runs.c, engine_definitions.c.name.label("workflow_name"))
             .select_from(named)
@@ -183,6 +178,25 @@ class RunStore:
             total = int((await c.execute(total_q)).scalar_one())
             by_status = {str(k): int(n) for k, n in (await c.execute(by_status_q)).all()}
         return rows, total, by_status
+
+    async def listed(self, params: ListParams, *, workflow_id: str | None = None) -> ListPage:
+        """The runs list on the shared contract: the acting team's runs (of one workflow when given), newest first,
+        then by id, each with `workflow_name`; `status` filters, given once per value, and `facets.status` counts the
+        runs per status under the other filters."""
+        r = engine_runs
+        where = [r.c.tenant_id == self.tx.tenant(), team_visible(r)]
+        if workflow_id:
+            where.append(r.c.workflow_id == workflow_id)
+        q = sa.select(*r.c, engine_definitions.c.name.label("workflow_name")).select_from(_named(r)).where(*where)
+        async with self.tx.tenant_tx() as c:
+            return await list_page(
+                c,
+                q,
+                params,
+                default_sort=r.c.created_at.desc(),
+                filters={"status": r.c.status},
+                facets={"status": r.c.status},
+            )
 
     async def update(self, run_id: str, *, generation: int | None = None, **values: Any) -> None:
         """`generation`: the writing worker's lease generation, checked in this transaction, so a superseded worker's
@@ -516,3 +530,14 @@ class RunStore:
             for run_id, payload in (await c.execute(q)).all():
                 out.setdefault(str(run_id), []).append(dict(payload or {}))
         return out
+
+
+def _named(runs: sa.Table) -> sa.Join:
+    """Runs joined to their workflow version, so a list names the workflow, not its id."""
+    d = engine_definitions
+    return runs.outerjoin(
+        d,
+        sa.and_(
+            d.c.tenant_id == runs.c.tenant_id, d.c.workflow_id == runs.c.workflow_id, d.c.version == runs.c.version
+        ),
+    )

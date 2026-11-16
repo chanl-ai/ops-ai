@@ -14,12 +14,13 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from ops_agents.api.routers.engine import RunsQuery, cancel_engine_run, get_engine_run, list_engine_runs
+from ops_agents.api.routers.engine import cancel_engine_run, get_engine_run, list_engine_runs
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.store import DefinitionStore, RunStore
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from tests.engine.test_worker import CountingTools, M, drain, worker
 
 FLOW = parse(
@@ -111,7 +112,7 @@ async def test_every_read_of_a_waiting_run_masks_what_it_shows(engine: AsyncEngi
     tenant, run_id = await _ran(engine, waiting, by=M.email)
     rt: Any = SimpleNamespace(db=engine, policies=Policies({}), settings=SimpleNamespace(review_sla_hours=24.0))
     with tenant_scope(tenant):
-        listed = json.loads(bytes((await list_engine_runs(rt, M, RunsQuery())).body))["data"]
+        listed = json.loads(bytes((await list_engine_runs(rt=rt, me=M, q=ListParams())).body))["data"]
         cancelled = json.loads(bytes((await cancel_engine_run(rt, M, run_id)).body))["data"]
     detail = await _read(engine, tenant, run_id, {})
     for shown in (listed, cancelled, detail):

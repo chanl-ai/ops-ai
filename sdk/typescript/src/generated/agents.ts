@@ -1919,8 +1919,9 @@ export interface paths {
         };
         /**
          * List Engine Runs
-         * @description The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`
-         *     counts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.
+         * @description The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one
+         *     workflow's, `status` repeats to keep several, and `facets.status` counts the runs per status under the other
+         *     filters. A scoped API key lists its own workflow's runs only.
          *     No request transaction: people's names and the masking policy come from platform-service, with none open.
          */
         get: operations["workflows_list_engine_runs"];
@@ -23065,10 +23066,13 @@ export interface operations {
         parameters: {
             query?: {
                 workflowId?: string | null;
-                workflow_id?: string | null;
-                status?: string[];
+                status?: string[] | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 from sse_starlette import EventSourceResponse
 
 from ops_agent_kernel.pii import masked
@@ -42,6 +42,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, ListResult, paged
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 
 from ...store.actor_names import UNNAMED_WORKFLOW
@@ -1231,32 +1232,28 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
     return ok(started_view(run, created), status=202 if created else 200)
 
 
-class RunsQuery(BaseModel):
-    workflowId: str | None = None  # noqa: N815 - the console's query parameter
-    # The name the list took before it paged; kept so a caller written for it still filters.
-    workflow_id: str | None = Field(default=None, json_schema_extra={"deprecated": True})
-    status: list[str] = Field(default_factory=list[str])
-    page: int = Field(default=1, ge=1)
-    pageSize: int = Field(default=25, ge=1, le=100)  # noqa: N815
-
-
 @runs_router.get("", response_model=Envelope[ListResult[RunRow]])
-async def list_engine_runs(rt: Rt, me: Me, q: Annotated[RunsQuery, Query()]) -> JSONResponse:
-    """The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`
-    counts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.
+async def list_engine_runs(
+    *,
+    rt: Rt,
+    me: Me,
+    q: ListQuery,
+    workflow_id: Annotated[str | None, Query(alias="workflowId")] = None,
+    status: Annotated[list[str] | None, Query()] = None,
+) -> JSONResponse:
+    """The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one
+    workflow's, `status` repeats to keep several, and `facets.status` counts the runs per status under the other
+    filters. A scoped API key lists its own workflow's runs only.
     No request transaction: people's names and the masking policy come from platform-service, with none open."""
-    wanted = q.workflowId or q.workflow_id
+    # `status` reaches the store through `q.filters`; both are declared so the document and the SDKs name them.
+    del status
+    wanted = workflow_id
     if (scope := key_scope(me)) is not None:
         if scope[0] != "workflow" or wanted not in (None, scope[1]):
-            return ok(paged([], 0, q.page, q.pageSize) | {"facets": {"status": {}}})
+            return ok(paged([], 0, q.page, q.page_size) | {"facets": {"status": {}}})
         wanted = scope[1]
-    rows, total, by_status = await runs(rt).page(
-        workflow_id=wanted,
-        statuses=q.status,
-        team_id=current_team(),
-        offset=(q.page - 1) * q.pageSize,
-        limit=q.pageSize,
-    )
+    listed = await runs(rt).listed(q, workflow_id=wanted)
+    rows = listed["data"]
     who = await actors(rt, [started_by_of(r) for r in rows])
     ended = await run_story.outcome_texts(rt, rows)
     views = [
@@ -1270,8 +1267,7 @@ async def list_engine_runs(rt: Rt, me: Me, q: Annotated[RunsQuery, Query()]) -> 
         }
         for r in rows
     ]
-    listed = paged(views, total, q.page, q.pageSize)
-    return ok(listed | {"facets": {"status": by_status}})
+    return ok({**listed, "data": views})
 
 
 @runs_router.get("/{run_id}", response_model=Envelope[RunDetail])

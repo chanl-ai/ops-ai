@@ -91,7 +91,15 @@ await withUiStack(
     const W = as(await tokenFor('w.kamau@harborpine.example'));
     const M = as(await tokenFor('m.okafor@harborpine.example'));
     const P = as(await tokenFor('p.shah@harborpine.example'));
-    const runsOf = async (workflow) => (await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=50`, J))?.data ?? [];
+    // Every page: one page holds at most 50 runs.
+    const runsOf = async (workflow) => {
+      const rows = [];
+      for (let page = 1; ; page += 1) {
+        const body = await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=50&page=${page}`, J);
+        rows.push(...(body?.data ?? []));
+        if (!body?.pagination?.hasNext) return rows;
+      }
+    };
     const detail = (id) => get(`${agents}/v1/runs/${id}`, J);
     const out = (run, node) => (run?.steps ?? []).find((s) => s.nodeId === node)?.output;
 

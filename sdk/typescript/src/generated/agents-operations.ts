@@ -1995,10 +1995,13 @@ export const agentsOperations = {
     "pathParams": [],
     "query": [
       "workflowId",
-      "workflow_id",
       "status",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

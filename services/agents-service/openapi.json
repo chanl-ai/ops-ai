@@ -45954,7 +45954,7 @@
     },
     "/v1/runs": {
       "get": {
-        "description": "The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`\ncounts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
+        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one\nworkflow's, `status` repeats to keep several, and `facets.status` counts the runs per status under the other\nfilters. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
         "operationId": "workflows_list_engine_runs",
         "parameters": [
           {
@@ -45975,31 +45975,21 @@
           },
           {
             "in": "query",
-            "name": "workflow_id",
+            "name": "status",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "deprecated": true,
-              "title": "Workflow Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Status",
-              "type": "array"
+              "title": "Status"
             }
           },
           {
@@ -46018,11 +46008,82 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {

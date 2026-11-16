@@ -1576,7 +1576,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/runs",
         "pathParams": [],
-        "query": ["workflowId", "workflow_id", "status", "page", "pageSize"],
+        "query": ["workflowId", "status", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "workflows_list_runs": {
@@ -2653,13 +2653,26 @@ class Operations:
         status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultRunRow:
         "List Engine Runs"
         return self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_engine_runs"],
             {},
-            {"workflowId": workflow_id, "status": status, "page": page, "pageSize": page_size},
+            {
+                "workflowId": workflow_id,
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -4136,13 +4149,26 @@ class AsyncOperations:
         status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultRunRow:
         "List Engine Runs"
         return await self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_engine_runs"],
             {},
-            {"workflowId": workflow_id, "status": status, "page": page, "pageSize": page_size},
+            {
+                "workflowId": workflow_id,
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
