@@ -1,0 +1,916 @@
+{
+ "first_save": {
+  "accounts": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "App plugin:test.fields was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "card": {
+   "accountsCount": 0,
+   "appGroup": "needs_admin",
+   "appState": "off",
+   "appStateReason": null,
+   "authKind": "bearer",
+   "category": null,
+   "connectionId": null,
+   "credential": null,
+   "description": null,
+   "docsUrl": null,
+   "href": null,
+   "id": "plugin:test.fields",
+   "kind": "plugin",
+   "kindLabel": "Bearer token",
+   "logo": null,
+   "managedClient": false,
+   "mayManage": true,
+   "moduleIds": [
+    "mod_plugin_fields"
+   ],
+   "name": "Fields desk",
+   "ownSignIn": null,
+   "plugin": {
+    "fixed": [],
+    "kinds": [
+     "bearer"
+    ],
+    "platformApp": false,
+    "scopes": [],
+    "settings": [
+     {
+      "asked": null,
+      "choices": null,
+      "credential": false,
+      "default": "https://api.multi.test",
+      "label": "System address",
+      "locked": false,
+      "name": "base_url",
+      "other": null,
+      "perAccount": false,
+      "secret": false
+     },
+     {
+      "asked": null,
+      "choices": null,
+      "credential": false,
+      "default": "2026-10",
+      "label": "API version",
+      "locked": false,
+      "name": "api_version",
+      "other": null,
+      "perAccount": false,
+      "secret": false
+     }
+    ],
+    "signIn": [
+     "team"
+    ],
+    "teamOn": true,
+    "teamVersion": null,
+    "tools": [
+     "fields_search",
+     "fields_find",
+     "fields_post_message",
+     "fields_transfer",
+     "fields_echo"
+    ],
+    "updateAvailable": false,
+    "values": {
+     "api_version": "2026-10",
+     "base_url": "https://api.multi.test"
+    }
+   },
+   "pluginId": "test.fields",
+   "sandboxId": null,
+   "signIn": null,
+   "state": null,
+   "status": null,
+   "toolsAdded": 5,
+   "toolsCount": 5
+  },
+  "page": {
+   "body": {
+    "data": {
+     "accounts": [],
+     "authConfigs": [],
+     "card": {
+      "accountsCount": 0,
+      "appGroup": "needs_admin",
+      "appState": "off",
+      "appStateReason": null,
+      "authKind": "bearer",
+      "category": null,
+      "connectionId": null,
+      "credential": null,
+      "description": null,
+      "docsUrl": null,
+      "href": null,
+      "id": "plugin:test.fields",
+      "kind": "plugin",
+      "kindLabel": "Bearer token",
+      "logo": null,
+      "managedClient": false,
+      "mayManage": true,
+      "moduleIds": [
+       "mod_plugin_fields"
+      ],
+      "name": "Fields desk",
+      "ownSignIn": null,
+      "plugin": {
+       "fixed": [],
+       "kinds": [
+        "bearer"
+       ],
+       "platformApp": false,
+       "scopes": [],
+       "settings": [
+        {
+         "asked": null,
+         "choices": null,
+         "credential": false,
+         "default": "https://api.multi.test",
+         "label": "System address",
+         "locked": false,
+         "name": "base_url",
+         "other": null,
+         "perAccount": false,
+         "secret": false
+        },
+        {
+         "asked": null,
+         "choices": null,
+         "credential": false,
+         "default": "2026-10",
+         "label": "API version",
+         "locked": false,
+         "name": "api_version",
+         "other": null,
+         "perAccount": false,
+         "secret": false
+        }
+       ],
+       "signIn": [
+        "team"
+       ],
+       "teamOn": true,
+       "teamVersion": null,
+       "tools": [
+        "fields_search",
+        "fields_find",
+        "fields_post_message",
+        "fields_transfer",
+        "fields_echo"
+       ],
+       "updateAvailable": false,
+       "values": {
+        "api_version": "2026-10",
+        "base_url": "https://api.multi.test"
+       }
+      },
+      "pluginId": "test.fields",
+      "sandboxId": null,
+      "signIn": null,
+      "state": null,
+      "status": null,
+      "toolsAdded": 5,
+      "toolsCount": 5
+     },
+     "connection": null,
+     "me": {
+      "account": null,
+      "connected": false,
+      "signIns": 0
+     },
+     "peopleCount": 0,
+     "skills": [
+      {
+       "id": "desk-helper",
+       "kind": "agent",
+       "title": "Desk helper"
+      }
+     ],
+     "tools": [
+      {
+       "access": "read",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_search",
+       "title": "Search records",
+       "usedBy": null
+      },
+      {
+       "access": "read",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_find",
+       "title": "Find records by status",
+       "usedBy": null
+      },
+      {
+       "access": "write",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_post_message",
+       "title": "Post a message",
+       "usedBy": null
+      },
+      {
+       "access": "write",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_transfer",
+       "title": "Move money",
+       "usedBy": null
+      },
+      {
+       "access": "read",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_echo",
+       "title": "Echo what was sent",
+       "usedBy": null
+      }
+     ],
+     "usage": []
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "update": {
+   "body": {
+    "data": {
+     "available": false,
+     "digest": null,
+     "headersChanged": false,
+     "installed": {
+      "digest": "<hex>",
+      "version": "0.1.0"
+     },
+     "tools": [],
+     "version": null
+    },
+    "success": true
+   },
+   "status": 200
+  }
+ },
+ "held": {
+  "accounts": {
+   "body": {
+    "data": [
+     {
+      "appId": "plugin:test.fields",
+      "default": true,
+      "id": "<id:ca>",
+      "identity": [],
+      "missingObjects": [],
+      "name": "Fields desk",
+      "own": false,
+      "pointsAt": null,
+      "sandbox": false
+     }
+    ],
+    "success": true
+   },
+   "status": 200
+  },
+  "card": {
+   "accountsCount": 1,
+   "appGroup": "needs_admin",
+   "appState": "needs_sign_in",
+   "appStateReason": "Sign in the team account.",
+   "authKind": "bearer",
+   "category": null,
+   "connectionId": "<id:ca>",
+   "credential": null,
+   "description": null,
+   "docsUrl": null,
+   "href": null,
+   "id": "plugin:test.fields",
+   "kind": "plugin",
+   "kindLabel": "Bearer token",
+   "logo": null,
+   "managedClient": false,
+   "mayManage": true,
+   "moduleIds": [
+    "mod_plugin_fields"
+   ],
+   "name": "Fields desk",
+   "ownSignIn": null,
+   "plugin": {
+    "fixed": [],
+    "kinds": [
+     "bearer"
+    ],
+    "platformApp": false,
+    "scopes": [],
+    "settings": [
+     {
+      "asked": null,
+      "choices": null,
+      "credential": false,
+      "default": "https://api.multi.test",
+      "label": "System address",
+      "locked": false,
+      "name": "base_url",
+      "other": null,
+      "perAccount": false,
+      "secret": false
+     },
+     {
+      "asked": null,
+      "choices": null,
+      "credential": false,
+      "default": "2026-10",
+      "label": "API version",
+      "locked": false,
+      "name": "api_version",
+      "other": null,
+      "perAccount": false,
+      "secret": false
+     }
+    ],
+    "signIn": [
+     "team"
+    ],
+    "teamOn": true,
+    "teamVersion": "0.1.0",
+    "tools": [
+     "fields_search",
+     "fields_find",
+     "fields_post_message",
+     "fields_transfer",
+     "fields_echo"
+    ],
+    "updateAvailable": false,
+    "values": {
+     "api_version": "2026-11",
+     "base_url": "https://api.multi.test"
+    }
+   },
+   "pluginId": "test.fields",
+   "sandboxId": null,
+   "signIn": "team",
+   "state": "not_signed_in",
+   "status": "draft",
+   "toolsAdded": 1,
+   "toolsCount": 5
+  },
+  "page": {
+   "body": {
+    "data": {
+     "accounts": [
+      {
+       "account": null,
+       "actions": [
+        "rename",
+        "sign_in",
+        "delete"
+       ],
+       "configId": null,
+       "configName": null,
+       "default": true,
+       "health": null,
+       "id": "<id:ca>",
+       "identity": [],
+       "kind": "team",
+       "mine": false,
+       "myDefault": null,
+       "name": "Fields desk",
+       "owner": {
+        "kind": "team",
+        "name": "Operations"
+       },
+       "peopleSignedIn": 0,
+       "pointsAt": null,
+       "revision": 2,
+       "rowId": "<id:ca>",
+       "samePlaceAs": null,
+       "sandbox": false,
+       "signIn": "team",
+       "signInValues": [],
+       "state": "not_signed_in",
+       "stateReason": null,
+       "status": "draft",
+       "statusDetail": null,
+       "test": null
+      }
+     ],
+     "authConfigs": [
+      {
+       "accountCount": 1,
+       "canDelete": false,
+       "canEdit": false,
+       "clientId": null,
+       "default": true,
+       "fields": [],
+       "id": "",
+       "name": "Bearer token",
+       "permissions": [],
+       "secretEnds": null,
+       "signInPlace": null,
+       "type": "account"
+      }
+     ],
+     "card": {
+      "accountsCount": 1,
+      "appGroup": "needs_admin",
+      "appState": "needs_sign_in",
+      "appStateReason": "Sign in the team account.",
+      "authKind": "bearer",
+      "category": null,
+      "connectionId": "<id:ca>",
+      "credential": null,
+      "description": null,
+      "docsUrl": null,
+      "href": null,
+      "id": "plugin:test.fields",
+      "kind": "plugin",
+      "kindLabel": "Bearer token",
+      "logo": null,
+      "managedClient": false,
+      "mayManage": true,
+      "moduleIds": [
+       "mod_plugin_fields"
+      ],
+      "name": "Fields desk",
+      "ownSignIn": null,
+      "plugin": {
+       "fixed": [],
+       "kinds": [
+        "bearer"
+       ],
+       "platformApp": false,
+       "scopes": [],
+       "settings": [
+        {
+         "asked": null,
+         "choices": null,
+         "credential": false,
+         "default": "https://api.multi.test",
+         "label": "System address",
+         "locked": false,
+         "name": "base_url",
+         "other": null,
+         "perAccount": false,
+         "secret": false
+        },
+        {
+         "asked": null,
+         "choices": null,
+         "credential": false,
+         "default": "2026-10",
+         "label": "API version",
+         "locked": false,
+         "name": "api_version",
+         "other": null,
+         "perAccount": false,
+         "secret": false
+        }
+       ],
+       "signIn": [
+        "team"
+       ],
+       "teamOn": true,
+       "teamVersion": "0.1.0",
+       "tools": [
+        "fields_search",
+        "fields_find",
+        "fields_post_message",
+        "fields_transfer",
+        "fields_echo"
+       ],
+       "updateAvailable": false,
+       "values": {
+        "api_version": "2026-11",
+        "base_url": "https://api.multi.test"
+       }
+      },
+      "pluginId": "test.fields",
+      "sandboxId": null,
+      "signIn": "team",
+      "state": "not_signed_in",
+      "status": "draft",
+      "toolsAdded": 1,
+      "toolsCount": 5
+     },
+     "connection": {
+      "accountName": "Fields desk",
+      "activity": [
+       {
+        "action": "secret_set",
+        "actor": "Priya Shah",
+        "at": "<datetime>",
+        "detail": {
+         "fields": [],
+         "secrets": [
+          "token"
+         ],
+         "settings": [
+          "baseUrl",
+          "prefix",
+          "testPath"
+         ]
+        }
+       },
+       {
+        "action": "created",
+        "actor": "Priya Shah",
+        "at": "<datetime>",
+        "detail": {
+         "kind": "bearer"
+        }
+       }
+      ],
+      "appId": "plugin:test.fields",
+      "authKind": "bearer",
+      "category": null,
+      "certificate": null,
+      "credentialId": null,
+      "description": null,
+      "docsUrl": null,
+      "health": null,
+      "id": "<id:ca>",
+      "kindLabel": "Bearer token",
+      "mayManage": true,
+      "name": "Fields desk",
+      "people": [],
+      "platformApp": null,
+      "pluginSecrets": {},
+      "pluginSettings": {
+       "api_version": "2026-11",
+       "base_url": "https://api.multi.test"
+      },
+      "redirectUri": null,
+      "revision": 2,
+      "sandbox": false,
+      "secrets": {
+       "clientKey": {
+        "set": false,
+        "setAt": null,
+        "setBy": null
+       },
+       "token": {
+        "set": true,
+        "setAt": "<datetime>",
+        "setBy": "Priya Shah"
+       }
+      },
+      "settings": {
+       "baseUrl": "https://api.multi.test",
+       "prefix": "Bearer",
+       "testPath": "/fields/me"
+      },
+      "signIn": "team",
+      "signedIn": null,
+      "status": "healthy",
+      "statusDetail": null,
+      "teamBackup": false,
+      "teamId": "team_ops",
+      "updatedAt": "<datetime>",
+      "usedBy": []
+     },
+     "me": {
+      "account": null,
+      "connected": false,
+      "signIns": 0
+     },
+     "peopleCount": 0,
+     "skills": [
+      {
+       "id": "desk-helper",
+       "kind": "agent",
+       "title": "Desk helper"
+      }
+     ],
+     "tools": [
+      {
+       "access": "read",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_search",
+       "title": "Search records",
+       "usedBy": null
+      },
+      {
+       "access": "read",
+       "added": false,
+       "askedAtSignIn": false,
+       "name": "fields_find",
+       "title": "Find records by status",
+       "usedBy": null
+      },
+      {
+       "access": "write",
+       "added": false,
+       "askedAtSignIn": false,
+       "name": "fields_post_message",
+       "title": "Post a message",
+       "usedBy": null
+      },
+      {
+       "access": "write",
+       "added": false,
+       "askedAtSignIn": false,
+       "name": "fields_transfer",
+       "title": "Move money",
+       "usedBy": null
+      },
+      {
+       "access": "read",
+       "added": false,
+       "askedAtSignIn": false,
+       "name": "fields_echo",
+       "title": "Echo what was sent",
+       "usedBy": null
+      }
+     ],
+     "usage": []
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "update": {
+   "body": {
+    "data": {
+     "available": false,
+     "digest": "<hex>",
+     "headersChanged": false,
+     "installed": {
+      "digest": "<hex>",
+      "version": "0.1.0"
+     },
+     "tools": [],
+     "version": "0.1.0"
+    },
+    "success": true
+   },
+   "status": 200
+  }
+ },
+ "none": {
+  "accounts": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "App plugin:test.fields was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "card": {
+   "accountsCount": 0,
+   "appGroup": "needs_admin",
+   "appState": "off",
+   "appStateReason": null,
+   "authKind": "bearer",
+   "category": null,
+   "connectionId": null,
+   "credential": null,
+   "description": null,
+   "docsUrl": null,
+   "href": null,
+   "id": "plugin:test.fields",
+   "kind": "plugin",
+   "kindLabel": "Bearer token",
+   "logo": null,
+   "managedClient": false,
+   "mayManage": true,
+   "moduleIds": [
+    "mod_plugin_fields"
+   ],
+   "name": "Fields desk",
+   "ownSignIn": null,
+   "plugin": {
+    "fixed": [],
+    "kinds": [
+     "bearer"
+    ],
+    "platformApp": false,
+    "scopes": [],
+    "settings": [
+     {
+      "asked": null,
+      "choices": null,
+      "credential": false,
+      "default": "https://api.multi.test",
+      "label": "System address",
+      "locked": false,
+      "name": "base_url",
+      "other": null,
+      "perAccount": false,
+      "secret": false
+     },
+     {
+      "asked": null,
+      "choices": null,
+      "credential": false,
+      "default": "2026-10",
+      "label": "API version",
+      "locked": false,
+      "name": "api_version",
+      "other": null,
+      "perAccount": false,
+      "secret": false
+     }
+    ],
+    "signIn": [
+     "team"
+    ],
+    "teamOn": false,
+    "teamVersion": null,
+    "tools": [
+     "fields_search",
+     "fields_find",
+     "fields_post_message",
+     "fields_transfer",
+     "fields_echo"
+    ],
+    "updateAvailable": false,
+    "values": {
+     "api_version": "2026-10",
+     "base_url": "https://api.multi.test"
+    }
+   },
+   "pluginId": "test.fields",
+   "sandboxId": null,
+   "signIn": null,
+   "state": null,
+   "status": null,
+   "toolsAdded": 5,
+   "toolsCount": 5
+  },
+  "page": {
+   "body": {
+    "data": {
+     "accounts": [],
+     "authConfigs": [],
+     "card": {
+      "accountsCount": 0,
+      "appGroup": "needs_admin",
+      "appState": "off",
+      "appStateReason": null,
+      "authKind": "bearer",
+      "category": null,
+      "connectionId": null,
+      "credential": null,
+      "description": null,
+      "docsUrl": null,
+      "href": null,
+      "id": "plugin:test.fields",
+      "kind": "plugin",
+      "kindLabel": "Bearer token",
+      "logo": null,
+      "managedClient": false,
+      "mayManage": true,
+      "moduleIds": [
+       "mod_plugin_fields"
+      ],
+      "name": "Fields desk",
+      "ownSignIn": null,
+      "plugin": {
+       "fixed": [],
+       "kinds": [
+        "bearer"
+       ],
+       "platformApp": false,
+       "scopes": [],
+       "settings": [
+        {
+         "asked": null,
+         "choices": null,
+         "credential": false,
+         "default": "https://api.multi.test",
+         "label": "System address",
+         "locked": false,
+         "name": "base_url",
+         "other": null,
+         "perAccount": false,
+         "secret": false
+        },
+        {
+         "asked": null,
+         "choices": null,
+         "credential": false,
+         "default": "2026-10",
+         "label": "API version",
+         "locked": false,
+         "name": "api_version",
+         "other": null,
+         "perAccount": false,
+         "secret": false
+        }
+       ],
+       "signIn": [
+        "team"
+       ],
+       "teamOn": false,
+       "teamVersion": null,
+       "tools": [
+        "fields_search",
+        "fields_find",
+        "fields_post_message",
+        "fields_transfer",
+        "fields_echo"
+       ],
+       "updateAvailable": false,
+       "values": {
+        "api_version": "2026-10",
+        "base_url": "https://api.multi.test"
+       }
+      },
+      "pluginId": "test.fields",
+      "sandboxId": null,
+      "signIn": null,
+      "state": null,
+      "status": null,
+      "toolsAdded": 5,
+      "toolsCount": 5
+     },
+     "connection": null,
+     "me": {
+      "account": null,
+      "connected": false,
+      "signIns": 0
+     },
+     "peopleCount": 0,
+     "skills": [
+      {
+       "id": "desk-helper",
+       "kind": "agent",
+       "title": "Desk helper"
+      }
+     ],
+     "tools": [
+      {
+       "access": "read",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_search",
+       "title": "Search records",
+       "usedBy": null
+      },
+      {
+       "access": "read",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_find",
+       "title": "Find records by status",
+       "usedBy": null
+      },
+      {
+       "access": "write",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_post_message",
+       "title": "Post a message",
+       "usedBy": null
+      },
+      {
+       "access": "write",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_transfer",
+       "title": "Move money",
+       "usedBy": null
+      },
+      {
+       "access": "read",
+       "added": true,
+       "askedAtSignIn": false,
+       "name": "fields_echo",
+       "title": "Echo what was sent",
+       "usedBy": null
+      }
+     ],
+     "usage": []
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "update": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Fields desk is not turned on for this team.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  }
+ }
+}
