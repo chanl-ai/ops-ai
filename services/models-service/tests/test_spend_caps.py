@@ -155,3 +155,26 @@ async def test_a_stop_right_after_the_provider_answered_still_records_the_spend(
             await lock.rollback()
         await lock.close()
     assert await models.spent(key_id) > 0, "the stop dropped the spend the provider charged"
+
+
+async def test_a_settle_that_fails_still_leaves_the_calls_row(models: Models) -> None:
+    """The settle's transaction fails after the provider answered: the call still has its one row, an error with the
+    usage the provider charged, so the log never shows fewer calls than were made."""
+    key_id, secret = await models.key(budget="5")
+    failed: list[bool] = []
+
+    def fail_once() -> None:
+        if not failed:
+            failed.append(True)
+            raise RuntimeError("the database went away")
+
+    remove = _on_spend_write(models, fail_once)
+    try:
+        with contextlib.suppress(RuntimeError):
+            await models.complete(secret, **{"X-Tenant-Id": "local"})
+    finally:
+        remove()
+    assert failed, "the call never reached its settle"
+    rows = await models.calls(key_id)
+    assert [(r["outcome"], r["reason"]) for r in rows] == [("error", "settle_failed")], rows
+    assert rows[0]["inputTokens"] > 0, rows

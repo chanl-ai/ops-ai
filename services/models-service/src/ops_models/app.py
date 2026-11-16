@@ -929,6 +929,12 @@ def create_models_app(
                     output_tokens=output_tokens,
                     cost=str(spend),
                 )
+                # The call keeps its one row, an error with what the provider charged, in a transaction of its own.
+                try:
+                    charged = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+                    await self.log("error", "settle_failed", **charged, **self.version)
+                except Exception:
+                    log.exception("model_call_row_lost", key_id=self.key.id, tenant_id=self.tenant)
                 raise
 
         async def broke(self, reason: str) -> None:
@@ -1119,7 +1125,8 @@ def create_models_app(
                         pending = await anext(chunks, None)
                     # Spend and the log row are written before the client sees the end: once it has [DONE] it
                     # disconnects, and Starlette cancels whatever this generator is still awaiting. The settle is
-                    # shielded, so it runs to its end even then.
+                    # shielded, so it runs to its end even then, and writes the call's row whether it succeeds or
+                    # fails: marked settled before it starts, so a cancel or its failure adds no second row.
                     settled = True
                     await settle(usage.input_tokens, usage.output_tokens)
                     yield "data: [DONE]\n\n"
