@@ -264,9 +264,13 @@ def _on_error(context: ExceptionContext) -> None:
 async def _end(state: _Request, *, commit: bool) -> None:
     conn, tx = state.conn, state.tx
     state.closed = True
-    if conn is None or tx is None:
+    if conn is None:
         return
     conn.sync_connection.info.pop(_STATE, None)  # pyright: ignore[reportOptionalMemberAccess]
+    if tx is None:
+        # BEGIN failed after the connection was taken: it goes back to the pool, or the request leaks it.
+        await conn.close()
+        return
     try:
         if commit:
             # Cleared before the commit, so a transaction commits once.

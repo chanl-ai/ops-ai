@@ -1,8 +1,8 @@
-"""ops_store.isolation, by failure mode: a transaction that does not carry the caller's tenant, team and scope;
-a setting that outlives its transaction (SQL Server keeps session context on the pooled connection); a statement with
-no context that reads anyway; a widening that names no reason or leaves no log line; a widening that loses the caller's
-tenant. The live cases run on the PostgreSQL conformance database; SQL Server's statements are checked as sent, and run
-live."""
+"""ops_store.isolation, by failure mode: a transaction that does not carry the caller's tenant, team and scope; a
+setting that outlives its transaction (SQL Server keeps session context on the pooled connection); a statement with
+no context that reads anyway; a widening that names no reason or leaves no log line; a widening that loses the
+caller's tenant; a request whose BEGIN fails leaving its connection checked out. The live cases run on the PostgreSQL
+conformance database; SQL Server's statements are checked as sent, and run live."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any, cast
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.dialects import mssql
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -52,6 +52,19 @@ async def test_the_settings_end_with_the_transaction_even_on_error(engine: Async
             raise RuntimeError("boom")
     async with engine.connect() as c:
         assert all(v in (None, "") for v in (await c.execute(READ)).one())
+
+
+async def test_a_request_whose_begin_fails_returns_its_connection(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refused(_self: AsyncConnection) -> Any:
+        raise ConnectionResetError("the server closed the connection at BEGIN")
+
+    monkeypatch.setattr(AsyncConnection, "begin", refused)
+    with isolation.scope("tenant-a", "team-a"), pytest.raises(ConnectionResetError):
+        async with isolation.request_transaction(), isolation.isolated_tx(engine):
+            pass
+    assert cast(sa.QueuePool, engine.sync_engine.pool).checkedout() == 0
 
 
 async def test_no_context_raises_before_any_statement(engine: AsyncEngine) -> None:
