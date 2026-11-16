@@ -51,6 +51,8 @@ THREADS: dict[str, tuple[str, str, dict[str, Any]]] = {
     "th_vera_started_for_otto": (CHAT, "team_ops", {"ownerEmail": VERA, "startedFor": OTTO}),
     # startedFor is not server-owned metadata, so a caller may store any JSON there; this one holds an @.
     "th_started_for_list": (CHAT, "team_ops", {"startedFor": [VERA]}),
+    # Longer than SQL Server's JSON_VALUE reads (4000 characters): still a person's thread, never the team's.
+    "th_started_for_long": (CHAT, "team_ops", {"startedFor": "x" * 4000 + VERA}),
     "th_lending": ("refunds", "team_lending", {"ownerEmail": "lena@harborpine.example"}),
 }
 TEAM_ROWS = ["th_workflow", "th_other_workflow", "th_agent", "th_chat_nobody", "th_chat_not_an_email"]
@@ -150,6 +152,7 @@ READERS: list[tuple[str, dict[str, str], int, list[str]]] = [
             "th_vera_started_for_otto",
             # Its person is the list's text, which matches no one's email, so only a reader of every chat sees it.
             "th_started_for_list",
+            "th_started_for_long",
         ],
     ),
     ("key for a workflow", key("wf"), 200, ["th_workflow"]),

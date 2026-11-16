@@ -405,6 +405,44 @@ def _json_fragment_other(e: json_fragment, c: SQLCompiler, **kw: Any) -> str:
     return f"json_extract({c.process(e.clauses.clauses[0], **kw)}, '$.{_key_of(e)}')"
 
 
+class JsonTextLength(FunctionElement[int]):
+    """The length of a top-level string field of a JSON column, NULL when the field is absent, JSON null or not a
+    string. SQL Server's JSON_VALUE answers NULL for a string over 4000 characters, so a check that reads it cannot
+    tell a long string from no string; this reads the whole value (OPENJSON) to tell them apart."""
+
+    type = sa.Integer()
+    inherit_cache = True
+
+    def __init__(self, column: sa.ColumnElement[Any], key: str) -> None:
+        super().__init__(column, _checked_key(key))
+
+
+@compiles(JsonTextLength, "postgresql")
+def _json_text_length_pg(e: JsonTextLength, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    col_sql, key_sql = c.process(col, **kw), c.process(key, **kw)
+    return (
+        f"(CASE WHEN json_typeof(CAST(({col_sql} -> {key_sql}) AS JSON)) = 'string' "
+        f"THEN length({col_sql} ->> {key_sql}) END)"
+    )
+
+
+@compiles(JsonTextLength, "mssql")
+def _json_text_length_mssql(e: JsonTextLength, c: SQLCompiler, **kw: Any) -> str:
+    col, key = e.clauses.clauses
+    j = sa.func.openjson(col).table_valued(sa.column("key"), sa.column("value"), sa.column("type")).alias("j")
+    # LEN drops trailing spaces; the appended character keeps them counted. Type 1 is a JSON string.
+    size = sa.func.len(j.c.value + sa.literal_column("N'.'")) - 1
+    whole = sa.select(sa.func.max(size)).where(j.c.key == key, j.c.type == sa.literal_column("1")).scalar_subquery()
+    return c.process(whole, **kw)
+
+
+@compiles(JsonTextLength)
+def _json_text_length_other(e: JsonTextLength, c: SQLCompiler, **kw: Any) -> str:
+    col, key = c.process(e.clauses.clauses[0], **kw), _key_of(e)
+    return f"(CASE WHEN json_type({col}, '$.{key}') = 'text' THEN length(json_extract({col}, '$.{key}')) END)"
+
+
 class json_array_has(ColumnElement[bool]):  # noqa: N801
     """Rows whose JSON array field `key` holds the string `value`."""
 

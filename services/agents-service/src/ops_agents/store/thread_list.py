@@ -9,7 +9,10 @@ request (`ThreadReader`) and the person a thread names is worked out per row her
 - a person only when that text holds an `@`; a `startedFor` that is an array or object holding an `@` names a person
   nobody is (its text matches no email), so only a reader of every chat reads that thread;
 - `chat` or a legacy `owner` name make a thread a person's even when no email names one: its owner is then the
-  `ownerEmail` text, else the reader whose name `owner` holds.
+  `ownerEmail` text, else the reader whose name `owner` holds;
+- a text `startedFor` over JSON_TEXT_MAX characters (with no `ownerEmail`), which SQL Server's JSON_VALUE reads as
+  absent, names a person nobody is, and a legacy `owner` that long still makes the thread a person's, so a text too
+  long to compare never widens who reads the thread.
 
 Emails match stripped and lower-cased on both sides, as `ops_access.can` compares an owner. A name matches exactly:
 both sides end in a sentinel, since SQL Server's `=` ignores trailing spaces under any collation."""
@@ -22,7 +25,7 @@ from typing import Any, Literal
 import sqlalchemy as sa
 
 from ops_service_kit.listing import ListParams
-from ops_store.dialect import json_fragment, json_text
+from ops_store.dialect import JsonTextLength, json_fragment, json_text
 from ops_store.listing import ListPage, list_page
 from ops_store.team_scope import team_visible
 
@@ -76,10 +79,15 @@ def readable(reader: ThreadReader) -> sa.ColumnElement[bool]:
     named = sa.case((owner_email.is_not(None), owner_email), else_=sa.case((nested, None), else_=started_for))
     person = sa.case((named.like("%@%"), named), else_=None)
     # Each term below is TRUE or FALSE, never NULL, as the NOTs that use them need.
-    nobody = sa.and_(owner_email.is_(None), nested, sa.func.coalesce(fragment, "").like("%@%"))
+    long_started_for = sa.func.coalesce(JsonTextLength(t.c.meta, "startedFor"), 0) > JSON_TEXT_MAX
+    long_owner = sa.func.coalesce(JsonTextLength(t.c.meta, "owner"), 0) > JSON_TEXT_MAX
+    nobody = sa.and_(
+        owner_email.is_(None),
+        sa.or_(sa.and_(nested, sa.func.coalesce(fragment, "").like("%@%")), long_started_for),
+    )
     chat = sa.func.coalesce(json_text(t.c.meta, "chat"), "").in_(("true", "1"))
     legacy = json_text(t.c.meta, "owner")
-    flagged = sa.or_(chat, sa.func.coalesce(legacy, "") != "")
+    flagged = sa.or_(chat, sa.func.coalesce(legacy, "") != "", long_owner)
     teams = sa.and_(person.is_(None), sa.not_(nobody), sa.not_(flagged))
     allowed: list[sa.ColumnElement[bool]] = [t.c.graph != CHAT_GRAPH, teams]
     if reader.chat == "own":
