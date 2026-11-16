@@ -116,6 +116,12 @@ def move_sql(source: str, target: str, which: str) -> list[str]:
 
 def upgrade() -> None:
     dialect = op.get_context().dialect.name
+    # No call lands in the log while the spend is totalled and the tenant-less calls move: the step is one
+    # transaction, so the lock holds to its end. models-service is stopped for it (docs/deploy/database.md).
+    if dialect == "postgresql":
+        op.execute("LOCK TABLE model_call_log IN EXCLUSIVE MODE")
+    elif dialect == "mssql":
+        op.execute("SELECT TOP (0) id FROM model_call_log WITH (TABLOCKX, HOLDLOCK)")
     op.create_table("model_call_refusals", *_call_columns())
     op.create_index("ix_model_call_refusals_key_id", "model_call_refusals", ["key_id"])
     op.create_index("ix_model_call_refusals_thread_id", "model_call_refusals", ["thread_id"])

@@ -106,3 +106,35 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
     finally:
         command.upgrade(cfg, "head")
         asyncio.run(_sql(database_url, [("DELETE FROM model_call_log WHERE key_id = :k", {"k": key})]))
+
+
+def test_a_call_an_old_pod_is_writing_during_the_move_still_counts_toward_the_cap(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The backfill totals a key's spend from the log: a call inserted, not yet committed, when the migration starts
+    is counted, because the migration waits for the log's writers before it reads."""
+    monkeypatch.setenv("OPS_DATABASE_URL", database_url)
+    cfg = Config(str(ROOT / "alembic.ini"))
+    key, now = f"workflow:lock-{uuid4().hex[:8]}", datetime.now(UTC)
+    row = {"id": f"mc_lk_{uuid4().hex[:10]}", "k": key, "tenant": "t_a", "outcome": "ok", "run": None, "at": now}
+
+    async def race() -> None:
+        engine = create_async_engine(database_url)
+        async with engine.connect() as c:
+            await c.begin()
+            async with past_the_call_log_policy(c):
+                await c.execute(sa.text(INSERT), {**row, "cost": Decimal("0.40")})
+            migrating = asyncio.ensure_future(asyncio.to_thread(command.upgrade, cfg, "head"))
+            await asyncio.sleep(1.0)  # the migration has started and reaches the log
+            await c.commit()
+            await asyncio.wait_for(migrating, 60)
+        await engine.dispose()
+
+    command.downgrade(cfg, BEFORE)
+    try:
+        asyncio.run(race())
+        q = "SELECT amount FROM model_key_spend WHERE key_id = :k AND period LIKE 'day:%'"
+        assert asyncio.run(_sql(database_url, [(q, {"k": key})]))[0] == [(Decimal("0.4"),)], "the call was missed"
+    finally:
+        command.upgrade(cfg, "head")
+        asyncio.run(_sql(database_url, [("DELETE FROM model_call_log WHERE key_id = :k", {"k": key})]))

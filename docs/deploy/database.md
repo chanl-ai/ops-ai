@@ -91,6 +91,16 @@ with the name and columns the revision gives, for example
 `CREATE INDEX CONCURRENTLY ix_engine_runs_workflow_created ON engine_runs (tenant_id, workflow_id, created_at)`;
 the upgrade then finds it and goes on.
 
+### A revision that moves rows: stop the service first
+
+Some revisions move or total rows that the running release still writes. Stop that service, run the upgrade, then
+start the new release. Pods of the old release left running would write rows the step does not see, and after it
+they are refused.
+
+| Revision | Stop | Why |
+|---|---|---|
+| models 0012 | models-service | It locks `model_call_log` against writes for the step, totals each key's spend per day and run from it, moves the calls that name no tenant to `model_call_refusals`, and then forces the tenant policy on the log. An old pod's insert names no tenant setting, so the policy refuses it and its completion answers 500 until the pod is replaced |
+
 ## Verify: drift
 
 ```
