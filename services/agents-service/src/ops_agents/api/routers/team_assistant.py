@@ -6,6 +6,9 @@ list, read as this team); the assistant is the team's default agent, or its Ops 
 change is a new version of the assistant, recorded as the admin's and published at once unless the team's publish
 policy asks for a review, which the answer says. A draft someone else is editing, or an open review, is never stepped
 over: the answer says the assistant is waiting and nothing changes.
+
+No request transaction (`Tx`): the route reads tools-service's operations and the plugins' templates between its
+reads and writes, so each store call takes and returns its own connection and none is held while tools-service answers.
 """
 
 from __future__ import annotations
@@ -17,9 +20,8 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Conflict, ServiceUnavailable
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
@@ -44,7 +46,7 @@ log = get_logger("ops_agents.team_assistant")
 GiveState = Literal["given", "in_review", "waiting", "already", "none"]
 
 
-class AppToolsIn(WireModel):
+class AppToolsIn(In):
     # The app's tool modules (its card's moduleIds), whose added read operations the assistant gets.
     module_ids: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(min_length=1, max_length=20)
 

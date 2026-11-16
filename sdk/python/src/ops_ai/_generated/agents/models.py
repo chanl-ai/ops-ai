@@ -811,7 +811,7 @@ class FormFields(TypedDict, closed=True):
     takesFiles: NotRequired[bool | None]
 
 
-class FormIn(TypedDict):
+class FormIn(TypedDict, closed=True):
     afterText: NotRequired[str]
     dailyCap: NotRequired[int]
     description: NotRequired[str]
@@ -820,7 +820,7 @@ class FormIn(TypedDict):
     title: NotRequired[str | None]
 
 
-class FormPatch(TypedDict):
+class FormPatch(TypedDict, closed=True):
     afterText: NotRequired[str | None]
     dailyCap: NotRequired[int | None]
     paused: NotRequired[bool | None]
@@ -1877,7 +1877,7 @@ class StoryTask(TypedDict, closed=True):
     title: str
 
 
-class SubmitIn(TypedDict):
+class SubmitIn(TypedDict, closed=True):
     values: NotRequired[dict[str, Any]]
 
 

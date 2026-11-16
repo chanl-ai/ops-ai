@@ -9717,6 +9717,7 @@
         "type": "object"
       },
       "FormIn": {
+        "additionalProperties": false,
         "properties": {
           "afterText": {
             "default": "",
@@ -9770,6 +9771,7 @@
         "type": "object"
       },
       "FormPatch": {
+        "additionalProperties": false,
         "properties": {
           "afterText": {
             "anyOf": [
@@ -18792,6 +18794,7 @@
         "type": "object"
       },
       "SubmitIn": {
+        "additionalProperties": false,
         "properties": {
           "values": {
             "additionalProperties": true,
@@ -23785,6 +23788,7 @@
     },
     "/reviews": {
       "get": {
+        "description": "Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut\nafter merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and\nworkflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's\npending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts\nand facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows\n(Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of\nthe rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy.",
         "operationId": "reviews_list_reviews",
         "parameters": [
           {
@@ -41472,6 +41476,26 @@
         "operationId": "agents_knowledge_usage",
         "parameters": [
           {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -56529,7 +56553,7 @@
     },
     "/v1/workflows": {
       "get": {
-        "description": "The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start\nrun), `takesFiles` those whose start form takes a file (Files' \"Start a workflow with this file\"); each row's\n`start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,\nthe total and the status counts are taken, since the console no longer shows them.",
+        "description": "The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start\nrun), `takesFiles` those whose start form takes a file (Files' \"Start a workflow with this file\"); each row's\n`start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,\nthe total and the status counts are taken, since the console no longer shows them. Both engines' rows are joined\nhere, so the list sorts and pages in memory: by the sort column, then the id.",
         "operationId": "workflows_list_workflows",
         "parameters": [
           {
@@ -56599,6 +56623,18 @@
               ],
               "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Status",
+              "type": "array"
             }
           },
           {
@@ -62026,6 +62062,7 @@
     },
     "/v1/workflows/{workflow_id}/runs": {
       "get": {
+        "description": "The workflow's runs, most recently changed first, a page at a time.",
         "operationId": "workflows_list_runs",
         "parameters": [
           {
@@ -62058,6 +62095,18 @@
               "minimum": 1,
               "title": "Pagesize",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Status",
+              "type": "array"
             }
           },
           {

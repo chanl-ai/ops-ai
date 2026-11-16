@@ -45,7 +45,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Reviews */
+        /**
+         * List Reviews
+         * @description Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut
+         *     after merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and
+         *     workflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's
+         *     pending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts
+         *     and facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows
+         *     (Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of
+         *     the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy.
+         */
         get: operations["reviews_list_reviews"];
         put?: never;
         post?: never;
@@ -2867,7 +2876,8 @@ export interface paths {
          * @description The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
          *     run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
          *     `start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,
-         *     the total and the status counts are taken, since the console no longer shows them.
+         *     the total and the status counts are taken, since the console no longer shows them. Both engines' rows are joined
+         *     here, so the list sorts and pages in memory: by the sort column, then the id.
          */
         get: operations["workflows_list_workflows"];
         put?: never;
@@ -3326,7 +3336,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Runs */
+        /**
+         * List Runs
+         * @description The workflow's runs, most recently changed first, a page at a time.
+         */
         get: operations["workflows_list_runs"];
         put?: never;
         post?: never;
@@ -20750,7 +20763,9 @@ export interface operations {
     };
     agents_knowledge_usage: {
         parameters: {
-            query?: never;
+            query?: {
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -28757,6 +28772,7 @@ export interface operations {
                 search?: string | null;
                 sortBy?: string | null;
                 sortOrder?: "asc" | "desc";
+                status?: string[];
                 startable?: boolean;
                 takesFiles?: boolean;
                 engine?: "all" | "current";
@@ -31688,6 +31704,7 @@ export interface operations {
             query?: {
                 page?: number;
                 pageSize?: number;
+                status?: string[];
             };
             header?: never;
             path: {

@@ -269,7 +269,9 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/knowledge-usage",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "ids"
+    ],
     "stream": false
   },
   "agents_list_agents": {
@@ -1977,7 +1979,8 @@ export const agentsOperations = {
     ],
     "query": [
       "page",
-      "pageSize"
+      "pageSize",
+      "status"
     ],
     "stream": false
   },
@@ -2004,6 +2007,7 @@ export const agentsOperations = {
       "search",
       "sortBy",
       "sortOrder",
+      "status",
       "startable",
       "takesFiles",
       "engine"

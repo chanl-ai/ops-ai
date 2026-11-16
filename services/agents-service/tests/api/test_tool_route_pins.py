@@ -5,10 +5,13 @@ Regenerate the pins only for an intended change: `AGENTS_REPIN=1` writes what th
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy import event
+from sqlalchemy.pool import Pool
 
 from ops_agents.api.agent_registry import SEED_TEAM
 from ops_agents.api.auth import DEV_PASSWORD, DEV_TOTP
@@ -80,3 +83,33 @@ async def test_the_tool_and_step_up_routes_keep_every_key_value_and_error_object
         r = await client.post(path, json=body)
         seen[name] = {"status": r.status_code, "keys": sorted(r.json()["data"])}
     compare(seen, FIXTURES / "reply-pins-tool-routes.json")
+
+
+# (method, path, body, connections the request checks out). One: the route answers in the request transaction. Zero: it
+# reads nothing from the database. More: it calls another service, so each read takes and returns its own connection
+# and none is held while the other service answers.
+CHECKOUTS: list[tuple[str, str, dict[str, Any] | None, int]] = [
+    ("POST", "/v1/team-assistant/app-tools", {"moduleIds": ["mod_nothing"]}, 6),
+]
+
+
+async def test_each_route_checks_out_the_connections_it_should(client: AsyncClient) -> None:
+    request_task = asyncio.current_task()
+    counted: list[int] = []
+
+    def checked_out(*_: object) -> None:
+        # The app's loops check out connections too; only the request's own task counts.
+        if asyncio.current_task() is request_task:
+            counted[-1] += 1
+
+    event.listen(Pool, "checkout", checked_out)
+    seen: list[tuple[str, int]] = []
+    try:
+        for method, path, body, _ in CHECKOUTS:
+            counted.append(0)
+            r = await client.request(method, path, json=body)
+            assert r.status_code < 300, r.text
+            seen.append((path, counted[-1]))
+    finally:
+        event.remove(Pool, "checkout", checked_out)
+    assert seen == [(p, n) for _, p, _, n in CHECKOUTS], seen

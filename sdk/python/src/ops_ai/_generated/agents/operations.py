@@ -223,7 +223,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/knowledge-usage",
         "pathParams": [],
-        "query": [],
+        "query": ["ids"],
         "stream": False,
     },
     "agents_list_agents": {
@@ -1573,7 +1573,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows/{workflow_id}/runs",
         "pathParams": ["workflow_id"],
-        "query": ["page", "pageSize"],
+        "query": ["page", "pageSize", "status"],
         "stream": False,
     },
     "workflows_list_versions": {
@@ -1591,7 +1591,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "startable", "takesFiles", "engine"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "status", "startable", "takesFiles", "engine"],
         "stream": False,
     },
     "workflows_move_pointer": {
@@ -2470,9 +2470,9 @@ class Operations:
             SERVICE, OPERATIONS["agents_set_guardrail_status"], {"guardrail_id": guardrail_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def agents_knowledge_usage(self) -> list[KnowledgeUsage]:
+    def agents_knowledge_usage(self, *, ids: list[str] | None = None) -> list[KnowledgeUsage]:
         "Knowledge Usage"
-        return self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
     def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
         "List Memories"
@@ -2930,6 +2930,7 @@ class Operations:
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        status: list[str] | None = None,
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
@@ -2945,6 +2946,7 @@ class Operations:
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
+                "status": status,
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
@@ -3111,14 +3113,19 @@ class Operations:
         )  # type: ignore[no-any-return]
 
     def workflows_list_runs(
-        self, workflow_id: str, *, page: int | None = None, page_size: int | None = None
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        status: list[str] | None = None,
     ) -> ListResultWorkflowRun:
         "List Runs"
         return self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_runs"],
             {"workflow_id": workflow_id},
-            {"page": page, "pageSize": page_size},
+            {"page": page, "pageSize": page_size, "status": status},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3834,9 +3841,9 @@ class AsyncOperations:
             SERVICE, OPERATIONS["agents_set_guardrail_status"], {"guardrail_id": guardrail_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def agents_knowledge_usage(self) -> list[KnowledgeUsage]:
+    async def agents_knowledge_usage(self, *, ids: list[str] | None = None) -> list[KnowledgeUsage]:
         "Knowledge Usage"
-        return await self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
     async def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
         "List Memories"
@@ -4308,6 +4315,7 @@ class AsyncOperations:
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        status: list[str] | None = None,
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
@@ -4323,6 +4331,7 @@ class AsyncOperations:
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
+                "status": status,
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
@@ -4507,14 +4516,19 @@ class AsyncOperations:
         )  # type: ignore[no-any-return]
 
     async def workflows_list_runs(
-        self, workflow_id: str, *, page: int | None = None, page_size: int | None = None
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        status: list[str] | None = None,
     ) -> ListResultWorkflowRun:
         "List Runs"
         return await self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_runs"],
             {"workflow_id": workflow_id},
-            {"page": page, "pageSize": page_size},
+            {"page": page, "pageSize": page_size, "status": status},
             {},
             None,
         )  # type: ignore[no-any-return]
