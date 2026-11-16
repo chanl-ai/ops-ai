@@ -146,3 +146,22 @@ async def test_the_list_takes_the_shared_list_contract(client: Client) -> None: 
         assert sorted(f["id"] for f in picked["data"]) == sorted([ids[0], ids[2]])
         capped = _data(await _list(c, pageSize=500))
         assert capped["pagination"]["pageSize"] == 50
+
+
+async def test_files_uploaded_at_the_same_moment_page_without_repeats_or_gaps(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+) -> None:
+    """A batch import stores many files in one second; the order ends with the id, so each page holds the next ones."""
+    async with client() as c:
+        ids = [await _stored(c, f"import-{i}.pdf", PDF + bytes([i])) for i in range(5)]
+        same = datetime(2026, 11, 2, 9, 30, tzinfo=UTC)
+        async with engine.begin() as conn:
+            await conn.execute(sa.update(files_table).where(files_table.c.id.in_(ids)).values(uploaded_at=same))
+        for order in ("desc", "asc"):
+            seen = [
+                row["id"]
+                for page in (1, 2, 3)
+                for row in _data(await _list(c, page=page, sortBy="uploadedAt", sortOrder=order))["data"]
+            ]
+            assert seen == sorted(ids, reverse=order == "desc"), order
