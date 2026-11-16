@@ -131,6 +131,7 @@ def rises(root: Path, began: str, pathspecs: list[str], parse: Parse = rows) -> 
         return []
     out: list[str] = list_rises(root, began)
     shas = _git(root, "log", "--format=%H", f"{began}..HEAD", "--", *pathspecs).stdout.split()
+    seen: set[tuple[str, str]] = set()
     for sha in reversed(shas):
         changed = _git(root, "diff-tree", "--no-commit-id", "--name-only", "-r", sha, "--", *pathspecs).stdout.split()
         for name in changed:
@@ -138,7 +139,29 @@ def rises(root: Path, began: str, pathspecs: list[str], parse: Parse = rows) -> 
             after = _git(root, "show", f"{sha}:{name}")
             now = parse(after.stdout) if not after.returncode else Counter[str]()
             was = parse(before.stdout) if not before.returncode else Counter[str]()
-            out += [f"{sha[:8]} raises {name}: `{row}`" for row in raised(was, now)]
+            for row in raised(was, now):
+                out.append(f"{sha[:8]} raises {name}: `{row}`")
+                seen.add((name, row.rsplit(" (", 1)[0]))
+    return out + net_rises(root, began, pathspecs, parse, seen)
+
+
+def net_rises(root: Path, began: str, pathspecs: list[str], parse: Parse, seen: set[tuple[str, str]]) -> list[str]:
+    """The rows the whole branch raised: the merge base's files against HEAD's, whatever shape its commits have.
+    `diff-tree` prints nothing for a merge commit, so a rise made in the merge itself is found only here. A row a commit
+    already reported is not repeated."""
+    base = _git(root, "merge-base", began, "HEAD").stdout.strip() or began
+    head = _git(root, "rev-parse", "HEAD").stdout.strip()
+    out: list[str] = []
+    for name in _git(root, "diff", "--name-only", base, "HEAD", "--", *pathspecs).stdout.split():
+        before = _git(root, "show", f"{base}:{name}")
+        after = _git(root, "show", f"HEAD:{name}")
+        now = parse(after.stdout) if not after.returncode else Counter[str]()
+        was = parse(before.stdout) if not before.returncode else Counter[str]()
+        out += [
+            f"{head[:8]} raises {name} (net of the branch): `{row}`"
+            for row in raised(was, now)
+            if (name, row.rsplit(" (", 1)[0]) not in seen
+        ]
     return out
 
 

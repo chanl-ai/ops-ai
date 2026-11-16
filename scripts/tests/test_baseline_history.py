@@ -81,3 +81,31 @@ def test_editing_the_maintainers_list_is_a_rise(tmp_path: Path, monkeypatch: pyt
     (tmp_path / ".github/standards-maintainers.txt").write_text(f"{h.login_hash('owner')}\n{h.login_hash('me')}\n")
     _git(tmp_path, "commit", "-qam", "list myself")
     assert any("standards-maintainers.txt" in p for p in h.problems(tmp_path, began, ["sites"]))
+
+
+def test_a_rise_made_inside_a_merge_commit_is_found_from_the_net_effect_of_the_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`diff-tree` prints nothing for a merge commit, so a row raised and a file added in the merge itself gave no rise.
+    The base's tree against the head's does not depend on how the commits are shaped."""
+    began = _repo(tmp_path)
+    main = _git(tmp_path, "rev-parse", "--abbrev-ref", "HEAD")
+    _git(tmp_path, "checkout", "-q", "-b", "side")
+    (tmp_path / "other.txt").write_text("side\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "side work")
+    _git(tmp_path, "checkout", "-q", main)
+    (tmp_path / "other2.txt").write_text("main\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "main work")
+    _git(tmp_path, "merge", "-q", "--no-commit", "--no-ff", "side")
+    (tmp_path / "sites/a.txt").write_text("# header\n9 raw a.py\n")
+    (tmp_path / "sites/b.txt").write_text("1 raw b.py\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "merge side")
+    monkeypatch.setenv(h.REVIEW_ENV, "required")
+    found = h.problems(tmp_path, began, ["sites"])
+    assert any("raw a.py (2 -> 9)" in p for p in found), found
+    assert any("raw b.py (0 -> 1)" in p for p in found), found
+    monkeypatch.setenv(h.REVIEW_ENV, "approved")
+    assert h.problems(tmp_path, began, ["sites"]) == []
