@@ -25,9 +25,9 @@ from the `team.created` event, with no dev seed. Its assistant then answers from
 | # | Step | Expected |
 |---|---|---|
 | 1 | Wanjiru (workspace admin) makes the Claims desk team, with Priya as its admin | 201 |
-| 2 | Read the team's Apps cards and default chat agent, without opening the team first | four built-in cards; the default is `ag_ops_<team>` |
+| 2 | Read the team's Apps cards and default chat agent, without opening the team first | four built-in cards; the default is the team's Ops Assistant (`ag_ops_` and a digest of tenant and team) |
 | 3 | A person of the team makes a knowledge base, uploads a chargeback rule and syncs it; uploads a handover note to Files | the source indexes the rule |
-| 4 | Start a chat with no agent named; ask the assistant to call `search_knowledge` | the thread's agent is `ag_ops_<team>`; the call returns the rule through the gateway |
+| 4 | Start a chat with no agent named; ask the assistant to call `search_knowledge` | the thread's agent is that default; the call returns the rule through the gateway |
 | 5 | Ask it to call `read_file` on the handover note | the call returns the note's text |
 
 ## Acceptance layers

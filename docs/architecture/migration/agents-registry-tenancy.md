@@ -67,6 +67,14 @@ row.
   from its versions; `deployments` PK `(tenant_id, id)`; `channel_messages` `(tenant_id, deployment_id, message_key)`;
   `channel_cursors` `(tenant_id, deployment_id)`; `registry_workflows` `(tenant_id, id)`; `graph_versions` PK
   `(tenant_id, name, version)` and digest unique `(tenant_id, digest)`.
+- Agents keep the key `id`. Every id derived from fixed inputs includes the tenant, so two tenants never derive one id
+  and one tenant's `go_live` cannot replace another's catalogue entry: a team's Ops Assistant is made as `ag_ops_` and
+  24 hex of a SHA-256 of tenant and team (`api/ops_tools.py` `ops_assistant_id`). An assistant made earlier keeps its
+  `ag_ops_<team>` id: `assistant_id` looks the team's assistant up in the caller's tenant by either id with that team
+  as owner first and derives the new id only to create one; the start-up catch-up accepts either. Seeded agents keep
+  their seed-file ids, because seeds load only into `local` and no other path creates an agent with a chosen id
+  (creates take random `ag_` ids). The catalogue stays keyed by id; the two-tenant test is in
+  `tests/api/test_registry_tenant_catalogue.py`.
 - Lookups before a tenant is known: widgets are safe (the mint key or session names the tenant and deployment); public
   forms use `form_links`, which has a tenant; channel deployments have no unauthenticated address;
   `/v1/workflows/refs` already requires a tenant.

@@ -45,3 +45,19 @@ async def test_a_wrapper_run_naming_another_tenants_agent_is_not_found(database_
         state = {"agent_id": agent, "messages": [{"role": "user", "content": "hi"}]}
         with tenant_scope(b), pytest.raises(ValueError, match="not live"):
             await rt.graphs["agent_wrapper"].ainvoke(state, {"configurable": {"thread_id": tid}})
+
+
+async def test_two_tenants_teams_of_one_id_each_get_their_own_assistant(database_url: str) -> None:
+    a, b = tenants()
+    async with started(database_url, seed=False) as (client, rt):
+        first = await client.post("/v1/chat/threads", json={"kbIds": []}, headers=person(a))
+        assert first.status_code == 201, first.text
+        mine = str(first.json()["data"]["agentId"])
+        served = rt.catalog.agent(mine)
+        second = await client.post("/v1/chat/threads", json={"kbIds": []}, headers=person(b))
+        assert second.status_code == 201, second.text
+        theirs = str(second.json()["data"]["agentId"])
+        assert theirs != mine
+        assert rt.catalog.agent(mine) is served, "the other tenant's first chat replaced this tenant's assistant"
+        read = await client.get(f"/v1/agents/{theirs}", headers=person(b))
+        assert read.status_code == 200, read.text

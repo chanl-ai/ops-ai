@@ -13,12 +13,12 @@ from typing import Any
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.api.agent_registry import registry
 from ops_agents.api.ops_tools import ops_assistant_id
-from ops_agents.store.tenancy import tenant_scope
+from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from tests.api.test_team_default_agent import Stack, stack, start  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import ADMIN, TENANT, VIEWER
 
 URL = "/v1/team-assistant/app-tools"
-AID = ops_assistant_id("team_ops")
+AID = ops_assistant_id(LOCAL_TENANT, "team_ops")
 SALESFORCE = "mod_plugin_salesforce"
 
 

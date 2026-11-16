@@ -10,6 +10,7 @@ deciding a task and starting a run are the person's own presses on the card.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from typing import Any, cast
@@ -31,7 +32,7 @@ from ..activities.gateway import carded
 from ..graphs.common import OPS_SERVER
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.team_defaults import TeamDefaults
-from ..store.tenancy import ASSISTANT_CATCH_UP
+from ..store.tenancy import ASSISTANT_CATCH_UP, current_tenant
 from . import hitl_facade
 from .agent_registry import SEED_FIELDS, go_live, live_agent, registry, seed_agent_version, spec_from_seed
 from .auth import Principal, caller_of, reader_teams
@@ -41,6 +42,8 @@ from .run_starts import REGISTRY
 from .runs import graph_store
 
 log = get_logger("ops_agents.ops_tools")
+# Every team's Ops Assistant id starts so; the start-up catch-up finds the teams by it.
+ASSISTANT_PREFIX = "ag_ops_"
 
 LIMIT = 5
 # From this many matching cases, find_cases answers with one table instead of a card each: a list reads as rows, and a
@@ -92,18 +95,34 @@ OPS_ASSISTANT: dict[str, Any] = {
 }
 
 
-def ops_assistant_id(team_id: str) -> str:
-    return f"ag_ops_{team_id}"
+def ops_assistant_id(tenant_id: str, team_id: str) -> str:
+    """The id a team's Ops Assistant is made with: derived from the tenant and the team, so two tenants' teams of one
+    id never share an agent (the registry's key is the id alone), within the 64-character id."""
+    digest = hashlib.sha256(f"{tenant_id}\0{team_id}".encode()).hexdigest()[:24]
+    return f"{ASSISTANT_PREFIX}{digest}"
+
+
+def made_before_id(team_id: str) -> str:
+    """The id an assistant made before ids took the tenant has, and keeps."""
+    return f"{ASSISTANT_PREFIX}{team_id}"
+
+
+async def assistant_id(rt: Runtime, team_id: str) -> str:
+    """The team's Ops Assistant in the caller's tenant: the one it holds under either id with that team as owner, else
+    the id a create uses."""
+    made = ops_assistant_id(current_tenant(), team_id)
+    owners = await registry(rt).tenant_owners({made_before_id(team_id), made})
+    return next((aid for aid in (made_before_id(team_id), made) if owners.get(aid) == team_id), made)
 
 
 def _declared(rt: Runtime, aid: str) -> dict[str, Any]:
     return spec_from_seed(AgentDefinition.model_validate({**OPS_ASSISTANT, "id": aid}), rt.settings.model_alias)
 
 
-async def follow_declared(rt: Runtime, team_id: str) -> None:
-    """Brings the team's Ops Assistant to the declared one (OPS_ASSISTANT) as a new version, when its published version
-    is still the platform's; once a person has published a version the assistant is the team's and is left alone."""
-    aid = ops_assistant_id(team_id)
+async def follow_declared(rt: Runtime, aid: str) -> None:
+    """Brings a team's Ops Assistant `aid` to the declared one (OPS_ASSISTANT) as a new version, when its published
+    version is still the platform's; once a person has published a version the assistant is the team's and is left
+    alone."""
     reg = registry(rt)
     row = await reg.row(aid)
     if row["published_version"] is None:
@@ -127,12 +146,12 @@ async def ensure_ops_assistant(rt: Runtime, team_id: str) -> AgentDefinition:
     default agent, as the declared one. Its id comes from the team, so two first chats at once make one:
     the second insert meets the first's row and serves it. Setting the default is recorded like a team admin's
     (`TeamDefaults.set_agent`, `by`)."""
-    aid = ops_assistant_id(team_id)
+    aid = await assistant_id(rt, team_id)
     if (live := await live_agent(rt, aid)) is None:
         spec = _declared(rt, aid)
         # False when another first chat of the team made it a moment ago; either way it is served below.
         if not await registry(rt).create_if_absent(spec, by=SYSTEM, team_id=team_id, agent_id=aid):
-            await follow_declared(rt, team_id)
+            await follow_declared(rt, aid)
         if await live_agent(rt, aid) is None:
             go_live(rt, aid, 1, spec)
         live = cast(AgentDefinition, rt.catalog.agent(aid))
@@ -144,13 +163,13 @@ async def catch_up_assistants(rt: Runtime) -> int:
     """At start: every team whose default agent is its Ops Assistant gets the declared one, if nobody changed it; a
     failure in one tenant is logged and the rest go on. Returns how many teams were looked at."""
     seen = 0
-    for tenant_id, team_id, agent_id in await TeamDefaults(rt.db).on_agents(ops_assistant_id("")):
-        if agent_id != ops_assistant_id(team_id):
+    for tenant_id, team_id, agent_id in await TeamDefaults(rt.db).on_agents(ASSISTANT_PREFIX):
+        if agent_id not in (made_before_id(team_id), ops_assistant_id(tenant_id, team_id)):
             continue
         seen += 1
         try:
             with isolation.tenant_wide(ASSISTANT_CATCH_UP, tenant_id=tenant_id):
-                await follow_declared(rt, team_id)
+                await follow_declared(rt, agent_id)
         except Exception as e:  # one tenant's failure must not stop the others, nor the service's start
             log.warning("ops_assistant_catch_up_failed", tenant=tenant_id, error=type(e).__name__)
     return seen
