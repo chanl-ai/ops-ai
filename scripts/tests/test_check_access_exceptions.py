@@ -11,7 +11,6 @@ import hashlib
 import importlib.util
 import subprocess
 import sys
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
@@ -71,22 +70,12 @@ def test_a_refusal_returned_as_a_status_and_code_tuple_is_found() -> None:
     assert [(f.kind, f.key, f.line) for f in found] == [("refusal", "APP_OFF", 3)]
 
 
-def _committed(files: dict[str, str]) -> Callable[[str], str | None]:
-    """Stands in for the lane files at HEAD: the text of each lane named, None for one not committed yet."""
-
-    def at_head(lane: str) -> str | None:
-        return files.get(lane)
-
-    return at_head
-
-
 def _lanes(c: ModuleType, tmp: Path, monkeypatch: pytest.MonkeyPatch, **rows: str) -> None:
     """An empty baseline file per lane in the temp tree, with `rows` as the text of the lanes named."""
     (tmp / "lanes").mkdir(exist_ok=True)
     for lane in c.LANES:
         (tmp / "lanes" / f"{lane}.txt").write_text(rows.get(lane, ""))
     monkeypatch.setattr(c, "BASELINES", tmp / "lanes")
-    monkeypatch.setattr(c, "committed_baseline", _committed({}))
 
 
 def _run(
@@ -224,8 +213,8 @@ def test_an_annotated_line_needs_the_trailer_and_annotating_a_line_already_there
 def test_a_lane_baseline_may_only_fall(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An owner compare has no allowlist line, so its lane's file is its only ceiling: raising it to fit new code
-    fails against the committed file, and the same row already committed passes."""
+    """An owner compare has no allowlist line, so its lane's file is its only ceiling: code beyond it fails, and a raise
+    is reported to the history check, not to this one."""
     c = checker()
     site = "services/tools-service/src/ops_tools/a.py"
     row = f"{site} owner-compare owner 1\n"
@@ -236,11 +225,11 @@ def test_a_lane_baseline_may_only_fall(
     monkeypatch.setattr(c, "committed", lambda: None)
     monkeypatch.setattr(c, "findings", lambda: [c.Finding(site, 3, "owner-compare", "owner", "x.owner == me.sub")])
     _lanes(c, tmp_path, monkeypatch, tools=row)
-    monkeypatch.setattr(c, "committed_baseline", _committed(dict.fromkeys(c.LANES, "")))
-    assert c.main([]) == 1
-    assert "tools.txt owner-compare rose from 0 to 1" in capsys.readouterr().out
-    monkeypatch.setattr(c, "committed_baseline", _committed({**dict.fromkeys(c.LANES, ""), "tools": row}))
     assert c.main([]) == 0, capsys.readouterr().out
+    assert [r.split(";")[0] for r in c._rises("tools.txt", "", row)] == [
+        "rose  tools.txt owner-compare rose from 0 to 1"
+    ]
+    assert c._rises("tools.txt", row, row) == []
     _lanes(c, tmp_path, monkeypatch)
     assert c.main([]) == 1
     assert f"new   {site}:3  owner-compare owner" in capsys.readouterr().out

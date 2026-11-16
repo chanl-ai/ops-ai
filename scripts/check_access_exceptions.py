@@ -113,9 +113,10 @@ BASELINE = {
 REFUSAL_HOMES = ("packages/ops_access/", "packages/ops_identity/", "packages/ops_store/")
 ROLES = "admin|owner|builder|approver|reviewer|viewer|chat_user|security_admin"
 # Left-hand names that hold something other than a person's role (a message's role, a node's kind).
-NOT_A_ROLE = re.compile(r"(kind|type|status|variant|mode|tab|view|sort|shape|step)$", re.IGNORECASE)
+NOT_A_ROLE = re.compile(r"(kind|type|status|variant|mode|tab|view|sort|shape|step|answer)$", re.IGNORECASE)
 PY_ROLE = [
-    re.compile(rf"([\w.\[\]\"']+)\s*(?:==|!=)\s*[\"']({ROLES})[\"']"),
+    # The left side may end in a call: `roles.get(team) == "admin"`, `p.role.lower() == "admin"`.
+    re.compile(rf"([\w.\[\]\"']+(?:\([^()]*\))*)\s*(?:==|!=)\s*[\"']({ROLES})[\"']"),
     re.compile(rf"[\"']({ROLES})[\"']\s*(?:==|!=)\s*([\w.]+)"),
 ]
 # A caller's subject compared with a service's; a table's `sub` column (`<table>.c.sub`) filtered by it is not one.
@@ -144,7 +145,11 @@ OWNER_COMPARE = [
     re.compile(rf"\b{_CALLER}[\w.()]*\s*(?:===?|!==?)\s*[\w.\[\(\"']*(?:owner|created_by|createdBy)"),
 ]
 # The one reader of a policy's value is `policy(p, key)` in this file.
-POLICY_READ = re.compile(r"\.policies\.get\(|\.policies\[|\bBY_KEY\[[^\]]+\]\.default\b")
+# A policy map copied to a name (`held = p.policies`) is read later as `held.get(...)`, with no `.policies` on
+# that line.
+POLICY_READ = re.compile(
+    r"\.policies\.get\(|\.policies\[|=\s*[\w.]+\.policies\b(?![\w.(\[])|\bBY_KEY\[[^\]]+\]\.default\b"
+)
 
 
 @dataclass(frozen=True)
@@ -318,18 +323,37 @@ def _name(call: ast.Call) -> str:
     return call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
 
 
+def _role_lists(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
+    """A set, tuple or list made only of role names, where it is defined (`ADMIN_ROLES = {"admin", "owner"}`): a test
+    against it reads as `role in ADMIN_ROLES`, with no role name on the line. Counted as a role-name, in its lane's
+    file."""
+    if rel.startswith(ACCESS_HOME):
+        return []
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        value = node.value if isinstance(node, ast.Assign | ast.AnnAssign) else None
+        if isinstance(value, ast.Call) and value.args and _name(value) in {"frozenset", "set", "tuple", "list"}:
+            value = value.args[0]
+        if not isinstance(value, ast.Set | ast.Tuple | ast.List) or not value.elts:
+            continue
+        names = [e.value for e in value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+        if len(names) == len(value.elts) and all(re.fullmatch(ROLES, v) for v in names):
+            out.append(Finding(rel, node.lineno, "role-name", names[0], lines[node.lineno - 1].strip()))
+    return out
+
+
 def _python(path: Path) -> list[Finding]:
     rel = path.relative_to(ROOT).as_posix()
     source = path.read_text()
     lines = source.splitlines()
     tree = ast.parse(source)
-    found = [*_refusals(rel, tree, lines), *_conflicts(rel, tree, lines)]
+    found = [*_refusals(rel, tree, lines), *_conflicts(rel, tree, lines), *_role_lists(rel, tree, lines)]
     for n, line in enumerate(lines, 1):
         code = line.split("#", 1)[0]
         for rx in PY_ROLE:
             for m in rx.finditer(code):
                 left, role = (m.group(1), m.group(2)) if rx is PY_ROLE[0] else (m.group(2), m.group(1))
-                if not NOT_A_ROLE.search(left.strip("\"'[]")):
+                if not NOT_A_ROLE.search(left.rstrip("\"'[])")):
                     found.append(Finding(rel, n, "role-name", role, line.strip()))
         for _ in PY_SUB.finditer(code):
             found.append(Finding(rel, n, "role-name", "service-sub", line.strip()))
@@ -457,13 +481,6 @@ def _totals(text: str) -> Counter[str]:
     return totals
 
 
-def committed_baseline(lane: str) -> str | None:
-    """A lane's file at HEAD; None where it is not committed yet or there is no history to read."""
-    name = (BASELINES / f"{lane}.txt").relative_to(ROOT).as_posix()
-    shown = subprocess.run(["git", "show", f"HEAD:{name}"], cwd=ROOT, capture_output=True, text=True, check=False)
-    return None if shown.returncode else shown.stdout
-
-
 def _rises(name: str, before: str, now: str) -> list[str]:
     was, held = _totals(before), _totals(now)
     return [
@@ -475,7 +492,8 @@ def _rises(name: str, before: str, now: str) -> list[str]:
 
 def baseline_problems(counts: Counter[tuple[str, str, str]]) -> list[str]:
     """Role-name compares, owner compares and policy reads against their lane's file: one beyond its row, a row above
-    what the code holds, a row in the wrong lane's file, a path no lane owns, and a total above the committed file's."""
+    what the code holds, a row in the wrong lane's file and a path no lane owns. A total above the committed file's
+    waits for a maintainer's review on the pull request (`--commits`)."""
     out: list[str] = []
     listed: dict[tuple[str, str, str], int] = {}
     for lane in LANES:
@@ -488,9 +506,6 @@ def baseline_problems(counts: Counter[tuple[str, str, str]]) -> list[str]:
             if k[1] not in BASELINED or lane_of(k[0]) != lane:
                 out.append(f"lane  {path.name} lists {k[0]} {k[1]}, which is not a {'/'.join(BASELINED)} of its lane")
             listed[k] = count
-        before = committed_baseline(lane)
-        if before is not None:
-            out.extend(_rises(path.name, before, text))
     for k in sorted({*listed, *(k for k in counts if k[1] in BASELINED)}):
         lane = lane_of(k[0])
         if lane is None:
@@ -670,6 +685,31 @@ PLANTS = (
         "role-set",
     ),
     ("role-set", "apps/console/src/b.ts", "const may = ['admin', 'owner'].includes(role);\n", "role-set admin"),
+    # The list is the finding where it is defined; the test against it can sit anywhere under any name.
+    (
+        "role-name",
+        "services/kb-service/src/k/b.py",
+        'ADMIN_ROLES = frozenset({"admin", "owner"})\n\ndef f(role):\n    return role in ADMIN_ROLES\n',
+        "role-name admin",
+    ),
+    (
+        "role-name",
+        "services/platform-service/src/p/b.py",
+        'def f(roles, team):\n    return roles.get(team) == "admin"\n',
+        "role-name admin",
+    ),
+    (
+        "role-name",
+        "services/platform-service/src/p/c.py",
+        'def f(p):\n    return p.role.lower() == "admin"\n',
+        "role-name admin",
+    ),
+    (
+        "policy-read",
+        "services/files-service/src/f/b.py",
+        'def f(p):\n    held = p.policies\n    return held.get("stepUp")\n',
+        "policy-read",
+    ),
     (
         "owner-compare",
         "services/agents-service/src/a/a.py",
