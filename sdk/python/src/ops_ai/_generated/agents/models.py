@@ -733,11 +733,6 @@ class EnvelopeListAgentVersion(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListCaseTypeView(TypedDict, closed=True):
-    data: list[CaseTypeView]
-    success: Literal[True]
-
-
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
@@ -3072,11 +3067,6 @@ class EnvelopeListRunJournalEntry(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListTaskTypeView(TypedDict, closed=True):
-    data: list[TaskTypeView]
-    success: Literal[True]
-
-
 class EnvelopeListTemplateView(TypedDict, closed=True):
     data: list[TemplateView]
     success: Literal[True]
@@ -3190,8 +3180,20 @@ class ListResultCaseRow(TypedDict, closed=True):
     pagination: Pagination
 
 
+class ListResultCaseTypeView(TypedDict, closed=True):
+    data: list[CaseTypeView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ListResultDefinitionRow(TypedDict, closed=True):
     data: list[DefinitionRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultTaskTypeView(TypedDict, closed=True):
+    data: list[TaskTypeView]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -3812,8 +3814,18 @@ class EnvelopeListResultCaseRow(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListResultCaseTypeView(TypedDict, closed=True):
+    data: ListResultCaseTypeView
+    success: Literal[True]
+
+
 class EnvelopeListResultDefinitionRow(TypedDict, closed=True):
     data: ListResultDefinitionRow
+    success: Literal[True]
+
+
+class EnvelopeListResultTaskTypeView(TypedDict, closed=True):
+    data: ListResultTaskTypeView
     success: Literal[True]
 
 

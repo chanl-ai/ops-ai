@@ -682,7 +682,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/case-types",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "cases_list_cases": {
@@ -1234,7 +1234,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/task-types",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "reviews_open_egress_host_request": {
@@ -2204,9 +2204,32 @@ class Operations:
         "Retry Batch"
         return self._t.call(SERVICE, OPERATIONS["batches_retry_batch"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def cases_list_case_types(self) -> list[CaseTypeView]:
+    def cases_list_case_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultCaseTypeView:
         "List Case Types"
-        return self._t.call(SERVICE, OPERATIONS["cases_list_case_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["cases_list_case_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def cases_create_case_type(self, body: OpsAgentsApiRoutersCaseTypesTypeIn) -> CaseTypeDetail:
         "Create Case Type"
@@ -2757,9 +2780,32 @@ class Operations:
         "Render Skill"
         return self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def reviews_list_task_types(self) -> list[TaskTypeView]:
+    def reviews_list_task_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTaskTypeView:
         "List Task Types"
-        return self._t.call(SERVICE, OPERATIONS["reviews_list_task_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["reviews_list_task_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def reviews_create_task_type(self, body: OpsAgentsApiRoutersTaskTypesTypeIn) -> TaskTypeDetail:
         "Create Task Type"
@@ -3601,9 +3647,32 @@ class AsyncOperations:
         "Retry Batch"
         return await self._t.call(SERVICE, OPERATIONS["batches_retry_batch"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def cases_list_case_types(self) -> list[CaseTypeView]:
+    async def cases_list_case_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultCaseTypeView:
         "List Case Types"
-        return await self._t.call(SERVICE, OPERATIONS["cases_list_case_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["cases_list_case_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def cases_create_case_type(self, body: OpsAgentsApiRoutersCaseTypesTypeIn) -> CaseTypeDetail:
         "Create Case Type"
@@ -4178,9 +4247,32 @@ class AsyncOperations:
         "Render Skill"
         return await self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def reviews_list_task_types(self) -> list[TaskTypeView]:
+    async def reviews_list_task_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTaskTypeView:
         "List Task Types"
-        return await self._t.call(SERVICE, OPERATIONS["reviews_list_task_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["reviews_list_task_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def reviews_create_task_type(self, body: OpsAgentsApiRoutersTaskTypesTypeIn) -> TaskTypeDetail:
         "Create Task Type"

@@ -7504,6 +7504,25 @@
         "title": "Envelope[ListResult[CaseRow]]",
         "type": "object"
       },
+      "Envelope_ListResult_CaseTypeView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_CaseTypeView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[CaseTypeView]]",
+        "type": "object"
+      },
       "Envelope_ListResult_DefinitionRow__": {
         "additionalProperties": false,
         "properties": {
@@ -7540,6 +7559,25 @@
           "data"
         ],
         "title": "Envelope[ListResult[RunRow]]",
+        "type": "object"
+      },
+      "Envelope_ListResult_TaskTypeView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_TaskTypeView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[TaskTypeView]]",
         "type": "object"
       },
       "Envelope_ListResult_WorkflowRun__": {
@@ -8740,29 +8778,6 @@
         "title": "Envelope[list[AgentVersion]]",
         "type": "object"
       },
-      "Envelope_list_CaseTypeView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/CaseTypeView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[CaseTypeView]]",
-        "type": "object"
-      },
       "Envelope_list_FormView__": {
         "additionalProperties": false,
         "properties": {
@@ -9037,29 +9052,6 @@
           "data"
         ],
         "title": "Envelope[list[RunJournalEntry]]",
-        "type": "object"
-      },
-      "Envelope_list_TaskTypeView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/TaskTypeView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[TaskTypeView]]",
         "type": "object"
       },
       "Envelope_list_TemplateView__": {
@@ -11546,6 +11538,38 @@
         "title": "ListResult[CaseRow]",
         "type": "object"
       },
+      "ListResult_CaseTypeView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CaseTypeView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[CaseTypeView]",
+        "type": "object"
+      },
       "ListResult_DefinitionRow_": {
         "additionalProperties": false,
         "properties": {
@@ -11608,6 +11632,38 @@
           "facets"
         ],
         "title": "ListResult[RunRow]",
+        "type": "object"
+      },
+      "ListResult_TaskTypeView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TaskTypeView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[TaskTypeView]",
         "type": "object"
       },
       "ListResult_WorkflowRun_": {
@@ -32740,9 +32796,103 @@
     },
     "/v1/case-types": {
       "get": {
-        "description": "Every case type in the tenant: the seeded ones first, then the teams' own.",
+        "description": "Every case type of the team on the shared list contract: the seeded ones first, then the team's own, each by\nname, then by id; `search` matches the name and description and `ids` names types.",
         "operationId": "cases_list_case_types",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -32813,7 +32963,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_CaseTypeView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_CaseTypeView__"
                 }
               }
             },
@@ -49788,9 +49938,103 @@
     },
     "/v1/task-types": {
       "get": {
-        "description": "Every type in the tenant: the seeded general types first, then the teams' own.",
+        "description": "Every task type of the team on the shared list contract: the seeded ones first, then the team's own, each by\nname, then by id; `search` matches the name and description and `ids` names types.",
         "operationId": "reviews_list_task_types",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -49861,7 +50105,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_TaskTypeView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_TaskTypeView__"
                 }
               }
             },

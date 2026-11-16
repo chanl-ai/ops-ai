@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from steps import required
-from usecase_harness import TEAM, agents, check, data, engine_worker, finish, until
+from usecase_harness import TEAM, agents, check, data, engine_worker, every_page, finish, until
 
 CALLER = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
 REVIEWER = {**TEAM, "X-Dev-User": "m.okafor@harborpine.example"}
@@ -18,7 +18,7 @@ FACTS = [{"label": "Vendor", "value": "Acme Supplies"}, {"label": "New account",
 with agents() as api, engine_worker("uc254"):
     # 1. The five general types are seeded. A seeded type is a system record: a caller holding workflows.manage (the
     # dev caller, as Builder and Admin since D59) saves a draft over it, and its published v1 stays what tasks open.
-    types = required(api.get("/v1/task-types", headers=CALLER), "list the task types")
+    types = every_page(api, "/v1/task-types", headers=CALLER)
     seeded = {t["id"] for t in types if t["origin"] == "seed"}
     check(
         "the five general types are seeded",

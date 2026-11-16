@@ -865,7 +865,14 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/case-types",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "cases_list_cases": {
@@ -1546,7 +1553,14 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/task-types",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "reviews_open_egress_host_request": {

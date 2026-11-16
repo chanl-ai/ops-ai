@@ -18,7 +18,8 @@ from pydantic import Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope, In
+from ops_service_kit.http import Envelope, In, ListResult
+from ops_service_kit.listing import ListQuery
 
 from ... import task_types as tt
 from ..auth import Principal, caller_in, caller_of
@@ -83,10 +84,12 @@ def _checked(content: dict[str, Any]) -> dict[str, Any]:
     return content
 
 
-@router.get("", response_model=Envelope[list[TaskTypeView]])
-async def list_task_types(rt: Rt, me: Me, _: Tx) -> JSONResponse:
-    """Every type in the tenant: the seeded general types first, then the teams' own."""
-    return ok([view(r) for r in await (await task_type_store(rt, store_team(me))).rows()])
+@router.get("", response_model=Envelope[ListResult[TaskTypeView]])
+async def list_task_types(rt: Rt, me: Me, _: Tx, q: ListQuery) -> JSONResponse:
+    """Every task type of the team on the shared list contract: the seeded ones first, then the team's own, each by
+    name, then by id; `search` matches the name and description and `ids` names types."""
+    listed = await (await task_type_store(rt, store_team(me))).page(q)
+    return ok({**listed, "data": [view(r) for r in listed["data"]]})
 
 
 @router.get("/{type_id}", response_model=Envelope[TaskTypeDetail])

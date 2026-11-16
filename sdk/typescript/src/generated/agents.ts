@@ -838,7 +838,8 @@ export interface paths {
         };
         /**
          * List Case Types
-         * @description Every case type in the tenant: the seeded ones first, then the teams' own.
+         * @description Every case type of the team on the shared list contract: the seeded ones first, then the team's own, each by
+         *     name, then by id; `search` matches the name and description and `ids` names types.
          */
         get: operations["cases_list_case_types"];
         put?: never;
@@ -2291,7 +2292,8 @@ export interface paths {
         };
         /**
          * List Task Types
-         * @description Every type in the tenant: the seeded general types first, then the teams' own.
+         * @description Every task type of the team on the shared list contract: the seeded ones first, then the team's own, each by
+         *     name, then by id; `search` matches the name and description and `ids` names types.
          */
         get: operations["reviews_list_task_types"];
         put?: never;
@@ -5932,6 +5934,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[CaseTypeView]] */
+        Envelope_ListResult_CaseTypeView__: {
+            data: components["schemas"]["ListResult_CaseTypeView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[DefinitionRow]] */
         Envelope_ListResult_DefinitionRow__: {
             data: components["schemas"]["ListResult_DefinitionRow_"];
@@ -5944,6 +5955,15 @@ export interface components {
         /** Envelope[ListResult[RunRow]] */
         Envelope_ListResult_RunRow__: {
             data: components["schemas"]["ListResult_RunRow_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[TaskTypeView]] */
+        Envelope_ListResult_TaskTypeView__: {
+            data: components["schemas"]["ListResult_TaskTypeView_"];
             /**
              * Success
              * @constant
@@ -6507,16 +6527,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[CaseTypeView]] */
-        Envelope_list_CaseTypeView__: {
-            /** Data */
-            data: components["schemas"]["CaseTypeView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[list[FormView]] */
         Envelope_list_FormView__: {
             /** Data */
@@ -6631,16 +6641,6 @@ export interface components {
         Envelope_list_RunJournalEntry__: {
             /** Data */
             data: components["schemas"]["RunJournalEntry"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[TaskTypeView]] */
-        Envelope_list_TaskTypeView__: {
-            /** Data */
-            data: components["schemas"]["TaskTypeView"][];
             /**
              * Success
              * @constant
@@ -7553,6 +7553,18 @@ export interface components {
             };
             pagination: components["schemas"]["Pagination"];
         };
+        /** ListResult[CaseTypeView] */
+        ListResult_CaseTypeView_: {
+            /** Data */
+            data: components["schemas"]["CaseTypeView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** ListResult[DefinitionRow] */
         ListResult_DefinitionRow_: {
             /** Data */
@@ -7569,6 +7581,18 @@ export interface components {
         ListResult_RunRow_: {
             /** Data */
             data: components["schemas"]["RunRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[TaskTypeView] */
+        ListResult_TaskTypeView_: {
+            /** Data */
+            data: components["schemas"]["TaskTypeView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -16170,7 +16194,14 @@ export interface operations {
     };
     cases_list_case_types: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16183,7 +16214,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_CaseTypeView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_CaseTypeView__"];
                 };
             };
             /** @description Invalid request */
@@ -25140,7 +25171,14 @@ export interface operations {
     };
     reviews_list_task_types: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -25153,7 +25191,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_TaskTypeView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_TaskTypeView__"];
                 };
             };
             /** @description Invalid request */
