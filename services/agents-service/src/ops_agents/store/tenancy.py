@@ -45,6 +45,7 @@ MAIL_LISTENER = "mail_listener"  # the mailbox listener polls one tenant's bound
 RUN_RECONCILER = "run_reconciler"  # the run reconciler gives one tenant's run with nothing behind it its state
 TESTS = "tests"  # `tenant_scope`, which tests use to act for a tenant
 ASSISTANT_CATCH_UP = "assistant_catch_up"  # start-up: one tenant's Ops Assistants brought to the declared version
+OWNER = "owner_team"  # a registry record's owning team, read across teams only to decide a refusal (`owner_teams`)
 
 # Why a path reads past the tenant (`isolation.system_tx`): only to find the tenant of what it claimed.
 CLAIM_THREAD = "claim_thread"  # GraphStore.owner_of, for the sweeper and the timer poller
@@ -66,6 +67,7 @@ __all__ = [
     "LOCAL_TENANT",
     "MAIL_LISTENER",
     "MEMORY_RETENTION",
+    "OWNER",
     "RETENTION_TENANTS",
     "RUN_RECONCILER",
     "SEED",

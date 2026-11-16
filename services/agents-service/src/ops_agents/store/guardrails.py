@@ -11,7 +11,7 @@ import re
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
@@ -23,6 +23,7 @@ from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of, publish_requested
 from .base import metadata
+from .tenancy import OWNER, RuntimeStore
 
 registry_guardrails = sa.Table(
     "registry_guardrails",
@@ -74,16 +75,13 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "guardrail"
 
 
-class GuardrailRegistry:
+class GuardrailRegistry(RuntimeStore):
     # A slug and a version number are unique keys (CAS); a save writes its version row and moves the guardrail in one
     # transaction, as does a publish (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
     async def rows(self) -> list[dict[str, Any]]:
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = (
                 sa.select(registry_guardrails)
                 .where(team_visible(registry_guardrails))
@@ -107,7 +105,7 @@ class GuardrailRegistry:
                 team_visible(registry_guardrails),
             )
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def page(self, search: str, offset: int, limit: int) -> list[dict[str, Any]]:
@@ -118,7 +116,7 @@ class GuardrailRegistry:
             .where(self._matches(search), team_visible(registry_guardrails))
             .order_by(sa.func.lower(registry_guardrails.c.name), registry_guardrails.c.id)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
 
     async def count(self, search: str) -> int:
@@ -127,7 +125,7 @@ class GuardrailRegistry:
             .select_from(registry_guardrails)
             .where(self._matches(search), team_visible(registry_guardrails))
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return int((await c.execute(q)).scalar_one())
 
     @staticmethod
@@ -135,16 +133,10 @@ class GuardrailRegistry:
         t = registry_guardrails.c
         return sa.or_(contains(t.name, search), contains(t.owner, search))
 
-    async def owner_team(self, guardrail_id: str) -> str | None:
+    async def owner_team(self, guardrail_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
         owning team, never for showing the record."""
-        q = sa.select(registry_guardrails.c.team_id).where(
-            registry_guardrails.c.id == guardrail_id,
-            any_team(registry_guardrails, "the owning team a refusal is decided on"),
-        )
-        async with self.engine.connect() as c:
-            team = (await c.execute(q)).scalar()
-        return str(team) if team else None
+        return (await self.owner_teams(conn, registry_guardrails, {guardrail_id}, OWNER)).get(guardrail_id)
 
     async def find(
         self, guardrail_id: str, c: AsyncConnection | None = None, *, lock: bool = False
@@ -155,7 +147,7 @@ class GuardrailRegistry:
         if lock:
             q = locked(q, registry_guardrails)
         if c is None:
-            async with self.engine.connect() as conn:
+            async with self.tx() as conn:
                 r = (await conn.execute(q)).mappings().first()
         else:
             r = (await c.execute(q)).mappings().first()
@@ -175,7 +167,7 @@ class GuardrailRegistry:
             )
             .order_by(registry_guardrail_versions.c.version.desc())
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def version(self, guardrail_id: str, version: int) -> dict[str, Any] | None:
@@ -184,7 +176,7 @@ class GuardrailRegistry:
             registry_guardrail_versions.c.version == version,
             team_visible(registry_guardrail_versions),
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r else None
 
@@ -202,7 +194,7 @@ class GuardrailRegistry:
     ) -> str:
         gid = guardrail_id or new_id("gr")
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             slug = _slug(name)
             taken = (
                 await c.execute(
@@ -248,7 +240,7 @@ class GuardrailRegistry:
     async def save(self, guardrail_id: str, config: dict[str, Any], *, by: str, note: str = "") -> int:
         """Saves `config` as the next version, a draft; pins and the published pointer do not move."""
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             row = await self.row(guardrail_id, c)
             return await self._append(c, guardrail_id, int(row["version"]) + 1, config, by=by, note=note, at=at)
 
@@ -279,7 +271,7 @@ class GuardrailRegistry:
         has named it; otherwise opens the next version as the draft. What a reviewer saw or what runs never changes."""
         at = now_iso()
         v = registry_guardrail_versions
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             # Locked so two saves at once take turns: unlocked, both read the same newest version and the second
             # fails on the version key.
             row = await self.row(guardrail_id, c, lock=True)
@@ -313,7 +305,7 @@ class GuardrailRegistry:
 
     async def publish(self, guardrail_id: str, version: int, *, by: str, review_id: str) -> None:
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_guardrail_versions.update()
                 .where(
@@ -329,7 +321,7 @@ class GuardrailRegistry:
             )
 
     async def set_status(self, guardrail_id: str, status: str) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_guardrails.update()
                 .where(registry_guardrails.c.id == guardrail_id)
@@ -337,6 +329,6 @@ class GuardrailRegistry:
             )
 
     async def delete(self, guardrail_id: str) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await self.row(guardrail_id, c)
             await c.execute(registry_guardrails.delete().where(registry_guardrails.c.id == guardrail_id))
