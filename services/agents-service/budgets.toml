@@ -1,0 +1,307 @@
+# The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
+# standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
+# rows. The seed adds rows to agents, skills, guardrails, widgets and cases only; a row for any other list proves its
+# count, not that it stays flat as rows grow. Rows listing more than one transaction or connection open one per store
+# read and are budgeted as they run until their route is converted. A `not_budgeted` row that grows names its counts.
+
+["GET /health"]
+queries = 1
+
+["GET /health/background"]
+queries = 1
+
+["GET /reviews"]
+queries = 6
+transactions = 6
+connections = 6
+
+["GET /reviews/by-run-key/{run_key}"]
+not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
+
+["GET /reviews/{review_id}/place"]
+queries = 5
+transactions = 5
+connections = 5
+
+["GET /reviews/{thread_id}"]
+not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
+
+["GET /runs"]
+queries = 4
+transactions = 4
+connections = 4
+
+["GET /runs/{thread_id}"]
+queries = 6
+transactions = 6
+connections = 6
+
+["GET /v1/account-uses"]
+not_budgeted = "grows with rows: 10 statements at 5, 60 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/activity"]
+queries = 5
+transactions = 4
+connections = 4
+
+["GET /v1/agents"]
+queries = 15
+transactions = 12
+connections = 12
+
+["GET /v1/agents/{agent_id}"]
+queries = 17
+transactions = 17
+connections = 17
+
+["GET /v1/agents/{agent_id}/eval-cases"]
+queries = 2
+
+["GET /v1/agents/{agent_id}/live"]
+queries = 9
+transactions = 3
+connections = 3
+
+["GET /v1/agents/{agent_id}/publish-preview"]
+queries = 2
+transactions = 2
+connections = 2
+query = { version = "1" }
+
+["GET /v1/agents/{agent_id}/runs"]
+queries = 3
+
+["GET /v1/agents/{agent_id}/skills"]
+queries = 3
+
+["GET /v1/agents/{agent_id}/skills/options"]
+queries = 3
+
+["GET /v1/agents/{agent_id}/versions"]
+queries = 3
+
+["GET /v1/assurance/gates"]
+not_budgeted = "grows with rows: 13 statements at 5, 63 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/assurance/runs"]
+not_budgeted = "grows with rows: 13 statements at 5, 63 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/assurance/suites"]
+not_budgeted = "grows with rows: 13 statements at 5, 63 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/background"]
+queries = 2
+transactions = 2
+connections = 2
+
+["GET /v1/batches/{batch_id}"]
+not_budgeted = "needs a batch run; the budget seed starts none yet"
+
+["GET /v1/batches/{batch_id}/results.csv"]
+not_budgeted = "needs a batch run; the budget seed starts none yet"
+
+["GET /v1/case-types"]
+queries = 2
+
+["GET /v1/case-types/{type_id}"]
+queries = 2
+
+["GET /v1/cases"]
+queries = 2
+transactions = 2
+connections = 2
+
+["GET /v1/cases/{case_id}"]
+queries = 5
+transactions = 7
+connections = 7
+
+["GET /v1/channels"]
+queries = 7
+
+["GET /v1/channels/mailboxes"]
+queries = 2
+
+["GET /v1/channels/mailboxes/{mailbox_id}"]
+not_budgeted = "needs a connected mailbox; the budget seed connects none yet"
+
+["GET /v1/document-type-uses"]
+queries = 1
+query = { types = "dt_budget" }
+
+["GET /v1/events"]
+queries = 1
+query = { follow = "false" }
+
+["GET /v1/forms/public/{slug}"]
+not_budgeted = "needs a published form and its public token; the budget seed publishes none yet"
+
+["GET /v1/forms/{slug}/members"]
+not_budgeted = "needs a published form; the budget seed publishes none yet"
+
+["GET /v1/graphs"]
+queries = 2
+
+["GET /v1/graphs/{name}/versions"]
+queries = 1
+
+["GET /v1/guardrails"]
+not_budgeted = "grows with rows: 87 statements at 5, 1342 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/guardrails/options"]
+queries = 1
+
+["GET /v1/guardrails/{guardrail_id}"]
+not_budgeted = "grows with rows: 17 statements at 5, 67 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/knowledge-usage"]
+queries = 1
+
+["GET /v1/me/memories"]
+queries = 1
+
+["GET /v1/me/memories/export"]
+queries = 3
+
+["GET /v1/model-aliases"]
+queries = 0
+
+["GET /v1/overview"]
+queries = 12
+transactions = 9
+connections = 9
+
+["GET /v1/prompts/variables"]
+queries = 0
+
+["GET /v1/publish-requests/{request_id}"]
+not_budgeted = "needs a publish request; the budget seed raises none yet"
+
+["GET /v1/resources/{resource}/copies/{copy}/update"]
+not_budgeted = "needs an installed template copy; the budget seed installs none yet"
+
+["GET /v1/runs"]
+queries = 3
+transactions = 2
+connections = 2
+
+["GET /v1/runs/{run_id}"]
+not_budgeted = "needs an engine run; the budget seed starts none yet"
+
+["GET /v1/runs/{run_id}/events"]
+not_budgeted = "needs an engine run; the budget seed starts none yet"
+
+["GET /v1/skills"]
+not_budgeted = "grows with rows: 20 statements at 5, 170 at 50; list being moved to SQL by the store pass; re-measure then"
+
+["GET /v1/skills/options"]
+not_budgeted = "grows with rows: 14 statements at 5, 64 at 50; list being moved to SQL by the store pass; re-measure then"
+
+["GET /v1/skills/{skill_id}"]
+not_budgeted = "grows with rows: 15 statements at 5, 65 at 50; list being moved to SQL by the store pass; re-measure then"
+
+["GET /v1/skills/{skill_id}/eval-cases"]
+queries = 2
+
+["GET /v1/task-types"]
+queries = 2
+
+["GET /v1/task-types/{type_id}"]
+queries = 2
+
+["GET /v1/tasks/{task_id}"]
+not_budgeted = "needs a task; the budget seed opens none yet"
+
+["GET /v1/teams/usage"]
+queries = 7
+
+["GET /v1/templates"]
+not_budgeted = "refuses the dev caller (team_required: a dev session acts across teams); needs a person token in the seed"
+
+["GET /v1/threads"]
+queries = 1
+
+["GET /v1/threads/{thread_id}/inbox"]
+queries = 2
+
+["GET /v1/threads/{thread_id}/runs"]
+queries = 3
+
+["GET /v1/threads/{thread_id}/runs/{run_id}/events"]
+not_budgeted = "needs a graph run; the budget seed starts none yet"
+
+["GET /v1/threads/{thread_id}/state"]
+queries = 5
+transactions = 5
+connections = 5
+
+["GET /v1/tool-uses"]
+not_budgeted = "grows with rows: 22 statements at 5, 72 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/tools"]
+not_budgeted = "grows with rows: 26 statements at 5, 76 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/tools/options"]
+queries = 5
+transactions = 5
+connections = 5
+
+["GET /v1/tools/{tool_id}"]
+not_budgeted = "grows with rows: 26 statements at 5, 76 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/widgets"]
+queries = 2
+
+["GET /v1/widgets/options"]
+queries = 1
+
+["GET /v1/widgets/{widget_id}"]
+not_budgeted = "grows with rows: 19 statements at 5, 169 at 50; list being moved to SQL by the store pass; re-measure then"
+
+["GET /v1/workflow-refs"]
+queries = 2
+
+["GET /v1/workflows"]
+queries = 16
+
+["GET /v1/workflows/definitions"]
+queries = 2
+
+["GET /v1/workflows/definitions/account-uses"]
+not_budgeted = "grows with rows: 10 statements at 5, 60 at 50; reads one row per agent or record (N+1); to be fixed"
+
+["GET /v1/workflows/definitions/{workflow_id}"]
+queries = 4
+
+["GET /v1/workflows/definitions/{workflow_id}/versions/{version}/shapes"]
+queries = 1
+
+["GET /v1/workflows/node-types"]
+queries = 0
+
+["GET /v1/workflows/option-sources"]
+queries = 1
+query = { source = "agents" }
+
+["GET /v1/workflows/route-fields"]
+queries = 0
+
+["GET /v1/workflows/{workflow_id}"]
+queries = 9
+transactions = 9
+connections = 9
+
+["GET /v1/workflows/{workflow_id}/forms"]
+queries = 1
+
+["GET /v1/workflows/{workflow_id}/live"]
+not_budgeted = "needs a live engine definition; the budget seed publishes none yet"
+
+["GET /v1/workflows/{workflow_id}/runs"]
+queries = 3
+
+["GET /v1/workflows/{workflow_id}/validations/latest"]
+queries = 2
+
+["GET /v1/workflows/{workflow_id}/versions"]
+queries = 2
