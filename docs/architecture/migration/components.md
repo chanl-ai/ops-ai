@@ -280,12 +280,15 @@ any other role, through an invite or a role change.
 ```python
 # packages/ops_store/src/ops_store/copies.py
 def copy_table(metadata: sa.MetaData, name: str, *columns: sa.Column, marking: Marking = TENANT_SCOPED) -> sa.Table:
-    """A local copy of another service's records: the owner's id, its revision, and the columns a screen lists or
-    filters on. Policed like any tenant table. Never the source of truth for a decision."""
+    """A local copy of another service's records: the owner's id, its revision, a deleted flag, and the columns a
+    screen lists or filters on. Policed like any tenant table. Never the source of truth for a decision."""
+def live(table: sa.Table) -> sa.ColumnElement[bool]:
+    """The where-clause of every read for a screen: a deleted record keeps its row, flagged, as its tombstone."""
 async def apply(conn: AsyncConnection, table: sa.Table, event: Event) -> None:
-    """Upsert or delete by id and revision; an older revision is ignored, so a replayed event is harmless."""
+    """Upsert or mark deleted over a lower (revision, deleted) pair only, so a replayed or late event is harmless."""
 def resync(table: sa.Table, source: Callable[[], Awaitable[list[Out]]], *, key: str, every_s: float) -> Process:
-    """Reads the owner's full list at start and every every_s and reconciles the copy."""
+    """Reads the owner's full list at start and every every_s and sets the copy to it at any revision, so an edit at
+    the same revision or a counter that restarts is repaired by the next pass."""
 
 # agents-service, after
 @router.get("/v1/tools", response_model=Envelope[ListResult[ToolOut]])

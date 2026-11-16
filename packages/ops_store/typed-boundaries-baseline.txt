@@ -3,7 +3,7 @@
 3 dict-any packages/ops_store/src/ops_store/background.py
 4 dict-any packages/ops_store/src/ops_store/conformance.py
 2 gather packages/ops_store/src/ops_store/conformance.py
-10 dict-any packages/ops_store/src/ops_store/copies.py
+7 dict-any packages/ops_store/src/ops_store/copies.py
 2 dict-any packages/ops_store/src/ops_store/database.py
 3 dict-any packages/ops_store/src/ops_store/dialect.py
 3 dict-any packages/ops_store/src/ops_store/listing.py
