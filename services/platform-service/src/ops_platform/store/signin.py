@@ -199,21 +199,29 @@ class DomainListedError(Exception):
 
 
 async def _count_one(
-    c: AsyncConnection, t: sa.Table, row: sa.ColumnElement[bool], *, at: str, window_start: str
+    c: AsyncConnection, t: sa.Table, start: dict[str, str | int], *, keys: list[str], window_start: str
 ) -> int:
-    """Adds one wrong password to the row, which the caller has made sure exists, and returns the count; a count from
-    before `window_start` starts again at one. One UPDATE: two at once wait on the row's lock, so both count."""
+    """Adds one wrong password to the row `keys` name and returns the count; a count from before `window_start` starts
+    again at one. The row is made first if there is none (`start`, at zero); one UPDATE counts, so two at once wait on
+    the row's lock and both count. A right password or a reset may delete the row between the two statements: the
+    count then starts again, as it would have after that delete."""
+    at = start["first_failed_at"]
     stale = t.c.first_failed_at < window_start
     counted = (
         t.update()
-        .where(row)
+        .where(*[t.c[k] == start[k] for k in keys])
         .values(
             failures=sa.case((stale, 1), else_=t.c.failures + 1),
             first_failed_at=sa.case((stale, at), else_=t.c.first_failed_at),
         )
         .returning(t.c.failures)
     )
-    return int((await c.execute(counted)).scalar_one())
+    for _ in range(3):
+        await c.execute(insert_ignore(c, t, start, keys=keys))
+        failures = (await c.execute(counted)).scalar_one_or_none()
+        if failures is not None:
+            return int(failures)
+    raise RuntimeError(f"{t.name}: the count's row was deleted three times while counting")
 
 
 class SignInStore(TenantDb):
@@ -496,9 +504,13 @@ class SignInStore(TenantDb):
         starts the count again. Returns whether this wrong password locked them."""
         t = signin_lockouts
         async with self.tenant_tx(tenant_id) as c:
-            start = {"tenant_id": tenant_id, "user_id": user_id, "failures": 0, "first_failed_at": at}
-            await c.execute(insert_ignore(c, t, start, keys=["tenant_id", "user_id"]))
-            row = await _count_one(c, t, t.c.user_id == user_id, at=at, window_start=window_start)
+            start: dict[str, str | int] = {
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "failures": 0,
+                "first_failed_at": at,
+            }
+            row = await _count_one(c, t, start, keys=["tenant_id", "user_id"], window_start=window_start)
             if row < max_failures:
                 return False
             await c.execute(
@@ -531,9 +543,8 @@ class SignInStore(TenantDb):
         not the address has an account. Returns whether this one locked it."""
         t = signin_email_failures
         async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
-            start = {"email_hash": email_hash, "failures": 0, "first_failed_at": at}
-            await c.execute(insert_ignore(c, t, start, keys=["email_hash"]))
-            failures = await _count_one(c, t, t.c.email_hash == email_hash, at=at, window_start=window_start)
+            start: dict[str, str | int] = {"email_hash": email_hash, "failures": 0, "first_failed_at": at}
+            failures = await _count_one(c, t, start, keys=["email_hash"], window_start=window_start)
             if failures < max_failures:
                 return False
             await c.execute(
