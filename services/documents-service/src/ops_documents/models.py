@@ -9,8 +9,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from ops_ingest.reading import FileFacts, OcrMode
-from ops_ingest.reading import Page as ReadingPage
+from ops_ingest.reading import OcrMode
 from ops_service_kit.http import In, JsonValue, ListResult, Out
 
 
@@ -430,6 +429,93 @@ class ReadingSettingsOut(Out):
 class ReadingError(Out):
     code: str
     message: str
+
+
+# A reading's parts as this service answers them: the same fields as ops_ingest's reading models, owned here so the
+# reply is an `Out` (frozen, extra forbidden) and the contract does not move when the reader's models do.
+Box = list[float]
+
+
+class ReadingLine(Out):
+    text: str
+    box: Box | None = None
+
+
+class ReadingCell(Out):
+    id: str
+    row: int
+    col: int
+    row_span: int = 1
+    col_span: int = 1
+    text: str
+    box: Box | None = None
+    header: bool = False
+
+
+class ReadingBlock(Out):
+    id: str
+    kind: Literal["title", "heading", "paragraph", "table"]
+    text: str
+    box: Box | None = None
+    order: int = 0
+    level: int | None = None
+    lines: list[ReadingLine] = Field(default_factory=list[ReadingLine])
+    cells: list[ReadingCell] = Field(default_factory=list[ReadingCell])
+    caption: str | None = None
+    sheet: str | None = None
+    read_by: Literal["text", "ocr"] = "text"
+    furniture: bool = False
+    main: bool = False
+
+
+class ReadingWord(Out):
+    text: str
+    box: Box
+    confidence: float
+
+
+class ReadingFormField(Out):
+    name: str
+    value: str
+    kind: Literal["text", "checkbox", "choice", "signature"]
+    page: int
+    box: Box | None = None
+
+
+class ReadingOcrQuality(Out):
+    mean: float
+    low_share: float
+    words: int
+
+
+class ReadingPage(Out):
+    number: int
+    width: float | None = None
+    height: float | None = None
+    source: Literal["text", "ocr", "mixed", "none"]
+    image_share: float = 0.0
+    text: str = ""
+    blocks: list[ReadingBlock] = Field(default_factory=list[ReadingBlock])
+    words: list[ReadingWord] = Field(default_factory=list[ReadingWord])
+    form_fields: list[ReadingFormField] = Field(default_factory=list[ReadingFormField])
+    ocr: ReadingOcrQuality | None = None
+    unread_reason: str | None = None
+    warnings: list[str] = Field(default_factory=list[str])
+    duration_ms: int = 0
+
+
+class FileFacts(Out):
+    filename: str
+    mime_type: str
+    size_bytes: int
+    page_count: int
+    title: str | None = None
+    author: str | None = None
+    created: str | None = None
+    modified: str | None = None
+    paged: bool = True
+    removed_chars: int = 0
+    warnings: list[str] = Field(default_factory=list[str])
 
 
 class FileReading(Out):

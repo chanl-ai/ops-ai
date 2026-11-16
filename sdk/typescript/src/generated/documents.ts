@@ -661,83 +661,6 @@ export interface components {
             waiting: number | null;
         };
         /**
-         * Block
-         * @description One run of content in reading order. A paragraph keeps its lines (and their boxes) so the page's text can put
-         *     each on its own line; a table keeps its cells.
-         */
-        Block: {
-            /** Box */
-            box?: number[] | null;
-            /** Caption */
-            caption?: string | null;
-            /** Cells */
-            cells?: components["schemas"]["Cell"][];
-            /**
-             * Furniture
-             * @default false
-             */
-            furniture: boolean;
-            /** Id */
-            id: string;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "title" | "heading" | "paragraph" | "table";
-            /** Level */
-            level?: number | null;
-            /** Lines */
-            lines?: components["schemas"]["Line"][];
-            /**
-             * Main
-             * @default false
-             */
-            main: boolean;
-            /**
-             * Order
-             * @default 0
-             */
-            order: number;
-            /**
-             * Readby
-             * @default text
-             * @enum {string}
-             */
-            readBy: "text" | "ocr";
-            /** Sheet */
-            sheet?: string | null;
-            /** Text */
-            text: string;
-        };
-        /** Cell */
-        Cell: {
-            /** Box */
-            box?: number[] | null;
-            /** Col */
-            col: number;
-            /**
-             * Colspan
-             * @default 1
-             */
-            colSpan: number;
-            /**
-             * Header
-             * @default false
-             */
-            header: boolean;
-            /** Id */
-            id: string;
-            /** Row */
-            row: number;
-            /**
-             * Rowspan
-             * @default 1
-             */
-            rowSpan: number;
-            /** Text */
-            text: string;
-        };
-        /**
          * Classification
          * @description Which of the team's document types a file is: the model's choice and how sure it is, or none.
          *     `needsReview` when none fits or the confidence is under the floor.
@@ -1391,10 +1314,7 @@ export interface components {
             /** Misses */
             misses: number;
         };
-        /**
-         * FileFacts
-         * @description What is known about a file before its pages are read.
-         */
+        /** FileFacts */
         FileFacts: {
             /** Author */
             author?: string | null;
@@ -1441,7 +1361,7 @@ export interface components {
             /** Fileid */
             fileId: string;
             /** Pages */
-            pages?: components["schemas"]["Page"][] | null;
+            pages?: components["schemas"]["ReadingPage"][] | null;
             /** Pagesdone */
             pagesDone: number;
             /** Pagestotal */
@@ -1454,26 +1374,6 @@ export interface components {
              * @enum {string}
              */
             status: "none" | "queued" | "reading" | "done" | "failed";
-        };
-        /**
-         * FormField
-         * @description A field of a fillable PDF form, read from the form dictionary: values typed into a form are not in the text
-         *     layer.
-         */
-        FormField: {
-            /** Box */
-            box?: number[] | null;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "text" | "checkbox" | "choice" | "signature";
-            /** Name */
-            name: string;
-            /** Page */
-            page: number;
-            /** Value */
-            value: string;
         };
         /**
          * Health
@@ -1620,13 +1520,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** Line */
-        Line: {
-            /** Box */
-            box?: number[] | null;
-            /** Text */
-            text: string;
-        };
         /** ListResult[Extraction] */
         ListResult_Extraction_: {
             /** Data */
@@ -1638,55 +1531,6 @@ export interface components {
                 };
             };
             pagination: components["schemas"]["Pagination"];
-        };
-        /** OcrQuality */
-        OcrQuality: {
-            /** Lowshare */
-            lowShare: number;
-            /** Mean */
-            mean: number;
-            /** Words */
-            words: number;
-        };
-        /** Page */
-        Page: {
-            /** Blocks */
-            blocks?: components["schemas"]["Block"][];
-            /**
-             * Durationms
-             * @default 0
-             */
-            durationMs: number;
-            /** Formfields */
-            formFields?: components["schemas"]["FormField"][];
-            /** Height */
-            height?: number | null;
-            /**
-             * Imageshare
-             * @default 0
-             */
-            imageShare: number;
-            /** Number */
-            number: number;
-            ocr?: components["schemas"]["OcrQuality"] | null;
-            /**
-             * Source
-             * @enum {string}
-             */
-            source: "text" | "ocr" | "mixed" | "none";
-            /**
-             * Text
-             * @default
-             */
-            text: string;
-            /** Unreadreason */
-            unreadReason?: string | null;
-            /** Warnings */
-            warnings?: string[];
-            /** Width */
-            width?: number | null;
-            /** Words */
-            words?: components["schemas"]["Word"][];
         };
         /** Pagination */
         Pagination: {
@@ -1724,12 +1568,101 @@ export interface components {
             /** Samples */
             samples: number;
         };
+        /** ReadingBlock */
+        ReadingBlock: {
+            /** Box */
+            box?: number[] | null;
+            /** Caption */
+            caption?: string | null;
+            /** Cells */
+            cells?: components["schemas"]["ReadingCell"][];
+            /**
+             * Furniture
+             * @default false
+             */
+            furniture: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "title" | "heading" | "paragraph" | "table";
+            /** Level */
+            level?: number | null;
+            /** Lines */
+            lines?: components["schemas"]["ReadingLine"][];
+            /**
+             * Main
+             * @default false
+             */
+            main: boolean;
+            /**
+             * Order
+             * @default 0
+             */
+            order: number;
+            /**
+             * Readby
+             * @default text
+             * @enum {string}
+             */
+            readBy: "text" | "ocr";
+            /** Sheet */
+            sheet?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** ReadingCell */
+        ReadingCell: {
+            /** Box */
+            box?: number[] | null;
+            /** Col */
+            col: number;
+            /**
+             * Colspan
+             * @default 1
+             */
+            colSpan: number;
+            /**
+             * Header
+             * @default false
+             */
+            header: boolean;
+            /** Id */
+            id: string;
+            /** Row */
+            row: number;
+            /**
+             * Rowspan
+             * @default 1
+             */
+            rowSpan: number;
+            /** Text */
+            text: string;
+        };
         /** ReadingError */
         ReadingError: {
             /** Code */
             code: string;
             /** Message */
             message: string;
+        };
+        /** ReadingFormField */
+        ReadingFormField: {
+            /** Box */
+            box?: number[] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "checkbox" | "choice" | "signature";
+            /** Name */
+            name: string;
+            /** Page */
+            page: number;
+            /** Value */
+            value: string;
         };
         /** ReadingIn */
         ReadingIn: {
@@ -1747,6 +1680,62 @@ export interface components {
              */
             ocr: "off" | "auto" | "always";
         };
+        /** ReadingLine */
+        ReadingLine: {
+            /** Box */
+            box?: number[] | null;
+            /** Text */
+            text: string;
+        };
+        /** ReadingOcrQuality */
+        ReadingOcrQuality: {
+            /** Lowshare */
+            lowShare: number;
+            /** Mean */
+            mean: number;
+            /** Words */
+            words: number;
+        };
+        /** ReadingPage */
+        ReadingPage: {
+            /** Blocks */
+            blocks?: components["schemas"]["ReadingBlock"][];
+            /**
+             * Durationms
+             * @default 0
+             */
+            durationMs: number;
+            /** Formfields */
+            formFields?: components["schemas"]["ReadingFormField"][];
+            /** Height */
+            height?: number | null;
+            /**
+             * Imageshare
+             * @default 0
+             */
+            imageShare: number;
+            /** Number */
+            number: number;
+            ocr?: components["schemas"]["ReadingOcrQuality"] | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "text" | "ocr" | "mixed" | "none";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /** Unreadreason */
+            unreadReason?: string | null;
+            /** Warnings */
+            warnings?: string[];
+            /** Width */
+            width?: number | null;
+            /** Words */
+            words?: components["schemas"]["ReadingWord"][];
+        };
         /** ReadingSettingsOut */
         ReadingSettingsOut: {
             /** Language */
@@ -1756,6 +1745,15 @@ export interface components {
              * @enum {string}
              */
             ocr: "off" | "auto" | "always";
+        };
+        /** ReadingWord */
+        ReadingWord: {
+            /** Box */
+            box: number[];
+            /** Confidence */
+            confidence: number;
+            /** Text */
+            text: string;
         };
         /** Sample */
         Sample: {
@@ -2020,15 +2018,6 @@ export interface components {
             toVersion: number;
             /** Version */
             version?: number | null;
-        };
-        /** Word */
-        Word: {
-            /** Box */
-            box: number[];
-            /** Confidence */
-            confidence: number;
-            /** Text */
-            text: string;
         };
     };
     responses: never;

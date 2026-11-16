@@ -29,17 +29,6 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
-class Cell(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    col: int
-    colSpan: NotRequired[int]
-    header: NotRequired[bool]
-    id: str
-    row: int
-    rowSpan: NotRequired[int]
-    text: str
-
-
 class Classification(TypedDict, closed=True):
     confidence: float | None
     floor: float
@@ -175,14 +164,6 @@ class FileFacts(TypedDict, closed=True):
     warnings: NotRequired[list[str]]
 
 
-class FormField(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    kind: Literal["text", "checkbox", "choice", "signature"]
-    name: str
-    page: int
-    value: str
-
-
 class Health(TypedDict, closed=True):
     reason: NotRequired[Literal["database", "ocr"] | None]
     status: Literal["ok", "degraded"]
@@ -245,17 +226,6 @@ class LayoutWord(TypedDict, closed=True):
     text: str
 
 
-class Line(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    text: str
-
-
-class OcrQuality(TypedDict, closed=True):
-    lowShare: float
-    mean: float
-    words: int
-
-
 class Pagination(TypedDict, closed=True):
     hasNext: bool
     hasPrev: bool
@@ -275,9 +245,28 @@ class Purged(TypedDict, closed=True):
     samples: int
 
 
+class ReadingCell(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    col: int
+    colSpan: NotRequired[int]
+    header: NotRequired[bool]
+    id: str
+    row: int
+    rowSpan: NotRequired[int]
+    text: str
+
+
 class ReadingError(TypedDict, closed=True):
     code: str
     message: str
+
+
+class ReadingFormField(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    kind: Literal["text", "checkbox", "choice", "signature"]
+    name: str
+    page: int
+    value: str
 
 
 class ReadingIn(TypedDict, closed=True):
@@ -286,9 +275,26 @@ class ReadingIn(TypedDict, closed=True):
     ocr: NotRequired[Literal["off", "auto", "always"]]
 
 
+class ReadingLine(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    text: str
+
+
+class ReadingOcrQuality(TypedDict, closed=True):
+    lowShare: float
+    mean: float
+    words: int
+
+
 class ReadingSettingsOut(TypedDict, closed=True):
     language: str
     ocr: Literal["off", "auto", "always"]
+
+
+class ReadingWord(TypedDict, closed=True):
+    box: list[float]
+    confidence: float
+    text: str
 
 
 class Sample(TypedDict, closed=True):
@@ -411,30 +417,8 @@ class UpdateInput(TypedDict, closed=True):
     mode: NotRequired[Literal["merge", "reset"] | None]
 
 
-class Word(TypedDict, closed=True):
-    box: list[float]
-    confidence: float
-    text: str
-
-
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
-
-
-class Block(TypedDict, closed=True):
-    box: NotRequired[list[float] | None]
-    caption: NotRequired[str | None]
-    cells: NotRequired[list[Cell]]
-    furniture: NotRequired[bool]
-    id: str
-    kind: Literal["title", "heading", "paragraph", "table"]
-    level: NotRequired[int | None]
-    lines: NotRequired[list[Line]]
-    main: NotRequired[bool]
-    order: NotRequired[int]
-    readBy: NotRequired[Literal["text", "ocr"]]
-    sheet: NotRequired[str | None]
-    text: str
 
 
 class DocumentTypeExample(TypedDict, closed=True):
@@ -553,20 +537,36 @@ class LayoutBlock(TypedDict, closed=True):
     text: str
 
 
-class Page(TypedDict, closed=True):
-    blocks: NotRequired[list[Block]]
+class ReadingBlock(TypedDict, closed=True):
+    box: NotRequired[list[float] | None]
+    caption: NotRequired[str | None]
+    cells: NotRequired[list[ReadingCell]]
+    furniture: NotRequired[bool]
+    id: str
+    kind: Literal["title", "heading", "paragraph", "table"]
+    level: NotRequired[int | None]
+    lines: NotRequired[list[ReadingLine]]
+    main: NotRequired[bool]
+    order: NotRequired[int]
+    readBy: NotRequired[Literal["text", "ocr"]]
+    sheet: NotRequired[str | None]
+    text: str
+
+
+class ReadingPage(TypedDict, closed=True):
+    blocks: NotRequired[list[ReadingBlock]]
     durationMs: NotRequired[int]
-    formFields: NotRequired[list[FormField]]
+    formFields: NotRequired[list[ReadingFormField]]
     height: NotRequired[float | None]
     imageShare: NotRequired[float]
     number: int
-    ocr: NotRequired[OcrQuality | None]
+    ocr: NotRequired[ReadingOcrQuality | None]
     source: Literal["text", "ocr", "mixed", "none"]
     text: NotRequired[str]
     unreadReason: NotRequired[str | None]
     warnings: NotRequired[list[str]]
     width: NotRequired[float | None]
-    words: NotRequired[list[Word]]
+    words: NotRequired[list[ReadingWord]]
 
 
 class UpdateReview(TypedDict, closed=True):
@@ -640,7 +640,7 @@ class FileReading(TypedDict, closed=True):
     error: NotRequired[ReadingError | None]
     facts: NotRequired[FileFacts | None]
     fileId: str
-    pages: NotRequired[list[Page] | None]
+    pages: NotRequired[list[ReadingPage] | None]
     pagesDone: int
     pagesTotal: int | None
     readerVersion: str
