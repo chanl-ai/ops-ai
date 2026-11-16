@@ -25,36 +25,36 @@ async def hand_over(store: ReviewHandoffs, agents: ServiceClient) -> int:
     sent = 0
     modules, waiting = await store.pending()
     for v in waiting:
-        m = modules.get((v["tenant_id"], v["module_id"]))
-        if m is None or not str(v["review_id"]).startswith(SEEDED):
+        m = modules.get((v.tenant_id, v.module_id))
+        if m is None or not v.review_id.startswith(SEEDED):
             continue
         body = {
             "kind": "tool_module",
-            "subjectId": v["module_id"],
+            "subjectId": v.module_id,
             "moduleName": m.display_name,
-            "moduleVersion": v["version"],
-            "requestedBy": v["published_by"] or "the tools-service seed",
+            "moduleVersion": v.version,
+            "requestedBy": v.published_by or "the tools-service seed",
         }
         try:
-            opened = await agents.post("/v1/publish-requests", body, tenant=v["tenant_id"], team=m.team_id)
+            opened = await agents.post("/v1/publish-requests", body, tenant=v.tenant_id, team=m.team_id)
         except ServiceCallError as e:
             if e.code != "review_open":
                 raise
             # Reviews already holds an open request for the module; the version keeps the seed's id.
-            log.info("tool_review_already_open", module=v["module_id"])
+            log.info("tool_review_already_open", module=v.module_id)
             continue
         await store.opened(v, str(opened["id"]))
         sent += 1
     # Open workflow requests for a module's operations run as the tool_access_request system workflow: each
     # is reported once as its event, for the module's team unless the request already named its deciding team.
     for a in await store.open_access():
-        m = modules.get((a["tenant_id"], a["module_id"]))
+        m = modules.get((a.tenant_id, a.module_id))
         if m is None:
             continue
-        module = {"id": a["module_id"], "tenant_id": a["tenant_id"], "display_name": m.display_name}
-        await store.start_access_run(
-            a, event=access_event(module, {**a, "decider_team": a["decider_team"] or m.team_id})
-        )
+        module = {"id": a.module_id, "tenant_id": a.tenant_id, "display_name": m.display_name}
+        # access_event reads a request as modules/service.py holds one, by its column names.
+        request = {**a.model_dump(), "decider_team": a.decider_team or m.team_id}
+        await store.start_access_run(a, event=access_event(module, request))
         sent += 1
     return sent
 

@@ -28,7 +28,7 @@ from .modules.routes import ERRORS
 from .modules.service import Caller
 from .registry import ToolRegistry
 from .store.calls import CallLog
-from .store.mcp_links import McpLinks
+from .store.mcp_links import LinkedTool, McpLink, McpLinks
 
 # A link names its tools; past this many an assistant reads a list too long to choose from (tool search starts at 20).
 MAX_TOOLS = 20
@@ -107,20 +107,20 @@ def mcp_links_router(
         assert who.principal is not None
         return who.principal
 
-    def _view(row: dict[str, Any], last: dict[str, Any] | None) -> dict[str, Any]:
-        tools = [LinkTool(name=t["name"], title=t["title"], kind=t["kind"], access=t["access"]) for t in row["tools"]]
+    def _view(row: McpLink, last: dict[str, Any] | None) -> dict[str, Any]:
+        tools = [LinkTool(name=t.name, title=t.title, kind=t.kind, access=t.access) for t in row.tools]
         return McpLinkView(
-            id=row["id"],
-            name=row["name"],
-            slug=row["slug"],
-            team_id=row["team_id"],
+            id=row.id,
+            name=row.name,
+            slug=row.slug,
+            team_id=row.team_id,
             environment="test",
-            url=f"{base}/mcp/{row['team_id']}/{row['slug']}" if base else None,
+            url=f"{base}/mcp/{row.team_id}/{row.slug}" if base else None,
             tools=tools,
             tool_count=len(tools),
-            paused=row["paused"],
-            created_by=row["created_by"],
-            created_at=row["created_at"],
+            paused=row.paused,
+            created_by=row.created_by,
+            created_at=row.created_at,
             last_call=LastCall(
                 # A signed-in assistant is known by its client id only; the console words it rather than show the id.
                 at=last["created_at"],
@@ -132,7 +132,7 @@ def mcp_links_router(
             else None,
         ).model_dump(by_alias=True)
 
-    async def _one(who: Caller, link_id: str) -> dict[str, Any]:
+    async def _one(who: Caller, link_id: str) -> McpLink:
         row = await links.get(who.tenant_id, who.team.id, link_id)
         if row is None:
             raise NotFound(f"MCP link {link_id}")
@@ -149,8 +149,8 @@ def mcp_links_router(
         out: list[dict[str, Any]] = []
         for team_id in teams:
             rows = await links.list(who.tenant_id, team_id)
-            last = await log.last_by_link(who.tenant_id, team_id, [x["id"] for x in rows])
-            out.extend(_view(x, last.get(x["id"])) for x in rows)
+            last = await log.last_by_link(who.tenant_id, team_id, [x.id for x in rows])
+            out.extend(_view(x, last.get(x.id)) for x in rows)
         return ok(sorted(out, key=lambda v: str(v["name"]).lower()))
 
     @r.post("", response_model=Envelope[McpLinkView], status_code=201)
@@ -166,23 +166,23 @@ def mcp_links_router(
             return directory.sees_module(team, module)
 
         grantable = {str(x["name"]): x for x in await registry.grantable(who.tenant_id, sees)}
-        picked: list[dict[str, Any]] = []
+        picked: list[LinkedTool] = []
         for t in body.tools:
             if t.id.startswith(WORKFLOW_ID):
                 wid = t.id.removeprefix(WORKFLOW_ID)
                 picked.append(
-                    {
-                        "name": f"{WORKFLOW_PREFIX}{wid}",
-                        "title": t.label,
-                        "kind": "workflow",
-                        "access": "workflow",
-                        "description": t.description,
-                        "input_schema": t.input_schema or {"type": "object"},
-                    }
+                    LinkedTool(
+                        name=f"{WORKFLOW_PREFIX}{wid}",
+                        title=t.label,
+                        kind="workflow",
+                        access="workflow",
+                        description=t.description,
+                        input_schema=t.input_schema or {"type": "object"},
+                    )
                 )
             elif (op := grantable.get(t.id)) is not None:
                 access = "write" if op["access"] not in ("read",) else "read"
-                picked.append({"name": t.id, "title": t.label, "kind": "tool", "access": access})
+                picked.append(LinkedTool(name=t.id, title=t.label, kind="tool", access=access))
             else:
                 raise Unprocessable(f"{t.label} is not a tool this team can run.", code="tool_not_runnable")
         row = await links.create(
@@ -194,8 +194,8 @@ def mcp_links_router(
     async def get_mcp_link(link_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         can(_principal(who), "deployments", "view", team=who.team.id, what="this team's MCP links")
         row = await _one(who, link_id)
-        last = await log.last_by_link(who.tenant_id, who.team.id, [row["id"]])
-        return ok(_view(row, last.get(row["id"])))
+        last = await log.last_by_link(who.tenant_id, who.team.id, [row.id])
+        return ok(_view(row, last.get(row.id)))
 
     @r.patch("/{link_id}", response_model=Envelope[McpLinkView])
     async def pause_mcp_link(  # pyright: ignore[reportUnusedFunction]
@@ -206,8 +206,8 @@ def mcp_links_router(
         await _one(who, link_id)
         row = await links.set_paused(who.tenant_id, who.team.id, link_id, body.paused)
         assert row is not None
-        last = await log.last_by_link(who.tenant_id, who.team.id, [row["id"]])
-        return ok(_view(row, last.get(row["id"])))
+        last = await log.last_by_link(who.tenant_id, who.team.id, [row.id])
+        return ok(_view(row, last.get(row.id)))
 
     @r.delete("/{link_id}", status_code=204)
     async def delete_mcp_link(link_id: str, who: Annotated[Caller, Depends(caller)]) -> Response:  # pyright: ignore[reportUnusedFunction]

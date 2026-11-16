@@ -165,6 +165,22 @@ async def test_app_and_account_replies(bank: Bank) -> None:
     pins.check()
 
 
+async def test_egress_replies(bank: Bank) -> None:
+    api = bank.api
+    pins = Pins("egress", api.tenant)
+    host = {"value": "ledger.bank.test", "note": "Ledger"}
+    pins.reply("add host", await api.client.post("/v1/egress/hosts", json=host), sent=host)
+    pins.reply("add host again", await api.client.post("/v1/egress/hosts", json=host), sent=host)
+    cidr = {"value": "10.20.0.0/16", "note": "Core network"}
+    pins.reply("add range", await api.client.post("/v1/egress/ranges", json=cidr), sent=cidr)
+    pins.reply("allow list", await api.client.get("/v1/egress"))
+    pins.reply("hosts page", await api.client.get("/v1/egress/hosts", params={"pageSize": 2, "search": "ledger"}))
+    gone = {"value": "10.20.0.0/16"}
+    pins.reply("remove range", await api.client.post("/v1/egress/ranges/remove", json=gone), sent=gone)
+    pins.reply("remove missing", await api.client.post("/v1/egress/ranges/remove", json=gone), sent=gone)
+    pins.check()
+
+
 def _service(tenant: str) -> dict[str, str]:
     return service_headers(tenant)
 

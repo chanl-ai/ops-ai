@@ -21,6 +21,7 @@ from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok,
 from .callers import Person, person, security_admin
 from .egress import EgressDenied, listable_host, listable_range
 from .modules.schemas import ModuleRef
+from .store import egress as stored
 from .store.egress import EgressStore, HostInUseError
 
 
@@ -77,30 +78,28 @@ class Change(Out):
     entry: ListedHost | ListedRange | None = None
 
 
-def _host_out(h: dict[str, object]) -> dict[str, object]:
+def _host_out(h: stored.ListedHost) -> dict[str, object]:
     """A stored host row as the lists and an add return it."""
-    at = h["added_at"]
     return {
-        "host": h["host"],
-        "note": h["note"],
-        "addedBy": h["added_by"],
-        "addedAt": at.isoformat() if isinstance(at, datetime) else at,
-        "modules": h["modules"],
-        "templateId": h.get("template_id"),
-        "protection": h.get("protection"),
+        "host": h.host,
+        "note": h.note,
+        "addedBy": h.added_by,
+        "addedAt": h.added_at.isoformat(),
+        "modules": [{"id": m.id, "name": m.name} for m in h.modules],
+        "templateId": h.template_id,
+        "protection": h.protection,
     }
 
 
-def _range_out(x: dict[str, object]) -> dict[str, object]:
+def _range_out(x: stored.ListedRange) -> dict[str, object]:
     """A stored range row as the list and an add return it."""
-    at = x["added_at"]
     return {
-        "cidr": x["cidr"],
-        "note": x["note"],
-        "addedBy": x["added_by"],
-        "addedAt": at.isoformat() if isinstance(at, datetime) else at,
-        "templateId": x.get("template_id"),
-        "protection": x.get("protection"),
+        "cidr": x.cidr,
+        "note": x.note,
+        "addedBy": x.added_by,
+        "addedAt": x.added_at.isoformat(),
+        "templateId": x.template_id,
+        "protection": x.protection,
     }
 
 
@@ -126,7 +125,7 @@ def egress_router(store: EgressStore) -> APIRouter:
 
     async def _listed(who: Person) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
         listed = await store.allow_list(who.tenant_id)
-        return [_host_out(h) for h in listed["hosts"]], [_range_out(x) for x in listed["ranges"]]
+        return [_host_out(h) for h in listed.hosts], [_range_out(x) for x in listed.ranges]
 
     @r.post("/held-hosts/decisions", response_model=Envelope[Change])
     async def decide_held_host(body: HeldHostDecisionIn, svc: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -176,7 +175,7 @@ def egress_router(store: EgressStore) -> APIRouter:
             who.tenant_id, kind, value, actor=who.name, note=body.note.strip(), at=datetime.now(UTC), template=template
         )
         row = await store.entry(who.tenant_id, kind, value)
-        entry = None if row is None else _host_out(row) if kind == "host" else _range_out(row)
+        entry = None if row is None else _host_out(row) if isinstance(row, stored.ListedHost) else _range_out(row)
         return ok({"kind": kind, "value": value, "changed": changed, "entry": entry}, 201 if changed else 200)
 
     async def _remove(kind: str, body: RemoveIn, who: Person) -> JSONResponse:

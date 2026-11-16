@@ -7,15 +7,18 @@ Who may connect and what a call may do stay the door's and the gateway's.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar, Literal
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee, isolation
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -45,8 +48,30 @@ mcp_links = sa.Table(
 )
 
 
-def _row(r: Any) -> dict[str, Any]:
-    return dict(r._mapping)  # pyright: ignore[reportPrivateUsage]
+class LinkedTool(Out):
+    """One picked tool or workflow as the link stores it."""
+
+    name: str
+    title: str
+    kind: Literal["tool", "workflow"]
+    access: Literal["read", "write", "workflow"]
+    # A picked workflow's description and input schema, as agents-service's catalog described it when the link was made.
+    description: str | None = None
+    input_schema: dict[str, JsonValue] | None = None
+
+
+class McpLink(Out):
+    id: str
+    tenant_id: str
+    team_id: str
+    slug: str
+    name: str
+    environment: str
+    tools: list[LinkedTool]
+    paused: bool
+    created_by: str
+    created_at: str
+    updated_at: str
 
 
 class McpLinks:
@@ -56,55 +81,55 @@ class McpLinks:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def list(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
+    async def list(self, tenant_id: str, team_id: str) -> list[McpLink]:
         t = mcp_links
         with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.team_id == team_id)
             async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                return [_row(r) for r in await c.execute(q.order_by(t.c.name))]
+                return await rows(c, q.order_by(t.c.name, t.c.id), McpLink)
 
-    async def get(self, tenant_id: str, team_id: str, link_id: str) -> dict[str, Any] | None:
+    async def get(self, tenant_id: str, team_id: str, link_id: str) -> McpLink | None:
         t = mcp_links
         with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.id == link_id)
             async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                found = (await c.execute(q)).first()
-        return _row(found) if found else None
+                return await one(c, q, McpLink)
 
-    async def by_slug(self, tenant_id: str, team_id: str, slug: str) -> dict[str, Any] | None:
+    async def by_slug(self, tenant_id: str, team_id: str, slug: str) -> McpLink | None:
         t = mcp_links
         with isolation.scope(tenant_id, team_id):
             q = sa.select(t).where(
                 t.c.tenant_id == tenant_id, team_visible(t), t.c.team_id == team_id, t.c.slug == slug
             )
             async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                found = (await c.execute(q)).first()
-        return _row(found) if found else None
+                return await one(c, q, McpLink)
 
     async def create(
-        self, tenant_id: str, team_id: str, *, slug: str, name: str, tools: list[dict[str, Any]], by: str
-    ) -> dict[str, Any]:
+        self, tenant_id: str, team_id: str, *, slug: str, name: str, tools: list[LinkedTool], by: str
+    ) -> McpLink:
         at = now_iso()
-        row = {
-            "id": new_id("mcl"),
-            "tenant_id": tenant_id,
-            "team_id": team_id,
-            "slug": slug,
-            "name": name,
-            "environment": "test",
-            "tools": tools,
-            "paused": False,
-            "created_by": by,
-            "created_at": at,
-            "updated_at": at,
-        }
+        link = McpLink(
+            id=new_id("mcl"),
+            tenant_id=tenant_id,
+            team_id=team_id,
+            slug=slug,
+            name=name,
+            environment="test",
+            tools=tools,
+            paused=False,
+            created_by=by,
+            created_at=at,
+            updated_at=at,
+        )
         try:
             with isolation.scope(tenant_id, team_id):
                 async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                    await c.execute(sa.insert(mcp_links).values(**row))
+                    # Each tool is stored with only the keys it has, as before: a picked tool has no schema of its own.
+                    tools_json = [x.model_dump(exclude_none=True) for x in tools]
+                    await c.execute(sa.insert(mcp_links).values(**link.model_dump(exclude={"tools"}), tools=tools_json))
         except IntegrityError as e:
             raise Unprocessable(f"This team already has a link named {name}.", code="link_name_taken") from e
-        return row
+        return link
 
     async def delete(self, tenant_id: str, team_id: str, link_id: str) -> bool:
         """Removes the link; its address answers 404 from then on. Its calls stay in the call log with its id."""
@@ -114,7 +139,7 @@ class McpLinks:
             async with isolation.isolated_tx(self.engine, role=ROLE) as c:
                 return (await c.execute(q)).rowcount > 0
 
-    async def set_paused(self, tenant_id: str, team_id: str, link_id: str, paused: bool) -> dict[str, Any] | None:
+    async def set_paused(self, tenant_id: str, team_id: str, link_id: str, paused: bool) -> McpLink | None:
         t = mcp_links
         with isolation.scope(tenant_id, team_id):
             q = (

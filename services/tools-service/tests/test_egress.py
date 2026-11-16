@@ -91,7 +91,7 @@ async def test_a_host_in_use_stays_listed_and_every_change_is_audited(api: Api, 
     assert gone.status_code == 200
     listed = (await api.client.get("/v1/egress")).json()["data"]["hosts"]
     assert "spare.example.com" not in [h["host"] for h in listed]
-    trail = [(a["value"], a["action"]) for a in await EgressStore(engine).audit(api.tenant)]
+    trail = [(a.value, a.action) for a in await EgressStore(engine).audit(api.tenant)]
     assert ("spare.example.com", "added") in trail and ("spare.example.com", "removed") in trail
     assert ("statements.example.com", "removed") not in trail, "a refused removal leaves no entry"
 

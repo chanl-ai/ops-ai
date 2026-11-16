@@ -163,7 +163,7 @@ async def test_builders_list_a_new_host_in_their_own_name(builder_app: Any, engi
     async for c in builder_app("builders"):
         added = await _add_operation(c, tenant, "nh-builders")
         assert added.status_code == 200, added.text
-        trail = [(a["value"], a["actor"]) for a in await EgressStore(engine).audit(tenant)]
+        trail = [(a.value, a.actor) for a in await EgressStore(engine).audit(tenant)]
         assert ("new-statements.example.com", "James Richardson") in trail
 
 
@@ -191,5 +191,5 @@ async def test_any_public_saves_a_new_public_host_listed_in_the_builders_name(
         added = await _add_operation(c, tenant, "nh-any")
         assert added.status_code == 200, added.text
         assert not REVIEWS.hosts, "any_public asks nobody"
-        trail = [(a["value"], a["actor"]) for a in await EgressStore(engine).audit(tenant)]
+        trail = [(a.value, a.actor) for a in await EgressStore(engine).audit(tenant)]
         assert ("new-statements.example.com", "James Richardson") in trail

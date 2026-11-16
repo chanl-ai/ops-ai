@@ -22,7 +22,7 @@ from ops_service_kit.settings import Settings
 from ops_tools.app import MCP_OFF
 from ops_tools.modules.seed import load
 from ops_tools.store.calls import gateway_calls
-from ops_tools.store.mcp_links import McpLinks
+from ops_tools.store.mcp_links import LinkedTool, McpLinks
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import Api, build_app, no_keys, opa_client
@@ -228,10 +228,10 @@ async def test_a_key_made_for_one_link_opens_that_link_alone(stack: Stack) -> No
     """A key a link's Keys tab made is bound to that link: refused (401) on the team's whole address and on another
     link."""
     links = McpLinks(stack.engine)
-    tools = [{"name": "lookup_case", "title": "Look up a case", "kind": "tool", "access": "read"}]
+    tools = [LinkedTool(name="lookup_case", title="Look up a case", kind="tool", access="read")]
     own = await links.create(stack.api.tenant, "team_lending", slug="claims", name="Claims", tools=tools, by="Priya")
     await links.create(stack.api.tenant, "team_lending", slug="other", name="Other", tools=tools, by="Priya")
-    LINK_TARGET.update(id=own["id"])
+    LINK_TARGET.update(id=own.id)
     body: dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
     accept = {"Accept": "application/json, text/event-stream"}
     async with stack.running(), stack.http("ok_linked") as http:

@@ -1,4 +1,4 @@
-# 1273 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 1223 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body apps_add_account
 1 reply apps_add_account
 1 body apps_add_app
@@ -93,7 +93,7 @@
 1 task services/tools-service/src/ops_tools/connections/service.py
 16 dict-any services/tools-service/src/ops_tools/connectors.py
 2 dict-any services/tools-service/src/ops_tools/egress.py
-6 dict-any services/tools-service/src/ops_tools/egress_routes.py
+4 dict-any services/tools-service/src/ops_tools/egress_routes.py
 1 dict-any services/tools-service/src/ops_tools/environments.py
 39 dict-any services/tools-service/src/ops_tools/executor.py
 2 dict-any services/tools-service/src/ops_tools/expression_routes.py
@@ -107,8 +107,8 @@
 2 dict-any services/tools-service/src/ops_tools/limits.py
 4 dict-any services/tools-service/src/ops_tools/mailboxes.py
 23 dict-any services/tools-service/src/ops_tools/mcp.py
-7 dict-any services/tools-service/src/ops_tools/mcp_links.py
-19 dict-any services/tools-service/src/ops_tools/mcp_server.py
+4 dict-any services/tools-service/src/ops_tools/mcp_links.py
+13 dict-any services/tools-service/src/ops_tools/mcp_server.py
 31 dict-any services/tools-service/src/ops_tools/mcp_tools.py
 13 dict-any services/tools-service/src/ops_tools/mock_routes.py
 7 dict-any services/tools-service/src/ops_tools/mocks.py
@@ -133,26 +133,19 @@
 19 dict-any services/tools-service/src/ops_tools/registry.py
 14 dict-any services/tools-service/src/ops_tools/secrets/routes.py
 3 dict-any services/tools-service/src/ops_tools/send_check.py
-2 dict-any services/tools-service/src/ops_tools/send_policy_routes.py
+1 dict-any services/tools-service/src/ops_tools/send_policy_routes.py
 11 dict-any services/tools-service/src/ops_tools/store/calls.py
 10 store-dict services/tools-service/src/ops_tools/store/calls.py
 7 dict-any services/tools-service/src/ops_tools/store/connections.py
 1 store-dict services/tools-service/src/ops_tools/store/connections.py
-6 dict-any services/tools-service/src/ops_tools/store/egress.py
-5 store-dict services/tools-service/src/ops_tools/store/egress.py
-7 dict-any services/tools-service/src/ops_tools/store/mcp_links.py
-6 store-dict services/tools-service/src/ops_tools/store/mcp_links.py
 1 dict-any services/tools-service/src/ops_tools/store/mocks.py
 14 dict-any services/tools-service/src/ops_tools/store/modules.py
 3 store-dict services/tools-service/src/ops_tools/store/modules.py
 8 dict-any services/tools-service/src/ops_tools/store/plugin_bindings.py
 5 store-dict services/tools-service/src/ops_tools/store/plugin_bindings.py
-5 dict-any services/tools-service/src/ops_tools/store/review_handoffs.py
-2 store-dict services/tools-service/src/ops_tools/store/review_handoffs.py
+1 dict-any services/tools-service/src/ops_tools/store/review_handoffs.py
 4 dict-any services/tools-service/src/ops_tools/store/secrets.py
 3 store-dict services/tools-service/src/ops_tools/store/secrets.py
-3 dict-any services/tools-service/src/ops_tools/store/send_policies.py
-3 store-dict services/tools-service/src/ops_tools/store/send_policies.py
 5 dict-any services/tools-service/src/ops_tools/tools.py
 1 body tool_modules_add_function
 1 reply tool_modules_add_function

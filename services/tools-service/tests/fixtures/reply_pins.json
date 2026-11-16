@@ -322,6 +322,347 @@
    "status": 200
   }
  },
+ "egress": {
+  "add host": {
+   "body": {
+    "data": {
+     "changed": true,
+     "entry": {
+      "addedAt": "<datetime>",
+      "addedBy": "James Richardson",
+      "host": "ledger.bank.test",
+      "modules": [],
+      "note": "Ledger",
+      "protection": null,
+      "templateId": null
+     },
+     "kind": "host",
+     "value": "ledger.bank.test"
+    },
+    "success": true
+   },
+   "sent": [
+    "note",
+    "value"
+   ],
+   "status": 201
+  },
+  "add host again": {
+   "body": {
+    "data": {
+     "changed": false,
+     "entry": {
+      "addedAt": "<datetime>",
+      "addedBy": "James Richardson",
+      "host": "ledger.bank.test",
+      "modules": [],
+      "note": "Ledger",
+      "protection": null,
+      "templateId": null
+     },
+     "kind": "host",
+     "value": "ledger.bank.test"
+    },
+    "success": true
+   },
+   "sent": [
+    "note",
+    "value"
+   ],
+   "status": 200
+  },
+  "add range": {
+   "body": {
+    "data": {
+     "changed": true,
+     "entry": {
+      "addedAt": "<datetime>",
+      "addedBy": "James Richardson",
+      "cidr": "10.20.0.0/16",
+      "note": "Core network",
+      "protection": null,
+      "templateId": null
+     },
+     "kind": "range",
+     "value": "10.20.0.0/16"
+    },
+    "success": true
+   },
+   "sent": [
+    "note",
+    "value"
+   ],
+   "status": 201
+  },
+  "allow list": {
+   "body": {
+    "data": {
+     "hosts": [
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "api.equifax.ca",
+       "modules": [
+        {
+         "id": "mod_equifax",
+         "name": "Equifax credit"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "api.theworknumber.com",
+       "modules": [
+        {
+         "id": "mod_work_number",
+         "name": "The Work Number"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "cards.api.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_card_platform",
+         "name": "Card platform"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "casemgmt.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_case_mgmt",
+         "name": "Case management system"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "corebanking.api.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_core_banking",
+         "name": "Core banking"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "fincrime-mcp.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_compliance_mcp",
+         "name": "Compliance screening"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "graph.microsoft.com",
+       "modules": [
+        {
+         "id": "mod_m365_mail",
+         "name": "Microsoft 365 mail"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "harborpine.my.salesforce.com",
+       "modules": [
+        {
+         "id": "mod_salesforce",
+         "name": "Salesforce"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "harborpine.sharepoint.com",
+       "modules": [
+        {
+         "id": "mod_sharepoint",
+         "name": "SharePoint policies"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "James Richardson",
+       "host": "ledger.bank.test",
+       "modules": [],
+       "note": "Ledger",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "login.microsoftonline.com",
+       "modules": [
+        {
+         "id": "mod_m365_mail",
+         "name": "Microsoft 365 mail"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "los.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_loan_origination",
+         "name": "Loan origination"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "payments.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_payments_hub",
+         "name": "Payments hub"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "scheduler.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_branch_scheduler",
+         "name": "Branch scheduler"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      }
+     ],
+     "ranges": [
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "James Richardson",
+       "cidr": "10.20.0.0/16",
+       "note": "Core network",
+       "protection": null,
+       "templateId": null
+      }
+     ]
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "hosts page": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "James Richardson",
+       "host": "ledger.bank.test",
+       "modules": [],
+       "note": "Ledger",
+       "protection": null,
+       "templateId": null
+      }
+     ],
+     "facets": {},
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 2,
+      "total": 1,
+      "totalPages": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "remove missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "10.20.0.0/16 on the egress allow-list was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "sent": [
+    "value"
+   ],
+   "status": 404
+  },
+  "remove range": {
+   "body": {
+    "data": {
+     "changed": true,
+     "kind": "range",
+     "value": "10.20.0.0/16"
+    },
+    "success": true
+   },
+   "sent": [
+    "value"
+   ],
+   "status": 200
+  }
+ },
  "gateway_and_executions": {
   "call ok": {
    "body": {
