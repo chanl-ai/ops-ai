@@ -47,13 +47,9 @@ queries = 3
 
 ["GET /v1/executions"]
 queries = 8
-transactions = 2
-connections = 2
 
 ["GET /v1/executions/{call_id}"]
 queries = 7
-transactions = 2
-connections = 2
 
 ["GET /v1/grantable-operations"]
 not_budgeted = "agents-service's route, called with a service token; a person's token is refused before any statement"
@@ -87,21 +83,15 @@ queries = 1
 
 ["GET /v1/tool-modules"]
 queries = 10
-transactions = 5
-connections = 5
 
 ["GET /v1/tool-modules/grants"]
-queries = 6
+queries = 3
 
 ["GET /v1/tool-modules/{module_id}"]
 queries = 9
-transactions = 4
-connections = 4
 
 ["GET /v1/tool-modules/{module_id}/activity"]
 queries = 11
-transactions = 4
-connections = 4
 
 ["GET /v1/tool-modules/{module_id}/operations/{op_id}/mocks"]
 queries = 8

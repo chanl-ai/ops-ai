@@ -10,8 +10,9 @@ security on them arrives with ops_identity, as the checkpointer does it.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
+from datetime import datetime, timedelta
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
@@ -20,7 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql.schema import SchemaItem
 
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
+from ops_store.listing import ListPage, list_page
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -434,6 +437,22 @@ def _granted(tenant_id: str) -> sa.ColumnElement[bool]:
     )
 
 
+def grant_views(now: datetime, expiring: timedelta) -> dict[str, sa.ColumnElement[bool]]:
+    """The Access tab's views of an approval, by view: approved and not past its end is active (and expiring within
+    `expiring`), requested waits, an approval past its end is expired, and a rejected or revoked one has ended."""
+    a = module_approvals.c
+    past = sa.and_(a.status == "approved", a.expires_at.isnot(None), a.expires_at < now)
+    active = sa.and_(a.status == "approved", sa.or_(a.expires_at.is_(None), a.expires_at >= now))
+    return {
+        "active": active,
+        "expiring": sa.and_(active, a.expires_at.isnot(None), a.expires_at < now + expiring),
+        "requested": a.status == "requested",
+        "expired": sa.or_(a.status == "expired", past),
+        "ended": a.status.in_(("rejected", "revoked")),
+        "all": sa.true(),
+    }
+
+
 class ModuleStore(Store):
     # A module and its children land together (TRANSACTION); a write lands only against the revision read (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
@@ -515,6 +534,33 @@ class ModuleStore(Store):
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             kids = await self._children(c, tenant_id, [r["id"] for r in rows])
         return [{**r, **kids[r["id"]]} for r in rows]
+
+    async def grants(
+        self,
+        tenant_id: str,
+        q: ListParams,
+        *,
+        view: sa.ColumnElement[bool],
+        views: Mapping[str, sa.ColumnElement[bool]],
+    ) -> tuple[ListPage, dict[str, int]]:
+        """One page of the approvals on the modules the acting team reads, newest request first, searched by workflow,
+        module or requester, in `view`; and how many of them, unsearched, each of `views` holds."""
+        a, t = module_approvals.c, tool_modules.c
+        seen = sa.and_(t.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
+        joined = module_approvals.join(tool_modules, sa.and_(t.tenant_id == a.tenant_id, t.id == a.module_id))
+        listed = sa.select(*module_approvals.c, t.display_name.label("module_name")).select_from(joined).where(seen)
+        async with self.tx() as c:
+            page = await list_page(
+                c,
+                listed.where(view),
+                q,
+                search=[a.workflow_name, a.workflow_id, t.display_name, t.name, a.requested_by],
+                default_sort=a.requested_at.desc(),
+            )
+            sums = [sa.func.sum(sa.case((where, 1), else_=0)).label(name) for name, where in views.items()]
+            counted = sa.select(*sums).select_from(joined).where(seen)
+            row = (await c.execute(counted)).mappings().one()
+        return page, {name: int(row[name] or 0) for name in views}
 
     async def all_teams(self, tenant_id: str) -> list[Aggregate]:
         """Every team's modules: for what another service asks on a run's behalf (the operations an agent or workflow

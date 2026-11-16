@@ -629,7 +629,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Executions */
+        /**
+         * List Executions
+         * @description Off the request transaction: the service reads in one and asks agents-service to name the agents and
+         *     workflows after it.
+         */
         get: operations["executions_list_executions"];
         put?: never;
         post?: never;
@@ -1039,10 +1043,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Modules */
+        /**
+         * List Modules
+         * @description The team's modules, one page of a view. The view and the filters are read from the shared list query; they
+         *     are named here for the document. `sortBy` is displayName, name, calls24h, errorRate, updatedAt, operationCount
+         *     or ownerTeam.
+         */
         get: operations["tool_modules_list_modules"];
         put?: never;
-        /** Create Module */
+        /**
+         * Create Module
+         * @description Off the request transaction: it may fetch the source and send a new host to Security.
+         */
         post: operations["tool_modules_create_module"];
         delete?: never;
         options?: never;
@@ -1059,7 +1071,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Blank Module */
+        /**
+         * Create Blank Module
+         * @description Off the request transaction: a host not yet listed is sent to Security in agents-service.
+         */
         post: operations["tool_modules_create_blank_module"];
         delete?: never;
         options?: never;
@@ -1093,7 +1108,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Discover */
+        /**
+         * Discover
+         * @description Off the request transaction: it fetches the source, so no connection is held while it answers.
+         */
         post: operations["tool_modules_discover"];
         delete?: never;
         options?: never;
@@ -1110,7 +1128,8 @@ export interface paths {
         };
         /**
          * List Grants
-         * @description Every workflow's access to the modules the team sees: a page of one view, with each view's count.
+         * @description Every workflow's access to the modules the team sees: a page of one view, with each view's count. `view`
+         *     is read from the shared list query's filters; it is named here for the document.
          */
         get: operations["tool_modules_list_grants"];
         put?: never;
@@ -1166,7 +1185,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request Approval */
+        /**
+         * Request Approval
+         * @description Off the request transaction: the workflow is read from agents-service.
+         */
         post: operations["tool_modules_request_approval"];
         delete?: never;
         options?: never;
@@ -1200,7 +1222,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Decide Approval */
+        /**
+         * Decide Approval
+         * @description Off the request transaction: platform-service says whether the requester may decide and which writes wait.
+         */
         post: operations["tool_modules_decide_approval"];
         delete?: never;
         options?: never;
@@ -1254,7 +1279,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Add Operation */
+        /**
+         * Add Operation
+         * @description Off the request transaction: a host not yet listed is sent to Security in agents-service.
+         */
         post: operations["tool_modules_add_operation"];
         delete?: never;
         options?: never;
@@ -1271,7 +1299,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import Operations */
+        /**
+         * Import Operations
+         * @description Off the request transaction: it fetches the source again before it adds the operations.
+         */
         post: operations["tool_modules_import_operations"];
         delete?: never;
         options?: never;
@@ -1351,7 +1382,8 @@ export interface paths {
         put?: never;
         /**
          * Run Tool
-         * @description The tool page's Run, in the screen's words: the test console's owner try, Mock on the stub's answer and
+         * @description Off the request transaction: a Real run goes through the gateway to the system. The tool page's Run, in the
+         *     screen's words: the test console's owner try, Mock on the stub's answer and
          *     Real as the gateway's call, so the two never decide differently.
          */
         post: operations["tool_modules_run_tool"];
@@ -1387,7 +1419,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request Review */
+        /**
+         * Request Review
+         * @description Off the request transaction: the review opens in agents-service.
+         */
         post: operations["tool_modules_request_review"];
         delete?: never;
         options?: never;
@@ -1404,7 +1439,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test Operation */
+        /**
+         * Test Operation
+         * @description Off the request transaction: a real run calls the system, and a mock waits its delay.
+         */
         post: operations["tool_modules_test_operation"];
         delete?: never;
         options?: never;
@@ -1421,7 +1459,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish Version */
+        /**
+         * Publish Version
+         * @description Off the request transaction: platform-service gives the publish-review mode and a review opens in agents-
+         *     service.
+         */
         post: operations["tool_modules_publish_version"];
         delete?: never;
         options?: never;
@@ -13078,16 +13120,20 @@ export interface operations {
     tool_modules_list_modules: {
         parameters: {
             query?: {
-                page?: number;
-                pageSize?: number;
+                /** @description all, needs_approval, expiring, expired, failing or security_review */
                 view?: string;
-                search?: string | null;
-                sortBy?: string | null;
-                sortOrder?: string | null;
+                /** @description http, code or mcp */
                 type?: string[] | null;
+                /** @description read or write */
                 access?: string[] | null;
                 approvalState?: string[] | null;
-                templateId?: string | null;
+                templateId?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -13718,10 +13764,14 @@ export interface operations {
     tool_modules_list_grants: {
         parameters: {
             query?: {
+                /** @description active, expiring, requested, expired, ended or all */
                 view?: string;
-                search?: string | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

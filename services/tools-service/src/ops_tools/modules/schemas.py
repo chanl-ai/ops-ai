@@ -7,10 +7,9 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-from ops_service_kit.http import ListResult, Out
+from ops_service_kit.http import In, ListResult, Out
 
 from ..environments import ModuleEnvironment, RunKind
 
@@ -27,12 +26,6 @@ Environment = ModuleEnvironment
 BindingSource = Literal["case.account", "case.customerId", "case.id", "case.requesterEmail", "case.queue"]
 ChangeKind = Literal["added", "removed", "access_widened", "schema_changed", "binding_changed", "settings"]
 FieldType = Literal["string", "number", "integer", "boolean", "object", "array"]
-
-
-class In(BaseModel):
-    """Request bodies refuse unknown fields, so a caller cannot slip in a field the route never reads."""
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
 # Shared parts

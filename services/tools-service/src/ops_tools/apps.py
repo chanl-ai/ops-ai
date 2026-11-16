@@ -26,7 +26,7 @@ from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, Out, ok
+from ops_service_kit.http import Envelope, In, Out, ok
 from ops_store import isolation
 
 from .app_states import AppGroup, AppState, app_group
@@ -48,7 +48,7 @@ from .defaults import ensure_defaults
 from .modules.directory import Directory
 from .modules.policy import WriteApprovals, tool_mode
 from .modules.routes import ERRORS
-from .modules.schemas import In, ToolCallRow
+from .modules.schemas import ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, name_in_words, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers

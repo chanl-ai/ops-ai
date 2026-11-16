@@ -853,9 +853,12 @@ export const toolsOperations = {
     "pathParams": [],
     "query": [
       "view",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -886,16 +889,17 @@ export const toolsOperations = {
     "path": "/v1/tool-modules",
     "pathParams": [],
     "query": [
-      "page",
-      "pageSize",
       "view",
-      "search",
-      "sortBy",
-      "sortOrder",
       "type",
       "access",
       "approvalState",
-      "templateId"
+      "templateId",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

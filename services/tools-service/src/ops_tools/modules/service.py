@@ -36,8 +36,9 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import paged
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
+from ops_store import isolation
 
 from .. import mcp, transform
 from ..auth import Authenticator, AuthFailed, may_use
@@ -53,7 +54,15 @@ from ..secrets import SecretResolver, scrub
 from ..store.calls import CallLog, CallStats, DayStats
 from ..store.connections import ConnectionStore
 from ..store.mocks import MockStore
-from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError, ModuleStore, StaleModuleError
+from ..store.modules import (
+    CALL_SHAPE,
+    REVIEWED,
+    Aggregate,
+    HostNotAllowedError,
+    ModuleStore,
+    StaleModuleError,
+    grant_views,
+)
 from . import openapi
 from .directory import Directory, Team
 from .executions import call_row
@@ -76,6 +85,7 @@ def _rates(t: CallStats) -> dict[str, Any]:
 # Short enough that an approval granted for 30 days (the test default) is not expiring the day it is granted.
 EXPIRING = timedelta(days=7)
 GRANT_VIEWS = ("active", "expiring", "requested", "expired", "ended", "all")
+MODULE_VIEWS = ("all", "needs_approval", "expiring", "expired", "failing", "security_review")
 FAILING_RATE = 0.02
 ACCESS_ORDER = ("read", "write")
 WRITES = {"write"}
@@ -110,6 +120,10 @@ DENY_TEXT = {
     "continue the test, or run it against the stub.",
     "module_not_published": "The module is not published, so only the stub can be called.",
 }
+
+
+# A team's write approval levels as `WriteApprovals.levels` answers them: (team level, per-app levels).
+Levels = tuple[Any, dict[str, Any]]
 
 
 class NotYetAvailable(ApiError):
@@ -632,8 +646,16 @@ class ModuleService:
                 out[f"can{action.capitalize()}"] = True
         return out
 
-    async def _detail(self, m: Aggregate, team: Team, who: Caller | None = None) -> dict[str, Any]:
-        """`who` is the person asking; their rights on the module ride along. A service applying a decision has none."""
+    async def _levels(self, tenant_id: str, team: Team) -> Levels:
+        """The team's write approval levels from platform-service. A route on the request transaction reads them before
+        its first store call, so no connection is held while platform-service answers."""
+        return await self.approvals.levels(tenant_id, team.id)
+
+    async def _detail(
+        self, m: Aggregate, team: Team, who: Caller | None = None, *, levels: Levels | None = None
+    ) -> dict[str, Any]:
+        """`who` is the person asking; their rights on the module ride along. A service applying a decision has none.
+        Without `levels` they are asked of platform-service here, after the module's reads."""
         m = (await self._as_team_sees(str(m["tenant_id"]), team.id, [m]))[0]
         traffic = await self._traffic(str(m["tenant_id"]), self._call_teams(who) if who else [team.id], [m])
         have = await self._secret_names(str(m["tenant_id"]), [m])
@@ -657,6 +679,7 @@ class ModuleService:
                     self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC), have)
                     for o in m["operations"]
                 ],
+                levels,
             ),
             "pendingChanges": m["pending"],
             "approvals": [self._approval_out(a) for a in ordered],
@@ -665,11 +688,13 @@ class ModuleService:
             **(self._rights(who, m) if who is not None else {}),
         }
 
-    async def _with_answers(self, m: Aggregate, team: Team, shown: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _with_answers(
+        self, m: Aggregate, team: Team, shown: list[dict[str, Any]], levels: Levels | None = None
+    ) -> list[dict[str, Any]]:
         """Each write's answer for the team in view (waits, who answers, which level), from the resolver the gateway
         runs, so the tool page and the operations table never apply the rule themselves."""
         tenant = str(m["tenant_id"])
-        levels = await self.approvals.levels(tenant, team.id)
+        levels = levels or await self.approvals.levels(tenant, team.id)
         by_name = {str(o["name"]): o for o in m["operations"]}
         out: list[dict[str, Any]] = []
         for row in shown:
@@ -794,54 +819,34 @@ class ModuleService:
 
     # ── Reads ─────────────────────────────────────────────────────────────
 
-    def _grant_views(self, a: dict[str, Any], now: datetime) -> set[str]:
-        """The Access tab's views an approval is in: approved is active (and expiring within a week), requested waits,
-        an approval past its end is expired, and a rejected or revoked one has ended."""
-        status, views = a["status"], {"all"}
-        if status == "approved":
-            views.add("active")
-            if a["expires_at"] is not None and a["expires_at"] - now < EXPIRING:
-                views.add("expiring")
-        elif status == "requested":
-            views.add("requested")
-        elif status == "expired":
-            views.add("expired")
-        elif status in ("rejected", "revoked"):
-            views.add("ended")
-        return views
+    async def grants(self, who: Caller, q: ListParams) -> dict[str, Any]:
+        """Every workflow's access to the modules the caller's team sees, newest request first, one page of the view
+        `q` names (`all` when none), searched by workflow, module or requester; `facets.view` counts each view."""
+        view = (q.filters.get("view") or ["all"])[-1]
+        if view not in GRANT_VIEWS:
+            raise ValidationFailed(f"There is no view {view!r}: ask for one of {', '.join(GRANT_VIEWS)}.")
+        views = grant_views(self.clock(), EXPIRING)
+        page, counts = await self.store.grants(who.tenant_id, q, view=views[view], views=views)
+        page["data"] = [
+            {
+                **self._approval_out({**r, "status": self._approval_status(r)}),
+                "moduleId": r["module_id"],
+                "moduleName": r["module_name"],
+            }
+            for r in page["data"]
+        ]
+        return {**page, "facets": {"view": counts}}
 
-    async def grants(self, who: Caller, *, view: str, search: str | None, page: int, page_size: int) -> dict[str, Any]:
-        """Every workflow's access to the modules the caller's team sees, newest request first, one page of `view`,
-        searched by workflow, module or requester; `facets.view` counts each view."""
-        now = self.clock()
-        mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
-        rows = [(a, m) for m in mods for a in self._approvals(m)]
-        views = {id(a): self._grant_views(a, now) for a, _ in rows}
-        counts = {v: sum(1 for a, _ in rows if v in views[id(a)]) for v in GRANT_VIEWS}
-        q = (search or "").lower()
-
-        def matches(a: dict[str, Any], m: Aggregate) -> bool:
-            said = f"{a['workflow_name']} {a['workflow_id']} {m['display_name']} {m['name']} {a['requested_by']}"
-            return not q or q in said.lower()
-
-        picked = [(a, m) for a, m in rows if view in views[id(a)] and matches(a, m)]
-        picked.sort(key=lambda x: (x[0]["requested_at"], x[0]["id"]), reverse=True)
-        out = [{**self._approval_out(a), "moduleId": m["id"], "moduleName": m["display_name"]} for a, m in picked]
-        listed = paged(out[(page - 1) * page_size : page * page_size], len(out), page, page_size)
-        return listed | {"facets": {"view": counts}}
-
-    async def list(
-        self,
-        who: Caller,
-        *,
-        page: int,
-        page_size: int,
-        view: str,
-        search: str | None,
-        filters: dict[str, list[str]],
-        sort_by: str | None,
-        sort_order: str | None,
-    ) -> dict[str, Any]:
+    async def list(self, who: Caller, q: ListParams) -> dict[str, Any]:
+        """One page of the modules the caller's team sees, in the view `q` names (`all` when none), with each view's
+        count, the facets and the totals of every module seen. The page is chosen here, over every module seen: the
+        failing view and the reachable column follow each connection's status and a plugin module's team binding, which
+        no column of this database holds, and the counts and totals span every module, so each is read once."""
+        view = (q.filters.get("view") or ["all"])[-1]
+        if view not in MODULE_VIEWS:
+            raise ValidationFailed(f"There is no view {view!r}: ask for one of {', '.join(MODULE_VIEWS)}.")
+        page, page_size, search, sort_by = q.page, q.page_size, q.search, q.sort_by
+        filters = {k: q.filters.get(k, []) for k in ("type", "access", "approvalState", "templateId")}
         now = self.clock()
         mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
         mods = await self._as_team_sees(who.tenant_id, who.team.id, mods)
@@ -857,14 +862,17 @@ class ModuleService:
         def values(r: dict[str, Any], key: str) -> list[str]:
             return list(r["accessClasses"]) if key == "access" else [str(r.get(key))]
 
-        q = (search or "").lower()
+        words = (search or "").lower()
+        wanted = set(q.ids) if q.ids is not None else None
         searched = [
             r
             for r in rows
             if self._in_view(r, view)
+            and (r["id"] in wanted if wanted is not None else True)
             and (
-                not q
-                or q in f"{r['displayName']} {r['name']} {r['system']} {r['description']} {r['ownerTeam']}".lower()
+                wanted is not None
+                or not words
+                or words in f"{r['displayName']} {r['name']} {r['system']} {r['description']} {r['ownerTeam']}".lower()
             )
         ]
         active = {k: v for k, v in filters.items() if v}
@@ -882,7 +890,7 @@ class ModuleService:
                     facet[val] = facet.get(val, 0) + 1
             facets[key] = facet
         if sort_by in ("displayName", "name", "calls24h", "errorRate", "updatedAt", "operationCount", "ownerTeam"):
-            filtered.sort(key=lambda r: r[sort_by], reverse=sort_order == "desc")
+            filtered.sort(key=lambda r: r[sort_by], reverse=q.sort_order == "desc")
         total = len(filtered)
         total_pages = max(1, -(-total // page_size))
         page = min(page, total_pages)
@@ -917,7 +925,8 @@ class ModuleService:
         }
 
     async def get(self, who: Caller, module_id: str) -> dict[str, Any]:
-        return await self._detail(await self._find(who, module_id), who.team, who)
+        levels = await self._levels(who.tenant_id, who.team)
+        return await self._detail(await self._find(who, module_id), who.team, who, levels=levels)
 
     async def activity(self, who: Caller, module_id: str) -> dict[str, Any]:
         """Calls per UTC day over the last 14 days from the call log, days without calls at zero, and the latest calls
@@ -972,32 +981,34 @@ class ModuleService:
         mine = link_calls_of(who) if link_id is not None else None
         if link_id is None:
             _can(who, "activity", "view", what="the tool-call log")
-        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
-        scope = None if not who.verified and who.team.scope == "all" else list(mods)
-        if module_ids is not None:
-            scope = [m for m in module_ids if scope is None or m in scope]
-        if link_id is not None:
-            # A link's calls are the team's own already, and a workflow started through one has no module.
-            scope = None
-        if key is not None:
-            # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
-            await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
-        rows, total = await self.calls.search(
-            tenant_id=who.tenant_id,
-            team_ids=self._call_teams(who),
-            tools=[tool] if tool else None,
-            module_ids=scope,
-            thread_id=thread_id,
-            decision=decision,
-            key=key,
-            call_id=call_id,
-            link_id=link_id,
-            sub=mine,
-            since=since,
-            until=until,
-            offset=(page - 1) * page_size,
-            limit=page_size,
-        )
+        # One transaction for the reads; the agents and workflows are named by agents-service after it ends.
+        async with isolation.request_transaction():
+            mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
+            scope = None if not who.verified and who.team.scope == "all" else list(mods)
+            if module_ids is not None:
+                scope = [m for m in module_ids if scope is None or m in scope]
+            if link_id is not None:
+                # A link's calls are the team's own already, and a workflow started through one has no module.
+                scope = None
+            if key is not None:
+                # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
+                await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
+            rows, total = await self.calls.search(
+                tenant_id=who.tenant_id,
+                team_ids=self._call_teams(who),
+                tools=[tool] if tool else None,
+                module_ids=scope,
+                thread_id=thread_id,
+                decision=decision,
+                key=key,
+                call_id=call_id,
+                link_id=link_id,
+                sub=mine,
+                since=since,
+                until=until,
+                offset=(page - 1) * page_size,
+                limit=page_size,
+            )
         pages = max(1, -(-total // page_size))
         names = _workflow_names(list(mods.values()))
         listed = [
@@ -1409,6 +1420,7 @@ class ModuleService:
 
     async def update_details(self, who: Caller, module_id: str, patch: dict[str, Any]) -> dict[str, Any]:
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         if patch.get("display_name") is not None:
             if not patch["display_name"].strip():
@@ -1422,7 +1434,7 @@ class ModuleService:
                 sign_in_fits(str(patch["sign_in"]), conn)
             m["sign_in"] = sign_in_of(patch["sign_in"])
         m.update(_provisioned(who, patch))
-        return await self._detail(await self._save(m), who.team, who)
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _stage(self, m: Aggregate, changes: list[dict[str, Any]]) -> None:
         pending: list[dict[str, Any]] = list(m["pending"])
@@ -1486,6 +1498,7 @@ class ModuleService:
 
     async def set_connection(self, who: Caller, module_id: str, connection_id: str | None) -> dict[str, Any]:
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         if connection_id is None:
             if m["status"] != "draft":
@@ -1503,7 +1516,7 @@ class ModuleService:
                 raise ValidationFailed(f"{conn['name']} is not available to this module's team. Pick another one.")
             sign_in_fits(sign_in_of(m.get("sign_in")), conn)
             m.update(connection_id=conn["id"], catalog_id=conn.get("catalog_id"), auth=module_auth(conn))
-        return await self._detail(await self._save(m), who.team, who)
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _holders(self, m: Aggregate) -> list[str]:
         return list(dict.fromkeys(a["workflow_name"] for a in self._approvals(m) if a["status"] == "approved"))
@@ -1552,6 +1565,7 @@ class ModuleService:
     ) -> dict[str, Any]:
         """`fields` names the keys the caller sent, so `binding: null` (remove it) differs from leaving it out."""
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         o = next((x for x in m["operations"] if x["id"] == op_id), None)
         if o is None:
@@ -1765,7 +1779,7 @@ class ModuleService:
             if answer_changed
             else []
         )
-        return await self._detail(await self._save(m, events=told), who.team, who)
+        return await self._detail(await self._save(m, events=told), who.team, who, levels=levels)
 
     @staticmethod
     def _code_changes(o: dict[str, Any], code: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1788,11 +1802,12 @@ class ModuleService:
     async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> dict[str, Any]:
         """Adds a function to a code module."""
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         if kind_of(m) != "code" or m["connection_id"]:
             raise ValidationFailed(f"{m['display_name']} is not a code module; add its operations from its system.")
         await self._append(who, m, [_code_operation(f)])
-        return await self._detail(await self._save(m), who.team, who)
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _checked_shape(
         self, m: Aggregate, o: dict[str, Any], patch: dict[str, Any], fields: set[str], base: str
@@ -2064,12 +2079,13 @@ class ModuleService:
 
     async def discard(self, who: Caller, module_id: str) -> dict[str, Any]:
         _can(who, "tools", "edit", what="tools")
+        levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
         _refuse_during_review(m, "discard changes")
         if m["baseline"] is None:
             raise ValidationFailed("There are no changes to discard.")
         m.update(operations=copy.deepcopy(m["baseline"]), pending=[], baseline=None)
-        return await self._detail(await self._save(m), who.team, who)
+        return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     async def request_review(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
         _can(who, "tools", "publish", what="tools")
@@ -2105,6 +2121,7 @@ class ModuleService:
         current version publishes it and clears drift, since the reviewed tool list is the one now held; a no sends a
         module never published back to draft, and withdraws the declined version of a published one. Applying the same
         decision twice changes nothing."""
+        levels = await self._levels(tenant_id, self.dir.everyone)
         m = await self.store.get_any(tenant_id, module_id)
         if m is None:
             raise NotFound("Module")
@@ -2112,7 +2129,7 @@ class ModuleService:
         if v is None:
             raise NotFound("Review")
         if v["status"] != "in_review":
-            return await self._detail(m, self.dir.everyone)
+            return await self._detail(m, self.dir.everyone, levels=levels)
         now = self.clock()
         v.update(reviewer=by, finding=None if decision == "approved" else (reason or "").strip() or None)
         current = version == m["version"]
@@ -2131,7 +2148,7 @@ class ModuleService:
                 v["status"] = "draft"
             else:
                 v["status"] = "revoked"
-        return await self._detail(await self._save(m), self.dir.everyone)
+        return await self._detail(await self._save(m), self.dir.everyone, levels=levels)
 
     # ── Workflow approvals ────────────────────────────────────────────────
 

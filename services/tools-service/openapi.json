@@ -21978,6 +21978,7 @@
     },
     "/v1/executions": {
       "get": {
+        "description": "Off the request transaction: the service reads in one and asks agents-service to name the agents and\nworkflows after it.",
         "operationId": "executions_list_executions",
         "parameters": [
           {
@@ -27769,8 +27770,101 @@
     },
     "/v1/tool-modules": {
       "get": {
+        "description": "The team's modules, one page of a view. The view and the filters are read from the shared list query; they\nare named here for the document. `sortBy` is displayName, name, calls24h, errorRate, updatedAt, operationCount\nor ownerTeam.",
         "operationId": "tool_modules_list_modules",
         "parameters": [
+          {
+            "description": "all, needs_approval, expiring, expired, failing or security_review",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "all, needs_approval, expiring, expired, failing or security_review",
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "description": "http, code or mcp",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "http, code or mcp",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "read or write",
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "read or write",
+              "title": "Access"
+            }
+          },
+          {
+            "in": "query",
+            "name": "approvalState",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Approvalstate"
+            }
+          },
+          {
+            "in": "query",
+            "name": "templateId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Templateid"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -27787,22 +27881,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "view",
-            "required": false,
-            "schema": {
-              "default": "all",
-              "pattern": "^(all|needs_approval|expiring|expired|failing|security_review)$",
-              "title": "View",
-              "type": "string"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -27842,21 +27930,18 @@
             "name": "sortOrder",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "pattern": "^(asc|desc)$",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
               ],
-              "title": "Sortorder"
+              "title": "Sortorder",
+              "type": "string"
             }
           },
           {
             "in": "query",
-            "name": "type",
+            "name": "ids",
             "required": false,
             "schema": {
               "anyOf": [
@@ -27864,67 +27949,14 @@
                   "items": {
                     "type": "string"
                   },
+                  "maxItems": 1000,
                   "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Type"
-            }
-          },
-          {
-            "in": "query",
-            "name": "access",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access"
-            }
-          },
-          {
-            "in": "query",
-            "name": "approvalState",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Approvalstate"
-            }
-          },
-          {
-            "in": "query",
-            "name": "templateId",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Templateid"
+              "title": "Ids"
             }
           },
           {
@@ -28121,6 +28153,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
+        "description": "Off the request transaction: it may fetch the source and send a new host to Security.",
         "operationId": "tool_modules_create_module",
         "parameters": [
           {
@@ -28339,6 +28372,7 @@
     },
     "/v1/tool-modules/blank": {
       "post": {
+        "description": "Off the request transaction: a host not yet listed is sent to Security in agents-service.",
         "operationId": "tool_modules_create_blank_module",
         "parameters": [
           {
@@ -28765,6 +28799,7 @@
     },
     "/v1/tool-modules/discover": {
       "post": {
+        "description": "Off the request transaction: it fetches the source, so no connection is held while it answers.",
         "operationId": "tool_modules_discover",
         "parameters": [
           {
@@ -28973,18 +29008,47 @@
     },
     "/v1/tool-modules/grants": {
       "get": {
-        "description": "Every workflow's access to the modules the team sees: a page of one view, with each view's count.",
+        "description": "Every workflow's access to the modules the team sees: a page of one view, with each view's count. `view`\nis read from the shared list query's filters; it is named here for the document.",
         "operationId": "tool_modules_list_grants",
         "parameters": [
           {
+            "description": "active, expiring, requested, expired, ended or all",
             "in": "query",
             "name": "view",
             "required": false,
             "schema": {
               "default": "all",
-              "pattern": "^(active|expiring|requested|expired|ended|all)$",
+              "description": "active, expiring, requested, expired, ended or all",
               "title": "View",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -29005,25 +29069,52 @@
           },
           {
             "in": "query",
-            "name": "page",
+            "name": "sortBy",
             "required": false,
             "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
             }
           },
           {
             "in": "query",
-            "name": "pageSize",
+            "name": "sortOrder",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -30049,6 +30140,7 @@
     },
     "/v1/tool-modules/{module_id}/approvals": {
       "post": {
+        "description": "Off the request transaction: the workflow is read from agents-service.",
         "operationId": "tool_modules_request_approval",
         "parameters": [
           {
@@ -30483,6 +30575,7 @@
     },
     "/v1/tool-modules/{module_id}/approvals/{approval_id}/decide": {
       "post": {
+        "description": "Off the request transaction: platform-service says whether the requester may decide and which writes wait.",
         "operationId": "tool_modules_decide_approval",
         "parameters": [
           {
@@ -31144,6 +31237,7 @@
     },
     "/v1/tool-modules/{module_id}/operations": {
       "post": {
+        "description": "Off the request transaction: a host not yet listed is sent to Security in agents-service.",
         "operationId": "tool_modules_add_operation",
         "parameters": [
           {
@@ -31371,6 +31465,7 @@
     },
     "/v1/tool-modules/{module_id}/operations/import": {
       "post": {
+        "description": "Off the request transaction: it fetches the source again before it adds the operations.",
         "operationId": "tool_modules_import_operations",
         "parameters": [
           {
@@ -32815,7 +32910,7 @@
     },
     "/v1/tool-modules/{module_id}/operations/{operation}/run": {
       "post": {
-        "description": "The tool page's Run, in the screen's words: the test console's owner try, Mock on the stub's answer and\nReal as the gateway's call, so the two never decide differently.",
+        "description": "Off the request transaction: a Real run goes through the gateway to the system. The tool page's Run, in the\nscreen's words: the test console's owner try, Mock on the stub's answer and\nReal as the gateway's call, so the two never decide differently.",
         "operationId": "tool_modules_run_tool",
         "parameters": [
           {
@@ -33419,6 +33514,7 @@
     },
     "/v1/tool-modules/{module_id}/reviews": {
       "post": {
+        "description": "Off the request transaction: the review opens in agents-service.",
         "operationId": "tool_modules_request_review",
         "parameters": [
           {
@@ -33636,6 +33732,7 @@
     },
     "/v1/tool-modules/{module_id}/test": {
       "post": {
+        "description": "Off the request transaction: a real run calls the system, and a mock waits its delay.",
         "operationId": "tool_modules_test_operation",
         "parameters": [
           {
@@ -33853,6 +33950,7 @@
     },
     "/v1/tool-modules/{module_id}/versions": {
       "post": {
+        "description": "Off the request transaction: platform-service gives the publish-review mode and a review opens in agents-\nservice.",
         "operationId": "tool_modules_publish_version",
         "parameters": [
           {
