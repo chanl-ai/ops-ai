@@ -11,6 +11,7 @@
 PY ?= uv run python
 PYTEST ?= $(PY) -m pytest -q -p no:cacheprovider
 LINT_IMPORTS ?= uv run lint-imports --no-logo
+PYRIGHT ?= uv run pyright
 
 CHECKS = \
   access-exceptions access-exceptions-commits access-exceptions-self-test \
@@ -100,6 +101,17 @@ check-run.service-standards = $(PY) scripts/check_service_standards.py
 check-paths.service-standards = ^(services|packages)/.*\.py$$|^scripts/check_service_standards\.py$$
 check-run.service-standards-self-test = $(PY) scripts/check_service_standards.py --self-test
 check-paths.service-standards-self-test = ^scripts/check_service_standards\.py$$
+
+# Strict types on the code and its tests: `packages` as one run, and each service through its own typecheck target. A new
+# test file's untyped helper reached CI because nothing on this list type-checked tests. Pre-commit runs only the members
+# whose files are staged.
+TYPED_SERVICES = agents-service documents-service files-service kb-service models-service platform-service runner-service tools-service
+CHECK_TYPED = typecheck-packages $(addprefix typecheck-,$(TYPED_SERVICES))
+CHECKS += $(CHECK_TYPED)
+check-run.typecheck-packages = $(PYRIGHT) packages
+check-paths.typecheck-packages = ^packages/.*\.pyi?$$|^pyproject\.toml$$
+$(foreach s,$(TYPED_SERVICES),$(eval check-run.typecheck-$(s) = $$(MAKE) -C services/$(s) typecheck))
+$(foreach s,$(TYPED_SERVICES),$(eval check-paths.typecheck-$(s) = ^services/$(s)/.*\.pyi?$$$$|^services/$(s)/pyproject\.toml$$$$|^pyproject\.toml$$$$))
 
 # STAGED=1 runs a check only when a staged path can change its result. STAGED_FILES names a file of staged paths, one
 # a line (verify-staged.sh passes its own, read from the commit's index); unset, the index is read.

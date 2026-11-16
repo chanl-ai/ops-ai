@@ -59,8 +59,13 @@ export_path="$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | t
 # CI's checks job and `make verify` run the same list. They run on this export with the checkout's own tools; GIT_DIR
 # lets the history checks read the commits already made, which the export does not have.
 printf '%s\n' "${staged[@]}" > "$tmp/.staged"
-if ! GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$tmp/.staged" \
-  PY="$root/.venv/bin/python" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$tmp/.checks.log" 2>&1; then
+# A service's typecheck target runs `uv run pyright`, which would build an environment in the export; this `uv` runs the
+# command from the checkout's own environment instead.
+mkdir -p "$tmp/.bin"
+printf '#!/bin/sh\n[ "$1" = run ] && shift\nexec "$@"\n' > "$tmp/.bin/uv"
+chmod +x "$tmp/.bin/uv"
+if ! PATH="$tmp/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$tmp/.staged" \
+  PY="$root/.venv/bin/python" PYRIGHT="$root/.venv/bin/pyright" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$tmp/.checks.log" 2>&1; then
   tail -60 "$tmp/.checks.log"; echo "verify-staged: make checks failed (above); fix what it names"; exit 1
 fi
 # Python files in the commit are linted and format-checked; a second each.

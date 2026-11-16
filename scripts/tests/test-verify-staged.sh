@@ -47,7 +47,7 @@ assert s.count(old) == 1
 # A route a service may add without a new finding: authenticated, with a typed reply, so only the openapi gate fails.
 route = (
     '    @app.get("/v1/models/probe", tags=["health"], response_model=Envelope[ProbeOut])\n'
-    "    async def probe(p: CurrentTenantCaller) -> Envelope[ProbeOut]:  # pyright: ignore[reportUnusedFunction]\n"
+    "    async def probe(p: CurrentTenantCaller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]\n"
     '        return ok(ProbeOut(status="ok"))\n\n'
 )
 model = "class _Wire(In):"
@@ -80,6 +80,14 @@ if commit listed services/files-service/src/ops_files/__init__.py; then echo "FA
   grep -q "check_config_literals.py --strict (exit 1)" "$tmp/listed.log" && echo "PASS a check on the list refuses a commit it fails, naming it" || { echo "FAIL the listed-check commit failed for another reason:"; tail -5 "$tmp/listed.log"; pass=1; }
 fi
 git checkout -q HEAD -- services/files-service/src/ops_files/__init__.py
+# Strict types reach tests: a test file with an untyped helper reached CI once because no commit check type-checked tests.
+typed=packages/ops_service_kit/tests/test_zz_untyped_probe.py
+printf 'def helper(x):\n    return [x]\n\n\ndef test_probe() -> None:\n    assert helper(1)\n' > "$typed"
+git add "$typed"
+if commit typed "$typed"; then echo "FAIL an untyped test file was committed"; pass=1; else
+  grep -q "typecheck-packages" "$tmp/typed.log" && echo "PASS an untyped test file is refused by the typecheck on the list" || { echo "FAIL the untyped commit failed for another reason:"; tail -5 "$tmp/typed.log"; pass=1; }
+fi
+git rm -q --cached -f "$typed"; rm -f "$typed"
 # The checks that sat beside the list in verify-staged.sh are on it: a staged path a check names runs it, and a failure
 # refuses the commit under the check's command. Proved once on cross-service with a test importing another service
 # (c4957ea5's fault), then with that check taken off the list in this clone: the same commit goes through, so the

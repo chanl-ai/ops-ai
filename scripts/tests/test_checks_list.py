@@ -51,7 +51,8 @@ REQUIRED = {
     "portable-store-commits", "config-literals", "config-literals-commits", "typed-boundaries", "isolation-markings",
     "isolation-sites", "store-inventory", "roles-matrix", "sbom", "k8s-base", "lint-imports", "sdk-drift",
     "changelog-entries", "console-standards", "downgrades", "token-lifetime", "cross-service", "standards",
-    "service-standards", "service-standards-self-test",
+    "service-standards", "service-standards-self-test", "typecheck-packages", "typecheck-models-service",
+    "typecheck-documents-service", "typecheck-files-service", "typecheck-kb-service", "typecheck-agents-service",
 }  # fmt: skip
 
 
@@ -96,7 +97,9 @@ def staged_names(tmp_path: Path, *paths: str) -> list[str]:
     """The checks `make checks STAGED=1` starts for these staged paths, with every tool replaced by `echo`."""
     staged = tmp_path / "staged.txt"
     staged.write_text("\n".join(paths) + "\n")
-    out = make("checks", "STAGED=1", f"STAGED_FILES={staged}", "PY=echo", "PYTEST=echo", "LINT_IMPORTS=echo")
+    out = make(
+        "checks", "STAGED=1", f"STAGED_FILES={staged}", "PY=echo", "PYTEST=echo", "LINT_IMPORTS=echo", "PYRIGHT=echo"
+    )
     return [line.removeprefix("== ") for line in out.splitlines() if line.startswith("== ")]
 
 
@@ -114,6 +117,15 @@ def test_staged_runs_a_check_only_when_a_staged_path_can_change_it(tmp_path: Pat
     # A history check can only change when a baseline file is staged.
     assert "config-literals-commits" not in names
     assert "config-literals-commits" in staged_names(tmp_path, "services/kb-service/config-literals-baseline.txt")
+
+
+def test_types_are_checked_for_the_members_whose_files_are_staged(tmp_path: Path) -> None:
+    """A test file's untyped helper reached CI because no check on the list type-checked tests."""
+    only = staged_names(tmp_path, "packages/ops_service_kit/tests/test_x.py")
+    assert [n for n in only if n.startswith("typecheck")] == ["typecheck-packages"], only
+    one = staged_names(tmp_path, "services/models-service/tests/test_x.py")
+    assert [n for n in one if n.startswith("typecheck")] == ["typecheck-models-service"], one
+    assert not [n for n in staged_names(tmp_path, "docs/usecases/README.md") if n.startswith("typecheck")]
 
 
 def test_staging_does_not_skip_when_the_plan_skipped_a_job() -> None:
