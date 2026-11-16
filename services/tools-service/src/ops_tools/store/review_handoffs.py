@@ -73,9 +73,7 @@ class ReviewHandoffs(Store):
         async with self.system_tx(HANDOFF_LIST) as c:
             owners = await rows(
                 c,
-                sa.select(m.c.tenant_id, m.c.id, m.c.display_name, m.c.team_id).where(
-                    any_team(m, "the start-up hand-over reads every tenant's modules")
-                ),
+                sa.select(m.c.tenant_id, m.c.id, m.c.display_name, m.c.team_id).where(any_team(m, HANDOFF_LIST)),
                 ModuleOwner,
             )
             waiting = await rows(
