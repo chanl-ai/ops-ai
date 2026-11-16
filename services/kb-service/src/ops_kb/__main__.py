@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import uvicorn
 
-from ops_identity import Auth
+from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -47,7 +47,7 @@ async def _seed(settings: Settings) -> None:
     )
     try:
         await _files_ready(settings)
-        if settings.files_url:
+        if settings.files is not None:
             await move_to_files_service(service, KnowledgeFiles(settings.kb_files_dir))
         with isolation.tenant_wide(DEMO_SEED, tenant_id=TENANT):
             await seed_demo(service)
@@ -75,24 +75,29 @@ async def move_to_files_service(
 
 async def _files_ready(settings: Settings) -> None:
     """The stack starts files-service just before kb-service; the seed uploads through it, so wait up to a minute."""
-    if not settings.files_url:
+    if settings.files is None:
         return
-    async with httpx.AsyncClient(base_url=settings.files_url, timeout=2) as http:
+    files = ServiceClient.for_settings(settings, service="kb", audience="files")
+    try:
         for _ in range(60):
             try:
-                if (await http.get("/health")).status_code == 200:
+                if (await files.http.get("/health")).status_code == 200:
                     return
             except httpx.HTTPError:
                 pass
             await asyncio.sleep(1)
-    log.warning("files_service_not_ready", url=settings.files_url)
+    finally:
+        await files.aclose()
+    log.warning("files_service_not_ready", url=settings.files.base)
 
 
 def main() -> None:
     settings = Settings()
     # agents-service says which agents use a knowledge base and runs the workflows that listen to its events.
     # With platform-service on the stack, its internal port also keeps the audit log of settings changes.
-    settings.require("agents", *(("platform_internal",) if settings.platform_url else settings.identity_endpoints))
+    settings.require(
+        "agents", *(("platform_internal",) if settings.platform is not None else settings.identity_endpoints)
+    )
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="kb-service")
     if settings.environment == "dev":

@@ -19,6 +19,7 @@ import httpx
 from ops_ingest import ModelBudgetSpent, ModelUnavailable
 from ops_service_kit.ids import new_id
 from ops_service_kit.model_calls import IngestModel, ModelCallError
+from ops_service_kit.settings import Endpoint
 
 QUESTIONS_STEP = "kb:questions"
 # models-service's refusals that mean a spend ceiling, which stop the step as a ceiling rather than an outage.
@@ -67,9 +68,10 @@ class ModelsIngest:
             )
 
 
-def models_clients(models_url: str, key: str) -> AiClients:
+def models_clients(models: Endpoint, key: str) -> AiClients:
     def make(tenant: str, run_id: str, ceiling: float) -> AiClient:
-        http = httpx.Client(base_url=models_url, timeout=120)
+        # Called with kb-service's model key, not a service token, so it is not a ServiceClient.
+        http = httpx.Client(base_url=models.base, timeout=models.timeout_s)
         inner = IngestModel(http, key, tenant=tenant, step=QUESTIONS_STEP, run_id=run_id, run_cap=f"{ceiling:.2f}")
         return ModelsIngest(inner)
 

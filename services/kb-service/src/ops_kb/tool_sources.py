@@ -97,7 +97,7 @@ class ToolReader:
             "runContext": {"act": act, "environment": "live"},
         }
         try:
-            data = await self.tools.post("/v1/calls", json=body, tenant=tenant_id, team=team_id, timeout=60)
+            data = await self.tools.post("/v1/calls", json=body, tenant=tenant_id, team=team_id)
         except ServiceCallError as e:
             return Answer(False, code=str(e.code or "refused"), message=e.message)
         except ServiceUnreachable as e:

@@ -1,8 +1,3 @@
-# 20 literal timeouts and HTTP clients built in services/kb-service (scripts/check_config_literals.py). A row may only fall.
-1 client services/kb-service/src/ops_kb/__main__.py
-1 timeout services/kb-service/src/ops_kb/__main__.py
+# 2 literal timeouts and HTTP clients built in services/kb-service (scripts/check_config_literals.py). A row may only fall.
 1 client services/kb-service/src/ops_kb/ai.py
-1 timeout services/kb-service/src/ops_kb/ai.py
-6 client services/kb-service/src/ops_kb/app.py
-9 timeout services/kb-service/src/ops_kb/app.py
-1 timeout services/kb-service/src/ops_kb/tool_sources.py
+1 client services/kb-service/src/ops_kb/app.py

@@ -167,68 +167,67 @@ PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
 
 
 def _agents_service(settings: Settings) -> AgentsUsage:
-    http = httpx.AsyncClient(base_url=settings.endpoint("agents").base, timeout=5)
-    return AgentsUsage(
-        ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["agents:view"], timeout=5)
-    )
+    return AgentsUsage(ServiceClient.for_settings(settings, service="kb", audience="agents", scopes=["agents:view"]))
 
 
 def _tools_service(settings: Settings) -> ToolReader | None:
     """tools-service's gateway, for "tool" sources: the declared sources and one call per list page or item."""
     # An install with no plugin (Settings.plugins) has no tool sources: kb-service then calls no tools route at all.
-    if not settings.plugins or not settings.tools_url:
+    if not settings.plugins or settings.tools is None:
         return None
-    http = httpx.AsyncClient(base_url=settings.tools_url, timeout=60)
-    client = ServiceClient.for_settings(
-        settings, http, service="kb", audience="tools", scopes=["tools:view", "tools:run", "knowledge:run"], timeout=60
-    )
-    return ToolReader(client)
+    scopes = ["tools:view", "tools:run", "knowledge:run"]
+    return ToolReader(ServiceClient.for_settings(settings, service="kb", audience="tools", scopes=scopes))
 
 
 def _platform_service(settings: Settings) -> ServiceClient | None:
     """platform-service's internal port, which keeps the account's audit log; None on a stack without it."""
-    if not settings.platform_url:
+    if settings.platform is None:
         return None
-    internal = settings.endpoint("platform_internal").base
-    http = httpx.AsyncClient(base_url=internal, timeout=10)
-    return ServiceClient.for_settings(settings, http, service="kb", audience="platform", scopes=[AUDIT_SCOPE])
+    return ServiceClient.for_settings(
+        settings, service="kb", audience="platform", scopes=[AUDIT_SCOPE], endpoint="platform_internal"
+    )
+
+
+def _models_http(settings: Settings) -> tuple[httpx.AsyncClient, str] | None:
+    """models-service on its endpoint, with kb-service's own model key; None when this stack has no models-service or
+    no key for kb-service. Called with that key, not a service token, so it is not a ServiceClient."""
+    if settings.models is None or settings.models_key is None:
+        return None
+    http = httpx.AsyncClient(base_url=settings.models.base, timeout=settings.models.timeout_s)
+    return http, settings.models_key.get_secret_value()
 
 
 def _embedder(settings: Settings) -> Embedder | None:
-    """The environment's embedding model through models-service with kb-service's own key; None when this stack has
-    no models-service or no key for kb-service, and search then runs on keywords and says why."""
-    if not settings.models_url or settings.models_key is None:
+    """The environment's embedding model through models-service; None without it, and search then runs on keywords
+    and says why."""
+    if (models := _models_http(settings)) is None:
         return None
-    http = httpx.AsyncClient(base_url=settings.models_url, timeout=60)
-    calls = ModelCalls(http, settings.models_key.get_secret_value())
-    return ModelsEmbedder(calls, settings.embedding_alias, settings.embedding_width)
+    return ModelsEmbedder(ModelCalls(*models), settings.embedding_alias, settings.embedding_width)
 
 
 def _query_model(settings: Settings) -> QueryModel | None:
-    """Rerank and rewrite through models-service with kb-service's own key; None without either, and a base asking
-    for them is searched without them, saying why."""
-    if not settings.models_url or settings.models_key is None:
+    """Rerank and rewrite through models-service; None without it, and a base asking for them is searched without
+    them, saying why."""
+    if (models := _models_http(settings)) is None:
         return None
-    http = httpx.AsyncClient(base_url=settings.models_url, timeout=30)
-    return ModelsQuery(ModelCalls(http, settings.models_key.get_secret_value()))
+    return ModelsQuery(ModelCalls(*models))
 
 
 def _ai_clients(settings: Settings) -> AiClients | None:
     """The sources' AI steps through models-service with kb-service's own key; None without either."""
-    if not settings.models_url or settings.models_key is None:
+    if settings.models is None or settings.models_key is None:
         return None
-    return models_clients(settings.models_url, settings.models_key.get_secret_value())
+    return models_clients(settings.models, settings.models_key.get_secret_value())
 
 
 def _events_service(settings: Settings) -> ServiceClient:
     """agents-service, which runs the workflows that listen to kb-service's events (a source that keeps failing)."""
-    http = httpx.AsyncClient(base_url=settings.endpoint("agents").base, timeout=10)
-    return ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["events:emit"])
+    return ServiceClient.for_settings(settings, service="kb", audience="agents", scopes=["events:emit"])
 
 
 def _documents_service(settings: Settings) -> Readings | None:
     """documents-service, which reads every file a source holds; unset, file sources cannot be indexed."""
-    if not settings.documents_url:
+    if settings.documents is None:
         return None
     return DocumentsReadings(
         DocumentsClient.from_settings(settings, service="kb", scopes=["documents:view", "documents:run"])
@@ -275,10 +274,10 @@ def create_kb_app(
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
-    no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files_url names it,
+    no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files is set,
     else under kb_files_dir. `agents` says which agents cite each base; by default agents-service at
-    Settings().agents_url. `platform` receives the audit entries of settings changes; by default platform-service's
-    internal port when Settings().platform_url names it, else the entries wait in the outbox."""
+    Settings().agents. `platform` receives the audit entries of settings changes; by default platform-service's
+    internal port when Settings().platform is set, else the entries wait in the outbox."""
     reader = tools or _tools_service(Settings())
     readings = readings or _documents_service(Settings())
     audit_log = platform or _platform_service(Settings())
@@ -311,7 +310,9 @@ def create_kb_app(
                 rebuild.cancel()
             tasks = {t for t in (beat, hand_off, embeds, *service.rebuilds) if t is not None}
             if tasks:
-                await asyncio.wait(tasks, timeout=5)
+                # A loop still in its pass gets as long as a request waits for a database connection: a pass that
+                # has none by then would fail anyway.
+                await asyncio.wait(tasks, timeout=Settings().db.wait_s)
 
     app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id, lifespan=lifespan)
     install_error_handlers(app)

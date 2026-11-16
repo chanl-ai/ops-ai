@@ -154,6 +154,8 @@ services:
       OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_KB:?}
       OPS_SERVICE_SIGNING_KID: svc-kb-1
       OPS_MODELS_KEY: ${OPS_MODELS_KEY_KB:-}
+      # A tool source's page or item is one plugin call through tools-service, which may take up to a minute.
+      OPS_TOOLS__TIMEOUT_S: "60"
     volumes:
       - kb-data:/data
       - ${OPS_PLUGINS_HOST_DIR:-../../plugins}:/plugins:ro

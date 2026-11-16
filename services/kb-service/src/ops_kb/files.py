@@ -261,7 +261,7 @@ async def move_files(
 
 
 def file_intake(settings: Settings) -> FileIntake:
-    """files-service when `files_url` names it; otherwise the in-process store under `kb_files_dir`."""
-    if settings.files_url:
+    """files-service when its endpoint is set; otherwise the in-process store under `kb_files_dir`."""
+    if settings.files is not None:
         return FilesServiceIntake(FilesClient.from_settings(settings, service="kb"))
     return KnowledgeFiles(settings.kb_files_dir)
