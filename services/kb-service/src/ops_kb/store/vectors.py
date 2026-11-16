@@ -10,8 +10,8 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store import isolation
 from ops_store.dialect import vector_distance_sql, vector_search_setup, vector_text
+from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
 from .fulltext import Narrowing, scope_sql
@@ -43,20 +43,23 @@ def _search_sql(width: int, scope: str = "TRUE") -> sa.TextClause:
     ).bindparams(sa.bindparam("kb_ids", expanding=True))
 
 
-class PgVectorStore:
+class PgVectorStore(Store):
+    role = ROLE
+
     def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+        super().__init__(engine)
         self._ready: bool | None = None
 
     async def ready(self) -> bool:
-        """Whether this database has the vector table (pgvector installed when the chain ran)."""
+        """Whether this database has the vector table (pgvector installed when the chain ran). Asked inside a tenant's
+        request or pass, on its transaction."""
         if self._ready is None:
-            async with self.engine.connect() as c:
-                if c.dialect.name != "postgresql":
-                    self._ready = False
-                else:
+            if self.engine.dialect.name != "postgresql":
+                self._ready = False
+            else:
+                async with self.tx() as c:
                     found = await c.scalar(sa.text("SELECT to_regclass('kb_unit_vectors')"))
-                    self._ready = found is not None
+                self._ready = found is not None
         return self._ready
 
     async def pending(self, tenant: str, *, model: str, width: int, limit: int) -> list[dict[str, Any]]:
@@ -76,7 +79,7 @@ class PgVectorStore:
             .order_by(u.c.chunk_id, u.c.position)
             .limit(limit)
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             return [dict(r) for r in (await conn.execute(q)).mappings()]
 
     async def pending_count(self, tenant: str, *, model: str, width: int) -> int:
@@ -94,7 +97,7 @@ class PgVectorStore:
                 team_visible(c),
             )
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             return int(await conn.scalar(q) or 0)
 
     async def put(self, tenant: str, rows: list[dict[str, Any]], *, model: str, width: int) -> None:
@@ -103,7 +106,7 @@ class PgVectorStore:
             return
         v = kb_unit_vectors
         now = datetime.now(UTC)
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             ids = [str(r["unit_id"]) for r in rows]
             teams = {
                 str(r[0]): str(r[1])
@@ -148,7 +151,7 @@ class PgVectorStore:
             """
         ).bindparams(sa.bindparam("kb_ids", expanding=True))
         params = {"tenant": tenant, "kb_ids": kb_ids, "model": model, "width": width}
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             row = (await conn.execute(q, params)).mappings().one()
         return int(row["embedded"] or 0), int(row["total"] or 0)
 
@@ -175,7 +178,7 @@ class PgVectorStore:
             "width": width,
             "limit": limit * OVERFETCH,
         }
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             for statement in vector_search_setup(conn.dialect.name):
                 await conn.execute(sa.text(statement))
             return [dict(r) for r in (await conn.execute(_search_sql(width, scope), params)).mappings()]

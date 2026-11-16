@@ -1,4 +1,1 @@
 # kb-service: processes with no loop_reports_failure test yet (packages/ops_store/tests/test_loop_health.py). A row may only go.
-kb_embed
-kb_relay
-knowledge_schedule

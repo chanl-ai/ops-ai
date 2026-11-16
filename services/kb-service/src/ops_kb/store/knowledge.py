@@ -3,13 +3,14 @@
 A knowledge base belongs to a department team and names its owner; a source brings documents in (file sources only
 in this slice, holding file ids, never bytes); a knowledge base reads the sources attached to it. Every row carries
 its tenant and its team, and the database holds each transaction to them (kb_0011): every transaction is
-`ops_store.isolation.isolated_tx` as `ops_kb_tenant`, and a link, document, version, chunk, change and run take the
+`Store.tx()` as `ops_kb_tenant`, and a link, document, version, chunk, change and run take the
 team of the base, source or document they belong to.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, ClassVar, NamedTuple, cast
 
@@ -21,17 +22,29 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.errors import Conflict
 from ops_service_kit.ids import new_id
-from ops_store import Guarantee, isolation
+from ops_store import Guarantee
+from ops_store.audit import AUDIT_EVENT, AUDIT_ROUTE
 from ops_store.audit import record as record_audit
-from ops_store.database import open_database
+from ops_store.database import open_database, reachable
 from ops_store.dialect import Vector, db_after, db_now
+from ops_store.outbox import Poster, Relay, outbox_table, relay
 from ops_store.outbox import add as add_event
-from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, dialect_indexes, postgres_only
 from ops_store.search import contains
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
-__all__ = ["ROLE", "SYSTEM_ROLE", "AsyncEngine", "KnowledgeStore", "engine_for", "kb_outbox", "metadata", "reachable"]
+__all__ = [
+    "ROLE",
+    "SYSTEM_ROLE",
+    "AsyncEngine",
+    "KnowledgeStore",
+    "engine_for",
+    "kb_outbox",
+    "metadata",
+    "outbox_relay",
+    "reachable",
+]
 
 metadata = sa.MetaData()
 
@@ -373,6 +386,25 @@ kb_runs = sa.Table(
 # one audit log (ops_store.audit); read across tenants by the relay as ops_kb_system.
 kb_outbox = outbox_table(metadata, "kb_outbox", info=TENANT_SCOPED)
 
+# Where kb_outbox's events go: an audit entry to platform-service's account audit log (`audit:create`), its team in the
+# token alone; every other event (a source that keeps failing, a knowledge base changed) to agents-service's
+# /v1/events (`events:emit`), where the workflows that listen to it run.
+RELAY_ROUTES = {AUDIT_EVENT: ("platform",), "*": ("agents",)}
+
+
+def outbox_relay(engine: AsyncEngine, targets: Mapping[str, Poster]) -> Relay:
+    """kb_outbox's relay to the services in `targets` ("platform", "agents"); one this installation does not run is
+    left out, and its events are delivered by doing nothing."""
+    return relay(
+        engine,
+        kb_outbox,
+        routes=RELAY_ROUTES,
+        targets=targets,
+        role=SYSTEM_ROLE,
+        team_in_token=frozenset({"platform"}),
+        path_by_target={"platform": AUDIT_ROUTE},
+    )
+
 
 def _with_team(chunks: list[dict[str, Any]], team: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Pieces and their index units (each piece's `units`), both in the team they are written in."""
@@ -459,18 +491,13 @@ class ChangePage(NamedTuple):
     origins: dict[str, int]
 
 
-class KnowledgeStore:
+class KnowledgeStore(Store):
     """kb-service's door to its knowledge bases and sources, always inside one tenant. Creating a knowledge base with
     its links, attaching sources and removing a source with its links each land whole."""
 
+    role = ROLE
+    system_role = SYSTEM_ROLE
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
-    def _tx(self) -> Any:
-        """One transaction carrying the request's (or the task's) tenant and team, as the role the policy applies to."""
-        return isolation.isolated_tx(self.engine, role=ROLE)
 
     @staticmethod
     async def _team_of(c: AsyncConnection, table: sa.Table, tenant: str, row_id: str) -> str:
@@ -479,7 +506,7 @@ class KnowledgeStore:
         return str((await c.execute(q)).scalar_one())
 
     async def bases(self, tenant: str) -> list[dict[str, Any]]:
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = sa.select(kb_bases).where(kb_bases.c.tenant_id == tenant, team_visible(kb_bases))
             rows = (await c.execute(q)).mappings()
             return [dict(r) for r in rows]
@@ -493,14 +520,14 @@ class KnowledgeStore:
         if not wanted:
             return []
         q = sa.select(t.id, t.name).where(t.tenant_id == tenant, sa.or_(*wanted), team_visible(kb_bases))
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def team_bases(self, tenant: str, team: str | None) -> list[dict[str, Any]]:
         """The bases a person in `team` reads: the team's and those no team owns, as the picker offers."""
         t = kb_bases.c
         scope = t.team_id.is_(None) if team is None else sa.or_(t.team_id.is_(None), t.team_id == team)
-        async with self._tx() as c:
+        async with self.tx() as c:
             rows = (
                 await c.execute(sa.select(kb_bases).where(t.tenant_id == tenant, scope, team_visible(kb_bases)))
             ).mappings()
@@ -516,11 +543,11 @@ class KnowledgeStore:
         q = sa.select(t.id, t.name, t.description, t.owner).where(t.tenant_id == tenant, scope, team_visible(kb_bases))
         q = q.where(t.id.in_(ids) if ids is not None else contains(t.name, search))
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def base(self, tenant: str, kb_id: str) -> dict[str, Any] | None:
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = sa.select(kb_bases).where(
                 kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id, team_visible(kb_bases)
             )
@@ -529,7 +556,7 @@ class KnowledgeStore:
 
     async def tenants(self) -> list[str]:
         """Every tenant holding a source; only the start-up move between file stores reads across tenants."""
-        async with isolation.system_tx(self.engine, MOVE_TENANTS, role=SYSTEM_ROLE) as c:
+        async with self.system_tx(MOVE_TENANTS) as c:
             q = sa.select(kb_sources.c.tenant_id).where(any_team(kb_sources, MOVE_TENANTS))
             return [str(r[0]) for r in await c.execute(q.distinct())]
 
@@ -553,7 +580,7 @@ class KnowledgeStore:
         )
         if ids is not None:
             counted = counted.where(kb_items.c.source_id.in_(ids))
-        async with self._tx() as c:
+        async with self.tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             counts: dict[str, dict[str, int]] = {}
             for r in (await c.execute(counted)).mappings():
@@ -565,26 +592,27 @@ class KnowledgeStore:
 
     async def links(self, tenant: str) -> list[tuple[str, str]]:
         """(knowledge base id, source id) for every attachment in the tenant."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = sa.select(kb_base_sources.c.kb_id, kb_base_sources.c.source_id).where(
                 kb_base_sources.c.tenant_id == tenant, team_visible(kb_base_sources)
             )
             return [(r.kb_id, r.source_id) for r in await c.execute(q)]
 
     async def create_base(self, row: dict[str, Any], source_ids: list[str]) -> None:
-        try:
-            async with self._tx() as c:
-                await c.execute(sa.insert(kb_bases).values(**row))
-                await self._link(c, row["tenant_id"], row["id"], source_ids)
-        except IntegrityError as e:
-            # An id is unique in the tenant; one another team holds is not seen before the insert.
-            raise Conflict(f"A knowledge base with id {row['id']} already exists.") from e
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(kb_bases).values(**row))
+            except IntegrityError as e:
+                # An id is unique in the tenant; one another team holds is not seen before the insert.
+                raise Conflict(f"A knowledge base with id {row['id']} already exists.") from e
+            await self._link(c, row["tenant_id"], row["id"], source_ids)
 
     async def update_base(
         self, tenant: str, kb_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
     ) -> None:
         """`audit` is the change's entry for the account's audit log, written in the same transaction."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(kb_bases).where(kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id).values(**values)
             )
@@ -593,7 +621,7 @@ class KnowledgeStore:
                 await record_audit(c, kb_outbox, tenant_id=tenant, team_id=team, **audit)
 
     async def attach(self, tenant: str, kb_id: str, source_ids: list[str]) -> None:
-        async with self._tx() as c:
+        async with self.tx() as c:
             await self._link(c, tenant, kb_id, source_ids)
 
     async def _link(self, c: AsyncConnection, tenant: str, kb_id: str, source_ids: list[str]) -> None:
@@ -606,14 +634,14 @@ class KnowledgeStore:
         await c.execute(stmt.on_conflict_do_nothing())
 
     async def create_source(self, row: dict[str, Any], kb_ids: list[str]) -> None:
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(sa.insert(kb_sources).values(**row))
             for kb_id in kb_ids:
                 await self._link(c, row["tenant_id"], kb_id, [row["id"]])
 
     async def remove_base(self, tenant: str, kb_id: str, *, by: str) -> bool:
         """Deletes the base and records its id as retired, in one transaction."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             key = (kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id)
             q = sa.select(kb_bases.c.name, kb_bases.c.team_id).where(*key, team_visible(kb_bases))
             row = (await c.execute(q)).first()
@@ -638,11 +666,11 @@ class KnowledgeStore:
         )
         if kb_ids is not None:
             q = q.where(kb_retired_bases.c.id.in_(kb_ids))
-        async with self._tx() as c:
+        async with self.tx() as c:
             return {str(r.id) for r in await c.execute(q)}
 
     async def remove_source(self, tenant: str, source_id: str) -> bool:
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = sa.delete(kb_sources).where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             return (await c.execute(q)).rowcount > 0
 
@@ -656,7 +684,7 @@ class KnowledgeStore:
             q = q.where(kb_items.c.source_id.in_(source_ids))
         if item_id is not None:
             q = q.where(kb_items.c.id == item_id)
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_items.c.created_at))).mappings()]
 
     async def versions(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
@@ -669,7 +697,7 @@ class KnowledgeStore:
             )
             .order_by(kb_item_versions.c.version.desc())
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def chunks(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
@@ -692,7 +720,7 @@ class KnowledgeStore:
             )
             .order_by(kb_chunks.c.position)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def units(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
@@ -711,7 +739,7 @@ class KnowledgeStore:
             )
             .order_by(kb_chunks.c.position, kb_units.c.position)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def index_version(
@@ -727,7 +755,7 @@ class KnowledgeStore:
         """Writes one version of an item with its chunks, and withdraws the previous version's chunks, in one
         transaction: a reader sees the old version or the new one, never both, and the change row lands with the
         version it records. Returns the version it replaced."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             # The document, its version, chunks and change take its source's team.
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
             item = {**item, "team_id": team}
@@ -762,7 +790,7 @@ class KnowledgeStore:
         """Deletes pieces withdrawn before `before` (their units and vectors go with them); the number deleted. A
         version's text stays in its change row and its snapshot for as long as those are kept."""
         ch = kb_chunks
-        async with self._tx() as c:
+        async with self.tx() as c:
             done = await c.execute(
                 sa.delete(ch).where(
                     ch.c.tenant_id == tenant,
@@ -788,7 +816,7 @@ class KnowledgeStore:
         }
         if activate:
             values["status"] = sa.case((kb_sources.c.status == "draft", "active"), else_=kb_sources.c.status)
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(kb_sources)
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
@@ -801,12 +829,12 @@ class KnowledgeStore:
 
     async def record_event(self, tenant: str, source_id: str, *, name: str, payload: dict[str, Any]) -> None:
         """A service event about the source (it keeps failing), relayed to agents-service so a workflow can act."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             team = await self._team_of(c, kb_sources, tenant, source_id)
             await add_event(c, kb_outbox, tenant_id=tenant, team_id=team, name=name, key=new_id("evt"), payload=payload)
 
     async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> None:
-        async with self._tx() as c:
+        async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = (
                 await c.execute(
@@ -829,7 +857,7 @@ class KnowledgeStore:
 
     async def swap_files(self, tenant: str, source_id: str, moved: dict[str, str]) -> None:
         """Points a source at files copied to another store, keeping each file's place and uploaded name."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = (
                 await c.execute(
@@ -848,7 +876,7 @@ class KnowledgeStore:
         """Removes files from a source; the stored blobs stay, other sources may hold them."""
         if not file_ids:
             return
-        async with self._tx() as c:
+        async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = (
                 await c.execute(
@@ -868,7 +896,7 @@ class KnowledgeStore:
     async def refreshed(self, tenant: str, kb_ids: list[str]) -> None:
         if not kb_ids:
             return
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(kb_bases)
                 .where(kb_bases.c.tenant_id == tenant, kb_bases.c.id.in_(kb_ids))
@@ -878,7 +906,7 @@ class KnowledgeStore:
     async def reindex(self, tenant: str, item_id: str, values: dict[str, Any], chunks: list[dict[str, Any]]) -> None:
         """Rebuilds an item's chunks from the same content, keeping its version: the old chunks are withdrawn in the
         transaction that inserts the new ones."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             team = await self._team_of(c, kb_items, tenant, item_id)
             chunks, units = _with_team(chunks, team)
             await c.execute(
@@ -892,7 +920,7 @@ class KnowledgeStore:
 
     async def add_item(self, tenant: str, item: dict[str, Any]) -> None:
         """An item with no version yet (waiting for its reading, or failed before one), in its source's team."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
             await c.execute(sa.insert(kb_items).values(**{**item, "team_id": team}))
 
@@ -903,11 +931,11 @@ class KnowledgeStore:
         )
         if file_id is not None:
             q = q.where(kb_items.c.file_id == file_id)
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_items.c.created_at))).mappings()]
 
     async def update_item(self, tenant: str, item_id: str, values: dict[str, Any]) -> None:
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
@@ -916,7 +944,7 @@ class KnowledgeStore:
         self, tenant: str, source_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
     ) -> None:
         """`audit` is the change's entry for the account's audit log, written in the same transaction."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(kb_sources)
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
@@ -927,7 +955,7 @@ class KnowledgeStore:
                 await record_audit(c, kb_outbox, tenant_id=tenant, team_id=team, **audit)
 
     async def detach(self, tenant: str, kb_id: str, source_id: str) -> None:
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.delete(kb_base_sources).where(
                     kb_base_sources.c.tenant_id == tenant,
@@ -940,7 +968,7 @@ class KnowledgeStore:
         """Drops documents a tool source no longer lists, with their versions and chunks."""
         if not item_ids:
             return 0
-        async with self._tx() as c:
+        async with self.tx() as c:
             for table, column in (
                 (kb_units, kb_units.c.item_id),
                 (kb_chunks, kb_chunks.c.item_id),
@@ -955,7 +983,7 @@ class KnowledgeStore:
         holder's ran out): true when taken, so two syncs of one source never run at once."""
         s = kb_sources
         free = sa.or_(s.c.lease_until.is_(None), s.c.lease_until < db_now())
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = (
                 sa.update(s)
                 .where(s.c.tenant_id == tenant, s.c.id == source_id, free, team_visible(s))
@@ -966,7 +994,7 @@ class KnowledgeStore:
     async def renew(self, tenant: str, source_id: str, *, owner: str, seconds: float) -> bool:
         """Extends `owner`'s lease by `seconds` from now; false when it no longer holds it."""
         s = kb_sources
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = (
                 sa.update(s)
                 .where(s.c.tenant_id == tenant, s.c.id == source_id, s.c.lease_owner == owner, team_visible(s))
@@ -976,11 +1004,11 @@ class KnowledgeStore:
 
     async def release(self, tenant: str, source_id: str, *, owner: str) -> None:
         """Gives up `owner`'s lease; a lease another holder took is left alone."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(_released(tenant, source_id, owner))
 
     async def add_run(self, row: dict[str, Any]) -> None:
-        async with self._tx() as c:
+        async with self.tx() as c:
             team = await self._team_of(c, kb_sources, str(row["tenant_id"]), str(row["source_id"]))
             await c.execute(sa.insert(kb_runs).values(**row, team_id=team))
 
@@ -1003,7 +1031,7 @@ class KnowledgeStore:
             )
             .distinct()
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def update_run(
@@ -1011,7 +1039,7 @@ class KnowledgeStore:
     ) -> None:
         """`release` (source id, lease owner) frees the source in the same transaction, so a run seen finished never
         holds its source after."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(kb_runs).where(kb_runs.c.tenant_id == tenant, kb_runs.c.id == run_id).values(**values)
             )
@@ -1021,7 +1049,7 @@ class KnowledgeStore:
     async def cancel_run(self, tenant: str, run_id: str, *, by: str) -> bool:
         """Asks a running run to stop; true when it was running and nobody had asked yet."""
         r = kb_runs
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = (
                 sa.update(r)
                 .where(r.c.tenant_id == tenant, r.c.id == run_id, r.c.status == "running", r.c.cancelled_by.is_(None))
@@ -1033,7 +1061,7 @@ class KnowledgeStore:
         q = sa.select(kb_runs.c.source_id).where(
             kb_runs.c.tenant_id == tenant, kb_runs.c.status == "running", team_visible(kb_runs)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return {str(r[0]) for r in await c.execute(q.distinct())}
 
     async def end_stale_runs(self, tenant: str, *, reason: str) -> int:
@@ -1046,7 +1074,7 @@ class KnowledgeStore:
             s.c.lease_until.is_not(None),
             s.c.lease_until >= db_now(),
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             q = (
                 sa.update(r)
                 .where(r.c.tenant_id == tenant, r.c.status == "running", ~held)
@@ -1073,7 +1101,7 @@ class KnowledgeStore:
             q = q.limit(limit)
         if run_id is not None:
             q = q.where(kb_runs.c.id == run_id)
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_runs.c.started_at.desc()))).mappings()]
 
     async def drafts(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
@@ -1084,19 +1112,19 @@ class KnowledgeStore:
             .where(c.c.tenant_id == tenant, c.c.item_id == item_id, c.c.origin == "faq", team_visible(c))
             .order_by(c.c.changed_at, c.c.id)
         )
-        async with self._tx() as conn:
+        async with self.tx() as conn:
             return [dict(r) for r in (await conn.execute(q)).mappings()]
 
     async def add_drafts(self, tenant: str, rows: list[dict[str, Any]]) -> None:
         if not rows:
             return
-        async with self._tx() as conn:
+        async with self.tx() as conn:
             team = await self._team_of(conn, kb_items, tenant, str(rows[0]["item_id"]))
             await conn.execute(sa.insert(kb_changes), [{**r, "tenant_id": tenant, "team_id": team} for r in rows])
 
     async def update_change(self, tenant: str, change_id: str, values: dict[str, Any]) -> None:
         c = kb_changes
-        async with self._tx() as conn:
+        async with self.tx() as conn:
             await conn.execute(
                 sa.update(c).where(c.c.tenant_id == tenant, c.c.id == change_id, team_visible(c)).values(**values)
             )
@@ -1107,7 +1135,7 @@ class KnowledgeStore:
         live = sa.select(ch.c.id).where(
             ch.c.tenant_id == tenant, ch.c.item_id == item_id, ch.c.withdrawn_at.is_(None), team_visible(ch)
         )
-        async with self._tx() as conn:
+        async with self.tx() as conn:
             await conn.execute(
                 sa.delete(u).where(
                     u.c.tenant_id == tenant,
@@ -1125,7 +1153,7 @@ class KnowledgeStore:
         q = sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant, team_visible(kb_changes))
         if ids is not None:
             q = q.where(kb_changes.c.id.in_(ids))
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_changes.c.changed_at.desc()))).mappings()]
 
     async def change_page(
@@ -1167,7 +1195,7 @@ class KnowledgeStore:
         def tally(when: sa.ColumnElement[bool]) -> sa.ColumnElement[Any]:
             return sa.func.coalesce(sa.func.sum(sa.case((when, 1), else_=0)), 0)
 
-        async with self._tx() as conn:
+        async with self.tx() as conn:
             mine_n, open_n, done_n = (
                 await conn.execute(
                     sa.select(tally(mine), tally(waiting), tally(sa.not_(waiting))).select_from(joined).where(*scope)
@@ -1205,13 +1233,3 @@ def _released(tenant: str, source_id: str, owner: str) -> sa.Update:
 
 def engine_for(url: str) -> AsyncEngine:
     return open_database(url)
-
-
-async def reachable(engine: AsyncEngine) -> bool:
-    """Whether the database answers; health says degraded when it does not."""
-    try:
-        async with engine.connect() as c:
-            await c.execute(sa.text("SELECT 1"))
-    except Exception:
-        return False
-    return True

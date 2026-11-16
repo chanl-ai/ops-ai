@@ -7,9 +7,8 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store import isolation
+from ops_store.store import Store
 
 from .knowledge import ROLE
 
@@ -125,12 +124,11 @@ _SEARCH = """
 OVERFETCH = 4
 
 
-class KeywordLane:
+class KeywordLane(Store):
     """The keyword lane: units holding at least `threshold` of the question's terms, best first, each with its share as
-    `lane_score`."""
+    `lane_score`. As the tenant role, so the team policy keeps another team's chunks out of the search."""
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
 
     def ready(self) -> bool:
         """Whether this database searches the units' text: PostgreSQL alone carries their tsv column."""
@@ -160,7 +158,6 @@ class KeywordLane:
             "min_shared": MIN_SHARED_TERMS,
             "term_cap": TERM_CAP,
         }
-        # As the tenant role, so the team policy keeps another team's chunks out of the search.
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             rows = (await c.execute(search, params)).mappings().all()
         return [{**r, "lane_score": float(r["shared"]) / float(min(r["total"], TERM_CAP))} for r in rows]

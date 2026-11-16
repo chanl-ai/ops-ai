@@ -38,6 +38,7 @@ from ops_store import isolation
 from ops_store.audit import AUDIT_SCOPE
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
+from ops_store.outbox import run_relay
 from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
@@ -96,7 +97,7 @@ from .schemas import (
 from .search import HybridRetriever
 from .service import KnowledgeService, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
-from .store.event_relay import keep_relaying
+from .store.knowledge import outbox_relay
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader
 
@@ -278,7 +279,8 @@ def create_kb_app(
         stop = asyncio.Event()
         runs = (reader is not None or readings is not None) and schedule
         beat = asyncio.create_task(keep_syncing(service, stop)) if runs else None
-        hand_off = asyncio.create_task(keep_relaying(engine, audit_log, events, stop))
+        targets = {k: v for k, v in (("platform", audit_log), ("agents", events)) if v is not None}
+        hand_off = asyncio.create_task(run_relay(outbox_relay(engine, targets), key="kb_relay", stop=stop))
         embeds = (
             asyncio.create_task(keep_embedding(service.store, vectors, embedder, backlog, stop))
             if embedder is not None and schedule

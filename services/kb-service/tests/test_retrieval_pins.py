@@ -40,7 +40,9 @@ NOTES = policy_pdf("Branch notes", [("Opening hours", "Branches open at nine and
 @pytest.fixture
 async def stack(engine: AsyncEngine, tenant: str, tmp_path: Path) -> AsyncIterator[Stack]:
     """kb-service with the concept embedder, so both lanes run; a database with no pgvector fails the pin."""
-    if not await PgVectorStore(engine).ready():
+    with isolation.tenant_wide("test: whether the database has pgvector", tenant_id=tenant):
+        has_vectors = await PgVectorStore(engine).ready()
+    if not has_vectors:
         pytest.fail("The test database has no kb_unit_vectors, so the meaning lane cannot be pinned.")
     embedder, files = ConceptEmbedder(), KnowledgeFiles(tmp_path)
     readings = LocalReadings(files)

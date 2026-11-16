@@ -72,7 +72,9 @@ class Stack:
 
 @pytest.fixture
 async def stack(engine: AsyncEngine, tenant: str, tmp_path: Path) -> AsyncIterator[Stack]:
-    if not await PgVectorStore(engine).ready():
+    with isolation.tenant_wide("test: whether the database has pgvector", tenant_id=tenant):
+        has_vectors = await PgVectorStore(engine).ready()
+    if not has_vectors:
         # CI runs pgvector, so there a missing vector table is a failure; a local server on the old image is skipped
         # with the way to move it.
         if os.environ.get("CI"):
