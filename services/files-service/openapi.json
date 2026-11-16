@@ -4189,7 +4189,7 @@
     },
     "/v1/files/uploads": {
       "post": {
-        "description": "A ticket for one upload: a signed storage URL, or this service's content route on the local backend.",
+        "description": "A ticket for one upload: a signed storage URL, or this service's content route on the local backend. Not\non Tx: the rows are read in one transaction and written in another, with none open while the URL is signed\n(tests/test_request_transactions.py).",
         "operationId": "files_create_upload",
         "parameters": [
           {
@@ -5730,7 +5730,7 @@
     },
     "/v1/files/{file_id}/download-url": {
       "post": {
-        "description": "A short-lived link; 423 until the file is scanned clean.",
+        "description": "A short-lived link; 423 until the file is scanned clean. Not on Tx: no transaction is open while the link\nis signed.",
         "operationId": "files_download_url",
         "parameters": [
           {

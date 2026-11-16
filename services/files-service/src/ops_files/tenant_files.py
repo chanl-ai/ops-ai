@@ -395,10 +395,12 @@ class TenantFiles:
         file_id, held_hash = claimed
         if held_hash != request_hash:
             raise IdempotencyConflictError("this Idempotency-Key was used for a different upload")
-        row = await self._files.get(file_id)
-        if row is None or row.file.team != who.team:
-            raise IdempotencyConflictError("the file this Idempotency-Key created has been deleted")
-        store, proxy = await self._placement(row)
+        async with isolation.request_transaction():
+            row = await self._files.get(file_id)
+            if row is None or row.file.team != who.team:
+                raise IdempotencyConflictError("the file this Idempotency-Key created has been deleted")
+            store, proxy = await self._placement(row)
+        # Signed with nothing open: on Azure an expired delegation key makes a signature a network call.
         return await self._ticket(
             store, proxy, file_id=file_id, key=row.file.storage_key, mime=row.file.mime, size=row.file.declared_size
         )
@@ -412,27 +414,30 @@ class TenantFiles:
             raise InvalidUploadError(f"invalid team {who.team!r}")
         if request.team is not None and request.team != who.team:
             raise InvalidUploadError("the owning team comes from the caller's context")
-        name = display_name(request.name)
-        config = await self._config_for(who.tenant_id)
-        check_limits(config, request)
-        chosen = await self._settings.retention_for(who.tenant_id, request.purpose) if self._settings else None
-        retention = config.retention_class(request.retention_class or chosen or default_class(config, request))
-        claim: dict[str, str] | None = None
-        request_hash = ""
-        if idempotency_key is not None:
-            if not 0 < len(idempotency_key) <= 255:
-                raise InvalidUploadError("Idempotency-Key is 1 to 255 characters")
-            # Outside text is indexed only through its hash (database portability D7).
-            scope = "\n".join([who.tenant_id, who.team, who.actor, idempotency_key])
-            request_hash = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
-            claim = {"key_hash": hashlib.sha256(scope.encode()).hexdigest(), "request_hash": request_hash}
-            held = await self._files.idempotent_upload(claim["key_hash"])
-            if held is not None:
-                return await self._replay(who, held, request_hash)
-        now = self._clock()
-        file_id = self._new_id()
-        key = f"{who.tenant_id}/{who.team}/{request.purpose}/{now:%Y}/{now:%m}/{file_id}"
-        store, proxy = await self._upload_placement(who.tenant_id, request.purpose)
+        # The gate reads in one transaction, closed before the URL is signed; the row is written after it.
+        held: tuple[str, str] | None = None
+        async with isolation.request_transaction():
+            name = display_name(request.name)
+            config = await self._config_for(who.tenant_id)
+            check_limits(config, request)
+            chosen = await self._settings.retention_for(who.tenant_id, request.purpose) if self._settings else None
+            retention = config.retention_class(request.retention_class or chosen or default_class(config, request))
+            claim: dict[str, str] | None = None
+            request_hash = ""
+            if idempotency_key is not None:
+                if not 0 < len(idempotency_key) <= 255:
+                    raise InvalidUploadError("Idempotency-Key is 1 to 255 characters")
+                # Outside text is indexed only through its hash (database portability D7).
+                scope = "\n".join([who.tenant_id, who.team, who.actor, idempotency_key])
+                request_hash = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
+                claim = {"key_hash": hashlib.sha256(scope.encode()).hexdigest(), "request_hash": request_hash}
+                held = await self._files.idempotent_upload(claim["key_hash"])
+            now = self._clock()
+            file_id = self._new_id()
+            key = f"{who.tenant_id}/{who.team}/{request.purpose}/{now:%Y}/{now:%m}/{file_id}"
+            store, proxy = await self._upload_placement(who.tenant_id, request.purpose)
+        if held is not None:
+            return await self._replay(who, held, request_hash)
         ticket = await self._ticket(store, proxy, file_id=file_id, key=key, mime=request.mime, size=request.size)
         values: dict[str, Any] = {
             "id": file_id,
@@ -655,13 +660,15 @@ class TenantFiles:
             raise NotScannedError(f"{row.file.id} scan is {row.file.scan_status}")
 
     async def download_url(self, who: Who, file_id: str, *, expires_in: int | None = None) -> DownloadLink:
-        row = await self._owned(who, file_id)
-        self._readable(row)
-        config = await self._config_for(who.tenant_id)
-        ttl = expires_in if expires_in is not None else config.max_download_url_seconds
-        if not 0 < ttl <= config.max_download_url_seconds:
-            raise DownloadTtlError(f"download links last at most {config.max_download_url_seconds} seconds")
-        store, proxy = await self._placement(row)
+        # The gate reads in one transaction, closed before the link is signed.
+        async with isolation.request_transaction():
+            row = await self._owned(who, file_id)
+            self._readable(row)
+            config = await self._config_for(who.tenant_id)
+            ttl = expires_in if expires_in is not None else config.max_download_url_seconds
+            if not 0 < ttl <= config.max_download_url_seconds:
+                raise DownloadTtlError(f"download links last at most {config.max_download_url_seconds} seconds")
+            store, proxy = await self._placement(row)
         if proxy:
             url = f"/v1/files/{file_id}/content"
         else:

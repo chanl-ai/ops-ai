@@ -162,7 +162,9 @@ export interface paths {
         put?: never;
         /**
          * Create Upload
-         * @description A ticket for one upload: a signed storage URL, or this service's content route on the local backend.
+         * @description A ticket for one upload: a signed storage URL, or this service's content route on the local backend. Not
+         *     on Tx: the rows are read in one transaction and written in another, with none open while the URL is signed
+         *     (tests/test_request_transactions.py).
          */
         post: operations["files_create_upload"];
         delete?: never;
@@ -286,7 +288,8 @@ export interface paths {
         put?: never;
         /**
          * Download Url
-         * @description A short-lived link; 423 until the file is scanned clean.
+         * @description A short-lived link; 423 until the file is scanned clean. Not on Tx: no transaction is open while the link
+         *     is signed.
          */
         post: operations["files_download_url"];
         delete?: never;

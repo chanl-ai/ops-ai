@@ -367,9 +367,11 @@ def create_files_app(
 
     @public.post("/uploads", status_code=201, response_model=Envelope[UploadTicket])
     async def create_upload(  # pyright: ignore[reportUnusedFunction]
-        body: UploadRequest, request: Request, who: Caller, _: Tx, idempotency_key: IdempotencyKey = None
+        body: UploadRequest, request: Request, who: Caller, idempotency_key: IdempotencyKey = None
     ) -> JSONResponse:
-        """A ticket for one upload: a signed storage URL, or this service's content route on the local backend."""
+        """A ticket for one upload: a signed storage URL, or this service's content route on the local backend. Not
+        on Tx: the rows are read in one transaction and written in another, with none open while the URL is signed
+        (tests/test_request_transactions.py)."""
         ticket = await files.create_upload(who, body, idempotency_key=idempotency_key)
         ticket.upload_url = _absolute(request, ticket.upload_url, config.files_public_url)
         return ok(ticket.model_dump(mode="json", by_alias=True), 201)
@@ -492,9 +494,10 @@ def create_files_app(
 
     @public.post("/{file_id}/download-url", response_model=Envelope[DownloadLink])
     async def download_url(  # pyright: ignore[reportUnusedFunction]
-        file_id: str, request: Request, who: Caller, _: Tx, body: DownloadIn | None = None
+        file_id: str, request: Request, who: Caller, body: DownloadIn | None = None
     ) -> JSONResponse:
-        """A short-lived link; 423 until the file is scanned clean."""
+        """A short-lived link; 423 until the file is scanned clean. Not on Tx: no transaction is open while the link
+        is signed."""
         link = await files.download_url(who, file_id, expires_in=body.ttl_seconds if body else None)
         link.url = _absolute(request, link.url, config.files_public_url)
         return ok(link.model_dump(mode="json", by_alias=True))
