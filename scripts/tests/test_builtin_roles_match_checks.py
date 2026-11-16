@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -44,6 +45,7 @@ from ops_files.app import who as files_who
 from ops_identity import Principal
 from ops_kb.app import who as kb_who
 from ops_kb.service import KnowledgeService
+from ops_kb.store.knowledge import BaseRow
 from ops_platform.store.members import Actor
 from ops_platform.store.roles import Holdings
 from ops_platform.teams import Members
@@ -186,8 +188,13 @@ class _Bases:
     def __init__(self, team: str, owner: str) -> None:
         self.team, self.owner = team, owner
 
-    async def base(self, tenant_id: str, kb_id: str) -> dict[str, Any]:
-        return {"id": kb_id, "team_id": self.team, "owner": self.owner, "name": "Policies"}
+    async def base(self, tenant_id: str, kb_id: str) -> BaseRow:
+        at = datetime(2026, 1, 1, tzinfo=UTC)
+        return BaseRow(
+            id=kb_id, team_id=self.team, name="Policies", slug="policies", description="", color="blue",
+            owner=self.owner, collections=[], retrieval={}, settings=None, created_by=self.owner, created_at=at,
+            last_refreshed_at=None, template_id=None, protection=None, documents_source_id=None, revision=0,
+        )  # fmt: skip
 
 
 def kb_system_edit(p: Principal) -> Scope | None:
