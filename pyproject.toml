@@ -133,7 +133,7 @@ executionEnvironments = [
     { root = "packages/ops_policy", extraPaths = ["packages/ops_policy"] },
     { root = "packages/ops_identity", extraPaths = ["packages/ops_identity"] },
     { root = "packages/ops_access", extraPaths = ["packages/ops_access"] },
-    { root = "packages/ops_store", extraPaths = ["packages/ops_store"] },
+    { root = "packages/ops_store", extraPaths = ["packages/ops_store", "scripts"] },
     { root = "packages/ops_engine", extraPaths = ["packages/ops_engine"] },
     { root = "." },
 ]
