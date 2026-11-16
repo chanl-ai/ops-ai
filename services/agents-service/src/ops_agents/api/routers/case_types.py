@@ -2,7 +2,10 @@
 
 Every member of the tenant reads every type. Creating, saving and publishing one are workflow building
 (`workflows.create`, `workflows.edit`, `workflows.publish`) in the owning team; a seeded type is a system record, and a
-team copies it to change it. A case pins the version it was opened with."""
+team copies it to change it. A case pins the version it was opened with.
+
+Every route answers in one request transaction (`Tx`), the seeding of the tenant's types included: they touch this
+service's database only."""
 
 from __future__ import annotations
 
@@ -14,9 +17,9 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 
 from ...case_fields import specs_of
 from ..auth import Principal, caller_in, caller_of
@@ -32,7 +35,7 @@ router = APIRouter(prefix="/v1/case-types")
 ID = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
 
 
-class CaseField(WireModel):
+class CaseField(In):
     key: str = Field(min_length=1, max_length=64)
     label: str = Field(min_length=1, max_length=200)
     # text, number, money, date, enum (the extraction field types), file or link.
@@ -41,7 +44,7 @@ class CaseField(WireModel):
     options: list[str] | None = None
 
 
-class Definition(WireModel):
+class Definition(In):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     fields: list[CaseField] = Field(max_length=50)
@@ -50,12 +53,12 @@ class Definition(WireModel):
     deadline: str | None = Field(default=None, max_length=64)
 
 
-class TypeRef(WireModel):
+class TypeRef(In):
     id: str = Field(min_length=1, max_length=64)
     version: int | None = Field(default=None, ge=1)
 
 
-class TypeIn(WireModel):
+class TypeIn(In):
     id: str = Field(min_length=3, max_length=64)
     # Start from this type's published version (the newest when no version); the fields below replace its own.
     copy_of: TypeRef | None = None
@@ -65,7 +68,7 @@ class TypeIn(WireModel):
     deadline: str | None = Field(default=None, max_length=64)
 
 
-class PublishIn(WireModel):
+class PublishIn(In):
     version: int = Field(ge=1)
 
 
@@ -95,19 +98,18 @@ def _checked(content: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("", response_model=Envelope[list[CaseTypeView]])
-async def list_case_types(rt: Rt, me: Me) -> JSONResponse:
+async def list_case_types(rt: Rt, me: Me, _: Tx) -> JSONResponse:
     """Every case type in the tenant: the seeded ones first, then the teams' own."""
     return ok([view(r) for r in await (await case_type_store(rt, store_team(me))).rows()])
 
 
 @router.get("/{type_id}", response_model=Envelope[CaseTypeDetail])
-async def get_case_type(rt: Rt, me: Me, type_id: str) -> JSONResponse:
+async def get_case_type(rt: Rt, me: Me, _: Tx, type_id: str) -> JSONResponse:
     """A case type with each of its versions, newest first."""
     return ok(detail(await (await case_type_store(rt, store_team(me))).get(type_id)))
 
 
-@router.post("", response_model=Envelope[CaseTypeDetail], status_code=201)
-async def create_case_type(rt: Rt, me: Me, body: TypeIn) -> JSONResponse:
+async def create_type(rt: Runtime, me: Principal, body: TypeIn) -> None:
     """A team's case type as draft v1: from nothing, or a copy of another type's published version with edits."""
     team = team_of(me, "case type")
     can(caller_of(me), "workflows", "create", team=team, what="a case type")
@@ -124,20 +126,31 @@ async def create_case_type(rt: Rt, me: Me, body: TypeIn) -> JSONResponse:
     if not content.get("name"):
         raise Unprocessable("name is required.", code="case_type_invalid")
     await store.create(body.id, content, team_id=team, by=by_of(me), copied_from=copied)
-    return ok(detail(await store.get(body.id)), 201)
 
 
-@router.put("/{type_id}/draft", response_model=Envelope[CaseTypeDetail])
-async def save_case_type(rt: Rt, me: Me, type_id: str, body: Definition) -> JSONResponse:
+@router.post("", response_model=Envelope[CaseTypeDetail], status_code=201)
+async def create_case_type(rt: Rt, me: Me, _: Tx, body: TypeIn) -> JSONResponse:
+    """A team's case type as draft v1: from nothing, or a copy of another type's published version with edits."""
+    await create_type(rt, me, body)
+    return ok(detail(await (await case_type_store(rt, store_team(me))).get(body.id)), 201)
+
+
+async def save_type(rt: Runtime, me: Principal, type_id: str, body: Definition) -> None:
     """Saves the draft: edits it in place, or opens the next version over a published one."""
     store = await case_type_store(rt, store_team(me))
     await owned(store, me, type_id, "edit")
     await store.save_draft(type_id, _checked(body.model_dump(mode="json", exclude_none=True)), by=by_of(me))
-    return ok(detail(await store.get(type_id)))
+
+
+@router.put("/{type_id}/draft", response_model=Envelope[CaseTypeDetail])
+async def save_case_type(rt: Rt, me: Me, _: Tx, type_id: str, body: Definition) -> JSONResponse:
+    """Saves the draft: edits it in place, or opens the next version over a published one."""
+    await save_type(rt, me, type_id, body)
+    return ok(detail(await (await case_type_store(rt, store_team(me))).get(type_id)))
 
 
 @router.post("/{type_id}/publish", response_model=Envelope[CaseTypeDetail])
-async def publish_case_type(rt: Rt, me: Me, type_id: str, body: PublishIn) -> JSONResponse:
+async def publish_case_type(rt: Rt, me: Me, _: Tx, type_id: str, body: PublishIn) -> JSONResponse:
     """Publishes the newest draft. Cases already open keep the version they were opened with."""
     store = await case_type_store(rt, store_team(me))
     await owned(store, me, type_id, "publish")

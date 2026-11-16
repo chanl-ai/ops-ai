@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 from pydantic_ai.models.test import TestModel
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from tests.api import role_app as role_app_module
@@ -59,3 +60,32 @@ async def test_every_record_type_route_keeps_its_reply_status_and_error_object(c
             await c.post(f"{base}/{new}/publish", json={"version": 1, "note": "x"}, headers=BUILDER)
         )
     compare(seen, FIXTURES / "reply-pins-record-types.json")
+
+
+async def test_each_record_type_route_holds_one_transaction(client: AsyncClient) -> None:
+    """A create whose draft and the detail read back come from different moments, or a publish half written."""
+    c = client
+    begun: list[int] = []
+
+    def began(_conn: object) -> None:
+        begun.append(1)
+
+    event.listen(_ENGINES[-1].sync_engine, "begin", began)
+    counts: dict[str, int] = {}
+    for prefix, seed, new in _ROUTERS:
+        base = f"/v1/{prefix}"
+        await c.get(base, headers=VIEWER)  # the tenant's seeded types, written once
+        record = (await c.get(f"{base}/{seed}", headers=VIEWER)).json()["data"]["versions"][0]["record"]
+        steps: list[tuple[str, str, str, object]] = [
+            ("list", "GET", base, None),
+            ("read", "GET", f"{base}/{seed}", None),
+            ("create", "POST", base, {"id": new, "copyOf": {"id": seed}, "name": "Copied"}),
+            ("save", "PUT", f"{base}/{new}/draft", record),
+            ("publish", "POST", f"{base}/{new}/publish", {"version": 1}),
+        ]
+        for name, method, path, body in steps:
+            begun.clear()
+            r = await c.request(method, path, json=body, headers=BUILDER)
+            assert r.status_code in (200, 201), (prefix, name, r.text)
+            counts[f"{prefix}.{name}"] = len(begun)
+    assert counts == dict.fromkeys(counts, 1), counts

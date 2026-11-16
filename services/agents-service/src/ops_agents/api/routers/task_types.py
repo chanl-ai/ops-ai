@@ -2,7 +2,10 @@
 
 Every member of the tenant reads every type, seeded or a team's, so a workflow may use a type another team keeps.
 Creating, saving and publishing one are workflow building (`workflows.create`, `workflows.edit`, `workflows.publish`)
-in the owning team; a seeded type is read-only, and a team copies it to change it."""
+in the owning team; a seeded type is read-only, and a team copies it to change it.
+
+Every route answers in one request transaction (`Tx`), the seeding of the tenant's types included: they touch this
+service's database only."""
 
 from __future__ import annotations
 
@@ -13,9 +16,9 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 
 from ... import task_types as tt
 from ..auth import Principal, caller_in, caller_of
@@ -30,7 +33,7 @@ Me: TypeAlias = Annotated[Principal, Depends(caller_in("workflows"))]  # noqa: U
 router = APIRouter(prefix="/v1/task-types")
 
 
-class Definition(WireModel):
+class Definition(In):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     params: dict[str, Any]
@@ -39,12 +42,12 @@ class Definition(WireModel):
     defaults: dict[str, Any] | None = None
 
 
-class TypeRef(WireModel):
+class TypeRef(In):
     id: str = Field(min_length=1, max_length=64)
     version: int | None = Field(default=None, ge=1)
 
 
-class TypeIn(WireModel):
+class TypeIn(In):
     id: str = Field(min_length=3, max_length=64)
     # Start from this type's published version (the newest when no version); the fields below replace its own.
     copy_of: TypeRef | None = None
@@ -56,7 +59,7 @@ class TypeIn(WireModel):
     defaults: dict[str, Any] | None = None
 
 
-class PublishIn(WireModel):
+class PublishIn(In):
     version: int = Field(ge=1)
 
 
@@ -81,19 +84,18 @@ def _checked(content: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("", response_model=Envelope[list[TaskTypeView]])
-async def list_task_types(rt: Rt, me: Me) -> JSONResponse:
+async def list_task_types(rt: Rt, me: Me, _: Tx) -> JSONResponse:
     """Every type in the tenant: the seeded general types first, then the teams' own."""
     return ok([view(r) for r in await (await task_type_store(rt, store_team(me))).rows()])
 
 
 @router.get("/{type_id}", response_model=Envelope[TaskTypeDetail])
-async def get_task_type(rt: Rt, me: Me, type_id: str) -> JSONResponse:
+async def get_task_type(rt: Rt, me: Me, _: Tx, type_id: str) -> JSONResponse:
     """A type with each of its versions, newest first."""
     return ok(detail(await (await task_type_store(rt, store_team(me))).get(type_id)))
 
 
-@router.post("", response_model=Envelope[TaskTypeDetail], status_code=201)
-async def create_task_type(rt: Rt, me: Me, body: TypeIn) -> JSONResponse:
+async def create_type(rt: Runtime, me: Principal, body: TypeIn) -> None:
     """A team's type as draft v1: from nothing, or a copy of another type's published version with edits."""
     team = team_of(me, "task type")
     can(caller_of(me), "workflows", "create", team=team, what="a task type")
@@ -110,20 +112,31 @@ async def create_task_type(rt: Rt, me: Me, body: TypeIn) -> JSONResponse:
     if not content.get("name"):
         raise Unprocessable("name is required.", code="invalid_task_type")
     await store.create(body.id, content, team_id=team, by=by_of(me), copied_from=copied)
-    return ok(detail(await store.get(body.id)), 201)
 
 
-@router.put("/{type_id}/draft", response_model=Envelope[TaskTypeDetail])
-async def save_task_type(rt: Rt, me: Me, type_id: str, body: Definition) -> JSONResponse:
+@router.post("", response_model=Envelope[TaskTypeDetail], status_code=201)
+async def create_task_type(rt: Rt, me: Me, _: Tx, body: TypeIn) -> JSONResponse:
+    """A team's type as draft v1: from nothing, or a copy of another type's published version with edits."""
+    await create_type(rt, me, body)
+    return ok(detail(await (await task_type_store(rt, store_team(me))).get(body.id)), 201)
+
+
+async def save_type(rt: Runtime, me: Principal, type_id: str, body: Definition) -> None:
     """Saves the draft: edits it in place, or opens the next version over a published one."""
     store = await task_type_store(rt, store_team(me))
     await owned(store, me, type_id, "edit")
     await store.save_draft(type_id, _checked(body.model_dump(exclude_none=True)), by=by_of(me))
-    return ok(detail(await store.get(type_id)))
+
+
+@router.put("/{type_id}/draft", response_model=Envelope[TaskTypeDetail])
+async def save_task_type(rt: Rt, me: Me, _: Tx, type_id: str, body: Definition) -> JSONResponse:
+    """Saves the draft: edits it in place, or opens the next version over a published one."""
+    await save_type(rt, me, type_id, body)
+    return ok(detail(await (await task_type_store(rt, store_team(me))).get(type_id)))
 
 
 @router.post("/{type_id}/publish", response_model=Envelope[TaskTypeDetail])
-async def publish_task_type(rt: Rt, me: Me, type_id: str, body: PublishIn) -> JSONResponse:
+async def publish_task_type(rt: Rt, me: Me, _: Tx, type_id: str, body: PublishIn) -> JSONResponse:
     """Publishes the newest draft. Tasks already open keep the version they were opened with."""
     store = await task_type_store(rt, store_team(me))
     await owned(store, me, type_id, "publish")
