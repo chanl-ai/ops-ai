@@ -31,7 +31,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DisconnectionError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlalchemy.pool import AsyncAdaptedQueuePool, ConnectionPoolEntry
+from sqlalchemy.pool import AsyncAdaptedQueuePool, ConnectionPoolEntry, NullPool
 from sqlalchemy.util import await_
 
 from ops_service_kit.logging import get_logger
@@ -148,14 +148,27 @@ def _transaction_ended(conn: sa.Connection) -> None:
 _DOWN: weakref.WeakSet[sa.Engine] = weakref.WeakSet()
 
 
+# Per database, an engine with no pool for /health's probe: a pool every request holds would make a busy service
+# answer degraded while its database is healthy.
+_PROBES: weakref.WeakKeyDictionary[sa.Engine, AsyncEngine] = weakref.WeakKeyDictionary()
+
+
+def _probe_engine(db: Database) -> AsyncEngine:
+    found = _PROBES.get(db.sync_engine)
+    if found is None:
+        found = _PROBES[db.sync_engine] = create_async_engine(db.url, poolclass=NullPool)
+    return found
+
+
 async def reachable(db: Database, *, timeout_s: float | None = None) -> bool:
     """Whether the database answers one statement that names no table, within `timeout_s` (the setting
     `database_health_timeout_s` by default) from the connect to the reply: what a service's /health asks. Needs no
-    caller, so it is a connection of its own; this package's one probe (tests/test_isolation_sites.py, OWNED)."""
+    caller, so it is a connection of its own, opened outside the pool and closed after; this package's one probe
+    (tests/test_isolation_sites.py, OWNED)."""
     limit = timeout_s if timeout_s is not None else Settings().database_health_timeout_s
     try:
         async with asyncio.timeout(limit):
-            async with db.connect() as c:
+            async with _probe_engine(db).connect() as c:
                 await c.execute(sa.select(1))
     except Exception as e:
         if db.sync_engine not in _DOWN:

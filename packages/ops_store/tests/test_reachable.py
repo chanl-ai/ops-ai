@@ -1,7 +1,7 @@
 """`database.reachable(engine)`, the probe every service's /health asks, by failure mode: a probe that needs a caller or
 a table, one that raises instead of answering False when the database refuses the connection, one that waits out the
-connect policy (three attempts of 30 s) on a server that accepts and never replies, and one that logs every poll of
-an outage instead of its start."""
+connect policy (three attempts of 30 s) on a server that accepts and never replies, one that logs every poll of
+an outage instead of its start, and one that waits for a pooled connection, so a busy pool answers degraded."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.pool import QueuePool
 
 from ops_service_kit.settings import Settings
 from ops_store.backends import backends
@@ -77,4 +78,18 @@ async def test_a_server_that_never_replies_is_unreachable_within_the_timeout() -
         assert time.monotonic() - began < 2.0
     finally:
         silent.close()
+        await db.dispose()
+
+
+async def test_a_drained_pool_on_a_reachable_database_answers_healthy(engine: AsyncEngine) -> None:
+    """Every pooled connection busy (a burst of requests) is not an outage: the probe connects on its own, outside
+    the pool, so it answers within its limit and takes nothing the requests wait for."""
+    db = open_database(engine.url.render_as_string(hide_password=False), pool_size=1, max_overflow=0, pool_timeout=5)
+    try:
+        async with db.connect():
+            pool = db.sync_engine.pool
+            assert isinstance(pool, QueuePool)
+            assert await reachable(db, timeout_s=2.0) is True
+            assert pool.checkedout() == 1, "the probe took no pooled connection"
+    finally:
         await db.dispose()
