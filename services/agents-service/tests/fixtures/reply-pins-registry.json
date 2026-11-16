@@ -1056,44 +1056,55 @@
   },
   "guardrails.list": {
     "body": {
-      "data": [
-        {
-          "config": {
-            "message": "I can't give investment advice.",
-            "topics": [
-              "investment advice"
+      "data": {
+        "data": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "No investment advice",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "no-investment-advice",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "j.richardson@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
             ]
-          },
-          "id": "<gr>",
-          "kind": "blocked_topics",
-          "name": "No investment advice",
-          "owner": "Operations",
-          "pendingRequestId": null,
-          "publishedVersion": null,
-          "slug": "no-investment-advice",
-          "status": "live",
-          "updatedAt": "<timeZ>",
-          "usedBy": [],
-          "version": 1,
-          "versions": [
-            {
-              "config": {
-                "message": "I can't give investment advice.",
-                "topics": [
-                  "investment advice"
-                ]
-              },
-              "note": "",
-              "publishedAt": null,
-              "publishedBy": null,
-              "savedAt": "<timeZ>",
-              "savedBy": "j.richardson@harborpine.example",
-              "state": "draft",
-              "version": 1
-            }
-          ]
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 1,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200

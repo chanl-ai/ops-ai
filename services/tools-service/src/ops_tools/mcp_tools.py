@@ -33,8 +33,9 @@ from .registry import Resolved
 TIMEOUT = 15.0
 # How the gateway runs an operation of this file (GatewayCalls.call with `run`); no registry module holds them.
 PLATFORM = "platform"
-# Skills read for prompts, one list call per page; a team past MAX_PAGES * PAGE skills is cut there.
-PAGE, MAX_PAGES = 200, 20
+# Skills read for prompts, one list call per page at the shared list contract's largest page; a team past
+# MAX_PAGES * PAGE skills is cut there.
+PAGE, MAX_PAGES = 50, 80
 
 
 @dataclass(frozen=True)

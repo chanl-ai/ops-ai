@@ -299,7 +299,10 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -329,11 +332,14 @@ export const agentsOperations = {
     "pathParams": [],
     "query": [
       "view",
+      "usableBy",
+      "agentId",
       "page",
       "pageSize",
       "search",
-      "usableBy",
-      "agentId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

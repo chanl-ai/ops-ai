@@ -37,7 +37,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from dev_egress import HOSTS, host_ip, private_address
@@ -197,6 +197,19 @@ def items(page: Any) -> list[dict[str, Any]]:
             if isinstance(page.get(key), list):
                 return page[key]
     return []
+
+
+def every_row(api: httpx.Client, path: str) -> list[dict[str, Any]]:
+    """Every row of a list on the shared contract, one page at a time until `pagination.hasNext` is false."""
+    out: list[dict[str, Any]] = []
+    for n in range(1, 1000):
+        page = data(api.get(path, params={"page": n, "pageSize": 50}))
+        out.extend(items(page))
+        body = cast(dict[str, Any], page) if isinstance(page, dict) else {}
+        meta = cast(dict[str, Any], body.get("pagination") or {})
+        if not meta.get("hasNext"):
+            break
+    return out
 
 
 # ── Team and people ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -939,7 +952,7 @@ def ensure_skills(builder: Session, approver: Session, skills: list[dict[str, An
     """The team's skills, each published through review; found by name before it is made. Answers name to id, for
     the agents that pin them."""
     api = builder("agents")
-    have = {s["name"]: s for s in items(data(api.get("/v1/skills", params={"pageSize": 100})))}
+    have = {s["name"]: s for s in every_row(api, "/v1/skills")}
     ids: dict[str, str] = {}
     for skill in skills:
         found = have.get(skill["name"]) or data(api.post("/v1/skills", json=skill))
@@ -959,7 +972,7 @@ def ensure_skills(builder: Session, approver: Session, skills: list[dict[str, An
 def ensure_guardrails(builder: Session, approver: Session, rules: list[dict[str, Any]]) -> dict[str, str]:
     """The team's guardrails, each published through review; found by name before it is made. Answers name to id."""
     api = builder("agents")
-    have = {g["name"]: g for g in items(data(api.get("/v1/guardrails", params={"pageSize": 100})))}
+    have = {g["name"]: g for g in every_row(api, "/v1/guardrails")}
     ids: dict[str, str] = {}
     for rule in rules:
         found = have.get(rule["name"]) or data(api.post("/v1/guardrails", json=rule))

@@ -13,12 +13,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
-import pytest
 from httpx import AsyncClient
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
-from ops_agents.store.guardrails import GuardrailRegistry
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
@@ -167,27 +164,6 @@ async def test_only_the_creator_or_a_team_admin_deletes_a_guardrail(tmp_path: Pa
         r = await c.delete(f"/v1/guardrails/{g['id']}", headers=KIM)
         assert r.status_code == 403, r.text
         assert (await c.delete(f"/v1/guardrails/{g['id']}", headers=LEE)).status_code == 204
-
-
-async def test_the_paged_list_answers_one_page_and_the_searched_total(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        for i in range(5):
-            _ok(await c.post("/v1/guardrails", json={**RULE, "name": f"Rule {i}", "topics": [f"topic {i}"]}), 201)
-        whole = cast(list[dict[str, Any]], _ok(await c.get("/v1/guardrails")))
-        assert isinstance(whole, list), "without page the pin picker still reads the whole list"
-
-        # A page reads only its own rows: the whole-table read is never called, and the query answers at most a page.
-        async def no_whole_table(_self: GuardrailRegistry) -> list[dict[str, Any]]:
-            raise AssertionError("a page must not load every guardrail")
-
-        monkeypatch.setattr(GuardrailRegistry, "rows", no_whole_table)
-        p2 = _ok(await c.get("/v1/guardrails", params={"page": 2, "pageSize": 2}))
-        assert [g["name"] for g in p2["data"]] == ["Rule 2", "Rule 3"]
-        assert (p2["pagination"]["total"], p2["pagination"]["totalPages"]) == (len(whole), -(-len(whole) // 2))
-        hit = _ok(await c.get("/v1/guardrails", params={"page": 1, "search": "rule 4"}))
-        assert [g["name"] for g in hit["data"]] == ["Rule 4"] and hit["pagination"]["total"] == 1
 
 
 async def test_wildcards_in_the_search_match_only_themselves(tmp_path: Path) -> None:

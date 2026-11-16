@@ -1404,8 +1404,9 @@ export interface paths {
         };
         /**
          * List Guardrails
-         * @description Every guardrail, which the agent page's pin picker reads whole; with `page`, one page of those whose name or
-         *     owner matches `search`, as the Guardrails list reads it. The page and its count are queried, not sliced.
+         * @description One page of the guardrails the caller sees on the shared list contract, by name then id: `search` matches the
+         *     name or owner, `ids` names guardrails exactly, whatever their state. The page and its count are queried, not
+         *     sliced.
          */
         get: operations["agents_list_guardrails"];
         put?: never;
@@ -1476,7 +1477,9 @@ export interface paths {
         put?: never;
         /**
          * Request Guardrail Publish
-         * @description Opens a publish request for the newest draft; approved at once under the dev auto-approve setting.
+         * @description Opens a publish request for the newest draft; approved at once under the dev auto-approve setting. Off the
+         *     request transaction: the team's publish-review policy is read from platform-service between the reads and the
+         *     writes.
          */
         post: operations["agents_request_guardrail_publish"];
         delete?: never;
@@ -2098,8 +2101,11 @@ export interface paths {
         };
         /**
          * List Skills
-         * @description The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
-         *     what chat and the MCP prompts use; every other view describes the newest version an editor sees.
+         * @description One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when
+         *     or slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,
+         *     which is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,
+         *     `ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every matching skill, so the
+         *     rows are filtered and paged in memory.
          *
          *     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
          *     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
@@ -2107,7 +2113,11 @@ export interface paths {
          */
         get: operations["agents_list_skills"];
         put?: never;
-        /** Create Skill */
+        /**
+         * Create Skill
+         * @description The tools the body names are checked against tools-service's directory before the transaction opens. With
+         *     `requestReview` the publish request follows the commit, as `POST .../publish-requests` does.
+         */
         post: operations["agents_create_skill"];
         delete?: never;
         options?: never;
@@ -2124,7 +2134,8 @@ export interface paths {
         };
         /**
          * Skill Options
-         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams.
+         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The
+         *     directory is read from tools-service first, with nothing open, then the rows in one transaction.
          */
         get: operations["agents_skill_options"];
         put?: never;
@@ -2189,7 +2200,9 @@ export interface paths {
         /**
          * Save Skill Draft
          * @description Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-         *     not the newest version, or the skill is deprecated or in review.
+         *     not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
+         *     writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
+         *     `stale_base`.
          */
         put: operations["agents_save_skill_draft"];
         post?: never;
@@ -2229,7 +2242,8 @@ export interface paths {
         /**
          * Request Skill Publish
          * @description Opens a publish request for the newest draft, decided like an agent publish (by someone other than who asked
-         *     or saved it); approved at once under the dev auto-approve setting.
+         *     or saved it); approved at once under the dev auto-approve setting. Off the request transaction: the team's
+         *     publish-review policy is read from platform-service between the reads and the writes.
          */
         post: operations["agents_request_skill_publish"];
         delete?: never;
@@ -5830,6 +5844,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[GuardrailList] */
+        Envelope_GuardrailList_: {
+            data: components["schemas"]["GuardrailList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Guardrail] */
         Envelope_Guardrail_: {
             data: components["schemas"]["Guardrail"];
@@ -6358,16 +6381,6 @@ export interface components {
         /** Envelope[Union[ValidationRun, NoneType]] */
         Envelope_Union_ValidationRun__NoneType__: {
             data: components["schemas"]["ValidationRun"] | null;
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[Union[list[Guardrail], GuardrailList]] */
-        Envelope_Union_list_Guardrail___GuardrailList__: {
-            /** Data */
-            data: components["schemas"]["Guardrail"][] | components["schemas"]["GuardrailList"];
             /**
              * Success
              * @constant
@@ -19845,9 +19858,12 @@ export interface operations {
     agents_list_guardrails: {
         parameters: {
             query?: {
-                page?: number | null;
-                pageSize?: number;
-                search?: string;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -19861,7 +19877,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_list_Guardrail___GuardrailList__"];
+                    "application/json": components["schemas"]["Envelope_GuardrailList_"];
                 };
             };
             /** @description Invalid request */
@@ -23957,11 +23973,14 @@ export interface operations {
         parameters: {
             query?: {
                 view?: "all" | "published" | "always" | "drafts" | "in_review" | "deprecated" | "unused";
-                page?: number;
-                pageSize?: number;
-                search?: string | null;
                 usableBy?: "agent" | null;
                 agentId?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

@@ -241,7 +241,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/guardrails",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "agents_list_model_aliases": {
@@ -268,7 +268,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/skills",
         "pathParams": [],
-        "query": ["view", "page", "pageSize", "search", "usableBy", "agentId"],
+        "query": ["view", "usableBy", "agentId", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "agents_list_tool_uses": {
@@ -2395,14 +2395,28 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["graphs_publish_version"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
 
     def agents_list_guardrails(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> GuardrailList:
         "List Guardrails"
         return self._t.call(
             SERVICE,
             OPERATIONS["agents_list_guardrails"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -2656,11 +2670,14 @@ class Operations:
         self,
         *,
         view: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        usable_by: str | None = None,
-        agent_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> SkillList:
         "List Skills"
         return self._t.call(
@@ -2669,11 +2686,14 @@ class Operations:
             {},
             {
                 "view": view,
+                "usableBy": usable_by,
+                "agentId": agent_id,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,
-                "usableBy": usable_by,
-                "agentId": agent_id,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -3778,14 +3798,28 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["graphs_publish_version"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def agents_list_guardrails(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> GuardrailList:
         "List Guardrails"
         return await self._t.call(
             SERVICE,
             OPERATIONS["agents_list_guardrails"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -4047,11 +4081,14 @@ class AsyncOperations:
         self,
         *,
         view: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        usable_by: str | None = None,
-        agent_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> SkillList:
         "List Skills"
         return await self._t.call(
@@ -4060,11 +4097,14 @@ class AsyncOperations:
             {},
             {
                 "view": view,
+                "usableBy": usable_by,
+                "agentId": agent_id,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,
-                "usableBy": usable_by,
-                "agentId": agent_id,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,

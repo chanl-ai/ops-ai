@@ -3797,6 +3797,11 @@ class EnvelopeGateList(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeGuardrailList(TypedDict, closed=True):
+    data: GuardrailList
+    success: Literal[True]
+
+
 class EnvelopeGuardrail(TypedDict, closed=True):
     data: Guardrail
     success: Literal[True]
@@ -3879,11 +3884,6 @@ class EnvelopeToolOptionsPage(TypedDict, closed=True):
 
 class EnvelopeUnionValidationRunNoneType(TypedDict, closed=True):
     data: ValidationRun | None
-    success: Literal[True]
-
-
-class EnvelopeUnionListGuardrailGuardrailList(TypedDict, closed=True):
-    data: list[Guardrail] | GuardrailList
     success: Literal[True]
 
 

@@ -1,0 +1,989 @@
+{
+  "create": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "I can't give investment advice.",
+          "topics": [
+            "investment advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": null,
+        "slug": "no-investment-advice",
+        "status": "live",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": null,
+            "publishedBy": null,
+            "savedAt": "<timeZ>",
+            "savedBy": "usr_b@harborpine.example",
+            "state": "draft",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "create.noTopic": {
+    "body": {
+      "error": {
+        "code": "no_topics",
+        "message": "Name at least one blocked topic.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "create.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "x"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "x: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "create.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "create",
+          "area": "guardrails",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot create a guardrail; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "decide.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Publish request GRP-missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "decide.unknown": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "decision"
+            ],
+            "msg": "Input should be 'approved' or 'rejected'"
+          }
+        ],
+        "message": "decision: Input should be 'approved' or 'rejected'",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "delete": {
+    "body": null,
+    "status": 204
+  },
+  "delete.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Guardrail <gr> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "delete.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "delete",
+          "area": "guardrails",
+          "scope": "own",
+          "teamId": "team_ops"
+        },
+        "message": "Your role lets you delete only your own; No investment advice is someone else's.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "edit": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "I can't give investment advice.",
+          "topics": [
+            "tax advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": null,
+        "slug": "no-investment-advice",
+        "status": "live",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "tax advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": null,
+            "publishedBy": null,
+            "savedAt": "<timeZ>",
+            "savedBy": "usr_b@harborpine.example",
+            "state": "draft",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "edit.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Guardrail <gr> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "edit.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "guardrails",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit guardrail No investment advice; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "tax advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "No investment advice",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": 1,
+            "slug": "no-investment-advice",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "tax advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": "<timeZ>",
+                "publishedBy": "auto-approve (dev)",
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "published",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 0",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-0",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 1",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-1",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 2",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-2",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 4,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.otherTeam": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Fraud rule",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "fraud-rule",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_o@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.page": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 1",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-1",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 2",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-2",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 2,
+          "total": 4,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.pastTheEnd": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 1",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-1",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 2",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-2",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 2,
+          "total": 4,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.search": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "Same rule 1",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "same-rule-1",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "usr_b@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "v1 \u00b7 Operations",
+            "id": "<gr>",
+            "label": "No investment advice"
+          }
+        ],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.ids": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "v1 \u00b7 Operations",
+            "id": "<gr>",
+            "label": "No investment advice"
+          }
+        ],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.otherTeam": {
+    "body": {
+      "data": {
+        "data": [],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.search": {
+    "body": {
+      "data": {
+        "data": [],
+        "nextCursor": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "publish": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "I can't give investment advice.",
+          "topics": [
+            "tax advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": 1,
+        "slug": "no-investment-advice",
+        "status": "live",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "tax advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": "<timeZ>",
+            "publishedBy": "auto-approve (dev)",
+            "savedAt": "<timeZ>",
+            "savedBy": "usr_b@harborpine.example",
+            "state": "published",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "publish.again": {
+    "body": {
+      "error": {
+        "code": "not_newest_draft",
+        "message": "v1 is not the newest draft (v1).",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "publish.notNewest": {
+    "body": {
+      "error": {
+        "code": "not_newest_draft",
+        "message": "v2 is not the newest draft (v1).",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "publish.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "publish",
+          "area": "guardrails",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot publish guardrail No investment advice; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "read": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "I can't give investment advice.",
+          "topics": [
+            "investment advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": null,
+        "slug": "no-investment-advice",
+        "status": "live",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": null,
+            "publishedBy": null,
+            "savedAt": "<timeZ>",
+            "savedBy": "usr_b@harborpine.example",
+            "state": "draft",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "read.deleted": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Guardrail <gr> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "read.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Guardrail gr_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "read.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Guardrail <gr> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "status": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "I can't give investment advice.",
+          "topics": [
+            "tax advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": 1,
+        "slug": "no-investment-advice",
+        "status": "deprecated",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "tax advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": "<timeZ>",
+            "publishedBy": "auto-approve (dev)",
+            "savedAt": "<timeZ>",
+            "savedBy": "usr_b@harborpine.example",
+            "state": "published",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "status.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "guardrails",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit guardrail No investment advice; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  }
+}

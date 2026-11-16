@@ -7333,6 +7333,25 @@
         "title": "Envelope[GraphPublished]",
         "type": "object"
       },
+      "Envelope_GuardrailList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/GuardrailList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[GuardrailList]",
+        "type": "object"
+      },
       "Envelope_Guardrail_": {
         "additionalProperties": false,
         "properties": {
@@ -8476,36 +8495,6 @@
           "data"
         ],
         "title": "Envelope[Union[ValidationRun, NoneType]]",
-        "type": "object"
-      },
-      "Envelope_Union_list_Guardrail___GuardrailList__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/Guardrail"
-                },
-                "type": "array"
-              },
-              {
-                "$ref": "#/components/schemas/GuardrailList"
-              }
-            ],
-            "title": "Data"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[Union[list[Guardrail], GuardrailList]]",
         "type": "object"
       },
       "Envelope_UpdateReview_": {
@@ -39662,12 +39651,23 @@
     },
     "/v1/guardrails": {
       "get": {
-        "description": "Every guardrail, which the agent page's pin picker reads whole; with `page`, one page of those whose name or\nowner matches `search`, as the Guardrails list reads it. The page and its count are queried, not sliced.",
+        "description": "One page of the guardrails the caller sees on the shared list contract, by name then id: `search` matches the\nname or owner, `ids` names guardrails exactly, whatever their state. The page and its count are queried, not\nsliced.",
         "operationId": "agents_list_guardrails",
         "parameters": [
           {
             "in": "query",
             "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
             "required": false,
             "schema": {
               "anyOf": [
@@ -39679,19 +39679,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Page"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "title": "Pagesize"
             }
           },
           {
@@ -39699,9 +39687,65 @@
             "name": "search",
             "required": false,
             "schema": {
-              "default": "",
-              "title": "Search",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -39774,7 +39818,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_list_Guardrail___GuardrailList__"
+                  "$ref": "#/components/schemas/Envelope_GuardrailList_"
                 }
               }
             },
@@ -40864,7 +40908,7 @@
     },
     "/v1/guardrails/{guardrail_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for the newest draft; approved at once under the dev auto-approve setting.",
+        "description": "Opens a publish request for the newest draft; approved at once under the dev auto-approve setting. Off the\nrequest transaction: the team's publish-review policy is read from platform-service between the reads and the\nwrites.",
         "operationId": "agents_request_guardrail_publish",
         "parameters": [
           {
@@ -47435,7 +47479,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
+        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every matching skill, so the\nrows are filtered and paged in memory.\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -47455,45 +47499,6 @@
               ],
               "title": "View",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Search"
             }
           },
           {
@@ -47527,6 +47532,100 @@
                 }
               ],
               "title": "Agentid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -47703,6 +47802,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
+        "description": "The tools the body names are checked against tools-service's directory before the transaction opens. With\n`requestReview` the publish request follows the commit, as `POST .../publish-requests` does.",
         "operationId": "agents_create_skill",
         "parameters": [
           {
@@ -47891,7 +47991,7 @@
     },
     "/v1/skills/options": {
       "get": {
-        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams.",
+        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The\ndirectory is read from tools-service first, with nothing open, then the rows in one transaction.",
         "operationId": "agents_skill_options",
         "parameters": [
           {
@@ -48634,7 +48734,7 @@
     },
     "/v1/skills/{skill_id}/draft": {
       "put": {
-        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is\nnot the newest version, or the skill is deprecated or in review.",
+        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is\nnot the newest version, or the skill is deprecated or in review. The checks run again in the transaction that\nwrites, after the tools are checked against tools-service with nothing open, so a save landing in between answers\n`stale_base`.",
         "operationId": "agents_save_skill_draft",
         "parameters": [
           {
@@ -49214,7 +49314,7 @@
     },
     "/v1/skills/{skill_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for the newest draft, decided like an agent publish (by someone other than who asked\nor saved it); approved at once under the dev auto-approve setting.",
+        "description": "Opens a publish request for the newest draft, decided like an agent publish (by someone other than who asked\nor saved it); approved at once under the dev auto-approve setting. Off the request transaction: the team's\npublish-review policy is read from platform-service between the reads and the writes.",
         "operationId": "agents_request_skill_publish",
         "parameters": [
           {

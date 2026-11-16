@@ -1,20 +1,29 @@
 """/v1/skills and /v1/agents/{id}/skills: skills as versioned attachments an agent pins (spec 11 SK-1 to SK-10 and
-SK-23 to SK-25; api/skills.py). Tests, resources, generation, import and export (SK-11 to SK-22) are not served."""
+SK-23 to SK-25; api/skills.py). Tests, resources, generation, import and export (SK-11 to SK-22) are not served.
+
+A route that only reads and writes this service's database answers in one request transaction (`Tx`), so a check and
+the write it guards land together or not at all. The tool directory (tools-service) and the publish-review policy
+(platform-service) are read with nothing open: the options route reads the directory first, a create checks its tools
+before its transaction, a draft save reads and checks in one transaction, checks its tools, then checks again and
+writes in a second, and a publish request takes a transaction per store call around the policy read.
+"""
 
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, OptionsPage, options_page, options_window
+from ops_service_kit.http import Envelope, In, OptionsPage, options_page, options_window, page_window
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
@@ -53,14 +62,14 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 VIEWS = ("all", "published", "always", "drafts", "in_review", "deprecated", "unused")
 
 
-class SkillInput(WireModel):
+class SkillInput(In):
     name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     type: Literal["string"] = "string"
     description: str = Field(default="", max_length=500)
     required: bool = False
 
 
-class SkillPartInput(WireModel):
+class SkillPartInput(In):
     """One named part of a skill, read with the skill's shared instructions."""
 
     slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -74,13 +83,13 @@ class SkillPartInput(WireModel):
     budget: int | None = Field(default=None, ge=1, le=6000)
 
 
-class SkillRenderInput(WireModel):
+class SkillRenderInput(In):
     # The part to use, for a skill with parts.
     part: str | None = None
     inputs: dict[str, str] = Field(default_factory=dict[str, str], max_length=20)
 
 
-class SkillCreateInput(WireModel):
+class SkillCreateInput(In):
     name: str
     # The name in URL form when absent; a template sets it so the copy keeps the template's id as its prompt name.
     slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -100,7 +109,7 @@ class SkillCreateInput(WireModel):
     parts: list[SkillPartInput] = Field(default_factory=list[SkillPartInput], max_length=8)
 
 
-class SkillDraftPatch(WireModel):
+class SkillDraftPatch(In):
     name: str | None = None
     use_when: str | None = None
     loading: Literal["on_match", "always"] | None = None
@@ -115,15 +124,15 @@ class SkillDraftPatch(WireModel):
     base_version: int
 
 
-class ReviewInput(WireModel):
+class ReviewInput(In):
     note: str = ""
 
 
-class DeprecateInput(WireModel):
+class DeprecateInput(In):
     reason: str
 
 
-class AttachInput(WireModel):
+class AttachInput(In):
     # None attaches the latest published version, as the picker offers it.
     version: int | None = None
 
@@ -144,18 +153,19 @@ def _in_view(s: dict[str, Any], view: str) -> bool:
 @router.get("/v1/skills", response_model=Envelope[SkillList])
 async def list_skills(
     *,
-    request: Request,
     rt: Rt,
-    view: Literal["all", "published", "always", "drafts", "in_review", "deprecated", "unused"] = "all",
-    page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
-    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
-    search: str | None = None,
     caller: Annotated[Principal, Depends(reader_of("skills"))],
+    _: Tx,
+    q: ListQuery,
+    view: Literal["all", "published", "always", "drafts", "in_review", "deprecated", "unused"] = "all",
     usable_by: Annotated[Literal["agent"] | None, Query(alias="usableBy")] = None,
     agent_id: Annotated[str | None, Query(alias="agentId")] = None,
 ) -> JSONResponse:
-    """The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
-    what chat and the MCP prompts use; every other view describes the newest version an editor sees.
+    """One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when
+    or slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,
+    which is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,
+    `ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every matching skill, so the
+    rows are filtered and paged in memory.
 
     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
@@ -175,8 +185,10 @@ async def list_skills(
         offered = {r["id"] for r, _ in await usable(rt, team=team, menu=menu, pinned=pinned)}
         raw = [r for r in raw if r["id"] in offered]
     rows = [await row_view(rt, r, pins) for r in raw]
-    if search:
-        s = search.lower()
+    if q.ids is not None:
+        rows = [x for x in rows if x["id"] in q.ids]
+    elif q.search:
+        s = q.search.lower()
         rows = [x for x in rows if s in x["name"].lower() or s in x["useWhen"].lower() or s in x["slug"]]
     counts = {v: sum(1 for x in rows if _in_view(x, v)) for v in VIEWS}
     facet_cols = ("status", "ownerTeam", "origin", "loading")
@@ -189,35 +201,41 @@ async def list_skills(
         by_id = {r["id"]: r for r in raw}
         rows = [await row_view(rt, by_id[x["id"]], pins, served=True) for x in rows]
     for c in facet_cols:
-        if wanted := request.query_params.getlist(c):
+        if wanted := q.filters.get(c):
             rows = [x for x in rows if x[c] in wanted]
+    rows.sort(key=lambda x: (str(x["name"]).lower(), str(x["id"])))
+    page_no = page_window(len(rows), q.page, q.page_size)[0]
+    body = page(rows, page_no, q.page_size)
     if spec is not None:
         reg = skills(rt)
-        for x in rows:
+        for x in body["data"]:
             v = await reg.version(x["id"], int(x["publishedVersion"] or x["version"]))
             needs = missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), spec)
             x["locked"], x["needs"] = bool(needs), needs
-    rows.sort(key=lambda x: str(x["name"]).lower())
-    return ok({**page(rows, page_no, page_size), "facets": facets, "viewCounts": counts})
+    return ok({**body, "facets": facets, "viewCounts": counts})
 
 
 @router.get("/v1/skills/options", response_model=Envelope[SkillOptions])
 async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skills"))]) -> JSONResponse:
-    """What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams."""
-    reg = agent_registry(rt)
-    specs = [(await reg.version(r["id"], int(r["version"])))["spec"] for r in await reg.rows()]
+    """What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The
+    directory is read from tools-service first, with nothing open, then the rows in one transaction."""
     tools = [
         {"toolId": t["id"], "name": t["name"], "module": t["server"], "system": t["server"], "access": t["access"]}
         for t in await known_tools(rt)
     ]
+    async with isolation.request_transaction():
+        reg = agent_registry(rt)
+        specs = [(await reg.version(r["id"], int(r["version"])))["spec"] for r in await reg.rows()]
+        teams = sorted({str(r["owner_team"]) for r in await skills(rt).rows()})
     held: list[Any] = [k for s in specs for k in cast(list[Any], s.get("collections") or [])]
     kbs = sorted({str(k) for k in held})
-    teams = sorted({str(r["owner_team"]) for r in await skills(rt).rows()})
     return ok({"teams": teams, "tools": tools, "knowledgeBases": kbs, "limits": LIMITS})
 
 
 @router.get("/v1/skills/{skill_id}", response_model=Envelope[SkillDetail])
-async def get_skill(rt: Rt, skill_id: str, caller: Annotated[Principal, Depends(caller_in("skills"))]) -> JSONResponse:
+async def get_skill(
+    rt: Rt, skill_id: str, caller: Annotated[Principal, Depends(caller_in("skills"))], _: Tx
+) -> JSONResponse:
     """The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
     right render asks for, so a person who may only chat never reads a skill's text."""
     row = await skills(rt).row(skill_id)
@@ -227,7 +245,7 @@ async def get_skill(rt: Rt, skill_id: str, caller: Annotated[Principal, Depends(
 
 @router.post("/v1/skills/{skill_id}/render", response_model=Envelope[SkillRendered])
 async def render_skill(
-    rt: Rt, skill_id: str, body: SkillRenderInput, caller: Annotated[Principal, Depends(caller_in("skills"))]
+    rt: Rt, skill_id: str, body: SkillRenderInput, caller: Annotated[Principal, Depends(caller_in("skills"))], _: Tx
 ) -> JSONResponse:
     """The published version's text with the inputs filled in, for one part when the skill has parts. A read: it
     takes a service token holding skills:view in the skill's team, as the MCP prompts call it; a person needs
@@ -284,43 +302,58 @@ async def changeable(rt: Runtime, me: Principal, skill_id: str, action: str) -> 
 
 @router.post("/v1/skills", response_model=Envelope[SkillDetail], status_code=201)
 async def create_skill(rt: Rt, me: Me, body: SkillCreateInput) -> JSONResponse:
+    """The tools the body names are checked against tools-service's directory before the transaction opens. With
+    `requestReview` the publish request follows the commit, as `POST .../publish-requests` does."""
     require_builder(me, area="skills", team_id=me.team_id, action="create", what="a skill")
     content = await check_content(rt, body.model_dump(by_alias=True))
-    sid = await skills(rt).create(
-        content, owner_team=body.owner_team, team_id=me.team_id or "", origin=body.origin, by=me.email
-    )
-    if body.request_review:
-        await _request_review(rt, sid, 1, body.review_note, me.email)
+    async with isolation.request_transaction():
+        sid = await skills(rt).create(
+            content, owner_team=body.owner_team, team_id=me.team_id or "", origin=body.origin, by=me.email
+        )
+        if not body.request_review:
+            return ok(await detail(rt, sid), 201)
+    await _request_review(rt, sid, 1, body.review_note, me.email)
     return ok(await detail(rt, sid), 201)
+
+
+async def _editable(rt: Runtime, me: Principal, skill_id: str, base_version: int) -> int:
+    """The newest version once a draft save may write it: 409 when the skill is deprecated, `base_version` is not
+    the newest version, or the newest is in review."""
+    row = await changeable(rt, me, skill_id, "edit")
+    if row["deprecated_reason"]:
+        raise Conflict("The skill is deprecated; it takes no new versions.", code="skill_deprecated")
+    if base_version != row["version"]:
+        raise Conflict(f"v{row['version']} was saved after v{base_version}; reload and edit again.", code="stale_base")
+    if any(r["status"] == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
+        raise Conflict("The newest version is in review; decide the review first.", code="review_open")
+    return int(row["version"])
 
 
 @router.put("/v1/skills/{skill_id}/draft", response_model=Envelope[SkillDetail])
 async def save_skill_draft(rt: Rt, me: Me, skill_id: str, body: SkillDraftPatch) -> JSONResponse:
     """Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-    not the newest version, or the skill is deprecated or in review."""
+    not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
+    writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
+    `stale_base`."""
     reg = skills(rt)
-    row = await changeable(rt, me, skill_id, "edit")
-    if row["deprecated_reason"]:
-        raise Conflict("The skill is deprecated; it takes no new versions.", code="skill_deprecated")
-    if body.base_version != row["version"]:
-        raise Conflict(
-            f"v{row['version']} was saved after v{body.base_version}; reload and edit again.", code="stale_base"
-        )
-    if any(r["status"] == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
-        raise Conflict("The newest version is in review; decide the review first.", code="review_open")
-    newest = await reg.version(skill_id, int(row["version"]))
+    async with isolation.request_transaction():
+        newest = await reg.version(skill_id, await _editable(rt, me, skill_id, body.base_version))
     assert newest is not None
     merged = {**newest["content"], "toolIds": [t["toolId"] for t in newest["content"]["tools"]]}
     merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version"})
     merged.pop("slug", None)
-    await reg.save_draft(skill_id, await check_content(rt, merged), by=me.email, note=body.note)
-    return ok(await detail(rt, skill_id))
+    content = await check_content(rt, merged)
+    async with isolation.request_transaction():
+        await _editable(rt, me, skill_id, body.base_version)
+        await reg.save_draft(skill_id, content, by=me.email, note=body.note)
+        return ok(await detail(rt, skill_id))
 
 
 @router.post("/v1/skills/{skill_id}/publish-requests", response_model=Envelope[SkillDetail], status_code=201)
 async def request_skill_publish(rt: Rt, me: Me, skill_id: str, body: ReviewInput) -> JSONResponse:
     """Opens a publish request for the newest draft, decided like an agent publish (by someone other than who asked
-    or saved it); approved at once under the dev auto-approve setting."""
+    or saved it); approved at once under the dev auto-approve setting. Off the request transaction: the team's
+    publish-review policy is read from platform-service between the reads and the writes."""
     await changeable(rt, me, skill_id, "publish")
     d = await detail(rt, skill_id)
     if not d["publishCheck"]["canRequest"]:
@@ -330,7 +363,7 @@ async def request_skill_publish(rt: Rt, me: Me, skill_id: str, body: ReviewInput
 
 
 @router.post("/v1/skills/{skill_id}/deprecate", response_model=Envelope[SkillDetail])
-async def deprecate_skill(rt: Rt, me: Me, skill_id: str, body: DeprecateInput) -> JSONResponse:
+async def deprecate_skill(rt: Rt, me: Me, _: Tx, skill_id: str, body: DeprecateInput) -> JSONResponse:
     if not body.reason.strip():
         raise ValidationFailed("Say why the skill is deprecated.", code="reason_required")
     await changeable(rt, me, skill_id, "deprecate")
@@ -339,7 +372,7 @@ async def deprecate_skill(rt: Rt, me: Me, skill_id: str, body: DeprecateInput) -
 
 
 @router.delete("/v1/skills/{skill_id}", status_code=204, response_class=Response)
-async def delete_skill(rt: Rt, me: Me, skill_id: str) -> Response:
+async def delete_skill(rt: Rt, me: Me, _: Tx, skill_id: str) -> Response:
     """Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.
     Who deleted it is logged; agents-service has no audit table yet."""
     row = await skills(rt).row(skill_id)
@@ -355,7 +388,7 @@ async def delete_skill(rt: Rt, me: Me, skill_id: str) -> Response:
 
 @router.get("/v1/agents/{agent_id}/skills", response_model=Envelope[AgentSkills])
 async def get_agent_skills(
-    rt: Rt, agent_id: str, _: Annotated[Principal, Depends(reader_of("skills"))]
+    rt: Rt, agent_id: str, _: Annotated[Principal, Depends(reader_of("skills"))], __: Tx
 ) -> JSONResponse:
     return ok(await agent_skills(rt, agent_id))
 
@@ -365,6 +398,7 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
     rt: Rt,
     agent_id: str,
     _: Annotated[Principal, Depends(reader_of("skills"))],
+    __: Tx,
     search: str = "",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -394,7 +428,7 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
 
 
 @router.put("/v1/agents/{agent_id}/skills/{skill_id}", response_model=Envelope[AgentSkills])
-async def attach_skill(rt: Rt, me: Me, agent_id: str, skill_id: str, body: AttachInput) -> JSONResponse:
+async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body: AttachInput) -> JSONResponse:
     """Attaches the skill at `version`, or moves its pin there, as a new draft agent version; it serves once that
     version is published (spec 11 5.4)."""
     reg = agent_registry(rt)
@@ -412,7 +446,7 @@ async def attach_skill(rt: Rt, me: Me, agent_id: str, skill_id: str, body: Attac
 
 
 @router.delete("/v1/agents/{agent_id}/skills/{skill_id}", response_model=Envelope[AgentSkills])
-async def detach_skill(rt: Rt, me: Me, agent_id: str, skill_id: str) -> JSONResponse:
+async def detach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str) -> JSONResponse:
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "detach a skill from")
     spec = dict((await reg.version(agent_id, int(row["version"])))["spec"])
