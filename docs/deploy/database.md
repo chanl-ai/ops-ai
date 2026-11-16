@@ -211,6 +211,31 @@ models; `make uc-sql-server` installs the bundle on the SQL Server test machine 
 in `deploy/database/golden/mssql/`; a model change fails it naming the chain's file. Review the new DDL, then
 `make db-ddl-golden`.
 
+### SQL Server tests from a Mac
+
+No SQL Server 2022 or later image runs on Apple silicon, and the local Azure SQL Edge (`deploy/database/mssql_local.sh`)
+is engine 15, which the golden schema (compatibility level 160) refuses, so every service-level SQL Server test is
+refused there. A shared SQL Server runs on Fly instead: the image and edition CI's `store-mssql` job pins (2025,
+Developer), one shared-cpu-2x machine with 4 GB and a 5 GB volume in ewr, no service and no IP, reached only through
+`fly proxy`. Use it to see a SQL Server failure before pushing; CI's `store-mssql` job stays the gate.
+
+| Task | Command |
+|---|---|
+| Create on first use, else start; waits until it answers | `make mssql-remote-up` |
+| One member's tests (the client container, PostgreSQL from `make db-up`) | `make mssql-remote-test PKG=services/kb-service T="tests/test_kb_isolation.py"` |
+| The proxy alone, for your own client; prints the port | `make mssql-remote-proxy` |
+| State of the machine and the proxy | `make mssql-remote-status` |
+| Drop databases a killed run left (older than `HOURS`, default 2) | `make mssql-remote-sweep` |
+| Stop the proxy and the machine | `make mssql-remote-down` |
+
+Settings come from the staging config file (`deploy/fly/staging.env.example`): the app is `<STG_APP_PREFIX>-test-mssql`
+and creating it needs `STG_FLY_ORG`. The SA password is the app's `MSSQL_SA_PASSWORD` secret, kept in
+`<config dir>/test-mssql-sa.txt` (mode 600); `up` generates both on first use. Several builders can share it: each test
+makes its own randomly named database and drops it. A member whose tests start their own OPA (tools-service) gets one
+started on the host for the run. Fly cannot stop an idle machine that has no service, so run `make mssql-remote-down`
+when done. Cost: about 21 USD a month if left running (about 3 cents an hour), about 1 USD a month stopped (the
+volume and the stopped image).
+
 ## Facts that shape it
 
 | Fact | Consequence |
