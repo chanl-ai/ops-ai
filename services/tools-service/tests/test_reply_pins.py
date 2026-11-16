@@ -115,6 +115,42 @@ async def test_gateway_call_and_executions_replies(bank: Bank, gateway_call: Any
     pins.check()
 
 
+async def test_gateway_route_replies(bank: Bank) -> None:
+    """The internal gateway routes agents-service and runner-service call, before they move onto the kit's models."""
+    api = bank.api
+    pins = Pins("gateway", api.tenant)
+    h = _service(api.tenant)
+    pins.reply("health", await api.client.get("/health"))
+    pins.reply("grantable", await api.client.get("/v1/grantable-operations", headers=h))
+    pins.reply("grantable without tools:view", await api.client.get("/v1/grantable-operations", headers=_scopes(api)))
+    for name, body in (
+        ("fence", {"thread": "thr_pin", "generation": 2}),
+        ("fence again", {"thread": "thr_pin", "generation": 2}),
+        ("fence below", {"thread": "thr_pin", "generation": 1}),
+        ("fence of no generation", {"thread": "thr_pin", "generation": 0}),
+        ("fence unknown field", {"thread": "thr_pin", "generation": 3, "owner": "x"}),
+    ):
+        pins.reply(name, await api.client.post("/v1/fences", json=body, headers=h), sent=body)
+    for name, body in (
+        ("abandon", {"key": "k-pin", "tool": "lookup_case", "thread": "thr_pin"}),
+        ("abandon again", {"key": "k-pin", "tool": "lookup_case", "thread": "thr_pin"}),
+        ("abandon without tool", {"key": "k-pin"}),
+    ):
+        pins.reply(name, await api.client.post("/v1/calls/abandon", json=body, headers=h), sent=body)
+    code: dict[str, Any] = {"tool": "lookup_case", "input": {}}
+    pins.reply("code run call", await api.client.post("/v1/code-runs/calls", json=code, headers=h), sent=code)
+    pins.reply(
+        "code run call with tools:run",
+        await api.client.post("/v1/code-runs/calls", json=code, headers=_scopes(api, ["tools:run"])),
+        sent=code,
+    )
+    pins.check()
+
+
+def _scopes(api: Api, scopes: list[str] | None = None) -> dict[str, str]:
+    return service_headers(api.tenant, scopes=scopes or [])
+
+
 async def test_secret_replies(bank: Bank) -> None:
     api = bank.api
     pins = Pins("secrets", api.tenant)

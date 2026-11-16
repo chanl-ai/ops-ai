@@ -663,6 +663,1250 @@
    "status": 200
   }
  },
+ "gateway": {
+  "abandon": {
+   "body": {
+    "data": {
+     "abandoned": true,
+     "call": null
+    },
+    "success": true
+   },
+   "sent": [
+    "key",
+    "thread",
+    "tool"
+   ],
+   "status": 200
+  },
+  "abandon again": {
+   "body": {
+    "data": {
+     "abandoned": true,
+     "call": null
+    },
+    "success": true
+   },
+   "sent": [
+    "key",
+    "thread",
+    "tool"
+   ],
+   "status": 200
+  },
+  "abandon without tool": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "tool"
+       ],
+       "msg": "Field required"
+      }
+     ],
+     "message": "tool: Field required",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "key"
+   ],
+   "status": 400
+  },
+  "code run call": {
+   "body": {
+    "error": {
+     "code": "scope_required",
+     "details": {
+      "scope": "tools:run"
+     },
+     "message": "This service token does not hold the tools:run scope.",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "sent": [
+    "input",
+    "tool"
+   ],
+   "status": 403
+  },
+  "code run call with tools:run": {
+   "body": {
+    "error": {
+     "code": "unauthorized",
+     "message": "Sign in, or send a valid API key.",
+     "requestId": "<id:req>",
+     "status": 401
+    },
+    "success": false
+   },
+   "sent": [
+    "input",
+    "tool"
+   ],
+   "status": 401
+  },
+  "fence": {
+   "body": {
+    "data": {
+     "generation": 2,
+     "thread": "thr_pin"
+    },
+    "success": true
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 200
+  },
+  "fence again": {
+   "body": {
+    "data": {
+     "generation": 2,
+     "thread": "thr_pin"
+    },
+    "success": true
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 200
+  },
+  "fence below": {
+   "body": {
+    "error": {
+     "code": "lease_superseded",
+     "details": {
+      "callId": "",
+      "reasons": [
+       "fence is at generation 2"
+      ]
+     },
+     "message": "fence is at generation 2",
+     "requestId": "<id:req>",
+     "status": 409
+    },
+    "success": false
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 409
+  },
+  "fence of no generation": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "generation"
+       ],
+       "msg": "Input should be greater than or equal to 1"
+      }
+     ],
+     "message": "generation: Input should be greater than or equal to 1",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 400
+  },
+  "fence unknown field": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "owner"
+       ],
+       "msg": "Extra inputs are not permitted"
+      }
+     ],
+     "message": "owner: Extra inputs are not permitted",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "generation",
+    "owner",
+    "thread"
+   ],
+   "status": 400
+  },
+  "grantable": {
+   "body": {
+    "data": [
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Book a branch or advisor appointment",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "branch": {
+         "type": "string"
+        },
+        "slot": {
+         "type": "string"
+        },
+        "topic": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "branch",
+        "slot"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_branch_scheduler",
+      "moduleName": "Branch scheduler",
+      "name": "book_appointment",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Book appointment"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Card transactions for a date range",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "cardAccount": {
+         "type": "string"
+        },
+        "from": {
+         "type": "string"
+        },
+        "to": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "cardAccount",
+        "from"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_card_platform",
+      "moduleName": "Card platform",
+      "name": "get_transactions",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get transactions"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 2,
+      "description": "Post a provisional credit to a card account",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "description": "CAD",
+         "type": "number"
+        },
+        "cardAccount": {
+         "type": "string"
+        },
+        "disputeId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "cardAccount",
+        "amount",
+        "disputeId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_card_platform",
+      "moduleName": "Card platform",
+      "name": "issue_provisional_credit",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": true,
+      "testAccount": false,
+      "title": "Issue provisional credit"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Reverse a card fee",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "description": "CAD",
+         "type": "number"
+        },
+        "cardAccount": {
+         "type": "string"
+        },
+        "feeId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "cardAccount",
+        "feeId",
+        "amount"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_card_platform",
+      "moduleName": "Card platform",
+      "name": "waive_fee",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Waive fee"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Look up a business and its owners",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "jurisdiction": {
+         "type": "string"
+        },
+        "registryNumber": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "registryNumber"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_compliance_mcp",
+      "moduleName": "Compliance screening",
+      "name": "corporate_registry",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Corporate registry"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "PEP, sanctions and adverse media screening",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "country": {
+         "type": "string"
+        },
+        "dateOfBirth": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "country"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_compliance_mcp",
+      "moduleName": "Compliance screening",
+      "name": "screen_watchlists",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Screen watchlists"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Defer one or more loan payments under the hardship program",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "loanAccountId": {
+         "type": "string"
+        },
+        "payments": {
+         "description": "Number of payments to defer (1\u20133)",
+         "type": "integer"
+        },
+        "reasonCode": {
+         "enum": [
+          "job_loss",
+          "illness",
+          "disaster",
+          "other"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "loanAccountId",
+        "payments",
+        "reasonCode"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "apply_payment_deferral",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Apply payment deferral"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Name, contact details and products held by a customer",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "customerId": {
+         "description": "Customer number",
+         "examples": [
+          "CUS-118842"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "customerId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "get_customer_profile",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get customer profile"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Balance, rate, next payment and arrears for a loan account",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "include": {
+         "description": "Extra sections: schedule, arrears, collateral",
+         "type": "array"
+        },
+        "loanAccountId": {
+         "description": "Loan account number",
+         "examples": [
+          "LN-0048213"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "loanAccountId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "get_loan_account",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get loan account"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Payoff amount and per-diem interest for a loan as of a date",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "asOf": {
+         "description": "Payoff date",
+         "type": "string"
+        },
+        "loanAccountId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "loanAccountId",
+        "asOf"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "get_payoff_statement",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get payoff statement"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Change a customer\u2019s mailing address",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "city": {
+         "type": "string"
+        },
+        "customerId": {
+         "description": "Customer number",
+         "type": "string"
+        },
+        "line1": {
+         "description": "Street address",
+         "type": "string"
+        },
+        "line2": {
+         "type": "string"
+        },
+        "postalCode": {
+         "type": "string"
+        },
+        "province": {
+         "enum": [
+          "AB",
+          "BC",
+          "MB",
+          "NB",
+          "NL",
+          "NS",
+          "ON",
+          "PE",
+          "QC",
+          "SK"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "customerId",
+        "line1",
+        "city",
+        "province",
+        "postalCode"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "update_address",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Update address"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Pull a bureau report and score",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "applicantId": {
+         "type": "string"
+        },
+        "consentRef": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "applicantId",
+        "consentRef"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_equifax",
+      "moduleName": "Equifax credit",
+      "name": "run_credit_check",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Run credit check"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Semantic search with citations",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "allTeamKnowledgeBases": {
+         "description": "Search every knowledge base of the team instead of naming them",
+         "type": "boolean"
+        },
+        "collections": {
+         "description": "The team's knowledge bases to search, by id or name",
+         "type": "array"
+        },
+        "query": {
+         "description": "What to look for, in a sentence",
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_knowledge",
+      "moduleName": "Knowledge search",
+      "name": "search_knowledge",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Search knowledge"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Create a pre-approval in the loan system",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "description": "CAD",
+         "type": "number"
+        },
+        "applicationId": {
+         "type": "string"
+        },
+        "rate": {
+         "description": "%",
+         "type": "number"
+        }
+       },
+       "required": [
+        "applicationId",
+        "amount",
+        "rate"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_loan_origination",
+      "moduleName": "Loan origination",
+      "name": "issue_preapproval",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Issue preapproval"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Messages in the case\u2019s email thread",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "mailbox": {
+         "type": "string"
+        },
+        "messageId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "mailbox",
+        "messageId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_m365_mail",
+      "moduleName": "Microsoft 365 mail",
+      "name": "get_thread",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get thread"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Reply to the customer on the case thread",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "body": {
+         "type": "string"
+        },
+        "mailbox": {
+         "type": "string"
+        },
+        "subject": {
+         "type": "string"
+        },
+        "to": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "to",
+        "subject",
+        "body"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_m365_mail",
+      "moduleName": "Microsoft 365 mail",
+      "name": "send_reply",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Send reply"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Wire attempts and MFA results for an account",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "accountId": {
+         "type": "string"
+        },
+        "days": {
+         "description": "Look-back window, 1\u201330",
+         "type": "integer"
+        }
+       },
+       "required": [
+        "accountId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_payments_hub",
+      "moduleName": "Payments hub",
+      "name": "get_wire_history",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get wire history"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 2,
+      "description": "Place or release a hold on an outbound wire",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "hours": {
+         "type": "integer"
+        },
+        "reason": {
+         "type": "string"
+        },
+        "wireId": {
+         "description": "Wire id, e.g. W-88213",
+         "type": "string"
+        }
+       },
+       "required": [
+        "wireId",
+        "hours",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_payments_hub",
+      "moduleName": "Payments hub",
+      "name": "place_wire_hold",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": true,
+      "testAccount": false,
+      "title": "Place wire hold"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Read a document's fields with one of the team's document types: each field's value, how sure the read is, and whether a person should check it.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "documentType": {
+         "description": "The team's document type, by its id or name",
+         "type": "string"
+        },
+        "file": {
+         "description": "The file's id, or its name in the team's files",
+         "type": "string"
+        }
+       },
+       "required": [
+        "file",
+        "documentType"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_platform_tools",
+      "moduleName": "Platform tools",
+      "name": "read_document",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Read a document"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Read a file the team uploaded: its name, type and full text. Name it by its id or its name.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "file": {
+         "description": "The file's id, or its name in the team's files",
+         "type": "string"
+        }
+       },
+       "required": [
+        "file"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_platform_tools",
+      "moduleName": "Platform tools",
+      "name": "read_file",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Read a file"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Email an automatic acknowledgement to the sender of a message; no approval.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "body": {
+         "type": "string"
+        },
+        "mailbox": {
+         "type": "string"
+        },
+        "subject": {
+         "type": "string"
+        },
+        "to": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "to",
+        "subject",
+        "body"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_platform_tools",
+      "moduleName": "Platform tools",
+      "name": "send_acknowledgement",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Send an acknowledgement"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Look up a Harbor & Pine deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "query": {
+         "description": "Account number or holder name",
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "lookup_account",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Lookup account"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Look up a Harbor & Pine customer by name, customer id (e.g. CUS-4471) or email. Returns segment, home branch, status and open items.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "query": {
+         "description": "Customer name, id or email",
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "lookup_customer",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Lookup customer"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Open a case for a customer issue in your team; returns its id. Calling again with the same call key returns the same case.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "customerId": {
+         "description": "The customer's id in the bank's system",
+         "type": "string"
+        },
+        "customerName": {
+         "type": "string"
+        },
+        "priority": {
+         "enum": [
+          "low",
+          "normal",
+          "high",
+          "urgent"
+         ],
+         "type": "string"
+        },
+        "subject": {
+         "description": "What the issue is, in a line",
+         "type": "string"
+        }
+       },
+       "required": [
+        "subject"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "open_case",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Open case"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Ask a customer to provide a document (receipt, statement, proof of address, ID). Writes to the customer: each request is reviewed before it is sent.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "customerId": {
+         "type": "string"
+        },
+        "document": {
+         "type": "string"
+        },
+        "reason": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "customerId",
+        "document",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "request_document",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Request document"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Read a policy file",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "fileId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "fileId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_sharepoint",
+      "moduleName": "SharePoint policies",
+      "name": "get_file",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get file"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Search policy pages and files",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "query": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_sharepoint",
+      "moduleName": "SharePoint policies",
+      "name": "search_sites",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Search sites"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Employment and income verification",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "applicantId": {
+         "type": "string"
+        },
+        "consentRef": {
+         "type": "string"
+        },
+        "employer": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "applicantId",
+        "employer",
+        "consentRef"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_work_number",
+      "moduleName": "The Work Number",
+      "name": "verify_employment",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Verify employment"
+     }
+    ],
+    "success": true
+   },
+   "status": 200
+  },
+  "grantable without tools:view": {
+   "body": {
+    "error": {
+     "code": "scope_required",
+     "details": {
+      "scope": "tools:view"
+     },
+     "message": "This service token does not hold the tools:view scope.",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "status": 403
+  },
+  "health": {
+   "body": {
+    "status": "ok"
+   },
+   "status": 200
+  }
+ },
  "gateway_and_executions": {
   "call ok": {
    "body": {
