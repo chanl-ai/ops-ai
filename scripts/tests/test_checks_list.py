@@ -1,11 +1,12 @@
 """The one list of checks (make/checks.mk), by failure mode: a check added to one of the places that run checks and not
 the others, so a pull request, `make verify` and pre-commit each pass a different set; a plan for a one-file change that
 skips the checks job; and a pipeline job the standards name (staging that skips when the plan skipped a job, the
-both-database store run, the release proof, the production deploy) that is missing or has the wrong trigger."""
+both-database store run, the release proof) that is missing or has the wrong trigger."""
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -127,12 +128,14 @@ def test_the_both_database_run_and_the_release_proof_are_required_with_their_tri
     assert "make db-scripts-proof FROM=" in release and "make install-proof" in release
 
 
-def test_production_deploys_a_release_tag_only_after_an_approval_the_owner_sets_up() -> None:
-    wf: dict[str, Any] = yaml.safe_load((ROOT / ".github/workflows/deploy-prod.yml").read_text())
-    triggers: dict[str, Any] = wf.get("on") or wf[True]
-    assert triggers["push"] == {"tags": ["v20*"]} and "branches" not in triggers["push"]
-    assert "pull_request" not in triggers
-    deploy = wf["jobs"]["deploy"]
-    assert deploy["environment"]["name"] == "production" and deploy["needs"] == "guard"
-    # Nothing runs until the owner has made the environment, whose required reviewers hold the deploy.
-    assert wf["jobs"]["guard"]["if"] == "${{ vars.PROD_DEPLOY_ENABLED == 'true' }}"
+def test_no_workflow_deploys_production_until_the_owner_has_set_up_the_environment() -> None:
+    """A workflow cannot see the `production` environment's reviewers or where the deploy token lives, so one that ran
+    on a repository variable could deploy with no approval. It returns with a guard that reads the environment's rules
+    (docs/deploy/fly-staging.md, "Production on GitHub")."""
+    deploying = [
+        path.name
+        for path in (ROOT / ".github/workflows").glob("*.yml")
+        if re.search(r"environment:\s*(name:\s*)?['\"]?production", path.read_text())
+    ]
+    assert deploying == [], deploying
+    assert not (ROOT / ".github/workflows/deploy-prod.yml").exists()

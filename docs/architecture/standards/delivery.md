@@ -71,17 +71,14 @@ Rule: production deploys only a tag `vYYYY-MM-DD.N` on a commit staging ran; mig
 start; rollback redeploys the previous image; migrations only add (`DA10`).
 Why: promotion is repeatable and reversible.
 
-Today: `.github/workflows/release-tag.yml` tags on merge to `main`; `.github/workflows/deploy-prod.yml` deploys a tag
-`v20*` after a `guard` job proves staging ran the same content and a person approves on the `production` environment.
-It stays off until the repository variable `PROD_DEPLOY_ENABLED` is `true`. `release-images.yml` has never built from a
-merged commit.
+Today: `.github/workflows/release-tag.yml` tags on merge to `main`; no workflow deploys the tag. A workflow returns once
+the owner has made the `production` environment (`docs/deploy/fly-staging.md`, "Production on GitHub"). `release-images.yml`
+has never built from a merged commit.
 
 Pattern (`make stg-rollback`, `deploy/fly/stg_deploy.sh`): the staging path is the production path with another target.
 
-Check: `.github/workflows/release-tag.yml`; `.github/workflows/deploy-prod.yml`; `make stg-rollback`. Needed: the
-`production` environment with required reviewers and its variables and secrets (the owner's items); a token that lets
-the tag push start the workflow, since a tag pushed with the repository's own token starts none (`workflow_dispatch`
-takes the tag meanwhile).
+Check: `.github/workflows/release-tag.yml`; `make stg-rollback`. Needed: the production deploy workflow, after the
+owner's set-up in `docs/deploy/fly-staging.md` ("Production on GitHub").
 
 ## DL6 An upgrade from the previous release is proven
 

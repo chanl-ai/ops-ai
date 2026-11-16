@@ -242,7 +242,6 @@ CHECKS = \
 staging:        if: ${{ !cancelled() && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success' }}
 store-mssql:    # every pull request: the store, kit and identity suites against a SQL Server container, required by ci-ok
 release-proof:  # pull requests into main: make db-scripts-proof FROM=<last tag>; make install-proof
-deploy-prod:    # its own workflow, on: push tags v20*; deploys the tagged commit staging ran, after approval on the production environment
 ```
 
 Also in C6: the api-layer use-case harness takes a base URL (`OPS_USECASE_BASE_URL`) so the same scripts can run
@@ -316,7 +315,7 @@ check green; open the pull request.
 | C3 | `check_config_literals.py` is at zero for loopback fallbacks and on per-service baselines starting at 58 and 47 for timeouts and clients; the import-linter contract allows `httpx` only in tools-service, models-service, `ops_identity.client` and the listed client packages; one boot test per service that an unset required endpoint exits naming it; `make verify` green with `auth_mode` defaulting to `platform` |
 | C4 | A test that `Relay(` is constructed only in `ops_store.outbox` (red at 5 today); a test that every key on `PROCESSES` has a `loop_reports_failure` test |
 | C5 | `check_typed_boundaries.py --strict` with a baseline file per service: `dict[str, Any]` per layer starting at 4,308; dict-returning store functions at 194; bare tasks at 13 and 32; `logging.getLogger(` and `print(` outside the kit at zero; the contract walk asserts every body is an `In` and every reply an `Out`; ruff `S608` and `ASYNC` and pyright `reportDeprecated` on |
-| C6 | The checks job runs `make checks`; the staging job's `if:` carries `!cancelled()`; `store-mssql` and `release-proof` exist with the right triggers; `deploy-prod` exists; `ops_service_kit.standards.check(app, settings_module=...)` replaces rules 4 to 6 of `services/agents-service/scripts/check_standards.py`; the api harness accepts `OPS_USECASE_BASE_URL` |
+| C6 | The checks job runs `make checks`; the staging job's `if:` carries `!cancelled()`; `store-mssql` and `release-proof` exist with the right triggers; no production deploy workflow exists until the owner's set-up (`docs/deploy/fly-staging.md`); `ops_service_kit.standards.check(app, settings_module=...)` replaces rules 4 to 6 of `services/agents-service/scripts/check_standards.py`; the api harness accepts `OPS_USECASE_BASE_URL` |
 | C7 | The checker exits 1 on a "no decision" row and on each planted shape; the allowlist carries an outcome per line; the two register rows are decided; a per-lane baseline file exists for role names |
 | C8 | A published module appears in the copy after one relay pass and in `/v1/tools` with its facets; `resync` repairs a deleted copy row; the budget fixture's row for `/v1/tools` is one transaction and no hop; both SDKs regenerated on `develop` afterwards |
 
