@@ -131,9 +131,13 @@ async def test_a_policed_row_is_read_and_written_only_in_its_tenant_and_team(
     assert await _count(engine, table, elsewhere, TEAM) == 0, "another tenant read the row"
     assert await _count(engine, table, tenant, OTHER_TEAM) == (0 if by_team else 1), "the team policy is wrong"
 
-    await _refused(engine, table, (elsewhere, TEAM), _row(table, tenant, 2))
+    # The refused rows belong to a tenant that holds no such row yet: SQL Server checks a key before its block
+    # predicate, so a row repeating the first one's key would be refused by the key and prove nothing.
+    fresh = f"t_{uuid4().hex[:10]}"
+    await _parents(engine, table, fresh)
+    await _refused(engine, table, (elsewhere, TEAM), _row(table, fresh, 2))
     if by_team:
-        await _refused(engine, table, (tenant, OTHER_TEAM), _row(table, tenant, 3))
+        await _refused(engine, table, (fresh, OTHER_TEAM), _row(table, fresh, 3))
 
 
 async def _refused(engine: AsyncEngine, table: sa.Table, scope: tuple[str, str], row: dict[str, Any]) -> None:
