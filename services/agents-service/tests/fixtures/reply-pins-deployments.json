@@ -1,0 +1,203 @@
+{
+  "dep.change": {
+    "body": {
+      "data": {
+        "channel": "api",
+        "graph": "complex_workflow",
+        "id": "dep_pin",
+        "multitask": "reject",
+        "paused": true
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "dep.create": {
+    "body": {
+      "data": {
+        "channel": "api",
+        "graph": "complex_workflow",
+        "id": "dep_pin",
+        "multitask": "enqueue",
+        "paused": false
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "dep.otherTeam": {
+    "body": {
+      "error": {
+        "code": "deployment_id_taken",
+        "message": "A deployment dep_pin exists; choose another id.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "dep.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "dep.unknownGraph": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "message": "Unknown graph nowhere.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "dep.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "create",
+          "area": "deployments",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot create this deployment; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "inbox.post": {
+    "body": {
+      "data": {
+        "seq": 1,
+        "status": "queued",
+        "threadId": "<gth>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "inbox.postAgain": {
+    "body": {
+      "data": {
+        "seq": 1,
+        "status": "queued",
+        "threadId": "<gth>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "inbox.postMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Thread was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "inbox.read": {
+    "body": {
+      "data": [
+        {
+          "kind": "customer_reply",
+          "messageKey": "m1",
+          "seq": 1,
+          "status": "queued"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "inbox.readMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Thread was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "inbox.readOtherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Thread was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "pause": {
+    "body": {
+      "data": {
+        "id": "dep_pin",
+        "paused": false
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "pause.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Deployment dep_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "pause.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Deployment dep_pin was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}

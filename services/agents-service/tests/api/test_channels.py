@@ -4,12 +4,15 @@ loses the types not built yet, or a page for one of them fails to load."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy import event
+from sqlalchemy.pool import Pool
 
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.engine import EngineTransactions
@@ -23,6 +26,8 @@ from tests.api.test_activity import email
 from tests.api.test_case_routes import started_run
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER, person
+
+from .test_reply_pins import FIXTURES, answer, compare
 
 FRAUD_BUILDER = person("omar", "team_fraud", "builder")
 SEEDED: dict[str, Any] = {
@@ -334,3 +339,71 @@ async def test_a_chat_channel_is_renamed_its_websites_wait_for_review_and_it_ret
     assert retired.status_code == 200 and retired.json()["data"]["retiredAt"], retired.text
     assert (again.status_code, again.json()["error"]["code"]) == (409, "channel_retired"), again.text
     assert (await channels(c, BUILDER, type="chat"))["data"] == []
+
+
+Request = tuple[str, str, dict[str, Any] | None, dict[str, str]]
+
+
+async def connections(c: AsyncClient, requests: list[Request]) -> list[tuple[str, str, int, int]]:
+    """Each request's status and how many connections it checked out. One: the route answers in the request
+    transaction. More: it calls another party, so each read takes and returns its own and none is held meanwhile."""
+    request_task = asyncio.current_task()
+    counted: list[int] = []
+
+    def checked_out(*_: object) -> None:
+        # The app's loops check out connections too; only the request's own task counts.
+        if asyncio.current_task() is request_task:
+            counted[-1] += 1
+
+    event.listen(Pool, "checkout", checked_out)
+    seen: list[tuple[str, str, int, int]] = []
+    try:
+        for method, path, body, who in requests:
+            counted.append(0)
+            r = await c.request(method, path, json=body, headers=who)
+            seen.append((method, path, r.status_code, counted[-1]))
+    finally:
+        event.remove(Pool, "checkout", checked_out)
+    return seen
+
+
+DEPLOYMENT = {"id": "dep_pin", "graph": "complex_workflow", "channel": "api"}
+REPLY = {"kind": "customer_reply", "messageKey": "m1", "payload": {"text": "Yes, go ahead."}}
+
+
+async def test_deployment_and_inbox_routes_keep_every_reply_and_error(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    made = await c.post("/v1/threads", json={"graph": "dispute_email"}, headers=BUILDER)
+    tid = made.json()["data"]["threadId"]
+    rows: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str]]] = [
+        ("dep.create", "POST", "/v1/deployments", DEPLOYMENT, BUILDER),
+        ("dep.change", "POST", "/v1/deployments", {**DEPLOYMENT, "paused": True, "multitask": "reject"}, BUILDER),
+        ("dep.unknownGraph", "POST", "/v1/deployments", {**DEPLOYMENT, "graph": "nowhere"}, BUILDER),
+        ("dep.unknownField", "POST", "/v1/deployments", {**DEPLOYMENT, "colour": "red"}, BUILDER),
+        ("dep.otherTeam", "POST", "/v1/deployments", DEPLOYMENT, FRAUD_BUILDER),
+        ("dep.viewer", "POST", "/v1/deployments", {**DEPLOYMENT, "id": "dep_viewer"}, VIEWER),
+        ("pause", "PATCH", "/v1/deployments/dep_pin", {"paused": False}, BUILDER),
+        ("pause.missing", "PATCH", "/v1/deployments/dep_missing", {"paused": True}, BUILDER),
+        ("pause.otherTeam", "PATCH", "/v1/deployments/dep_pin", {"paused": True}, FRAUD_BUILDER),
+        ("inbox.post", "POST", f"/v1/threads/{tid}/inbox", REPLY, BUILDER),
+        ("inbox.postAgain", "POST", f"/v1/threads/{tid}/inbox", REPLY, BUILDER),
+        ("inbox.postMissing", "POST", "/v1/threads/th_missing1/inbox", REPLY, BUILDER),
+        ("inbox.read", "GET", f"/v1/threads/{tid}/inbox", None, BUILDER),
+        ("inbox.readOtherTeam", "GET", f"/v1/threads/{tid}/inbox", None, FRAUD_BUILDER),
+        ("inbox.readMissing", "GET", "/v1/threads/th_missing1/inbox", None, BUILDER),
+    ]
+    seen = {name: answer(await c.request(m, path, json=body, headers=who)) for name, m, path, body, who in rows}
+    compare(seen, FIXTURES / "reply-pins-deployments.json")
+
+
+async def test_local_channel_routes_answer_in_one_transaction(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    made = await c.post("/v1/threads", json={"graph": "dispute_email"}, headers=BUILDER)
+    tid = made.json()["data"]["threadId"]
+    requests: list[Request] = [
+        ("POST", "/v1/deployments", DEPLOYMENT, BUILDER),
+        ("PATCH", "/v1/deployments/dep_pin", {"paused": True}, BUILDER),
+        ("GET", f"/v1/threads/{tid}/inbox", None, BUILDER),
+    ]
+    expected = [(m, p, 201 if m == "POST" else 200, 1) for m, p, _, _ in requests]
+    assert await connections(c, requests) == expected

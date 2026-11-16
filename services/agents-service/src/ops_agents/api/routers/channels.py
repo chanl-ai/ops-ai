@@ -1,4 +1,9 @@
-"""Deployments (a graph on a channel, with settings) and a thread's inbox of channel messages (E6)."""
+"""Deployments (a graph on a channel, with settings) and a thread's inbox of channel messages (E6).
+
+The deployment routes and the inbox read answer in one request transaction (`Tx`): they read and write this service's
+database only. Delivering a channel message takes none: it holds the thread's lock on a connection of its own and may
+resume the run (`channels.inbox.deliver`).
+"""
 
 from __future__ import annotations
 
@@ -7,9 +12,9 @@ from typing import Annotated, Any, Literal, TypeAlias
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, ValidationFailed
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 from ops_service_kit.ids import now_iso
 
 from ...store.channels import ChannelStore, Deployment
@@ -36,7 +41,7 @@ deployments_router = APIRouter(prefix="/v1/deployments", dependencies=[Depends(p
 inbox_router = APIRouter(prefix="/v1/threads", dependencies=[Depends(principal)])
 
 
-class DeploymentInput(WireModel):
+class DeploymentInput(In):
     id: str
     graph: str
     channel: Literal["widget", "api", "mcp"]
@@ -46,11 +51,11 @@ class DeploymentInput(WireModel):
     budget: BudgetInput | None = None
 
 
-class PauseInput(WireModel):
+class PauseInput(In):
     paused: bool
 
 
-class InboxInput(WireModel):
+class InboxInput(In):
     kind: Literal["customer_reply"]
     message_key: str
     payload: dict[str, Any]
@@ -63,7 +68,7 @@ def _channels(rt: Runtime) -> ChannelStore:
 
 
 @deployments_router.post("", response_model=Envelope[DeploymentView], status_code=201)
-async def put_deployment(rt: Rt, me: Me, body: DeploymentInput) -> JSONResponse:
+async def put_deployment(rt: Rt, me: Me, body: DeploymentInput, _: Tx) -> JSONResponse:
     """Creates the deployment in the team acting, or changes one the caller's team owns; it keeps its owning team."""
     held = await _channels(rt).deployment(body.id)
     team = held.team_id if held is not None else me.team_id
@@ -82,11 +87,11 @@ async def put_deployment(rt: Rt, me: Me, body: DeploymentInput) -> JSONResponse:
         ),
         now_iso(),
     )
-    return ok(body.wire(), status=201)
+    return ok(body.model_dump(mode="json", by_alias=True, exclude_none=True), status=201)
 
 
 @deployments_router.patch("/{deployment_id}", response_model=Envelope[DeploymentPaused])
-async def pause_deployment(rt: Rt, me: Me, deployment_id: str, body: PauseInput) -> JSONResponse:
+async def pause_deployment(rt: Rt, me: Me, deployment_id: str, body: PauseInput, _: Tx) -> JSONResponse:
     held = await _channels(rt).deployment(deployment_id)
     if held is None:
         raise NotFound(f"Deployment {deployment_id}")
@@ -107,7 +112,8 @@ async def post_inbox(rt: Rt, me: Me, thread_id: str, body: InboxInput) -> JSONRe
 
 
 @inbox_router.get("/{thread_id}/inbox", response_model=Envelope[list[InboxItem]])
-async def get_inbox(rt: Rt, thread_id: str) -> JSONResponse:
+async def get_inbox(rt: Rt, thread_id: str, _: Tx) -> JSONResponse:
+    """The thread's channel messages; another team's or tenant's thread is not found (the store never returns it)."""
     await resolve(rt, thread_id)
     rows = await _channels(rt).inbox(thread_id)
     return ok(
