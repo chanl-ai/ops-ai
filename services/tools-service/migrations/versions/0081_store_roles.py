@@ -139,3 +139,8 @@ def downgrade() -> None:
         op.execute(f"REVOKE ALL ON {name} FROM {SYSTEM_ROLE}")
     for name in TENANT_GRANTS:
         op.execute(f"REVOKE INSERT, UPDATE, DELETE ON {name} FROM {ROLE}")
+    # Dropping the role ends the runtime login's membership too. Roles are server-wide: while another database on the
+    # server still grants to it, the drop is refused and the role stays, since that database's service needs it.
+    op.execute(
+        f"DO $$ BEGIN DROP ROLE IF EXISTS {SYSTEM_ROLE}; EXCEPTION WHEN dependent_objects_still_exist THEN NULL; END $$"
+    )
