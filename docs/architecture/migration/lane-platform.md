@@ -86,9 +86,9 @@ change as its migration, with a pin per reader that the same people are returned
 | `lifecycle.py`: `leave`, `leave_team`, `delete_team` | Every team of one person; a team being deleted | `tenant_wide` with a named reason |
 | `identity.py`: `roles` | Every membership of the caller, to build `/v1/me` and the token | `tenant_wide`; sign-in path, pinned |
 | `signin.py`: `_join_groups`, `_group_given`, `_set_role`, `_add_member` | Memberships a sign-in gives, before any team is chosen | `tenant_wide`; sign-in path, pinned |
-| `members.py`: `_accept`; `seeding.py`: `write_seed` | An invite found by its token; the first workspace | `tenant_wide` with a named reason |
+| `members.py`: `_accept`; `seeding.py`: `write_seed` | Activates an invite already found by its token (the lookup itself runs in `system_tx(INVITE_LOOKUP)`); the first workspace | the invite's team; `tenant_wide` for the seed |
 
-The work belongs to step 2 below (every store on the base's `tx()`): that is where each reader chooses its scope.
+The first column is verified (each runs a `members` statement under `tenant_tx`); the scope column is proposed from what each function is for and is confirmed when that reader is rewritten. The work belongs to step 2 below (every store on the base's `tx()`): that is where each reader chooses its scope.
 
 ## Step order
 
