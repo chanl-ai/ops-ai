@@ -30,7 +30,8 @@ from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_mo
 
 PLATFORM = Ed25519Signer.generate("registry-pins")
 ORIGIN = "https://intranet.bank.example"
-TEAM = "team_ops"
+# A team of this module's own, so a list reads none of the other tests' agents on the shared database.
+TEAM = f"team_{new_id('pin')}"
 
 
 def person(tenant: str, team: str = TEAM, role: str = "builder") -> dict[str, str]:
