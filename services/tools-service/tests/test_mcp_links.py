@@ -172,6 +172,15 @@ async def test_a_link_takes_only_tools_the_team_can_run(stack: Stack) -> None:
     assert (r.status_code, r.json()["error"]["code"]) == (422, "tool_not_runnable"), r.text
 
 
+async def test_a_refused_link_keeps_the_teams_platform_tools(stack: Stack) -> None:
+    async with _rest(stack, "linker") as rest:
+        refused = await rest.post(
+            "/v1/mcp-links", json={"name": "Payroll", "tools": [{"id": "run_payroll", "label": "x"}]}
+        )
+        made = await rest.post("/v1/mcp-links", json={"name": "Cases", "tools": [{"id": "open_case", "label": "x"}]})
+    assert (refused.status_code, made.status_code) == (422, 201), made.text
+
+
 async def test_a_picked_workflow_starts_its_live_version_only_for_who_may_run_it(stack: Stack) -> None:
     picked = {
         "id": "workflow:wf_claims",
