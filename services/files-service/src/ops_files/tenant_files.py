@@ -15,10 +15,10 @@ import contextlib
 import hashlib
 import re
 import uuid
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterable, AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 
 from ops_files.models import (
     CompletedUpload,
@@ -72,6 +72,7 @@ from ops_files.service import (
 from ops_files.sniffing import SNIFF_BYTES, prove
 from ops_files.store import AsyncEngine, FileRow, FilesStore, HoldRow, ListedFile, ReadRequestRow, ReadRequestsStore
 from ops_service_kit.http import options_page, options_window
+from ops_service_kit.listing import ListParams
 from ops_storage.base import ObjectExistsError, StreamingObjectStore
 from ops_store import isolation
 
@@ -620,48 +621,29 @@ class TenantFiles:
     async def list(
         self,
         who: Who,
+        params: ListParams,
         *,
-        page: int,
-        page_size: int,
         mine: bool = False,
-        purpose: FilePurpose | None = None,
         ref_type: FileReferenceType | None = None,
         ref_id: str | None = None,
-        search: str = "",
         uploaded_after: datetime | None = None,
         uploaded_before: datetime | None = None,
         view: str = "all",
-        filters: Mapping[str, Sequence[str]] | None = None,
     ) -> dict[str, Any]:
-        found = await self._files.list(
+        page, counts = await self._files.list(
             who.team,
-            page=page,
-            page_size=page_size,
+            params,
+            purposes=get_args(FilePurpose),
             uploaded_by=who.actor if mine else None,
-            purpose=purpose,
             ref_type=ref_type,
             ref_id=ref_id,
-            search=search,
             uploaded_after=uploaded_after,
             uploaded_before=uploaded_before,
             view=view,
-            filters=filters,
             now=self._clock(),
         )
-        pages = max(1, -(-found.total // page_size))
-        return {
-            "data": [self._row_detail(r, who) for r in found.rows],
-            "pagination": {
-                "page": page,
-                "pageSize": page_size,
-                "total": found.total,
-                "totalPages": pages,
-                "hasNext": page < pages,
-                "hasPrev": page > 1,
-            },
-            "facets": dict(found.facets),
-            "viewCounts": dict(found.view_counts),
-        }
+        rows = [self._row_detail(ListedFile.model_validate(r), who) for r in page["data"]]
+        return {**page, "data": rows, "viewCounts": counts}
 
     @staticmethod
     def _readable(row: FileRow) -> None:

@@ -50,10 +50,11 @@ export interface paths {
         };
         /**
          * List Files
-         * @description Available files of the caller's team, newest first; `uploadedBy=me` keeps the caller's own. Search, the
-         *     uploaded-since date, the view and the purpose, scan, sensitivity, read-as type and read path filters run in
-         *     the query, which also answers each view's count and the facet counts; `readPath=model` keeps files no
-         *     template matched.
+         * @description Available files of the caller's team on the shared list contract, newest first (`sortBy` name or
+         *     uploadedAt); `uploadedBy=me` keeps the caller's own. Search, the uploaded dates, the view and the purpose,
+         *     scan, sensitivity, read-as type and read path filters run in the query, which also answers each view's count
+         *     and the facet counts; `readPath=model` keeps files no template matched. The filters are declared here so a
+         *     bad value is refused; ListQuery reads the same keys as its filters.
          */
         get: operations["files_list_files"];
         put?: never;
@@ -1351,8 +1352,6 @@ export interface operations {
     files_list_files: {
         parameters: {
             query?: {
-                page?: number;
-                pageSize?: number;
                 uploadedBy?: "me" | null;
                 purpose?: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar")[] | null;
                 scan?: string[] | null;
@@ -1361,10 +1360,15 @@ export interface operations {
                 readPath?: ("template" | "model")[] | null;
                 refType?: ("source" | "case" | "chat" | "eval_set" | "test_set" | "evidence" | "export" | "tool_module") | null;
                 refId?: string | null;
-                search?: string;
                 uploadedAfter?: string | null;
                 uploadedBefore?: string | null;
                 view?: "all" | "quarantined" | "legal_hold" | "unreferenced" | "expiring";
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

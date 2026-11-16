@@ -133,3 +133,16 @@ async def test_email_texts_are_left_out_of_the_list_until_asked_for(
         asked = _data(await _list(c, pageSize=25, purpose="email_body"))
         assert [f["id"] for f in asked["data"]] == [body]
         assert (await c.get(f"/v1/files/{body}", headers=OPS)).status_code == 200, "a run or case still opens it"
+
+
+async def test_the_list_takes_the_shared_list_contract(client: Client) -> None:  # noqa: F811
+    """sortBy and sortOrder order the page in the query, ids answers exactly those rows whatever the search says, and
+    a page size above the install's maximum is answered at the maximum."""
+    async with client() as c:
+        ids = [await _stored(c, n, PDF + bytes([60 + i])) for i, n in enumerate(("b.pdf", "c.pdf", "a.pdf"))]
+        by_name = _data(await _list(c, pageSize=3, sortBy="name", sortOrder="asc"))
+        assert [f["name"] for f in by_name["data"]] == ["a.pdf", "b.pdf", "c.pdf"]
+        picked = _data(await _list(c, ids=[ids[0], ids[2]], search="nothing matches this"))
+        assert sorted(f["id"] for f in picked["data"]) == sorted([ids[0], ids[2]])
+        capped = _data(await _list(c, pageSize=500))
+        assert capped["pagination"]["pageSize"] == 50

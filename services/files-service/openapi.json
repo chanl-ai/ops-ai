@@ -2290,32 +2290,9 @@
     },
     "/v1/files": {
       "get": {
-        "description": "Available files of the caller's team, newest first; `uploadedBy=me` keeps the caller's own. Search, the\nuploaded-since date, the view and the purpose, scan, sensitivity, read-as type and read path filters run in\nthe query, which also answers each view's count and the facet counts; `readPath=model` keeps files no\ntemplate matched.",
+        "description": "Available files of the caller's team on the shared list contract, newest first (`sortBy` name or\nuploadedAt); `uploadedBy=me` keeps the caller's own. Search, the uploaded dates, the view and the purpose,\nscan, sensitivity, read-as type and read path filters run in the query, which also answers each view's count\nand the facet counts; `readPath=model` keeps files no template matched. The filters are declared here so a\nbad value is refused; ListQuery reads the same keys as its filters.",
         "operationId": "files_list_files",
         "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
           {
             "in": "query",
             "name": "uploadedBy",
@@ -2489,16 +2466,6 @@
           },
           {
             "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Search",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "uploadedAfter",
             "required": false,
             "schema": {
@@ -2546,6 +2513,99 @@
               ],
               "title": "View",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {

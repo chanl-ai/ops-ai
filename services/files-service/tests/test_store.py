@@ -7,10 +7,14 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, get_args
 
+from ops_files.models import FilePurpose
 from ops_files.store import AsyncEngine, FilesStore
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
+
+PURPOSES = get_args(FilePurpose)
 
 DIGEST = "a" * 64
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
@@ -72,9 +76,9 @@ async def test_two_completions_of_the_same_bytes_leave_one_available_file(engine
     loser = ids[1 - results.index(None)]
     assert results[ids.index(loser)] == winner
     with isolation.scope(tenant, "team_ops"):
-        listed = await store.list("team_ops", page=1, page_size=10)
+        listed, _ = await store.list("team_ops", ListParams(page_size=10), purposes=PURPOSES)
         loser_row = await store.get(loser)
-    assert [row.id for row in listed.rows] == [winner]
+    assert [row["id"] for row in listed["data"]] == [winner]
     assert loser_row is not None and loser_row.file.status == "uploading"
 
 
@@ -96,4 +100,4 @@ async def test_a_file_is_not_found_from_another_tenant(engine: AsyncEngine, tena
         await store.insert_upload(_upload(mine, tenant))
     with isolation.scope(f"{tenant}_other", "team_ops"):
         assert await store.get(mine) is None
-        assert (await store.list("team_ops", page=1, page_size=10)).total == 0
+        assert (await store.list("team_ops", ListParams(), purposes=PURPOSES))[0]["pagination"]["total"] == 0

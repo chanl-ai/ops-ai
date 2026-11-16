@@ -11,7 +11,6 @@ by tenant and, through `team_visible`, by team, so it seeks on its index."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
@@ -21,8 +20,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
 from ops_store.database import open_database, reachable
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.rows import one, rows
@@ -47,7 +48,6 @@ __all__ = [
     "HoldRow",
     "ListedFile",
     "OptionRow",
-    "Page",
     "ReferenceOut",
     "VersionOut",
     "engine_for",
@@ -69,18 +69,18 @@ files = sa.Table(
     sa.Column("tenant_id", sa.String(64), nullable=False),
     sa.Column("team", sa.String(64), nullable=False),
     # Display name only; it never reaches a storage key.
-    sa.Column("name", sa.String(255), nullable=False),
+    sa.Column("name", sa.String(255), nullable=False, info=LISTED),
     sa.Column("mime", sa.String(127), nullable=False),
     sa.Column("sniffed_mime", sa.String(127)),
     sa.Column("size", sa.BigInteger, nullable=False),
     sa.Column("digest", sa.String(64)),
-    sa.Column("purpose", sa.String(32), nullable=False),
+    sa.Column("purpose", sa.String(32), nullable=False, info=LISTED),
     sa.Column("status", sa.String(16), nullable=False),  # uploading | available | rejected
-    sa.Column("scan_status", sa.String(16), nullable=False),  # pending | clean | infected | failed
+    sa.Column("scan_status", sa.String(16), nullable=False, info=LISTED),  # pending | clean | infected | failed
     sa.Column("scan_engine", sa.String(64)),
     sa.Column("scan_at", sa.DateTime(timezone=True)),
     sa.Column("scan_detail", sa.String(500)),
-    sa.Column("sensitivity", sa.String(16), nullable=False),
+    sa.Column("sensitivity", sa.String(16), nullable=False, info=LISTED),
     sa.Column("sensitivity_suggested", sa.Boolean, nullable=False),
     sa.Column("retention_class_id", sa.String(64), nullable=False),
     sa.Column("delete_after", sa.Date),
@@ -93,16 +93,22 @@ files = sa.Table(
     sa.Column("declared_digest", sa.String(64)),
     sa.Column("upload_expires_at", sa.DateTime(timezone=True)),
     sa.Column("uploaded_by", sa.String(320), nullable=False),
-    sa.Column("uploaded_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("uploaded_at", sa.DateTime(timezone=True), nullable=False, info=LISTED),
     sa.Column("version_count", sa.Integer, nullable=False),
     # What was read from the file, recorded by the extract workflow; `read_as` and `read_path` repeat its
     # type and path as columns so the list filters and counts them in the query.
     sa.Column("data", sa.JSON),
-    sa.Column("read_as", sa.String(64)),
-    sa.Column("read_path", sa.String(16)),
+    sa.Column("read_as", sa.String(64), info=LISTED),
+    sa.Column("read_path", sa.String(16), info=LISTED),
     sa.Index("ix_files_team_status", "tenant_id", "team", "status", "uploaded_at"),
-    sa.Index("ix_files_read_as", "tenant_id", "team", "read_as"),
+    sa.Index("ix_files_read_as", "tenant_id", "read_as", "team"),
     sa.Index("ix_files_delete_after", "tenant_id", "delete_after"),
+    sa.Index("ix_files_name", "tenant_id", "name"),
+    sa.Index("ix_files_purpose", "tenant_id", "purpose"),
+    sa.Index("ix_files_scan_status", "tenant_id", "scan_status"),
+    sa.Index("ix_files_sensitivity", "tenant_id", "sensitivity"),
+    sa.Index("ix_files_uploaded_at", "tenant_id", "uploaded_at"),
+    sa.Index("ix_files_read_path", "tenant_id", "read_path"),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
 
@@ -291,15 +297,15 @@ class FileRow(Out):
     hold: HoldRow | None
 
 
-@dataclass(frozen=True)
-class Page:
-    rows: Sequence[ListedFile]
-    total: int
-    view_counts: Mapping[str, int] = field(default_factory=dict[str, int])
-    facets: Mapping[str, Mapping[str, int]] = field(default_factory=dict[str, Mapping[str, int]])
-
-
 VIEWS = ("all", "quarantined", "legal_hold", "unreferenced", "expiring")
+# The list's filters, each also a facet it counts, by the query key the console sends.
+FACETS: Mapping[str, sa.Column[Any]] = {
+    "purpose": files.c.purpose,
+    "scan": files.c.scan_status,
+    "sensitivity": files.c.sensitivity,
+    "readAs": files.c.read_as,
+    "readPath": files.c.read_path,
+}
 
 
 def _team_of(file_id: str) -> Any:
@@ -366,23 +372,21 @@ class FilesStore(Store):
     async def list(
         self,
         team: str,
+        params: ListParams,
         *,
-        page: int,
-        page_size: int,
+        purposes: Sequence[str],
         uploaded_by: str | None = None,
-        purpose: str | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
-        search: str = "",
         uploaded_after: datetime | None = None,
         uploaded_before: datetime | None = None,
         view: str = "all",
-        filters: Mapping[str, Sequence[str]] | None = None,
         now: datetime | None = None,
-    ) -> Page:
-        """Available files of one team, newest first. Search, the uploaded-since date, the view and the facet filters
-        run in the query; `view_counts` and `facets` are grouped counts under the same search and date, so no page
-        counts rows it did not load."""
+    ) -> tuple[ListPage, dict[str, int]]:
+        """Available files of one team on the shared list contract, newest first, and the count of each view the Files
+        page offers under the same search and filters, all in one transaction. `purposes` is every purpose: a list that
+        names no purpose and no record keeps to those not listed only when asked for, as a purpose filter, so the
+        purpose facet, which leaves its own filter out, still counts them and the filter offers them."""
         tenant = isolation.tenant()
         at = now or datetime.now(UTC)
         base: list[sa.ColumnElement[bool]] = [
@@ -393,8 +397,6 @@ class FilesStore(Store):
         ]
         if uploaded_by is not None:
             base.append(files.c.uploaded_by == uploaded_by)
-        if purpose is not None:
-            base.append(files.c.purpose == purpose)
         if ref_type is not None or ref_id is not None:
             refs = sa.select(file_references.c.file_id).where(
                 file_references.c.tenant_id == tenant, team_visible(file_references)
@@ -404,55 +406,42 @@ class FilesStore(Store):
             if ref_id is not None:
                 refs = refs.where(file_references.c.ref_id == ref_id)
             base.append(files.c.id.in_(refs))
-        if search.strip():
-            base.append(sa.or_(*(contains(col, search) for col in (files.c.name, files.c.uploaded_by, files.c.digest))))
         if uploaded_after is not None:
             base.append(files.c.uploaded_at >= uploaded_after)
         if uploaded_before is not None:
             base.append(files.c.uploaded_at < uploaded_before)
-        facet_cols = {
-            "purpose": files.c.purpose,
-            "scan": files.c.scan_status,
-            "sensitivity": files.c.sensitivity,
-            "readAs": files.c.read_as,
-            "readPath": files.c.read_path,
-        }
-        chosen = {k: list(v) for k, v in (filters or {}).items() if k in facet_cols and v}
-        # A list that names no purpose and no record leaves out the purposes listed only when asked for; the purpose
-        # facet still counts them, so the filter offers them.
-        asked = "purpose" in chosen or purpose is not None or ref_type is not None or ref_id is not None
-        hidden = [] if asked else [files.c.purpose.not_in(LISTED_WHEN_ASKED)]
-
-        def facet_where(skip: str | None = None) -> list[sa.ColumnElement[bool]]:
-            shown = [] if skip == "purpose" else hidden
-            return [*(facet_cols[k].in_(v) for k, v in chosen.items() if k != skip), *shown]
-
-        where = [*base, *facet_where(), self._in_view(view, tenant, at)]
+        asked = bool(params.filters.get("purpose")) or ref_type is not None or ref_id is not None
+        if not asked:
+            shown = [p for p in purposes if p not in LISTED_WHEN_ASKED]
+            params = params.model_copy(update={"filters": {**params.filters, "purpose": shown}})
+        search = (files.c.name, files.c.uploaded_by, files.c.digest)
+        query = sa.select(files, self._reference_count(), *self._hold_columns()).where(*base)
         async with self.tx() as c:
-            total = int((await c.execute(sa.select(sa.func.count()).select_from(files).where(*where))).scalar_one())
-            listed = await rows(
+            page = await list_page(
                 c,
-                sa.select(files, self._reference_count(), *self._hold_columns())
-                .where(*where)
-                .order_by(files.c.uploaded_at.desc(), files.c.id)
-                .limit(page_size)
-                .offset((page - 1) * page_size),
-                ListedFile,
+                query.where(self._in_view(view, tenant, at)),
+                params,
+                search=search,
+                sortable={"name": files.c.name, "uploadedAt": files.c.uploaded_at},
+                default_sort=files.c.uploaded_at.desc(),
+                filters=FACETS,
+                facets=FACETS,
             )
+            # The views' counts under the page's own search and filters: the same rows list_page counted, by view.
+            words = (params.search or "").strip()
+            chosen = (
+                [files.c.id.in_(params.ids)]
+                if params.ids is not None
+                else [sa.or_(*(contains(col, words) for col in search))]
+                if words
+                else []
+            )
+            wanted = [FACETS[k].in_(v) for k, v in params.filters.items() if k in FACETS and v]
             counts: dict[str, int] = {}
             for v in VIEWS:
-                in_view = self._in_view(v, tenant, at)
-                q = sa.select(sa.func.count()).select_from(files).where(*base, *facet_where(), in_view)
-                counts[v] = int((await c.execute(q)).scalar_one())
-            facets: dict[str, dict[str, int]] = {}
-            for key, col in facet_cols.items():
-                q = (
-                    sa.select(col, sa.func.count())
-                    .where(*base, *facet_where(key), self._in_view(view, tenant, at))
-                    .group_by(col)
-                )
-                facets[key] = {str(k): int(n) for k, n in (await c.execute(q)).all()}
-        return Page(rows=listed, total=total, view_counts=counts, facets=facets)
+                q = sa.select(sa.func.count()).select_from(files).where(*base, *chosen, *wanted)
+                counts[v] = int((await c.execute(q.where(self._in_view(v, tenant, at)))).scalar_one())
+        return page, counts
 
     @staticmethod
     def _in_view(view: str, tenant: str, now: datetime) -> sa.ColumnElement[bool]:

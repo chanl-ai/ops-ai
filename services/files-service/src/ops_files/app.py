@@ -84,6 +84,7 @@ from ops_service_kit.http import (
     ok,
     operation_id,
 )
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_storage.base import ObjectLockedError, ObjectNotFoundError, content_disposition
@@ -272,8 +273,6 @@ async def who(p: CurrentCaller, request: Request) -> Who:
 
 
 Caller = Annotated[Who, Depends(who)]
-Page = Annotated[int, Query(ge=1)]
-PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
 IdempotencyKey = Annotated[
     str | None, Header(alias="Idempotency-Key", description="A retry with the same key returns the same file.")
 ]
@@ -395,9 +394,8 @@ def create_files_app(
     async def list_files(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
         _: Tx,
+        q: ListQuery,
         *,
-        page: Page = 1,
-        page_size: PageSize = 25,
         uploaded_by: Annotated[Literal["me"] | None, Query(alias="uploadedBy")] = None,
         purpose: Annotated[list[FilePurpose] | None, Query()] = None,
         scan: Annotated[list[str] | None, Query()] = None,
@@ -406,34 +404,26 @@ def create_files_app(
         read_path: Annotated[list[Literal["template", "model"]] | None, Query(alias="readPath")] = None,
         ref_type: Annotated[FileReferenceType | None, Query(alias="refType")] = None,
         ref_id: Annotated[str | None, Query(alias="refId")] = None,
-        search: str = "",
         uploaded_after: Annotated[datetime | None, Query(alias="uploadedAfter")] = None,
         uploaded_before: Annotated[datetime | None, Query(alias="uploadedBefore")] = None,
         view: Literal["all", "quarantined", "legal_hold", "unreferenced", "expiring"] = "all",
     ) -> JSONResponse:
-        """Available files of the caller's team, newest first; `uploadedBy=me` keeps the caller's own. Search, the
-        uploaded-since date, the view and the purpose, scan, sensitivity, read-as type and read path filters run in
-        the query, which also answers each view's count and the facet counts; `readPath=model` keeps files no
-        template matched."""
+        """Available files of the caller's team on the shared list contract, newest first (`sortBy` name or
+        uploadedAt); `uploadedBy=me` keeps the caller's own. Search, the uploaded dates, the view and the purpose,
+        scan, sensitivity, read-as type and read path filters run in the query, which also answers each view's count
+        and the facet counts; `readPath=model` keeps files no template matched. The filters are declared here so a
+        bad value is refused; ListQuery reads the same keys as its filters."""
+        del purpose, scan, sensitivity, read_as, read_path
         return ok(
             await files.list(
                 who,
-                page=page,
-                page_size=page_size,
+                q,
                 mine=uploaded_by == "me",
                 ref_type=ref_type,
                 ref_id=ref_id,
-                search=search,
                 uploaded_after=uploaded_after,
                 uploaded_before=uploaded_before,
                 view=view,
-                filters={
-                    "purpose": list(purpose or []),
-                    "scan": scan or [],
-                    "sensitivity": sensitivity or [],
-                    "readAs": read_as or [],
-                    "readPath": list(read_path or []),
-                },
             )
         )
 

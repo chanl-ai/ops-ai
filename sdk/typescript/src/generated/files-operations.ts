@@ -132,8 +132,6 @@ export const filesOperations = {
     "path": "/v1/files",
     "pathParams": [],
     "query": [
-      "page",
-      "pageSize",
       "uploadedBy",
       "purpose",
       "scan",
@@ -142,10 +140,15 @@ export const filesOperations = {
       "readPath",
       "refType",
       "refId",
-      "search",
       "uploadedAfter",
       "uploadedBefore",
-      "view"
+      "view",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
