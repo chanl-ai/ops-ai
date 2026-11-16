@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ops_agents.api.app import create_app
 from ops_agents.api.model_aliases import HttpModelAliases, ModelsUnavailable, chat_aliases
 from ops_agents.store.base import metadata
+from ops_agents.store.template_copies import TemplateCopies
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.settings import Settings
@@ -183,6 +184,24 @@ async def test_restore_copies_into_a_new_draft_and_delete_waits_for_its_workflow
     assert (await client.delete(f"/v1/agents/{FRAUD}")).status_code == 204
     assert (await client.get(f"/v1/agents/{FRAUD}")).status_code == 404
     assert "agent:ag_fraud" not in {g["name"] for g in (await client.get("/v1/graphs")).json()["data"]}
+
+
+async def test_a_delete_that_fails_part_way_keeps_the_agent(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The delete removes the agent and stops its copies counting in one transaction: when the second write fails the
+    agent is still there to delete again, never half gone."""
+    created = await _create(client)
+
+    async def fails(*_: Any) -> None:
+        raise RuntimeError("the copies table is unavailable")
+
+    monkeypatch.setattr(TemplateCopies, "removed_record", fails)
+    failed = await client.delete(f"/v1/agents/{created['id']}")
+    assert failed.status_code == 500, failed.text
+    monkeypatch.undo()
+    assert (await _agent(client, created["id"]))["id"] == created["id"]
+    assert (await client.delete(f"/v1/agents/{created['id']}")).status_code == 204
 
 
 async def test_test_turn_stops_at_the_gate_on_a_write_tool(client: AsyncClient) -> None:

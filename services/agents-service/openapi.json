@@ -45636,7 +45636,7 @@
     },
     "/v1/runs": {
       "get": {
-        "description": "The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`\ncounts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.",
+        "description": "The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`\ncounts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
         "operationId": "workflows_list_engine_runs",
         "parameters": [
           {
@@ -45881,7 +45881,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker\nrunning the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a\nversion is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to\none workflow starts that one only, on the version it pins when it pins one.",
+        "description": "Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker\nrunning the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a\nversion is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to\none workflow starts that one only, on the version it pins when it pins one.\nNo request transaction: the run and its work row keep start_run's own transaction, which a worker claims from.",
         "operationId": "workflows_start_engine_run",
         "parameters": [
           {
@@ -46096,7 +46096,7 @@
     },
     "/v1/runs/set-aside-emails/{event_id}/run": {
       "post": {
-        "description": "Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under\nthe email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may\nrun it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment\n(the email stays set aside).",
+        "description": "Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under\nthe email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may\nrun it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment\n(the email stays set aside).\nNo request transaction: the email's attachments are stored in files-service between its reads and its write.",
         "operationId": "workflows_run_set_aside_email",
         "parameters": [
           {
@@ -46294,7 +46294,7 @@
     },
     "/v1/runs/start": {
       "post": {
-        "description": "Starts a run from the start form its trigger declares (`startForm` on the definition), through the same entry\nthe trigger's real source uses: a test email goes through the mailbox listener's own start, so its run gets the\ninput and steps a mailbox email gets; a form's values become the input. The run records the person and how they\nstarted it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger\nonly its source starts, `email_filtered` for a test email the trigger's filters would skip.",
+        "description": "Starts a run from the start form its trigger declares (`startForm` on the definition), through the same entry\nthe trigger's real source uses: a test email goes through the mailbox listener's own start, so its run gets the\ninput and steps a mailbox email gets; a form's values become the input. The run records the person and how they\nstarted it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger\nonly its source starts, `email_filtered` for a test email the trigger's filters would skip.\nNo request transaction: a test email's attachments go to files-service between its reads and its writes.",
         "operationId": "workflows_start_by_hand",
         "parameters": [
           {
@@ -46483,7 +46483,7 @@
     },
     "/v1/runs/{run_id}": {
       "get": {
-        "description": "The run with every step from the journal: per node its input, output, port, attempts and errors.",
+        "description": "The run with every step from the journal: per node its input, output, port, attempts and errors.\nNo request transaction: names, the masking policy and file names come from platform-service and files-service.",
         "operationId": "workflows_get_engine_run",
         "parameters": [
           {
@@ -46671,7 +46671,7 @@
     },
     "/v1/runs/{run_id}/cancel": {
       "post": {
-        "description": "Cancels a run that has not ended: a queued run never starts, a waiting run's review leaves Reviews, a running\npass finishes and journals the step under way and begins no other. Cancelling a cancelled run returns it; a run\nthat succeeded or failed is refused (409).",
+        "description": "Cancels a run that has not ended: a queued run never starts, a waiting run's review leaves Reviews, a running\npass finishes and journals the step under way and begins no other. Cancelling a cancelled run returns it; a run\nthat succeeded or failed is refused (409).\nNo request transaction: the masking policy (platform-service) is asked after the writes, with none open.",
         "operationId": "workflows_cancel_engine_run",
         "parameters": [
           {
@@ -46859,7 +46859,7 @@
     },
     "/v1/runs/{run_id}/events": {
       "get": {
-        "description": "The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps\npolling until the run ends or waits for a person.",
+        "description": "The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps\npolling until the run ends or waits for a person.\nNo request transaction: the masking policy comes from platform-service, and each frame's read opens its own.",
         "operationId": "workflows_engine_run_events",
         "parameters": [
           {
@@ -47070,7 +47070,7 @@
     },
     "/v1/runs/{run_id}/retry": {
       "post": {
-        "description": "Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write\nwith a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is\nrefused (409 run_not_stuck).",
+        "description": "Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write\nwith a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is\nrefused (409 run_not_stuck).\nNo request transaction: the masking policy (platform-service) is asked after the write, with none open.",
         "operationId": "workflows_retry_engine_run",
         "parameters": [
           {
@@ -57242,7 +57242,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Stores the definition as the workflow's next version, once it passes every check; the same definition again\nreturns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless\nthe caller is a builder or admin of the team that owns the workflow (the acting team for a new one).",
+        "description": "Stores the definition as the workflow's next version, once it passes every check; the same definition again\nreturns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless\nthe caller is a builder or admin of the team that owns the workflow (the acting team for a new one).\nNo request transaction: the AI-steps policy (platform-service) and document types (documents-service) are asked\nbetween its reads and its write, with none open.",
         "operationId": "workflows_create_definition",
         "parameters": [
           {
@@ -57642,7 +57642,7 @@
     },
     "/v1/workflows/definitions/validate": {
       "post": {
-        "description": "Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads\nnowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that\nnever refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.",
+        "description": "Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads\nnowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that\nnever refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.\nNo request transaction: it reads no row, and documents-service is asked for field shapes.",
         "operationId": "workflows_validate_definition",
         "parameters": [
           {
@@ -58010,6 +58010,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
+        "description": "One definition at a version (its newest when left out), its versions and its open review.",
         "operationId": "workflows_get_definition",
         "parameters": [
           {
@@ -58589,7 +58590,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once\nunder the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it\nno longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a\nworkflow no team owns). The request lists what each step acts on: its operation, agent and approver.",
+        "description": "Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once\nunder the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it\nno longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a\nworkflow no team owns). The request lists what each step acts on: its operation, agent and approver.\nNo request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked\nwith none open.",
         "operationId": "workflows_request_definition_publish",
         "parameters": [
           {
@@ -59163,7 +59164,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
       "get": {
-        "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.",
+        "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.\nNo request transaction: the version is read, then documents-service is asked with none open.",
         "operationId": "workflows_definition_shapes",
         "parameters": [
           {
@@ -59360,7 +59361,7 @@
     },
     "/v1/workflows/node-types": {
       "get": {
-        "description": "Every registered node type at every version: ports with their connection types, parameters as JSON Schema with\nthe form generated from them, effects, retry and executor, and why the acting team cannot use one now.",
+        "description": "Every registered node type at every version: ports with their connection types, parameters as JSON Schema with\nthe form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request\ntransaction: it reads no row, and the AI-steps policy comes from platform-service.",
         "operationId": "workflows_node_types",
         "parameters": [
           {
@@ -59539,7 +59540,7 @@
     },
     "/v1/workflows/option-sources": {
       "get": {
-        "description": "The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,\nregistry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from\nthe definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.",
+        "description": "The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,\nregistry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from\nthe definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.\nNo request transaction: the tools source is asked of tools-service.",
         "operationId": "workflows_option_sources",
         "parameters": [
           {

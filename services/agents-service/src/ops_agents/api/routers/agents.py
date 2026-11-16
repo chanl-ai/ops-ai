@@ -2,6 +2,12 @@
 
 Rows are the console's `Agent`; versions its `AgentVersion`; a publish request answers with its `Review`. Bulk routes
 are not served.
+
+A route that only reads and writes this service's database answers in one request transaction (`Tx`): the versions,
+the recent runs and the delete. The others take none, so no connection is held while another party answers: an
+agent's reply names its stale grants from tools-service's directory (list, create, read, change, restore, pause), the
+read names its team from platform-service, the publish preview and publish read the team's publish policy there and
+ask models-service for the aliases, and the test, eval and job routes run the model.
 """
 
 from __future__ import annotations
@@ -19,9 +25,9 @@ from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_MANUAL
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, ListResult
+from ops_service_kit.http import Envelope, In, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 
 from ...store.evals import EvalStore
@@ -81,7 +87,7 @@ Reader: TypeAlias = Annotated[Principal, Depends(reader_of("agents"))]  # noqa: 
 Channel = Literal["voice", "chat", "email", "api"]
 
 
-class Guardrails(WireModel):
+class Guardrails(In):
     redact_pii: bool = True
     # Empty (None) is no cap; a number caps each turn. No ceiling: a real agent may need many.
     max_tool_calls_per_turn: int | None = Field(default=None, ge=1)
@@ -94,7 +100,7 @@ class Guardrails(WireModel):
     blocked_topics: list[str] = Field(default_factory=list[str])
 
 
-class AgentInput(WireModel):
+class AgentInput(In):
     name: str = Field(min_length=1, max_length=200)
     role: str = Field(min_length=1, max_length=400)
     # A models-service alias; empty runs the agent on the runtime's alias.
@@ -106,7 +112,7 @@ class AgentInput(WireModel):
     protection: Literal["system", "managed"] | None = None
 
 
-class GuardrailPinInput(WireModel):
+class GuardrailPinInput(In):
     guardrail_id: str
     # None or 0 on a new pin takes the published version.
     version: int | None = None
@@ -114,12 +120,12 @@ class GuardrailPinInput(WireModel):
     enabled: bool = True
 
 
-class WidgetPinInput(WireModel):
+class WidgetPinInput(In):
     widget_id: str
     version: int | None = None
 
 
-class AgentPatch(WireModel):
+class AgentPatch(In):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     role: str | None = Field(default=None, min_length=1, max_length=400)
     model: str | None = None
@@ -155,51 +161,51 @@ class AgentPatch(WireModel):
     protection: Literal["system", "managed"] | None = None
 
 
-class PublishRequestInput(WireModel):
+class PublishRequestInput(In):
     version: int
     note: str = ""
 
 
-class PausedInput(WireModel):
+class PausedInput(In):
     paused: bool
 
 
-class TestInput(WireModel):
+class TestInput(In):
     # No run-as: a test runs as the person testing (there is no Run as), so a field naming someone else
     # would be accepted and ignored.
     message: str = Field(min_length=1)
 
 
-class EvalCheckInput(WireModel):
+class EvalCheckInput(In):
     type: str
     tool: str | None = None
     text: str | None = None
 
 
-class EvalCaseContextInput(WireModel):
+class EvalCaseContextInput(In):
     collections: list[str] = Field(default_factory=list[str])
 
 
-class EvalCaseInput(WireModel):
+class EvalCaseInput(In):
     name: str
     input: str
     context: EvalCaseContextInput | None = None
     checks: list[EvalCheckInput] = Field(default_factory=list[EvalCheckInput])
 
 
-class EvalRunInput(WireModel):
+class EvalRunInput(In):
     # Empty is 422 from the use case, not Pydantic 400.
     # Omitted: run the cases saved on the agent and keep the run. Given: score these and keep nothing.
     cases: list[EvalCaseInput] | None = None
 
 
-class JobInput(WireModel):
+class JobInput(In):
     message: str = "Review held wires."
     due_at: str | None = None
     key: str = "job"
 
 
-class JobArmed(WireModel):
+class JobArmed(Out):
     """What arming a job answers: the thread, the key, and whichever of the timer or the started run applies."""
 
     thread_id: str
@@ -562,7 +568,7 @@ async def agent_users(rt: Runtime, agent_id: str) -> list[dict[str, str]]:
 
 
 @router.delete("/{agent_id}", status_code=204, response_model=None)
-async def delete_agent(rt: Rt, me: Cl, agent_id: str) -> Response:
+async def delete_agent(rt: Rt, me: Cl, _: Tx, agent_id: str) -> Response:
     """Deletes the agent. 409 `in_use` while a workflow of the team runs it, naming each in `details.usedBy`, so the
     person changes or removes those first."""
     await changeable(rt, me, agent_id, "delete")
@@ -575,13 +581,14 @@ async def delete_agent(rt: Rt, me: Cl, agent_id: str) -> Response:
             details={"usedBy": users},
         )
     await registry(rt).delete(agent_id)
-    take_down(rt, agent_id)
     await TemplateCopies(rt.db).removed_record("agent", agent_id)
+    # Out of the catalogue once both writes stand, so a failed delete leaves the agent serving as before.
+    take_down(rt, agent_id)
     return Response(status_code=204)
 
 
 @router.get("/{agent_id}/versions", response_model=Envelope[list[AgentVersion]])
-async def list_versions(rt: Rt, _: Reader, agent_id: str) -> JSONResponse:
+async def list_versions(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONResponse:
     reg = registry(rt)
     row = await reg.row(agent_id)
     requests = await reg.requests("agent", agent_id)
@@ -616,7 +623,9 @@ def _meta(thread: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/{agent_id}/runs", response_model=Envelope[list[AgentRun]])
-async def recent_runs(rt: Rt, _: Reader, agent_id: str, limit: Annotated[int, Query(ge=1, le=50)] = 10) -> JSONResponse:
+async def recent_runs(
+    rt: Rt, _: Reader, __: Tx, agent_id: str, limit: Annotated[int, Query(ge=1, le=50)] = 10
+) -> JSONResponse:
     """The agent's newest threads in the selected team: chats with it and runs of its own `agent:<id>` graph."""
     await registry(rt).row(agent_id)
     assert rt.graph_store is not None

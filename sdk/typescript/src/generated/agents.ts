@@ -1882,6 +1882,7 @@ export interface paths {
          * List Engine Runs
          * @description The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`
          *     counts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.
+         *     No request transaction: people's names and the masking policy come from platform-service, with none open.
          */
         get: operations["workflows_list_engine_runs"];
         put?: never;
@@ -1891,6 +1892,7 @@ export interface paths {
          *     running the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a
          *     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to
          *     one workflow starts that one only, on the version it pins when it pins one.
+         *     No request transaction: the run and its work row keep start_run's own transaction, which a worker claims from.
          */
         post: operations["workflows_start_engine_run"];
         delete?: never;
@@ -1914,6 +1916,7 @@ export interface paths {
          *     the email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may
          *     run it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment
          *     (the email stays set aside).
+         *     No request transaction: the email's attachments are stored in files-service between its reads and its write.
          */
         post: operations["workflows_run_set_aside_email"];
         delete?: never;
@@ -1938,6 +1941,7 @@ export interface paths {
          *     input and steps a mailbox email gets; a form's values become the input. The run records the person and how they
          *     started it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger
          *     only its source starts, `email_filtered` for a test email the trigger's filters would skip.
+         *     No request transaction: a test email's attachments go to files-service between its reads and its writes.
          */
         post: operations["workflows_start_by_hand"];
         delete?: never;
@@ -1956,6 +1960,7 @@ export interface paths {
         /**
          * Get Engine Run
          * @description The run with every step from the journal: per node its input, output, port, attempts and errors.
+         *     No request transaction: names, the masking policy and file names come from platform-service and files-service.
          */
         get: operations["workflows_get_engine_run"];
         put?: never;
@@ -1980,6 +1985,7 @@ export interface paths {
          * @description Cancels a run that has not ended: a queued run never starts, a waiting run's review leaves Reviews, a running
          *     pass finishes and journals the step under way and begins no other. Cancelling a cancelled run returns it; a run
          *     that succeeded or failed is refused (409).
+         *     No request transaction: the masking policy (platform-service) is asked after the writes, with none open.
          */
         post: operations["workflows_cancel_engine_run"];
         delete?: never;
@@ -1999,6 +2005,7 @@ export interface paths {
          * Engine Run Events
          * @description The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps
          *     polling until the run ends or waits for a person.
+         *     No request transaction: the masking policy comes from platform-service, and each frame's read opens its own.
          */
         get: operations["workflows_engine_run_events"];
         put?: never;
@@ -2023,6 +2030,7 @@ export interface paths {
          * @description Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write
          *     with a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is
          *     refused (409 run_not_stuck).
+         *     No request transaction: the masking policy (platform-service) is asked after the write, with none open.
          */
         post: operations["workflows_retry_engine_run"];
         delete?: never;
@@ -2886,6 +2894,8 @@ export interface paths {
          * @description Stores the definition as the workflow's next version, once it passes every check; the same definition again
          *     returns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless
          *     the caller is a builder or admin of the team that owns the workflow (the acting team for a new one).
+         *     No request transaction: the AI-steps policy (platform-service) and document types (documents-service) are asked
+         *     between its reads and its write, with none open.
          */
         post: operations["workflows_create_definition"];
         delete?: never;
@@ -2928,6 +2938,7 @@ export interface paths {
          * @description Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads
          *     nowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that
          *     never refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.
+         *     No request transaction: it reads no row, and documents-service is asked for field shapes.
          */
         post: operations["workflows_validate_definition"];
         delete?: never;
@@ -2943,7 +2954,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Definition */
+        /**
+         * Get Definition
+         * @description One definition at a version (its newest when left out), its versions and its open review.
+         */
         get: operations["workflows_get_definition"];
         put?: never;
         post?: never;
@@ -3015,6 +3029,8 @@ export interface paths {
          *     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
          *     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
          *     workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+         *     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
+         *     with none open.
          */
         post: operations["workflows_request_definition_publish"];
         delete?: never;
@@ -3074,6 +3090,7 @@ export interface paths {
          * Definition Shapes
          * @description What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
          *     its settings, or read from its document type or operation. A mapping picker reads it.
+         *     No request transaction: the version is read, then documents-service is asked with none open.
          */
         get: operations["workflows_definition_shapes"];
         put?: never;
@@ -3094,7 +3111,8 @@ export interface paths {
         /**
          * Node Types
          * @description Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
-         *     the form generated from them, effects, retry and executor, and why the acting team cannot use one now.
+         *     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
+         *     transaction: it reads no row, and the AI-steps policy comes from platform-service.
          */
         get: operations["workflows_node_types"];
         put?: never;
@@ -3117,6 +3135,7 @@ export interface paths {
          * @description The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
          *     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
          *     the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+         *     No request transaction: the tools source is asked of tools-service.
          */
         get: operations["workflows_option_sources"];
         put?: never;
