@@ -83,6 +83,25 @@ async def test_an_operations_mocks_are_changed_and_paged_in_one_transaction(gate
     assert counts == dict.fromkeys(["add 0", "add 1", "add 2", "list", "change", "delete"], 1), counts
 
 
+async def test_an_mcp_links_routes_each_hold_one_transaction(gateway: Gateway) -> None:  # noqa: F811
+    c = gateway.client
+    counts: dict[str, int] = {}
+    # A picked workflow, which the start checks, not the create: the dev caller's team runs no module's tools.
+    made = {"name": "Tx links", "tools": [{"id": "workflow:wf_tx", "label": "Tx flow"}]}
+    r, counts["create"] = await _counted(c, "POST", "/v1/mcp-links", made, {})
+    assert r.status_code == 201, r.text
+    link = f"/v1/mcp-links/{r.json()['data']['id']}"
+    for name, method, path, body in (
+        ("list", "GET", "/v1/mcp-links", None),
+        ("get", "GET", link, None),
+        ("pause", "PATCH", link, {"paused": True}),
+        ("delete", "DELETE", link, None),
+    ):
+        r, counts[name] = await _counted(c, method, path, body, {})
+        assert r.status_code in (200, 204), (name, r.text)
+    assert counts == dict.fromkeys(["create", "list", "get", "pause", "delete"], 1), counts
+
+
 @pytest.mark.parametrize("path", ["/v1/egress/hosts"])
 async def test_a_page_past_the_end_answers_the_last_page(
     client: httpx.AsyncClient,  # noqa: F811

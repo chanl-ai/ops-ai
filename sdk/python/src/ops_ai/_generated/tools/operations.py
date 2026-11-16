@@ -496,7 +496,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/mcp-links",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "mcp_links_pause_mcp_link": {
@@ -1128,9 +1128,32 @@ class Operations:
         "Knowledge Source Hosts"
         return self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def mcp_links_list_mcp_links(self) -> list[McpLinkView]:
+    def mcp_links_list_mcp_links(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMcpLinkView:
         "List Mcp Links"
-        return self._t.call(SERVICE, OPERATIONS["mcp_links_list_mcp_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["mcp_links_list_mcp_links"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def mcp_links_create_mcp_link(self, body: McpLinkIn) -> McpLinkView:
         "Create Mcp Link"
@@ -1726,9 +1749,32 @@ class AsyncOperations:
         "Knowledge Source Hosts"
         return await self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def mcp_links_list_mcp_links(self) -> list[McpLinkView]:
+    async def mcp_links_list_mcp_links(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMcpLinkView:
         "List Mcp Links"
-        return await self._t.call(SERVICE, OPERATIONS["mcp_links_list_mcp_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["mcp_links_list_mcp_links"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def mcp_links_create_mcp_link(self, body: McpLinkIn) -> McpLinkView:
         "Create Mcp Link"

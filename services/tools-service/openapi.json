@@ -4596,6 +4596,25 @@
         "title": "Envelope[HostList]",
         "type": "object"
       },
+      "Envelope_ListResult_McpLinkView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_McpLinkView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[McpLinkView]]",
+        "type": "object"
+      },
       "Envelope_McpLinkView_": {
         "additionalProperties": false,
         "properties": {
@@ -5206,29 +5225,6 @@
           "data"
         ],
         "title": "Envelope[list[KnowledgeSourceView]]",
-        "type": "object"
-      },
-      "Envelope_list_McpLinkView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/McpLinkView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[McpLinkView]]",
         "type": "object"
       },
       "Envelope_list_MyAccount__": {
@@ -5977,6 +5973,7 @@
         "title": "InvalidField",
         "type": "object"
       },
+      "JsonValue": {},
       "KindField": {
         "additionalProperties": false,
         "properties": {
@@ -6314,6 +6311,38 @@
           "access"
         ],
         "title": "LinkTool",
+        "type": "object"
+      },
+      "ListResult_McpLinkView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/McpLinkView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[McpLinkView]",
         "type": "object"
       },
       "ListedHost": {
@@ -9393,7 +9422,9 @@
           "inputSchema": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -23586,9 +23617,103 @@
     },
     "/v1/mcp-links": {
       "get": {
-        "description": "The links of every team the person belongs to and may see channels in, by name, each with its newest\ncall: an admin of several teams sees them on one page, as the Team filter needs. A key or service token reads\nits own team's only.",
+        "description": "The links of every team the caller may see channels in, by name ignoring case, a page at a time on the\nshared list contract (`search` on the name), each with its newest call. A person reads the team they act in;\nthe dev caller and a service token every team they may see.",
         "operationId": "mcp_links_list_mcp_links",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -23659,7 +23784,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_McpLinkView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_McpLinkView__"
                 }
               }
             },

@@ -723,9 +723,9 @@ export interface paths {
         };
         /**
          * List Mcp Links
-         * @description The links of every team the person belongs to and may see channels in, by name, each with its newest
-         *     call: an admin of several teams sees them on one page, as the Team filter needs. A key or service token reads
-         *     its own team's only.
+         * @description The links of every team the caller may see channels in, by name ignoring case, a page at a time on the
+         *     shared list contract (`search` on the name), each with its newest call. A person reads the team they act in;
+         *     the dev caller and a service token every team they may see.
          */
         get: operations["mcp_links_list_mcp_links"];
         put?: never;
@@ -3017,6 +3017,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[McpLinkView]] */
+        Envelope_ListResult_McpLinkView__: {
+            data: components["schemas"]["ListResult_McpLinkView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[McpLinkView] */
         Envelope_McpLinkView_: {
             data: components["schemas"]["McpLinkView"];
@@ -3288,16 +3297,6 @@ export interface components {
         Envelope_list_KnowledgeSourceView__: {
             /** Data */
             data: components["schemas"]["KnowledgeSourceView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[McpLinkView]] */
-        Envelope_list_McpLinkView__: {
-            /** Data */
-            data: components["schemas"]["McpLinkView"][];
             /**
              * Success
              * @constant
@@ -3602,6 +3601,7 @@ export interface components {
             /** Message */
             message: string;
         };
+        JsonValue: unknown;
         /** KindField */
         KindField: {
             /** Advanced */
@@ -3723,6 +3723,18 @@ export interface components {
             name: string;
             /** Title */
             title: string;
+        };
+        /** ListResult[McpLinkView] */
+        ListResult_McpLinkView_: {
+            /** Data */
+            data: components["schemas"]["McpLinkView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /** ListedHost */
         ListedHost: {
@@ -4652,7 +4664,7 @@ export interface components {
             id: string;
             /** Inputschema */
             inputSchema?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Label */
             label: string;
@@ -10903,7 +10915,14 @@ export interface operations {
     };
     mcp_links_list_mcp_links: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10916,7 +10935,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_McpLinkView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_McpLinkView__"];
                 };
             };
             /** @description Invalid request */

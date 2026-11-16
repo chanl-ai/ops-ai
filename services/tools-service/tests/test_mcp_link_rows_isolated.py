@@ -9,9 +9,11 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.schema import isolation_kind
-from ops_tools.store.mcp_links import LinkedTool, McpLinks, mcp_links
+from ops_store.team_scope import acting_as
+from ops_tools.store.mcp_links import LINK_TEAMS, LinkedTool, McpLinks, mcp_links
 from ops_tools.store.tenancy import ROLE
 
 TEAM_A, TEAM_B = "team_cards", "team_ops"
@@ -33,3 +35,13 @@ async def test_another_team_or_tenant_reads_no_link_without_the_team_clause(engi
             async with isolation.isolated_tx(engine, role=ROLE) as c:
                 seen = (await c.execute(count)).scalar_one()
         assert seen == rows, f"{in_tenant}/{team} read {seen} of team A's links"
+
+
+async def test_the_list_of_several_teams_holds_the_named_teams_only(engine: AsyncEngine, tenant: str) -> None:
+    tools = [LinkedTool(name="lookup_case", title="Look up a case", kind="tool", access="read")]
+    for team, name in ((TEAM_A, "Cards"), (TEAM_B, "Ops"), ("team_payroll", "Payroll")):
+        await McpLinks(engine).create(tenant, team, slug=name.lower(), name=name, tools=tools, by="t")
+    # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
+    with isolation.tenant_wide(LINK_TEAMS, tenant_id=tenant), acting_as(TEAM_A):
+        page = await McpLinks(engine).listed(tenant, [TEAM_A, TEAM_B], ListParams())
+    assert [x["name"] for x in page["data"]] == ["Cards", "Ops"]

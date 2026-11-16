@@ -94,6 +94,8 @@ WIDENINGS: dict[str, set[str]] = {
     "STAMP_VERSIONS": {"services/tools-service/src/ops_tools/store/plugin_bindings.py"},
     "ALLOW_LIST": {"services/tools-service/src/ops_tools/store/egress.py"},
     "HEADER_KEYS": {"services/tools-service/src/ops_tools/store/modules.py"},
+    # The MCP links list of a caller who may see channels in several teams names each team in its query.
+    "LINK_TEAMS": {"services/tools-service/src/ops_tools/store/mcp_links.py"},
     "AUDIT_RETENTION": {"services/tools-service/src/ops_tools/__main__.py"},
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},

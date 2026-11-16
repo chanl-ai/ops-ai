@@ -578,7 +578,14 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/v1/mcp-links",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "mcp_links_pause_mcp_link": {

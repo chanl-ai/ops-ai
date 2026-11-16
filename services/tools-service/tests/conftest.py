@@ -434,7 +434,7 @@ def build_app(
             egress_router(EgressStore(engine)),
             secrets_router(resolver, modules=ModuleStore(engine), credentials=connections),
             send_policy_router(SendPolicies(engine), directory),
-            mcp_links_router(links, calls, registry, directory, settings.tools_public_url),
+            mcp_links_router(links, registry, directory, settings.tools_public_url),
             mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(accounts, directory),
             apps_router(apps, directory),

@@ -131,17 +131,6 @@ class GatewayCall(Out):
     caller_name: str | None
 
 
-class LinkLastCall(Out):
-    """A link's newest call, for the links list's Last call column."""
-
-    link_id: str
-    created_at: str
-    outcome: str
-    client_name: str | None
-    client_id: str | None
-    sub: str
-
-
 class CallStats(Out):
     """Calls, errors and p95 latency of a module or one of its operations."""
 
@@ -430,23 +419,6 @@ class CallLog(Store):
         async with self.tx() as c:
             found = await rows(c, q, GatewayCall)
             return found, int((await c.execute(total)).scalar_one())
-
-    async def last_by_link(self, tenant_id: str, team_id: str, link_ids: list[str]) -> dict[str, LinkLastCall]:
-        """Each link's newest call in the team, for the links list's Last call column."""
-        if not link_ids:
-            return {}
-        t = gateway_calls
-        newest = (
-            sa.select(t.c.link_id, sa.func.max(t.c.created_at).label("at"))
-            .where(t.c.tenant_id == tenant_id, t.c.team_id == team_id, t.c.link_id.in_(link_ids))
-            .group_by(t.c.link_id)
-            .subquery()
-        )
-        q = sa.select(t.c.link_id, t.c.created_at, t.c.outcome, t.c.client_name, t.c.client_id, t.c.sub).join(
-            newest, sa.and_(t.c.link_id == newest.c.link_id, t.c.created_at == newest.c.at)
-        )
-        async with self.tx() as c:
-            return {r.link_id: r for r in await rows(c, q, LinkLastCall)}
 
     async def made_for(
         self, person: str, module_ids: list[str], since: str, *, tenant_id: str, team_id: str

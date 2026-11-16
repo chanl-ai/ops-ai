@@ -99,7 +99,7 @@ def build_app() -> FastAPI:
             expressions_router(),
             secrets_router(secrets),
             send_policy_router(SendPolicies(engine), directory),
-            mcp_links_router(McpLinks(engine), CallLog(engine), ToolRegistry(catalog), directory, None),
+            mcp_links_router(McpLinks(engine), ToolRegistry(catalog), directory, None),
             mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(connection_service, directory),
             plugins_router(PluginAccounts(host, connection_service), directory),

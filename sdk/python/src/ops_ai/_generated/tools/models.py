@@ -477,6 +477,9 @@ class InvalidField(TypedDict, closed=True):
     message: str
 
 
+JsonValue: TypeAlias = Any
+
+
 class KindField(TypedDict, closed=True):
     advanced: bool
     choices: NotRequired[list[str] | None]
@@ -776,7 +779,7 @@ class PersonSignedIn(TypedDict, closed=True):
 class PickedTool(TypedDict, closed=True):
     description: NotRequired[str | None]
     id: str
-    inputSchema: NotRequired[dict[str, Any] | None]
+    inputSchema: NotRequired[dict[str, JsonValue] | None]
     label: str
 
 
@@ -1564,11 +1567,6 @@ class EnvelopeListKnowledgeSourceView(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListMcpLinkView(TypedDict, closed=True):
-    data: list[McpLinkView]
-    success: Literal[True]
-
-
 class EnvelopeListMyAccount(TypedDict, closed=True):
     data: list[MyAccount]
     success: Literal[True]
@@ -1592,6 +1590,12 @@ class HTTPValidationError(TypedDict):
 class ImportOperationsIn(TypedDict, closed=True):
     operations: list[DiscoveredOperationIn]
     source: ModuleSourceIn
+
+
+class ListResultMcpLinkView(TypedDict, closed=True):
+    data: list[McpLinkView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
 
 
 class ListedHost(TypedDict, closed=True):
@@ -2131,6 +2135,11 @@ class EnvelopeChange(TypedDict, closed=True):
 
 class EnvelopeExecutionList(TypedDict, closed=True):
     data: ExecutionList
+    success: Literal[True]
+
+
+class EnvelopeListResultMcpLinkView(TypedDict, closed=True):
+    data: ListResultMcpLinkView
     success: Literal[True]
 
 

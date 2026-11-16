@@ -325,7 +325,7 @@ def main() -> None:
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
-            mcp_links_router(mcp_links, calls, registry, directory, settings.tools_public_url),
+            mcp_links_router(mcp_links, registry, directory, settings.tools_public_url),
             mocks_router(MockStore(engine), store, directory),
             *(
                 [
