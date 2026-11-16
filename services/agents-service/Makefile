@@ -3,7 +3,7 @@
 # with `make -C services/agents-service <target>`; the root `make up` runs it in the background.
 STACK_SVC := agents
 include ../../make/service-common.mk
-.PHONY: install run worker test lint typecheck verify checks migrate clean db-up db-down standards sbom openapi openapi-check
+.PHONY: install run worker test lint typecheck verify checks migrate registry-tenant-preflight clean db-up db-down standards sbom openapi openapi-check
 
 export PYDANTIC_AI_NO_BANNER := 1
 
@@ -41,6 +41,9 @@ checks: lint typecheck loader-test standards openapi-check ## Everything verify 
 
 migrate: ## Alembic upgrade head
 	uv run alembic upgrade head
+
+registry-tenant-preflight: ## Teams the registry tenant migration cannot place (none, or two tenants); exit 1 when any
+	uv run python scripts/registry_tenant_preflight.py
 
 clean: ## Remove caches
 	rm -rf .pytest_cache .ruff_cache
