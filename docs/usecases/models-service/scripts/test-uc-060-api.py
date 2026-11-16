@@ -23,7 +23,8 @@ HOLD_ARGS = {"wireId": "W-1001", "action": "hold", "hours": 24}
 
 def ask(api: httpx.Client, text: str, **extra: Any) -> httpx.Response:
     body = {"model": "default", "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}]}
-    auth = {"Authorization": f"Bearer {RUNTIME_KEY}"}
+    # As agents-service calls it, naming its tenant: the call log is that tenant's, listed by its service token.
+    auth = {"Authorization": f"Bearer {RUNTIME_KEY}", "X-Tenant-Id": "local"}
     return api.post("/v1/models/chat/completions", json={**body, **extra}, headers=auth)
 
 

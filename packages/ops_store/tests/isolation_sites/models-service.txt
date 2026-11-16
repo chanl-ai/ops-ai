@@ -1,5 +1,5 @@
-# models-service: 0 raw, 0 caught, 25 install blocks with no tenant (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+# models-service: 0 raw, 0 caught, 23 install blocks with no tenant (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
 5 install services/models-service/src/ops_models/store/aliases.py
-4 install services/models-service/src/ops_models/store/calls.py
+2 install services/models-service/src/ops_models/store/calls.py
 9 install services/models-service/src/ops_models/store/keys.py
 7 install services/models-service/src/ops_models/store/providers.py

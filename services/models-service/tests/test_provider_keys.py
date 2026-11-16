@@ -140,7 +140,7 @@ async def test_a_connection_whose_key_is_not_saved_is_refused_without_calling_th
     assert r.json()["error"]["code"] == "provider_key_missing"
     assert rig.key_name in r.json()["error"]["message"]
     assert rig.seen == []
-    assert [c["reason"] for c in await rig.models.calls(rig.key_id)] == ["provider_key_missing"]
+    assert [c["reason"] for c in await rig.models.calls(rig.key_id, rig.tenant)] == ["provider_key_missing"]
 
 
 async def test_a_call_naming_no_account_uses_no_accounts_key(rig: Rig) -> None:

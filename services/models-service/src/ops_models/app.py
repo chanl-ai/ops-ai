@@ -755,19 +755,24 @@ def create_models_app(
             self.provider: Any = None
 
         async def log(self, outcome: str, reason: str | None = None, **values: Any) -> None:
-            await call_log.record(
-                {
-                    "id": new_id("mc"),
-                    "input_tokens": values.pop("input_tokens", 0),
-                    "output_tokens": values.pop("output_tokens", 0),
-                    "cost": values.pop("cost", Decimal(0)),
-                    "latency_ms": int((time.perf_counter() - self.started) * 1000),
-                    "outcome": outcome,
-                    "reason": reason,
-                    **self.row,
-                    **values,
-                }
-            )
+            """The call's one row: the named tenant's, written as that tenant; a call that named none has no tenant's
+            log to land in (`CallLog.record`)."""
+            row = {
+                "id": new_id("mc"),
+                "input_tokens": values.pop("input_tokens", 0),
+                "output_tokens": values.pop("output_tokens", 0),
+                "cost": values.pop("cost", Decimal(0)),
+                "latency_ms": int((time.perf_counter() - self.started) * 1000),
+                "outcome": outcome,
+                "reason": reason,
+                **self.row,
+                **values,
+            }
+            if self.tenant:
+                with isolation.scope(self.tenant, None):
+                    await call_log.record(row)
+            else:
+                await call_log.record(row)
 
         async def refuse(self, status: int, code: str, message: str, *, versioned: bool = True) -> JSONResponse:
             await self.log("error" if status >= 500 else "denied", code, **(self.version if versioned else {}))
@@ -857,23 +862,22 @@ def create_models_app(
                     "tenant_budget_exhausted",
                     f"Tenant {tenant} has spent its budget of {share.budget} on model key {key.id}.",
                 )
-        if key.daily_cap is not None:
-            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            if await call_log.spent(key.id, since=today) >= key.daily_cap:
-                return await gate.refuse(
-                    429, "daily_spend_cap", f"Model key {key.id} has spent its {key.daily_cap} for today."
-                )
+        # The key's caps are the key's, summed over every tenant it spends for, in one read.
+        totals = await call_log.totals(key.id, now, run_id=row.get("run_id") if run_cap is not None else None)
+        if key.daily_cap is not None and totals.today >= key.daily_cap:
+            return await gate.refuse(
+                429, "daily_spend_cap", f"Model key {key.id} has spent its {key.daily_cap} for today."
+            )
         if run_cap is not None and row.get("run_id"):
             try:
                 cap = Decimal(run_cap)
             except InvalidOperation:
                 return await gate.refuse(400, "invalid_spend_cap", "X-Run-Spend-Cap is an amount, such as 5.00.")
-            if await call_log.spent(key.id, run_id=row["run_id"]) >= cap:
+            if totals.run >= cap:
                 return await gate.refuse(
                     429, "run_spend_cap", f"Run {row['run_id']} has spent its {cap} on model key {key.id}."
                 )
-        # The log's times are the database's, so the one-minute window is measured on the database's clock too.
-        recent = await call_log.recent(key.id)
+        recent = totals.recent
         alias_row = await aliases.current(alias_name)
         if recent >= key.rate_limit_per_minute:
             return await gate.refuse(

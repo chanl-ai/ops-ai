@@ -9,6 +9,8 @@ rotation's overlap. A model call row is metadata only: never a prompt or a compl
 
 from __future__ import annotations
 
+from typing import Any
+
 import sqlalchemy as sa
 
 from ops_store.dialect import db_now
@@ -114,32 +116,66 @@ model_key_tenants = sa.Table(
     info=TENANT_SCOPED,
 )
 
+
+def _call_columns() -> list[sa.Column[Any]]:
+    """One call's metadata, shared by the tenant's log and the calls that named no tenant."""
+    return [
+        sa.Column("id", sa.String(64), primary_key=True),
+        sa.Column("key_id", sa.String(200), nullable=False, index=True),
+        sa.Column("alias", sa.String(120), nullable=False),
+        sa.Column("alias_version", sa.Integer),
+        sa.Column("provider_model", sa.String(200)),
+        sa.Column("input_tokens", sa.Integer, nullable=False),
+        sa.Column("output_tokens", sa.Integer, nullable=False),
+        sa.Column("cost", MONEY, nullable=False),
+        sa.Column("latency_ms", sa.Integer, nullable=False),
+        sa.Column("outcome", sa.String(16), nullable=False),  # ok | error | denied
+        sa.Column("reason", sa.String(64)),
+        sa.Column("sensitivity", sa.String(16)),
+        sa.Column("run_id", sa.String(64)),
+        sa.Column("step_id", sa.String(200)),
+        sa.Column("thread_id", sa.String(64), index=True),
+        sa.Column("request_hash", sa.String(64)),
+    ]
+
+
 model_call_log = sa.Table(
     "model_call_log",  # not model_calls: agents-service's replay ledger has that name in the same database
     metadata,
-    sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("key_id", sa.String(200), nullable=False, index=True),
-    sa.Column("alias", sa.String(120), nullable=False),
-    sa.Column("alias_version", sa.Integer),
-    sa.Column("provider_model", sa.String(200)),
-    sa.Column("input_tokens", sa.Integer, nullable=False),
-    sa.Column("output_tokens", sa.Integer, nullable=False),
-    sa.Column("cost", MONEY, nullable=False),
-    sa.Column("latency_ms", sa.Integer, nullable=False),
-    sa.Column("outcome", sa.String(16), nullable=False),  # ok | error | denied
-    sa.Column("reason", sa.String(64)),
-    sa.Column("sensitivity", sa.String(16)),
-    sa.Column("run_id", sa.String(64)),
-    sa.Column("step_id", sa.String(200)),
-    sa.Column("thread_id", sa.String(64), index=True),
-    sa.Column("request_hash", sa.String(64)),
+    *_call_columns(),
     sa.Column("tenant_id", sa.String(64)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), index=True),
     # How many images the request carried, refused or sent.
     sa.Column("images", sa.Integer, nullable=False, server_default="0"),
-    # A run's spend, which a caller's per-run cap (X-Run-Spend-Cap) reads before each call.
     sa.Index("ix_model_call_log_key_run", "key_id", "run_id"),
-    # A key's rate limit and daily and run caps sum its rows across every tenant, and a refusal before any tenant is
-    # known still writes its row, so the log is the install's; tenant_id records whose share paid and polices nothing.
-    info=system("a model key's call log, summed per key across tenants; read only by service tokens"),
+    # Held to its tenant by the database: written and read only as ROLE in that tenant (models_0012). A key's caps
+    # are read from model_key_spend, never from here.
+    info=TENANT_SCOPED,
+)
+
+# A call that named no tenant (no X-Tenant-Id): refused before a tenant is known, or served by a key that spends for
+# no tenant. It has no tenant to be held to, so it never lands in the tenant's log.
+model_call_refusals = sa.Table(
+    "model_call_refusals",
+    metadata,
+    *_call_columns(),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), index=True),
+    sa.Column("images", sa.Integer, nullable=False, server_default="0"),
+    info=system("a model call that named no tenant: no tenant column and no tenant to hold it to"),
+)
+
+# What a key's caps read, summed across every tenant it spends for: per `period`, `sec:<epoch second>` (the rate
+# limit, kept two minutes), `day:<UTC date>` (the daily cap) and `run:<run id>` (a caller's run cap). Written in the
+# transaction of the call's row, whichever table that is in.
+model_key_spend = sa.Table(
+    "model_key_spend",
+    metadata,
+    sa.Column("key_id", sa.String(200), primary_key=True),
+    sa.Column("period", sa.String(80), primary_key=True),
+    sa.Column("amount", MONEY, nullable=False),
+    sa.Column("calls", sa.Integer, nullable=False),
+    # When the period's first call was counted, on the service's clock: the rate window and the sweep of old seconds
+    # read it.
+    sa.Column("starts_at", sa.DateTime(timezone=True), nullable=False),
+    info=system("a model key's spend and call count per period, summed across the tenants it spends for"),
 )

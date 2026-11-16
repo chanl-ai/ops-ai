@@ -33,6 +33,15 @@ SERVICE = {
 }
 
 
+# A caller's own tenant, as every real caller names it: the call log is that tenant's, read by its service token.
+LOCAL = {"X-Tenant-Id": "local"}
+
+
+def _service(tenant: str) -> dict[str, str]:
+    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant, ttl_s=3600)
+    return {"Authorization": f"Bearer {token}"}
+
+
 def pytest_configure(config: pytest.Config) -> None:
     isolate_from_stack()
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
@@ -69,8 +78,9 @@ class Models:
             "/v1/models/chat/completions", json=body, headers={"Authorization": f"Bearer {secret}", **headers}
         )
 
-    async def calls(self, key_id: str) -> list[dict[str, Any]]:
-        r = await self.client.get("/v1/models/calls", params={"keyId": key_id}, headers=SERVICE)
+    async def calls(self, key_id: str, tenant: str = "local") -> list[dict[str, Any]]:
+        """The key's calls that `tenant` made, read with a service token naming it."""
+        r = await self.client.get("/v1/models/calls", params={"keyId": key_id}, headers=_service(tenant))
         return r.json()["data"]["items"]
 
     async def spent(self, key_id: str) -> Decimal:

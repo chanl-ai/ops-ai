@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- models-service, stamped at models_0011
+-- models-service, stamped at models_0012
 CREATE TABLE provider_connections (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
@@ -86,6 +86,43 @@ CREATE INDEX ix_model_call_log_key_run ON model_call_log (key_id, run_id);
 GO
 CREATE INDEX ix_model_call_log_thread_id ON model_call_log (thread_id);
 GO
+CREATE TABLE model_call_refusals (
+	id VARCHAR(64) NOT NULL, 
+	key_id VARCHAR(200) NOT NULL, 
+	alias VARCHAR(120) NOT NULL, 
+	alias_version INTEGER NULL, 
+	provider_model VARCHAR(200) NULL, 
+	input_tokens INTEGER NOT NULL, 
+	output_tokens INTEGER NOT NULL, 
+	cost NUMERIC(18, 6) NOT NULL, 
+	latency_ms INTEGER NOT NULL, 
+	outcome VARCHAR(16) NOT NULL, 
+	reason VARCHAR(64) NULL, 
+	sensitivity VARCHAR(16) NULL, 
+	run_id VARCHAR(64) NULL, 
+	step_id VARCHAR(200) NULL, 
+	thread_id VARCHAR(64) NULL, 
+	request_hash VARCHAR(64) NULL, 
+	created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
+	images INTEGER NOT NULL DEFAULT '0', 
+	CONSTRAINT model_call_refusals_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_model_call_refusals_created_at ON model_call_refusals (created_at);
+GO
+CREATE INDEX ix_model_call_refusals_key_id ON model_call_refusals (key_id);
+GO
+CREATE INDEX ix_model_call_refusals_thread_id ON model_call_refusals (thread_id);
+GO
+CREATE TABLE model_key_spend (
+	key_id VARCHAR(200) NOT NULL, 
+	period VARCHAR(80) NOT NULL, 
+	amount NUMERIC(18, 6) NOT NULL, 
+	calls INTEGER NOT NULL, 
+	starts_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT model_key_spend_pkey PRIMARY KEY (key_id, period)
+);
+GO
 CREATE TABLE model_aliases (
 	name VARCHAR(120) NOT NULL, 
 	version INTEGER NOT NULL, 
@@ -127,10 +164,16 @@ CREATE SECURITY POLICY ops_security.model_key_tenants_tenant
     ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_key_tenants AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.model_call_log_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.model_call_log,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_call_log AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_call_log AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_models (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_models_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_models (version_num) VALUES ('models_0011');
+INSERT INTO alembic_version_models (version_num) VALUES ('models_0012');
 GO

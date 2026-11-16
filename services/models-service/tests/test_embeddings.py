@@ -14,7 +14,7 @@ import pytest
 from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls
 from ops_service_kit.scripted_vectors import scripted_vector
 
-from .conftest import Models
+from .conftest import LOCAL, Models
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -40,7 +40,7 @@ async def test_a_chat_alias_is_refused_for_embeddings_and_an_embedding_alias_for
             ["x y"], alias="bank-standard", width=None, tenant="local", step="s"
         )
     assert (refused.value.code, refused.value.status) == ("alias_kind_mismatch", 400)
-    chat = await models.complete(secret, alias="bank-embed")
+    chat = await models.complete(secret, alias="bank-embed", **LOCAL)
     assert chat.status_code == 400 and chat.json()["error"]["code"] == "alias_kind_mismatch"
     assert [c["reason"] for c in await models.calls(key_id)] == ["alias_kind_mismatch", "alias_kind_mismatch"]
 
