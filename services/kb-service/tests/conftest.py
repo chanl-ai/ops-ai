@@ -37,7 +37,13 @@ from .readings_fake import LocalReadings
 ROOT = Path(__file__).parents[1]
 # The test files that run on SQL Server too; the store-mssql job in .github/workflows/ci.yml runs the same list.
 BOTH_DATABASES = frozenset(
-    {"test_kb_isolation.py", "test_kb_changed.py", "test_team_isolation.py", "test_background_tenants.py"}
+    {
+        "test_kb_isolation.py",
+        "test_kb_changed.py",
+        "test_team_isolation.py",
+        "test_background_tenants.py",
+        "test_system_user_predicates.py",
+    }
 )
 
 
