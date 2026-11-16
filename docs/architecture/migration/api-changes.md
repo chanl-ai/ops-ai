@@ -38,6 +38,10 @@ that has not changed still gets the same answer.
 | Route | What changed | Before | After | What a caller must change | Old form works |
 |---|---|---|---|---|---|
 | `GET /v1/models/calls` | behaviour: calls that name no tenant | listed with every tenant's calls (before the call log was held to its tenant) | not listed: a completion sent with no `X-Tenant-Id` is kept in `model_calls_untenanted` for operators and no route reads it | Send `X-Tenant-Id` on every completion whose calls must be listed | No |
+| `GET /health/background` | new route | absent | the service's background processes (`models_spend_retention`, the sweep of idle key spend) and their state, as every service answers it | Nothing; new | Yes |
+| `GET /health` | reply model | an open object | `Health`: `status` only, no other field | Nothing | Yes |
+| `POST /v1/models/chat/completions` | reply field `choices[].message.tool_calls` | each call passed on as the provider sent it, any key included | `ToolCall`: `id`, `type` `function`, `function` {`name`, `arguments`}, OpenAI's names unchanged; a key outside OpenAI's format is not passed on | Nothing for an OpenAI client | Yes |
+| `GET /health` | reply model | an untyped object `{status, reason?}`; the 503 body was written by hand | `Health`: `status` `ok` or `degraded`, `reason` `database` or `ocr` or absent, no other field; the same bodies on 200 and 503 | Nothing | Yes |
 
 ## documents-service
 

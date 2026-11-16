@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ops_service_kit.http import ExternalOut, In, Out, Passthrough
 
 
-class Health(BaseModel):
+class Health(Out):
     status: str
 
 
@@ -135,10 +135,25 @@ class ChatCompletionRequest(Passthrough):
     tools: list[dict[str, Any]] | None = None
 
 
+class ToolFunction(ExternalOut):
+    """The function a tool call names and its arguments, a JSON string as the model wrote it."""
+
+    name: str
+    arguments: str
+
+
+class ToolCall(ExternalOut):
+    """One tool call in OpenAI's reply format."""
+
+    id: str
+    type: Literal["function"]
+    function: ToolFunction
+
+
 class ChatMessage(ExternalOut):
     role: Literal["assistant"]
     content: str | None
-    tool_calls: list[dict[str, Any]] | None = None
+    tool_calls: list[ToolCall] | None = None
 
 
 class ChatChoice(ExternalOut):

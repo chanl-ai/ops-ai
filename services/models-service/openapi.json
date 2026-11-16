@@ -744,8 +744,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/ToolCall"
                 },
                 "type": "array"
               },
@@ -1351,6 +1350,7 @@
         "type": "object"
       },
       "Health": {
+        "additionalProperties": false,
         "properties": {
           "status": {
             "title": "Status",
@@ -1974,6 +1974,51 @@
           }
         },
         "title": "RotateIn",
+        "type": "object"
+      },
+      "ToolCall": {
+        "additionalProperties": false,
+        "description": "One tool call in OpenAI's reply format.",
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/ToolFunction"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "function",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "function"
+        ],
+        "title": "ToolCall",
+        "type": "object"
+      },
+      "ToolFunction": {
+        "additionalProperties": false,
+        "description": "The function a tool call names and its arguments, a JSON string as the model wrote it.",
+        "properties": {
+          "arguments": {
+            "title": "Arguments",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "arguments"
+        ],
+        "title": "ToolFunction",
         "type": "object"
       }
     }
@@ -3125,22 +3170,6 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
             "name": "x-data-sensitivity",
             "required": false,
             "schema": {
@@ -3243,6 +3272,22 @@
                 }
               ],
               "title": "X-Run-Spend-Cap"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -3393,22 +3438,6 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
             "name": "x-data-sensitivity",
             "required": false,
             "schema": {
@@ -3479,6 +3508,22 @@
                 }
               ],
               "title": "X-Run-Spend-Cap"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],

@@ -32,7 +32,16 @@ from ops_metering import Price, Usage, cost
 from ops_policy import CredentialStore
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.credentials import credential_store
-from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.errors import (
+    ApiError,
+    Conflict,
+    Forbidden,
+    NotFound,
+    TooManyRequests,
+    Unauthorized,
+    Unprocessable,
+    ValidationFailed,
+)
 from ops_service_kit.http import (
     Envelope,
     In,
@@ -77,6 +86,8 @@ from .schemas import (
     ProviderCreated,
     ProviderKeyOut,
     ProviderOut,
+    ToolCall,
+    ToolFunction,
 )
 from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, ProviderKeyStore, Providers, cleared
 from .store.aliases import AliasRow, ServingAlias
@@ -227,7 +238,29 @@ def new_secret() -> str:
     return "mk_" + secrets.token_urlsafe(24)
 
 
+INVALID_KEY = "The model key is unknown, or a rotated secret past its overlap."
+
+
+async def model_key(authorization: Annotated[str | None, Header()] = None) -> str:
+    """The model key a completion or an embedding authenticates with, from its `Authorization` header as OpenAI
+    clients send it; 401 invalid_key when none is sent. The gate looks the key up in its one transaction and answers
+    the same 401 for a key it does not know."""
+    presented = (authorization or "").removeprefix("Bearer ").strip()
+    if not presented:
+        raise Unauthorized(INVALID_KEY, code="invalid_key")
+    return presented
+
+
+def refusal(status: int, code: str, message: str) -> ApiError:
+    """A refusal a route raises, rendered by the kit's handler."""
+    error = ApiError(message, code=code)
+    error.status = status
+    return error
+
+
 def refused(status: int, code: str, message: str) -> JSONResponse:
+    """A refusal returned rather than raised, by a model call whose call-log row must commit with it: the kit's error
+    body, as the handler would render it."""
     return JSONResponse(error_body(status, code, message), status_code=status)
 
 
@@ -237,62 +270,76 @@ def provider_refused(e: ProviderError) -> JSONResponse:
     return JSONResponse(error_body(e.status, e.code, e.message), status_code=e.status, headers=headers)
 
 
+def typed(reply: Out | Sequence[Out], status: int = 200) -> JSONResponse:
+    """A reply model in the success envelope, under its wire names."""
+    if isinstance(reply, Out):
+        return ok(reply.model_dump(by_alias=True), status)
+    return ok([r.model_dump(by_alias=True) for r in reply], status)
+
+
+def _tool_call(call: Mapping[str, Any]) -> ToolCall:
+    """A provider's tool call in OpenAI's reply format; a key OpenAI's format does not name is not passed on."""
+    function: Mapping[str, Any] = call.get("function") or {}
+    named = ToolFunction(name=str(function.get("name") or ""), arguments=str(function.get("arguments") or ""))
+    return ToolCall(id=str(call.get("id") or ""), type="function", function=named)
+
+
 def _iso(v: datetime | None) -> str | None:
     return v.isoformat() if v is not None else None
 
 
-def _key_view(r: KeyRow) -> dict[str, Any]:
-    return {
-        "id": r.id,
-        "kind": r.kind,
-        "budget": str(r.budget),
-        "spent": str(r.spent),
-        "rateLimitPerMinute": r.rate_limit_per_minute,
-        "expiresAt": _iso(r.expires_at),
-        "status": r.status,
-        "rotatedAt": _iso(r.rotated_at),
-        "previousValidUntil": _iso(r.previous_valid_until),
-    }
+def _key_view(r: KeyRow) -> KeyOut:
+    return KeyOut(
+        id=r.id,
+        kind=r.kind,
+        budget=str(r.budget),
+        spent=str(r.spent),
+        rate_limit_per_minute=r.rate_limit_per_minute,
+        expires_at=_iso(r.expires_at),
+        status=r.status,
+        rotated_at=_iso(r.rotated_at),
+        previous_valid_until=_iso(r.previous_valid_until),
+    )
 
 
-def _alias_view(r: AliasRow) -> dict[str, Any]:
-    return {
-        "name": r.name,
-        "version": r.version,
-        "kind": r.kind,
-        "providerId": r.provider_id,
-        "modelId": r.model_id,
-        "clearedSensitivity": r.cleared_sensitivity,
-        "inputPerMillion": str(r.input_per_million),
-        "outputPerMillion": str(r.output_per_million),
-        "status": r.status,
-        "reasoningEffort": r.reasoning_effort,
-        "images": r.images,
-    }
+def _alias_view(r: AliasRow) -> AliasOut:
+    return AliasOut(
+        name=r.name,
+        version=r.version,
+        kind=r.kind,
+        provider_id=r.provider_id,
+        model_id=r.model_id,
+        cleared_sensitivity=r.cleared_sensitivity,
+        input_per_million=str(r.input_per_million),
+        output_per_million=str(r.output_per_million),
+        status=r.status,
+        reasoning_effort=r.reasoning_effort,
+        images=r.images,
+    )
 
 
-def _provider_view(r: ProviderRow) -> dict[str, Any]:
-    return {
-        "id": r.id,
-        "name": r.name,
-        "type": r.type,
-        "baseUrl": r.base_url,
-        "keyRef": r.key_ref,
-        "apiVersion": r.api_version,
-        "region": r.region,
-        "observedRegion": r.observed_region,
-        "regionMismatch": region_mismatch(r.observed_region, r.region),
-    }
+def _provider_view(r: ProviderRow) -> ProviderOut:
+    return ProviderOut(
+        id=r.id,
+        name=r.name,
+        type=r.type,
+        base_url=r.base_url,
+        key_ref=r.key_ref,
+        api_version=r.api_version,
+        region=r.region,
+        observed_region=r.observed_region,
+        region_mismatch=region_mismatch(r.observed_region, r.region),
+    )
 
 
-def _provider_key_view(r: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        "name": r["name"],
-        "version": r["version"],
-        "createdBy": r["created_by"],
-        "createdAt": r["created_at"].isoformat(),
-        "rotatedAt": _iso(r["rotated_at"]),
-    }
+def _provider_key_view(r: Mapping[str, Any]) -> ProviderKeyOut:
+    return ProviderKeyOut(
+        name=r["name"],
+        version=r["version"],
+        created_by=r["created_by"],
+        created_at=r["created_at"].isoformat(),
+        rotated_at=_iso(r["rotated_at"]),
+    )
 
 
 def _key_refusal(key: KeyRow, now: datetime) -> tuple[int, str, str] | None:
@@ -390,8 +437,8 @@ def create_models_app(
     connections_guard = Depends(connections_caller)
 
     @app.get("/health", tags=["health"], response_model=Health)
-    async def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
-        return {"status": "ok"}
+    async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
+        return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
     async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
@@ -410,7 +457,7 @@ def create_models_app(
     )
     async def list_providers(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Every provider connection: where its calls go and the name of the key it signs in with, never a key."""
-        return ok([_provider_view(r) for r in await providers.all()])
+        return typed([_provider_view(r) for r in await providers.all()])
 
     @app.post(
         "/v1/models/providers",
@@ -434,8 +481,8 @@ def create_models_app(
             "region": body.region,
         }
         if not await providers.create({**row, "created_at": now_iso()}):
-            return refused(409, "provider_exists", f"A provider connection named {body.name} exists.")
-        return ok({"id": pid, "name": body.name, "type": body.type}, status=201)
+            raise Conflict(f"A provider connection named {body.name} exists.", code="provider_exists")
+        return typed(ProviderCreated(id=pid, name=body.name, type=body.type), status=201)
 
     @app.put(
         "/v1/models/providers/{provider_id}",
@@ -450,19 +497,19 @@ def create_models_app(
         new version."""
         row = await providers.get(provider_id)
         if row is None:
-            return refused(404, "provider_not_found", f"No provider connection {provider_id}.")
+            raise refusal(404, "provider_not_found", f"No provider connection {provider_id}.")
         # A connection's type never changes after it is made, so the check holds without a lock.
         if row.type == "scripted":
-            return refused(409, "provider_not_rebindable", "A scripted connection has no endpoint to change.")
+            raise Conflict("A scripted connection has no endpoint to change.", code="provider_not_rebindable")
         # An api-version or region left out keeps the stored one: the install scripts move only the base URL and key.
         given = body.model_fields_set
         version = body.api_version if "api_version" in given else row.api_version
         region = body.region if "region" in given else row.region
         if (why := connection_problem(row.type, body.base_url, version, region)) is not None:
-            return refused(400, "validation_failed", why)
+            raise ValidationFailed(why)
         fields = {"base_url": body.base_url, "key_ref": body.key_ref, "api_version": version, "region": region}
         await providers.rebind(provider_id, fields)
-        return ok(_provider_view(row.model_copy(update={**fields, "observed_region": None})))
+        return typed(_provider_view(row.model_copy(update={**fields, "observed_region": None})))
 
     def account_admin(p: CurrentPrincipal) -> str:
         """settings.manage, held in the Security team: an account admin. Returns the actor."""
@@ -477,7 +524,7 @@ def create_models_app(
     async def list_provider_keys(p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The account's model provider keys by name; a value is never returned."""
         account_admin(p)
-        return ok([_provider_key_view(r) for r in await key_vault.listed(p.tenant_id)])
+        return typed([_provider_key_view(r) for r in await key_vault.listed(p.tenant_id)])
 
     @app.put(
         "/v1/provider-keys/{name}",
@@ -493,7 +540,7 @@ def create_models_app(
         by = account_admin(p)
         saved, _new = await key_vault.save(p.tenant_id, name, body.value, by=by)
         keys.forget(p.tenant_id, name)
-        return ok(_provider_key_view(saved))
+        return typed(_provider_key_view(saved))
 
     async def saved_key(p: Principal, name: str) -> str:
         """The key's value, read in a transaction of its own that is closed before the key goes to the provider; inside
@@ -522,10 +569,10 @@ def create_models_app(
                 http, key_fetch, body.provider, value, endpoint=body.endpoint, api_version=body.api_version
             )
         except KeyRefused as e:
-            return ok(KeyCheckOut(ok=False, reason=str(e)).model_dump(by_alias=True))
+            return typed(KeyCheckOut(ok=False, reason=str(e)))
         except EndpointRefused as e:
             raise Unprocessable(str(e), code="endpoint_refused") from e
-        return ok(KeyCheckOut(ok=True, models=len(found)).model_dump(by_alias=True))
+        return typed(KeyCheckOut(ok=True, models=len(found)))
 
     @app.get(
         "/v1/provider-keys/{name}/models",
@@ -601,7 +648,7 @@ def create_models_app(
             priced = {k: getattr(held_version, k) for k in prices if held_version is not None}
             if await aliases.add_version(alias, {**version_fields, **priced}) is None:
                 await aliases.create(alias, "chat", version_fields)
-        return ok(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)).model_dump(by_alias=True))
+        return typed(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)))
 
     @app.delete(
         "/v1/provider-keys/{name}",
@@ -629,7 +676,7 @@ def create_models_app(
         responses=ERRORS,
     )
     async def list_aliases(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok([_alias_view(cur) for cur in await aliases.all_current()])
+        return typed([_alias_view(cur) for cur in await aliases.all_current()])
 
     @app.post(
         "/v1/models/aliases",
@@ -641,8 +688,8 @@ def create_models_app(
     )
     async def create_alias(body: AliasIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         if not await aliases.create(body.name, body.kind, _version_fields(body)):
-            return refused(409, "alias_exists", f"Alias {body.name} exists; add a version instead.")
-        return ok({"name": body.name, "version": 1}, status=201)
+            raise Conflict(f"Alias {body.name} exists; add a version instead.", code="alias_exists")
+        return typed(AliasRef(name=body.name, version=1), status=201)
 
     @app.get(
         "/v1/models/aliases/{name}/versions",
@@ -653,7 +700,9 @@ def create_models_app(
     )
     async def list_versions(name: str, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         rows = [_alias_view(r) for r in await aliases.versions(name)]
-        return ok(rows) if rows else refused(404, "alias_not_found", f"No alias {name}.")
+        if not rows:
+            raise refusal(404, "alias_not_found", f"No alias {name}.")
+        return typed(rows)
 
     @app.post(
         "/v1/models/aliases/{name}/versions",
@@ -667,14 +716,14 @@ def create_models_app(
         # Versions are immutable: a change is a new version, which replaces the one serving.
         version = await aliases.add_version(name, _version_fields(body))
         if version is None:
-            return refused(404, "alias_not_found", f"No alias {name}.")
-        return ok({"name": name, "version": version}, status=201)
+            raise refusal(404, "alias_not_found", f"No alias {name}.")
+        return typed(AliasRef(name=name, version=version), status=201)
 
     @app.get(
         "/v1/models/keys", dependencies=[guard], tags=["keys"], response_model=Envelope[list[KeyOut]], responses=ERRORS
     )
     async def list_keys(_: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok([_key_view(r) for r in await key_store.all()])
+        return typed([_key_view(r) for r in await key_store.all()])
 
     @app.post(
         "/v1/models/keys",
@@ -689,9 +738,9 @@ def create_models_app(
         row = {"id": body.id, "kind": body.kind, "budget": body.budget, "spent": Decimal(0), "status": "active"}
         limits = {"rate_limit_per_minute": body.rate_limit_per_minute, "expires_at": body.expires_at}
         if not await key_store.issue({**row, **limits, "secret_hash": secret_hash(secret)}):
-            return refused(409, "key_exists", f"A key for {body.id} exists; rotate it instead.")
+            raise Conflict(f"A key for {body.id} exists; rotate it instead.", code="key_exists")
         # The secret is returned once and stored only as a hash.
-        return ok({"id": body.id, "secret": secret}, status=201)
+        return typed(KeySecret(id=body.id, secret=secret), status=201)
 
     @app.post(
         "/v1/models/keys/{key_id}/rotate",
@@ -705,10 +754,9 @@ def create_models_app(
         overlap = body.overlap_seconds if body.overlap_seconds is not None else overlap_seconds
         now = datetime.now(UTC)
         if not await key_store.rotate(key_id, secret_hash(secret), now + timedelta(seconds=overlap), now):
-            return refused(404, "key_not_found", f"No key {key_id}.")
-        return ok(
-            {"id": key_id, "secret": secret, "previousValidUntil": (now + timedelta(seconds=overlap)).isoformat()}
-        )
+            raise refusal(404, "key_not_found", f"No key {key_id}.")
+        until = (now + timedelta(seconds=overlap)).isoformat()
+        return typed(KeyRotated(id=key_id, secret=secret, previous_valid_until=until))
 
     @app.get(
         "/v1/models/calls", dependencies=[guard], tags=["calls"], response_model=Envelope[CallPage], responses=ERRORS
@@ -761,17 +809,19 @@ def create_models_app(
         spends on models needs a key with a budget."""
         key = await key_store.get(body.key_id)
         if key is None:
-            return refused(403, "key_not_registered", f"No model key is registered for {body.key_id}.")
+            raise Forbidden(f"No model key is registered for {body.key_id}.", code="key_not_registered")
         if (why := _key_refusal(key, datetime.now(UTC))) is not None:
-            return refused(*why)
+            raise refusal(*why)
         remaining: Decimal = key.budget - key.spent
         if body.alias and body.estimated_tokens:
             alias_row = await aliases.current(body.alias)
             if alias_row is not None:
                 estimate = cost(Usage(input_tokens=body.estimated_tokens), Price(alias_row.input_per_million))
                 if estimate > remaining:
-                    return refused(429, "key_budget_exhausted", f"The estimate {estimate} exceeds {remaining} left.")
-        return ok({"admitted": True, "remaining": str(remaining)})
+                    raise TooManyRequests(
+                        f"The estimate {estimate} exceeds {remaining} left.", code="key_budget_exhausted"
+                    )
+        return typed(Admission(admitted=True, remaining=str(remaining)))
 
     class Gate:
         """One authenticated call on its way to a provider: the key, the alias version it is served by, its price, and
@@ -875,7 +925,7 @@ def create_models_app(
             return self.alias_row
 
     async def open_gate(
-        authorization: str | None,
+        presented: str,
         alias_name: str,
         kind: str,
         *,
@@ -888,11 +938,10 @@ def create_models_app(
         """Every check a model call passes before it reaches a provider, in one order for chat and embeddings: the
         key, its budget and the tenant's share, the rate limit, the alias and its kind, the data's sensitivity, images,
         and the account's provider key."""
-        presented = (authorization or "").removeprefix("Bearer ").strip()
         now = datetime.now(UTC)
-        key = await key_store.by_secret(secret_hash(presented) if presented else "", now)
+        key = await key_store.by_secret(secret_hash(presented), now)
         if key is None:
-            return refused(401, "invalid_key", "The model key is unknown, or a rotated secret past its overlap.")
+            return refused(401, "invalid_key", INVALID_KEY)
         row_values = {"key_id": key.id, "alias": alias_name, "sensitivity": sensitivity, "tenant_id": tenant}
         gate = Gate(key, {**row_values, **row, "images": images}, tenant)
         if (why := _key_refusal(key, now)) is not None:
@@ -980,7 +1029,7 @@ def create_models_app(
     async def completions(
         request: ChatCompletionRequest,
         *,
-        authorization: Annotated[str | None, Header()] = None,
+        presented: Annotated[str, Depends(model_key)],
         x_data_sensitivity: Annotated[str, Header()] = "internal",
         x_run_id: Annotated[str | None, Header()] = None,
         x_step_id: Annotated[str | None, Header()] = None,
@@ -994,7 +1043,7 @@ def create_models_app(
         # The gate is one transaction, committed (a refusal's row with it) before the provider is called.
         async with isolation.request_transaction():
             gate = await open_gate(
-                authorization,
+                presented,
                 alias_name,
                 "chat",
                 sensitivity=x_data_sensitivity,
@@ -1055,7 +1104,7 @@ def create_models_app(
         await settle(done.input_tokens, done.output_tokens)
         # `tool_calls` is left unset, not None, when there are none: the route drops unset fields, so the key is absent.
         message = (
-            ChatMessage(role="assistant", content=done.text, tool_calls=done.tool_calls)
+            ChatMessage(role="assistant", content=done.text, tool_calls=[_tool_call(c) for c in done.tool_calls])
             if done.tool_calls
             else ChatMessage(role="assistant", content=done.text)
         )
@@ -1092,7 +1141,7 @@ def create_models_app(
     async def embeddings(
         request: EmbeddingsRequest,
         *,
-        authorization: Annotated[str | None, Header()] = None,
+        presented: Annotated[str, Depends(model_key)],
         x_data_sensitivity: Annotated[str, Header()] = "internal",
         x_run_id: Annotated[str | None, Header()] = None,
         x_step_id: Annotated[str | None, Header()] = None,
@@ -1105,7 +1154,7 @@ def create_models_app(
         # The gate is one transaction, committed (a refusal's row with it) before the provider is called.
         async with isolation.request_transaction():
             gate = await open_gate(
-                authorization,
+                presented,
                 request.model,
                 "embedding",
                 sensitivity=x_data_sensitivity,

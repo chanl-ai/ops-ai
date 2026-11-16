@@ -166,12 +166,13 @@ for that service.
 
 - The broad and install columns were added to the isolation check after the baselines were first committed, so "not
   counted" means no figure existed before.
-- Models' 23 install-scope sites touch five tables and none of them is the call log: `model_aliases` (5 sites),
-  `model_keys` (9), `provider_connections` (7) and `model_key_spend` (2, one of which also inserts into
-  `model_call_refusals`, the calls that name no tenant). Each table is marked install-wide in `store/tables.py`. The
-  call log (`model_call_log`) holds tenants' runs and costs; since `f24a1143` it is read and written on tenant
-  transactions, and a key's caps read `model_key_spend` instead. The 23 sites match
-  `packages/ops_store/tests/isolation_sites/models-service.txt` (aliases 5, calls 2, keys 9, providers 7).
+- Models' 24 install-scope sites touch five tables and none of them is the call log: `model_aliases` (5 sites),
+  `model_keys` (9), `provider_connections` (7) and `model_key_spend` (3: the caps' read, the write that also inserts
+  into `model_calls_untenanted`, the calls that name no tenant, and the sweep of idle spend). Each table is marked
+  install-wide in `store/tables.py`, and each block declares its tables. The call log (`model_call_log`) holds
+  tenants' runs and costs; since `f24a1143` it is read and written on tenant transactions, and a key's caps read
+  `model_key_spend` instead. The 24 sites match `packages/ops_store/tests/isolation_sites/models-service.txt`
+  (aliases 5, calls 3, keys 9, providers 7).
 - Runner's timeouts rise from 1 to 2 while its clients fall from 1 to 0: the check was widened to count a timeout
   given by position, so the second timeout existed before and was not counted. The two literal timeouts remain in
   `fetch.py` and `wasm.py`.

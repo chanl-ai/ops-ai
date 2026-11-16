@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI
 from fastapi.routing import APIRoute
 
 from ops_identity import current_caller, current_principal, current_service, current_tenant_caller
+from ops_models.app import model_key
 from ops_platform.api.app import _bearer
 from ops_runner.app import create_runner_app
 from ops_runner.wasm import WasmPython
@@ -39,11 +40,7 @@ SETTINGS_MODULE = "ops_service_kit.settings"
 IDENTITY = frozenset({current_caller, current_principal, current_service, current_tenant_caller})
 
 # Services the check finds problems in, with how many. A count only falls; one at zero is removed.
-WAITING = {
-    # `/v1/models/chat/completions` and `/v1/models/embeddings` are OpenAI-compatible: the model key is read from the
-    # `Authorization` header inside the handler, not by a dependency.
-    "models-service": 2,
-}
+WAITING: dict[str, int] = {}
 # Services with no app of their own to read: a folder with no source.
 NO_APP = {"hitl-service"}
 
@@ -113,6 +110,9 @@ def targets(service: str) -> list[Target]:
             Target(public, {_bearer}, PLATFORM_PUBLIC),
             Target(internal, service_principals(internal)),
         ]
+    if service == "models-service":
+        # The OpenAI-compatible completion and embedding routes authenticate by the model key a client sends.
+        return [Target(module.build_app(), set(IDENTITY) | {model_key})]
     return [Target(module.build_app())]
 
 
