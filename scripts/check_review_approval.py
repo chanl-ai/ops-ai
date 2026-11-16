@@ -17,6 +17,7 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -26,18 +27,32 @@ import baseline_history
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def approving(reviews: list[dict[str, Any]], allowed: set[str]) -> bool:
+def approving(
+    reviews: list[dict[str, Any]],
+    allowed: set[str],
+    head: str | None = None,
+    rose_since: Callable[[str], bool] = lambda _commit: True,
+) -> bool:
     """Whether a listed maintainer's latest review (a later review replaces an earlier one, so a dismissed or changed
-    mind counts) is an approval. `reviews` are {login, state, at} in any order."""
-    latest: dict[str, tuple[str, str]] = {}
+    mind counts) is an approval. `reviews` are {login, state, at, commit} in any order. With `head`, an approval
+    counts only on the head commit, or on an earlier one when `rose_since(commit)` says nothing was raised after it:
+    the reviewer did not see rows raised later."""
+    latest: dict[str, tuple[str, str, str]] = {}
     for review in reviews:
         login = str(review.get("login") or "").lower()
         if not login or review.get("state") in ("COMMENTED", "PENDING"):
             continue
         if login not in latest or str(review.get("at") or "") >= latest[login][0]:
-            latest[login] = (str(review.get("at") or ""), str(review.get("state") or ""))
+            latest[login] = (
+                str(review.get("at") or ""),
+                str(review.get("state") or ""),
+                str(review.get("commit") or ""),
+            )
     return any(
-        state == "APPROVED" and baseline_history.login_hash(login) in allowed for login, (_, state) in latest.items()
+        state == "APPROVED"
+        and baseline_history.login_hash(login) in allowed
+        and (head is None or commit == head or (bool(commit) and not rose_since(commit)))
+        for login, (_, state, commit) in latest.items()
     )
 
 
@@ -46,7 +61,7 @@ def fetch(repo: str, pr: int) -> list[dict[str, Any]]:
     done = subprocess.run(
         [
             "gh", "api", f"repos/{repo}/pulls/{pr}/reviews", "--paginate",
-            "--jq", "[.[] | {login: .user.login, state: .state, at: .submitted_at}]",
+            "--jq", "[.[] | {login: .user.login, state: .state, at: .submitted_at, commit: .commit_id}]",
         ],
         capture_output=True, text=True, check=True,
     )  # fmt: skip
@@ -61,8 +76,22 @@ def fetch(repo: str, pr: int) -> list[dict[str, Any]]:
     return pages
 
 
-def status(reviews: list[dict[str, Any]], allowed: set[str]) -> str:
-    return "approved" if approving(reviews, allowed) else "required"
+def status(
+    reviews: list[dict[str, Any]],
+    allowed: set[str],
+    head: str | None = None,
+    rose_since: Callable[[str], bool] = lambda _commit: True,
+) -> str:
+    return "approved" if approving(reviews, allowed, head, rose_since) else "required"
+
+
+def allowed_list(root: Path, base: str, head: str = "HEAD") -> set[str]:
+    """Who may approve: the list at the pull request's base. The head's list counts only for the one pull request that
+    adds the file (the base has none and the head has one); where neither has a list, nobody may approve."""
+    listed = baseline_history.maintainers_at(root, base)
+    if listed or baseline_history.has_maintainers(root, base):
+        return listed
+    return baseline_history.maintainers_at(root, head)
 
 
 def self_test() -> int:
@@ -90,17 +119,18 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--repo")
     parser.add_argument("--pr", type=int)
     parser.add_argument("--base", help="the pull request's base sha: its maintainers list is the one that counts")
+    parser.add_argument("--head", default="HEAD", help="the pull request's head sha, which a review must be on")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
     if not (args.repo and args.pr and args.base):
         parser.error("--repo, --pr and --base are required")
-    allowed = baseline_history.maintainers_at(ROOT, args.base)
-    # The pull request that adds the list has none at its base; that one time its own list counts, and its review is
-    # the owner's.
-    allowed = allowed or baseline_history.maintainers_at(ROOT, "HEAD")
-    print(status(fetch(args.repo, args.pr), allowed))
+    allowed = allowed_list(ROOT, args.base)
+    head = subprocess.run(
+        ["git", "rev-parse", args.head], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    print(status(fetch(args.repo, args.pr), allowed, head, lambda c: baseline_history.rose_since(ROOT, c, head)))
     return 0
 
 

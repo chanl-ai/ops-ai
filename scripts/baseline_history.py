@@ -21,6 +21,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -85,12 +86,43 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=False)
 
 
+def has_maintainers(root: Path, rev: str) -> bool:
+    """Whether the commit has a maintainers file at all, however many it lists."""
+    return _git(root, "cat-file", "-e", f"{rev}:{MAINTAINERS}").returncode == 0
+
+
 def maintainers_at(root: Path, rev: str) -> set[str]:
     """The login hashes the maintainers file lists at `rev`; none where the commit has no such file."""
     shown = _git(root, "show", f"{rev}:{MAINTAINERS}")
     if shown.returncode:
         return set()
     return {line.strip().lower() for line in shown.stdout.splitlines() if line.strip() and not line.startswith("#")}
+
+
+# The files a rise can be made in: every baseline and waiting list the history checks read.
+RATCHET_PATH = re.compile(
+    r"(^|/)[\w-]*baseline[\w-]*\.txt$|^access-exceptions-allowlist\.txt$|^scripts/access-baselines/"
+    r"|^packages/ops_store/tests/(isolation_sites|relay_sites|loop_health)/|^deploy/database/tests/test_indexes\.py$"
+    rf"|^{re.escape(MAINTAINERS)}$"
+)
+
+
+def rose_since(root: Path, reviewed: str, head: str = "HEAD") -> bool:
+    """Whether anything between a reviewed commit and `head` raised a baseline row, added a file to one or edited a
+    list that is not made of rows. A commit that is not in this checkout counts as a rise: it cannot be compared."""
+    if _git(root, "cat-file", "-e", f"{reviewed}^{{commit}}").returncode:
+        return True
+    for name in _git(root, "diff", "--name-only", reviewed, head).stdout.split():
+        if not RATCHET_PATH.search(name):
+            continue
+        if not name.endswith(".txt") or name == MAINTAINERS:
+            return True
+        before, after = _git(root, "show", f"{reviewed}:{name}"), _git(root, "show", f"{head}:{name}")
+        was = rows(before.stdout) if not before.returncode else Counter[str]()
+        now = rows(after.stdout) if not after.returncode else Counter[str]()
+        if raised(was, now):
+            return True
+    return False
 
 
 def login_hash(login: str) -> str:
