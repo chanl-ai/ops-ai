@@ -38,12 +38,14 @@ from sqlalchemy import event
 from sqlalchemy.engine import ExceptionContext
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
+from sqlalchemy.sql import visitors
 
 from ops_service_kit.logging import add_context, get_logger
 from ops_service_kit.request_timing import note_caller
 
 from . import dialect
-from .team_scope import acting_as, acting_team, set_acting_team
+from .schema import SYSTEM_KEY
+from .team_scope import InstallScopeError, acting_as, acting_team, set_acting_team
 
 log = get_logger(__name__)
 
@@ -174,14 +176,16 @@ def scope(tenant_id: str, team_id: str | None) -> Generator[Isolation]:
 def install_wide(reason: str) -> Generator[Isolation]:
     """No tenant for a block, logged with `reason`: statements on the install's own tables (marked `system(...)`) from
     a path that may have no caller (a route that authenticates by a model key, a seed, a loop). Inside a request it
-    runs on the request's connection; a tenant table's policy shows it no row and refuses its writes, for any login
-    row-level security applies to (every runtime login; the compose superuser bypasses it). `tenant()` raises inside."""
+    runs on the request's connection. Every statement on a connection in this scope is checked before it is sent
+    (`_refuse_outside_install`): one that names a table not marked `system(...)`, or SQL with no table metadata, raises
+    `InstallScopeError`, whatever the login and whether or not the table has a row policy. `tenant()` and
+    `team_visible` raise inside."""
     _need(reason, "install_wide")
     base = _ctx.get()
     _log_widen(base.kind if base else TASK, reason=reason, scope="install", tenant="-")
     token = _ctx.set(Isolation("", None, "install", base.kind if base else TASK, reason))
     try:
-        with acting_as(None):
+        with acting_as(None, install=True):
             yield _ctx.get()  # pyright: ignore[reportReturnType]
     finally:
         _ctx.reset(token)
@@ -333,6 +337,7 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
     seed, test): its own transaction, as `role` on PostgreSQL (a role row-level security applies to), with SQL
     Server's session context cleared when it ends however it ends. Only system_tx takes a second connection."""
     ctx = _in_force()
+    _guard(engine)
     state = _request_here(engine)
     if state is None:
         async with _own_tx(engine, ctx, role) as conn:
@@ -430,12 +435,62 @@ async def enter_transaction(
         case "mssql":
             await conn.execute(_MS_SET, {**values, "tenant_id": None} if install else values)
         case _:
-            return
+            pass
+    # Marked after the statement that set it: the connection now carries the scope its statements are checked by.
+    if install:
+        conn.info[_INSTALL] = True
+    else:
+        conn.info.pop(_INSTALL, None)
 
 
 async def leave_transaction(conn: AsyncConnection) -> None:
+    conn.info.pop(_INSTALL, None)
     if dialect.dialect_of(conn) == "mssql":
         await conn.execute(_MS_SET, dict.fromkeys(SETTINGS))
+
+
+# Install-wide statements -------------------------------------------------------------------------------------------
+
+# A connection's info key while it carries install scope. It lives on the pooled connection, so it is also cleared
+# when the connection goes back to the pool, however its block ended.
+_INSTALL = "ops_install_scope"
+
+
+def _guard(engine: AsyncEngine) -> None:
+    """Checks every statement on `engine`'s connections that carry install scope, registered once per engine before
+    its first isolated transaction opens a connection."""
+    sync = engine.sync_engine
+    if not event.contains(sync, "before_execute", _refuse_outside_install):
+        event.listen(sync, "before_execute", _refuse_outside_install)
+        # SQL for the driver (`exec_driver_sql`) skips before_execute; it reaches the cursor uncompiled.
+        event.listen(sync, "before_cursor_execute", _refuse_driver_sql)
+        event.listen(sync, "checkin", _forget_install)
+
+
+def _forget_install(_dbapi_conn: object, record: Any) -> None:
+    record.info.pop(_INSTALL, None)
+
+
+def _refuse_driver_sql(conn: sa.Connection, _cursor: Any, _sql: str, _params: Any, context: Any, _many: bool) -> None:
+    if conn.info.get(_INSTALL) and context.compiled is None:
+        raise InstallScopeError("refused: SQL for the driver inside an install-wide block names no table to check")
+
+
+def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> None:
+    """Raises before a statement on a connection in install scope is sent unless every table it names is marked
+    `system(...)`. Raw SQL (a text clause, a literal column, a string for the driver) names no table the check can
+    read, so it is refused rather than parsed; the mechanism's own context statement is the one exception. Each
+    statement is checked as written, so a cached compile does not skip it."""
+    if not conn.info.get(_INSTALL) or statement is _MS_SET:
+        return
+    for element in visitors.iterate(statement):
+        if isinstance(element, sa.TextClause) or (isinstance(element, sa.ColumnClause) and element.is_literal):
+            raise InstallScopeError("refused: raw SQL (text or a literal column) inside an install-wide block")
+        if isinstance(element, sa.TableClause) and not (isinstance(element, sa.Table) and element.info.get(SYSTEM_KEY)):
+            raise InstallScopeError(
+                f"refused: {element.name} is not marked system(...); an install-wide block reaches only the install's"
+                " own tables"
+            )
 
 
 # The three keys in one batch, one round trip to set them and one to clear them (slow-tests RCA A3).
@@ -480,6 +535,7 @@ __all__ = [
     "DEV",
     "SERVICE",
     "TASK",
+    "InstallScopeError",
     "Isolation",
     "NoTenantError",
     "RequestTransactionFailed",

@@ -82,6 +82,7 @@ class _Recorder:
 
     def __init__(self) -> None:
         self.sent: list[tuple[str, dict[str, Any]]] = []
+        self.info: dict[str, Any] = {}
 
     async def execute(self, stmt: Any, params: dict[str, Any] | None = None) -> None:
         self.sent.append((str(stmt), dict(params or {})))

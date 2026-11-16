@@ -1,11 +1,12 @@
-"""`Store.install_tx(reason)` on each database, by failure mode: an install-wide statement that reads or writes a
-tenant table's rows, one that opens a second connection inside a request, one that leaves the request's connection in
-its scope afterwards, and the guard on `Store.tx()` loosened by it."""
+"""`Store.install_tx(reason)` on each database, by failure mode: an install-wide statement that reaches a table not
+marked `system(...)` (policed, unpoliced or unknown to the metadata, or as a login row security does not apply to),
+a team filter that passes every team's rows, one that opens a second connection inside a request, one that leaves the
+request's connection in its scope afterwards, and the guard on `Store.tx()` loosened by it."""
 
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import pytest
@@ -13,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.dialects import mssql
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -21,9 +22,10 @@ from ops_store.backends import backends
 from ops_store.conformance import engine_for, sql_server_database
 from ops_store.database import open_database
 from ops_store.dialect import dialect_of
-from ops_store.isolation import NoTenantError
+from ops_store.isolation import InstallScopeError, NoTenantError
 from ops_store.schema import (
     MSSQL_SECURITY,
+    TEAM_OWNED,
     TENANT_SCOPED,
     isolation_ddl,
     isolation_drop_ddl,
@@ -32,6 +34,7 @@ from ops_store.schema import (
     system,
 )
 from ops_store.store import Store
+from ops_store.team_scope import team_visible
 
 SQL_SERVER = (os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD"))
 ROLE = "ops_install_scope_test"
@@ -53,6 +56,15 @@ notes = sa.Table(
     sa.Column("tenant_id", sa.String(64), nullable=False),
     info=TENANT_SCOPED,
 )
+# Team-owned but with no row policy yet, as many tables still wait: only the query filter and the scope hold it.
+loose = sa.Table(
+    "store_test_install_loose",
+    meta,
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    info=TEAM_OWNED,
+)
 
 
 class Install(Store):
@@ -66,6 +78,11 @@ class Install(Store):
     async def note_ids(self) -> list[str]:
         async with self.tx() as c:
             return [str(i) for i in (await c.execute(sa.select(notes.c.id).order_by(notes.c.id))).scalars()]
+
+
+class Bare(Install):
+    # No role: on PostgreSQL the compose superuser, which row security does not apply to.
+    role = None
 
 
 def _mssql_type(column: sa.Column[Any]) -> str:
@@ -89,9 +106,13 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             await c.run_sync(meta.create_all)
             await c.execute(settings.insert().values(name="region", value="eu"))
             await c.execute(notes.insert(), [{"id": "n1", "tenant_id": "t1"}, {"id": "n2", "tenant_id": "t2"}])
+            await c.execute(
+                loose.insert(),
+                [{"id": "a", "tenant_id": "t1", "team_id": "x"}, {"id": "b", "tenant_id": "t2", "team_id": "y"}],
+            )
             if request.param == "postgresql":
                 await c.execute(sa.text(role_ddl(ROLE)))
-                for t in (settings, notes):
+                for t in (settings, notes, loose):
                     await c.execute(sa.text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {t.name} TO {ROLE}"))
                 for statement in isolation_ddl(notes, "postgresql"):
                     await c.execute(sa.text(statement))
@@ -120,15 +141,69 @@ async def test_an_install_wide_transaction_reads_install_tables_and_no_tenant_ro
         assert await st.note_ids() == ["n1"], "the policy shows a tenant its own row"
     async with st.install_tx(SETTINGS) as c:
         assert await c.scalar(sa.select(settings.c.value)) == "eu"
-        assert list((await c.execute(sa.select(notes.c.id))).scalars()) == []
         with pytest.raises(NoTenantError):
             isolation.tenant()
-    with pytest.raises(DBAPIError):
-        async with st.install_tx(SETTINGS) as c:
-            # The empty tenant no context can carry: refused by the write check, not stored where none can read it.
-            await c.execute(notes.insert().values(id="n3", tenant_id=""))
     with pytest.raises(NoTenantError):
         await st.note_ids()
+
+
+@pytest.mark.parametrize("role", [ROLE, None], ids=["policed-role", "no-role"])
+async def test_an_install_block_refuses_every_statement_on_a_table_not_marked_system(
+    engine: AsyncEngine, role: str | None
+) -> None:
+    """With no role (the compose superuser, past row security on PostgreSQL) as with one, on a policed table, on one
+    with no policy, and in a subquery: refused by name before the database sees it."""
+    st = Install(engine) if role else Bare(engine)
+    refused: list[str] = []
+    for statement in (
+        sa.select(notes.c.id),
+        sa.select(loose.c.id),
+        notes.insert().values(id="n3", tenant_id="t1"),
+        sa.select(settings.c.value).where(settings.c.name.in_(sa.select(loose.c.id))),
+        sa.select(settings.c.value).where(sa.exists(sa.select(notes.c.id))),
+        sa.select(sa.table("store_test_install_loose", sa.column("id"))),
+    ):
+        try:
+            async with st.install_tx(SETTINGS) as c:
+                result = await c.execute(statement)
+                refused.append(f"ran: {list(result.scalars()) if result.returns_rows else 'wrote'}")
+        except InstallScopeError:
+            refused.append("refused")
+        except DBAPIError as e:
+            refused.append(f"the database refused it: {type(e.orig).__name__}")
+    assert refused == ["refused"] * 6, refused
+    async with st.install_tx(SETTINGS) as c:
+        assert await c.scalar(sa.select(settings.c.value)) == "eu", "a system table is still read"
+    with isolation.scope("t1", None):
+        assert sorted(await _loose(engine, role)) == ["a"], "the caller's own block still reads"
+
+
+async def _loose(engine: AsyncEngine, role: str | None) -> list[str]:
+    async with isolation.isolated_tx(engine, role=role) as c:
+        return [str(i) for i in (await c.execute(sa.select(loose.c.id).where(loose.c.tenant_id == "t1"))).scalars()]
+
+
+async def test_an_install_block_refuses_raw_sql(engine: AsyncEngine) -> None:
+    """Text with no table metadata says nothing the refusal can check, so it is refused, as SQL for the driver."""
+    st = Install(engine)
+    raw = "SELECT id FROM store_test_install_loose"
+    runs: list[Callable[[AsyncConnection], Awaitable[object]]] = [
+        lambda c: c.execute(sa.text(raw)),
+        lambda c: c.exec_driver_sql(raw),
+        lambda c: c.execute(sa.select(settings.c.value).where(sa.text("1 = 1"))),
+    ]
+    for run in runs:
+        with pytest.raises(InstallScopeError):
+            async with st.install_tx(SETTINGS) as c:
+                await run(c)
+
+
+def test_the_team_filter_refuses_an_install_block() -> None:
+    """No acting team in an install block is no team at all, not every team."""
+    with isolation.install_wide(SETTINGS), pytest.raises(InstallScopeError):
+        team_visible(loose)
+    with isolation.install_wide(SETTINGS), isolation.scope("t1", "x"):
+        assert str(team_visible(loose)) == str(loose.c.team_id == "x"), "a team scope inside reads its team"
 
 
 async def test_inside_a_request_it_reuses_the_one_connection_and_restores_the_callers_scope(
@@ -148,11 +223,11 @@ async def test_inside_a_request_it_reuses_the_one_connection_and_restores_the_ca
                 region = await st.setting("region")
                 async with st.tx() as outer:
                     async with st.install_tx(SETTINGS) as c:
-                        hidden = list((await c.execute(sa.select(notes.c.id))).scalars())
+                        hidden = list((await c.execute(sa.select(settings.c.value))).scalars())
                     # The block around it reads on as the caller, with no statement of its own to set that again.
                     restored = list((await outer.execute(sa.select(notes.c.id))).scalars())
                 after = await st.note_ids()
     finally:
         event.remove(engine.sync_engine.pool, "checkout", checked_out)
-    assert (before, region, hidden, restored, after) == (["n1"], "eu", [], ["n1"], ["n1"])
+    assert (before, region, hidden, restored, after) == (["n1"], "eu", ["eu"], ["n1"], ["n1"])
     assert len(checkouts) == 1, f"{len(checkouts)} checkouts in one request on {dialect_of(engine)}"
