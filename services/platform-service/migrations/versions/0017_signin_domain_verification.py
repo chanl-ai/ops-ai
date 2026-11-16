@@ -72,6 +72,7 @@ def upgrade() -> None:
         ["domain"],
         unique=True,
         postgresql_where=sa.text("verified_at IS NOT NULL"),
+        mssql_where=sa.text("verified_at IS NOT NULL"),
         sqlite_where=sa.text("verified_at IS NOT NULL"),
     )
     _replace_lookup(verified_only=True)

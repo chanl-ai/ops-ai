@@ -22,13 +22,13 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from pydantic import JsonValue
 from sqlalchemy import Row
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore
 from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
@@ -196,6 +196,24 @@ class DomainTakenError(Exception):
 
 class DomainListedError(Exception):
     """The domain is on another provider of this workspace."""
+
+
+async def _count_one(
+    c: AsyncConnection, t: sa.Table, row: sa.ColumnElement[bool], *, at: str, window_start: str
+) -> int:
+    """Adds one wrong password to the row, which the caller has made sure exists, and returns the count; a count from
+    before `window_start` starts again at one. One UPDATE: two at once wait on the row's lock, so both count."""
+    stale = t.c.first_failed_at < window_start
+    counted = (
+        t.update()
+        .where(row)
+        .values(
+            failures=sa.case((stale, 1), else_=t.c.failures + 1),
+            first_failed_at=sa.case((stale, at), else_=t.c.first_failed_at),
+        )
+        .returning(t.c.failures)
+    )
+    return int((await c.execute(counted)).scalar_one())
 
 
 class SignInStore(TenantDb):
@@ -477,22 +495,10 @@ class SignInStore(TenantDb):
         `window_start` starts again at one. Reaching `max_failures` locks the person until `lock_until`, audited, and
         starts the count again. Returns whether this wrong password locked them."""
         t = signin_lockouts
-        stale = t.c.first_failed_at < window_start
         async with self.tenant_tx(tenant_id) as c:
-            row = (
-                await c.execute(
-                    insert(t)
-                    .values(tenant_id=tenant_id, user_id=user_id, failures=1, first_failed_at=at)
-                    .on_conflict_do_update(
-                        index_elements=[t.c.tenant_id, t.c.user_id],
-                        set_={
-                            "failures": sa.case((stale, 1), else_=t.c.failures + 1),
-                            "first_failed_at": sa.case((stale, at), else_=t.c.first_failed_at),
-                        },
-                    )
-                    .returning(t.c.failures)
-                )
-            ).scalar_one()
+            start = {"tenant_id": tenant_id, "user_id": user_id, "failures": 0, "first_failed_at": at}
+            await c.execute(insert_ignore(c, t, start, keys=["tenant_id", "user_id"]))
+            row = await _count_one(c, t, t.c.user_id == user_id, at=at, window_start=window_start)
             if row < max_failures:
                 return False
             await c.execute(
@@ -524,22 +530,10 @@ class SignInStore(TenantDb):
         """Counts one wrong password for an address in one upsert, as `count_failure` does for a person, whether or
         not the address has an account. Returns whether this one locked it."""
         t = signin_email_failures
-        stale = t.c.first_failed_at < window_start
         async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
-            failures = (
-                await c.execute(
-                    insert(t)
-                    .values(email_hash=email_hash, failures=1, first_failed_at=at)
-                    .on_conflict_do_update(
-                        index_elements=[t.c.email_hash],
-                        set_={
-                            "failures": sa.case((stale, 1), else_=t.c.failures + 1),
-                            "first_failed_at": sa.case((stale, at), else_=t.c.first_failed_at),
-                        },
-                    )
-                    .returning(t.c.failures)
-                )
-            ).scalar_one()
+            start = {"email_hash": email_hash, "failures": 0, "first_failed_at": at}
+            await c.execute(insert_ignore(c, t, start, keys=["email_hash"]))
+            failures = await _count_one(c, t, t.c.email_hash == email_hash, at=at, window_start=window_start)
             if failures < max_failures:
                 return False
             await c.execute(

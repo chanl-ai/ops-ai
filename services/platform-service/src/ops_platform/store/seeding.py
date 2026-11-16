@@ -14,13 +14,13 @@ from __future__ import annotations
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import ANY_TEAM
 from ops_access.platform_events import TEAM_CREATED
 from ops_service_kit.ids import now_iso
+from ops_store.dialect import insert_ignore, upsert
 from ops_store.outbox import add as add_event
 from ops_store.store import Store
 
@@ -28,6 +28,9 @@ from .policies import write_new_workspace_policies
 from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership
 from .tables import members, platform_outbox, role_assignments, teams, tenants, users
 from .tenancy import SEED_ID_CHECK, TenantDb
+
+# One assignment per subject, role and team (uq_role_assignments): a seed run again adds none.
+GRANT_KEY = ["tenant_id", "subject_kind", "subject_id", "role_id", "team_id"]
 
 
 class SeedConflictError(RuntimeError):
@@ -47,20 +50,16 @@ async def write_seed(
     tenant_id = str(tenant["id"])
     now = now_iso()
     async with db.tenant_tx(tenant_id) as c:
-        made_tenant = await c.execute(
-            insert(tenants)
-            .values(
-                id=tenant_id,
-                name=tenant["name"],
-                status="active",
-                allowed_domains=tenant["allowedDomains"],
-                created_at=now,
-            )
-            .on_conflict_do_nothing(index_elements=[tenants.c.id])
-            .returning(tenants.c.id)
-        )
+        first = {
+            "id": tenant_id,
+            "name": tenant["name"],
+            "status": "active",
+            "allowed_domains": tenant["allowedDomains"],
+            "created_at": now,
+        }
+        made_tenant = await c.execute(insert_ignore(c, tenants, first, keys=["id"]))
         seeded: list[dict[str, Any]] = data.get("teams") or []
-        if made_tenant.first() is not None:
+        if made_tenant.rowcount == 1:
             await write_new_workspace_policies(c, tenant_id, at=now)
         if security_team in {str(t["id"]) for t in seeded}:
             # The workspace's record names its Security team; a workspace that already names one keeps it.
@@ -94,11 +93,8 @@ async def write_seed(
                 "owner_groups": team["ownerGroups"],
                 "scope": team["scope"],
             }
-            made = await c.execute(
-                insert(teams)
-                .values(id=team["id"], tenant_id=tenant_id, created_at=now, **fields)
-                .on_conflict_do_nothing(index_elements=[teams.c.id])
-            )
+            row = {"id": team["id"], "tenant_id": tenant_id, "created_at": now, **fields}
+            made = await c.execute(insert_ignore(c, teams, row, keys=["id"]))
             if made.rowcount:
                 # A seeded team, the install's first team included, gets each service's defaults like any new team;
                 # a team already there reports nothing again.
@@ -110,30 +106,21 @@ async def write_seed(
             fields = {"email": person["email"], "name": person["name"], "status": "active"}
             # A seeded person's address and name belong to the seed file (no route changes them), so a database seeded
             # before the file changed them signs in with the new ones; their roles and status stay as people set them.
-            await c.execute(
-                insert(users)
-                .values(id=person["id"], tenant_id=tenant_id, created_at=now, **fields)
-                .on_conflict_do_update(
-                    index_elements=[users.c.id], set_={"email": person["email"], "name": person["name"]}
-                )
-            )
+            row = {"id": person["id"], "tenant_id": tenant_id, "created_at": now, **fields}
+            await c.execute(upsert(c, users, row, keys=["id"], update=["email", "name"]))
             await c.execute(sa.update(members).where(members.c.user_id == person["id"]).values(email=person["email"]))
             for team_id, role in person["teams"].items():
                 fields = {"email": person["email"], "role": role, "status": "active", "updated_at": now}
-                created = await c.execute(
-                    insert(members)
-                    .values(
-                        id=f"mem_{person['id']}_{team_id}",
-                        tenant_id=tenant_id,
-                        team_id=team_id,
-                        user_id=person["id"],
-                        created_at=now,
-                        **fields,
-                    )
-                    .on_conflict_do_nothing(index_elements=[members.c.id])
-                    .returning(members.c.id)
-                )
-                if created.first() is None:
+                row = {
+                    "id": f"mem_{person['id']}_{team_id}",
+                    "tenant_id": tenant_id,
+                    "team_id": team_id,
+                    "user_id": person["id"],
+                    "created_at": now,
+                    **fields,
+                }
+                created = await c.execute(insert_ignore(c, members, row, keys=["id"]))
+                if created.rowcount != 1:
                     continue
                 await mirror_membership(
                     c,
@@ -152,30 +139,19 @@ async def write_seed(
             for role_id in every:
                 # A workspace role: the built-in role in every team (`*`); Admin there makes a workspace admin,
                 # Security admin there holds the Security team's actions wherever that team is.
-                await c.execute(
-                    insert(role_assignments)
-                    .values(
-                        id=f"ras_{person['id']}_every_{role_id}",
-                        tenant_id=tenant_id,
-                        subject_kind="person",
-                        subject_id=person["id"],
-                        role_id=role_id,
-                        team_id=ANY_TEAM,
-                        granted_by="seed",
-                        reason="Seeded workspace role",
-                        source="grant",
-                        created_at=now,
-                    )
-                    .on_conflict_do_nothing(
-                        index_elements=[
-                            role_assignments.c.tenant_id,
-                            role_assignments.c.subject_kind,
-                            role_assignments.c.subject_id,
-                            role_assignments.c.role_id,
-                            role_assignments.c.team_id,
-                        ]
-                    )
-                )
+                grant = {
+                    "id": f"ras_{person['id']}_every_{role_id}",
+                    "tenant_id": tenant_id,
+                    "subject_kind": "person",
+                    "subject_id": person["id"],
+                    "role_id": role_id,
+                    "team_id": ANY_TEAM,
+                    "granted_by": "seed",
+                    "reason": "Seeded workspace role",
+                    "source": "grant",
+                    "created_at": now,
+                }
+                await c.execute(insert_ignore(c, role_assignments, grant, keys=GRANT_KEY))
             if every:
                 await bump_version(c, tenant_id)
         await ensure_owner(c, tenant_id, at=now)

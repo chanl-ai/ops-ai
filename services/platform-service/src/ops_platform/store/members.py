@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.dialect import locked
 from ops_store.outbox import add as add_event
 from ops_store.rows import one, rows
 
@@ -468,11 +469,10 @@ async def end_membership(c: AsyncConnection, actor: Actor, member_id: str, user_
 
 
 async def _lock_admins(c: AsyncConnection, team_id: str) -> set[str]:
-    q = (
-        sa.select(members.c.id)
-        .where(members.c.team_id == team_id, members.c.role == ADMIN, members.c.status == "active")
-        .with_for_update()
+    q = sa.select(members.c.id).where(
+        members.c.team_id == team_id, members.c.role == ADMIN, members.c.status == "active"
     )
+    q = locked(q, members)
     return {str(i) for i in (await c.execute(q)).scalars().all()}
 
 
