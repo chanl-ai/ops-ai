@@ -10,6 +10,5 @@
 1 raw services/agents-service/src/ops_agents/store/base.py
 10 raw services/agents-service/src/ops_agents/store/channels.py
 4 raw services/agents-service/src/ops_agents/store/graphs.py
-12 raw services/agents-service/src/ops_agents/store/skills.py
 12 raw services/agents-service/src/ops_agents/store/widgets.py
 12 raw services/agents-service/src/ops_agents/store/workflow_registry.py

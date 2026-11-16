@@ -14,7 +14,7 @@ import re
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
@@ -25,6 +25,7 @@ from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
+from .tenancy import OWNER, RuntimeStore
 
 registry_skills = sa.Table(
     "registry_skills",
@@ -110,16 +111,13 @@ def tokens_of(content: dict[str, Any]) -> int:
     return max(1, (len(text) + longest + 3) // 4)
 
 
-class SkillRegistry:
+class SkillRegistry(RuntimeStore):
     # A slug and a version number are unique keys (CAS); a save writes its version and moves the skill in one
     # transaction, as does a publish (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
     async def rows(self) -> list[dict[str, Any]]:
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = sa.select(registry_skills).where(team_visible(registry_skills)).order_by(registry_skills.c.slug)
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
@@ -148,23 +146,18 @@ class SkillRegistry:
                 t.published_loading == loading if loading else sa.true(),
             )
         q = q.order_by(t.slug).offset(offset).limit(limit)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
-    async def owner_team(self, skill_id: str) -> str | None:
+    async def owner_team(self, skill_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
         owning team, never for showing the record."""
-        q = sa.select(registry_skills.c.team_id).where(
-            registry_skills.c.id == skill_id, any_team(registry_skills, "the owning team a refusal is decided on")
-        )
-        async with self.engine.connect() as c:
-            team = (await c.execute(q)).scalar()
-        return str(team) if team else None
+        return (await self.owner_teams(conn, registry_skills, {skill_id}, OWNER)).get(skill_id)
 
     async def find(self, skill_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
         q = sa.select(registry_skills).where(registry_skills.c.id == skill_id, team_visible(registry_skills))
         if c is None:
-            async with self.engine.connect() as conn:
+            async with self.tx() as conn:
                 r = (await conn.execute(q)).mappings().first()
         else:
             r = (await c.execute(q)).mappings().first()
@@ -182,7 +175,7 @@ class SkillRegistry:
             .where(registry_skill_versions.c.skill_id == skill_id, team_visible(registry_skill_versions))
             .order_by(registry_skill_versions.c.version.desc())
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def published_in(
@@ -204,7 +197,7 @@ class SkillRegistry:
             .join(registry_skills, sa.and_(t.id == v.skill_id, t.published_version == v.version))
             .where(live, team_visible(registry_skill_versions))
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             rows = [dict(r) for r in (await c.execute(rows_q)).mappings()]
             versions = {str(r["skill_id"]): dict(r) for r in (await c.execute(versions_q)).mappings()}
         return [(r, versions[r["id"]]) for r in rows if r["id"] in versions]
@@ -215,7 +208,7 @@ class SkillRegistry:
             registry_skill_versions.c.version == version,
             team_visible(registry_skill_versions),
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r else None
 
@@ -232,7 +225,7 @@ class SkillRegistry:
     ) -> str:
         sid = skill_id or new_id("sk")
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             taken = (
                 await c.execute(
                     sa.select(registry_skills.c.id).where(
@@ -282,7 +275,7 @@ class SkillRegistry:
         """Edits the newest version while it is an unpublished draft, or opens the next version on top of a published
         one. Published versions never change."""
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             row = await self.row(skill_id, c)
             n = int(row["version"])
             newest = (
@@ -331,7 +324,7 @@ class SkillRegistry:
 
     async def publish(self, skill_id: str, version: int, *, by: str, review_id: str) -> None:
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_skill_versions.update()
                 .where(registry_skill_versions.c.skill_id == skill_id, registry_skill_versions.c.version == version)
@@ -358,7 +351,7 @@ class SkillRegistry:
             )
 
     async def deprecate(self, skill_id: str, reason: str, *, by: str) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_skills.update()
                 .where(registry_skills.c.id == skill_id)
@@ -366,6 +359,6 @@ class SkillRegistry:
             )
 
     async def delete(self, skill_id: str) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await self.row(skill_id, c)
             await c.execute(registry_skills.delete().where(registry_skills.c.id == skill_id))
