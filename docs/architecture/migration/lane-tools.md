@@ -35,6 +35,7 @@ builder; a second on the store layer brings it to 5 to 6 working days.
 | `__main__.py` endpoint fields and `require()`; its `service_client()` and the 10 clients onto `ServiceClient.for_settings`; 3 fallbacks and 10 timeouts deleted; `opa.py`'s literal port onto a setting | The OPA policy evaluation itself |
 | The relay: `run_relay(relay(...))` with two route rows (`policy.changed` to `/v1/platform-events`, the rest to `/v1/events`); `retention(secret_audit, ...)` registered | |
 | The outbox gains `tool.module.published`, `tool.module.changed` and `tool.team_state.changed` (app on or off for a team, tool added, account linked) for the agents lane's catalogue copy | |
+| Wired to `ops_store.copies`: each of the three events carries the module's revision and, in its payload, its `id` (`"deleted": true` when it goes), and an internal full list of every tenant's modules and team states is what the agents lane's `resync` reads | |
 | Access, from the register: the 4 system locks in `gateway_calls.py`, `modules/review_events.py` and `registry.py` become a grid cell or a policy; `system_workflow_only` goes with them; `directory.py` and `send_policy_routes.py` raise the baseline codes; `modules/routes.py`'s service check becomes a scope check through `can()` | 16 lines kept with their register reason: refusals from a record's settings, an account's owner, a team's setup, the dev-caller lock, plugin modules |
 
 ## Target shapes

@@ -31,6 +31,7 @@ budgets file for 20 GET routes (0.5). One builder.
 | Route plumbing in `app.py`: every route takes `Tx`; list routes take `ListQuery`; bodies in `schemas.py` extend the kit's `In` (the local base deleted), replies `Out` | `retrieval.py`, `embedding.py`, `query_steps.py`, `search.py`, `tool_sources.py`, `files.py`, `schedule.py` (its loop registered with a health test) |
 | `__main__.py` endpoint fields and `require()`; the 7 clients onto `ServiceClient.for_settings`; 3 fallbacks and 12 timeouts deleted (`agents.py` and the files client among them) | `seed.py`, `origin.py`, `repeats.py` |
 | The outbox gains `kb.changed` (name, colour, revision) for the agents lane's `kb_labels` copy | |
+| Wired to `ops_store.copies`: `kb.changed` carries the knowledge base's `id` in its payload (`"deleted": true` when it goes), and an internal full list of every tenant's names, colours and revisions is what the agents lane's `resync` of `kb_labels` reads | |
 
 ## Target shapes
 

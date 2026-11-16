@@ -16,14 +16,18 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 | `conformance` | `lease_suite`, `timer_claim_suite`, `audit_suite`, `isolation_suite`, run against every backend from `backends` |
 | `backends` | The registered backends; PostgreSQL is the only one, on a `<db>_conformance` database next to the test database |
 | `database` | `open_database(url)`: the handle code outside a store holds; tests pooled connections and retries a stalled connect |
-| `isolation` | The one isolation context: `enter_caller`, `isolated_tx`, `tenant_wide`, `system_tx`, `NoTenantError` |
+| `isolation` | The one isolation context: `enter_caller`, `isolated_tx`, `tenant_wide`, `system_tx`, `NoTenantError`; `request_transaction` (one transaction per request) and `attempt` (a savepoint) |
+| `store` | `Store`: the base of every service's store class (`tx()`, `attempt(conn)`, `owner_teams`) |
 | `team_scope` | `team_visible` and `any_team`: the where-clause every read of a team-owned table carries |
 | `schema` | `TENANT_SCOPED` and the team-owned markers on tables; `differences` and `unowned` compare a migrated database with the metadata |
 | `schema_version` | `require_current_schema`: a service refuses to start when its chain's head is not recorded |
 | `dialect` | `locked`, `claim`, `upsert`, `insert_ignore`, `lock_key`, `db_now`, `db_epoch`, `db_after`, `system_tx`, `full_text` |
+| `listing` | `list_page`: a list's page, total and facet counts in SQL on the caller's transaction, from the kit's `ListQuery`; `LISTED` marks a column a list filters or sorts on |
 | `search` | `contains` and `like_pattern`: portable, escaped, case-insensitive text search |
-| `outbox` | `outbox_table`, `add`, `Relay`: an event written in the same transaction as its change, delivered at least once |
-| `background` | `PROCESSES`, `run`, `Beat`, heartbeats (`MemoryHeartbeats`, `DbHeartbeats`) behind `/health/background` |
+| `outbox` | `outbox_table`, `add`, `Relay`: an event written in the same transaction as its change, delivered at least once; `relay(routes=, targets=)` and `run_relay` are the one wiring (`tests/test_relay_sites.py`) |
+| `background` | `PROCESSES`, `run`, `Beat`, heartbeats (`MemoryHeartbeats`, `DbHeartbeats`) behind `/health/background`; `retention`, `register` and `run_sweep` for an append-only table's sweep |
+| `copies` | `copy_table`, `apply`, `resync`: a local copy of another service's records keyed by tenant, id and revision, written by its events (an older revision changes nothing) and repaired by a registered resync of the owner's full list |
+| `testing` | `loop_reports_failure`: the test every background process has in its service (`tests/test_loop_health.py`) |
 | `reference` | `SqlAuditLog`: a reference audit log for a service that has none, and the audit suite's own check |
 
 ## Contract with callers
@@ -34,6 +38,11 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 - Widening past one team needs a reason that is a named constant of the calling service: `tenant_wide` for every team
   of one tenant, `system_tx` past the tenant. `tests/test_isolation_sites.py` lists every call site by reason, so a new
   one fails that test until it is listed.
+- Inside a request that took `ops_identity.fastapi.Tx`, every `isolated_tx` of the request's task joins one
+  transaction; another task (a gather branch, a created task, a stream's generator) opens its own. A database error
+  that is caught runs inside `Store.attempt(conn)`; one that leaves an `isolated_tx` block otherwise fails the request
+  (`RequestTransactionFailed`). A store never calls `engine.begin()` or `engine.connect()`: `tests/isolation_sites/`
+  lists, one file per service, the sites still to move and the caught errors with no savepoint, and a row may only fall.
 - A table marked `TENANT_SCOPED` is isolated by the database itself (forced row-level security on PostgreSQL, a
   security policy on SQL Server); `schema.differences` reports a marked table the database does not isolate, or the
   reverse.
@@ -56,6 +65,20 @@ Depended on by `ops_checkpointer`, `ops_engine`, `ops_identity` and every Python
 
 `tests/test_database.py` and `tests/test_outbox.py` skip their PostgreSQL-only cases on SQLite. A change here runs
 every dependant's suite under `make test` with no `PKG`.
+
+### On SQL Server too
+
+The tests that run on both databases (`tests/test_listing.py`, `packages/ops_identity/tests/test_request_transaction.py`)
+skip SQL Server unless `OPS_MSSQL_SERVER` and `MSSQL_SA_PASSWORD` are set. On a laptop:
+
+| Task | Command |
+|---|---|
+| Start the server (127.0.0.1:14330, password generated and kept only in the container) | `deploy/database/mssql_local.sh start` |
+| Run a member's tests on both databases, in a Linux client with ODBC Driver 18 | `deploy/database/mssql_local.sh test packages/ops_store -rs tests` |
+
+On Apple silicon the server is Azure SQL Edge (SQL Server engine 15, no Full-Text Search), since the 2022 and 2025
+images crash under Docker Desktop's emulation; the pinned 2025 image runs on the SQL Server test machine
+(`docs/deploy/fly.md`). A run that prints `SKIPPED ... set OPS_MSSQL_SERVER` did not test SQL Server.
 
 ## Gotchas
 

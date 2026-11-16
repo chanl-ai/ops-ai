@@ -3,7 +3,7 @@ swallows its errors, or never reaches its heartbeat, reads as running while its 
 
 The test is a call to `ops_store.testing.loop_reports_failure(client, "<key>", trip)` in the tests of the service
 that runs the process (`services/<service>-service/tests`). The keys checked are those on `PROCESSES` and those a
-service registers with `background.retention(..., key=..., service=...)`.
+service registers with `background.retention(..., key=..., service=...)` or `copies.resync(..., key=..., service=...)`.
 
 `loop_health/<service>.txt` lists the keys still waiting for their test, one a row. A row may only go: a process with
 no test and no row fails here, and so does a row whose key has its test or is no longer a process."""
@@ -49,12 +49,12 @@ def keys_with_a_test(source: str) -> set[str]:
 
 
 def processes() -> dict[str, set[str]]:
-    """Service -> its process keys: the listed ones and the retention sweeps registered in source."""
+    """Service -> its process keys: the listed ones and the retention sweeps and copy resyncs registered in source."""
     by_service: dict[str, set[str]] = {}
     for p in PROCESSES:
         by_service.setdefault(p.service, set()).add(p.key)
     for src in (*ROOT.glob("packages/*/src"), *ROOT.glob("services/*/src")):
-        for call in _calls(src, "retention"):
+        for call in (*_calls(src, "retention"), *_calls(src, "resync")):
             given = {kw.arg: _text(kw.value) for kw in call.keywords}
             key, service = given.get("key"), given.get("service")
             if key and service:
