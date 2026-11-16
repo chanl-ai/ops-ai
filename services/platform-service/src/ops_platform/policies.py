@@ -75,7 +75,7 @@ class Policies:
             role_id = entry.get("reviewerRole")
             if not role_id:
                 raise ValidationFailed("Choose the role that reviews.", code="reviewer_role_required")
-            role = await roles.role(actor.tenant_id, str(role_id))
+            role = await roles.role_by_id(actor.tenant_id, str(role_id))
             if role is None:
                 raise ValidationFailed(
                     f"There is no role {role_id}. Choose a role that can approve.", code="reviewer_role_unknown"

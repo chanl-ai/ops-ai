@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import (
     ANY_TEAM,
@@ -31,7 +31,6 @@ from ops_identity import Principal
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import lock_key
-from ops_store.store import Store
 
 from .audit import record
 from .tables import members, role_assignments, role_permissions, roles, teams, tenants, users
@@ -64,12 +63,8 @@ class Holdings:
     assignments: list[Assignment]
 
 
-class RoleStore:
+class RoleStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
-
-    def __init__(self, db: AsyncEngine | Store) -> None:
-        # Holds its database rather than extending TenantDb: its `role(...)` read would hide the base's `role`.
-        self.db = TenantDb(db)
 
     async def roles(self, tenant_id: str) -> list[dict[str, Any]]:
         """Every role with its permission and assignment counts, built-in roles first in their fixed order."""
@@ -96,7 +91,7 @@ class RoleStore:
             .outerjoin(held, held.c.role_id == roles.c.id)
             .order_by(roles.c.builtin.desc(), sa.func.lower(roles.c.name), roles.c.id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(q)).all()
         order = {r.id: i for i, r in enumerate(BUILTIN_ROLES)}
         out = [
@@ -112,8 +107,8 @@ class RoleStore:
         ]
         return sorted(out, key=lambda r: (not r["builtin"], order.get(r["id"], 0)))
 
-    async def role(self, tenant_id: str, role_id: str) -> dict[str, Any] | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+    async def role_by_id(self, tenant_id: str, role_id: str) -> dict[str, Any] | None:
+        async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(sa.select(roles).where(roles.c.id == role_id))).mappings().first()
             if row is None:
                 return None
@@ -132,7 +127,7 @@ class RoleStore:
 
     async def holdings(self, tenant_id: str, user_id: str) -> Holdings:
         """The person's active teams and the assignments made to them or to one of those teams."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await holdings_in(c, user_id)
 
     async def live(
@@ -143,7 +138,7 @@ class RoleStore:
         token's roles (a demoted admin). `conn` reads on the caller's own transaction."""
         if conn is not None:
             return await live_in(conn, tenant_id, user_id, team=team)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await live_in(c, tenant_id, user_id, team=team)
 
     async def workspace_admin(self, tenant_id: str, user_id: str, *, now: str) -> bool:
@@ -171,7 +166,7 @@ class RoleStore:
             .order_by(roles.c.name)
         )
         out: dict[str, list[str]] = {}
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             for subject, name in (await c.execute(q)).all():
                 out.setdefault(str(subject), []).append(str(name))
         return out
@@ -180,7 +175,7 @@ class RoleStore:
         self, tenant_id: str, team_id: str, *, by: str, request_id: str, detail: dict[str, Any]
     ) -> None:
         """An access check an admin ran: who checked whom for what, and the answer, in the audit log."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await record(
                 c,
                 tenant_id=tenant_id,
@@ -200,7 +195,7 @@ class RoleStore:
             .where(teams.c.status == "active")
             .order_by(teams.c.created_at, teams.c.id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return {str(r[0]): str(r[1]) for r in (await c.execute(q)).all()}
 
     async def set_grid(
@@ -208,7 +203,7 @@ class RoleStore:
     ) -> bool:
         """Replaces the role's cells with `grants`, audited as `action` (`role.edit`, `role.reset`) with what changed,
         and raises the permission version so every token issued after carries the new grid. False for no such role."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             if (await c.execute(sa.select(roles.c.id).where(roles.c.id == role_id))).first() is None:
                 return False
             before = {(a, x): s for a, x, s in (await _grids(c, [role_id])).get(role_id, [])}
@@ -244,7 +239,7 @@ class RoleStore:
         return True
 
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Grant]]:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await _grids(c, role_ids)
 
     async def create(
@@ -252,7 +247,7 @@ class RoleStore:
     ) -> str:
         """A custom role with `grants`, audited as `role.create`; RoleNameTakenError when the name is used."""
         role_id = new_id("role")
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await _name_free(c, tenant_id, name, None)
             await c.execute(
                 roles.insert().values(
@@ -289,7 +284,7 @@ class RoleStore:
         self, tenant_id: str, role_id: str, *, name: str, description: str | None, by: str, request_id: str
     ) -> None:
         """A custom role's name and description, audited as `role.rename`; RoleNameTakenError when the name is used."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             before = (
                 await c.execute(sa.select(roles.c.name, roles.c.description).where(roles.c.id == role_id))
             ).first()
@@ -310,14 +305,14 @@ class RoleStore:
 
     async def holders(self, tenant_id: str, role_id: str) -> list[dict[str, Any]]:
         """Who holds the role and in which team, each person by name and address."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await self._holders_in(c, role_id)
 
     async def delete(self, tenant_id: str, role_id: str, *, move_to: str | None, by: str, request_id: str) -> int:
         """Deletes a custom role. While people or teams hold it, RoleInUseError names them, unless `move_to` names the
         role their assignments move to (one that a holder already has in that team is kept once). Audited as
         `role.delete`; returns how many assignments moved."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             held = (
                 await c.execute(
                     sa.select(role_assignments.c.id, role_assignments.c.subject_kind, role_assignments.c.subject_id,
@@ -382,7 +377,7 @@ class RoleStore:
             )
             .order_by(roles.c.name, role_assignments.c.team_id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(q)).all()
         return [
             {
@@ -400,7 +395,7 @@ class RoleStore:
     async def grant(self, tenant_id: str, user_id: str, role_id: str, team_id: str, *, by: str, request_id: str) -> str:
         """Gives the person a role in a team, audited as `role.grant`; AlreadyGrantedError when they hold it there."""
         grant_id = new_id("ras")
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             held = await c.execute(
                 sa.select(role_assignments.c.id).where(
                     role_assignments.c.subject_kind == "person",
@@ -440,7 +435,7 @@ class RoleStore:
         return grant_id
 
     async def grant_row(self, tenant_id: str, grant_id: str) -> dict[str, Any] | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     sa.select(
@@ -452,7 +447,7 @@ class RoleStore:
 
     async def ungrant(self, tenant_id: str, grant_id: str, *, by: str, request_id: str) -> bool:
         """Takes a given role away, audited as `role.ungrant`; False when no such grant."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     role_assignments.delete()
@@ -491,12 +486,12 @@ class RoleStore:
         ]
 
     async def version(self, tenant_id: str) -> int:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await version_in(c, tenant_id)
 
     async def security_team(self, tenant_id: str) -> str | None:
         """The workspace's Security team, from its record; None when it names none."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
 
 

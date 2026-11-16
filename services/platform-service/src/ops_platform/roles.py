@@ -38,7 +38,7 @@ class Roles:
         return await self.store.roles(tenant_id)
 
     async def get(self, tenant_id: str, role_id: str) -> dict[str, Any]:
-        role = await self.store.role(tenant_id, role_id)
+        role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
         grants = role.pop("grants")
@@ -66,7 +66,7 @@ class Roles:
         if role_id == ADMIN.id:
             raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
         _checked(cells)
-        role = await self.store.role(tenant_id, role_id)
+        role = await self.store.role_by_id(tenant_id, role_id)
         if role is not None and not role["builtin"]:
             self._custom_cells(cells)
         if not await self.store.set_grid(tenant_id, role_id, cells, by=by, request_id=request_id, action="role.edit"):
@@ -98,7 +98,7 @@ class Roles:
         `leftOut`), or empty. 409 `name_taken` for a name another role has."""
         left_out: list[str] = []
         if copy_of is not None:
-            source = await self.store.role(tenant_id, copy_of)
+            source = await self.store.role_by_id(tenant_id, copy_of)
             if source is None:
                 raise NotFound("No role with that id to copy.")
             grants: list[Grant] = list(source["grants"])
@@ -131,7 +131,7 @@ class Roles:
     async def delete(self, tenant_id: str, role_id: str, *, move_to: str | None, by: str, request_id: str) -> int:
         """409 `role_in_use` naming the holders while anyone holds it, unless `move_to` names the role they move to."""
         await self._custom(tenant_id, role_id, "deleted")
-        if move_to is not None and (move_to == role_id or await self.store.role(tenant_id, move_to) is None):
+        if move_to is not None and (move_to == role_id or await self.store.role_by_id(tenant_id, move_to) is None):
             raise ValidationFailed("Move the holders to another role of this workspace.", code="move_to_unknown")
         try:
             return await self.store.delete(tenant_id, role_id, move_to=move_to, by=by, request_id=request_id)
@@ -148,7 +148,7 @@ class Roles:
     ) -> dict[str, Any]:
         """Gives a person a custom role in a team they belong to. A built-in role comes with their team role instead
         (409 `builtin_role`); 409 `not_a_member` outside their teams, `already_granted` when they hold it there."""
-        role = await self.store.role(tenant_id, role_id)
+        role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
         if role["builtin"]:
@@ -165,7 +165,7 @@ class Roles:
         return next(g for g in await self.store.grants_of(tenant_id, person_id) if g["id"] == grant_id)
 
     async def _custom(self, tenant_id: str, role_id: str, verb: str) -> dict[str, Any]:
-        role = await self.store.role(tenant_id, role_id)
+        role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
         if role["builtin"]:
