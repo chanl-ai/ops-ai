@@ -38,7 +38,7 @@ from ..environments import LIVE
 from ..modules.seed import blank
 from ..store.connections import PERSON_ORIGIN, ConnectionStore, name_key, plugin_app, plugin_of
 from ..store.modules import Aggregate, ModuleStore, StaleModuleError
-from ..store.plugin_bindings import PluginBindings
+from ..store.plugin_bindings import PluginBinding, PluginBindings
 
 log = get_logger("ops_tools.plugins")
 
@@ -339,11 +339,11 @@ def input_field(name: str, f: InputField, *, paged: bool = False) -> dict[str, A
     return out
 
 
-def tools_added(m: Manifest, binding: Mapping[str, Any] | None) -> set[str] | None:
+def tools_added(m: Manifest, binding: PluginBinding | None) -> set[str] | None:
     """The operations the team added, by operation name; None while the binding keeps every tool added (one made
     before the catalog, or no binding). Stored as the binding's `tools_on`, by tool name."""
-    held = (binding or {}).get("tools_on")
-    return None if held is None else {m.operation(str(t)) for t in cast(list[Any], held)}
+    held = binding.tools_on if binding else None
+    return None if held is None else {m.operation(t) for t in held}
 
 
 def first_tools_on(m: Manifest) -> list[str]:
@@ -353,7 +353,7 @@ def first_tools_on(m: Manifest) -> list[str]:
     return sorted(t.name for t in m.tools)
 
 
-def tools_added_view(m: Manifest, binding: Mapping[str, Any] | None) -> dict[str, Any]:
+def tools_added_view(m: Manifest, binding: PluginBinding | None) -> dict[str, Any]:
     """What a call needs to refuse a tool the team has not added, in plain words: the operations added and their
     titles."""
     on = tools_added(m, binding)
@@ -458,6 +458,14 @@ def module_of(plugin: Plugin, *, tenant_id: str, at: datetime) -> Aggregate:
         "operations": ops,
         "versions": [version],
     }
+
+
+@dataclass(frozen=True)
+class Chosen:
+    """The account a plugin call signs in with: the team binding's default, or the one the call or the person named;
+    None when the team has no account to sign in with."""
+
+    connection_id: str | None
 
 
 @dataclass
@@ -605,8 +613,8 @@ class PluginHost:
         """Gives every binding of the plugin with no version the installed one, before the row follows the package,
         so from now on an upgrade waits for each team (bindings from before plugin_updates)."""
         for b in await self.bindings.of_plugin(tenant_id, plugin.manifest.id):
-            if not b.get("version"):
-                await self.take_installed(tenant_id, str(b["team_id"]), plugin)
+            if not b.version:
+                await self.take_installed(tenant_id, b.team_id, plugin)
 
     async def _follow(self, tenant_id: str, plugin: Plugin) -> None:
         """Rewrites the account's module row when its operations differ from the installed manifest's, under its
@@ -618,8 +626,8 @@ class PluginHost:
         kept = [
             t
             for b in await self.bindings.of_plugin(tenant_id, m.id)
-            if b.get("declarations")
-            for t in tools_of(cast(dict[str, Any], b["declarations"])).values()
+            if b.declarations
+            for t in tools_of(b.declarations).values()
         ]
         ops = following(m, cast(list[dict[str, Any]], row["operations"]), kept)
         stored = {str(o["id"]): o for o in row["operations"]}
@@ -670,11 +678,11 @@ class PluginHost:
         """The plugin's settings on an app's account, merged as a call there reads them, as a person may read them
         (`readable`): what the account's Settings shows and edits. Empty for an account no plugin serves."""
         b = await self.binding_of(tenant_id, connection_id)
-        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        plugin = self.plugins.get(b.plugin_id) if b else None
         if b is None or plugin is None:
             return {}
         own = await self.own_settings(tenant_id, connection_id)
-        plain, secrets = readable(plugin.manifest, self.settings(plugin, dict(b.get("settings") or {}), own))
+        plain, secrets = readable(plugin.manifest, self.settings(plugin, dict(b.settings), own))
         return {"pluginSettings": plain, "pluginSecrets": secrets}
 
     async def sign_in_error(
@@ -683,18 +691,18 @@ class PluginHost:
         """What the plugin serving an account says of a refused sign-in: its first sign_in_errors entry for the code
         and description; None for an account no plugin serves, or a code the plugin does not name."""
         b = await self.binding_of(tenant_id, connection_id)
-        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        plugin = self.plugins.get(b.plugin_id) if b else None
         return plugin.manifest.connection.sign_in_error(error, description) if plugin else None
 
     async def connection_hosts(self, tenant_id: str, connection_id: str) -> list[str]:
         """The hosts the plugin serving an account declares, rendered with the account's settings: what its sign-in,
         token and test requests reach without the tenant listing them. None for an account no plugin serves."""
         b = await self.binding_of(tenant_id, connection_id)
-        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        plugin = self.plugins.get(b.plugin_id) if b else None
         if b is None or plugin is None:
             return []
         own = await self.own_settings(tenant_id, connection_id)
-        return hosts_of(plugin.manifest, self.settings(plugin, dict(b.get("settings") or {}), own))
+        return hosts_of(plugin.manifest, self.settings(plugin, dict(b.settings), own))
 
     def installed_digest(self, plugin: Plugin) -> str:
         """The installed version's digest, which a team's binding is compared with for an update."""
@@ -711,7 +719,7 @@ class PluginHost:
         if team_id is None:
             return f"{plugin.manifest.title} is turned on per team; this call names no team."
         b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
-        if b is None or not b["enabled"]:
+        if b is None or not b.enabled:
             return f"{plugin.manifest.title} is off for this team; a team admin turns it on."
         return None
 
@@ -745,7 +753,7 @@ class PluginHost:
         if plugin is None:
             return None
         b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
-        return str(b["connection_id"]) if b and b.get("connection_id") else None
+        return b.connection_id if b and b.connection_id else None
 
     async def on_signed_in(self, tenant_id: str, connection_id: str, by: str) -> None:
         """After a finished sign-in on a plugin's account: the app is on for the account's team, with this account its
@@ -759,10 +767,10 @@ class PluginHost:
             return
         team = str(conn["team_id"])
         b = await self.bindings.get(tenant_id, team, plugin.manifest.id)
-        held = b.get("connection_id") if b else None
+        held = b.connection_id if b else None
         if held is not None and await self.connections.get(tenant_id, str(held)) is None:
             held = None
-        if b is not None and b.get("enabled") and held is not None:
+        if b is not None and b.enabled and held is not None:
             return
         await self.bindings.put(
             tenant_id,
@@ -770,13 +778,13 @@ class PluginHost:
             plugin.manifest.id,
             enabled=True,
             connection_id=str(held or connection_id),
-            settings=dict((b or {}).get("settings") or {}),
+            settings=dict(b.settings) if b else {},
             by=by,
         )
         if b is None:
             # A new app hands agents every tool, as turning it on does.
             await self.bindings.set_tools(tenant_id, team, plugin.manifest.id, first_tools_on(plugin.manifest))
-        if self.versions and not (b or {}).get("version"):
+        if self.versions and not (b.version if b else None):
             await self.take_installed(tenant_id, team, plugin)
 
     async def sign_in_scopes(self, tenant_id: str, connection_id: str) -> list[str] | None:
@@ -808,7 +816,7 @@ class PluginHost:
                 off |= {plugin.manifest.operation(t.name) for t in plugin.manifest.tools} - on
         return off
 
-    async def binding_of(self, tenant_id: str, connection_id: str) -> dict[str, Any] | None:
+    async def binding_of(self, tenant_id: str, connection_id: str) -> PluginBinding | None:
         """The binding a connection serves: the one naming it (the default account), else, for another account of the
         app, the binding of the account's plugin in the account's team."""
         b = await self.bindings.by_connection(tenant_id, connection_id)
@@ -907,24 +915,25 @@ class PluginHost:
         tenant_id: str,
         team_id: str,
         plugin: Plugin,
-        b: dict[str, Any],
+        b: PluginBinding | None,
         run: str,
         *,
         account: str | None,
         accounts: Mapping[str, str] | None,
         person: str | None,
-    ) -> dict[str, Any]:
-        """The account a call on `plugin`'s accounts signs in with, as `binding` (the team's binding with that account
-        as its connection_id), or what the call is refused or asked instead (`account_missing`, `account_choice`, ...).
+    ) -> Chosen | dict[str, Any]:
+        """The account a call on `plugin`'s accounts signs in with (the team's binding's, or another the call or the
+        person names), or what the call is refused or asked instead (`account_missing`, `account_choice`, ...).
         A package app's call passes the app it runs on, so it chooses among that app's accounts only."""
         # The caller sends every app's choice (`accounts`, app id to name); this call reads its own app's entry. The
         # single `account` string older callers send names the account for whichever app the call is for.
         account = (accounts or {}).get(plugin_app(plugin.manifest.id)) or account
+        connection_id = b.connection_id if b else None
         if account:
             refused = await self._named(tenant_id, team_id, plugin, account, run=run, person=person)
             if "refused" in refused:
                 return dict(refused["refused"])
-            return {"binding": {**b, "connection_id": refused["id"]}}
+            return Chosen(refused["id"])
         if person:
             # A call naming no account, for a person signed in to several: the one they pinned as their default;
             # with two or more and none pinned, the call asks which (ACCOUNT_CHOICE_NEEDED); with none of their
@@ -934,24 +943,24 @@ class PluginHost:
                 return {"account_choice": choice}
             chosen = await self.person_default(tenant_id, team_id, plugin, person)
             if chosen is not None:
-                b = {**b, "connection_id": chosen}
+                connection_id = chosen
         if self.connections is not None:
             # A test run takes the app's sandbox account when the team has one (records.account_for).
             found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
-            default = next((a for a in found if str(a["id"]) == str(b.get("connection_id") or "")), None)
+            default = next((a for a in found if str(a["id"]) == str(connection_id or "")), None)
             picked = account_for(default, found, run)
-            b = {**b, "connection_id": picked["id"] if picked else b.get("connection_id")}
-        return {"binding": b}
+            connection_id = picked["id"] if picked else connection_id
+        return Chosen(connection_id)
 
     async def package_checks(self, tenant_id: str, connection_id: str) -> list[dict[str, Any]]:
         """What Test connection reads on an account to learn which package apps are installed there: for each loaded
         package that runs on the account's app and requires objects, the path of each object's check rendered with
         the account's settings. Empty for an account no plugin serves, or one whose settings leave a path unset."""
         b = await self.binding_of(tenant_id, connection_id)
-        host = self.plugins.get(str(b["plugin_id"])) if b else None
+        host = self.plugins.get(b.plugin_id) if b else None
         if b is None or host is None:
             return []
-        settings = self.settings(host, dict(b.get("settings") or {}), await self.own_settings(tenant_id, connection_id))
+        settings = self.settings(host, dict(b.settings), await self.own_settings(tenant_id, connection_id))
         out: list[dict[str, Any]] = []
         for p in self.plugins.values():
             c = p.manifest.connection
@@ -996,7 +1005,7 @@ class PluginHost:
                 "connection_id": None,
                 "egress_hosts": [],
             }
-        b: dict[str, Any] = await self.bindings.get(tenant_id, team_id, plugin.manifest.id) or {}
+        b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
         module = {**module, **tools_added_view(plugin.manifest, b)}
         runs_on = plugin.manifest.connection.runs_on
         # A package app signs in with an account of the app it runs on (`signs`), chosen as that app's own calls
@@ -1011,7 +1020,7 @@ class PluginHost:
             if reason is not None:
                 off = {"app": signs.manifest.title, "appId": plugin_app(signs.manifest.id), "teamId": team_id}
                 return {**module, "plugin_off": reason, "app_off": off, "connection_id": None, "egress_hosts": []}
-            signs_b = await self.bindings.get(tenant_id, team_id, signs.manifest.id) or {}
+            signs_b = await self.bindings.get(tenant_id, team_id, signs.manifest.id)
             if (accounts or {}).get(plugin_app(plugin.manifest.id)):
                 why = (
                     f"{plugin.manifest.title} has no accounts of its own; it runs on {signs.manifest.title}'s, so a "
@@ -1021,22 +1030,20 @@ class PluginHost:
         chosen = await self._choose(
             tenant_id, team_id, signs, signs_b, run, account=account, accounts=accounts, person=person
         )
-        if "binding" not in chosen:
+        if not isinstance(chosen, Chosen):
             return {**module, **chosen, "connection_id": None, "egress_hosts": []}
-        signs_b = chosen["binding"]
-        b = signs_b if signs is plugin else b
         # The team's own plugin version, attached before the instance and header checks, so a team that is on
         # but not yet signed in still lists its own version's tools.
         team: dict[str, Any] = {}
-        if self.versions and b.get("declarations"):
-            decl = cast(dict[str, Any], b["declarations"])
+        if self.versions and b and b.declarations:
+            decl = b.declarations
             team = {"plugin_tools": tools_of(decl), "plugin_headers": declared_headers(decl)}
         module = {**module, **team}
         # The account the call signs in with picks the instance and hosts, so a call never mixes one account's
         # sign-in with another's address.
         conn = (
-            await self.connections.get(tenant_id, str(signs_b["connection_id"]))
-            if self.connections and signs_b.get("connection_id")
+            await self.connections.get(tenant_id, str(chosen.connection_id))
+            if self.connections and chosen.connection_id
             else None
         )
         module = {**module, "sandbox": bool((conn or {}).get("sandbox"))}
@@ -1050,9 +1057,9 @@ class PluginHost:
                 )
                 return {**module, "package_missing": why, "connection_id": None, "egress_hosts": []}
         own = own_and_registration(conn)
-        settings = self.settings(signs, dict(signs_b.get("settings") or {}), own)
+        settings = self.settings(signs, dict(signs_b.settings) if signs_b else {}, own)
         if signs is not plugin:
-            settings |= self.settings(plugin, dict(b.get("settings") or {}))
+            settings |= self.settings(plugin, dict(b.settings) if b else {})
         endpoint = render(plugin.manifest.endpoint, settings)
         hosts = hosts_of(plugin.manifest, settings)
         tools = cast(dict[str, Tool], team.get("plugin_tools") or {t.name: t for t in plugin.manifest.tools})
@@ -1071,7 +1078,7 @@ class PluginHost:
         if endpoint is None:
             # No instance yet is not the plugin being off. On an app each person signs in to, the team
             # account is not required first: this person signs in to the account.
-            connection_id = signs_b.get("connection_id")
+            connection_id = chosen.connection_id
             sign_in = str((conn or {}).get("sign_in") or "team")
             if sign_in != "team":
                 return {
@@ -1106,7 +1113,7 @@ class PluginHost:
             # For this call the module is the calling team's: its connection is the team's (the sign-in check reads
             # the module's team), and a held write is decided in the team, as for any workspace-level module.
             "team_id": team_id,
-            "connection_id": signs_b.get("connection_id"),
+            "connection_id": chosen.connection_id,
             "endpoint": endpoint,
             "egress_hosts": hosts,
             "plugin_settings": settings,
@@ -1230,7 +1237,7 @@ class PluginHost:
         on the account. Returns where Test connection reads, the instance and the plugin's health-check path, and
         under SIGNED_IN_AS whom the lookup named."""
         b = await self.binding_of(tenant_id, connection_id)
-        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        plugin = self.plugins.get(b.plugin_id) if b else None
         if b is None or plugin is None:
             return None
         m = plugin.manifest
@@ -1250,7 +1257,7 @@ class PluginHost:
         lookup = m.connection.after_sign_in
         named: str | None = None
         if lookup is not None:
-            now = self.settings(plugin, dict(b.get("settings") or {}), {**held, **read})
+            now = self.settings(plugin, dict(b.settings), {**held, **read})
             token = str(answer.get("access_token") or "")
             read[lookup.setting], named = await self._look_up(tenant_id, m, lookup, now, token)
         read = settle_at_sign_in(held, read, own=own)
@@ -1258,7 +1265,7 @@ class PluginHost:
         if read and self.connections is not None:
             await self.connections.set_plugin_settings(tenant_id, connection_id, read)
         values = await self.own_settings(tenant_id, connection_id) or {**held, **read}
-        merged = self.settings(plugin, dict(b.get("settings") or {}), values)
+        merged = self.settings(plugin, dict(b.settings), values)
         endpoint = render(m.endpoint, merged)
         check = m.connection.health_check
         said = {SIGNED_IN_AS: named} if named else {}

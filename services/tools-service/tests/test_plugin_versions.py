@@ -46,7 +46,7 @@ async def test_a_save_keeps_the_version_a_team_took_and_a_take_needs_a_binding(
     assert await b.take(tenant, "team_ops", ID, version="0.1.0", digest="d1", declarations=DECL)
     await b.put(tenant, "team_ops", ID, enabled=True, connection_id="con_a", settings={"x": 1}, by="t")
     row = await b.get(tenant, "team_ops", ID)
-    assert row is not None and (row["version"], row["digest"], row["declarations"]) == ("0.1.0", "d1", DECL)
+    assert row is not None and (row.version, row.digest, row.declarations) == ("0.1.0", "d1", DECL)
 
 
 async def test_every_teams_binding_of_a_plugin_is_found_for_the_stamp(engine: AsyncEngine, tenant: str) -> None:
@@ -54,7 +54,7 @@ async def test_every_teams_binding_of_a_plugin_is_found_for_the_stamp(engine: As
     for team in ("team_ops", "team_platform"):
         await b.put(tenant, team, ID, enabled=True, connection_id=None, settings={}, by="t")
     await b.put(tenant, "team_ops", "test.other", enabled=True, connection_id=None, settings={}, by="t")
-    assert sorted(r["team_id"] for r in await b.of_plugin(tenant, ID)) == ["team_ops", "team_platform"]
+    assert sorted(r.team_id for r in await b.of_plugin(tenant, ID)) == ["team_ops", "team_platform"]
 
 
 # Calls and lists run each team's version across an upgrade.
@@ -139,7 +139,7 @@ def path(u: Upgrade) -> str:
 
 async def test_a_binding_with_no_version_is_stamped_with_the_installed_one(up: Upgrade) -> None:
     row = await up.bindings.get(up.tenant, "team_ops", ID)
-    assert row is not None and row["version"] == "0.1.0" and row["digest"], row
+    assert row is not None and row.version == "0.1.0" and row.digest, row
 
 
 async def test_after_an_upgrade_a_team_keeps_calling_its_version(up: Upgrade) -> None:

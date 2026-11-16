@@ -665,8 +665,8 @@ class Apps:
             bindings = await self.plugins.bindings.of_team(who.tenant_id, team)
             for pid, plugin in sorted(self.plugins.plugins.items()):
                 m = plugin.manifest
-                b = bindings.get(pid) or {}
-                conn = by_id.get(str(b.get("connection_id") or ""))
+                b = bindings.get(pid)
+                conn = by_id.get(str((b.connection_id if b else None) or ""))
                 platform = self.connections.store.install_client(pid) is not None
                 locked = self.plugins.locked_settings(pid)
                 own = per_account(m)
@@ -685,7 +685,7 @@ class Apps:
                     for k, s in m.settings.items()
                     if not s.at_sign_in
                 ]
-                decl = cast(dict[str, Any] | None, b.get("declarations")) if self.plugins.versions else None
+                decl = (b.declarations if b else None) if self.plugins.versions else None
                 cards.append(
                     {
                         "id": plugin_app(pid),
@@ -712,7 +712,7 @@ class Apps:
                         "managedClient": platform,
                         "plugin": {
                             # On only with an enabled binding row, as PluginHost.off_reason decides.
-                            "teamOn": bool(b.get("enabled")) if pid in bindings else False,
+                            "teamOn": b.enabled if b is not None else False,
                             "platformApp": platform,
                             "kinds": list(m.connection.kinds),
                             "signIn": list(m.connection.sign_in),
@@ -730,19 +730,19 @@ class Apps:
                             "tools": [m.operation(t) for t in tools_of(decl)]
                             if decl
                             else [m.operation(t.name) for t in m.tools],
-                            "teamVersion": b.get("version") if self.plugins.versions else None,
+                            "teamVersion": (b.version if b else None) if self.plugins.versions else None,
                             "updateAvailable": self.plugins.versions
-                            and bool(b.get("digest"))
-                            and b.get("digest") != self.plugins.installed_digest(plugin),
+                            and bool(b and b.digest)
+                            and (b.digest if b else None) != self.plugins.installed_digest(plugin),
                         },
                     }
                 )
             # A plugin the team turned on that the install no longer holds keeps its card, so the team sees why its
             # tools stopped instead of finding its account listed as a custom app.
             for pid, b in sorted(bindings.items()):
-                if pid in self.plugins.plugins or not b.get("enabled"):
+                if pid in self.plugins.plugins or not b.enabled:
                     continue
-                conn = by_id.get(str(b.get("connection_id") or ""))
+                conn = by_id.get(str(b.connection_id or ""))
                 row = next((md for md in modules if plugin_id_of(md) == pid), None)
                 cards.append(
                     {
@@ -1006,12 +1006,12 @@ class Apps:
         b = await self.plugins.bindings.get(who.tenant_id, who.team.id, m.id)
         if b is None:
             raise ValidationFailed(f"Turn {m.title} on for the team first.", code="app_off")
-        held = b.get("tools_on")
-        now = {t.name for t in m.tools} if held is None else {str(t) for t in cast(list[Any], held)}
+        held = b.tools_on
+        now = {t.name for t in m.tools} if held is None else set(held)
         picked = {t.name for t in named if t is not None}
         now = now | picked if add else now - picked
         await self.plugins.bindings.set_tools(who.tenant_id, who.team.id, m.id, sorted(now))
-        granted = await self.granted(who, b.get("connection_id"))
+        granted = await self.granted(who, b.connection_id)
         return [
             {
                 "name": m.operation(t.name),
@@ -1486,7 +1486,7 @@ async def _edit_ops_ai_config(apps: Apps, who: Caller, credential_id: str, i: Ap
             code="ops_ai_app",
         )
     b = await apps.plugin_accounts.start_binding(who, plugin)
-    before = (dict(b.get("config_settings") or {}), dict(b.get("setting_modes") or {}))
+    before = (dict((b.config_settings if b else None) or {}), dict((b.setting_modes if b else None) or {}))
     after = _config_after(apps, card, credential_fields(apps, card, None), before, i)
     if after != before:
         await apps.plugin_accounts.host.bindings.set_config(
@@ -1670,8 +1670,8 @@ async def _config_of(
     plugin = _plugin(apps, card)
     if plugin is None or apps.plugins is None:
         return {}, {}
-    b = await apps.plugins.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
-    return dict(b.get("config_settings") or {}), dict(b.get("setting_modes") or {})
+    b = await apps.plugins.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id)
+    return dict((b.config_settings if b else None) or {}), dict((b.setting_modes if b else None) or {})
 
 
 def _modes_of(values: dict[str, Any], modes: dict[str, Any]) -> dict[str, str]:
@@ -1809,7 +1809,7 @@ async def account_choices(
     if not found or (pid is not None and plugin is None):
         raise NotFound(f"App {app_id}")
     b = await apps.plugins.bindings.get(who.tenant_id, who.team.id, pid) if apps.plugins and pid else None
-    default = str((b or {}).get("connection_id") or "") if pid else app_id
+    default = str((b.connection_id if b else None) or "") if pid else app_id
     own_ids = {
         str(t["connection_id"])
         for t in await store.own_sign_ins(who.tenant_id, own_key(who), [str(a["id"]) for a in found])

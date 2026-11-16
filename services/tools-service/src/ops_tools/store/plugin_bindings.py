@@ -6,13 +6,16 @@ binding on each call, and a team with no binding, or with its binding off, does 
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee, isolation
 from ops_store.dialect import upsert
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.store import Store
 from ops_store.team_scope import acting_as, any_team, team_visible
@@ -56,49 +59,77 @@ BINDING_BY_CONNECTION = "the sign-in on a plugin's connection finds the one bind
 STAMP_VERSIONS = "stamping a plugin's installed version on each team's binding that has none"
 
 
+class PluginBinding(Out):
+    """One team's binding of one plugin, every column of plugin_bindings."""
+
+    tenant_id: str
+    team_id: str
+    plugin_id: str
+    enabled: bool
+    connection_id: str | None
+    settings: dict[str, JsonValue]
+    updated_by: str
+    updated_at: str
+    version: str | None
+    digest: str | None
+    declarations: dict[str, JsonValue] | None
+    tools_on: list[str] | None
+    config_settings: dict[str, JsonValue] | None
+    setting_modes: dict[str, str] | None
+
+
 class PluginBindings(Store):
     # One row per (tenant, team, plugin): a save is an upsert on that key, so two saves at once leave one row.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
     role = ROLE
 
-    async def get(self, tenant_id: str, team_id: str, plugin_id: str) -> dict[str, Any] | None:
+    async def get(self, tenant_id: str, team_id: str, plugin_id: str) -> PluginBinding | None:
         t = plugin_bindings
         with acting_as(team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t), t.c.plugin_id == plugin_id)
         with isolation.scope(tenant_id, team_id):
             async with self.tx() as c:
-                row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+                return await one(c, q, PluginBinding)
 
-    async def of_team(self, tenant_id: str, team_id: str) -> dict[str, dict[str, Any]]:
+    async def of_team(self, tenant_id: str, team_id: str) -> dict[str, PluginBinding]:
         t = plugin_bindings
         with acting_as(team_id):
             q = sa.select(t).where(t.c.tenant_id == tenant_id, team_visible(t))
         with isolation.scope(tenant_id, team_id):
             async with self.tx() as c:
-                rows = (await c.execute(q)).mappings().all()
-        return {str(r["plugin_id"]): dict(r) for r in rows}
+                found = await rows(c, q, PluginBinding)
+        return {b.plugin_id: b for b in found}
 
-    async def by_connection(self, tenant_id: str, connection_id: str) -> dict[str, Any] | None:
+    async def by_connection(self, tenant_id: str, connection_id: str) -> PluginBinding | None:
         t = plugin_bindings
-        q = sa.select(t).where(
-            t.c.tenant_id == tenant_id, any_team(t, BINDING_BY_CONNECTION), t.c.connection_id == connection_id
+        # The first by key: a connection names one team's binding, but nothing in the table forbids a second.
+        q = (
+            sa.select(t)
+            .where(t.c.tenant_id == tenant_id, any_team(t, BINDING_BY_CONNECTION), t.c.connection_id == connection_id)
+            .order_by(t.c.team_id, t.c.plugin_id)
+            .limit(1)
         )
         with isolation.tenant_wide(BINDING_BY_CONNECTION, tenant_id=tenant_id):
             async with self.tx() as c:
-                row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+                return await one(c, q, PluginBinding)
 
-    async def of_plugin(self, tenant_id: str, plugin_id: str) -> list[dict[str, Any]]:
+    async def of_plugin(self, tenant_id: str, plugin_id: str) -> list[PluginBinding]:
         """Every team's binding of one plugin, for stamping the installed version on those that have none."""
         t = plugin_bindings
         q = sa.select(t).where(t.c.tenant_id == tenant_id, any_team(t, STAMP_VERSIONS), t.c.plugin_id == plugin_id)
         with isolation.tenant_wide(STAMP_VERSIONS, tenant_id=tenant_id):
             async with self.tx() as c:
-                return [dict(r) for r in (await c.execute(q)).mappings().all()]
+                return await rows(c, q, PluginBinding)
 
     async def take(
-        self, tenant_id: str, team_id: str, plugin_id: str, *, version: str, digest: str, declarations: dict[str, Any]
+        self,
+        tenant_id: str,
+        team_id: str,
+        plugin_id: str,
+        *,
+        version: str,
+        digest: str,
+        declarations: dict[str, JsonValue],
     ) -> bool:
         """Records the plugin version a team runs on its existing binding; False when the team has no binding."""
         t = plugin_bindings
@@ -126,7 +157,14 @@ class PluginBindings(Store):
                 return (await c.execute(q)).rowcount > 0
 
     async def set_config(
-        self, tenant_id: str, team_id: str, plugin_id: str, values: dict[str, Any], modes: dict[str, str], *, by: str
+        self,
+        tenant_id: str,
+        team_id: str,
+        plugin_id: str,
+        values: dict[str, JsonValue],
+        modes: dict[str, str],
+        *,
+        by: str,
     ) -> bool:
         """Records the team's values on Ops AI's app and their modes; False when the team has no binding."""
         t = plugin_bindings
@@ -150,9 +188,9 @@ class PluginBindings(Store):
         *,
         enabled: bool,
         connection_id: str | None,
-        settings: dict[str, Any],
+        settings: dict[str, JsonValue],
         by: str,
-    ) -> dict[str, Any]:
+    ) -> None:
         # The version and tools columns are not named here, so an upsert leaves what the team took and chose as it is.
         values = {
             "tenant_id": tenant_id,
@@ -167,4 +205,3 @@ class PluginBindings(Store):
         with isolation.scope(tenant_id, team_id):
             async with self.tx() as c:
                 await c.execute(upsert(c, plugin_bindings, values, keys=["tenant_id", "team_id", "plugin_id"]))
-        return values

@@ -148,7 +148,7 @@ async def test_the_instance_comes_from_the_token_and_only_from_the_systems_hosts
     b = await PluginBindings(engine).get(tenant, "team_a", ID)
     # The instance is the account's own (test_plugin_environments.py); no copy on the binding.
     assert b is not None
-    assert "instance_url" not in b["settings"], b["settings"]
+    assert "instance_url" not in b.settings, b.settings
 
 
 class AllowAll:

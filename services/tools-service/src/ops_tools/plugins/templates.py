@@ -267,10 +267,10 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
         """Whether the app's syncs would run as no one: it signs in, and its team account is not connected."""
         if set(plugin.manifest.connection.kinds) <= {"none"}:
             return False
-        b = await host.bindings.get(tenant_id, team_id, plugin.manifest.id) or {}
-        if not b.get("connection_id") or host.connections is None:
+        b = await host.bindings.get(tenant_id, team_id, plugin.manifest.id)
+        if b is None or not b.connection_id or host.connections is None:
             return True
-        conn = await host.connections.get(tenant_id, str(b["connection_id"]))
+        conn = await host.connections.get(tenant_id, b.connection_id)
         return (conn or {}).get("status") != "connected"
 
     @r.get("/v1/apps/{app_id}/resources", response_model=Envelope[list[AppResource]])

@@ -1,4 +1,4 @@
-# 1155 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 1127 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body apps_add_account
 1 reply apps_add_account
 1 body apps_add_app
@@ -60,7 +60,7 @@
 2 dict-any services/tools-service/src/ops_tools/__main__.py
 12 dict-any services/tools-service/src/ops_tools/app.py
 1 task services/tools-service/src/ops_tools/app.py
-116 dict-any services/tools-service/src/ops_tools/apps.py
+115 dict-any services/tools-service/src/ops_tools/apps.py
 20 dict-any services/tools-service/src/ops_tools/auth/__init__.py
 4 dict-any services/tools-service/src/ops_tools/auth/assertion.py
 3 dict-any services/tools-service/src/ops_tools/auth/discovery.py
@@ -107,8 +107,8 @@
 3 dict-any services/tools-service/src/ops_tools/opa.py
 2 dict-any services/tools-service/src/ops_tools/platform_events.py
 19 dict-any services/tools-service/src/ops_tools/plugins/executor.py
-64 dict-any services/tools-service/src/ops_tools/plugins/host.py
-48 dict-any services/tools-service/src/ops_tools/plugins/routes.py
+57 dict-any services/tools-service/src/ops_tools/plugins/host.py
+41 dict-any services/tools-service/src/ops_tools/plugins/routes.py
 18 dict-any services/tools-service/src/ops_tools/plugins/templates.py
 19 dict-any services/tools-service/src/ops_tools/registry.py
 11 dict-any services/tools-service/src/ops_tools/secrets/routes.py
@@ -119,8 +119,6 @@
 1 dict-any services/tools-service/src/ops_tools/store/mocks.py
 14 dict-any services/tools-service/src/ops_tools/store/modules.py
 3 store-dict services/tools-service/src/ops_tools/store/modules.py
-8 dict-any services/tools-service/src/ops_tools/store/plugin_bindings.py
-5 store-dict services/tools-service/src/ops_tools/store/plugin_bindings.py
 1 dict-any services/tools-service/src/ops_tools/store/review_handoffs.py
 1 dict-any services/tools-service/src/ops_tools/store/secrets.py
 5 dict-any services/tools-service/src/ops_tools/tools.py
