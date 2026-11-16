@@ -9,13 +9,16 @@ from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_store import Guarantee
-from ops_store.dialect import db_after, db_now
+from ops_store.dialect import claim, db_after, db_now
+from ops_store.rows import rows
 from ops_store.schema import system
 
 from .leases import check_fence, thread_leases
@@ -73,6 +76,14 @@ class Claim:
     attempts: int = 0
 
 
+class OpenDueOut(Out):
+    """A thread's earliest open timer of one kind."""
+
+    thread_id: str
+    kind: str
+    due_at: datetime
+
+
 class TimerStore(RuntimeStore):
     # Claims and closes are conditional updates (CAS) on the database's clock (CLOCK); a poller skips rows another
     # holds (LOCK); a fenced write and its fence check share one transaction (TRANSACTION).
@@ -107,7 +118,7 @@ class TimerStore(RuntimeStore):
                 r.timer_id for r in rows if r.fired_at is None and r.cancelled_at is None and key_of(r) not in wanted
             ]
             if stale:
-                locked = self._open(thread_id).where(timers.c.timer_id.in_(stale)).with_for_update(skip_locked=True)
+                locked = claim(self._open(thread_id).where(timers.c.timer_id.in_(stale)), timers)
                 ids = [r.timer_id for r in (await c.execute(locked)).all()]
                 cancelled.extend(ids)
                 if ids:
@@ -136,7 +147,7 @@ class TimerStore(RuntimeStore):
         """Cancels each open wanted timer and arms its next round from now. Returns [(timer id, kind, due at)]."""
         out: list[tuple[str, str, Any]] = []
         async with self._tx() as c:
-            rows = (await c.execute(self._open(thread_id).with_for_update(skip_locked=True))).all()
+            rows = (await c.execute(claim(self._open(thread_id), timers))).all()
             for r in rows:
                 key = key_of(r)
                 if key not in wanted:
@@ -214,19 +225,22 @@ class TimerStore(RuntimeStore):
         async with self._tx() as c:
             return [(str(r.thread_id), str(r.timer_id)) for r in (await c.execute(q)).all()]
 
-    async def open_due(self, thread_ids: list[str]) -> dict[str, dict[str, Any]]:
+    async def open_due(self, thread_ids: list[str]) -> dict[str, dict[str, datetime]]:
         """The earliest open breach and timeout due time per thread: {thread: {kind: due at}}."""
         if not thread_ids or not self.enabled:
             return {}
-        q = sa.select(timers.c.thread_id, timers.c.kind, timers.c.due_at).where(
-            timers.c.thread_id.in_(thread_ids), OPEN, timers.c.kind.in_(("breach", "timeout"))
+        t = timers.c
+        # Ordered latest first, so each thread's earliest of a kind is the one left. Not min() in SQL: the timers
+        # transaction is install-wide, which lets through only its listed functions (ops_store.isolation).
+        q = (
+            sa.select(t.thread_id, t.kind, t.due_at)
+            .where(t.thread_id.in_(thread_ids), OPEN, t.kind.in_(("breach", "timeout")))
+            .order_by(t.due_at.desc())
         )
-        found: dict[str, dict[str, Any]] = {}
+        found: dict[str, dict[str, datetime]] = {}
         async with self._tx() as c:
-            for tid, kind, at in await c.execute(q):
-                current = found.setdefault(str(tid), {}).get(str(kind))
-                if current is None or at < current:
-                    found[str(tid)][str(kind)] = at
+            for r in await rows(c, q, OpenDueOut):
+                found.setdefault(r.thread_id, {})[r.kind] = r.due_at
         return found
 
     def _open(self, thread_id: str) -> sa.Select[Any]:

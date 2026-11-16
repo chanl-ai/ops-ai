@@ -1,4 +1,4 @@
-# 2523 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 2520 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body agents_attach_skill
 1 body agents_create_agent
 1 reply agents_create_agent
@@ -321,8 +321,7 @@
 1 store-dict services/agents-service/src/ops_agents/store/task_types.py
 7 dict-any services/agents-service/src/ops_agents/store/template_copies.py
 5 store-dict services/agents-service/src/ops_agents/store/template_copies.py
-3 dict-any services/agents-service/src/ops_agents/store/timers.py
-1 store-dict services/agents-service/src/ops_agents/store/timers.py
+1 dict-any services/agents-service/src/ops_agents/store/timers.py
 3 dict-any services/agents-service/src/ops_agents/store/trigger_events.py
 2 store-dict services/agents-service/src/ops_agents/store/trigger_events.py
 11 dict-any services/agents-service/src/ops_agents/store/typed_records.py
