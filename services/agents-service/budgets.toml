@@ -269,7 +269,9 @@ queries = 2
 queries = 1
 
 ["GET /v1/widgets/{widget_id}"]
-not_budgeted = "grows with rows: 19 statements at 5, 169 at 50; list being moved to SQL by the store pass; re-measure then"
+queries = 7
+transactions = 7
+connections = 7
 
 ["GET /v1/workflow-refs"]
 queries = 2

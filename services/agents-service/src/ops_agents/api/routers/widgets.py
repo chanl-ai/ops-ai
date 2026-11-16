@@ -33,7 +33,7 @@ from ..schemas import WidgetTemplateList, WidgetTemplateOut
 from ..team_names import team_name
 from ..widgets import (
     check_content,
-    listed,
+    listed_one,
     listed_view,
     picker,
     publish,
@@ -158,7 +158,7 @@ async def widget_options(  # noqa: PLR0917 - FastAPI reads each query parameter 
 @router.get("/v1/widgets/{widget_id}", response_model=Envelope[WidgetTemplateOut])
 async def get_widget(rt: Rt, me: Reader, widget_id: str) -> JSONResponse:
     """Off the request transaction: the team's display name is read from platform-service after the rows."""
-    found = next((w for w in await listed(rt, teams_of(me)) if w["widgetId"] == widget_id), None)
+    found = await listed_one(rt, teams_of(me), widget_id)
     if found is None:
         raise NotFound(f"Widget {widget_id}")
     words = {"edit": "save", "delete": "retire"}

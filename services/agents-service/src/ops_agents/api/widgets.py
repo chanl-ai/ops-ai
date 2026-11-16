@@ -124,14 +124,14 @@ async def seeded_widgets(rt: Runtime) -> list[dict[str, Any]]:
     return sorted(out, key=lambda w: str(w["name"]))
 
 
-async def listed(rt: Runtime, teams: list[str]) -> list[dict[str, Any]]:
-    """The seeded library's latest versions, then the registry's widgets in the caller's teams, newest version each,
-    by name."""
-    out = await seeded_widgets(rt)
-    for row in await widgets(rt).rows():
-        if row["team_id"] in teams:
-            out.append(await view(rt, row["id"]))
-    return sorted(out, key=lambda w: str(w["name"]))
+async def listed_one(rt: Runtime, teams: list[str], widget_id: str) -> dict[str, Any] | None:
+    """The widget `widget_id` as the caller sees it, reading only that widget: the seeded library's latest version
+    first, else the registry's newest version when it is in the caller's teams."""
+    seeded = next((w for w in await seeded_widgets(rt) if w["widgetId"] == widget_id), None)
+    if seeded is not None:
+        return seeded
+    row = await widgets(rt).find(widget_id)
+    return await view(rt, widget_id) if row is not None and row["team_id"] in teams else None
 
 
 async def published(rt: Runtime, widget_id: str, version: int | None) -> WidgetPinRule | None:
