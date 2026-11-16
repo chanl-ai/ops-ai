@@ -147,6 +147,79 @@ Filled in when the pilot closes. The four lanes read these before they size thei
 | Statements and transactions per route at 5 and 50 rows, PostgreSQL and SQL Server | |
 | Pool wait under 50 concurrent GETs; longest `db.tx_open_ms` | |
 
+## Measured results
+
+Status: current, measured at the branch head on 2026-11-15. Every figure comes from a git command: "before" is the
+first committed version of each baseline file, found with `git log --diff-filter=A -- <file>`, and "after" is the file
+at the branch head. Typed-boundaries totals are the sum of the count column over all rows of the baseline file, which
+equals the figure in each file's header line. A cell reading "none" means the file does not exist for that service.
+
+| Measure | documents | files | models | runner |
+|---|---|---|---|---|
+| Isolation sites: raw | 1 -> 0 | 1 -> 0 | 25 -> 0 | none |
+| Isolation sites: caught | 5 -> 0 | 4 -> 0 | 0 -> 0 | none |
+| Isolation sites: broad | not counted -> 0 | not counted -> 0 | not counted -> 0 | none |
+| Isolation sites: install | not counted -> 0 | not counted -> 0 | not counted -> 23 | none |
+| Typed boundaries, total | 346 -> 289 | 64 -> 58 | 97 -> 69 | 25 -> 25 |
+| Config literals: timeouts | 7 -> 3 | 1 -> 0 | 2 -> 2 | 1 -> 2 |
+| Config literals: clients | 7 -> 3 | 1 -> 0 | 2 -> 2 | 1 -> 0 |
+| Relay sites | 1 -> 0 | 1 -> 0 | none | none |
+| Loop-health rows | 2 -> 0 | 2 -> 0 | none | none |
+| Routes on the request transaction (`Tx` parameters) | 16 of 33 | 16 of 27 | 16 of 19 | 0 of 2 |
+| Statement budget file (`budgets.toml`) | present | present | present | none |
+| Tests passing, as stated in the last commit body that gives a count | 163 | 129 | 130 (PostgreSQL) | not recorded |
+
+Reading the table:
+
+- The broad and install columns were added to the isolation check after the baselines were first committed, so "not
+  counted" means no figure existed before. Models' 23 install sites are the model aliases and call log, which hold
+  no tenant and are marked install-wide; they replaced the 25 raw transactions.
+- Runner's timeouts rise from 1 to 2 while its clients fall from 1 to 0: the check was widened to count a timeout
+  given by position, so the second timeout existed before and was not counted. The two literal timeouts remain in
+  `fetch.py` and `wasm.py`.
+- Typed boundaries for runner stay at 25 in total: one `dict-any` row became a `reply` row (the run route), so the
+  total did not change.
+- Runner has no store and no database, so it has no isolation, relay or loop-health baseline and no budget file. Its
+  health route and its one run route are not on `Tx`.
+- Route counts are decorated routes in each service's source; `Tx` parameters are counted in the same files. The
+  routes that are not on `Tx` are health, streaming and fan-out routes that open their own transactions.
+
+## Measured rates
+
+Observed on this branch, with the caveat that several builders worked at once, so the spans are not hours of one
+person's work and cannot be divided by lines to give a rate per builder. All four services were first touched by the
+same shared commit (the endpoint settings and owned client), which is why the first column is the same for each. The
+second column starts at the first commit whose subject names the service.
+
+| Service | First commit touching the service | First commit naming the service | Last commit | Span from first touch | Span from first naming | Store lines changed |
+|---|---|---|---|---|---|---|
+| models | 17:59 | 19:46 | 22:00 | 4 h 1 min | 2 h 14 min | 418 added, 149 removed (6 files) |
+| documents | 17:59 | 21:01 | 22:44 | 4 h 45 min | 1 h 43 min | 465 added, 487 removed (9 files) |
+| files | 17:59 | 21:10 | 22:04 | 4 h 5 min | 0 h 54 min | 331 added, 298 removed (5 files) |
+| runner | 17:59 | 22:13 | 22:30 | 4 h 31 min | 0 h 17 min | no store |
+
+Times are local commit times on 2026-11-15. Store lines are `git diff --stat` from the parent of the first commit to
+the branch head over each service's `store` directory. The branch also carries the shared components, the checks and
+their tests, which are not part of any service's span.
+
+## What the pilot found
+
+The shared components needed these changes before the services could move onto them:
+
+- Install-wide scope with a table guard: a store method for tables that hold no tenant, refused on any table not
+  marked install-wide, with the count of such blocks held in a falling baseline.
+- Bases for bodies and replies that keep an outside wire format, needed for the OpenAI-shaped replies models returns.
+- One database probe for `/health`, owned by `ops_store` instead of each service.
+- A store method for cross-tenant reads that runs as the store's system role, used by documents' restart reads.
+- Custom loop passes: a listed process can have its own pass for the sweep runner.
+- Type checking of the packages and each service on the one list of checks.
+
+These stay unconverted because converting them would change an API document:
+
+- Replies with untyped fields: `reply` and `dict-any` rows remain in all four typed-boundaries baselines.
+- List routes on the shared list contract: no route in documents, files or models calls `list_page` or takes `ListQuery`.
+- Health replies: `health_health` remains a `reply` row in documents, files and models.
+
 ## Branch and pull request
 
 Branch `refactor/pilot-services-on-shared-layers` from `origin/develop`, one pull request into `develop`. Commit
