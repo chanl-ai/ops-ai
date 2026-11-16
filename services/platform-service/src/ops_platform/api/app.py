@@ -59,7 +59,7 @@ from ..oauth.metadata import server_metadata
 from ..oauth.token import Tokens
 from ..passwords import Passwords, email_key_from
 from ..policies import Policies
-from ..roles import Roles, permissions_view, workspace_admin_of
+from ..roles import Roles, permissions_view
 from ..signin_options import SignInOptions
 from ..signin_settings import ProviderMetadata, SignInSettings
 from ..signin_watch import SecurityNotices
@@ -543,7 +543,7 @@ def create_public_app(
         found = await me_store.read(tenant, user)
         if found is None:
             raise Unauthorized("Sign in again.")
-        teams = [*found.member_teams, *(found.other_teams if await workspace_admin_of(found) else [])]
+        teams = [*found.member_teams, *found.other_teams]
         return ok(
             {
                 "user": {"id": found.user.id, "email": found.user.email, "name": found.user.name},
@@ -554,7 +554,8 @@ def create_public_app(
                     found.grids,
                     security=found.security_team,
                     version=found.permission_version,
-                    teams=None,
+                    # Every team the person belongs to or is assigned in, as /v1/me/permissions answers.
+                    teams=list(found.holdings.teams),
                 ),
                 "tenantId": tenant,
                 "tenantName": found.tenant_name or None,

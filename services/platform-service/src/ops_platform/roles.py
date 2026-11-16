@@ -17,7 +17,6 @@ from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
 
-from .store.me import MeRows
 from .store.roles import (
     AlreadyGrantedError,
     Holdings,
@@ -25,7 +24,6 @@ from .store.roles import (
     RoleNameTakenError,
     RoleRow,
     RoleStore,
-    access_from,
 )
 
 
@@ -218,24 +216,6 @@ class Roles:
         """The grids of the roles `h` holds, the workspace's Security team and its permission version."""
         grids = await self.store.grids(tenant_id, sorted({a.role_id for a in h.assignments}))
         return grids, await self.store.security_team(tenant_id), await self.store.version(tenant_id)
-
-
-async def workspace_admin_of(found: MeRows) -> bool:
-    """`RoleStore.workspace_admin`, decided on the rows `/v1/me` read rather than on a read of its own."""
-
-    async def fetch(_t: str, _v: int, ids: list[str]) -> dict[str, list[Grant]]:
-        return {i: found.grids[i] for i in ids if i in found.grids}
-
-    p, access = await access_from(
-        found.user.tenant_id,
-        found.user.id,
-        found.holdings,
-        version=found.permission_version,
-        security=found.security_team,
-        fetch=fetch,
-    )
-    # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
-    return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
 
 
 def permissions_view(

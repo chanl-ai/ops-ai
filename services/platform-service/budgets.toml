@@ -41,7 +41,7 @@ transactions = 3   # listed: what the route opens today; the store rewrite takes
 connections = 3
 
 ["GET /v1/me"]
-queries = 7
+queries = 8   # a workspace admin, as here, reads every other team too; anyone else runs 7
 
 ["GET /v1/me/permissions"]
 queries = 9

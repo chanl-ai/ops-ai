@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import event
+
 from ops_access import ANY_TEAM
 from ops_platform.store.tables import role_assignments, teams
 from ops_service_kit.ids import new_id, now_iso
@@ -78,3 +80,28 @@ async def test_me_answers_as_the_permissions_and_teams_routes_do(platform: Platf
     await _assign(platform, builder, "viewer", named_only)
     me = await _same_answers(platform, builder)
     assert [t["id"] for t in me["teams"]] == list(builder.teams)
+
+
+async def test_a_non_admins_me_reads_no_team_they_are_not_in(platform: Platform) -> None:
+    # Every read of the teams table on /v1/me is joined to the caller's own active memberships; only a workspace
+    # admin's read lists every team. A read of every team, even one the answer filters later, crosses teams.
+    builder = await platform.person(roles=("builder",))
+    await _team(platform, builder.tenant_id)
+    h = await bearer(platform, builder)
+    sent: list[str] = []
+
+    def seen(_c: Any, _cur: Any, statement: str, *_: Any) -> None:
+        flat = " ".join(statement.split())
+        if " FROM teams" in flat:
+            sent.append(flat)
+
+    target = platform.store.engine.sync_engine
+    event.listen(target, "before_cursor_execute", seen)
+    try:
+        r = await platform.public.get("/v1/me", headers=h)
+    finally:
+        event.remove(target, "before_cursor_execute", seen)
+    assert r.status_code == 200, r.text
+    assert [t["id"] for t in r.json()["data"]["teams"]] == list(builder.teams)
+    wide = [s for s in sent if "FROM teams JOIN members ON" not in s or "members.user_id" not in s]
+    assert sent and wide == [], wide
