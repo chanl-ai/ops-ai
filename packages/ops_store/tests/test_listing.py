@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import LabelledListResult
 from ops_service_kit.listing import ListParams
 from ops_service_kit.settings import Settings
 from ops_store.backends import backends
@@ -136,6 +137,8 @@ async def test_a_facet_keeps_its_other_choices_while_one_is_picked_and_names_eac
         "desk": {"Claims intake": 2, "Loan desk": 2},
     }
     assert page.get("labels") == {"agent": {"a_claims": "Claims intake", "a_loans": "Loan desk"}}
+    # The reply is the kit's model of a labelled list, whose pagination is built where `paged()` builds it.
+    LabelledListResult[dict[str, Any]].model_validate(page)
 
 
 async def test_the_statements_a_list_runs_do_not_grow_with_its_rows(engine: AsyncEngine) -> None:

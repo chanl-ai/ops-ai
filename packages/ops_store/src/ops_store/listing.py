@@ -17,12 +17,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_service_kit.http import page_window
+from ops_service_kit.http import PageJSON, page_window, paged
 from ops_service_kit.listing import ListParams
 
 from .search import contains
@@ -36,20 +36,11 @@ _NONE: Mapping[str, Any] = MappingProxyType({})
 Rows = sa.Select[*tuple[Any, ...]]
 
 
-class Pagination(TypedDict):
-    page: int
-    pageSize: int
-    total: int
-    totalPages: int
-    hasNext: bool
-    hasPrev: bool
-
-
 class ListPage(TypedDict):
-    """The `ListResult` JSON (`ops_service_kit.http`); `labels` only when the caller asked for some."""
+    """The `ListResult` JSON (`ops_service_kit.http`), or `LabelledListResult` when the caller asked for labels."""
 
     data: list[dict[str, Any]]
-    pagination: Pagination
+    pagination: PageJSON
     facets: dict[str, dict[str, int]]
     labels: NotRequired[dict[str, dict[str, str]]]
 
@@ -94,24 +85,10 @@ async def list_page(
         q = query.where(*chosen, *others).with_only_columns(column, sa.func.count()).group_by(column).order_by(None)
         counted[name] = {str(value): int(n) for value, n in await conn.execute(q) if value is not None}
 
-    pages = max(1, -(-total // params.page_size))
-    out: ListPage = {
-        "data": [dict(r) for r in rows.mappings()],
-        "pagination": {
-            "page": page,
-            "pageSize": params.page_size,
-            "total": total,
-            "totalPages": pages,
-            "hasNext": page < pages,
-            "hasPrev": page > 1,
-        },
-        "facets": counted,
-    }
-    if labels:
-        out["labels"] = {
-            name: await _labels(conn, read, sorted(counted.get(name, {}))) for name, read in labels.items()
-        }
-    return out
+    named = {name: await _labels(conn, read, sorted(counted.get(name, {}))) for name, read in labels.items()}
+    data = [dict(r) for r in rows.mappings()]
+    out = paged(data, total, page, params.page_size, facets=counted, labels=named or None)
+    return cast(ListPage, out)
 
 
 async def _labels(conn: AsyncConnection, read: Rows, values: list[str]) -> dict[str, str]:
@@ -130,4 +107,4 @@ def _declared(columns: Mapping[str, sa.ColumnElement[Any]]) -> None:
         raise ValueError(f"list_page filters or sorts on {', '.join(missing)}: declare each with info=LISTED")
 
 
-__all__ = ["LISTED", "LISTED_KEY", "ListPage", "Pagination", "list_page"]
+__all__ = ["LISTED", "LISTED_KEY", "ListPage", "list_page"]

@@ -7,7 +7,7 @@ against them; `ops_service_kit.contract` closes that gap in each service's tests
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypedDict, cast
 
 from fastapi import FastAPI, Request
 from fastapi.dependencies.models import Dependant
@@ -22,6 +22,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .errors import ApiError, TooManyRequests
 from .ids import new_id
+from .listing import page_sizes
 from .logging import get_logger
 from .request_timing import RequestTimingMiddleware, current_request_id
 from .settings import Settings
@@ -148,6 +149,13 @@ class ListResult[T](Out):
     facets: dict[str, dict[str, int]]
 
 
+class LabelledListResult[T](ListResult[T]):
+    """A list whose facet values are ids, with the label of each (`ops_store.listing.list_page(labels=...)`). Its
+    own model, so the document of every list without labels stays as it is."""
+
+    labels: dict[str, dict[str, str]]
+
+
 class Option(Out):
     """One choice in a picker: what it stores, what it shows, a short hint, and why it cannot be chosen when it
     cannot (the agent lacks a tool the widget needs, say)."""
@@ -187,11 +195,43 @@ def page_window(total: int, page: int, page_size: int) -> tuple[int, int]:
     return page, (page - 1) * page_size
 
 
-def paged(rows: list[dict[str, Any]], total: int, page: int, page_size: int) -> dict[str, Any]:
-    """The ListResult shape, with no facets, for one page the store already limited to `page_size` rows."""
+class PageJSON(TypedDict):
+    """The `Pagination` JSON, as `pagination()` builds it."""
+
+    page: int
+    pageSize: int
+    total: int
+    totalPages: int
+    hasNext: bool
+    hasPrev: bool
+
+
+def pagination(total: int, page: int, page_size: int) -> PageJSON:
+    """The `Pagination` JSON of one page: the one place its keys are built."""
     pages = max(1, -(-total // page_size))
-    meta = {"page": page, "pageSize": page_size, "total": total, "totalPages": pages}
-    return {"data": rows, "pagination": meta | {"hasNext": page < pages, "hasPrev": page > 1}, "facets": {}}
+    return {
+        "page": page,
+        "pageSize": page_size,
+        "total": total,
+        "totalPages": pages,
+        "hasNext": page < pages,
+        "hasPrev": page > 1,
+    }
+
+
+def paged(
+    rows: list[dict[str, Any]],
+    total: int,
+    page: int,
+    page_size: int,
+    *,
+    facets: dict[str, dict[str, int]] | None = None,
+    labels: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """The ListResult JSON for one page the store already limited to `page_size` rows; with `labels`, the
+    LabelledListResult JSON."""
+    out = {"data": rows, "pagination": pagination(total, page, page_size), "facets": facets or {}}
+    return out if labels is None else out | {"labels": labels}
 
 
 def ok(data: Any, status: int = 200) -> JSONResponse:
@@ -244,6 +284,8 @@ def install_error_handlers(app: FastAPI) -> None:
         at = next(i for i, m in enumerate(app.user_middleware) if m.cls is _UnhandledAsEnvelope)
         timing = Middleware(RequestTimingMiddleware, enabled=Settings().request_timing)
         app.user_middleware.insert(at, timing)
+    # Every service builds its app here, so the list sizes are read at start rather than by the first list request.
+    page_sizes()
 
     @app.exception_handler(ApiError)
     async def api_error(_: Request, e: ApiError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

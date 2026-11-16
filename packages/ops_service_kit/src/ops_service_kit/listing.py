@@ -7,11 +7,13 @@
 `page`, `pageSize`, `search`, `sortBy`, `sortOrder` and `ids` are the same on every list; every other query key is a
 filter, given once per value (`?status=open&status=held`), and the store names the columns it filters on
 (`ops_store.listing.list_page`). A page size above the install's maximum (`OPS_PAGE_SIZE_MAX`) is answered at the
-maximum, so no caller loads a whole table by asking for it.
+maximum, so no caller loads a whole table by asking for it. Both sizes are read from `Settings` once, when
+`install_error_handlers` builds the app, never per request.
 """
 
 from __future__ import annotations
 
+from functools import cache
 from typing import Annotated, Literal
 
 from fastapi import Depends, Query, Request
@@ -23,9 +25,16 @@ from .settings import Settings
 SHARED = frozenset({"page", "pageSize", "search", "sortBy", "sortOrder", "ids"})
 
 
+@cache
+def page_sizes() -> tuple[int, int]:
+    """The install's default and maximum page size, read once per process."""
+    settings = Settings()
+    return settings.page_size_default, settings.page_size_max
+
+
 class ListParams(BaseModel):
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default_factory=lambda: Settings().page_size_default, ge=1)
+    page_size: int = Field(default_factory=lambda: page_sizes()[0], ge=1)
     search: str | None = None
     sort_by: str | None = None
     sort_order: Literal["asc", "desc"] = "desc"
@@ -36,7 +45,7 @@ class ListParams(BaseModel):
     @field_validator("page_size")
     @classmethod
     def _capped(cls, size: int) -> int:
-        return min(size, Settings().page_size_max)
+        return min(size, page_sizes()[1])
 
 
 def list_params(
@@ -61,4 +70,4 @@ def list_params(
 
 ListQuery = Annotated[ListParams, Depends(list_params)]
 
-__all__ = ["SHARED", "ListParams", "ListQuery", "list_params"]
+__all__ = ["SHARED", "ListParams", "ListQuery", "list_params", "page_sizes"]
