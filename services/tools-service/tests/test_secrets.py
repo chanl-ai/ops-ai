@@ -78,7 +78,7 @@ async def test_a_value_goes_in_and_never_comes_out(keyed: Bank) -> None:
     made = await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
     assert made.status_code == 201, made.text
     listed = await c.get("/v1/secrets")
-    assert [s["name"] for s in listed.json()["data"]] == ["BANK_KEY"]
+    assert [s["name"] for s in listed.json()["data"]["data"]] == ["BANK_KEY"]
     rotated = await c.post("/v1/secrets/BANK_KEY/rotate", json={"value": ROTATED})
     assert rotated.json()["data"]["version"] == 2
     for r in (made, listed, rotated):

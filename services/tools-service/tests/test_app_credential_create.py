@@ -6,6 +6,7 @@ app. Rig: test_app_accounts."""
 
 from __future__ import annotations
 
+from ops_service_kit.listing import ListParams
 from ops_tools.store.secrets import SecretStore
 
 from .test_app_accounts import (
@@ -55,7 +56,7 @@ async def test_a_credential_needs_no_account_and_its_secret_is_not_a_value_tools
     cred = await world.store.credential(tenant, str(row["id"]))
     assert cred is not None and cred["secret_name"], cred
     secrets = SecretStore(world.store.engine)
-    shown = await secrets.page(tenant, str(cred["team_id"]), "", offset=0, limit=100)
+    _, shown = await secrets.page(tenant, str(cred["team_id"]), ListParams(ids=[str(cred["secret_name"])]))
     held = [s for s in await secrets.listed(tenant, str(cred["team_id"])) if s.name == cred["secret_name"]]
     assert held and held[0].credential_id == row["id"] and held[0].connection_id is None, held
     # Listed read only beside the team's secrets, and changed on the credential (test_secrets_auth_config_read_only).

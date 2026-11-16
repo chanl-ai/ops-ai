@@ -2281,6 +2281,11 @@ class EnvelopeHostList(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSecretList(TypedDict, closed=True):
+    data: SecretList
+    success: Literal[True]
+
+
 class EnvelopeSignInFinished(TypedDict, closed=True):
     data: SignInFinished
     success: Literal[True]
@@ -2288,11 +2293,6 @@ class EnvelopeSignInFinished(TypedDict, closed=True):
 
 class EnvelopeSystemCard(TypedDict, closed=True):
     data: SystemCard
-    success: Literal[True]
-
-
-class EnvelopeUnionListSecretMetaSecretList(TypedDict, closed=True):
-    data: list[SecretMeta] | SecretList
     success: Literal[True]
 
 

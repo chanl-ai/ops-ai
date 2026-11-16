@@ -975,27 +975,38 @@
   },
   "list": {
    "body": {
-    "data": [
-     {
-      "authConfig": null,
-      "connectionId": null,
-      "createdAt": "<datetime>",
-      "createdBy": "James Richardson",
-      "credentialId": null,
-      "ends": "er-1",
-      "label": null,
-      "name": "LEDGER_KEY",
-      "protection": null,
-      "readOnly": false,
-      "teamId": "team_lending",
-      "teams": [
-       "team_lending"
-      ],
-      "templateId": null,
-      "usedBy": [],
-      "version": 1
+    "data": {
+     "data": [
+      {
+       "authConfig": null,
+       "connectionId": null,
+       "createdAt": "<datetime>",
+       "createdBy": "James Richardson",
+       "credentialId": null,
+       "ends": "er-1",
+       "label": null,
+       "name": "LEDGER_KEY",
+       "protection": null,
+       "readOnly": false,
+       "teamId": "team_lending",
+       "teams": [
+        "team_lending"
+       ],
+       "templateId": null,
+       "usedBy": [],
+       "version": 1
+      }
+     ],
+     "facets": {},
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
      }
-    ],
+    },
     "success": true
    },
    "status": 200

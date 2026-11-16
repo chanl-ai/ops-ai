@@ -650,11 +650,13 @@ export const toolsOperations = {
     "path": "/v1/secrets",
     "pathParams": [],
     "query": [
+      "teamId",
       "page",
       "pageSize",
       "search",
-      "templateId",
-      "teamId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

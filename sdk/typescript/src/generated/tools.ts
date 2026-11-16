@@ -908,8 +908,9 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose
-         *     name matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.
+         * @description One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,
+         *     `ids` names secrets, and the filter `templateId` keeps those filling a template slot. Pickers search or name
+         *     what they need rather than loading every secret. The page and its count are queried, not sliced.
          */
         get: operations["secrets_list_secrets"];
         put?: never;
@@ -3125,6 +3126,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SecretList] */
+        Envelope_SecretList_: {
+            data: components["schemas"]["SecretList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SecretMeta] */
         Envelope_SecretMeta_: {
             data: components["schemas"]["SecretMeta"];
@@ -3218,16 +3228,6 @@ export interface components {
         /** Envelope[Union[SendPolicyView, NoneType]] */
         Envelope_Union_SendPolicyView__NoneType__: {
             data: components["schemas"]["SendPolicyView"] | null;
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[Union[list[SecretMeta], SecretList]] */
-        Envelope_Union_list_SecretMeta___SecretList__: {
-            /** Data */
-            data: components["schemas"]["SecretMeta"][] | components["schemas"]["SecretList"];
             /**
              * Success
              * @constant
@@ -4979,7 +4979,7 @@ export interface components {
         };
         /**
          * SecretList
-         * @description GET /v1/secrets?page=: one page of the secrets' metadata.
+         * @description GET /v1/secrets: one page of the secrets' metadata.
          */
         SecretList: {
             /** Data */
@@ -12188,11 +12188,13 @@ export interface operations {
     secrets_list_secrets: {
         parameters: {
             query?: {
-                page?: number | null;
-                pageSize?: number;
-                search?: string;
-                templateId?: string | null;
                 teamId?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -12206,7 +12208,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_list_SecretMeta___SecretList__"];
+                    "application/json": components["schemas"]["Envelope_SecretList_"];
                 };
             };
             /** @description Invalid request */

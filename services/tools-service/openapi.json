@@ -4824,6 +4824,25 @@
         "title": "Envelope[PluginUpdateView]",
         "type": "object"
       },
+      "Envelope_SecretList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SecretList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SecretList]",
+        "type": "object"
+      },
       "Envelope_SecretMeta_": {
         "additionalProperties": false,
         "properties": {
@@ -5038,36 +5057,6 @@
           "data"
         ],
         "title": "Envelope[Union[SendPolicyView, NoneType]]",
-        "type": "object"
-      },
-      "Envelope_Union_list_SecretMeta___SecretList__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/SecretMeta"
-                },
-                "type": "array"
-              },
-              {
-                "$ref": "#/components/schemas/SecretList"
-              }
-            ],
-            "title": "Data"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[Union[list[SecretMeta], SecretList]]",
         "type": "object"
       },
       "Envelope_WaitOut_": {
@@ -10417,7 +10406,7 @@
       },
       "SecretList": {
         "additionalProperties": false,
-        "description": "GET /v1/secrets?page=: one page of the secrets' metadata.",
+        "description": "GET /v1/secrets: one page of the secrets' metadata.",
         "properties": {
           "data": {
             "items": {
@@ -26077,64 +26066,9 @@
     },
     "/v1/secrets": {
       "get": {
-        "description": "The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose\nname matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.",
+        "description": "One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,\n`ids` names secrets, and the filter `templateId` keeps those filling a template slot. Pickers search or name\nwhat they need rather than loading every secret. The page and its count are queried, not sliced.",
         "operationId": "secrets_list_secrets",
         "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Page"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Search",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "templateId",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Templateid"
-            }
-          },
           {
             "in": "query",
             "name": "teamId",
@@ -26150,6 +26084,100 @@
                 }
               ],
               "title": "Teamid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -26222,7 +26250,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_list_SecretMeta___SecretList__"
+                  "$ref": "#/components/schemas/Envelope_SecretList_"
                 }
               }
             },

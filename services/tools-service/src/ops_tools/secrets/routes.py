@@ -19,7 +19,8 @@ from ops_access import Access, policy, reader_of, require_provisioner
 from ops_identity import Principal
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, Out, error_responses, ok, page_window, paged
+from ops_service_kit.http import Envelope, In, ListResult, Out, error_responses, ok
+from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 from ops_store.team_scope import acting_as
 
@@ -96,7 +97,7 @@ class SecretMeta(Out):
 
 
 class SecretList(ListResult[SecretMeta]):
-    """GET /v1/secrets?page=: one page of the secrets' metadata."""
+    """GET /v1/secrets: one page of the secrets' metadata."""
 
 
 def _refs(op: dict[str, Any]) -> set[str]:
@@ -258,37 +259,19 @@ def secrets_router(
         if who.principal is not None:
             may_write_secret(who.principal, action, owner, protection=protection)
 
-    @r.get(
-        "", response_model=Envelope[list[SecretMeta] | SecretList], dependencies=[Depends(reader_of("secrets_egress"))]
-    )
+    @r.get("", response_model=Envelope[SecretList], dependencies=[Depends(reader_of("secrets_egress"))])
     async def list_secrets(  # pyright: ignore[reportUnusedFunction]
-        who: Annotated[Person, Depends(caller)],
-        _: Tx,
-        *,
-        page: Annotated[int | None, Query(ge=1)] = None,
-        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
-        search: str = "",
-        template_id: Annotated[str | None, Query(alias="templateId")] = None,
-        team_id: TeamQuery = None,
+        who: Annotated[Person, Depends(caller)], _: Tx, q: ListQuery, team_id: TeamQuery = None
     ) -> JSONResponse:
-        """The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose
-        name matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced."""
+        """One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,
+        `ids` names secrets, and the filter `templateId` keeps those filling a template slot. Pickers search or name
+        what they need rather than loading every secret. The page and its count are queried, not sliced."""
         owner = _team(who, team_id)
         with _in(who, owner):
             users = await _users(who.tenant_id, owner)
-            if page is None:
-                listed = await store.listed(who.tenant_id, owner)
-                configs = await _configs(who.tenant_id, owner)
-                return ok(
-                    [_meta(x, users, configs) for x in listed if template_id is None or x.template_id == template_id]
-                )
-            total = await store.count(who.tenant_id, owner, search, template_id)
-            page, offset = page_window(total, page, page_size)
-            found = await store.page(
-                who.tenant_id, owner, search, offset=offset, limit=page_size, template_id=template_id
-            )
+            page, found = await store.page(who.tenant_id, owner, q)
             configs = await _configs(who.tenant_id, owner)
-            return ok(paged([_meta(x, users, configs) for x in found], total, page, page_size))
+            return ok({**page, "data": [_meta(x, users, configs) for x in found]})
 
     @r.post("", response_model=Envelope[SecretMeta], status_code=201)
     async def create_secret(body: SecretIn, who: Annotated[Person, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

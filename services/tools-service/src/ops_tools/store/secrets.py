@@ -12,11 +12,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, background
 from ops_store.dialect import locked
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
-from ops_store.search import contains
 from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
@@ -48,7 +49,7 @@ tool_secrets = sa.Table(
     sa.Column("last_used_at", _TS),
     # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
     # `system` nothing, `managed` anything. Null on a record no template made.
-    sa.Column("template_id", sa.String(120), index=True),
+    sa.Column("template_id", sa.String(120), index=True, info=LISTED),
     sa.Column("protection", sa.String(16)),
     # The connection whose secret part this is; written through the connection, listed as belonging to it,
     # never rotated or deleted on its own. Null for a secret a person added on the Secrets page.
@@ -169,45 +170,26 @@ class SecretStore(Store):
         async with self.tx() as c:
             return await one(c, q, SecretMeta)
 
-    async def page(
-        self,
-        tenant_id: str,
-        team_id: str,
-        search: str,
-        *,
-        offset: int,
-        limit: int,
-        template_id: str | None = None,
-    ) -> list[SecretMeta]:
-        """One page of the team's secrets whose name contains `search`, by name, leaving out accounts' secret parts;
-        the ciphertext is not selected, and LIMIT and OFFSET run in the query."""
-        q = (
-            sa.select(*_META)
-            .where(self._matching(tenant_id, team_id, search, template_id))
-            .order_by(sa.func.lower(tool_secrets.c.name))
-        )
+    async def page(self, tenant_id: str, team_id: str, params: ListParams) -> tuple[ListPage, list[SecretMeta]]:
+        """One page of the team's secrets' metadata by name ignoring case, then the key; `search` matches the name,
+        `ids` names secrets exactly, and the filter `templateId` keeps those filling a template slot. An account's
+        secret parts and an auth config's client secret are listed too, read only; the ciphertext is not selected."""
+        q = sa.select(*_META).where(_of(tenant_id, team_id), team_visible(tool_secrets))
+        if params.ids is not None:
+            # The table is keyed by (tenant, team, name) and list_page's `ids` needs a one-column key, so the names
+            # are matched here: every read names one team, so a name is one row.
+            q = q.where(tool_secrets.c.name.in_(params.ids))
+            params = params.model_copy(update={"ids": None, "search": None})
         async with self.tx() as c:
-            return await rows(c, q.offset(offset).limit(limit), SecretMeta)
-
-    async def count(self, tenant_id: str, team_id: str, search: str, template_id: str | None = None) -> int:
-        q = (
-            sa.select(sa.func.count())
-            .select_from(tool_secrets)
-            .where(self._matching(tenant_id, team_id, search, template_id), team_visible(tool_secrets))
-        )
-        async with self.tx() as c:
-            return int((await c.execute(q)).scalar_one())
-
-    @staticmethod
-    def _matching(tenant_id: str, team_id: str, search: str, template_id: str | None = None) -> sa.ColumnElement[bool]:
-        # An account's secret parts (an API key, a password) are its sign-in, kept and changed on the account, so the
-        # Secrets list leaves them out. An auth config's client secret is listed, read only, with its config.
-        named = sa.and_(
-            _of(tenant_id, team_id),
-            tool_secrets.c.connection_id.is_(None),
-            contains(tool_secrets.c.name, search),
-        )
-        return named if template_id is None else sa.and_(named, tool_secrets.c.template_id == template_id)
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[tool_secrets.c.name],
+                default_sort=sa.func.lower(tool_secrets.c.name),
+                filters={"templateId": tool_secrets.c.template_id},
+            )
+        return page, [SecretMeta.model_validate(r) for r in page["data"]]
 
     async def create(
         self,

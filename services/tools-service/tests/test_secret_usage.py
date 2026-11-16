@@ -31,7 +31,7 @@ async def _call(bank: Bank, tool: str) -> Any:
 
 
 async def _secret(bank: Bank, name: str) -> dict[str, Any]:
-    listed = (await bank.api.client.get("/v1/secrets")).json()["data"]
+    listed = (await bank.api.client.get("/v1/secrets", params={"ids": name})).json()["data"]["data"]
     return next(s for s in listed if s["name"] == name)
 
 
@@ -102,7 +102,7 @@ async def test_a_name_made_before_the_64_character_rule_keeps_working(k: Bank, e
     blob = await credentials().put(VALUE, context=context_of(tenant, long))
     assert await store.create(tenant, TEAM, long, blob, actor="before usage tracking", at=datetime.now(UTC))
     assert (await c.post(f"/v1/secrets/{long}/rotate", json={"value": ROTATED})).status_code == 200
-    assert long in [s["name"] for s in (await c.get("/v1/secrets")).json()["data"]]
+    assert long in [s["name"] for s in (await c.get("/v1/secrets", params={"ids": long})).json()["data"]["data"]]
 
 
 async def test_an_operation_shows_its_secret_set_only_once_its_own_team_has_it(k: Bank) -> None:
@@ -122,7 +122,7 @@ async def test_a_renamed_secret_keeps_its_value_under_the_new_name(k: Bank) -> N
     renamed = await c.post("/v1/secrets/SPARE_KEY/rename", json={"name": "BANK_KEY"})
     assert renamed.status_code == 200 and renamed.json()["data"]["name"] == "BANK_KEY", renamed.text
     assert renamed.json()["data"]["ends"] == VALUE[-4:], renamed.text
-    names = [s["name"] for s in (await c.get("/v1/secrets")).json()["data"]]
+    names = [s["name"] for s in (await c.get("/v1/secrets")).json()["data"]["data"]]
     assert "SPARE_KEY" not in names and "BANK_KEY" in names, names
     await _call(k, f"echo_{tenant}")
     assert k.received[-1]["headers"]["x-api-key"] == VALUE

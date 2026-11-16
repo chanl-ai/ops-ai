@@ -550,7 +550,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/secrets",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "templateId", "teamId"],
+        "query": ["teamId", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "secrets_rename_secret": {
@@ -1198,18 +1198,28 @@ class Operations:
     def secrets_list_secrets(
         self,
         *,
+        team_id: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
-        team_id: str | None = None,
-    ) -> Any:
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> SecretList:
         "List Secrets"
         return self._t.call(
             SERVICE,
             OPERATIONS["secrets_list_secrets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id, "teamId": team_id},
+            {
+                "teamId": team_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1821,18 +1831,28 @@ class AsyncOperations:
     async def secrets_list_secrets(
         self,
         *,
+        team_id: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
-        team_id: str | None = None,
-    ) -> Any:
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> SecretList:
         "List Secrets"
         return await self._t.call(
             SERVICE,
             OPERATIONS["secrets_list_secrets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id, "teamId": team_id},
+            {
+                "teamId": team_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

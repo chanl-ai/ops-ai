@@ -1,6 +1,8 @@
 """`GET /v1/secrets` a page at a time as a person, by failure mode: another team's or another tenant's secrets on the
 page; the team's secrets out of name order; a total that counts rows the page does not hold; a page past the end
-answering nothing."""
+answering nothing; `ids` refused on a table keyed by team and name; an account's secret parts missing, which the
+pickers read; names equal ignoring case repeated or lost between pages; and the store's page reading another team's
+secrets when the database lets every team through."""
 
 from __future__ import annotations
 
@@ -9,7 +11,9 @@ from datetime import UTC, datetime
 import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
+from ops_store.team_scope import acting_as
 from ops_tools.store.secrets import SecretStore
 
 from . import test_egress_and_secrets_need_security_admin as security_admin
@@ -60,3 +64,49 @@ async def test_a_page_past_the_end_answers_the_last_page(
     page = r.json()["data"]
     assert [x["name"] for x in page["data"]] == ["PAST_C"]
     assert (page["pagination"]["page"], page["pagination"]["total"]) == (2, 3)
+
+
+async def test_ids_name_secrets_and_an_accounts_parts_are_listed(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    for name in ("BANK_KEY", "CARD_KEY", "LEDGER_KEY"):
+        await _made(engine, tenant, TEAM, name)
+    with isolation.scope(tenant, TEAM):
+        at = datetime.now(UTC)
+        await SecretStore(engine).create(tenant, TEAM, "CON_X_KEY", "sealed", actor="t", at=at, connection_id="con_x")
+    sam = person(tenant, "Sam Adeyemi", {TEAM: "admin"})
+    r = await client.get("/v1/secrets", params={"ids": ["LEDGER_KEY", "CON_X_KEY"]}, headers=sam)
+    assert r.status_code == 200, r.text
+    listed = [(x["name"], x["connectionId"], x["readOnly"]) for x in r.json()["data"]["data"]]
+    assert listed == [("CON_X_KEY", "con_x", True), ("LEDGER_KEY", None, False)]
+
+
+async def test_names_equal_ignoring_case_each_appear_once_across_pages(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    for name in ("Desk_key", "DESK_KEY"):
+        await _made(engine, tenant, TEAM, name)
+    sam = person(tenant, "Sam Adeyemi", {TEAM: "admin"})
+    seen: list[str] = []
+    for page_no in (1, 2):
+        r = await client.get("/v1/secrets", params={"page": page_no, "pageSize": 1}, headers=sam)
+        assert r.status_code == 200, r.text
+        seen += [x["name"] for x in r.json()["data"]["data"]]
+    assert sorted(seen) == ["DESK_KEY", "Desk_key"]
+
+
+async def test_the_store_page_holds_the_acting_team_when_the_policy_lets_every_team_through(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    await _made(engine, tenant, TEAM, "BANK_KEY")
+    await _made(engine, tenant, "team_ops", "OPS_KEY")
+    # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
+    wide = isolation.tenant_wide("a test reads the secrets list with every team let through", tenant_id=tenant)
+    with wide, acting_as(TEAM):
+        _, mine = await SecretStore(engine).page(tenant, TEAM, ListParams())
+        _, theirs = await SecretStore(engine).page(tenant, "team_ops", ListParams())
+    assert ([x.name for x in mine], theirs) == (["BANK_KEY"], [])

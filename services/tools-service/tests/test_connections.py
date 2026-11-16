@@ -99,7 +99,8 @@ async def test_a_secret_part_is_written_once_and_never_read_back(client: httpx.A
     detail = put.json()["data"]
     assert detail["secrets"]["key"]["set"] is True
     assert "k-secret-1" not in put.text
-    secrets = (await client.get("/v1/secrets", headers=who)).json()["data"]
+    named = {"ids": secret_name(conn["id"], "key")}
+    secrets = (await client.get("/v1/secrets", params=named, headers=who)).json()["data"]["data"]
     part = next(s for s in secrets if s["name"] == secret_name(conn["id"], "key"))
     assert part["connectionId"] == conn["id"] and "k-secret-1" not in str(secrets)
     for method, path, payload in (
@@ -119,8 +120,9 @@ async def test_a_stale_write_stores_no_value(client: httpx.AsyncClient, tenant: 
         "secretValues": {"password": "p-1"},
     }
     assert (await client.patch(_at(conn), json=first, headers=who)).status_code == 200
-    held = await client.get("/v1/secrets", headers=who)
-    version = next(s["version"] for s in held.json()["data"] if s["name"] == secret_name(conn["id"], "password"))
+    named = {"ids": secret_name(conn["id"], "password")}
+    held = await client.get("/v1/secrets", params=named, headers=who)
+    version = next(s["version"] for s in held.json()["data"]["data"] if s["name"] == named["ids"])
     stale = {
         "revision": conn["revision"],
         "settings": {"username": "ops", "baseUrl": BASE},
@@ -128,8 +130,8 @@ async def test_a_stale_write_stores_no_value(client: httpx.AsyncClient, tenant: 
     }
     lost = await client.patch(_at(conn), json=stale, headers=who)
     assert lost.status_code == 409 and lost.json()["error"]["code"] == "stale_version", lost.text
-    after = (await client.get("/v1/secrets", headers=who)).json()["data"]
-    assert next(s["version"] for s in after if s["name"] == secret_name(conn["id"], "password")) == version
+    after = (await client.get("/v1/secrets", params=named, headers=who)).json()["data"]["data"]
+    assert next(s["version"] for s in after if s["name"] == named["ids"]) == version
 
 
 async def test_settings_are_checked_against_the_kind(client: httpx.AsyncClient, tenant: str) -> None:

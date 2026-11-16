@@ -34,9 +34,7 @@ async def test_an_auth_configs_client_secret_is_listed_read_only_and_changed_onl
             "/v1/secrets", json={"name": "DESK_TOOL_KEY", "value": "x", "teamId": TEAM}, headers=sam
         )
     )
-    page = _data(
-        await world.client.get("/v1/secrets", params={"teamId": TEAM, "page": 1, "pageSize": 200}, headers=sam)
-    )
+    page = _data(await world.client.get("/v1/secrets", params={"teamId": TEAM, "page": 1, "pageSize": 50}, headers=sam))
     rows = {s["name"]: s for s in page["data"]}
     sealed = [n for n, s in rows.items() if s.get("credentialId") == row["id"]]
     assert sealed and "DESK_TOOL_KEY" in rows, list(rows)
