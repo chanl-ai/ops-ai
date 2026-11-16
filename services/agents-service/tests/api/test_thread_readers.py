@@ -21,7 +21,7 @@ from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
 from ops_service_kit.settings import Settings
 from ops_store import isolation
-from tests.api.test_action_roles import introspect
+from tests.api.test_action_roles import REVIEWER, introspect
 from tests.conftest import SEED, FakeGraphModels, empty_engine, started
 from tests.engine.test_lifecycle_rights import ADMIN, PLATFORM, TENANT, VIEWER, jwks, person
 
@@ -44,6 +44,13 @@ THREADS: dict[str, tuple[str, str, dict[str, Any]]] = {
     "th_chat_nobody": (CHAT, "team_ops", {}),
     "th_chat_not_an_email": (CHAT, "team_ops", {"startedFor": "intake-bot"}),
     "th_chat_key": (CHAT, "team_ops", {"chat": True, "ownerEmail": KEY_EMAIL}),
+    # One term alone makes a chat-graph thread a person's: `chat` names nobody, `owner` names otto.
+    "th_chat_flag_only": (CHAT, "team_ops", {"chat": True}),
+    "th_owner_name_only": (CHAT, "team_ops", {"owner": "otto"}),
+    # ownerEmail wins over startedFor.
+    "th_vera_started_for_otto": (CHAT, "team_ops", {"ownerEmail": VERA, "startedFor": OTTO}),
+    # startedFor is not server-owned metadata, so a caller may store any JSON there; this one holds an @.
+    "th_started_for_list": (CHAT, "team_ops", {"startedFor": [VERA]}),
     "th_lending": ("refunds", "team_lending", {"ownerEmail": "lena@harborpine.example"}),
 }
 TEAM_ROWS = ["th_workflow", "th_other_workflow", "th_agent", "th_chat_nobody", "th_chat_not_an_email"]
@@ -121,9 +128,10 @@ async def c(database_url: str) -> AsyncIterator[AsyncClient]:
 
 
 READERS: list[tuple[str, dict[str, str], int, list[str]]] = [
-    ("owner", VIEWER, 200, [*TEAM_ROWS, "th_chat_vera", "th_call_for_vera"]),
-    ("teammate", person("otto", "team_ops", "viewer"), 200, [*TEAM_ROWS, "th_chat_otto_by_name"]),
+    ("owner", VIEWER, 200, [*TEAM_ROWS, "th_chat_vera", "th_call_for_vera", "th_vera_started_for_otto"]),
+    ("teammate", person("otto", "team_ops", "viewer"), 200, [*TEAM_ROWS, "th_chat_otto_by_name", "th_owner_name_only"]),
     ("admin", ADMIN, 200, TEAM_ROWS),
+    ("reviewer", REVIEWER, 200, TEAM_ROWS),
     ("another team", person("lena", "team_lending", "admin"), 200, ["th_lending"]),
     # The owner-only policy is on unless the workspace turns it off.
     ("chat.view at all", chat_reader(None), 200, TEAM_ROWS),
@@ -131,7 +139,18 @@ READERS: list[tuple[str, dict[str, str], int, list[str]]] = [
         "chat.view at all, owner-only policy off",
         chat_reader({"chatThreadsOwnerOnly": False}),
         200,
-        [*TEAM_ROWS, "th_chat_vera", "th_chat_otto_by_name", "th_call_for_vera", "th_chat_key"],
+        [
+            *TEAM_ROWS,
+            "th_chat_vera",
+            "th_chat_otto_by_name",
+            "th_call_for_vera",
+            "th_chat_key",
+            "th_chat_flag_only",
+            "th_owner_name_only",
+            "th_vera_started_for_otto",
+            # Its person is the list's text, which matches no one's email, so only a reader of every chat sees it.
+            "th_started_for_list",
+        ],
     ),
     ("key for a workflow", key("wf"), 200, ["th_workflow"]),
     ("key for an agent", key("agent"), 200, ["th_agent"]),
