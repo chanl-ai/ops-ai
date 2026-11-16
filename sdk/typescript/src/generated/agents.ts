@@ -1350,7 +1350,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Versions */
+        /**
+         * List Versions
+         * @description The graph's stored versions, oldest first.
+         */
         get: operations["graphs_list_versions"];
         put?: never;
         /**
@@ -1358,7 +1361,8 @@ export interface paths {
          * @description Stores the definition as the graph's next version and points new threads at it, with no review. A builder or
          *     admin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does
          *     not hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside
-         *     the team's publish policy this route refuses one with 409 `review_required`.
+         *     the team's publish policy this route refuses one with 409 `review_required`. No request transaction: the
+         *     publish policy is read from platform-service between its reads and its write.
          */
         post: operations["graphs_publish_version"];
         delete?: never;
@@ -2424,7 +2428,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Threads */
+        /**
+         * List Threads
+         * @description The threads the caller may read, of one graph when `graph` is given.
+         */
         get: operations["threads_list_threads"];
         put?: never;
         /** Create Thread */
@@ -2509,6 +2516,7 @@ export interface paths {
          * @description Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only
          *     when every node it is waiting in exists under the same name in the target, so the resume lands on a real node.
          *     Choosing the version a run continues on is a builder's step: a builder or admin of the thread's team.
+         *     No request transaction: the thread's checkpoint is read through the checkpointer, which keeps its own.
          */
         post: operations["threads_migrate"];
         delete?: never;

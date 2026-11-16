@@ -39281,6 +39281,7 @@
     },
     "/v1/graphs/{name}/versions": {
       "get": {
+        "description": "The graph's stored versions, oldest first.",
         "operationId": "graphs_list_versions",
         "parameters": [
           {
@@ -39466,7 +39467,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Stores the definition as the graph's next version and points new threads at it, with no review. A builder or\nadmin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does\nnot hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside\nthe team's publish policy this route refuses one with 409 `review_required`.",
+        "description": "Stores the definition as the graph's next version and points new threads at it, with no review. A builder or\nadmin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does\nnot hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside\nthe team's publish policy this route refuses one with 409 `review_required`. No request transaction: the\npublish policy is read from platform-service between its reads and its write.",
         "operationId": "graphs_publish_version",
         "parameters": [
           {
@@ -51525,6 +51526,7 @@
     },
     "/v1/threads": {
       "get": {
+        "description": "The threads the caller may read, of one graph when `graph` is given.",
         "operationId": "threads_list_threads",
         "parameters": [
           {
@@ -52693,7 +52695,7 @@
     },
     "/v1/threads/{thread_id}/migrate": {
       "post": {
-        "description": "Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only\nwhen every node it is waiting in exists under the same name in the target, so the resume lands on a real node.\nChoosing the version a run continues on is a builder's step: a builder or admin of the thread's team.",
+        "description": "Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only\nwhen every node it is waiting in exists under the same name in the target, so the resume lands on a real node.\nChoosing the version a run continues on is a builder's step: a builder or admin of the thread's team.\nNo request transaction: the thread's checkpoint is read through the checkpointer, which keeps its own.",
         "operationId": "threads_migrate",
         "parameters": [
           {
