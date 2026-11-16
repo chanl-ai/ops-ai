@@ -6,7 +6,9 @@ transaction, the provider call with none open, then one settle transaction."""
 from __future__ import annotations
 
 import json
+import tomllib
 from collections.abc import AsyncIterator
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -19,6 +21,7 @@ from ops_service_kit.request_timing import current
 
 from .conftest import SERVICE, Models
 
+BUDGETS = Path(__file__).parents[1] / "budgets.toml"
 # (transactions finished, transactions open) at each moment the provider is working.
 Seen = list[tuple[str, int, int]]
 
@@ -96,7 +99,8 @@ async def test_the_provider_answers_with_no_transaction_open_between_one_gate_an
     assert [s for s in seen if s[0] == "call"] == [("call", 1, 0)], "one gate transaction, closed before the call"
     frames = [s for s in seen if s[0] != "call"]
     assert all(open_ == 0 for _, _, open_ in frames), f"a frame went out with a transaction open: {frames}"
+    row = tomllib.loads(BUDGETS.read_text())[f"POST {path}"]
     measured = (line["db.tx_count"], line["db.connection_count"])
-    assert measured == (2, 2), "one gate and one settle transaction"
+    assert measured == (row["transactions"], row["connections"]) == (2, 2), "one gate and one settle transaction"
     calls = (await models.client.get("/v1/models/calls", params={"keyId": key_id}, headers=SERVICE)).json()["data"]
     assert [(c["outcome"], c["inputTokens"]) for c in calls["items"]] == [("ok", 4 if call == "embedding" else 9)]

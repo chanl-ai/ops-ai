@@ -1,0 +1,121 @@
+"""Every GET route of models-service in its statement budget (`budgets.toml`, data-access standard DA1 and DA6), by
+failure mode: a list whose statements grow with its rows, a route over its row, a route that opens a second
+transaction or checks out a second connection, and a provider asked while the request holds a transaction (the
+provider key's model list), which the budget's service-call count cannot see, since the provider is not a service."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Mapping
+from pathlib import Path
+from uuid import uuid4
+
+import httpx
+import pytest
+from fastapi import FastAPI
+
+from ops_identity.fastapi import current_principal
+from ops_models.app import create_models_app
+from ops_service_kit.contract import response_checker
+from ops_service_kit.public_address import PublicFetch
+from ops_service_kit.request_timing import current
+from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check
+
+from .conftest import SERVICE, Models
+from .test_provider_key_check import Resolver
+from .test_provider_keys import people
+
+BUDGETS = Path(__file__).parents[1] / "budgets.toml"
+KEY = "sk-budget"
+
+statement_budget = pytest.fixture(budget_check)
+
+
+@pytest.fixture
+def held() -> list[int]:
+    """The transactions the request held open at each provider call."""
+    return []
+
+
+def _provider(held: list[int]) -> httpx.AsyncClient:
+    def handle(request: httpx.Request) -> httpx.Response:
+        timing = current()
+        held.append(timing.db_tx_open if timing is not None else -1)
+        return httpx.Response(200, json={"data": [{"id": "model-a"}, {"id": "model-b"}]})
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handle))
+
+
+@pytest.fixture
+def tenant() -> str:
+    return f"t_{uuid4().hex[:8]}"
+
+
+@pytest.fixture
+def app(models: Models, held: list[int], tenant: str) -> FastAPI:
+    fetch = PublicFetch(resolver=Resolver(), max_redirects=0)
+    built = create_models_app(models.engine, upstream=_provider(held), key_fetch=fetch)
+    # A request with no bearer token is an account admin of `tenant`: the provider key routes are a person's.
+    built.dependency_overrides[current_principal] = people(tenant)
+    return built
+
+
+class Caller:
+    """The test's client as the budget calls it. The provider key routes are an account admin's, and every other GET
+    a service's, so a path under /v1/provider-keys goes without the service token; its model list names the provider,
+    a query the budget's path template cannot carry."""
+
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self.client = client
+
+    async def get(self, url: str, *, headers: Mapping[str, str]) -> httpx.Response:
+        if not url.startswith("/v1/provider-keys"):
+            return await self.client.get(url, headers=headers)
+        person = {k: v for k, v in headers.items() if k.lower() != "authorization"}
+        query = {"provider": "openai"} if url.endswith("/models") else None
+        return await self.client.get(url, headers=person, params=query)
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[Caller]:
+    hooks = {"response": [response_checker(app)]}
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as http:
+        yield Caller(http)
+
+
+@pytest.fixture
+def seed_team(app: FastAPI, client: Caller, models: Models) -> SeedTeam:
+    """`n` more of each list: connections, aliases and one alias's versions, model keys, calls on one key, and the
+    account's provider keys. The versioned alias and a provider key share one name, since both paths name `{name}`."""
+    http = client.client
+    name = f"budget-{uuid4().hex[:8]}"
+    on_app = Models(http, models.engine, app)
+
+    async def seed(n: int) -> Seeded:
+        version = {"providerId": "prov_scripted", "modelId": "scripted-standard", "clearedSensitivity": "internal"}
+        if (await http.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).status_code == 404:
+            made = await http.post("/v1/models/aliases", json={"name": name, **version}, headers=SERVICE)
+            assert made.status_code == 201, made.text
+        assert (await http.put(f"/v1/provider-keys/{name}", json={"value": KEY})).status_code == 200
+        _, secret = await on_app.key(budget="100")
+        for i in range(n):
+            tag = f"{name}-{n}-{i}"
+            conn = {"name": tag, "type": "openai-compatible", "baseUrl": "http://up/v1"}
+            assert (await http.post("/v1/models/providers", json=conn, headers=SERVICE)).status_code == 201
+            alias = {"name": tag, **version}
+            assert (await http.post("/v1/models/aliases", json=alias, headers=SERVICE)).status_code == 201
+            added = await http.post(f"/v1/models/aliases/{name}/versions", json=version, headers=SERVICE)
+            assert added.status_code == 201, added.text
+            await on_app.key()
+            assert (await on_app.complete(secret)).status_code == 200
+            assert (await http.put(f"/v1/provider-keys/{tag}", json={"value": KEY})).status_code == 200
+        return Seeded(headers=SERVICE, ids={"name": name})
+
+    return seed
+
+
+async def test_every_get_stays_in_its_budget(statement_budget: StatementBudget, held: list[int]) -> None:
+    problems = await statement_budget(BUDGETS)
+    assert problems == [], "\n".join(problems)
+    assert held, "the provider key's model list asked the provider"
+    assert set(held) == {0}, f"the provider was asked with a transaction open: {held}"

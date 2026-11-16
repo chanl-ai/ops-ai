@@ -1,0 +1,40 @@
+# The statement budget of each models-service route at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
+# standard DA1 and DA6), measured on PostgreSQL by tests/test_statement_budget.py. A route is one transaction on one
+# connection, with no other service or provider called while it is open, unless its row lists more and says why.
+
+["GET /health"]
+queries = 0
+
+["GET /v1/models/providers"]
+queries = 2
+
+["GET /v1/provider-keys"]
+queries = 2
+
+# The key is read in a transaction of its own, closed before the provider is asked for the models it reaches.
+["GET /v1/provider-keys/{name}/models"]
+queries = 2
+
+["GET /v1/models/aliases"]
+queries = 2
+
+["GET /v1/models/aliases/{name}/versions"]
+queries = 2
+
+["GET /v1/models/keys"]
+queries = 2
+
+["GET /v1/models/calls"]
+queries = 3
+
+# The listed exception: a model call is a gate transaction (key, caps, alias, provider key; a refusal's row commits in
+# it), the provider call with no transaction open, then a settle transaction (region, spend, the call's row). One
+# transaction around both would hold a pooled connection for as long as the provider takes to answer.
+# tests/test_request_transactions.py holds the two routes to these rows; budget_check measures GET routes only.
+["POST /v1/models/chat/completions"]
+transactions = 2
+connections = 2
+
+["POST /v1/models/embeddings"]
+transactions = 2
+connections = 2
