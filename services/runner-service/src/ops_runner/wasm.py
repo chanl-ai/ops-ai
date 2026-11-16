@@ -29,6 +29,10 @@ from .domain import CallAnswer, Limits, RunResult, failure
 TICK_S = 0.1
 # Grace after the limit before the host stops waiting for a guest that trapped but has not let go of its pipes.
 GRACE_S = 2.0
+# How long the host waits before it looks again for a guest that has not opened its end of a pipe yet. The wait is a
+# join on the guest's thread, so it ends at once when the guest ends during set-up.
+OPEN_POLL_S = 0.005
+READ_POLL_S = 0.01
 LOG_CAP = 8192
 OUTPUT_CAP = 1 << 20
 
@@ -77,12 +81,14 @@ class WasmPython:
         started = time.monotonic()
         work = Path(tempfile.mkdtemp(prefix="ops-run-"))
         try:
-            return _Run(self, work, started, limits, answer).execute(source, entry, input)
+            return Run(self, work, started, limits, answer).execute(source, entry, input)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
 
-class _Run:
+class Run:
+    """One run's directory, pipes and guest thread, and the conversation with the guest over them."""
+
     def __init__(self, runtime: WasmPython, work: Path, started: float, limits: Limits, answer: CallAnswer) -> None:
         self.runtime = runtime
         self.work = work
@@ -130,13 +136,13 @@ class _Run:
         # A fifo's open blocks until the other end opens. Non-blocking opens keep a guest that dies during set-up from
         # hanging the host.
         out_fd = os.open(self.stdout, os.O_RDONLY | os.O_NONBLOCK)
-        in_fd = _open_writer(self.stdin, thread)
+        in_fd = open_writer(self.stdin, thread)
         result = RunResult(ok=False, create_ms=self._ms())
         deadline = self.started + self.limits.time_s + GRACE_S
         try:
             if in_fd is not None:
                 _write(in_fd, {"source": source, "entry": entry, "input": input})
-            self._converse(result, thread, out_fd, in_fd, deadline)
+            self.converse(result, thread, out_fd, in_fd, deadline)
         finally:
             if in_fd is not None:
                 os.close(in_fd)
@@ -148,7 +154,7 @@ class _Run:
         result.execute_ms = self._ms() - result.create_ms
         return result
 
-    def _converse(
+    def converse(
         self, result: RunResult, thread: threading.Thread, out_fd: int, in_fd: int | None, deadline: float
     ) -> None:
         buf = bytearray()
@@ -162,7 +168,7 @@ class _Run:
             if not chunk:
                 if not thread.is_alive():
                     return
-                time.sleep(0.01)  # no writer yet: the guest has not opened stdout
+                thread.join(READ_POLL_S)  # no writer: the guest has not opened stdout, or closed it and is ending
                 continue
             buf.extend(chunk)
             if len(buf) > OUTPUT_CAP:
@@ -216,14 +222,14 @@ class _Run:
         return int((time.monotonic() - self.started) * 1000)
 
 
-def _open_writer(path: str, thread: threading.Thread) -> int | None:
+def open_writer(path: str, thread: threading.Thread) -> int | None:
     while True:
         try:
             return os.open(path, os.O_WRONLY | os.O_NONBLOCK)
         except OSError:  # ENXIO: the guest has not opened its stdin yet
             if not thread.is_alive():
                 return None
-            time.sleep(0.005)
+            thread.join(OPEN_POLL_S)
 
 
 def _write(fd: int, msg: dict[str, Any]) -> None:
