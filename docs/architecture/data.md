@@ -75,7 +75,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | models-service | `ops_models.store.keys` | `ModelKeys` | CAS, TRANSACTION | none |
 | models-service | `ops_models.store.provider_keys` | `ProviderKeyStore` | CAS, TRANSACTION | none |
 | models-service | `ops_models.store.providers` | `Providers` | CAS | none |
-| models-service | `ops_models.store.tables` | none: no repository class | | `model_aliases`, `model_call_log`, `model_call_refusals`, `model_key_spend`, `model_key_tenants`, `model_keys`, `provider_connections`, `provider_keys` |
+| models-service | `ops_models.store.tables` | none: no repository class | | `model_aliases`, `model_call_log`, `model_calls_untenanted`, `model_key_spend`, `model_key_tenants`, `model_keys`, `provider_connections`, `provider_keys` |
 | platform-service | `ops_platform.store.audit` | `AuditLog` | RLS | none |
 | platform-service | `ops_platform.store.audit` | `TeamNameAudit` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.holders` | `HolderStore` | RLS | none |

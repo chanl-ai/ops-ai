@@ -3,7 +3,7 @@
 model_call_log holds a tenant's runs, threads, request hashes and the cost of each call, and was an install table
 because a key's caps summed its rows across tenants. The caps now read model_key_spend, a key's spend and calls per
 second, UTC day and run, whose day and run totals are set here from the call rows; a call that named no tenant moves
-to model_call_refusals, which has no tenant column, in one pass; then the log carries the generated tenant
+to model_calls_untenanted, which has no tenant column, in one pass; then the log carries the generated tenant
 policy for ops_models_tenant (models_0009). Plain SQL, so it renders offline; both steps are safe to re-run.
 
 Revision ID: models_0012
@@ -84,11 +84,11 @@ def _call_columns() -> list[sa.Column[Any]]:
 
 
 def backfill_sql(dialect: str) -> list[str]:
-    """Sets each key's day and run totals from every call row, the log's and the refusals' (a call is in one of the
-    two whether or not the move has run), so a re-run gives the same totals. A second's count is not backfilled: the
-    rate window starts empty at the migration, for at most one minute."""
+    """Sets each key's day and run totals from every call row, the log's and the untenanted calls' (a call is in one
+    of the two whether or not the move has run), so a re-run gives the same totals. A second's count is not
+    backfilled: the rate window starts empty at the migration, for at most one minute."""
     calls = ", ".join(("key_id", "run_id", "cost", "created_at"))
-    every = f"(SELECT {calls} FROM model_call_log UNION ALL SELECT {calls} FROM model_call_refusals) c"
+    every = f"(SELECT {calls} FROM model_call_log UNION ALL SELECT {calls} FROM model_calls_untenanted) c"
     if dialect == "postgresql":
         day, join = "to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')", "||"
     else:
@@ -122,10 +122,10 @@ def upgrade() -> None:
         op.execute("LOCK TABLE model_call_log IN EXCLUSIVE MODE")
     elif dialect == "mssql":
         op.execute("SELECT TOP (0) id FROM model_call_log WITH (TABLOCKX, HOLDLOCK)")
-    op.create_table("model_call_refusals", *_call_columns())
-    op.create_index("ix_model_call_refusals_key_id", "model_call_refusals", ["key_id"])
-    op.create_index("ix_model_call_refusals_thread_id", "model_call_refusals", ["thread_id"])
-    op.create_index("ix_model_call_refusals_created_at", "model_call_refusals", ["created_at"])
+    op.create_table("model_calls_untenanted", *_call_columns())
+    op.create_index("ix_model_calls_untenanted_key_id", "model_calls_untenanted", ["key_id"])
+    op.create_index("ix_model_calls_untenanted_thread_id", "model_calls_untenanted", ["thread_id"])
+    op.create_index("ix_model_calls_untenanted_created_at", "model_calls_untenanted", ["created_at"])
     op.create_table(
         "model_key_spend",
         sa.Column("key_id", sa.String(200), primary_key=True),
@@ -142,7 +142,7 @@ def upgrade() -> None:
         op.execute("SET LOCAL row_security = off")
     for statement in backfill_sql(dialect):
         op.execute(statement)
-    for statement in move_sql("model_call_log", "model_call_refusals", "tenant_id IS NULL"):
+    for statement in move_sql("model_call_log", "model_calls_untenanted", "tenant_id IS NULL"):
         op.execute(statement)
     if dialect == "postgresql":
         op.execute(f"GRANT SELECT, INSERT ON model_call_log TO {ROLE}")
@@ -161,11 +161,11 @@ def downgrade() -> None:
     if dialect == "postgresql":
         op.execute(f"REVOKE ALL ON model_call_log FROM {ROLE}")
     if dialect in ("postgresql", "mssql"):
-        for statement in move_sql("model_call_refusals", "model_call_log", "1 = 1"):
+        for statement in move_sql("model_calls_untenanted", "model_call_log", "1 = 1"):
             op.execute(statement)
     op.drop_index("ix_model_call_log_tenant_created", table_name="model_call_log")
     op.drop_table("model_key_spend")
-    op.drop_index("ix_model_call_refusals_created_at", table_name="model_call_refusals")
-    op.drop_index("ix_model_call_refusals_thread_id", table_name="model_call_refusals")
-    op.drop_index("ix_model_call_refusals_key_id", table_name="model_call_refusals")
-    op.drop_table("model_call_refusals")
+    op.drop_index("ix_model_calls_untenanted_created_at", table_name="model_calls_untenanted")
+    op.drop_index("ix_model_calls_untenanted_thread_id", table_name="model_calls_untenanted")
+    op.drop_index("ix_model_calls_untenanted_key_id", table_name="model_calls_untenanted")
+    op.drop_table("model_calls_untenanted")

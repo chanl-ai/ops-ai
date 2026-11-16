@@ -130,7 +130,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.provider_keys TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_keys TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_key_tenants TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_log TO ops_models_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_refusals TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_calls_untenanted TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_key_spend TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_aliases TO ops_models_runtime;
 GRANT SELECT ON dbo.alembic_version_models TO ops_models_runtime;

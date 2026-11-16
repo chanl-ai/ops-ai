@@ -78,7 +78,7 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
             "ORDER BY period"
         )
         log_q = "SELECT id FROM model_call_log WHERE key_id = :k AND tenant_id IS NULL"
-        kept_q = "SELECT count(*) FROM model_call_refusals WHERE key_id = :k"
+        kept_q = "SELECT count(*) FROM model_calls_untenanted WHERE key_id = :k"
         day = f"day:{now.date().isoformat()}"
         spend, nulls, kept = asyncio.run(
             _sql(database_url, [(spend_q, {"k": key}), (log_q, {"k": key}), (kept_q, {"k": key})])
@@ -99,7 +99,7 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
         tables = (
             # Upper case: SQL Server's binary collation matches catalog names exactly; PostgreSQL folds them.
             "SELECT count(*) FROM INFORMATION_SCHEMA.TABLES "
-            "WHERE TABLE_NAME IN ('model_key_spend', 'model_call_refusals')"
+            "WHERE TABLE_NAME IN ('model_key_spend', 'model_calls_untenanted')"
         )
         restored, gone = asyncio.run(_sql(database_url, [(back, {"k": key}), (tables, {})]))
         assert (restored, gone) == ([(2,)], [(0,)]), "the down path lost the tenant-less calls or left a table"

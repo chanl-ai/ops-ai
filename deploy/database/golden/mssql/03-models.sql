@@ -88,7 +88,7 @@ CREATE INDEX ix_model_call_log_tenant_created ON model_call_log (tenant_id, crea
 GO
 CREATE INDEX ix_model_call_log_thread_id ON model_call_log (thread_id);
 GO
-CREATE TABLE model_call_refusals (
+CREATE TABLE model_calls_untenanted (
 	id VARCHAR(64) NOT NULL, 
 	key_id VARCHAR(200) NOT NULL, 
 	alias VARCHAR(120) NOT NULL, 
@@ -107,14 +107,14 @@ CREATE TABLE model_call_refusals (
 	request_hash VARCHAR(64) NULL, 
 	created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
 	images INTEGER NOT NULL DEFAULT '0', 
-	CONSTRAINT model_call_refusals_pkey PRIMARY KEY (id)
+	CONSTRAINT model_calls_untenanted_pkey PRIMARY KEY (id)
 );
 GO
-CREATE INDEX ix_model_call_refusals_created_at ON model_call_refusals (created_at);
+CREATE INDEX ix_model_calls_untenanted_created_at ON model_calls_untenanted (created_at);
 GO
-CREATE INDEX ix_model_call_refusals_key_id ON model_call_refusals (key_id);
+CREATE INDEX ix_model_calls_untenanted_key_id ON model_calls_untenanted (key_id);
 GO
-CREATE INDEX ix_model_call_refusals_thread_id ON model_call_refusals (thread_id);
+CREATE INDEX ix_model_calls_untenanted_thread_id ON model_calls_untenanted (thread_id);
 GO
 CREATE TABLE model_key_spend (
 	key_id VARCHAR(200) NOT NULL, 

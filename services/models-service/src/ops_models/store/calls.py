@@ -1,7 +1,7 @@
 """The model call log: one row per authenticated completion, a denial included, holding metadata and never a prompt
-or a completion. A call that names a tenant is that tenant's row; one that names none is a row of
-model_call_refusals. Either way the key's spend per period moves in the same transaction (`CallLog.record` opens
-one when no request has), which is what its caps read."""
+or a completion. A call that names a tenant is that tenant's row; one that names none, refused or served, is a row
+of model_calls_untenanted. Either way the key's spend per period moves in the same transaction (`CallLog.record`
+opens one when no request has), which is what its caps read."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from ops_store.store import Store
 
 from .provider_keys import ROLE
 from .tables import model_call_log as t
-from .tables import model_call_refusals as refusals
+from .tables import model_calls_untenanted as untenanted_calls
 from .tables import model_key_spend as spend
 
 # Why a key's spend and the calls that name no tenant are read and written with no tenant (`Store.install_tx`): a
@@ -172,7 +172,7 @@ class CallLog(Store):
                 async with self.tx() as c:
                     await c.execute(t.insert().values(**row))
             else:
-                untenanted = refusals.insert().values(**{k: v for k, v in row.items() if k != "tenant_id"})
+                untenanted = untenanted_calls.insert().values(**{k: v for k, v in row.items() if k != "tenant_id"})
             run = str(run_id) if run_id else None
             await self.spend.record(str(row["key_id"]), cost, run, now, untenanted=untenanted)
 

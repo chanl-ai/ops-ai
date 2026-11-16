@@ -26,3 +26,9 @@ that has not changed still gets the same answer.
 | `sdk/python/src/ops_ai/_cli/testdata.py:21` (`PAGE = 100`) | `_pages` stops when a page holds fewer than `PAGE` rows, so with the cap of 50 it reads only the first 50 test files; set `PAGE = 50` or stop on `pagination.hasNext` |
 | `sdk/python/src/ops_ai/_generated/files/operations.py`, `sdk/typescript/src/generated/files*.ts` | Regenerate: `files_list_files` gains `sortBy`, `sortOrder`, `ids`; `pageSize` loses its default and maximum |
 | `apps/console/src/lib/api/files-service-http.ts:30` (`list`) | Send `sortBy`/`sortOrder` from the table's sort; keep `pageSize` at 50 or less |
+
+## models-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `GET /v1/models/calls` | behaviour: calls that name no tenant | listed with every tenant's calls (before the call log was held to its tenant) | not listed: a completion sent with no `X-Tenant-Id` is kept in `model_calls_untenanted` for operators and no route reads it | Send `X-Tenant-Id` on every completion whose calls must be listed | No |

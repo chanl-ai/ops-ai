@@ -156,9 +156,10 @@ model_call_log = sa.Table(
 )
 
 # A call that named no tenant (no X-Tenant-Id): refused before a tenant is known, or served by a key that spends for
-# no tenant. It has no tenant to be held to, so it never lands in the tenant's log.
-model_call_refusals = sa.Table(
-    "model_call_refusals",
+# no tenant. It has no tenant to be held to, so it never lands in the tenant's log. Kept for operators, who read it in
+# the database: no route lists it, since every service token names a tenant and none may read past it.
+model_calls_untenanted = sa.Table(
+    "model_calls_untenanted",
     metadata,
     *_call_columns(),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), index=True),

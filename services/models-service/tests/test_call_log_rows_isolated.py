@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy import event
 
 from ops_models.store import CallLog
-from ops_models.store.tables import model_call_log, model_call_refusals
+from ops_models.store.tables import model_call_log, model_calls_untenanted
 from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_store.team_scope import InstallScopeError
@@ -64,7 +64,11 @@ async def test_a_call_that_names_no_tenant_is_kept_apart_from_every_tenants_log(
     log, row = CallLog(models.engine), _row(key_id, None)
     await log.record(row)
     async with log.spend.install_tx("probe") as c:
-        q = sa.select(sa.func.count()).select_from(model_call_refusals).where(model_call_refusals.c.id == row["id"])
+        q = (
+            sa.select(sa.func.count())
+            .select_from(model_calls_untenanted)
+            .where(model_calls_untenanted.c.id == row["id"])
+        )
         kept = (await c.execute(q)).scalar_one()
     async with models.engine.connect() as c, past_the_call_log_policy(c):
         # The database's owner, past the policy: the log has no tenant-less row for the key.
