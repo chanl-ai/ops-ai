@@ -23,7 +23,7 @@ PROCESSES: dict[str, tuple[dict[str, str], list[str]]] = {
     "ops_kb": (DEV, ["OPS_AGENTS_URL"]),
     "ops_models": (SIGNED_IN, ["OPS_PLATFORM_INTERNAL_URL"]),
     "ops_platform": (DEV, ["OPS_AGENTS_URL"]),
-    "ops_runner": (SIGNED_IN, ["OPS_PLATFORM_INTERNAL_URL"]),
+    "ops_runner": (SIGNED_IN, ["OPS_PLATFORM_INTERNAL_URL", "OPS_TOOLS_URL"]),
     "ops_tools": (DEV, ["OPS_AGENTS_URL", "OPS_DOCUMENTS_URL", "OPS_FILES_URL"]),
 }
 
