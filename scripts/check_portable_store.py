@@ -2,7 +2,8 @@
 (docs/architecture/decisions/database-support.md):
 
   sql   database-specific code outside ops_store, in source and migrations: RETURNING, ON CONFLICT, SKIP LOCKED,
-        advisory locks, JSONB operators and the JSONB type in SQL text; in source, also `= ANY(` (an array
+        advisory locks, JSONB operators and the JSONB type in SQL text; a boolean tested with IS (`.is_(True)`,
+        `.isnot(False)`, `IS TRUE` in SQL text), which SQL Server refuses; in source, also `= ANY(` (an array
         parameter), an aggregate's FILTER (WHERE ...) and `::` casts, which a migration may hold in its PostgreSQL
         branch (deploy/database/mssql.py refuses them in the SQL a revision renders for SQL Server); the same built
         with SQLAlchemy Core
@@ -56,6 +57,7 @@ TEXT = [
     ("SKIP LOCKED", re.compile(r"\bSKIP\s+LOCKED\b", re.IGNORECASE)),
     ("advisory lock", re.compile(r"\bpg_(try_)?advisory_", re.IGNORECASE)),
     ("JSONB operator", re.compile(r"->>|#>>|@>|<@|\?\||\?&|\bjsonb_\w+\s*\(", re.IGNORECASE)),
+    ("boolean IS", re.compile(r"\bIS\s+(NOT\s+)?(TRUE|FALSE)\b", re.IGNORECASE)),
 ]
 # In source code only: a migration writes each database's SQL in its own branch, and its SQL Server rendering is
 # checked whole (deploy/database/mssql.py POSTGRES_ONLY). An expanding bind parameter (IN :ids), CAST(x AS t) and a
@@ -79,6 +81,7 @@ CALLS = {
     "with_for_update": "row lock",
 }
 # func.<name> that reads the host's clock or exists on PostgreSQL alone; ops_store.dialect has db_now and db_after.
+IS_METHODS = {"is_", "isnot", "is_not"}
 CLOCK = {"now", "make_interval", "date_trunc", "clock_timestamp", "julianday"}
 DIALECT_INSERT = {"postgresql", "sqlite"}
 
@@ -108,6 +111,16 @@ def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str
             and SQL_SHAPE.search(node.value)
         ):
             out += [(node.lineno, name) for name, pattern in text if pattern.search(node.value)]
+        # `col.is_(True)` renders `IS 1` on SQL Server, which refuses it; `.is_(None)` is portable.
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in IS_METHODS
+            and len(node.args) == 1
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, bool)
+        ):
+            out.append((node.lineno, "boolean IS"))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in CALLS:
             out.append((node.lineno, CALLS[node.func.attr]))
         # The same constructs built from names: `sa.func.pg_try_advisory_xact_lock(...)` and the `JSONB` column type.
@@ -397,6 +410,9 @@ def warnings(now: Counter[str], base: Counter[str], where: dict[str, list[str]])
                 if kind == "slice"
                 else "give every supported database its own form of the index, or do without it"
                 if construct.endswith(" option")
+                else "compare with sa.true() / sa.false() (col == sa.true()); IS NOT TRUE also matches NULL,"
+                " so a nullable column needs sa.or_(col == sa.false(), col.is_(None))"
+                if construct == "boolean IS"
                 else "write the portable form: IN :ids (expanding bindparam), CAST(x AS t), CASE in the aggregate"
                 if construct in {name for name, _ in SOURCE_TEXT}
                 else "use ops_store.dialect (locked, claim, upsert, insert_ignore, lock_key, db_now, db_after)"

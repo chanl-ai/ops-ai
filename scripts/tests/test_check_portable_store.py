@@ -41,6 +41,9 @@ Q = text("SELECT id FROM kb_units WHERE kb_id = ANY(:ids)")
 R = text("SELECT count(*) FILTER (WHERE model = :m) FROM v")
 S = text("SELECT shared::float / total FROM hits")
 T = text("SELECT id FROM kb_units WHERE kb_id IN :ids AND CAST(shared AS FLOAT) > 0 AND url = 'http://[::1]'")
+U = select(t).where(t.c.on.is_(True), t.c.off.isnot(False), t.c.x.is_not(True), t.c.y.is_(False), t.c.z.is_(None))
+V = text("SELECT id FROM roles WHERE builtin IS FALSE AND hidden IS NOT TRUE")
+W = select(t).where(t.c.on == sa.true(), t.c.z.is_(None), t.c.n.is_(other))
 '''
 
 
@@ -68,6 +71,8 @@ def test_each_postgres_only_construct_in_code_is_found() -> None:
         22: {"array parameter"},
         23: {"aggregate FILTER"},
         24: {"PostgreSQL cast"},
+        26: {"boolean IS"},
+        27: {"boolean IS"},
         4: {"dialect insert"},
     }, found
 
