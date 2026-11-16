@@ -71,7 +71,7 @@ async def snapshot(rt: Runtime) -> Snapshot:
     names: dict[tuple[str, str], str] = {
         (ASSET_AGENT, i): agent_names.get((i, int(r["version"])), (str(r["slug"]), ""))[0] for i, r in agents.items()
     }
-    skill_names = await SkillNames(rt.db).newest(set(skills))
+    skill_names = await SkillNames(rt.db).newest()
     names |= {(ASSET_SKILL, i): skill_names.get(i) or str(r["slug"]) for i, r in skills.items()}
     names |= {(ASSET_WORKFLOW, i): str(r["name"]) for i, r in workflows.items()}
     teams = (

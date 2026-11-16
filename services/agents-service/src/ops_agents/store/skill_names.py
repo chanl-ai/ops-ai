@@ -27,11 +27,10 @@ class _Named(BaseModel):
 class SkillNames(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
-    async def newest(self, skill_ids: set[str]) -> dict[str, str]:
-        """Each of `skill_ids` the acting team sees, to its newest version's name, else its slug; a skill the team does
-        not see is left out. The tenant and team are named in the query as well as by the row policies."""
-        if not skill_ids:
-            return {}
+    async def newest(self) -> dict[str, str]:
+        """Each skill the acting team sees, to its newest version's name, else its slug. No list of ids is sent, so a
+        team with many skills stays under SQL Server's parameter limit. The tenant and team are named in the query as
+        well as by the row policies."""
         s, v = registry_skills, registry_skill_versions
         q = (
             sa.select(s.c.id, s.c.slug, json_text(v.c.content, "name").label("name"))
@@ -45,7 +44,7 @@ class SkillNames(RuntimeStore):
                     team_visible(v),
                 ),
             )
-            .where(mine(s), s.c.id.in_(sorted(skill_ids)), team_visible(s))
+            .where(mine(s), team_visible(s))
         )
         async with self.tx() as c:
             found = await rows(c, q, _Named)
