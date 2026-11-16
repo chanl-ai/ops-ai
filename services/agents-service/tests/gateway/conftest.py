@@ -15,6 +15,7 @@ from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.activities.catalog import load_catalog
+from ops_agents.store.tenancy import tenant_scope
 from ops_email import MemorySender
 from ops_identity import dev_service_signer, mint_service_token
 from ops_service_kit import opa_server
@@ -82,6 +83,15 @@ class Decisions:
         return {"id": kw["approval_id"], "status": "approved" if kw["decision"] == "approved" else "rejected"}
 
 
+class TenantReadLog(CallLog):
+    """tools-service's call log as these tests read it: a store call needs the tenant a request would set, so the
+    read sets the one it names, as tools-service's own tests do."""
+
+    async def for_thread(self, thread_id: str, *, tenant_id: str) -> list[dict[str, Any]]:
+        with tenant_scope(tenant_id):
+            return await super().for_thread(thread_id, tenant_id=tenant_id)
+
+
 @dataclass
 class Gateway:
     client: httpx.AsyncClient
@@ -134,7 +144,7 @@ class Gateway:
 @pytest.fixture
 async def gateway(engine: AsyncEngine) -> AsyncIterator[Gateway]:
     async with httpx.AsyncClient(base_url=OPA_URL) as opa_http:
-        log = CallLog(engine)
+        log = TenantReadLog(engine)
         clock = Clock()
         mail = MemorySender()
         decisions = Decisions()
