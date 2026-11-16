@@ -23,8 +23,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic.alias_generators import to_camel
+from pydantic import Field, model_validator
 
 from ops_access import Access
 from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal, current_service, install_auth
@@ -32,7 +31,16 @@ from ops_metering import Price, Usage, cost
 from ops_policy import CredentialStore
 from ops_service_kit.credentials import credential_store
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, error_body, error_responses, install_error_handlers, ok, operation_id
+from ops_service_kit.http import (
+    Envelope,
+    In,
+    Out,
+    error_body,
+    error_responses,
+    install_error_handlers,
+    ok,
+    operation_id,
+)
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
@@ -61,10 +69,12 @@ from .schemas import (
     ProviderOut,
 )
 from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, ProviderKeyStore, Providers, cleared
+from .store.aliases import AliasRow, ServingAlias
+from .store.providers import ProviderRow
 
 
-class _Wire(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+class _Wire(In):
+    """A request body: camelCase on the wire, snake_case accepted, an unknown field refused."""
 
 
 # The wire name of each field connection_problem names.
@@ -120,13 +130,13 @@ class KeyCheckIn(_Wire):
     api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
 
 
-class KeyCheckOut(_Wire):
+class KeyCheckOut(Out):
     ok: bool
     reason: str | None = None
     models: int = 0
 
 
-class ProviderModelOut(_Wire):
+class ProviderModelOut(Out):
     id: str
     model: str | None = None
 
@@ -142,7 +152,7 @@ class ChatModelIn(_Wire):
     api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
 
 
-class ChatModelOut(_Wire):
+class ChatModelOut(Out):
     provider_id: str
     model: str
     aliases: list[str]
@@ -233,33 +243,33 @@ def _key_view(r: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _alias_view(r: Mapping[str, Any]) -> dict[str, Any]:
+def _alias_view(r: AliasRow) -> dict[str, Any]:
     return {
-        "name": r["name"],
-        "version": r["version"],
-        "kind": r["kind"],
-        "providerId": r["provider_id"],
-        "modelId": r["model_id"],
-        "clearedSensitivity": r["cleared_sensitivity"],
-        "inputPerMillion": str(r["input_per_million"]),
-        "outputPerMillion": str(r["output_per_million"]),
-        "status": r["status"],
-        "reasoningEffort": r.get("reasoning_effort"),
-        "images": bool(r.get("images")),
+        "name": r.name,
+        "version": r.version,
+        "kind": r.kind,
+        "providerId": r.provider_id,
+        "modelId": r.model_id,
+        "clearedSensitivity": r.cleared_sensitivity,
+        "inputPerMillion": str(r.input_per_million),
+        "outputPerMillion": str(r.output_per_million),
+        "status": r.status,
+        "reasoningEffort": r.reasoning_effort,
+        "images": r.images,
     }
 
 
-def _provider_view(r: Mapping[str, Any]) -> dict[str, Any]:
+def _provider_view(r: ProviderRow) -> dict[str, Any]:
     return {
-        "id": r["id"],
-        "name": r["name"],
-        "type": r["type"],
-        "baseUrl": r["base_url"],
-        "keyRef": r["key_ref"],
-        "apiVersion": r["api_version"],
-        "region": r["region"],
-        "observedRegion": r["observed_region"],
-        "regionMismatch": region_mismatch(r["observed_region"], r["region"]),
+        "id": r.id,
+        "name": r.name,
+        "type": r.type,
+        "baseUrl": r.base_url,
+        "keyRef": r.key_ref,
+        "apiVersion": r.api_version,
+        "region": r.region,
+        "observedRegion": r.observed_region,
+        "regionMismatch": region_mismatch(r.observed_region, r.region),
     }
 
 
@@ -404,17 +414,17 @@ def create_models_app(
         if row is None:
             return refused(404, "provider_not_found", f"No provider connection {provider_id}.")
         # A connection's type never changes after it is made, so the check holds without a lock.
-        if row["type"] == "scripted":
+        if row.type == "scripted":
             return refused(409, "provider_not_rebindable", "A scripted connection has no endpoint to change.")
         # An api-version or region left out keeps the stored one: the install scripts move only the base URL and key.
         given = body.model_fields_set
-        version = body.api_version if "api_version" in given else row["api_version"]
-        region = body.region if "region" in given else row["region"]
-        if (why := connection_problem(row["type"], body.base_url, version, region)) is not None:
+        version = body.api_version if "api_version" in given else row.api_version
+        region = body.region if "region" in given else row.region
+        if (why := connection_problem(row.type, body.base_url, version, region)) is not None:
             return refused(400, "validation_failed", why)
         fields = {"base_url": body.base_url, "key_ref": body.key_ref, "api_version": version, "region": region}
         await providers.rebind(provider_id, fields)
-        return ok(_provider_view({**row, **fields, "observed_region": None}))
+        return ok(_provider_view(row.model_copy(update={**fields, "observed_region": None})))
 
     def account_admin(p: CurrentPrincipal) -> str:
         """settings.manage, held in the Security team: an account admin. Returns the actor."""
@@ -524,14 +534,14 @@ def create_models_app(
             fields = {"type": "openai-compatible", "base_url": CHAT_BASES[body.provider], "api_version": None}
             fields["key_ref"] = body.key_name
         name = f"{chat_aliases[0]}-{body.provider}"
-        held = next((r for r in await providers.all() if r["name"] == name), None)
-        pid = new_id("prov") if held is None else str(held["id"])
+        held = next((r for r in await providers.all() if r.name == name), None)
+        pid = new_id("prov") if held is None else held.id
         if held is None and not await providers.create(
             {"id": pid, "name": name, **fields, "region": None, "created_at": now_iso()}
         ):
-            held = next(r for r in await providers.all() if r["name"] == name)
+            held = next(r for r in await providers.all() if r.name == name)
         if held is not None:
-            pid = str(held["id"])
+            pid = held.id
             await providers.rebind(pid, {**fields, "region": None})
         version_fields = {
             "provider_id": pid,
@@ -547,7 +557,7 @@ def create_models_app(
             # until an admin prices it on the Models page.
             held_version = await aliases.current(alias)
             prices = ("input_per_million", "output_per_million")
-            priced = {k: held_version[k] for k in prices if held_version and k in held_version}
+            priced = {k: getattr(held_version, k) for k in prices if held_version is not None}
             if await aliases.add_version(alias, {**version_fields, **priced}) is None:
                 await aliases.create(alias, "chat", version_fields)
         return ok(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)).model_dump(by_alias=True))
@@ -562,7 +572,7 @@ def create_models_app(
     async def delete_provider_key(name: Annotated[str, KEY_NAME], p: CurrentPrincipal) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Deletes a key no provider connection names; 409 naming the connection that still does."""
         account_admin(p)
-        using = [r["name"] for r in await providers.all() if r["key_ref"] == name]
+        using = [r.name for r in await providers.all() if r.key_ref == name]
         if using:
             raise Conflict(f"Provider connection {', '.join(using)} signs in with {name}.", code="key_in_use")
         if not await key_vault.delete(p.tenant_id, name):
@@ -716,7 +726,7 @@ def create_models_app(
         if body.alias and body.estimated_tokens:
             alias_row = await aliases.current(body.alias)
             if alias_row is not None:
-                estimate = cost(Usage(input_tokens=body.estimated_tokens), Price(alias_row["input_per_million"]))
+                estimate = cost(Usage(input_tokens=body.estimated_tokens), Price(alias_row.input_per_million))
                 if estimate > remaining:
                     return refused(429, "key_budget_exhausted", f"The estimate {estimate} exceeds {remaining} left.")
         return ok({"admitted": True, "remaining": str(remaining)})
@@ -729,7 +739,7 @@ def create_models_app(
             self.key, self.row, self.tenant = key, row, tenant
             self.started = time.perf_counter()
             self.version: dict[str, Any] = {}
-            self.alias_row: Mapping[str, Any] = {}
+            self.alias_row: ServingAlias | None = None
             self.price = Price(Decimal(0))
             self.provider: Any = None
 
@@ -770,8 +780,9 @@ def create_models_app(
             """Records the region an Azure resource answered from on its connection, when it changed."""
             provider = self.provider
             seen = provider.observed_region if isinstance(provider, AzureOpenAIProvider) else None
-            if seen and seen != self.alias_row.get("observed_region"):
-                await providers.observe(str(self.alias_row["provider_id"]), seen)
+            alias = self.alias_row
+            if seen and alias is not None and seen != alias.observed_region:
+                await providers.observe(alias.provider_id, seen)
 
         async def failed(self, e: Exception) -> JSONResponse:
             """The provider's failure as the caller gets it, its code also the call-log row's reason."""
@@ -779,6 +790,13 @@ def create_models_app(
             await self.observed()
             await self.log("error", failure.code, **self.version)
             return provider_refused(failure)
+
+        @property
+        def serving(self) -> ServingAlias:
+            """The alias version a gate that opened is served by."""
+            if self.alias_row is None:
+                raise RuntimeError("the gate has no alias version until open_gate sets it")
+            return self.alias_row
 
     async def open_gate(
         authorization: str | None,
@@ -843,23 +861,23 @@ def create_models_app(
         if alias_row is None:
             return await gate.refuse(404, "alias_not_found", f"No current version of alias {alias_name}.")
         gate.alias_row = alias_row
-        gate.version = {"alias_version": alias_row["version"], "provider_model": alias_row["model_id"]}
-        if alias_row["kind"] != kind:
+        gate.version = {"alias_version": alias_row.version, "provider_model": alias_row.model_id}
+        if alias_row.kind != kind:
             return await gate.refuse(
-                400, "alias_kind_mismatch", f"Alias {alias_name} is a {alias_row['kind']} alias, not {kind}."
+                400, "alias_kind_mismatch", f"Alias {alias_name} is a {alias_row.kind} alias, not {kind}."
             )
-        if sensitivity not in SENSITIVITY or not cleared(alias_row["cleared_sensitivity"], sensitivity):
+        if sensitivity not in SENSITIVITY or not cleared(alias_row.cleared_sensitivity, sensitivity):
             return await gate.refuse(
                 403,
                 "sensitivity_not_cleared",
-                f"Alias {alias_name} is cleared for {alias_row['cleared_sensitivity']} data, not {sensitivity}.",
+                f"Alias {alias_name} is cleared for {alias_row.cleared_sensitivity} data, not {sensitivity}.",
             )
-        if images and not alias_row["images"]:
+        if images and not alias_row.images:
             return await gate.refuse(
                 403, "images_not_cleared", f"Alias {alias_name} is not cleared for images or files."
             )
-        gate.price = Price(alias_row["input_per_million"], alias_row["output_per_million"])
-        ref = alias_row.get("key_ref")
+        gate.price = Price(alias_row.input_per_million, alias_row.output_per_million)
+        ref = alias_row.key_ref
         if ref and not tenant:
             # A provider key is an account's own: a call that names no account signs in with none.
             return await gate.refuse(
@@ -877,7 +895,8 @@ def create_models_app(
                 "account admin adds it on Settings > Model providers.",
             )
         try:
-            gate.provider = provider_for(alias_row, {str(ref): provider_key} if ref and provider_key else {}, http)
+            secrets_by_ref = {str(ref): provider_key} if ref and provider_key else {}
+            gate.provider = provider_for(alias_row.model_dump(), secrets_by_ref, http)
         except ProviderError as e:
             await gate.log("error", e.code)
             return provider_refused(e)
@@ -912,16 +931,16 @@ def create_models_app(
         )
         if isinstance(gate, JSONResponse):
             return gate
-        alias_row, provider, version = gate.alias_row, gate.provider, gate.version
+        alias_row, provider, version = gate.serving, gate.provider, gate.version
         log, settle, observed, failed = gate.log, gate.settle, gate.observed, gate.failed
-        if alias_row.get("reasoning_effort") and "reasoning_effort" not in body:
-            body["reasoning_effort"] = alias_row["reasoning_effort"]
+        if alias_row.reasoning_effort and "reasoning_effort" not in body:
+            body["reasoning_effort"] = alias_row.reasoning_effort
         call_id = new_id("chatcmpl")
         created = int(time.time())
 
         if request.stream:
             usage = StreamUsage()
-            chunks = provider.stream(str(alias_row["model_id"]), body, usage)
+            chunks = provider.stream(alias_row.model_id, body, usage)
             # The first chunk is read before answering, so a provider that refuses the request is a 502, not a 200
             # stream that ends early.
             try:
@@ -953,7 +972,7 @@ def create_models_app(
 
             return StreamingResponse(events(), media_type="text/event-stream")
         try:
-            done = await provider.complete(str(alias_row["model_id"]), body)
+            done = await provider.complete(alias_row.model_id, body)
         except ProviderError as e:
             return await failed(e)
         await observed()
@@ -1022,7 +1041,7 @@ def create_models_app(
                 400, "invalid_input", f"Send 1 to {MAX_EMBED_INPUTS} texts to embed, not {len(inputs)}."
             )
         try:
-            done = await gate.provider.embed(str(gate.alias_row["model_id"]), inputs, request.dimensions)
+            done = await gate.provider.embed(gate.serving.model_id, inputs, request.dimensions)
         except ProviderError as e:
             return await gate.failed(e)
         await gate.observed()

@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import In, Out, Passthrough
 
 
 class Health(BaseModel):
@@ -125,11 +125,9 @@ class Admission(Out):
     remaining: str
 
 
-class ChatCompletionRequest(BaseModel):
+class ChatCompletionRequest(Passthrough):
     """OpenAI's chat completion request. Fields this service does not read (temperature, tool_choice and the rest) are
     kept and forwarded to the provider."""
-
-    model_config = ConfigDict(extra="allow")
 
     model: str
     messages: list[dict[str, Any]]
@@ -168,11 +166,9 @@ class ChatCompletion(_OpenAI):
     usage: ChatUsage
 
 
-class EmbeddingsRequest(BaseModel):
+class EmbeddingsRequest(In):
     """OpenAI's embeddings request: the alias as `model`, one text or a list, and the width when the caller names
     one."""
-
-    model_config = ConfigDict(extra="forbid")
 
     model: str
     input: str | list[str]

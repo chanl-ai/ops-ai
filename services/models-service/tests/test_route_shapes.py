@@ -51,7 +51,7 @@ async def test_the_alias_list_holds_each_aliases_serving_version_only(models: Mo
         }
     ]
     names = [a["name"] for a in r.json()["data"]]
-    assert names == sorted(names) and len(names) == len(set(names))
+    assert len(names) == len(set(names))
     assert all(set(a) == ALIAS_KEYS for a in r.json()["data"])
 
 

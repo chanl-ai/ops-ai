@@ -8,32 +8,44 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
+from ops_service_kit.http import Out
 from ops_store import Guarantee
-from ops_store.database import Database
 from ops_store.dialect import insert_ignore
+from ops_store.rows import one, rows
+from ops_store.store import Store
 
 from .tables import provider_connections as t
 
 
-class Providers:
+class ProviderRow(Out):
+    """A provider connection as stored."""
+
+    id: str
+    name: str
+    type: str
+    base_url: str | None
+    key_ref: str | None
+    api_version: str | None
+    region: str | None
+    observed_region: str | None
+    created_at: str
+
+
+class Providers(Store):
     # A connection's name is unique, so two creates of one name cannot both land (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
-    def __init__(self, db: Database) -> None:
-        self.db = db
+    async def all(self) -> list[ProviderRow]:
+        async with self.engine.connect() as c:
+            return await rows(c, t.select().order_by(t.c.name), ProviderRow)
 
-    async def all(self) -> list[dict[str, Any]]:
-        async with self.db.connect() as c:
-            return [dict(r) for r in (await c.execute(t.select().order_by(t.c.name))).mappings()]
-
-    async def get(self, provider_id: str) -> dict[str, Any] | None:
-        async with self.db.connect() as c:
-            row = (await c.execute(t.select().where(t.c.id == provider_id))).mappings().first()
-        return dict(row) if row is not None else None
+    async def get(self, provider_id: str) -> ProviderRow | None:
+        async with self.engine.connect() as c:
+            return await one(c, t.select().where(t.c.id == provider_id), ProviderRow)
 
     async def create(self, row: Mapping[str, Any]) -> bool:
         """Adds a connection; False, and nothing written, when one with the same name exists."""
-        async with self.db.begin() as c:
+        async with self.engine.begin() as c:
             if (await c.execute(sa.select(t.c.id).where(t.c.name == row["name"]))).first():
                 return False
             await c.execute(t.insert().values(**row))
@@ -42,12 +54,12 @@ class Providers:
     async def rebind(self, provider_id: str, fields: Mapping[str, Any]) -> None:
         """Sets where the connection's calls go (base URL, credential name, api-version, region); a moved endpoint has
         not answered yet, so the observed region is cleared."""
-        async with self.db.begin() as c:
+        async with self.engine.begin() as c:
             await c.execute(t.update().where(t.c.id == provider_id).values(**fields, observed_region=None))
 
     async def observe(self, provider_id: str, region: str) -> None:
         """Records the region the provider answered from, when it differs from the one recorded."""
-        async with self.db.begin() as c:
+        async with self.engine.begin() as c:
             await c.execute(
                 t.update()
                 .where(t.c.id == provider_id, sa.or_(t.c.observed_region.is_(None), t.c.observed_region != region))
@@ -56,10 +68,10 @@ class Providers:
 
     async def ensure(self, row: Mapping[str, Any]) -> None:
         """Adds the connection unless one with its id exists, which is left as it is."""
-        async with self.db.begin() as c:
+        async with self.engine.begin() as c:
             await c.execute(insert_ignore(c, t, row, keys=["id"]))
 
     async def follow_url(self, provider_id: str, base_url: str) -> None:
         """Points the connection at `base_url` unless it names a credential: one bound to a real provider keeps it."""
-        async with self.db.begin() as c:
+        async with self.engine.begin() as c:
             await c.execute(t.update().where(t.c.id == provider_id, t.c.key_ref.is_(None)).values(base_url=base_url))
