@@ -458,7 +458,9 @@ export const toolsOperations = {
       "page",
       "pageSize",
       "search",
-      "templateId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

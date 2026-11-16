@@ -18,8 +18,9 @@ import sqlalchemy as sa
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ops_service_kit.public_address import address_allowed
 from ops_service_kit.settings import Settings
-from ops_tools.egress import EgressBackend, EgressDenied, EgressPolicy, address_allowed
+from ops_tools.egress import EgressBackend, EgressDenied, EgressPolicy
 from ops_tools.modules.seed import load
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore

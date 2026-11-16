@@ -48,7 +48,7 @@ with agents(), tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT
     # their name as the operation is added (S13, owner's rule); a caller without the Security role waits for a task
     # instead, which tests/test_held_hosts.py proves.
     added = gw.post(f"/v1/tool-modules/{module_id}/operations", json=referenced)
-    listed = data(gw.get("/v1/egress/hosts", params={"pageSize": 200})) or {}
+    listed = data(gw.get("/v1/egress/hosts", params={"search": f"statements-{RUN}.harborpine.internal"})) or {}
     hosts = {h["host"] for h in (listed.get("data") if isinstance(listed, dict) else listed) or []}
     check(
         "an operation on a host off the allow-list lists the host in the Security holder's name (200)",

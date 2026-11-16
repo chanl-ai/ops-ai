@@ -552,8 +552,8 @@ export interface paths {
         };
         /**
          * List Hosts
-         * @description The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot
-         *     a provisioned host fills. The page and its count are queried, not sliced.
+         * @description The hosts, by name, a page at a time on the shared list contract; `search` matches the host or its note,
+         *     `ids` names hosts, and the filter `templateId` keeps the hosts filling those template slots.
          */
         get: operations["egress_list_hosts"];
         put?: never;
@@ -9750,9 +9750,11 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
-                pageSize?: number;
-                search?: string;
-                templateId?: string | null;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

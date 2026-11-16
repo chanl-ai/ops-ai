@@ -20,10 +20,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.rows import rows
 from ops_store.schema import TENANT_SCOPED
-from ops_store.search import contains
 from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
@@ -48,7 +49,7 @@ def _listed(name: str, key: str, length: int) -> sa.Table:
         sa.Column("added_at", _TS, nullable=False),
         # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
         # `system` nothing, `managed` anything. Null on a record no template made.
-        sa.Column("template_id", sa.String(120), index=True),
+        sa.Column("template_id", sa.String(120), index=True, info=LISTED),
         sa.Column("protection", sa.String(16)),
         info=TENANT_SCOPED,
     )
@@ -172,19 +173,22 @@ class EgressStore(Store):
                 used.setdefault(host, []).append(ModuleUse(id=module_id, name=name or module_id))
         return AllowList(hosts=[_using(h, used) for h in hosts], ranges=ranges)
 
-    async def hosts_page(
-        self, tenant_id: str, search: str, offset: int, limit: int, template_id: str | None = None
-    ) -> list[ListedHost]:
-        """One page of the listed hosts whose name or note contains `search`, by host, each with the modules that use
-        it; LIMIT and OFFSET run in the query, and only that page's modules are read."""
-        q = (
-            egress_hosts.select()
-            .where(self._hosts_matching(tenant_id, search, template_id))
-            .order_by(sa.func.lower(egress_hosts.c.host))
-        )
+    async def host_page(self, tenant_id: str, params: ListParams) -> tuple[ListPage, list[ListedHost]]:
+        """One page of the listed hosts, by host name and then the key, searched by host or note and filtered by the
+        template slot (`templateId`), each with the modules that use it; only that page's modules are read."""
+        h = egress_hosts.c
+        q = sa.select(*egress_hosts.c).where(h.tenant_id == tenant_id)
         async with self._list_tx(tenant_id) as c:
-            hosts = await rows(c, q.offset(offset).limit(limit), ListedHost)
-            return await self._with_modules(c, tenant_id, hosts)
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[h.host, h.note],
+                default_sort=sa.func.lower(h.host),
+                filters={"templateId": h.template_id},
+            )
+            hosts = [ListedHost.model_validate(r) for r in page["data"]]
+            return page, await self._with_modules(c, tenant_id, hosts)
 
     async def entry(self, tenant_id: str, kind: str, value: str) -> ListedHost | ListedRange | None:
         """One listed host, with the modules that use it, or one listed range, in the shape the lists return; None
@@ -207,21 +211,6 @@ class EgressStore(Store):
         for host, module_id, name in await c.execute(users_q):
             used.setdefault(host, []).append(ModuleUse(id=module_id, name=name or module_id))
         return [_using(h, used) for h in hosts]
-
-    async def hosts_count(self, tenant_id: str, search: str, template_id: str | None = None) -> int:
-        q = (
-            sa.select(sa.func.count())
-            .select_from(egress_hosts)
-            .where(self._hosts_matching(tenant_id, search, template_id))
-        )
-        async with self._list_tx(tenant_id) as c:
-            return int((await c.execute(q)).scalar_one())
-
-    @staticmethod
-    def _hosts_matching(tenant_id: str, search: str, template_id: str | None = None) -> sa.ColumnElement[bool]:
-        named = sa.or_(contains(egress_hosts.c.host, search), contains(egress_hosts.c.note, search))
-        held = sa.and_(egress_hosts.c.tenant_id == tenant_id, named)
-        return held if template_id is None else sa.and_(held, egress_hosts.c.template_id == template_id)
 
     async def protection(self, tenant_id: str, kind: str, value: str) -> str | None:
         """A listed entry's protection; None when it is unprotected or not listed."""

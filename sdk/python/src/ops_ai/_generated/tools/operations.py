@@ -385,7 +385,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/egress/hosts",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "templateId"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "egress_remove_host": {
@@ -1038,14 +1038,23 @@ class Operations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> HostList:
         "List Hosts"
         return self._t.call(
             SERVICE,
             OPERATIONS["egress_list_hosts"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1607,14 +1616,23 @@ class AsyncOperations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> HostList:
         "List Hosts"
         return await self._t.call(
             SERVICE,
             OPERATIONS["egress_list_hosts"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
