@@ -12,7 +12,7 @@
           return True
 
   async with aliases.tx() as conn: ...                   # the request's one transaction, or its own outside a request
-  async with providers.install_tx(PROVIDERS) as conn: ...  # the same, with no tenant: the install's own tables only
+  async with providers.install_tx(PROVIDERS, tables=(providers_t,)) as conn: ...  # no tenant: these system tables only
   async with readings.system_tx(RECOVER_PENDING) as conn: ...  # every tenant's rows, as the store's system role
 
 A store never calls `engine.begin()` or `engine.connect()`: that is a second connection beside the request's, as the
@@ -45,9 +45,7 @@ class Store:
         return isolation.isolated_tx(self.engine, role=self.role)
 
     @asynccontextmanager
-    async def install_tx(
-        self, reason: str, *, tables: Iterable[sa.Table] | None = None
-    ) -> AsyncGenerator[AsyncConnection]:
+    async def install_tx(self, reason: str, *, tables: Iterable[sa.Table]) -> AsyncGenerator[AsyncConnection]:
         """`tx()` with no tenant, for the install's own tables (marked `system(...)`), from a path that may carry no
         caller: a route that authenticates by a model key, a seed, a loop. Inside a request it is the request's
         connection with its scope set for the block and restored after; a tenant table shows it no row and refuses

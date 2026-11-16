@@ -54,7 +54,7 @@ async def test_a_tenant_reads_only_its_own_calls_and_the_install_scope_reads_non
             seen = (await c.execute(q, {"k": key_id})).scalar_one()
     assert (len(page.data), [t.calls for t in page.by_key], seen) == (1, [1], 1), "a tenant read another tenant's call"
     with pytest.raises(InstallScopeError):
-        async with log.install_tx("probe") as c:
+        async with log.install_tx("probe", tables=(model_calls_untenanted,)) as c:
             await c.execute(sa.select(sa.func.count()).select_from(model_call_log))
     # Both calls count toward the key's caps, whichever tenant made them.
     assert (await log.totals(key_id, datetime.now(UTC))).today == Decimal("0.02")
@@ -64,7 +64,7 @@ async def test_a_call_that_names_no_tenant_is_kept_apart_from_every_tenants_log(
     key_id = f"workflow:none-{uuid4().hex[:8]}"
     log, row = CallLog(models.engine), _row(key_id, None)
     await log.record(row)
-    async with log.spend.install_tx("probe") as c:
+    async with log.spend.install_tx("probe", tables=(model_calls_untenanted,)) as c:
         q = (
             sa.select(sa.func.count())
             .select_from(model_calls_untenanted)

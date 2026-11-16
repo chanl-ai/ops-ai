@@ -86,7 +86,7 @@ class Isolation:
     # Why a wider scope than `team` is in force; None for a team scope.
     reason: str | None = None
     # The tables an install-wide block declared it touches, the objects themselves: a same-named table in another
-    # schema or metadata is another table. None for one that declared none yet.
+    # schema or metadata is another table. None outside install scope.
     tables: frozenset[sa.Table] | None = None
 
 
@@ -180,7 +180,7 @@ def scope(tenant_id: str, team_id: str | None) -> Generator[Isolation]:
 
 
 @contextmanager
-def install_wide(reason: str, *, tables: Iterable[sa.Table] | None = None) -> Generator[Isolation]:
+def install_wide(reason: str, *, tables: Iterable[sa.Table]) -> Generator[Isolation]:
     """No tenant for a block, logged with `reason`: statements on the install's own tables (marked `system(...)`) from
     a path that may have no caller (a route that authenticates by a model key, a seed, a loop). Inside a request it
     runs on the request's connection. Every statement on a connection in this scope is checked before it is sent
@@ -188,9 +188,9 @@ def install_wide(reason: str, *, tables: Iterable[sa.Table] | None = None) -> Ge
     function not listed in `INSTALL_FUNCTIONS` raises `InstallScopeError`, whatever the login and whether or not the
     table has a row policy. `tenant()` and `team_visible` raise inside. `tables` are the only ones the block may touch,
     each marked `system(...)`; a statement reaching any other, a caller's statement passed in included, is refused.
-    A block that declares none is counted in `tests/isolation_sites/install/`, a list that only shrinks."""
+    Every block declares at least one; each declared set is counted in `tests/isolation_sites/install/`."""
     _need(reason, "install_wide")
-    declared = None if tables is None else _declared(tables)
+    declared = _declared(tables)
     base = _ctx.get()
     _log_widen(base.kind if base else TASK, reason=reason, scope="install", tenant="-")
     token = _ctx.set(Isolation("", None, "install", base.kind if base else TASK, reason, declared))
@@ -478,10 +478,13 @@ async def enter_transaction(
 
 
 def _mark(conn: AsyncConnection, ctx: Isolation) -> None:
-    """What the guard checks this connection's statements by: an install scope's declared tables, or every system
-    table for a block that declared none; nothing outside install scope."""
+    """What the guard checks this connection's statements by: an install scope's declared tables; nothing outside
+    install scope."""
     if ctx.scope == "install":
-        conn.info[_INSTALL] = ctx.tables if ctx.tables is not None else _UNDECLARED
+        # An install scope with no tables would leave the guard off; only `install_wide` builds one, with its tables.
+        if not ctx.tables:
+            raise InstallScopeError("refused: an install-wide block declares the tables it touches")
+        conn.info[_INSTALL] = ctx.tables
     else:
         conn.info.pop(_INSTALL, None)
 
@@ -497,8 +500,6 @@ async def leave_transaction(conn: AsyncConnection) -> None:
 # A connection's info key while it carries install scope. It lives on the pooled connection, so it is also cleared
 # when the connection goes back to the pool, however its block ended.
 _INSTALL = "ops_install_scope"
-# Its value for a block that declared no tables: every table marked system(...) is reachable.
-_UNDECLARED = True
 
 
 def _guard(engine: AsyncEngine) -> None:
@@ -560,13 +561,13 @@ def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> Non
     if not issubclass(kind, _STATEMENTS):
         raise InstallScopeError(f"refused: a {kind.__name__} inside an install-wide block")
     found: object = conn.info[_INSTALL]
-    declared = cast(frozenset[sa.Table], found) if isinstance(found, frozenset) else None
+    declared = cast(frozenset[sa.Table], found)
     problem = next(_install_problems(statement, declared), None)
     if problem is not None:
         raise InstallScopeError(f"refused: {problem} inside an install-wide block")
 
 
-def _install_problems(statement: sa.ClauseElement, declared: frozenset[sa.Table] | None) -> Iterator[str]:
+def _install_problems(statement: sa.ClauseElement, declared: frozenset[sa.Table]) -> Iterator[str]:
     """Each part of `statement` an install-wide block may not send. A column's table is walked too, since a column
     can stand in a statement whose tree never holds its table (an UPDATE's value, a RETURNING)."""
     seen: set[int] = set()
@@ -587,7 +588,7 @@ def _install_problems(statement: sa.ClauseElement, declared: frozenset[sa.Table]
             yield from _part_problems(e, declared)
 
 
-def _part_problems(e: object, declared: frozenset[sa.Table] | None) -> Iterator[str]:
+def _part_problems(e: object, declared: frozenset[sa.Table]) -> Iterator[str]:
     """What is wrong with one element of an install-wide statement, read by attribute: the element classes differ.
     Judged by its class (`issubclass`), so the attributes read first stay one type each."""
     kind = type(e)
@@ -605,7 +606,7 @@ def _part_problems(e: object, declared: frozenset[sa.Table] | None) -> Iterator[
         yield "raw SQL (a text clause or a literal column)"
     if issubclass(kind, sa.TableClause) and not marked:
         yield f"{name} is not marked system(...); an install-wide block reaches only the install's own tables"
-    elif marked and declared is not None and e not in declared:
+    elif marked and e not in declared:
         names = ", ".join(sorted(t.fullname for t in declared))
         yield f"{cast(sa.Table, e).fullname} is not among the tables this block declared ({names})"
     if isinstance(name, quoted_name) and name.quote is False and not _BARE.fullmatch(str(name)):

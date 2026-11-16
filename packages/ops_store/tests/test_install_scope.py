@@ -88,7 +88,7 @@ class Install(Store):
     role = ROLE
 
     async def setting(self, name: str) -> str | None:
-        async with self.install_tx(SETTINGS) as c:
+        async with self.install_tx(SETTINGS, tables=(settings,)) as c:
             return await c.scalar(sa.select(settings.c.value).where(settings.c.name == name))
 
     async def note_ids(self) -> list[str]:
@@ -169,7 +169,7 @@ async def test_an_install_wide_transaction_reads_install_tables_and_no_tenant_ro
     st = Install(engine)
     with isolation.scope("t1", None):
         assert await st.note_ids() == ["n1"], "the policy shows a tenant its own row"
-    async with st.install_tx(SETTINGS) as c:
+    async with st.install_tx(SETTINGS, tables=(settings,)) as c:
         assert await c.scalar(sa.select(settings.c.value)) == "eu"
         with pytest.raises(NoTenantError):
             isolation.tenant()
@@ -206,7 +206,7 @@ async def test_an_install_block_refuses_every_statement_on_a_table_not_marked_sy
         sa.select(sa.table("store_test_install_loose", sa.column("id"))),
     ):
         try:
-            async with st.install_tx(SETTINGS) as c:
+            async with st.install_tx(SETTINGS, tables=(settings,)) as c:
                 result = await c.execute(statement)
                 refused.append(f"ran: {list(result.scalars()) if result.returns_rows else 'wrote'}")
         except InstallScopeError:
@@ -214,7 +214,7 @@ async def test_an_install_block_refuses_every_statement_on_a_table_not_marked_sy
         except DBAPIError as e:
             refused.append(f"the database refused it: {type(e.orig).__name__}")
     assert refused == ["refused"] * 6, refused
-    async with st.install_tx(SETTINGS) as c:
+    async with st.install_tx(SETTINGS, tables=(settings,)) as c:
         assert await c.scalar(sa.select(settings.c.value)) == "eu", "a system table is still read"
     with isolation.scope("t1", None):
         assert sorted(await _loose(engine, role)) == ["a"], "the caller's own block still reads"
@@ -236,15 +236,15 @@ async def test_an_install_block_refuses_raw_sql(engine: AsyncEngine) -> None:
     ]
     for run in runs:
         with pytest.raises(InstallScopeError):
-            async with st.install_tx(SETTINGS) as c:
+            async with st.install_tx(SETTINGS, tables=(settings,)) as c:
                 await run(c)
 
 
 def test_the_team_filter_refuses_an_install_block() -> None:
     """No acting team in an install block is no team at all, not every team."""
-    with isolation.install_wide(SETTINGS), pytest.raises(InstallScopeError):
+    with isolation.install_wide(SETTINGS, tables=(settings,)), pytest.raises(InstallScopeError):
         team_visible(loose)
-    with isolation.install_wide(SETTINGS), isolation.scope("t1", "x"):
+    with isolation.install_wide(SETTINGS, tables=(settings,)), isolation.scope("t1", "x"):
         assert str(team_visible(loose)) == str(loose.c.team_id == "x"), "a team scope inside reads its team"
 
 
@@ -264,7 +264,7 @@ async def test_inside_a_request_it_reuses_the_one_connection_and_restores_the_ca
                 before = await st.note_ids()
                 region = await st.setting("region")
                 async with st.tx() as outer:
-                    async with st.install_tx(SETTINGS) as c:
+                    async with st.install_tx(SETTINGS, tables=(settings,)) as c:
                         hidden = list((await c.execute(sa.select(settings.c.value))).scalars())
                     # The block around it reads on as the caller, with no statement of its own to set that again.
                     restored = list((await outer.execute(sa.select(notes.c.id))).scalars())
@@ -288,7 +288,7 @@ async def test_a_statement_cancelled_mid_flight_raises_the_cancellation_and_retu
 
     async def call() -> None:
         with isolation.scope("t1", None):
-            async with isolation.request_transaction(), st.install_tx(SETTINGS):
+            async with isolation.request_transaction(), st.install_tx(SETTINGS, tables=(settings,)):
                 with isolation.scope("t1", None):
                     async with st.tx() as c:
                         started.set()
@@ -327,7 +327,7 @@ async def test_an_install_block_judges_a_statement_by_its_tables_not_its_columns
     ran: list[str] = []
     for statement in [*allowed, *refused]:
         try:
-            async with st.install_tx(SETTINGS) as c:
+            async with st.install_tx(SETTINGS, tables=(settings,)) as c:
                 await c.execute(statement)
             ran.append("ran")
         except InstallScopeError:
@@ -339,7 +339,7 @@ async def _outcomes(st: Store, statements: list[sa.Executable]) -> list[str]:
     out: list[str] = []
     for statement in statements:
         try:
-            async with st.install_tx(SETTINGS) as c:
+            async with st.install_tx(SETTINGS, tables=(settings,)) as c:
                 await c.execute(statement)
             out.append("ran")
         except InstallScopeError:
@@ -370,7 +370,7 @@ async def test_an_install_block_refuses_a_column_of_another_table_and_sql_text_o
         sa.select(sa.column(quoted_name("(SELECT count(*) FROM store_test_install_loose)", quote=False), sa.Integer)),
     ]
     assert await _outcomes(st, statements) == ["refused"] * len(statements)
-    async with st.install_tx(SETTINGS) as c:
+    async with st.install_tx(SETTINGS, tables=(settings,)) as c:
         assert await c.scalar(sa.select(settings.c.value)) == "eu", "a system table is still read"
 
 
@@ -401,7 +401,7 @@ async def test_a_list_over_a_system_table_is_searched_and_sorted_inside_an_insta
     async with engine.begin() as c:
         await c.execute(settings.insert(), [{"name": "Retention", "value": "30d"}, {"name": "retry", "value": "3"}])
     asked = ListParams(search="RET", sort_by="name", sort_order="desc")
-    async with st.install_tx(SETTINGS) as c:
+    async with st.install_tx(SETTINGS, tables=(settings,)) as c:
         page = await list_page(
             c,
             sa.select(settings.c.name),
@@ -447,6 +447,12 @@ async def test_an_install_block_touches_only_the_tables_it_declared(engine: Asyn
     with pytest.raises(InstallScopeError, match="cannot be declared"):
         async with st.install_tx(SETTINGS, tables=(notes,)):
             pass
+
+
+def test_an_install_block_that_names_an_empty_set_does_not_open() -> None:
+    """`tables` is required, so no block reaches every system table; an empty set raises before any connection."""
+    with pytest.raises(ValueError, match="at least one table"), isolation.install_wide(SETTINGS, tables=()):
+        pass
 
 
 class _Spelled(sa.types.UserDefinedType[str]):

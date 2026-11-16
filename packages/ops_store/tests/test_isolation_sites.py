@@ -528,9 +528,9 @@ def test_a_baseline_only_falls_in_the_history() -> None:
 
 
 # Install-wide blocks by the tables they declare, one file per service under `isolation_sites/install/`, each row
-# `<count> <reason> <table>,<table>` for the sites declaring that set, or `<count> undeclared <file>` for a site that
-# declares none (`Store.install_tx(REASON, tables=(...))`). A block is held to its declared tables when it runs
-# (`isolation._refuse_outside_install`); a row may only fall, so a new set, or a site declaring none, fails here.
+# `<count> <reason> <table>,<table>` for the sites declaring that set (`Store.install_tx(REASON, tables=(...))`, where
+# `tables` is required). A block is held to its declared tables when it runs (`isolation._refuse_outside_install`); a
+# row may only fall, so a new set fails here, as does a call whose tables the scan cannot read.
 INSTALL_TABLES = BASELINES / "install"
 
 
@@ -556,9 +556,7 @@ def install_findings(source: str, rel: str) -> list[tuple[int, str]]:
         if not (isinstance(node, ast.Call) and _handle(node.func) in INSTALL_CALLS):
             continue
         declared = next((kw.value for kw in node.keywords if kw.arg == "tables"), None)
-        if declared is None or (isinstance(declared, ast.Constant) and declared.value is None):
-            out.append((node.lineno, f"undeclared {rel}"))
-        elif isinstance(declared, ast.Tuple | ast.List) and all(isinstance(e, ast.Name) for e in declared.elts):
+        if isinstance(declared, ast.Tuple | ast.List) and all(isinstance(e, ast.Name) for e in declared.elts):
             tables = sorted({imported.get(e.id, e.id) for e in declared.elts if isinstance(e, ast.Name)})
             out.append((node.lineno, f"{_reason(node)} {','.join(tables)}"))
         else:
@@ -604,7 +602,7 @@ def test_install_blocks_declare_only_the_listed_tables() -> None:
     assert problems == [], "\n".join(problems)
 
 
-def test_the_install_scan_reads_declared_tables_aliases_and_undeclared_blocks() -> None:
+def test_the_install_scan_reads_declared_tables_and_refuses_aliases_and_unread_ones() -> None:
     planted = """
 from .tables import model_aliases as t
 from .tables import provider_connections
@@ -617,7 +615,7 @@ async def blocks(self):
 """
     assert install_findings(planted, "x.py") == [
         (6, "ALIASES model_aliases,provider_connections"),
-        (7, "undeclared x.py"),
+        (7, "unreadable x.py"),
         (8, "alias x.py"),
         (9, "unreadable x.py"),
     ]
