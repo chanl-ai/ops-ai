@@ -13,6 +13,7 @@
 
   async with aliases.tx() as conn: ...                   # the request's one transaction, or its own outside a request
   async with providers.install_tx(PROVIDERS) as conn: ...  # the same, with no tenant: the install's own tables only
+  async with readings.system_tx(RECOVER_PENDING) as conn: ...  # every tenant's rows, as the store's system role
 
 A store never calls `engine.begin()` or `engine.connect()`: that is a second connection beside the request's, as the
 database's owner, with no caller on it (`tests/test_isolation_sites.py` lists the sites still to move).
@@ -34,6 +35,8 @@ from .team_scope import any_team
 
 class Store:
     role: ClassVar[str | None] = None
+    # The role `system_tx` runs as: BYPASSRLS on PostgreSQL, the user the read predicates pass on SQL Server.
+    system_role: ClassVar[str | None] = None
 
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
@@ -50,6 +53,12 @@ class Store:
         with isolation.install_wide(reason):
             async with self.tx() as conn:
                 yield conn
+
+    def system_tx(self, reason: str) -> AbstractAsyncContextManager[AsyncConnection]:
+        """One transaction past the tenant, as `system_role`, whose grants limit what it reads: for work listed before
+        its tenant is known (a restart's queued reads), each item then done in its own tenant and team. Its own
+        connection, never the request's. `reason` is a named constant, listed in test_isolation_sites.py."""
+        return isolation.system_tx(self.engine, reason, role=self.system_role)
 
     def attempt(self, conn: AsyncConnection) -> AbstractAsyncContextManager[None]:
         """A savepoint around a statement that may fail and be caught, so the request's connection stays usable."""

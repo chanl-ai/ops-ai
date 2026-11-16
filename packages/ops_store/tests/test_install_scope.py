@@ -1,7 +1,8 @@
 """`Store.install_tx(reason)` on each database, by failure mode: an install-wide statement that reaches a table not
 marked `system(...)` (policed, unpoliced or unknown to the metadata, or as a login row security does not apply to),
 a team filter that passes every team's rows, one that opens a second connection inside a request, one that leaves the
-request's connection in its scope afterwards, and the guard on `Store.tx()` loosened by it."""
+request's connection in its scope afterwards, and the guard on `Store.tx()` loosened by it. `Store.system_tx(reason)`
+beside it: a system block that runs as the login instead of the store's system role, or opens with no reason."""
 
 from __future__ import annotations
 
@@ -40,6 +41,9 @@ from ops_store.team_scope import team_visible
 
 SQL_SERVER = (os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD"))
 ROLE = "ops_install_scope_test"
+# The store's system role: past row security on PostgreSQL, the user the read predicates pass on SQL Server.
+SYSTEM = "ops_install_scope_system"
+RECOVER = "a restart picking up every tenant's queued work"
 CHAIN = "storetestinstall"
 SETTINGS = "an install's setting, read by every tenant"
 
@@ -82,6 +86,16 @@ class Install(Store):
             return [str(i) for i in (await c.execute(sa.select(notes.c.id).order_by(notes.c.id))).scalars()]
 
 
+class Recovery(Install):
+    system_role = SYSTEM
+
+    async def every_note(self) -> tuple[str, list[str]]:
+        who = sa.func.current_user() if dialect_of(self.engine) == "postgresql" else sa.func.user_name()
+        async with self.system_tx(RECOVER) as c:
+            ids = [str(i) for i in (await c.execute(sa.select(notes.c.id).order_by(notes.c.id))).scalars()]
+            return str(await c.scalar(sa.select(who))), ids
+
+
 class Bare(Install):
     # No role: on PostgreSQL the compose superuser, which row security does not apply to.
     role = None
@@ -114,12 +128,16 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             )
             if request.param == "postgresql":
                 await c.execute(sa.text(role_ddl(ROLE)))
+                await c.execute(sa.text(role_ddl(SYSTEM, bypass=True)))
                 for t in (settings, notes, loose):
                     await c.execute(sa.text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {t.name} TO {ROLE}"))
+                await c.execute(sa.text(f"GRANT SELECT ON {notes.name} TO {SYSTEM}"))
                 for statement in isolation_ddl(notes, "postgresql"):
                     await c.execute(sa.text(statement))
             else:
-                for statement in security_ddl(CHAIN, [notes], column_type=_mssql_type, system_user=None):
+                await c.execute(sa.text(f"IF USER_ID(N'{SYSTEM}') IS NULL CREATE USER {SYSTEM} WITHOUT LOGIN"))
+                await c.execute(sa.text(f"GRANT SELECT ON {notes.name} TO {SYSTEM}"))
+                for statement in security_ddl(CHAIN, [notes], column_type=_mssql_type, system_user=SYSTEM):
                     await c.execute(sa.text(statement))
         yield e
         async with e.begin() as c:
@@ -147,6 +165,18 @@ async def test_an_install_wide_transaction_reads_install_tables_and_no_tenant_ro
             isolation.tenant()
     with pytest.raises(NoTenantError):
         await st.note_ids()
+
+
+async def test_a_system_block_reads_every_tenants_rows_as_the_stores_system_role_and_needs_a_reason(
+    engine: AsyncEngine,
+) -> None:
+    st = Recovery(engine)
+    assert await st.every_note() == (SYSTEM, ["n1", "n2"])
+    with isolation.scope("t1", None):
+        assert await st.note_ids() == ["n1"], "the store's own tx() still sees one tenant"
+    with pytest.raises(ValueError, match="needs a reason"):
+        async with st.system_tx(" "):
+            pass
 
 
 @pytest.mark.parametrize("role", [ROLE, None], ids=["policed-role", "no-role"])

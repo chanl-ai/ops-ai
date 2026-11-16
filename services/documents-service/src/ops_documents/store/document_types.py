@@ -173,6 +173,7 @@ def _type_team(type_id: str) -> Any:
 
 class DocumentTypesStore(Store):
     role = ROLE
+    system_role = SYSTEM_ROLE
 
     async def create(self, values: Mapping[str, Any], version: Mapping[str, Any]) -> None:
         """The type and its version 1, in one transaction."""
@@ -457,7 +458,7 @@ class DocumentTypesStore(Store):
         """Every queued or running test run, across tenants: what a restart picks up again, each then run as its own
         tenant and team."""
         t = document_type_tests
-        async with isolation.system_tx(self.engine, RECOVER_PENDING, role=SYSTEM_ROLE) as c:
+        async with self.system_tx(RECOVER_PENDING) as c:
             rows = (
                 (
                     await c.execute(

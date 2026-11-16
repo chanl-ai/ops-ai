@@ -17,7 +17,7 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 | `backends` | The registered backends; PostgreSQL is the only one, on a `<db>_conformance` database next to the test database |
 | `database` | `open_database(url)`: the handle code outside a store holds; tests pooled connections and retries a stalled connect |
 | `isolation` | The one isolation context: `enter_caller`, `isolated_tx`, `tenant_wide`, `system_tx`, `install_wide`, `NoTenantError`; `request_transaction` (one transaction per request) and `attempt` (a savepoint) |
-| `store` | `Store`: the base of every service's store class (`tx()`, `install_tx(reason)`, `attempt(conn)`, `owner_teams`) |
+| `store` | `Store`: the base of every service's store class (`tx()`, `install_tx(reason)`, `system_tx(reason)` as its `system_role`, `attempt(conn)`, `owner_teams`) |
 | `team_scope` | `team_visible` and `any_team`: the where-clause every read of a team-owned table carries |
 | `schema` | `TENANT_SCOPED` and the team-owned markers on tables; `differences` and `unowned` compare a migrated database with the metadata |
 | `schema_version` | `require_current_schema`: a service refuses to start when its chain's head is not recorded |
