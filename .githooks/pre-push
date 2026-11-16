@@ -18,11 +18,11 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sh
   [ -n "$since" ] || continue
   files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py')
   [ -n "$files" ] || continue
-  # The pushed content, not the working tree: another builder's unfinished file must not block this push. The files are
-  # exported from the pushed commit with the lint configuration, and ruff runs there.
+  # The pushed content, not the working tree: another builder's unfinished file must not block this push. The whole
+  # commit is exported because ruff tells first-party packages from third-party ones by the folders on disk; only the
+  # changed files are linted.
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/ops-pre-push.XXXXXX")
-  # shellcheck disable=SC2046,SC2086
-  git archive "$local_sha" pyproject.toml $(git ls-tree --name-only "$local_sha" ruff.toml .ruff.toml 2>/dev/null) $files | tar -x -C "$tmp"
+  git archive "$local_sha" | tar -x -C "$tmp"
   # shellcheck disable=SC2086
   (cd "$tmp" && $ruff check $files && $ruff format --check $files)
   status=$?

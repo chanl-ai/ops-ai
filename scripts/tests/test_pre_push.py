@@ -34,12 +34,39 @@ def make_repo(tmp_path: Path) -> tuple[Path, str]:
     repo = tmp_path / "repo"
     (repo / ".githooks").mkdir(parents=True)
     (repo / ".githooks/pre-push").write_text((ROOT / ".githooks/pre-push").read_text())
-    (repo / "pyproject.toml").write_text("[tool.ruff]\nline-length = 100\n")
+    (repo / "pyproject.toml").write_text('[tool.ruff]\nline-length = 100\n[tool.ruff.lint]\nselect = ["E", "I"]\n')
     (repo / "ok.py").write_text("x = 1\n")
     git(tmp_path, "init", "-q", str(repo))
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "base")
     return repo, git(repo, "rev-parse", "HEAD")
+
+
+def test_first_party_import_next_to_a_third_party_one_in_order_pushes_cleanly(tmp_path: Path) -> None:
+    # Ruff classifies an import as first party from the package folders on disk, so linting only the changed files
+    # reported I001 on correctly sorted imports.
+    repo, base = make_repo(tmp_path)
+    (repo / "mypkg").mkdir()
+    (repo / "mypkg/__init__.py").write_text("")
+    (repo / "mypkg/core.py").write_text("y = 1\n")
+    (repo / "mod.py").write_text("import yaml\n\nimport mypkg\n\nprint(yaml, mypkg)\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "first party")
+    # Only mod.py changes after this base, so mypkg is absent from the changed files.
+    base = git(repo, "rev-parse", "HEAD")
+    (repo / "mod.py").write_text("import yaml\n\nimport mypkg\n\nprint(yaml, mypkg, 2)\n")
+    git(repo, "commit", "-qam", "touch mod")
+    done = push(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_an_uncommitted_lint_error_in_the_tree_does_not_block(tmp_path: Path) -> None:
+    repo, base = make_repo(tmp_path)
+    (repo / "ok.py").write_text("x = 2\n")
+    git(repo, "commit", "-qam", "clean")
+    (repo / "ok.py").write_text("import os,sys\n")
+    done = push(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert done.returncode == 0, done.stdout + done.stderr
 
 
 def test_a_lint_error_in_a_pushed_commit_blocks_the_push(tmp_path: Path) -> None:
