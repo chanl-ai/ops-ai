@@ -31,13 +31,13 @@ CALLS = (
 )
 
 
-def test_rows_take_their_threads_tenant_orphans_go_and_no_default_remains(database_url: str) -> None:
+def test_rows_take_their_threads_tenant_orphans_go_and_no_default_remains(emptied_database: str) -> None:
     cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(cfg, BEFORE)
     tenant, thread, gone, at = new_id("ten"), new_id("gth"), new_id("wft"), now_iso()
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             # A run stopped after the column was added: the upgrade runs again over it.
             ("ALTER TABLE thread_budgets ADD COLUMN tenant_id VARCHAR(64)", {}),
             (THREAD, {"t": tenant, "id": thread, "team": new_id("team"), "at": at}),
@@ -50,7 +50,7 @@ def test_rows_take_their_threads_tenant_orphans_go_and_no_default_remains(databa
     command.upgrade(cfg, "head")
     budgets, calls = asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             ("SELECT thread_id, tenant_id FROM thread_budgets WHERE thread_id IN (:a, :b)", {"a": thread, "b": gone}),
             (
                 "SELECT thread_id, tenant_id, COUNT(*) FROM model_call_records WHERE thread_id IN (:a, :b) "
@@ -62,13 +62,13 @@ def test_rows_take_their_threads_tenant_orphans_go_and_no_default_remains(databa
     assert budgets == [(thread, tenant)]
     assert calls == [(thread, tenant, MANY)]
     with pytest.raises(IntegrityError):
-        asyncio.run(_sql(database_url, (BUDGET, {"id": new_id("gth"), "at": at})))
+        asyncio.run(_sql(emptied_database, (BUDGET, {"id": new_id("gth"), "at": at})))
     command.downgrade(cfg, BEFORE)
     command.upgrade(cfg, "head")
     # Its own rows, removed after, so no later migration's check reads them.
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             ("DELETE FROM model_call_records WHERE thread_id = :id", {"id": thread}),
             ("DELETE FROM thread_budgets WHERE thread_id = :id", {"id": thread}),
             ("DELETE FROM graph_threads WHERE id = :id", {"id": thread}),

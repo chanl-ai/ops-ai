@@ -59,34 +59,34 @@ def _clean(url: str, t: str) -> None:
     )
 
 
-def test_one_teams_definition_is_placed_the_unused_one_goes_and_the_handler_stays(database_url: str) -> None:
+def test_one_teams_definition_is_placed_the_unused_one_goes_and_the_handler_stays(emptied_database: str) -> None:
     cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(cfg, BEFORE)
     t, at = new_id("ten"), now_iso()
-    _seed(database_url, t, at, ("api_task", ["team_ops", "team_risk"]), ("ran_once", ["team_ops"]), ("unused", []))
+    _seed(emptied_database, t, at, ("api_task", ["team_ops", "team_risk"]), ("ran_once", ["team_ops"]), ("unused", []))
     try:
         command.upgrade(cfg, "head")
         (rows,) = asyncio.run(
             _sql(
-                database_url,
+                emptied_database,
                 ("SELECT workflow_id, team_id FROM engine_definitions WHERE tenant_id = :t ORDER BY 1", {"t": t}),
             )
         )
         assert [tuple(r) for r in rows] == [("api_task", None), ("ran_once", "team_ops")]
     finally:
-        _clean(database_url, t)
+        _clean(emptied_database, t)
 
 
-def test_a_definition_two_teams_ran_is_copied_and_the_second_teams_runs_move_to_the_copy(database_url: str) -> None:
+def test_a_definition_two_teams_ran_is_copied_and_the_second_teams_runs_move_to_the_copy(emptied_database: str) -> None:
     cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(cfg, BEFORE)
     t, at = new_id("ten"), now_iso()
-    _seed(database_url, t, at, ("shared_flow", ["team_ops", "team_risk"]))
+    _seed(emptied_database, t, at, ("shared_flow", ["team_ops", "team_risk"]))
     try:
         command.upgrade(cfg, "head")
         definitions, runs = asyncio.run(
             _sql(
-                database_url,
+                emptied_database,
                 ("SELECT workflow_id, team_id FROM engine_definitions WHERE tenant_id = :t ORDER BY 1", {"t": t}),
                 ("SELECT workflow_id, team_id FROM engine_runs WHERE tenant_id = :t ORDER BY 1", {"t": t}),
             )
@@ -94,4 +94,4 @@ def test_a_definition_two_teams_ran_is_copied_and_the_second_teams_runs_move_to_
         assert [tuple(r) for r in definitions] == [("shared_flow", "team_ops"), ("shared_flow_team_risk", "team_risk")]
         assert [tuple(r) for r in runs] == [("shared_flow", "team_ops"), ("shared_flow_team_risk", "team_risk")]
     finally:
-        _clean(database_url, t)
+        _clean(emptied_database, t)

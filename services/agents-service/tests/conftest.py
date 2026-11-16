@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -345,6 +346,20 @@ async def emptied(engine: AsyncEngine) -> None:
     async with engine.begin() as c:
         await c.execute(sa.text("set local lock_timeout = '5s'"))
         await c.execute(sa.text(f"truncate {names} restart identity cascade"))
+
+
+@pytest.fixture
+def emptied_database(database_url: str) -> str:
+    """The test database at head with the app's tables emptied, for a test that steps the migration chain down. A down
+    step refuses rows it cannot carry back (0108 refuses an id two tenants hold, which head allows), so rows the tests
+    before it left would decide whether it runs, and that changes with the file order of each CI shard."""
+
+    async def empty() -> None:
+        async with empty_engine(database_url):
+            pass
+
+    asyncio.run(empty())
+    return database_url
 
 
 @asynccontextmanager

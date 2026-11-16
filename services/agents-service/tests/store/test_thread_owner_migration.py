@@ -21,14 +21,14 @@ ROW = (
 )
 
 
-def test_a_thread_written_before_has_its_owner_in_the_column_and_the_down_path_runs(database_url: str) -> None:
+def test_a_thread_written_before_has_its_owner_in_the_column_and_the_down_path_runs(emptied_database: str) -> None:
     cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(cfg, BEFORE)
     tenant, team, owned, unowned = new_id("ten"), new_id("team"), new_id("thr"), new_id("thr")
     at = now_iso()
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             (
                 ROW,
                 {
@@ -44,10 +44,10 @@ def test_a_thread_written_before_has_its_owner_in_the_column_and_the_down_path_r
     )
     command.upgrade(cfg, "head")
     (rows,) = asyncio.run(
-        _sql(database_url, ("SELECT id, owner FROM graph_threads WHERE tenant_id = :t", {"t": tenant}))
+        _sql(emptied_database, ("SELECT id, owner FROM graph_threads WHERE tenant_id = :t", {"t": tenant}))
     )
     assert dict(rows) == {owned: "maya@harborpine.example", unowned: None}
     command.downgrade(cfg, BEFORE)
     command.upgrade(cfg, "head")
     # Its own tenant and team, removed after, so no later migration's check reads them.
-    asyncio.run(_sql(database_url, ("DELETE FROM graph_threads WHERE tenant_id = :t", {"t": tenant})))
+    asyncio.run(_sql(emptied_database, ("DELETE FROM graph_threads WHERE tenant_id = :t", {"t": tenant})))
