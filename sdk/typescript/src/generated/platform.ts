@@ -2766,6 +2766,7 @@ export interface components {
         Me: {
             /** Flags */
             flags: components["schemas"]["FlagOut"][];
+            permissions: components["schemas"]["PermissionsOut"];
             /** Policies */
             policies: {
                 [key: string]: unknown;

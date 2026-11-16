@@ -1035,17 +1035,6 @@ class ListResultWorkspaceTeamOut(TypedDict, closed=True):
     pagination: Pagination
 
 
-class Me(TypedDict, closed=True):
-    flags: list[FlagOut]
-    policies: dict[str, Any]
-    securityTeamId: str | None
-    teams: list[MeTeam]
-    tenantId: str
-    tenantName: str | None
-    user: MeUser
-    workspace: WorkspaceStateOut
-
-
 class OptionsOut(TypedDict, closed=True):
     password: bool
     sso: SsoOption | None
@@ -1133,11 +1122,6 @@ class EnvelopeListResultWorkspaceTeamOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeMe(TypedDict, closed=True):
-    data: Me
-    success: Literal[True]
-
-
 class EnvelopeOptionsOut(TypedDict, closed=True):
     data: OptionsOut
     success: Literal[True]
@@ -1174,4 +1158,21 @@ class PermissionsOut(TypedDict, closed=True):
 
 class EnvelopePermissionsOut(TypedDict, closed=True):
     data: PermissionsOut
+    success: Literal[True]
+
+
+class Me(TypedDict, closed=True):
+    flags: list[FlagOut]
+    permissions: PermissionsOut
+    policies: dict[str, Any]
+    securityTeamId: str | None
+    teams: list[MeTeam]
+    tenantId: str
+    tenantName: str | None
+    user: MeUser
+    workspace: WorkspaceStateOut
+
+
+class EnvelopeMe(TypedDict, closed=True):
+    data: Me
     success: Literal[True]

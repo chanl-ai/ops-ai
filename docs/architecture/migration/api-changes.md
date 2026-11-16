@@ -60,3 +60,10 @@ that has not changed still gets the same answer.
 |---|---|---|---|---|---|
 | `POST /v1/runs` | reply schema of `output` | untyped (`Any`) | `JsonValue`; the JSON is the same | Nothing; tools-service's runner client reads the same values, and runner has no generated SDK layer | Yes |
 | `POST /v1/runs` | how long an `ops.call` waits | each call waited up to the run's whole time limit, so a run could last about twice its limit | each call waits only for what is left of the run's limit; a later answer is traced `call_failed` and the run ends at its limit | Nothing; a tool slower than the run's limit now fails the call instead of answering late | Yes |
+
+## platform-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `GET /v1/me` | reply field `permissions` | absent; the shell asked `GET /v1/me/permissions` as a second call | `permissions`, a `PermissionsOut`, the same answer `GET /v1/me/permissions` gives in that request | Nothing; read `permissions` to drop the second call. Follow: console `apps/console/src/lib/api/platform-http.ts:36`, `workspace-teams-http.ts:29`, `workspace-policies-http.ts:18` and `apps/console/src/hooks/me-queries.ts` read it from `/me`; then `/v1/me/permissions` goes | Yes |
+| every signed-in `GET` | behaviour: a session's last seen time | written by every request | written by a non-GET request, a refresh and a sign-in only; a GET checks the session read only. An OAuth grant's "last used" moves at its refresh, not at each read | Nothing | Yes |

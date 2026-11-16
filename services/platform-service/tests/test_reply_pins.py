@@ -89,6 +89,8 @@ async def test_the_identity_member_role_and_key_replies_keep_every_key_and_value
     h["Authorization"] = f"Bearer {refreshed.json()['data']['token']}"
     seen["me"] = data(await c.get("/v1/me", headers=h), run)
     seen["permissions"] = data(await c.get("/v1/me/permissions", headers=h), run)
+    # The shell reads what a person may do from /v1/me, the same answer the permissions route gives.
+    assert seen["me"]["permissions"] == seen["permissions"]
     seen["teams"] = data(await c.get("/v1/teams", headers=h), run)
     invite = {"emails": [f"new.one@{run}.bank.test"], "role": "viewer"}
     seen["invite"] = data(await c.post("/v1/settings/members/invite", headers=h, json=invite), run)

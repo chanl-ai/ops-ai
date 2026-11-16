@@ -171,6 +171,8 @@ class FlagOut(Out):
 
 class Me(Out):
     user: MeUser
+    # What the person may do in each of their teams, the same answer as /v1/me/permissions.
+    permissions: PermissionsOut
     tenant_id: str
     # The workspace's name, for the console's header; null when it has none, so no id is shown in its place.
     tenant_name: str | None

@@ -3150,6 +3150,9 @@
             "title": "Flags",
             "type": "array"
           },
+          "permissions": {
+            "$ref": "#/components/schemas/PermissionsOut"
+          },
           "policies": {
             "additionalProperties": true,
             "title": "Policies",
@@ -3197,6 +3200,7 @@
         },
         "required": [
           "user",
+          "permissions",
           "tenantId",
           "tenantName",
           "teams",

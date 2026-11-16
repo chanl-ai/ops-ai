@@ -546,6 +546,8 @@ def create_public_app(
         return ok(
             {
                 "user": {"id": found.id, "email": found.email, "name": found.name},
+                # What the person may do in each team, as /v1/me/permissions answers it: the shell reads it here.
+                "permissions": await roles.of_me(tenant, user),
                 "tenantId": tenant,
                 "tenantName": await store.tenant_name(tenant) or None,
                 "teams": [{"id": t.id, "name": t.name, "role": t.role} for t in teams],
