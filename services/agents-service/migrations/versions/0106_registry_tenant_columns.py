@@ -51,7 +51,7 @@ from ops_agents.store.registry_tenants import (
     unmapped_teams,
 )
 from ops_service_kit.settings import Settings
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, session_table_ddl
 
 revision = "0106_registry_tenant_columns"
 down_revision = "0105_thread_owner_column"
@@ -269,12 +269,11 @@ def upgrade() -> None:
     _team_from_threads()
     copies: dict[str, str] = {}
     if dialect in ("postgresql", "mssql"):
-        create = "CREATE TABLE" if dialect == "mssql" else "CREATE TEMPORARY TABLE"
         sources = _sources(dev)
         copies = {what: _copy_name(dialect, what) for what in sources}
         for what, source in sources.items():
             # NOT NULL: outside dev a row with no one tenant fails here, before any row changes.
-            op.execute(f"{create} {copies[what]} (k VARCHAR(255) NOT NULL PRIMARY KEY, v VARCHAR(64) NOT NULL)")
+            op.execute(session_table_ddl(copies[what], dialect, [("k", 255), ("v", 64)]))
             copy = sa.table(copies[what], sa.column("k"), sa.column("v"))
             op.execute(sa.insert(copy).from_select(["k", "v"], source))
     for statement in after:

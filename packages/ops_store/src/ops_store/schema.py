@@ -312,6 +312,17 @@ def backfill_ddl(
     return [], []
 
 
+def session_table_ddl(name: str, dialect: str, columns: Iterable[tuple[str, int]]) -> str:
+    """CREATE for a migration's session table of NOT NULL text columns, the first its primary key. On SQL Server a
+    #table lives in tempdb and takes tempdb's collation, and comparing it with a real table's column fails with a
+    collation conflict, so each column carries the database's."""
+    collate = " COLLATE DATABASE_DEFAULT" if dialect == "mssql" else ""
+    create = "CREATE TABLE" if dialect == "mssql" else "CREATE TEMPORARY TABLE"
+    cols = [f"{c} VARCHAR({n}){collate} NOT NULL" for c, n in columns]
+    cols[0] += " PRIMARY KEY"
+    return f"{create} {name} ({', '.join(cols)})"
+
+
 def security_ddl(
     chain: str, tables: Iterable[sa.Table], *, column_type: Callable[[sa.Column[Any]], str], system_user: str | None
 ) -> list[str]:

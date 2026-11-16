@@ -53,6 +53,7 @@ from ops_store.schema import (
     isolation_ddl,
     isolation_drop_ddl,
     mssql_predicates_ddl,
+    session_table_ddl,
 )
 
 revision = "0109_registry_policies"
@@ -114,10 +115,9 @@ def _copy(dialect: str, what: str) -> str:
 def _list_moves(dialect: str, dev: bool) -> dict[str, str]:
     """A session table per kind (and for threads) of (k, v): each `local` row's id and the tenant it moves to. Only
     rows that move are listed, so each batch below makes progress and the fill ends."""
-    create = "CREATE TABLE" if dialect == "mssql" else "CREATE TEMPORARY TABLE"
     copies = {what: _copy(dialect, what) for what in (*TABLES, "thread")}
     for name in copies.values():
-        op.execute(f"{create} {name} (k VARCHAR(255) NOT NULL PRIMARY KEY, v VARCHAR(64) NOT NULL)")
+        op.execute(session_table_ddl(name, dialect, [("k", 255), ("v", 64)]))
     for kind, name in TABLES.items():
         row = table(name, "id", "team_id", "tenant_id")
         found = sa.select(row.c.id.label("k"), tenant_of(kind, row, dev=dev).label("v"))

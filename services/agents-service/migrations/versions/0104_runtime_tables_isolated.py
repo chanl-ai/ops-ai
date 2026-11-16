@@ -30,6 +30,7 @@ from ops_store.schema import (
     isolation_ddl,
     isolation_drop_ddl,
     mssql_predicates_ddl,
+    session_table_ddl,
 )
 
 revision = "0104_runtime_tables_isolated"
@@ -75,9 +76,8 @@ def _has_tenant(name: str) -> bool:
 def _copy(dialect: str) -> tuple[str, list[str]]:
     """The session table holding each thread's tenant, and the statements that fill it."""
     copy = "#thread_tenants_0104" if dialect == "mssql" else "thread_tenants_0104"
-    create = "CREATE TABLE" if dialect == "mssql" else "CREATE TEMPORARY TABLE"
     return copy, [
-        f"{create} {copy} (id VARCHAR(64) NOT NULL PRIMARY KEY, tenant_id VARCHAR(64) NOT NULL)",
+        session_table_ddl(copy, dialect, [("id", 64), ("tenant_id", 64)]),
         f"INSERT INTO {copy} (id, tenant_id) SELECT id, tenant_id FROM graph_threads",
     ]
 
