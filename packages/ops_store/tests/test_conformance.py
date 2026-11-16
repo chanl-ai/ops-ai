@@ -87,6 +87,24 @@ class Stalled(Leases):
         return await super().try_acquire(key, holder)
 
 
+class StalledSameGeneration(Leases):
+    """As Stalled, but the held-up contender takes the lapsed lease without a newer generation, so two winners hold
+    one generation and the first holder's fenced writes still land."""
+
+    async def try_acquire(self, key: str, holder: str) -> int | None:
+        if holder not in ("r1", "s1"):
+            return await super().try_acquire(key, holder)
+        await asyncio.sleep(self.ttl * 1.5)
+        async with self.engine.begin() as c:
+            took = (
+                leases.update()
+                .where(leases.c.key == key, leases.c.expires_at < NOW)
+                .values(holder=holder, expires_at=NOW + self.ttl)
+                .returning(leases.c.generation)
+            )
+            return (await c.execute(took)).scalar()
+
+
 class Timers:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
@@ -142,6 +160,8 @@ async def test_leases_conform_and_a_lease_without_cas_does_not(backend: tuple[Ba
 async def test_a_contender_held_up_past_the_ttl_may_take_the_lapsed_lease(backend: tuple[Backend, AsyncEngine]) -> None:
     b, engine = backend
     await lease_suite(b, lambda: _ready(Stalled(engine)))
+    with pytest.raises(AssertionError, match="contenders took one free key"):
+        await lease_suite(b, lambda: _ready(StalledSameGeneration(engine)))
 
 
 async def test_timer_claims_conform_and_a_read_then_write_claim_does_not(backend: tuple[Backend, AsyncEngine]) -> None:

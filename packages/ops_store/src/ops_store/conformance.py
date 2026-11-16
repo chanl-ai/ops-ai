@@ -123,14 +123,20 @@ async def _race(racers: Sequence[LeasePort], key: str, prefix: str) -> list[_Win
         g = await r.try_acquire(key, f"{prefix}{i}")
         return (g, start, time.monotonic()) if g else None
 
-    return sorted(w for w in await asyncio.gather(*(one(i, r) for i, r in enumerate(racers))) if w)
+    # In the order the winners got the key, so the generations are checked in that order, not sorted into it.
+    return sorted(
+        (w for w in await asyncio.gather(*(one(i, r) for i, r in enumerate(racers))) if w), key=lambda w: w[2]
+    )
 
 
 def _one_at_a_time(won: list[_Win], ttl: float) -> bool:
     """One winner, or each later one only after the lease before it lapsed: a contender held up past the ttl (a slow
     connection on a loaded host) takes the key once the first holder's lease ran out, which a correct lease allows. A
-    later winner that returned less than a ttl after the earlier one started took a lease that was still live."""
-    return len(won) >= 1 and all(later[2] - earlier[1] >= ttl for earlier, later in pairwise(won))
+    later winner that returned less than a ttl after the earlier one started took a lease that was still live, and one
+    without a newer generation than the winner before it would let that holder's fenced writes still land."""
+    return len(won) >= 1 and all(
+        later[0] > earlier[0] and later[2] - earlier[1] >= ttl for earlier, later in pairwise(won)
+    )
 
 
 async def timer_claim_suite(backend: Backend, make: Callable[[], Awaitable[TimerClaimPort]]) -> None:
