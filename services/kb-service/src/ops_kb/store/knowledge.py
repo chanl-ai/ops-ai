@@ -912,7 +912,7 @@ class KnowledgeStore(Store):
         degraded while a document of a source it reads failed, else healthy."""
         b, link, item = kb_bases.c, kb_base_sources.c, kb_items.c
         failed = (
-            sa.select(link.kb_id, sa.func.count().label("failed"))
+            sa.select(link.kb_id)
             .select_from(
                 kb_base_sources.join(
                     kb_items, sa.and_(item.tenant_id == link.tenant_id, item.source_id == link.source_id)
@@ -920,12 +920,13 @@ class KnowledgeStore(Store):
             )
             .where(link.tenant_id == tenant, item.status == "failed")
             .where(team_visible(kb_base_sources), team_visible(kb_items))
-            .group_by(link.kb_id)
+            .distinct()
             .subquery("failed")
         )
         health = sa.case(
             (b.last_refreshed_at.is_(None), _word("never")),
-            (failed.c.failed > 0, _word("degraded")),
+            # The derived table holds only bases with a failed document: a match is the test, with no value bound.
+            (failed.c.kb_id.is_not(None), _word("degraded")),
             else_=_word("healthy"),
         )
         q = (

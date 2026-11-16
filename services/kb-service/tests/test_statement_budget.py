@@ -16,11 +16,12 @@ import pytest
 from fastapi import FastAPI
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
-from ops_kb.agents import StaticAgents
+from ops_kb.agents import StaticAgents, Usage
 from ops_kb.app import create_kb_app
 from ops_kb.files import KnowledgeFiles
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.knowledge import engine_for, kb_changes, kb_items, kb_runs
+from ops_service_kit.request_timing import current
 from ops_service_kit.settings import Settings
 from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check
 from ops_store import isolation
@@ -43,8 +44,28 @@ async def _no_keys(_key: str) -> dict[str, Any] | None:
     return None
 
 
+class HeldAgents(StaticAgents):
+    """agents-service's "used by", noting the transactions the request held open when it was asked; the request
+    line's count of calls in a transaction cannot see an in-process fake."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.held: list[int] = []
+
+    async def usage(self, tenant_id: str, team_id: str | None) -> dict[str, Usage] | None:
+        timing = current()
+        if timing is not None:
+            self.held.append(timing.db_tx_open)
+        return await super().usage(tenant_id, team_id)
+
+
 @pytest.fixture
-async def app(database_url: str) -> AsyncIterator[FastAPI]:
+def agents() -> HeldAgents:
+    return HeldAgents()
+
+
+@pytest.fixture
+async def app(database_url: str, agents: HeldAgents) -> AsyncIterator[FastAPI]:
     """kb-service on its own engine, whose statements and transactions the request line counts, signing people in
     as platform-service does; agents-service's "used by" answers from memory."""
     engine = engine_for(database_url)
@@ -52,7 +73,7 @@ async def app(database_url: str) -> AsyncIterator[FastAPI]:
     services = ServiceAuth(audience="kb", verifiers=service_verifiers(settings, "kb"), scopes=settings.service_scopes)
     auth = Auth(Identity(audience="kb", jwks=_jwks, introspect=_no_keys, key_cache_s=0, services=services), services)
     files = KnowledgeFiles(Path(mkdtemp(prefix="kb-files-")))
-    yield create_kb_app(engine, auth=auth, files=files, agents=StaticAgents())
+    yield create_kb_app(engine, auth=auth, files=files, agents=agents)
     await engine.dispose()
 
 
@@ -112,5 +133,7 @@ def seed_team(database_url: str, app: FastAPI) -> SeedTeam:
     return seed
 
 
-async def test_every_get_stays_in_its_budget(statement_budget: StatementBudget) -> None:
+async def test_every_get_stays_in_its_budget(statement_budget: StatementBudget, agents: HeldAgents) -> None:
     assert await statement_budget(BUDGETS) == []
+    # The base list and a base's detail ask agents-service at each size, never inside a transaction.
+    assert agents.held and set(agents.held) == {0}, agents.held

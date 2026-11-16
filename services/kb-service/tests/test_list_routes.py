@@ -177,10 +177,18 @@ async def test_items_list_only_the_sources_team_rows_oldest_first_with_ties_by_i
     def make(sid: str, n: str) -> dict[str, Any]:
         return item_row(sid, f"Policy {n}", "reading" if n == "a" else "indexed")
 
-    shown, seen = await _per_source_list(kb, engine, tenant, child="items", table=kb_items, make=make)
-    assert shown == sorted(seen["mine"])
-    # Stored as reading, shown and counted as processing.
-    assert seen["first"]["facets"]["status"] == {"processing": 1, "indexed": 2}
+    try:
+        shown, seen = await _per_source_list(kb, engine, tenant, child="items", table=kb_items, make=make)
+        assert shown == sorted(seen["mine"])
+        # Stored as reading, shown and counted as processing.
+        assert seen["first"]["facets"]["status"] == {"processing": 1, "indexed": 2}
+    finally:
+        # A reading item's file is in no store, and the schedule picks up every tenant's waiting items.
+        with isolation.scope(tenant, "team_ops"):
+            async with KnowledgeStore(engine).tx() as c:
+                await c.execute(
+                    sa.delete(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.status == "reading")
+                )
 
 
 def base_row(
