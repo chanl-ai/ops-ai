@@ -74,8 +74,8 @@ from ...store.leases import LeaseHeldError
 from ...store.team_defaults import TeamDefaults
 from ...store.tenancy import current_tenant
 from .. import hitl_facade
-from ..agent_calls import agent_team, live_agent
-from ..agent_registry import definition_of, pinned_definition, refuse_new_turns, registry
+from ..agent_calls import agent_team
+from ..agent_registry import definition_of, live_agent, pinned_definition, refuse_new_turns, registry
 from ..auth import Principal, caller_of, principal, require_chat_use
 from ..chat_attachments import ChatAttachmentReader
 from ..chat_budget import ensure_budget

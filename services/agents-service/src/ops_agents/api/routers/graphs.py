@@ -36,8 +36,8 @@ from ops_service_kit.ids import new_id, now_iso
 
 from ...store.leases import LeaseHeldError
 from .. import hitl_facade
-from ..agent_calls import agent_team, live_agent
-from ..agent_registry import refuse_new_turns
+from ..agent_calls import agent_team
+from ..agent_registry import live_agent, refuse_new_turns
 from ..auth import (
     Principal,
     graph_target,
@@ -382,6 +382,8 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
             agent_id = row["graph"].removeprefix("agent:")
         elif row["graph"] == "agent_wrapper" and isinstance(body.input, dict) and body.input.get("agent_id"):
             agent_id = str(body.input["agent_id"])
+            # The caller names the agent: another tenant's id is NotFound, since the catalogue holds every tenant's.
+            await agent_team(rt, agent_id)
         if agent_id is not None:
             await refuse_new_turns(rt, agent_id)
             # The thread's budget is the agent's caps, or the caller's where lower, from its first turn on.

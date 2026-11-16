@@ -25,8 +25,7 @@ from ops_service_kit.logging import get_logger
 
 from ...store.team_defaults import TeamDefaults
 from ...store.template_copies import TemplateCopies
-from ..agent_calls import live_agent
-from ..agent_registry import agent_review_body, go_live, registry
+from ..agent_registry import agent_review_body, go_live, live_agent, registry
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok

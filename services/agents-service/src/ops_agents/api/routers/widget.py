@@ -43,8 +43,7 @@ from ops_store import isolation
 
 from ...store.widget_deployments import WidgetDeployments
 from ...store.widget_keys import WidgetKeys
-from ..agent_calls import live_agent
-from ..agent_registry import pinned_definition, registry
+from ..agent_registry import live_agent, pinned_definition, registry
 from ..auth import Principal, caller_of, principal, reader_of, require_builder
 from ..chat_threads import chat_row, update_meta
 from ..deps import Runtime, runtime

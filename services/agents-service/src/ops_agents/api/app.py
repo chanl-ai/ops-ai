@@ -45,6 +45,7 @@ from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.database import Database, open_database
 
+from ..store.agent_registry import AgentRegistry
 from ..store.background import BackgroundJobs, heartbeats
 from ..store.channels import ChannelStore, Deployment
 from ..store.graphs import GraphStore
@@ -415,6 +416,7 @@ def create_app(
                     apps=rt.apps_line,
                     ops=OpsReads(rt),
                     tools=directory,
+                    held_agents=AgentRegistry(db),
                 )
                 rt.graphs = build_graphs(deps, saver)
                 rt.saver = saver

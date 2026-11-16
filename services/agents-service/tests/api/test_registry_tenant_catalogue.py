@@ -4,6 +4,11 @@ team's default, or reads the connectors of an agent it cannot see, because the t
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
+from ops_agents.store.tenancy import tenant_scope
 from tests.api.test_registry_tenant_pins import person, published_agent, started, tenants
 
 
@@ -22,3 +27,21 @@ async def test_another_tenants_agent_id_is_not_found_on_every_chat_route(databas
         assert connectors.status_code == 404, connectors.text
         mine = await client.post("/v1/chat/threads", json={"agentId": agent, "kbIds": []}, headers=person(a))
         assert mine.status_code == 201, mine.text
+
+
+async def test_a_wrapper_run_naming_another_tenants_agent_is_not_found(database_url: str) -> None:
+    a, b = tenants()
+    async with started(database_url, seed=False) as (client, rt):
+        agent = await published_agent(client, rt, a, "Payee desk")
+    async with started(database_url, seed=False) as (client, rt):
+        theirs = person(b)
+        made = await client.post("/v1/threads", json={"graph": "agent_wrapper", "metadata": {}}, headers=theirs)
+        assert made.status_code == 201, made.text
+        tid = made.json()["data"]["threadId"]
+        body: dict[str, Any] = {"input": {"agent_id": agent, "message": "What is the payee limit?", "kb_ids": []}}
+        run = await client.post(f"/v1/threads/{tid}/runs/stream", json=body, headers=theirs)
+        assert run.status_code == 404, run.text
+        # The graph refuses too, for a run that reaches it some other way (a recovery, a resume).
+        state = {"agent_id": agent, "messages": [{"role": "user", "content": "hi"}]}
+        with tenant_scope(b), pytest.raises(ValueError, match="not live"):
+            await rt.graphs["agent_wrapper"].ainvoke(state, {"configurable": {"thread_id": tid}})

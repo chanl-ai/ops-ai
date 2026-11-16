@@ -246,6 +246,21 @@ def take_down(rt: Runtime, agent_id: str) -> None:
     rt.catalog.drop_agent(agent_id)
 
 
+async def live_agent(rt: Runtime, agent_id: str) -> AgentDefinition | None:
+    """The live agent `agent_id` when the caller's tenant holds it; None when it is not live or the tenant holds none,
+    for a route that takes the id from the caller's own records (a thread, the team's default)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
+    return rt.catalog.agent(agent_id)
+
+
+async def in_flight_agent(rt: Runtime, agent_id: str) -> AgentDefinition | None:
+    """`live_agent`, or the definition a turn under way started on after the agent was paused (it may finish)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
+    return rt.catalog.agent_in_flight(agent_id)
+
+
 async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDefinition | None:
     """The agent at a published version a deployment pins, from the registry store, kept in the catalogue so the
     chat graph serves it; None when that version was never published or the caller's tenant holds no such agent (the
@@ -264,6 +279,8 @@ async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDe
 
 async def refuse_new_turns(rt: Runtime, agent_id: str) -> None:
     """Raises 409 `agent_paused` when the agent is paused; new conversations, messages and turns wait for a resume."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return  # another tenant's agent: the caller's route answers NotFound, never its name or state
     if rt.catalog.agent(agent_id) is not None:
         return
     try:

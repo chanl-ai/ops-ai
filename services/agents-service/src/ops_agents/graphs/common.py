@@ -42,6 +42,13 @@ from .models import GraphModels
 from .usage import report_usage
 
 
+class HeldAgents(Protocol):
+    """The agents of `ids` the current tenant holds, each with its owning team. The catalogue holds every tenant's live
+    agents by id, so a run that names its agent in its input checks it here before serving it."""
+
+    async def tenant_owners(self, ids: set[str]) -> dict[str, str]: ...
+
+
 @dataclass(frozen=True)
 class GraphDeps:
     catalog: Catalog
@@ -65,6 +72,8 @@ class GraphDeps:
     apps: AppsRunner | None = None
     # The Ops tools for the team's default agent; None offers none.
     ops: OpsRunner | None = None
+    # Which agents the run's tenant holds (the agent registry); None checks nothing (unit tests).
+    held_agents: HeldAgents | None = None
 
 
 async def needs_step_up(deps: GraphDeps, tool: str) -> bool:

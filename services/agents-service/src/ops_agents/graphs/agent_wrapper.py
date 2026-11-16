@@ -141,7 +141,17 @@ def build(
             raise ValueError(f"Agent {aid} is not live, so it takes no new turns.")
         return agent
 
+    async def held(state: AgentState) -> None:
+        """A run naming its agent in its input (the shared wrapper) serves only an agent of the run's tenant; the
+        `agent:<id>` graph's agent was checked when its thread was made."""
+        if agent_id is not None or state.get("test_agent") is not None or deps.held_agents is None:
+            return
+        aid = state.get("agent_id")
+        if aid and aid not in await deps.held_agents.tenant_owners({aid}):
+            raise ValueError(f"Agent {aid} is not live, so it takes no new turns.")
+
     async def agent(state: AgentState) -> dict[str, Any]:
+        await held(state)
         a = agent_of(state)
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
         source = state["history"] if "history" in state else state["messages"]
@@ -250,6 +260,7 @@ def build(
         return {"decision": decision}
 
     async def resume(state: AgentState) -> dict[str, Any]:
+        await held(state)
         a = agent_of(state, in_flight=True)
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
         d = state.get("decision") or {}

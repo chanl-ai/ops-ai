@@ -33,8 +33,7 @@ from ..store.cases import CaseNotFound, CaseStore
 from ..store.team_defaults import TeamDefaults
 from ..store.tenancy import ASSISTANT_CATCH_UP
 from . import hitl_facade
-from .agent_calls import live_agent
-from .agent_registry import SEED_FIELDS, go_live, registry, seed_agent_version, spec_from_seed
+from .agent_registry import SEED_FIELDS, go_live, live_agent, registry, seed_agent_version, spec_from_seed
 from .auth import Principal, caller_of, reader_teams
 from .child_runs import TURN_PERSON, ChildRuns, engine_workflows
 from .deps import Runtime

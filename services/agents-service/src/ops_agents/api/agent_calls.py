@@ -19,7 +19,6 @@ from ops_agent_kernel.types import ToolGrant
 from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.ids import new_id, now_iso
 
-from ..activities.catalog import AgentDefinition
 from ..graphs.common import AGENT_TOOL_PREFIX
 from ..store.team_defaults import TeamDefaults
 from .agent_registry import registry
@@ -43,14 +42,6 @@ async def agent_team(rt: Runtime, agent_id: str) -> str | None:
     if agent_id not in owners:
         raise NotFound(f"Agent {agent_id}")
     return owners[agent_id] or None
-
-
-async def live_agent(rt: Runtime, agent_id: str) -> AgentDefinition | None:
-    """The live agent `agent_id` when the caller's tenant holds it; None when it is not live or the tenant holds none,
-    for a route that takes the id from the caller's own records (a thread, the team's default)."""
-    if agent_id not in await registry(rt).tenant_owners({agent_id}):
-        return None
-    return rt.catalog.agent(agent_id)
 
 
 class AgentCalls:
