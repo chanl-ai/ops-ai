@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Callable
 from typing import Any
 
 from httpx import AsyncClient
@@ -20,11 +21,17 @@ from ops_identity import dev_service_signer, mint_service_token
 from .test_reply_pins import FIXTURES, answer, compare
 
 
-def service(name: str, scopes: list[str], team: str | None = SEED_TEAM) -> dict[str, str]:
-    token = mint_service_token(
-        dev_service_signer(), service=name, audience="agents", tenant_id="local", scopes=scopes, team_id=team
-    )
-    return {"Authorization": f"Bearer {token}"}
+def service(name: str, scopes: list[str], team: str | None = SEED_TEAM) -> Callable[[], dict[str, str]]:
+    """Mints at send time: a service token lives 60 seconds, and a suite reaches this file later than that after
+    import."""
+
+    def headers() -> dict[str, str]:
+        token = mint_service_token(
+            dev_service_signer(), service=name, audience="agents", tenant_id="local", scopes=scopes, team_id=team
+        )
+        return {"Authorization": f"Bearer {token}"}
+
+    return headers
 
 
 PERSON: dict[str, str] = {}
@@ -34,7 +41,7 @@ ROUTE = "/v1/threads:route-to-people"
 STEP_UP = "/v1/auth/step-up"
 
 # (name, method, path, body, caller): each answered value by value.
-PINNED: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str]]] = [
+PINNED: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str] | Callable[[], dict[str, str]]]] = [
     ("assistant.none", "POST", "/v1/team-assistant/app-tools", {"moduleIds": ["mod_nothing"]}, PERSON),
     ("assistant.empty", "POST", "/v1/team-assistant/app-tools", {"moduleIds": []}, PERSON),
     ("assistant.unknown", "POST", "/v1/team-assistant/app-tools", {"moduleIds": ["m"], "agentId": "x"}, PERSON),
@@ -77,7 +84,8 @@ MINTED: list[tuple[str, str, dict[str, Any]]] = [
 
 async def test_the_tool_and_step_up_routes_keep_every_key_value_and_error_object(client: AsyncClient) -> None:
     seen: dict[str, Any] = {}
-    for name, method, path, body, headers in PINNED:
+    for name, method, path, body, caller in PINNED:
+        headers = caller() if callable(caller) else caller
         seen[name] = answer(await client.request(method, path, json=body, headers=headers))
     for name, path, body in MINTED:
         r = await client.post(path, json=body)

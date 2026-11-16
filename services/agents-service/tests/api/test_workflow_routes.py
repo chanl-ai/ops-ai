@@ -24,12 +24,9 @@ from ops_identity import dev_service_signer, mint_service_token
 from .test_reply_pins import FIXTURES, answer, compare
 from .test_workflow_registry import EMAIL
 
-TOOLS = {
-    "Authorization": "Bearer "
-    + mint_service_token(
-        dev_service_signer(), service="tools", audience="agents", tenant_id="local", scopes=["workflows:view"]
-    )
-}
+# Marks a row sent as tools-service. Its token is minted per request: it lives 60 seconds, and a suite reaches this
+# file later than that after import.
+TOOLS = object()
 APPROVAL = {"name": "Payee check", "trigger": "Payee added", "template": "approval", "agentSlug": "wire-fraud-sentinel"}
 
 # (name, method, path, body): `{wid}` is the workflow the first row creates. Each answered value by value, in order.
@@ -75,7 +72,10 @@ PINNED: list[tuple[str, str, str, Any]] = [
 async def _send(client: AsyncClient, method: str, path: str, body: Any, wid: str) -> Any:
     url = path.replace("{wid}", wid)
     if body is TOOLS:
-        return await client.request(method, url, headers=TOOLS)
+        token = mint_service_token(
+            dev_service_signer(), service="tools", audience="agents", tenant_id="local", scopes=["workflows:view"]
+        )
+        return await client.request(method, url, headers={"Authorization": f"Bearer {token}"})
     if body == "draft":
         body = {"graph": (await client.get(f"/v1/workflows/{wid}")).json()["data"]["draft"]["graph"], "note": "go"}
     return await client.request(method, url, json=body) if body is not None else await client.request(method, url)
