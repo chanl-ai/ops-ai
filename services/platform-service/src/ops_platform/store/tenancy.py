@@ -37,6 +37,7 @@ SIGNIN_LOCKOUT = "signin_lockout"  # failed sign-ins counted by email hash (sign
 RESET_LOOKUP = "reset_lookup"  # a password reset by its token hash
 SIGNIN_WATCH = "signin_watch"  # the SAML providers of open workspaces, for the daily certificate watch
 PURGE_LOOKUP = "purge_lookup"  # workspaces closed longer than the restore window, for the purge loop
+SEED_ID_CHECK = "seed_id_check"  # whether another tenant holds a seeded id, as the dev seed's login (seeding.py)
 
 
 class TenantDb(Store):

@@ -22,11 +22,12 @@ from ops_access import ANY_TEAM
 from ops_access.platform_events import TEAM_CREATED
 from ops_service_kit.ids import now_iso
 from ops_store.outbox import add as add_event
+from ops_store.store import Store
 
 from .policies import write_new_workspace_policies
 from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership
 from .tables import members, platform_outbox, role_assignments, teams, tenants, users
-from .tenancy import TenantDb
+from .tenancy import SEED_ID_CHECK, TenantDb
 
 
 class SeedConflictError(RuntimeError):
@@ -181,10 +182,11 @@ async def write_seed(
 
 
 async def _taken(db: TenantDb, table: sa.Table, row_id: str) -> bool:
-    """Whether any tenant holds `row_id`: the primary key is global, so an insert of it under no tenant's eyes fails."""
+    """Whether any tenant holds `row_id`: the primary key is global, so an insert of it under no tenant's eyes fails.
+    Read as the login with no role set (a base `Store`'s system role is none): the dev seed connects as the compose
+    superuser, which row-level security does not filter. A login that cannot read the table answers not taken."""
     try:
-        async with db.engine.begin() as c:
-            # The dev seed connects as the compose superuser, which row-level security does not filter.
+        async with Store(db.engine).system_tx(SEED_ID_CHECK) as c, db.attempt(c):
             found = await c.execute(sa.select(sa.func.count()).select_from(table).where(table.c.id == row_id))
             return found.scalar_one() > 0
     except DBAPIError:

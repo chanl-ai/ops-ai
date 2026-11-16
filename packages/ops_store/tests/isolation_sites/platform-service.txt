@@ -1,4 +1,1 @@
-# platform-service: 1 raw transactions and 2 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
-1 caught services/platform-service/src/ops_platform/store/seeding.py
-1 caught services/platform-service/src/ops_platform/store/signin.py
-1 raw services/platform-service/src/ops_platform/store/seeding.py
+# platform-service: 0 raw transactions and 0 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.

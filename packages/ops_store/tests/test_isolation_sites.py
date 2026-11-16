@@ -61,6 +61,8 @@ WIDENINGS: dict[str, set[str]] = {
     "SIGNIN_WATCH": {"services/platform-service/src/ops_platform/store/signin.py"},
     "RESET_LOOKUP": {"services/platform-service/src/ops_platform/store/signin.py"},
     "PURGE_LOOKUP": {"services/platform-service/src/ops_platform/store/lifecycle.py"},
+    # The dev seed checks whether another tenant holds a seeded id, as its own login (platform write_seed).
+    "SEED_ID_CHECK": {"services/platform-service/src/ops_platform/store/seeding.py"},
     "TESTS": {"services/agents-service/src/ops_agents/store/tenancy.py"},
     "SEED": {
         "services/agents-service/src/ops_agents/api/app.py",

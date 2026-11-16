@@ -56,6 +56,9 @@ PASSWORD = "password"
 # The membership roles a provider may give, lowest first; when two group rules give one team, the later one wins.
 # Admin is never one (decision D5).
 SIGNIN_ROLES = ("chat_user", "viewer", "builder", "approver")
+# A sign-in flow by its state hash or its handoff hash, through migration 0010's SECURITY DEFINER functions.
+_FLOW_BY_STATE = sa.text("SELECT id, tenant_id FROM platform_signin_flow(:v)")
+_FLOW_BY_HANDOFF = sa.text("SELECT id, tenant_id FROM platform_signin_handoff(:v)")
 
 
 @dataclass(frozen=True)
@@ -656,14 +659,14 @@ class SignInStore(TenantDb):
         return flow_id
 
     async def flow_by_state(self, state_hash: str) -> Flow | None:
-        return await self._flow("platform_signin_flow", state_hash)
+        return await self._flow(_FLOW_BY_STATE, state_hash)
 
     async def flow_by_handoff(self, handoff_hash: str) -> Flow | None:
-        return await self._flow("platform_signin_handoff", handoff_hash)
+        return await self._flow(_FLOW_BY_HANDOFF, handoff_hash)
 
-    async def _flow(self, function: str, value: str) -> Flow | None:
+    async def _flow(self, lookup: sa.TextClause, value: str) -> Flow | None:
         async with self.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(sa.text(f"SELECT id, tenant_id FROM {function}(:v)"), {"v": value})).first()  # noqa: S608
+            row = (await c.execute(lookup, {"v": value})).first()
         if row is None:
             return None
         cols = signin_flows.c
@@ -769,31 +772,21 @@ class SignInStore(TenantDb):
         default team) with that role. A person is linked or made only for an email on one of the provider's
         domains. Then the provider's group rules are applied (`_join_groups`). None: nobody may sign in as this
         answer."""
-        try:
-            return await self._resolve(
-                p, subject=subject, email=email, name=name, at=at, request_id=request_id, groups=groups
-            )
-        except IntegrityError:
-            # Another first sign-in for this subject or email committed between our read and our insert.
-            found = await self.linked(p.tenant_id, p.id, subject)
-            return SsoPerson(found, False) if found else None
-
-    async def _resolve(
-        self,
-        p: Provider,
-        *,
-        subject: str,
-        email: str,
-        name: str,
-        at: str,
-        request_id: str,
-        groups: tuple[str, ...] | None,
-    ) -> SsoPerson | None:
         async with self.tenant_tx(p.tenant_id) as c:
-            person = await self._person(c, p, subject=subject, email=email, name=name, at=at, request_id=request_id)
-            if person is not None:
-                await self._join_groups(c, p, person.user_id, email, groups, at=at, request_id=request_id)
-        return person
+            try:
+                async with self.attempt(c):
+                    person = await self._person(
+                        c, p, subject=subject, email=email, name=name, at=at, request_id=request_id
+                    )
+                    if person is not None:
+                        await self._join_groups(c, p, person.user_id, email, groups, at=at, request_id=request_id)
+                    return person
+            except IntegrityError:
+                # Another first sign-in for this subject or email committed between our read and our insert; this
+                # one's writes are rolled back to the savepoint and the person is read as that one made them.
+                pass
+        found = await self.linked(p.tenant_id, p.id, subject)
+        return SsoPerson(found, False) if found else None
 
     async def _person(
         self, c: AsyncConnection, p: Provider, *, subject: str, email: str, name: str, at: str, request_id: str
