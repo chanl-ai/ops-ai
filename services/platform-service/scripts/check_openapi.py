@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from fastapi import FastAPI
+
 from ops_identity import ServiceAuth
 from ops_platform.api.app import create_internal_app, create_public_app
 from ops_platform.keys import dev_signer
@@ -28,16 +30,23 @@ REPO_ALLOWLIST = "services/platform-service/openapi-untyped.txt"
 isolate_from_stack()
 
 
-def document() -> dict[str, Any]:
-    """Both apps' documents in one; building the apps opens no connection, so nothing here needs a database."""
+def build_apps() -> list[FastAPI]:
+    """The public and the internal app; building them opens no connection, so nothing here needs a database."""
     unanswered_endpoints("agents")
     store = IdentityStore.open(Settings().database_url)
-    doc = create_public_app(store, dev_signer(), demo_password=None, audiences=["platform"]).openapi()
+    public = create_public_app(store, dev_signer(), demo_password=None, audiences=["platform"])
     services = ServiceAuth(audience="platform", verifiers={}, tenant_scoped=False)
-    internal = create_internal_app(store, services=services).openapi()
-    doc["paths"].update(internal["paths"])
-    doc.setdefault("components", {}).setdefault("schemas", {}).update(internal.get("components", {}).get("schemas", {}))
-    return doc
+    return [public, create_internal_app(store, services=services)]
+
+
+def document() -> dict[str, Any]:
+    """Both apps' documents in one."""
+    public, internal = (app.openapi() for app in build_apps())
+    public["paths"].update(internal["paths"])
+    public.setdefault("components", {}).setdefault("schemas", {}).update(
+        internal.get("components", {}).get("schemas", {})
+    )
+    return public
 
 
 def main() -> int:

@@ -19,7 +19,8 @@ CHECKS = \
   typed-boundaries \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
-  ratchet-history lint-imports sdk-drift changelog-entries console-standards
+  ratchet-history lint-imports sdk-drift changelog-entries console-standards \
+  downgrades token-lifetime cross-service standards service-standards service-standards-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -80,6 +81,23 @@ check-run.changelog-entries = node scripts/changelog-check.mjs --entries
 check-paths.changelog-entries = ^changelog/|^roadmap\.json$$|^scripts/changelog-check\.mjs$$
 check-run.console-standards = node apps/console/scripts/check-standards.mjs && node apps/console/scripts/check-standards.mjs --self-test
 check-paths.console-standards = ^apps/console/
+
+# A migration whose downgrade() does nothing, beyond scripts/downgrades-waiting.txt, which only shrinks.
+check-run.downgrades = $(PY) scripts/check_downgrades.py --all
+check-paths.downgrades = /migrations/versions/.*\.py$$|^scripts/(check_downgrades\.py|downgrades-waiting\.txt)$$
+# A test that mints a short-lived person token flakes under load; a service that imports another service.
+check-run.token-lifetime = $(PYTEST) scripts/tests/test_test_token_lifetime.py
+check-paths.token-lifetime = (^|/)tests/.*\.py$$
+check-run.cross-service = $(PYTEST) scripts/tests/test_no_cross_service_imports.py
+check-paths.cross-service = ^services/[^/]+/(src|tests)/|^scripts/tests/test_no_cross_service_imports\.py$$
+# The code rules (environment read in one module, every route authenticated, no print or own logger): agents-service
+# with its layer rules, every other service from scripts/check_service_standards.py (its WAITING list only shrinks).
+check-run.standards = $(PY) services/agents-service/scripts/check_standards.py
+check-paths.standards = ^(services|packages)/.*\.py$$
+check-run.service-standards = $(PY) scripts/check_service_standards.py
+check-paths.service-standards = ^(services|packages)/.*\.py$$|^scripts/check_service_standards\.py$$
+check-run.service-standards-self-test = $(PY) scripts/check_service_standards.py --self-test
+check-paths.service-standards-self-test = ^scripts/check_service_standards\.py$$
 
 # STAGED=1 runs a check only when a staged path can change its result. STAGED_FILES names a file of staged paths, one
 # a line (verify-staged.sh passes its own, read from the commit's index); unset, the index is read.

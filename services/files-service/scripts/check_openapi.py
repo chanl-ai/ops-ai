@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from fastapi import FastAPI
+
 from ops_files.__main__ import build
 from ops_files.app import create_files_app
 from ops_service_kit import openapi
@@ -25,10 +27,15 @@ REPO_ALLOWLIST = "services/files-service/openapi-untyped.txt"
 isolate_from_stack()
 
 
-def document() -> dict[str, Any]:
-    """The app's document; building the app opens no connection, so nothing here needs a database."""
+def build_app() -> FastAPI:
+    """The app; building it opens no connection, so nothing here needs a database."""
     files = build(Settings())
-    return create_files_app(files, engine=files.engine, settings=files.settings).openapi()
+    return create_files_app(files, engine=files.engine, settings=files.settings)
+
+
+def document() -> dict[str, Any]:
+    """The app's document."""
+    return build_app().openapi()
 
 
 def main() -> int:

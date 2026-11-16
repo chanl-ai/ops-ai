@@ -72,23 +72,24 @@ if commit listed services/files-service/src/ops_files/__init__.py; then echo "FA
   grep -q "check_config_literals.py --strict (exit 1)" "$tmp/listed.log" && echo "PASS a check on the list refuses a commit it fails, naming it" || { echo "FAIL the listed-check commit failed for another reason:"; tail -5 "$tmp/listed.log"; pass=1; }
 fi
 git checkout -q HEAD -- services/files-service/src/ops_files/__init__.py
-# The gate rows (verify-staged.sh `gate`): a staged path a row names runs its check, and a failure refuses the commit
-# under the row's name. Proved once on the cross-service row with a test importing another service (c4957ea5's fault),
-# then with that row taken out of this clone's hook: the same commit goes through, so the refusal came from the gate and
-# not from another check. Each row's check has tests of its own (test_mssql_ddl.py, test_sbom.py,
-# test_no_cross_service_imports.py).
+# The checks that sat beside the list in verify-staged.sh are on it: a staged path a check names runs it, and a failure
+# refuses the commit under the check's command. Proved once on cross-service with a test importing another service
+# (c4957ea5's fault), then with that check taken off the list in this clone: the same commit goes through, so the
+# refusal came from the list and not from another check. Each check has tests of its own (test_no_cross_service_imports.py).
 probe=services/tools-service/tests/test_zz_gate_probe.py
 printf 'from ops_agents.activities.catalog import Catalog\n\n\ndef test_probe() -> None:\n    assert Catalog\n' > "$probe"
 git add "$probe"
 if commit gate "$probe"; then echo "FAIL a service test importing another service was committed"; pass=1; else
-  grep -q "verify-staged: cross-service:" "$tmp/gate.log" && echo "PASS a gate row refuses a commit its check fails, by name" || { echo "FAIL the gate commit failed for another reason:"; tail -5 "$tmp/gate.log"; pass=1; }
+  grep -q "test_no_cross_service_imports.py (exit 1)" "$tmp/gate.log" && echo "PASS a check on the list refuses a commit it fails, by name" || { echo "FAIL the gate commit failed for another reason:"; tail -5 "$tmp/gate.log"; pass=1; }
 fi
-python3 - scripts/verify-staged.sh <<'PY'
-import pathlib, re, sys
+python3 - make/checks.mk <<'PY'
+import pathlib, sys
 p = pathlib.Path(sys.argv[1])
-s, n = re.subn(r"gate cross-service .*?test_no_cross_service_imports\.py\n", "", p.read_text(), flags=re.S)
-assert n == 1, "no cross-service row to take out"
-p.write_text(s)
+s = p.read_text()
+assert " cross-service " in s, "no cross-service check to take out"
+p.write_text(s.replace(" cross-service ", " ", 1))
 PY
-if commit gate_off "$probe"; then echo "PASS with the row taken out the same commit goes through"; else echo "FAIL the commit was refused with the row taken out:"; tail -5 "$tmp/gate_off.log"; pass=1; fi
+git add make/checks.mk
+git -c user.name=t -c user.email=t@local commit -q --no-verify -m "take cross-service off the list" -- make/checks.mk >/dev/null 2>&1
+if commit gate_off "$probe"; then echo "PASS with the check off the list the same commit goes through"; else echo "FAIL the commit was refused with the check off the list:"; tail -5 "$tmp/gate_off.log"; pass=1; fi
 exit $pass

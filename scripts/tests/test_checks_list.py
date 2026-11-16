@@ -50,7 +50,8 @@ REQUIRED = {
     "access-exceptions", "access-exceptions-commits", "access-exceptions-self-test", "portable-store",
     "portable-store-commits", "config-literals", "config-literals-commits", "typed-boundaries", "isolation-markings",
     "isolation-sites", "store-inventory", "roles-matrix", "sbom", "k8s-base", "lint-imports", "sdk-drift",
-    "changelog-entries", "console-standards",
+    "changelog-entries", "console-standards", "downgrades", "token-lifetime", "cross-service", "standards",
+    "service-standards", "service-standards-self-test",
 }  # fmt: skip
 
 
@@ -84,6 +85,8 @@ def test_every_other_place_that_checks_runs_the_same_list(tmp_path: Path) -> Non
     assert "\nmake -s checks\n" in (ROOT / "scripts/verify-changed.sh").read_text()
     staged = (ROOT / "scripts/verify-staged.sh").read_text()
     assert "checks STAGED=1" in staged
+    # The four checks that sat beside the list in pre-commit are on it, so no other place can skip them.
+    assert "\ngate " not in staged and "gate()" not in staged
     # No check of the list is still written out beside it.
     for old in ("check_typed_boundaries.py --strict", "check_portable_store.py --strict", "lint-imports"):
         assert old not in (ROOT / "scripts/verify-changed.sh").read_text(), old
@@ -102,6 +105,12 @@ def test_staged_runs_a_check_only_when_a_staged_path_can_change_it(tmp_path: Pat
     names = staged_names(tmp_path, "services/kb-service/src/ops_kb/app.py")
     assert {"typed-boundaries", "config-literals", "access-exceptions", "lint-imports"} <= set(names), names
     assert "sdk-drift" not in names and "changelog-entries" not in names, names
+    # A migration, a test, a service module: each stages the checks that moved onto the list from verify-staged.sh.
+    assert "downgrades" in staged_names(tmp_path, "services/kb-service/migrations/versions/0010_x.py")
+    assert "token-lifetime" in staged_names(tmp_path, "services/kb-service/tests/test_a.py")
+    assert {"cross-service", "standards", "service-standards"} <= set(
+        staged_names(tmp_path, "services/files-service/src/ops_files/app.py")
+    )
     # A history check can only change when a baseline file is staged.
     assert "config-literals-commits" not in names
     assert "config-literals-commits" in staged_names(tmp_path, "services/kb-service/config-literals-baseline.txt")

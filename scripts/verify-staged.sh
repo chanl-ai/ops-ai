@@ -49,40 +49,11 @@ if [ "${#present[@]}" -gt 0 ]; then
   "$root/.venv/bin/python" "$root/scripts/scrub_board_paths.py" --root "$PWD" --check "${present[@]}" \
     || { echo "verify-staged: a staged file names a home path or the machine login; run uv run python scripts/scrub_board_paths.py --apply"; exit 1; }
 fi
-# Checks a commit needs by what it changes: one `gate` row each, naming the staged paths that call for it, how to fix a
-# failure, and the command, run on this export with the export's own sources first (the shared venv's editable installs
-# read the working tree, where other builders' uncommitted files would decide the result). Each ran only in verify-head
-# before, so a commit that broke one turned HEAD red for every builder. A new check is one more row.
+# Every check a commit can break is a name on the one list (make/checks.mk): the migration downgrades, test token
+# lifetimes, imports between services and the code rules of every service among them. They run on this export with the
+# export's own sources first (the shared venv's editable installs read the working tree, where other builders'
+# uncommitted files would decide the result), so a commit that breaks one cannot turn HEAD red for every builder.
 export_path="$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | tr '\n' ':')$PWD/deploy/database:$PWD"
-gate() {
-  local name=$1 paths=$2 fix=$3
-  shift 3
-  [ "${#staged[@]}" -gt 0 ] || return 0
-  # A here-string, not a pipe: under pipefail `grep -q` stops reading at its first match, printf takes SIGPIPE on a
-  # long staged list, and the pipeline's 141 read as no match and skipped the gate.
-  grep -qE "$paths" <<<"$(printf '%s\n' "${staged[@]}")" || return 0
-  PYTHONPATH="$export_path" "$@" >"$tmp/.gate-$name.log" 2>&1 \
-    || { tail -20 "$tmp/.gate-$name.log"; echo "verify-staged: $name: $fix"; exit 1; }
-}
-# Every table is marked TENANT_SCOPED or system(reason); a migration that adds one unmarked turned HEAD red overnight.
-# A migration's downgrade must undo its upgrade: the runtime-logins test migrates each chain down and back up, and
-# three empty downgrades (tools 0048, 0049, 0050) each held QA red for about an hour on 10-31.
-gate downgrades '/migrations/versions/.*\.py$' \
-  "a staged migration's downgrade() does nothing; make it undo exactly what upgrade() did" \
-  python3 "$root/scripts/check_downgrades.py" --root "$PWD" "${staged[@]}"
-# Test person tokens live an hour: a short one flakes under load (c81399fd). The scan is about 2 s.
-gate token-lifetime '(^|/)tests/.*\.py$' \
-  "a test mints a short-lived person token (above); mint it for an hour, or allowlist an expiry test with its reason" \
-  "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider scripts/tests/test_test_token_lifetime.py
-# No service imports another, outside a test conftest the allowlist names (c4957ea5 reddened QA this way).
-gate cross-service '^services/[^/]+/(src|tests)/' \
-  "a service imports another service; import it only in a tests/conftest.py the allowlist names" \
-  "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider scripts/tests/test_no_cross_service_imports.py
-# The repo's code rules (environment reads only in settings, and the rest of check_standards) run on any staged Python in
-# a service or package: a rule-4 read in ops_service_kit passed the commit and turned HEAD red for every builder (3e8e5f71).
-gate standards '^(services|packages)/.*\.py$' \
-  "a code rule in services/agents-service/scripts/check_standards.py fails (above); fix the code" \
-  bash -c 'cd services/agents-service && "$0" scripts/check_standards.py' "$root/.venv/bin/python"
 # The one list of checks (make/checks.mk), each run when a staged path can change its result: access decided outside
 # can(), the standards ratchets and their history, the files written from code, import directions, the SDK drift check.
 # CI's checks job and `make verify` run the same list. They run on this export with the checkout's own tools; GIT_DIR

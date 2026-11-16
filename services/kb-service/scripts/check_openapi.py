@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_kb.app import create_kb_app
@@ -26,10 +27,15 @@ REPO_ALLOWLIST = "services/kb-service/openapi-untyped.txt"
 isolate_from_stack()
 
 
-def document() -> dict[str, Any]:
-    """The app's document; building the app opens no connection, so nothing here needs a database."""
+def build_app() -> FastAPI:
+    """The app; building it opens no connection, so nothing here needs a database."""
     unanswered_endpoints("agents")
-    return create_kb_app(create_async_engine(Settings().database_url)).openapi()
+    return create_kb_app(create_async_engine(Settings().database_url))
+
+
+def document() -> dict[str, Any]:
+    """The app's document."""
+    return build_app().openapi()
 
 
 def main() -> int:

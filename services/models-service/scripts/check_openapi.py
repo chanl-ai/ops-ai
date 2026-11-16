@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_models.app import create_models_app
@@ -26,9 +27,14 @@ REPO_ALLOWLIST = "services/models-service/openapi-untyped.txt"
 isolate_from_stack()
 
 
+def build_app() -> FastAPI:
+    """The app; building it opens no connection, so nothing here needs a database."""
+    return create_models_app(create_async_engine(Settings().database_url))
+
+
 def document() -> dict[str, Any]:
-    """The app's document; building the app opens no connection, so nothing here needs a database."""
-    return create_models_app(create_async_engine(Settings().database_url)).openapi()
+    """The app's document."""
+    return build_app().openapi()
 
 
 def main() -> int:
