@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_store import Guarantee
 from ops_store.dialect import db_now
+from ops_store.schema import system
 
 from .leases import check_fence
 
@@ -36,6 +37,10 @@ timers = sa.Table(
     sa.Column("failed_at", sa.DateTime(timezone=True)),
     # db_now: now() on PostgreSQL, SYSDATETIMEOFFSET() on SQL Server, whose CURRENT_TIMESTAMP carries no offset.
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    info=system(
+        "the poller claims due timers across every tenant before it knows one; a timer holds ids, a node name and "
+        "times, none of a tenant's content"
+    ),
 )
 
 OPEN = sa.and_(timers.c.fired_at.is_(None), timers.c.cancelled_at.is_(None), timers.c.failed_at.is_(None))

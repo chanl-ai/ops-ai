@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_checkpointer import LeaseSupersededError
 from ops_store import Guarantee
 from ops_store.dialect import db_epoch, insert_ignore, lock_key, locked
+from ops_store.schema import system
 
 from .base import metadata
 
@@ -42,6 +43,10 @@ thread_leases = sa.Table(
     sa.Column("generation", sa.BigInteger(), nullable=False, server_default="1"),
     # Set when the owner finished and let go; an unreleased row past expiry is a crashed owner.
     sa.Column("released_at", sa.Float()),
+    info=system(
+        "a lease is taken and swept by thread id before its tenant is known (the sweeper claims across tenants); it "
+        "holds ids, an owner name and times, none of a tenant's content"
+    ),
 )
 
 

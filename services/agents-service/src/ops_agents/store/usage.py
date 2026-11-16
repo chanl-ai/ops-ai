@@ -14,9 +14,11 @@ from ops_metering import MICRO, Budget, Exhausted, PriceTable, Totals, Usage, co
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.dialect import upsert
+from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
 from .model_calls import ModelCall, ModelCallLedger
+from .tenancy import LOCAL_TENANT, current_tenant, tenant_tx
 
 thread_budgets = sa.Table(
     "thread_budgets",
@@ -26,6 +28,9 @@ thread_budgets = sa.Table(
     sa.Column("max_tokens", sa.BigInteger()),
     sa.Column("max_cost_micros", sa.BigInteger()),
     sa.Column("updated_at", sa.String(40), nullable=False),
+    # The thread's tenant, set from the request's or loop's context, never from a body (migration 0104).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default=LOCAL_TENANT),
+    info=TENANT_SCOPED,
 )
 
 
@@ -92,7 +97,7 @@ class UsageLedger:
         return await self.calls.sums(thread_id, by_run=True)
 
     async def budget(self, thread_id: str) -> Budget | None:
-        async with self.engine.connect() as c:
+        async with tenant_tx(self.engine) as c:
             row = (
                 (await c.execute(thread_budgets.select().where(thread_budgets.c.thread_id == thread_id)))
                 .mappings()
@@ -113,8 +118,9 @@ class UsageLedger:
             "max_tokens": budget.max_tokens,
             "max_cost_micros": _micros(budget.max_cost) if budget.max_cost is not None else None,
             "updated_at": now_iso(),
+            "tenant_id": current_tenant(),
         }
-        async with self.engine.begin() as c:
+        async with tenant_tx(self.engine) as c:
             await c.execute(upsert(c, thread_budgets, values, keys=["thread_id"]))
 
     async def update_budget(self, thread_id: str, budget: Budget) -> None:

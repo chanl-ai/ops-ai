@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0103_eval_cases_runs
+-- agents-service, stamped at 0104_runtime_tables_isolated
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -718,6 +718,7 @@ CREATE TABLE model_call_records (
 	request_hash VARCHAR(64) NULL, 
 	response NVARCHAR(max) NULL, 
 	created_at VARCHAR(40) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	CONSTRAINT model_call_records_pkey PRIMARY KEY (id)
 );
 GO
@@ -830,6 +831,7 @@ CREATE TABLE thread_budgets (
 	max_tokens BIGINT NULL, 
 	max_cost_micros BIGINT NULL, 
 	updated_at VARCHAR(40) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	CONSTRAINT thread_budgets_pkey PRIMARY KEY (thread_id)
 );
 GO
@@ -1256,6 +1258,12 @@ CREATE SECURITY POLICY ops_security.message_memory_use_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.message_memory_use AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.model_call_records_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.model_call_records,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.review_assignments_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.review_assignments,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER INSERT,
@@ -1290,6 +1298,12 @@ CREATE SECURITY POLICY ops_security.template_copies_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.template_copies,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.template_copies AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.template_copies AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.thread_budgets_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.thread_budgets,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.widget_mint_keys_tenant
@@ -1335,5 +1349,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0103_eval_cases_runs');
+INSERT INTO alembic_version (version_num) VALUES ('0104_runtime_tables_isolated');
 GO

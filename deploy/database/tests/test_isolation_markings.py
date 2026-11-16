@@ -24,11 +24,7 @@ WAITING: dict[str, set[str]] = {
         "channel_messages",
         "deployments",
         "graph_versions",
-        "model_call_records",
-        "thread_budgets",
         "thread_inbox",
-        "thread_leases",
-        "timers",
     },
     "agents registry": {
         "registry_agent_versions",

@@ -233,6 +233,7 @@ class _Out(TypedDict, total=False):
     replies: list[str]
 
 
+@pytest.mark.usefixtures("local_tenant")  # a run records its calls under its tenant, as a request or loop sets
 async def test_a_rerun_of_the_same_task_is_answered_from_the_record_not_models_service(tmp_path: Path) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'db.sqlite'}")
     async with engine.begin() as c:
