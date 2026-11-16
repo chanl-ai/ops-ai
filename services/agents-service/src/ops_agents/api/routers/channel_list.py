@@ -1,6 +1,12 @@
 """GET /v1/channels: every channel the caller's teams run, one row per existing record (a mailbox is email, a
 widget deployment is chat), with what it serves, a health dot from real checks, and its traffic, so the Channels hub
-neither joins records nor counts anything itself. `kinds` gives the gallery one row per channel type."""
+neither joins records nor counts anything itself. `kinds` gives the gallery one row per channel type.
+
+Retiring a chat channel answers in one request transaction (`Tx`). Every other route takes none: each reply is built
+by `rows_of`, which asks platform-service for the API keys and the teams' names, and a change may ask platform-service
+for the team's publish-review setting, so each store call takes and returns its own connection and none is held while
+platform-service answers. The list is merged from three sources (mailboxes, embeds, platform's keys) and paged here.
+"""
 
 from __future__ import annotations
 
@@ -13,9 +19,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, ListResult, Out, paged
+from ops_service_kit.http import Envelope, In, ListResult, Out, paged
 from ops_service_kit.ids import now_iso
 
 from ...store.channel_list import NOT_FOUND, STALE_READ, ChannelList
@@ -356,7 +362,7 @@ async def list_channels(rt: Rt, me: Me, q: Annotated[ChannelsQuery, Query()]) ->
     return ok(listed | {"facets": facets, "kinds": kinds})
 
 
-class ChannelIn(WireModel):
+class ChannelIn(In):
     # Chat is the one made here; a mailbox is connected at /v1/channels/mailboxes, an API key in Settings.
     type: Literal["chat"]
     agent_id: str
@@ -502,13 +508,13 @@ async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     return ok({"latestVersion": latest, "versions": _versions(rows, latest), "rows": rows})
 
 
-class ServesPatch(WireModel):
+class ServesPatch(In):
     kind: Literal["workflow", "agent"]
     id: str
     version: int | Literal["latest"]
 
 
-class ChannelPatch(WireModel):
+class ChannelPatch(In):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     paused: bool | None = None
     serves: ServesPatch | None = None
@@ -609,7 +615,7 @@ async def update_channel(rt: Rt, me: Me, channel_id: str, body: ChannelPatch) ->
 
 
 @router.post("/{channel_id}/retire", response_model=Envelope[Retired])
-async def retire_channel(rt: Rt, me: Me, channel_id: str) -> JSONResponse:
+async def retire_channel(rt: Rt, me: Me, channel_id: str, _: Tx) -> JSONResponse:
     """Retires a chat channel for good: the embed answers no page again and cannot be changed. An email channel
     is removed on its mailbox's page, and an API channel is a key revoked in Settings."""
     if not channel_id.startswith("wd_"):

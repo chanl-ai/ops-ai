@@ -398,12 +398,48 @@ async def test_deployment_and_inbox_routes_keep_every_reply_and_error(stack: Sta
 
 async def test_local_channel_routes_answer_in_one_transaction(stack: Stack) -> None:  # noqa: F811
     c, _ = stack
+    await widget(stack)
     made = await c.post("/v1/threads", json={"graph": "dispute_email"}, headers=BUILDER)
     tid = made.json()["data"]["threadId"]
     requests: list[Request] = [
         ("POST", "/v1/deployments", DEPLOYMENT, BUILDER),
         ("PATCH", "/v1/deployments/dep_pin", {"paused": True}, BUILDER),
         ("GET", f"/v1/threads/{tid}/inbox", None, BUILDER),
+        ("POST", "/v1/channels/wd_branch/retire", None, BUILDER),
     ]
-    expected = [(m, p, 201 if m == "POST" else 200, 1) for m, p, _, _ in requests]
+    expected = [(m, p, 201 if p == "/v1/deployments" else 200, 1) for m, p, _, _ in requests]
     assert await connections(c, requests) == expected
+
+
+async def test_channel_list_routes_keep_every_reply_and_error(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    await widget(stack)
+    await mailbox(stack, "intake@bank.example")
+    other_agent = {"serves": {"kind": "agent", "id": "ag_x", "version": 1}}
+    a_workflow = {"serves": {"kind": "workflow", "id": "w", "version": 1}}
+    rows: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str]]] = [
+        ("list", "GET", "/v1/channels", None, BUILDER),
+        ("list.otherTeam", "GET", "/v1/channels", None, FRAUD_BUILDER),
+        ("list.badType", "GET", "/v1/channels?type=fax", None, BUILDER),
+        ("list.pastEnd", "GET", "/v1/channels?page=9&pageSize=1", None, BUILDER),
+        ("create.unknownField", "POST", "/v1/channels", {"type": "chat", "agentId": "ag_branch", "x": 1}, BUILDER),
+        ("rename", "PATCH", "/v1/channels/wd_branch", {"name": "Branch help"}, BUILDER),
+        ("rename.unknownField", "PATCH", "/v1/channels/wd_branch", {"colour": "red"}, BUILDER),
+        ("serves.otherAgent", "PATCH", "/v1/channels/wd_branch", other_agent, BUILDER),
+        ("rename.otherTeam", "PATCH", "/v1/channels/wd_branch", {"name": "Theirs"}, FRAUD_BUILDER),
+        ("mailbox.pause", "PATCH", "/v1/channels/mbx_intake", {"paused": True}, BUILDER),
+        ("mailbox.serves", "PATCH", "/v1/channels/mbx_intake", a_workflow, BUILDER),
+        ("key.change", "PATCH", "/v1/channels/key_ci", {"paused": True}, BUILDER),
+        ("other.change", "PATCH", "/v1/channels/zz_1", {"paused": True}, BUILDER),
+        ("agentLive", "GET", "/v1/agents/ag_branch/live", None, BUILDER),
+        ("agentLive.missing", "GET", "/v1/agents/ag_missing/live", None, BUILDER),
+        ("workflowLive.missing", "GET", "/v1/workflows/wf_missing/live", None, BUILDER),
+        ("retire.mailbox", "POST", "/v1/channels/mbx_intake/retire", None, BUILDER),
+        ("retire.otherTeam", "POST", "/v1/channels/wd_branch/retire", None, FRAUD_BUILDER),
+        ("retire.viewer", "POST", "/v1/channels/wd_branch/retire", None, VIEWER),
+        ("retire", "POST", "/v1/channels/wd_branch/retire", None, BUILDER),
+        ("retire.again", "POST", "/v1/channels/wd_branch/retire", None, BUILDER),
+        ("list.afterRetire", "GET", "/v1/channels?includeRetired=true", None, BUILDER),
+    ]
+    seen = {name: answer(await c.request(m, path, json=body, headers=who)) for name, m, path, body, who in rows}
+    compare(seen, FIXTURES / "reply-pins-channel-list.json")

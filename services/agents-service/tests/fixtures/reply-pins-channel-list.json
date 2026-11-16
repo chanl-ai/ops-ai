@@ -1,0 +1,756 @@
+{
+  "agentLive": {
+    "body": {
+      "data": {
+        "latestVersion": 3,
+        "rows": [
+          {
+            "behind": 2,
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "lastActivityAt": null,
+            "pinned": true,
+            "traffic24h": 0,
+            "version": 1,
+            "where": {
+              "id": "wd_branch",
+              "kind": "channel",
+              "name": "Branch help",
+              "type": "chat"
+            }
+          }
+        ],
+        "versions": [
+          {
+            "places": 1,
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agentLive.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Agent ag_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "create.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "name"
+            ],
+            "msg": "Field required"
+          },
+          {
+            "loc": [
+              "body",
+              "origins"
+            ],
+            "msg": "Field required"
+          },
+          {
+            "loc": [
+              "body",
+              "x"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "name: Field required",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "key.change": {
+    "body": {
+      "error": {
+        "code": "channel_managed_elsewhere",
+        "message": "An API channel is an API key, which changes in Settings, API keys.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "intake@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "No live workflow watches this mailbox",
+              "state": "idle"
+            },
+            "id": "mbx_intake",
+            "lastActivityAt": null,
+            "name": "Mail intake@bank.example",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          }
+        ],
+        "facets": {
+          "health": {
+            "idle": 1,
+            "ok": 1
+          },
+          "type": {
+            "chat": 1,
+            "email": 1
+          }
+        },
+        "kinds": [
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "idle",
+            "total": 1,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.afterRetire": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "intake@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Paused",
+              "state": "idle"
+            },
+            "id": "mbx_intake",
+            "lastActivityAt": null,
+            "name": "Mail intake@bank.example",
+            "paused": true,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": "<timeZ>"
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Retired",
+              "state": "idle"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Branch help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          }
+        ],
+        "facets": {
+          "health": {
+            "idle": 2
+          },
+          "type": {
+            "chat": 1,
+            "email": 1
+          }
+        },
+        "kinds": [
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "api"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "chat"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": "idle",
+            "total": 1,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.badType": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "query",
+              "type",
+              0
+            ],
+            "msg": "Input should be 'email', 'chat', 'api', 'mcp', 'slack' or 'teams'"
+          }
+        ],
+        "message": "query.type.0: Input should be 'email', 'chat', 'api', 'mcp', 'slack' or 'teams'",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "list.otherTeam": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "health": {},
+          "type": {}
+        },
+        "kinds": [
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "api"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "chat"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.pastEnd": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "health": {
+            "idle": 1,
+            "ok": 1
+          },
+          "type": {
+            "chat": 1,
+            "email": 1
+          }
+        },
+        "kinds": [
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "idle",
+            "total": 1,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 9,
+          "pageSize": 1,
+          "total": 2,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "mailbox.pause": {
+    "body": {
+      "data": {
+        "activity7d": 0,
+        "canEdit": true,
+        "detail": "intake@bank.example",
+        "errors24h": 0,
+        "health": {
+          "checkedAt": "<timeZ>",
+          "reason": "Paused",
+          "state": "idle"
+        },
+        "id": "mbx_intake",
+        "lastActivityAt": null,
+        "name": "Mail intake@bank.example",
+        "paused": true,
+        "serves": null,
+        "servesCount": 0,
+        "teamId": "team_ops",
+        "teamName": null,
+        "traffic24h": 0,
+        "type": "email"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "mailbox.serves": {
+    "body": {
+      "error": {
+        "code": "serves_from_workflow",
+        "message": "An email channel serves the workflows whose Email received trigger names its mailbox; change the workflow's trigger to change what it serves.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "other.change": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Channel zz_1 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "rename": {
+    "body": {
+      "data": {
+        "activity7d": 0,
+        "canEdit": true,
+        "detail": "https://intranet.example",
+        "embed": {
+          "activeKeys": 0,
+          "agentId": "ag_branch",
+          "agentVersion": 1,
+          "origins": [
+            "https://intranet.example"
+          ],
+          "retiredAt": null
+        },
+        "errors24h": 0,
+        "health": {
+          "checkedAt": "<timeZ>",
+          "state": "ok"
+        },
+        "id": "wd_branch",
+        "lastActivityAt": null,
+        "name": "Branch help",
+        "paused": false,
+        "serves": {
+          "behind": 2,
+          "id": "ag_branch",
+          "kind": "agent",
+          "latestVersion": 3,
+          "name": "Branch Concierge",
+          "version": 1
+        },
+        "servesCount": 1,
+        "teamId": "team_ops",
+        "teamName": null,
+        "traffic24h": 0,
+        "type": "chat"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "rename.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Channel wd_branch was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "rename.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "retire": {
+    "body": {
+      "data": {
+        "id": "wd_branch",
+        "retiredAt": "<timeZ>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "retire.again": {
+    "body": {
+      "error": {
+        "code": "channel_retired",
+        "message": "This channel is retired already.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "retire.mailbox": {
+    "body": {
+      "error": {
+        "code": "channel_managed_elsewhere",
+        "message": "Only a chat channel is retired here.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "retire.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Channel wd_branch was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "retire.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "deployments",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit this channel; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "serves.otherAgent": {
+    "body": {
+      "error": {
+        "code": "serves_agent_fixed",
+        "message": "A chat channel keeps its agent; connect a new channel to serve another one.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "workflowLive.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Live workflow wf_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}
