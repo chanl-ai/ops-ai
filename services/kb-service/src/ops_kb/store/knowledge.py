@@ -553,6 +553,22 @@ class ChangeRow(Out):
     decided_at: datetime | None
 
 
+class RunRow(Out):
+    """One sync run of a source: running, or ended with its counts, errors and log."""
+
+    id: str
+    source_id: str
+    trigger: str
+    started_at: datetime
+    duration_sec: float
+    status: str
+    counts: dict[str, int]
+    errors: list[JsonValue]
+    log: list[JsonValue]
+    finished_at: datetime | None = None
+    cancelled_by: str | None = None
+
+
 class SameText(Out):
     """An indexed document of a base this one shares, holding the same text."""
 
@@ -1174,9 +1190,10 @@ class KnowledgeStore(Store):
         source_ids: list[str] | None = None,
         run_id: str | None = None,
         limit: int | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[RunRow]:
         """Runs newest first: of one source, of any of `source_ids`, or one run; `limit` keeps the newest."""
-        q = sa.select(kb_runs).where(kb_runs.c.tenant_id == tenant, team_visible(kb_runs))
+        shown = (col for col in kb_runs.c if col.name not in ("tenant_id", "team_id", "started_by"))
+        q = sa.select(*shown).where(kb_runs.c.tenant_id == tenant, team_visible(kb_runs))
         if source_id is not None:
             q = q.where(kb_runs.c.source_id == source_id)
         if source_ids is not None:
@@ -1186,7 +1203,7 @@ class KnowledgeStore(Store):
         if run_id is not None:
             q = q.where(kb_runs.c.id == run_id)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.order_by(kb_runs.c.started_at.desc()))).mappings()]
+            return await rows(c, q.order_by(kb_runs.c.started_at.desc()), RunRow)
 
     async def drafts(self, tenant: str, item_id: str) -> list[ChangeRow]:
         """The item's FAQ drafts in every state, oldest first."""

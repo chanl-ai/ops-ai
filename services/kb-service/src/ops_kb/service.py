@@ -62,7 +62,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
-from .store.knowledge import ChangeRow, ChunkRow
+from .store.knowledge import ChangeRow, ChunkRow, RunRow
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -506,13 +506,13 @@ class KnowledgeService:
         runs = await self.store.runs(tenant, source_ids=source_ids, limit=10)
         return [
             {
-                "id": r["id"],
-                "startedAt": _iso(r["started_at"]),
-                "durationSec": r["duration_sec"],
-                "processed": int(r["counts"].get("upserted", 0)),
-                "failed": int(r["counts"].get("failed", 0)),
-                "status": r["status"],
-                "trigger": r["trigger"],
+                "id": r.id,
+                "startedAt": _iso(r.started_at),
+                "durationSec": r.duration_sec,
+                "processed": r.counts.get("upserted", 0),
+                "failed": r.counts.get("failed", 0),
+                "status": r.status,
+                "trigger": r.trigger,
             }
             for r in runs
         ]
@@ -1217,7 +1217,7 @@ class KnowledgeService:
             raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")
         try:
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
-                run = _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
+                run = _run(run_row(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger)))
         finally:
             await lease.release()
         await self.settle_repeats(who, str(s["id"]))
@@ -1298,7 +1298,7 @@ class KnowledgeService:
         }
         await self.store.add_run(run)
         self._in_background(self._rebuild(who, s, run, stale, lease))
-        return _run(run)
+        return _run(run_row(run))
 
     async def _rebuild(
         self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]], lease: Lease
@@ -1326,11 +1326,9 @@ class KnowledgeService:
         try:
             for item in stale:
                 current = (await self.store.runs(tenant, run_id=run_id))[0]
-                if current["cancelled_by"]:
+                if current.cancelled_by:
                     status = "cancelled"
-                    log.append(
-                        f"Cancelled by {current['cancelled_by']} after {counts['checked']} of {counts['total']}."
-                    )
+                    log.append(f"Cancelled by {current.cancelled_by} after {counts['checked']} of {counts['total']}.")
                     break
                 counts["checked"] += 1
                 if not item["file_id"]:
@@ -1380,7 +1378,7 @@ class KnowledgeService:
         found = await self.store.runs(who.tenant_id, run_id=run_id)
         if not found:
             raise NotFound("No sync run with that id.")
-        await self._changeable_source(who, str(found[0]["source_id"]))
+        await self._changeable_source(who, found[0].source_id)
         if not await self.store.cancel_run(who.tenant_id, run_id, by=who.email):
             raise Conflict("This run is not running.", code="run_not_running")
         return _run((await self.store.runs(who.tenant_id, run_id=run_id))[0])
@@ -1501,7 +1499,7 @@ class KnowledgeService:
             "started_by": who.email,
         }
         await self.store.add_run(run)
-        return _run(run)
+        return _run(run_row(run))
 
     async def _chunks(
         self, who: Who, s: dict[str, Any], doc: ParsedDocument, *, item_id: str, version: int, title: str
@@ -2906,20 +2904,25 @@ def pieces(  # noqa: PLR0917 - each argument a different part of the piece rows
     return rows
 
 
-def _run(r: dict[str, Any]) -> dict[str, Any]:
+def run_row(run: dict[str, Any]) -> RunRow:
+    """A run this request wrote, as the store reads it back: who started it and its tenant are not shown."""
+    return RunRow.model_validate({k: v for k, v in run.items() if k in RunRow.model_fields})
+
+
+def _run(r: RunRow) -> dict[str, Any]:
     return {
-        "id": r["id"],
-        "sourceId": r["source_id"],
-        "trigger": r["trigger"],
-        "startedAt": _iso(r["started_at"]),
-        "durationSec": r["duration_sec"],
-        "status": r["status"],
-        "counts": r["counts"],
+        "id": r.id,
+        "sourceId": r.source_id,
+        "trigger": r.trigger,
+        "startedAt": _iso(r.started_at),
+        "durationSec": r.duration_sec,
+        "status": r.status,
+        "counts": r.counts,
         "phases": [],
-        "errors": r["errors"],
-        "log": r["log"],
-        **({"finishedAt": _iso(r["finished_at"])} if r.get("finished_at") else {}),
-        **({"cancelledBy": r["cancelled_by"]} if r.get("cancelled_by") else {}),
+        "errors": r.errors,
+        "log": r.log,
+        **({"finishedAt": _iso(r.finished_at)} if r.finished_at else {}),
+        **({"cancelledBy": r.cancelled_by} if r.cancelled_by else {}),
     }
 
 
