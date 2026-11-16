@@ -26,7 +26,7 @@ from ops_documents.store.extractions import service_outbox
 from ops_documents.store.readings import ReadingRow
 from ops_files_client.testing import FakeFilesService
 from ops_identity import dev_service_signer, mint_service_token
-from ops_ingest.reading import READER_VERSION, read
+from ops_ingest.reading import READER_VERSION, open_file, read
 from ops_store import isolation
 
 from .conftest import OPS, Make
@@ -156,7 +156,7 @@ async def test_a_long_read_carries_on_from_its_next_page_after_a_restart(
                 await store.save_page(row, page.number, page.model_dump(mode="json", by_alias=True))
         # The process stopped after page 3; a new one starts and resumes.
         pages_read: list[int] = []
-        real_open = readings_module.open_file
+        real_open = open_file
 
         def watched(*args: Any, **kw: Any) -> Any:
             opened = real_open(*args, **kw)

@@ -1,0 +1,64 @@
+# The statement budget of each documents-service GET route at 5 and 50 rows (ops_service_kit.testing.budget_check,
+# data-access standard DA1 and DA6), measured on PostgreSQL by tests/test_statement_budget.py. A route is one
+# transaction on one connection, with no other service or the model called while it is open, unless its row lists more
+# and says why. Routes that ask files-service first (readings, layout, extractions of a file) read their rows after it
+# answers, inside the one transaction.
+
+["GET /health"]
+queries = 1
+
+["GET /health/background"]
+queries = 0
+
+["GET /v1/documents/extractions"]
+queries = 3
+
+["GET /v1/documents/extractions/{extraction_id}"]
+queries = 3
+
+["GET /v1/documents/readings/{file_id}"]
+queries = 2
+
+# Reads the file's bytes from files-service and draws the page; no row.
+["GET /v1/documents/readings/{file_id}/pages/{number}/image"]
+queries = 0
+
+["GET /v1/documents/layout/{file_id}"]
+queries = 2
+
+["GET /v1/document-types"]
+queries = 2
+
+["GET /v1/document-types/{type_id}"]
+queries = 4
+
+["GET /v1/document-types/{type_id}/versions/{version}"]
+queries = 3
+
+["GET /v1/document-types/{type_id}/test-runs/{test_id}"]
+queries = 3
+
+# Not yet on one transaction: a transaction per store call (the type, then its examples).
+["GET /v1/document-types/{type_id}/examples"]
+queries = 4
+transactions = 2
+connections = 2
+
+# Not yet on one transaction: a transaction per store call (the type, its reads, its versions).
+["GET /v1/document-types/{type_id}/template-offers"]
+queries = 12
+transactions = 6
+connections = 6
+
+# Not yet on one transaction: the type and its samples in a transaction per store call, then models-service prices it.
+["GET /v1/document-types/{type_id}/versions/{version}/test-estimate"]
+queries = 8
+transactions = 4
+connections = 4
+
+# The team's copies in one transaction, closed before tools-service is asked for the team's templates.
+["GET /v1/templates"]
+queries = 2
+
+["GET /v1/resources/{resource}/copies/{copy}/update"]
+queries = 5
