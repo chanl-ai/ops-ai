@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import re
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
+from sqlalchemy import event
 
 from tests.api.test_forms import OUTSIDER, VALUES, live, shared
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -35,6 +37,7 @@ async def test_the_form_routes_keep_every_key_value_and_error_object(stack: Stac
     seen: dict[str, Any] = {}
     form = await shared(c, title="Ask for a payment plan", description="Tell us what has changed.")
     slug, token, fid = form["slug"], form["token"], form["id"]
+    seen["create"] = _seen(await c.post("/v1/workflows/payment_plan/forms", json={"mode": "members"}, headers=BUILDER))
     seen["create.stray"] = _seen(
         await c.post("/v1/workflows/payment_plan/forms", json={"mode": "members", "colour": "red"}, headers=BUILDER)
     )
@@ -64,3 +67,52 @@ async def test_the_form_routes_keep_every_key_value_and_error_object(stack: Stac
     seen["members"] = _seen(await c.get(f"/v1/forms/{members['slug']}/members", headers=BUILDER))
     seen["members.outsider"] = _seen(await c.get(f"/v1/forms/{members['slug']}/members", headers=OUTSIDER))
     compare(seen, FIXTURES / "reply-pins-forms.json")
+
+
+async def test_each_builder_form_route_holds_one_transaction(stack: Stack) -> None:  # noqa: F811
+    """A share whose row and token hash land in separate transactions leaves a form no link opens when the second
+    fails; a change read back from another moment than it was written."""
+    c, rt = stack
+    await live(c)
+    fid = (await shared(c))["id"]
+    steps: list[tuple[str, str, str, object]] = [
+        ("create", "POST", "/v1/workflows/payment_plan/forms", {"mode": "members"}),
+        ("list", "GET", "/v1/workflows/payment_plan/forms", None),
+        ("rotate", "POST", f"/v1/forms/{fid}/rotate", None),
+        ("update", "PATCH", f"/v1/forms/{fid}", {"paused": True}),
+    ]
+    begun: list[int] = []
+
+    def began(_conn: object) -> None:
+        begun.append(1)
+
+    event.listen(rt.db.sync_engine, "begin", began)
+    counts: dict[str, int] = {}
+    for name, method, path, body in steps:
+        begun.clear()
+        r = await c.request(method, path, json=body, headers=BUILDER)
+        assert r.status_code in (200, 201), (name, r.text)
+        counts[name] = len(begun)
+    assert counts == {name: 1 for name, *_ in steps}, counts
+
+
+async def test_a_form_upload_holds_no_connection_while_files_stores_it(stack: Stack) -> None:  # noqa: F811
+    """A connection held across files-service's answer: a slow scan holds the pool, and a tenant's uploads stall
+    every other request."""
+    c, rt = stack
+    await live(c)
+    form = await shared(c)
+    held: list[int] = []
+    out: list[int] = []
+    event.listen(rt.db.sync_engine, "checkout", lambda *_: out.append(1))
+    event.listen(rt.db.sync_engine, "checkin", lambda *_: out.pop())
+
+    async def write(*_: object, **__: object) -> object:
+        held.append(len(out))
+        return SimpleNamespace(file=SimpleNamespace(id="file_1", name="statement.pdf"))
+
+    rt.start_files = SimpleNamespace(write=write)
+    r = await c.post(
+        f"/v1/forms/public/{form['slug']}/files", params={"t": form["token"], "name": "statement.pdf"}, content=b"%PDF"
+    )
+    assert (r.status_code, r.json()["data"], held) == (201, {"fileId": "file_1", "name": "statement.pdf"}, [0])

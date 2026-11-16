@@ -8,6 +8,12 @@ the secret against its hash. Before sign-in the page shows the form's title, des
 Submissions are limited twice: 10 a minute per client address, the address read from the raw X-Forwarded-For header
 past the deploy's trusted proxies (never from `request.client`, which uvicorn already rewrites for a 127.0.0.1 peer),
 and the form's daily cap, counted with the form's row locked (`FormLinks.reserve`).
+
+The builder routes (share, list, rotate, change) answer in one request transaction (`Tx`). The rest take none: a
+submission records its `rate_limited` or `daily_cap` activity row before answering 429, and one transaction would roll
+that row back with the refusal; a file upload calls files-service with no connection held; and the members-only page
+enters each of the person's teams in turn, which stays on a connection per read until a test shows one request
+connection re-scoped to each team.
 """
 
 from __future__ import annotations
@@ -21,12 +27,13 @@ from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.store import DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
+from ops_identity.fastapi import Tx
 from ops_service_kit.client_address import client_address
 from ops_service_kit.errors import (
     Conflict,
@@ -37,7 +44,7 @@ from ops_service_kit.errors import (
     Unauthorized,
     Unprocessable,
 )
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, Out
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
@@ -68,22 +75,22 @@ EXPIRED = "This link has expired or was replaced. Ask whoever sent it to you for
 limits = RateLimit()
 
 
-class FormIn(BaseModel):
+class FormIn(In):
     mode: Literal["link", "members"] = "link"
-    expires_in_days: int = Field(default=DEFAULT_DAYS, ge=1, le=90, alias="expiresInDays")
-    daily_cap: int = Field(default=DEFAULT_CAP, ge=1, le=10_000, alias="dailyCap")
+    expires_in_days: int = Field(default=DEFAULT_DAYS, ge=1, le=90)
+    daily_cap: int = Field(default=DEFAULT_CAP, ge=1, le=10_000)
     title: str | None = Field(default=None, max_length=200)
     description: str = Field(default="", max_length=1000)
-    after_text: str = Field(default="", max_length=1000, alias="afterText")
+    after_text: str = Field(default="", max_length=1000)
 
 
-class FormPatch(BaseModel):
+class FormPatch(In):
     paused: bool | None = None
-    daily_cap: int | None = Field(default=None, ge=1, le=10_000, alias="dailyCap")
-    after_text: str | None = Field(default=None, max_length=1000, alias="afterText")
+    daily_cap: int | None = Field(default=None, ge=1, le=10_000)
+    after_text: str | None = Field(default=None, max_length=1000)
 
 
-class SubmitIn(BaseModel):
+class SubmitIn(In):
     values: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
@@ -179,7 +186,7 @@ def _store(rt: Runtime) -> DefinitionStore:
 
 
 @router.post("/v1/workflows/{workflow_id}/forms", status_code=201, response_model=Envelope[FormView])
-async def create_form(rt: Rt, me: Me, workflow_id: str, body: FormIn) -> JSONResponse:
+async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> JSONResponse:
     """Shares the workflow's live start form as a page: a signed link that expires, or a members-only page. The token
     is shown once, here and on Rotate."""
     stored = await live_version(_store(rt), workflow_id, None, team=me.team_id)
@@ -207,7 +214,7 @@ async def create_form(rt: Rt, me: Me, workflow_id: str, body: FormIn) -> JSONRes
 
 
 @router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[list[FormView]])
-async def workflow_forms(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONResponse:
     return ok([_view(r) for r in await _links(rt).of_workflow(workflow_id)])
 
 
@@ -220,7 +227,7 @@ async def _own(rt: Runtime, me: Principal, form_id: str) -> dict[str, Any]:
 
 
 @router.post("/v1/forms/{form_id}/rotate", response_model=Envelope[FormView])
-async def rotate_form(rt: Rt, me: Me, form_id: str) -> JSONResponse:
+async def rotate_form(rt: Rt, me: Me, _: Tx, form_id: str) -> JSONResponse:
     """A new link for the form; the old one stops working at once."""
     row = await _own(rt, me, form_id)
     token, hashed = _token(current_tenant(), str(row["team_id"]), form_id)
@@ -230,7 +237,7 @@ async def rotate_form(rt: Rt, me: Me, form_id: str) -> JSONResponse:
 
 
 @router.patch("/v1/forms/{form_id}", response_model=Envelope[FormView])
-async def update_form(rt: Rt, me: Me, form_id: str, body: FormPatch) -> JSONResponse:
+async def update_form(rt: Rt, me: Me, _: Tx, form_id: str, body: FormPatch) -> JSONResponse:
     await _own(rt, me, form_id)
     changes = body.model_dump(exclude_none=True)
     row = await _links(rt).update(form_id, **changes) if changes else await _links(rt).get(form_id)

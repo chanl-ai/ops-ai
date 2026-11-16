@@ -1,4 +1,23 @@
 {
+  "create": {
+    "body": {
+      "data": {
+        "afterText": "",
+        "dailyCap": 200,
+        "description": "",
+        "expiresAt": "<time+00:00>",
+        "id": "<form>",
+        "mode": "members",
+        "paused": false,
+        "slug": "ask-for-a-payment-plan-<tail>",
+        "title": "Ask for a payment plan",
+        "url": "/f/ask-for-a-payment-plan-<tail>",
+        "workflowId": "payment_plan"
+      },
+      "success": true
+    },
+    "status": 201
+  },
   "create.badCap": {
     "body": {
       "error": {
@@ -22,22 +41,24 @@
   },
   "create.stray": {
     "body": {
-      "data": {
-        "afterText": "",
-        "dailyCap": 200,
-        "description": "",
-        "expiresAt": "<time+00:00>",
-        "id": "<form>",
-        "mode": "members",
-        "paused": false,
-        "slug": "ask-for-a-payment-plan-<tail>",
-        "title": "Ask for a payment plan",
-        "url": "/f/ask-for-a-payment-plan-<tail>",
-        "workflowId": "payment_plan"
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
       },
-      "success": true
+      "success": false
     },
-    "status": 201
+    "status": 400
   },
   "files.noFiles": {
     "body": {
@@ -250,12 +271,24 @@
   },
   "submit.stray": {
     "body": {
-      "data": {
-        "received": true
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "extra"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "extra: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
       },
-      "success": true
+      "success": false
     },
-    "status": 202
+    "status": 400
   },
   "update": {
     "body": {
