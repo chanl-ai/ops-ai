@@ -342,3 +342,43 @@ async def test_models_service_aliases_are_its_chat_aliases_and_an_outage_is_503(
 async def test_the_instructions_editor_offers_only_placeholders_a_run_fills(client: AsyncClient) -> None:
     """A placeholder no turn fills fails the turn (ops_agent_kernel/context.py), so the editor lists none."""
     assert _ok(await client.get("/v1/prompts/variables")) == []
+
+
+# (method, path, body, the outside calls the route makes): tools-service's directory for stale grants (`_offered`),
+# platform-service for the team's name and its publish policy (`decide`), and the model.
+ASKS: list[tuple[str, str, Any, set[str]]] = [
+    ("get", "/v1/agents", None, {"_offered"}),
+    ("post", "/v1/agents", {"name": "Held check", "role": "Checks"}, {"_offered"}),
+    ("get", f"/v1/agents/{FRAUD}", None, {"_offered", "team_name"}),
+    ("get", "/v1/agents/{new}/publish-preview?version=1", None, {"decide"}),
+    ("post", f"/v1/agents/{FRAUD}/test", {"message": "What is the payee rule?"}, {"one_test_turn"}),
+]
+
+
+async def test_no_connection_is_held_while_an_agent_route_asks_another_party(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The routes left off the request transaction ask another service or the model between their reads: none holds a
+    connection while it answers."""
+    from ops_agents.api.routers import agents  # noqa: PLC0415 - the module whose seams are watched
+
+    from .test_workflow_routes import _held_by_request  # pyright: ignore[reportPrivateUsage]  # noqa: PLC0415
+
+    new = (await _create(client, "Preview check"))["id"]
+    seen: list[tuple[str, int, dict[str, set[int]]]] = []
+    with _held_by_request() as held:
+        asked: dict[str, set[int]] = {}
+        for name in ("_offered", "team_name", "decide", "one_test_turn"):
+            real = getattr(agents, name)
+
+            async def watched(*args: Any, _name: str = name, _real: Any = real, **kwargs: Any) -> Any:
+                asked.setdefault(_name, set()).add(held())
+                return await _real(*args, **kwargs)
+
+            monkeypatch.setattr(agents, name, watched)
+        for method, path, body, _ in ASKS:
+            asked.clear()
+            url = path.replace("{new}", new)
+            r = await client.request(method, url, **({} if body is None else {"json": body}))
+            seen.append((path, r.status_code // 100, dict(asked)))
+    assert seen == [(p, 2, {n: {0} for n in names}) for _, p, _, names in ASKS], seen
