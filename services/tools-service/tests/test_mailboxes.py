@@ -20,11 +20,14 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.pool import QueuePool
 
+from ops_email import ImapMailSource
 from ops_identity import Auth, dev_service_signer, install_auth, mint_service_token
 from ops_policy import context_of
 from ops_service_kit.http import install_error_handlers
 from ops_service_kit.settings import Settings
+from ops_tools import mailboxes
 from ops_tools.egress import EgressPolicy, OverrideResolver
 from ops_tools.mailboxes import mailboxes_router
 from ops_tools.secrets import SecretResolver
@@ -142,18 +145,6 @@ async def test_a_mailbox_is_read_with_its_secret_and_the_password_never_comes_ba
     assert len([u for u in used if u.name == SECRET and u.action == "used"]) == 1, used
 
 
-async def test_a_caller_of_another_team_cannot_use_this_teams_secret(env: Env) -> None:
-    """The secret is looked up for the token's team, so naming team_ops' secret from team_fraud reads nothing."""
-    r = await env.read(now=True, headers=headers(env.tenant, team="team_fraud"))
-    assert r.status_code == 403 and r.json()["error"]["code"] == "secret_refused", r.text
-
-
-async def test_a_host_off_the_allow_list_is_not_dialled(env: Env) -> None:
-    env.connection["host"] = "mail.elsewhere.test"
-    r = await env.read(now=True)
-    assert r.status_code == 403 and r.json()["error"]["code"] == "egress_denied", r.text
-
-
 async def test_the_same_name_in_another_team_does_not_serve_this_team(env: Env) -> None:
     """Another team's row under the same name is that team's: the mailbox's own team holds none, so nothing is read."""
     store, now = SecretStore(env.engine), datetime.now(UTC)
@@ -162,17 +153,6 @@ async def test_the_same_name_in_another_team_does_not_serve_this_team(env: Env) 
     assert await store.delete(env.tenant, TEAM, SECRET, actor="sam", at=now)
     r = await env.read(now=True)
     assert r.status_code == 403 and r.json()["error"]["code"] == "secret_refused", r.text
-
-
-async def test_only_a_service_with_deployments_run_in_a_team_reads_a_mailbox(env: Env) -> None:
-    for h in (headers(env.tenant, scopes=["tools:view"]), headers(env.tenant, team=None)):
-        r = await env.read(now=True, headers=h)
-        assert r.status_code == 403, r.text
-
-
-async def test_another_tenants_token_finds_neither_the_host_nor_the_secret(env: Env) -> None:
-    r = await env.read(now=True, headers=headers(f"{env.tenant}_other"))
-    assert r.status_code == 403 and r.json()["error"]["code"] in ("egress_denied", "secret_refused"), r.text
 
 
 async def test_plain_imap_is_refused_outside_dev(engine: AsyncEngine, tenant: str) -> None:
@@ -196,3 +176,90 @@ async def test_test_connection_reports_the_newest_message_or_the_step_that_faile
     d = (await env.post("test")).json()["data"]
     assert d["ok"] is False and [s["state"] for s in d["steps"]] == ["failed", "skipped", "skipped"]
     assert "mail.elsewhere.test is not an allowed address yet" in d["error"]
+
+
+# (name, route, body beside the connection, change to the connection, headers, status, reply data or error code)
+REFUSALS: list[tuple[str, str, dict[str, Any], dict[str, Any], str, int, str]] = [
+    ("unknown field", "read", {"now": True, "extra": 1}, {}, "ops", 400, "validation_failed"),
+    ("unknown connection field", "read", {"now": True}, {"color": "red"}, "ops", 400, "validation_failed"),
+    ("wait without cursor", "wait", {}, {}, "ops", 400, "validation_failed"),
+    ("another team's secret", "read", {"now": True}, {}, "fraud", 403, "secret_refused"),
+    ("host off the allow-list", "read", {"now": True}, {"host": "mail.elsewhere.test"}, "ops", 403, "egress_denied"),
+    ("no deployments:run", "read", {"now": True}, {}, "viewer", 403, "scope_required"),
+    # A token of no team passes the cell and then finds no secret of its own.
+    ("token of no team", "read", {"now": True}, {}, "no team", 403, "secret_refused"),
+    ("another tenant", "read", {"now": True}, {}, "other tenant", 403, "egress_denied"),
+    ("no host", "read", {"now": True}, {"host": None}, "ops", 422, "mailbox_incomplete"),
+    ("Microsoft 365 unserved", "read", {"now": True}, {"provider": "graph"}, "ops", 422, "graph_unavailable"),
+]
+
+
+async def test_mailbox_routes_answer_and_refuse_as_pinned(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every route's reply, and each refusal's status and code; no database connection is held while the mailbox is
+    dialled, since a mailbox can take seconds to answer."""
+    tokens = {
+        "ops": headers(env.tenant),
+        "fraud": headers(env.tenant, team="team_fraud"),
+        "viewer": headers(env.tenant, scopes=["tools:view"]),
+        "no team": headers(env.tenant, team=None),
+        "other tenant": headers(f"{env.tenant}_other"),
+    }
+    held: list[int] = []
+    pool = env.engine.pool
+    assert isinstance(pool, QueuePool)
+
+    def watched(connect: Any, folder: str) -> Any:
+        def dial() -> Any:
+            held.append(pool.checkedout())
+            return connect()
+
+        return ImapMailSource(dial, folder)
+
+    monkeypatch.setattr(mailboxes, "ImapMailSource", watched)
+    answered: dict[str, tuple[int, str]] = {}
+    for name, route, body, change, who, *_ in REFUSALS:
+        env.connection = {**_base(env), **change}
+        r = await env.post(route, headers=tokens[who], **body)
+        answered[name] = (r.status_code, r.json()["error"]["code"])
+    assert answered == {name: (status, code) for name, *_, status, code in REFUSALS}, answered
+
+    env.connection = _base(env)
+    deliver(env.address, 7)
+    first = (await env.read(now=True)).json()
+    cursor = first["data"]["deltaLink"]
+    assert first == {"success": True, "data": {"items": [], "nextLink": None, "deltaLink": cursor}}, first
+    waited = (await env.post("wait", cursor=cursor, seconds=0.2)).json()
+    assert waited == {"success": True, "data": {"changed": False}}, waited
+    tested = (await env.post("test")).json()
+    steps = ["Use the password secret and the allowed host", "Sign in", "Read inbox without marking anything read"]
+    newest = tested["data"]["newest"]
+    assert newest["subject"] == "Notice 7", tested
+    assert tested == {
+        "success": True,
+        "data": {
+            "ok": True,
+            "steps": [{"title": t, "state": "done"} for t in steps],
+            "newest": newest,
+            "error": None,
+        },
+    }, tested
+    env.connection = {**_base(env), "host": "mail.elsewhere.test"}
+    refused = (await env.post("test")).json()["data"]
+    assert refused == {
+        "ok": False,
+        "steps": [{"title": t, "state": s} for t, s in zip(steps, ["failed", "skipped", "skipped"], strict=True)],
+        "newest": None,
+        "error": refused["error"],
+    }, refused
+    assert held and set(held) == {0}, held
+
+
+def _base(env: Env) -> dict[str, Any]:
+    return {
+        "address": env.address,
+        "provider": "imap",
+        "host": HOST,
+        "port": 143,
+        "tls": False,
+        "passwordSecret": SECRET,
+    }
