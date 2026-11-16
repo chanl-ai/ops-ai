@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.knowledge import kb_items, kb_runs
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
+from ops_store.team_scope import acting_as
 
 from .test_provisioned_bases import kb, person  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
 from .test_team_isolation import outsider
@@ -261,3 +263,51 @@ async def test_bases_list_only_the_teams_rows_with_health_counted_and_ids_answer
     assert ([r["id"] for r in theirs["data"]], theirs["pagination"]["total"]) == ([lending["id"]], 1)
     another = await kb.get("/v1/knowledge-bases", headers=person(elsewhere, "james@harborpine.example", "builder"))
     assert [r["id"] for r in another.json()["data"]["data"]] == [other["id"]]
+
+
+# The store's own team predicate, with the row policy widened to every team of the tenant: only the query's
+# `team_visible` keeps team_lending's rows out of a team_ops page, its total and its facets.
+WIDE = "test: the list query's own team predicate, with the row policy open to every team"
+
+
+async def test_base_page_keeps_another_teams_rows_out_by_its_own_predicate(engine: AsyncEngine, tenant: str) -> None:
+    store = KnowledgeStore(engine)
+    mine = [base_row(tenant, "team_ops", "Rates"), base_row(tenant, "team_ops", "Hardship", refreshed=False)]
+    with isolation.scope(tenant, "team_ops"):
+        for row in mine:
+            await store.create_base(row, [])
+    with isolation.scope(tenant, "team_lending"):
+        await store.create_base(base_row(tenant, "team_lending", "Lending"), [])
+    with isolation.tenant_wide(WIDE, tenant_id=tenant), acting_as("team_ops"):
+        page = (await store.base_page(tenant, ListParams())).page
+    assert [r["id"] for r in page["data"]] == sorted((r["id"] for r in mine), reverse=True)
+    assert (page["pagination"]["total"], page["facets"]) == (2, {"health": {"healthy": 1, "never": 1}})
+
+
+async def test_source_page_keeps_another_teams_rows_out_by_its_own_predicate(engine: AsyncEngine, tenant: str) -> None:
+    mine = await _seed_sources(engine, tenant, "team_ops", "Rates", "Hardship")
+    await _seed_sources(engine, tenant, "team_lending", "Lending rates")
+    with isolation.tenant_wide(WIDE, tenant_id=tenant), acting_as("team_ops"):
+        page = (await KnowledgeStore(engine).source_page(tenant, ListParams())).page
+    assert [r["id"] for r in page["data"]] == sorted(mine, reverse=True)
+    assert (page["pagination"]["total"], page["facets"]) == (2, {"type": {"file": 2}, "status": {"active": 2}})
+
+
+async def test_run_page_keeps_another_teams_rows_out_by_its_own_predicate(engine: AsyncEngine, tenant: str) -> None:
+    [sid] = await _seed_sources(engine, tenant, "team_ops", "Rates")
+    mine = await insert_rows(engine, tenant, "team_ops", kb_runs, run_row(sid), run_row(sid))
+    await insert_rows(engine, tenant, "team_lending", kb_runs, {**run_row(sid), "status": "failed"})
+    with isolation.tenant_wide(WIDE, tenant_id=tenant), acting_as("team_ops"):
+        page, _ = await KnowledgeStore(engine).run_page(tenant, sid, ListParams())
+    assert [r["id"] for r in page["data"]] == sorted(mine, reverse=True)
+    assert (page["pagination"]["total"], page["facets"]) == (2, {"status": {"success": 2}})
+
+
+async def test_item_page_keeps_another_teams_rows_out_by_its_own_predicate(engine: AsyncEngine, tenant: str) -> None:
+    [sid] = await _seed_sources(engine, tenant, "team_ops", "Rates")
+    mine = await insert_rows(engine, tenant, "team_ops", kb_items, item_row(sid, "Rate sheet"), item_row(sid, "Fees"))
+    await insert_rows(engine, tenant, "team_lending", kb_items, item_row(sid, "Lending sheet", "failed"))
+    with isolation.tenant_wide(WIDE, tenant_id=tenant), acting_as("team_ops"):
+        page, _ = await KnowledgeStore(engine).item_page(tenant, sid, ListParams())
+    assert [r["id"] for r in page["data"]] == sorted(mine)
+    assert (page["pagination"]["total"], page["facets"]) == (2, {"status": {"indexed": 2}})
