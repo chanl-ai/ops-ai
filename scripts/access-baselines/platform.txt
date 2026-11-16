@@ -1,7 +1,5 @@
 # platform lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
 # (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.
-services/platform-service/src/ops_platform/store/policies.py policy-read policies 1
 services/platform-service/src/ops_platform/store/signin.py role-name chat_user 1
 services/platform-service/src/ops_platform/store/teams.py role-name admin 1
 services/platform-service/src/ops_platform/store/workspace.py role-name admin 1
-services/platform-service/src/ops_platform/workspace_lifecycle.py owner-compare owner 1

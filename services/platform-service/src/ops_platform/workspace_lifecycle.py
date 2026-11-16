@@ -107,8 +107,7 @@ class WorkspaceLifecycle:
         return await self.state(actor.tenant_id)
 
     async def leave(self, actor: Actor) -> None:
-        if (await self.store.state(actor.tenant_id)).owner == actor.user_id:
-            raise _owner_must_transfer()
+        # The store refuses the owner inside the transaction that would remove them, before any write (E42).
         try:
             await self.store.leave(
                 actor.tenant_id, user_id=actor.user_id, at=_iso(datetime.now(UTC)), request_id=actor.request_id

@@ -185,7 +185,7 @@ class LifecycleStore(TenantDb):
         account stays, so a later invite reaches the same person."""
         async with self.tenant_tx(tenant_id) as c:
             if await _owner_in(c, tenant_id) == user_id:
-                raise NotOwnerError  # the route refuses the owner before this; a transfer racing it lands here
+                raise NotOwnerError  # the owner leaves only by a transfer (E42); checked here, before any write
             await c.execute(
                 members.update()
                 .where(members.c.user_id == user_id, members.c.status != "removed")

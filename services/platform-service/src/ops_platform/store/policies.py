@@ -116,7 +116,8 @@ class PolicyStore(TenantDb):
             return {}
         async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
-        return _object(_object(row.value if row else BY_KEY[key].default).get(team_id))
+        # No row: no team has a part yet. A catalogue default is never keyed by a team, so it holds none either.
+        return _object(_object(row.value).get(team_id)) if row else {}
 
     async def _from_old_key(self, tenant_id: str, key: str, value: Any, team_id: str | None) -> tuple[str, Any]:
         """A write to an old key, as the new key's value for the same team: the old keys stay writable for one release
