@@ -151,8 +151,9 @@ MSSQL_SECURITY = "ops_security"
 
 
 def system(reason: str) -> dict[str, Any]:
-    """The marker for a table with no tenant column, reached only through `ops_store.isolation.system_tx` (leases,
-    timers, inbox, fences): no policy and no grant to the request role. `reason` says why it holds no tenant."""
+    """The marker for a table with no tenant column (leases, timers, inbox, fences, an install's own settings): no
+    policy. Reached through `Store.install_tx`, with no tenant, or `ops_store.isolation.system_tx`, past it, never as
+    the request role. `reason` says why it holds no tenant."""
     if not reason.strip():
         raise ValueError("system() needs a reason")
     return {SYSTEM_KEY: reason}

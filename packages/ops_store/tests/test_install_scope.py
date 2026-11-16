@@ -146,10 +146,13 @@ async def test_inside_a_request_it_reuses_the_one_connection_and_restores_the_ca
             async with isolation.request_transaction():
                 before = await st.note_ids()
                 region = await st.setting("region")
-                async with st.install_tx(SETTINGS) as c:
-                    hidden = list((await c.execute(sa.select(notes.c.id))).scalars())
+                async with st.tx() as outer:
+                    async with st.install_tx(SETTINGS) as c:
+                        hidden = list((await c.execute(sa.select(notes.c.id))).scalars())
+                    # The block around it reads on as the caller, with no statement of its own to set that again.
+                    restored = list((await outer.execute(sa.select(notes.c.id))).scalars())
                 after = await st.note_ids()
     finally:
         event.remove(engine.sync_engine.pool, "checkout", checked_out)
-    assert (before, region, hidden, after) == (["n1"], "eu", [], ["n1"])
+    assert (before, region, hidden, restored, after) == (["n1"], "eu", [], ["n1"], ["n1"])
     assert len(checkouts) == 1, f"{len(checkouts)} checkouts in one request on {dialect_of(engine)}"
