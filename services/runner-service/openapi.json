@@ -114,6 +114,7 @@
         "title": "Health",
         "type": "object"
       },
+      "JsonValue": {},
       "LimitsIn": {
         "additionalProperties": false,
         "properties": {
@@ -212,7 +213,7 @@
             "type": "boolean"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "trace": {
             "items": {

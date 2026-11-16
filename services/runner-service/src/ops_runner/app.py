@@ -25,7 +25,16 @@ from ops_identity import (
     current_service,
     install_auth,
 )
-from ops_service_kit.http import Envelope, In, Out, error_responses, install_error_handlers, ok, operation_id
+from ops_service_kit.http import (
+    Envelope,
+    In,
+    JsonValue,
+    Out,
+    error_responses,
+    install_error_handlers,
+    ok,
+    operation_id,
+)
 from ops_service_kit.settings import Settings
 
 from .domain import DEFAULT_CALLS, DEFAULT_MEMORY_MB, DEFAULT_TIME_S, CallAnswer, Limits, RunResult, failure
@@ -62,7 +71,7 @@ class ErrorOut(Out):
 
 class RunOut(Out):
     ok: bool
-    output: Any = None
+    output: JsonValue = None
     error: ErrorOut | None = None
     log: str
     calls: int

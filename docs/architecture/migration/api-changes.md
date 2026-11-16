@@ -53,3 +53,10 @@ that has not changed still gets the same answer.
 | Extraction, version, sample, example, test-run, template-suggestion and update-review replies | reply models | `corrections`, `imageCalls`, a test run's `result`, `needsReview` and the examples' and samples' values were `Any` or untyped objects | `ExtractionCorrection`, `ImageCall`, `TestResult` (`FieldScore`, `SampleResult`, `SampleComparison`), `needsReview` `string or integer`; field definitions, templates, checks, a field's answer, a proposal and a sample's expected values are `JsonValue`. The JSON is the same | Nothing; generated SDK types are narrower | Yes |
 | `POST /v1/documents/readings`, `GET /v1/documents/readings/{fileId}` | reply models | `FileReading.facts` and `pages` were ops_ingest's `FileFacts`, `Page`, `Block`, `Cell`, `Line`, `Word`, `FormField` and `OcrQuality` | documents-owned `FileFacts`, `ReadingPage`, `ReadingBlock`, `ReadingCell`, `ReadingLine`, `ReadingWord`, `ReadingFormField`, `ReadingOcrQuality` with the same fields; the JSON is the same | Nothing; a generated type named `Page`, `Block` and so on is now `Reading...` | Yes |
 | `GET /health` | reply model | an untyped object `{status, reason?}`; the 503 body was written by hand | `Health`: `status` `ok` or `degraded`, `reason` `database` or `ocr` or absent, no other field; the same bodies on 200 and 503 | Nothing | Yes |
+
+## runner-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `POST /v1/runs` | reply schema of `output` | untyped (`Any`) | `JsonValue`; the JSON is the same | Nothing; tools-service's runner client reads the same values, and runner has no generated SDK layer | Yes |
+| `POST /v1/runs` | how long an `ops.call` waits | each call waited up to the run's whole time limit, so a run could last about twice its limit | each call waits only for what is left of the run's limit; a later answer is traced `call_failed` and the run ends at its limit | Nothing; a tool slower than the run's limit now fails the call instead of answering late | Yes |
