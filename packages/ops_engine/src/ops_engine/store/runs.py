@@ -137,7 +137,7 @@ class RunStore:
             q = q.where(engine_runs.c.status == status)
         if team_id:
             q = q.where(engine_runs.c.team_id == team_id)
-        q = q.order_by(engine_runs.c.created_at.desc())
+        q = q.order_by(engine_runs.c.created_at.desc(), engine_runs.c.id)
         if limit is not None:
             q = q.limit(limit)
         async with self.tx.tenant_tx() as c:

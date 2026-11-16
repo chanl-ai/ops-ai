@@ -273,7 +273,7 @@ class GraphStore(RuntimeStore):
         q = (
             graph_threads.select()
             .where(mine(graph_threads), team_visible(graph_threads))
-            .order_by(graph_threads.c.updated_at.desc())
+            .order_by(graph_threads.c.updated_at.desc(), graph_threads.c.id)
         )
         if graph:
             q = q.where(graph_threads.c.graph == graph)
@@ -306,7 +306,7 @@ class GraphStore(RuntimeStore):
         q = (
             graph_runs.select()
             .where(graph_runs.c.thread_id == thread_id, mine(graph_runs), team_visible(graph_runs))
-            .order_by(graph_runs.c.created_at)
+            .order_by(graph_runs.c.created_at, graph_runs.c.id)
         )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -497,7 +497,7 @@ class GraphStore(RuntimeStore):
                 graph_runs.c.finished_at,
             )
             .where(mine(graph_runs), team_visible(graph_runs))
-            .order_by(graph_runs.c.created_at)
+            .order_by(graph_runs.c.created_at, graph_runs.c.id)
         )
         if only is not None:
             q = q.where(graph_runs.c.thread_id == only)
