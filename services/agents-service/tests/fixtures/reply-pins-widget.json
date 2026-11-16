@@ -1,0 +1,782 @@
+{
+  "budget.notPaused": {
+    "body": {
+      "error": {
+        "code": "not_paused",
+        "message": "This conversation is not paused on its budget.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "config.console": {
+    "body": {
+      "data": {
+        "agentName": "Wire Fraud Sentinel",
+        "allowedOrigins": [
+          "https://intranet.bank.example"
+        ],
+        "deploymentName": "Intranet help",
+        "paused": false,
+        "retired": false,
+        "suggestions": [
+          "What is the daily wire limit for a personal account?",
+          "What is our new-payee wire hold rule?",
+          "Place a 24-hour hold on wire W-88213, the payee was added this morning"
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "config.key": {
+    "body": {
+      "data": {
+        "agentName": "Wire Fraud Sentinel",
+        "allowedOrigins": [
+          "https://intranet.bank.example"
+        ],
+        "deploymentName": "Intranet help",
+        "paused": false,
+        "retired": false,
+        "suggestions": [
+          "What is the daily wire limit for a personal account?",
+          "What is our new-payee wire hold rule?",
+          "Place a 24-hour hold on wire W-88213, the payee was added this morning"
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "config.otherTenant": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "config.page": {
+    "body": {
+      "data": {
+        "agentName": "Wire Fraud Sentinel",
+        "allowedOrigins": [
+          "https://intranet.bank.example"
+        ],
+        "deploymentName": "Intranet help",
+        "paused": false,
+        "retired": false,
+        "suggestions": [
+          "What is the daily wire limit for a personal account?",
+          "What is our new-payee wire hold rule?",
+          "Place a 24-hour hold on wire W-88213, the payee was added this morning"
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "config.unlisted": {
+    "body": {
+      "error": {
+        "code": "origin_not_allowed",
+        "message": "https://e.x may not use this widget.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "deployments.create": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentVersion": 7,
+        "createdAt": "<timeZ>",
+        "createdBy": "usr_b@harborpine.example",
+        "id": "<wd>",
+        "name": "Intranet help",
+        "origins": [
+          "https://intranet.bank.example"
+        ],
+        "paused": false,
+        "retiredAt": null,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "deployments.createUnknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "x"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "x: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "deployments.createViewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "create",
+          "area": "deployments",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot create this widget deployment; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "deployments.list": {
+    "body": {
+      "data": [
+        {
+          "activeKeys": 0,
+          "agentId": "ag_fraud",
+          "agentVersion": 7,
+          "conversations7d": 0,
+          "createdAt": "<timeZ>",
+          "createdBy": "usr_b@harborpine.example",
+          "id": "<wd>",
+          "lastUsedAt": null,
+          "name": "Intranet help",
+          "origins": [
+            "https://intranet.bank.example"
+          ],
+          "paused": false,
+          "retiredAt": null,
+          "teamId": "team_ops",
+          "updatedAt": "<timeZ>"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "deployments.listOtherAgent": {
+    "body": {
+      "data": [],
+      "success": true
+    },
+    "status": 200
+  },
+  "keys.audit": {
+    "body": {
+      "data": [
+        {
+          "action": "revoked",
+          "actor": "usr_b@harborpine.example",
+          "at": "<timeZ>",
+          "keyId": "<wkk>"
+        },
+        {
+          "action": "preview",
+          "actor": "usr_b@harborpine.example",
+          "at": "<timeZ>",
+          "keyId": "preview"
+        },
+        {
+          "action": "created",
+          "actor": "usr_b@harborpine.example",
+          "at": "<time+00:00>",
+          "keyId": "<wkk>"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "keys.auditOtherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget deployment was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "keys.create": {
+    "body": {
+      "data": {
+        "key": {
+          "createdAt": "<time+00:00>",
+          "createdBy": "usr_b@harborpine.example",
+          "expiresAt": "<time+00:00>",
+          "id": "<wkk>",
+          "lastUsedAt": null,
+          "name": "Intranet server",
+          "revokedAt": null
+        },
+        "secret": "<secret>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "keys.createOtherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget deployment was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "keys.createTooLong": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "expiresInDays"
+            ],
+            "msg": "Input should be less than or equal to 365"
+          }
+        ],
+        "message": "expiresInDays: Input should be less than or equal to 365",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "keys.list": {
+    "body": {
+      "data": [
+        {
+          "createdAt": "<time+00:00>",
+          "createdBy": "usr_b@harborpine.example",
+          "expiresAt": "<time+00:00>",
+          "id": "<wkk>",
+          "lastUsedAt": null,
+          "name": "Intranet server",
+          "revokedAt": null
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "keys.listMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget deployment was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "keys.revoke": {
+    "body": {
+      "data": {
+        "id": "<wkk>",
+        "revoked": true
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "keys.revokeMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Mint key was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "loader": [
+    200,
+    "text/javascript; charset=utf-8",
+    "public, max-age=300"
+  ],
+  "messages.otherThread": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Conversation was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "messages.overrides": {
+    "body": {
+      "error": {
+        "code": "override_outside_limits",
+        "details": {
+          "field": "overrides.turn.temperature"
+        },
+        "message": "overrides.turn.temperature: a public widget key may not set this.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "messages.regenerate": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "regenerate"
+            ],
+            "msg": "Input should be a valid string"
+          }
+        ],
+        "message": "regenerate: Input should be a valid string",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "messages.stream": {
+    "contentType": "text/event-stream",
+    "frames": [
+      {
+        "messageId": "<m>",
+        "type": "start",
+        "userMessage": {
+          "at": "<timeZ>",
+          "content": "What is the daily wire limit for a personal account?",
+          "id": "<m>",
+          "role": "user"
+        }
+      },
+      {
+        "phase": "thinking",
+        "type": "status"
+      },
+      {
+        "phase": "retrieving",
+        "type": "status"
+      },
+      {
+        "phase": "writing",
+        "type": "status"
+      },
+      {
+        "delta": "The daily ",
+        "type": "text"
+      },
+      {
+        "delta": "wire ",
+        "type": "text"
+      },
+      {
+        "delta": "limit ",
+        "type": "text"
+      },
+      {
+        "delta": "for a ",
+        "type": "text"
+      },
+      {
+        "delta": "personal account is $25,000 online [1].",
+        "type": "text"
+      },
+      {
+        "citations": [
+          {
+            "documentId": "doc_wire_limits",
+            "n": 1,
+            "section": "4.2 Daily limits",
+            "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+            "title": "Wire Transfer Policy",
+            "version": "v6"
+          }
+        ],
+        "type": "citations"
+      },
+      {
+        "message": {
+          "agentId": "ag_fraud",
+          "agentName": "Wire Fraud Sentinel",
+          "at": "<timeZ>",
+          "citations": [
+            {
+              "documentId": "doc_wire_limits",
+              "n": 1,
+              "section": "4.2 Daily limits",
+              "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+              "title": "Wire Transfer Policy",
+              "version": "v6"
+            }
+          ],
+          "content": "The daily wire limit for a personal account is $25,000 online [1].",
+          "id": "<m>",
+          "model": "function:scripted:scripted_stream",
+          "role": "assistant",
+          "settings": {
+            "addedInstructions": [],
+            "composeOff": false,
+            "knowledgeBaseIds": [
+              "kb_people",
+              "kb_eng"
+            ],
+            "model": "default",
+            "sources": {
+              "model": "agent"
+            },
+            "toolsOff": [],
+            "widgetsOff": []
+          }
+        },
+        "type": "done"
+      }
+    ],
+    "status": 200
+  },
+  "mint.forged": {
+    "body": {
+      "error": {
+        "code": "widget_key_invalid",
+        "message": "That mint key is not valid or was revoked.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "mint.otherDeployment": {
+    "body": {
+      "error": {
+        "code": "widget_key_other_deployment",
+        "message": "That mint key is for another widget deployment.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "mint.personToken": {
+    "body": {
+      "error": {
+        "code": "widget_key_required",
+        "message": "Mint widget sessions from the bank's server with the deployment's mint key (Widgets, Mint keys).",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "mint.revoked": {
+    "body": {
+      "error": {
+        "code": "widget_key_invalid",
+        "message": "That mint key is not valid or was revoked.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "mint.session": {
+    "body": {
+      "data": {
+        "expiresIn": 900,
+        "session": "<session>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "mint.teamKey": {
+    "body": {
+      "error": {
+        "code": "widget_key_required",
+        "message": "Mint widget sessions from the bank's server with the deployment's mint key (Widgets, Mint keys).",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "mint.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "teamId"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "teamId: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "mint.unlistedOrigin": {
+    "body": {
+      "error": {
+        "code": "origin_not_allowed",
+        "message": "https://evil.example may not use this widget.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "page.session": {
+    "body": {
+      "data": {
+        "agentName": "Wire Fraud Sentinel",
+        "deploymentName": "Intranet help",
+        "expiresIn": 900,
+        "session": "<session>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "page.sessionApiKey": {
+    "body": {
+      "error": {
+        "code": "api_key_refused",
+        "message": "A page signs the person in; servers mint with /sessions.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "page.sessionMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "page.sessionOtherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "page.sessionUnlisted": {
+    "body": {
+      "error": {
+        "code": "origin_not_allowed",
+        "message": "https://e.x may not use this widget.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "preview.apiKey": {
+    "body": {
+      "error": {
+        "code": "api_key_refused",
+        "message": "A person previews from the console, signed in.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "preview.session": {
+    "body": {
+      "data": {
+        "expiresIn": 900,
+        "session": "<session>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "preview.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "deployments",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit this widget deployment; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "retired": [
+    410,
+    "/* Retired. Load /embed/v1.js and call OpsChat.init; see the embed dialog in the console. */\n"
+  ],
+  "threads.create": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "agentVersion": 7,
+        "archived": false,
+        "createdAt": "<timeZ>",
+        "id": "<th>",
+        "kbIds": [],
+        "kbNames": [],
+        "lastMessageAt": "<timeZ>",
+        "messageCount": 0,
+        "messages": [],
+        "owner": "usr_k",
+        "pinned": false,
+        "test": false,
+        "title": "New chat"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "threads.createMovedOrigin": {
+    "body": {
+      "error": {
+        "code": "origin_not_allowed",
+        "message": "https://portal.bank.example may not use this widget.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "threads.createNoSession": {
+    "body": {
+      "error": {
+        "code": "unauthorized",
+        "message": "This widget has no session; it starts one when it loads.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "threads.read": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "agentVersion": 7,
+        "archived": false,
+        "createdAt": "<timeZ>",
+        "id": "<th>",
+        "kbIds": [],
+        "kbNames": [],
+        "lastMessageAt": "<timeZ>",
+        "messageCount": 0,
+        "messages": [],
+        "owner": "usr_k",
+        "pinned": false,
+        "test": false,
+        "title": "New chat"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "threads.readMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Conversation was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}
