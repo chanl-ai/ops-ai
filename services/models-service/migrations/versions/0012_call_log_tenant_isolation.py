@@ -3,8 +3,8 @@
 model_call_log holds a tenant's runs, threads, request hashes and the cost of each call, and was an install table
 because a key's caps summed its rows across tenants. The caps now read model_key_spend, a key's spend and calls per
 second, UTC day and run, whose day and run totals are set here from the call rows; a call that named no tenant moves
-to model_call_refusals, which has no tenant column, in pages; then the log carries the generated tenant policy for
-ops_models_tenant (models_0009). Plain SQL, so it renders offline; both steps are safe to re-run.
+to model_call_refusals, which has no tenant column, in one pass; then the log carries the generated tenant
+policy for ops_models_tenant (models_0009). Plain SQL, so it renders offline; both steps are safe to re-run.
 
 Revision ID: models_0012
 Revises: models_0011
@@ -29,7 +29,6 @@ depends_on = None
 CHAIN = "models"
 ROLE = "ops_models_tenant"
 MONEY = sa.Numeric(18, 6)
-BATCH = 1000
 
 CALL = [
     "id",
@@ -103,20 +102,16 @@ def backfill_sql(dialect: str) -> list[str]:
     ]
 
 
-def move_sql(dialect: str, source: str, target: str, which: str) -> str:
-    """Moves the rows of `source` that `which` selects into `target`, a page at a time: a page is copied unless already
-    there, then every copied row leaves `source`, so a stopped run leaves nothing lost and a re-run finishes it."""
+def move_sql(source: str, target: str, which: str) -> list[str]:
+    """Moves the rows of `source` that `which` selects into `target`: one insert of every row not already there, then
+    one delete of every row now there, each a single pass with no per-page rescan of `target`. The revision is one
+    transaction, so a stopped run leaves nothing moved, and a re-run finds nothing left to move."""
     cols = ", ".join(CALL)
-    absent = f"id NOT IN (SELECT id FROM {target})"
-    leave = f"DELETE FROM {source} WHERE {which} AND id IN (SELECT id FROM {target})"
-    if dialect == "postgresql":
-        page = f"INSERT INTO {target} ({cols}) SELECT {cols} FROM {source} WHERE {which} AND {absent} LIMIT {BATCH}"
-        return (
-            f"DO $$ DECLARE moved integer; BEGIN LOOP {page}; {leave}; "
-            "GET DIAGNOSTICS moved = ROW_COUNT; EXIT WHEN moved = 0; END LOOP; END $$"
-        )
-    page = f"INSERT INTO {target} ({cols}) SELECT TOP ({BATCH}) {cols} FROM {source} WHERE {which} AND {absent}"
-    return f"WHILE 1 = 1 BEGIN {page}; {leave}; IF @@ROWCOUNT = 0 BREAK; END"
+    there = f"EXISTS (SELECT 1 FROM {target} m WHERE m.id = {source}.id)"
+    return [
+        f"INSERT INTO {target} ({cols}) SELECT {cols} FROM {source} WHERE {which} AND NOT {there}",
+        f"DELETE FROM {source} WHERE {which} AND {there}",
+    ]
 
 
 def upgrade() -> None:
@@ -141,7 +136,8 @@ def upgrade() -> None:
         op.execute("SET LOCAL row_security = off")
     for statement in backfill_sql(dialect):
         op.execute(statement)
-    op.execute(move_sql(dialect, "model_call_log", "model_call_refusals", "tenant_id IS NULL"))
+    for statement in move_sql("model_call_log", "model_call_refusals", "tenant_id IS NULL"):
+        op.execute(statement)
     if dialect == "postgresql":
         op.execute(f"GRANT SELECT, INSERT ON model_call_log TO {ROLE}")
     else:
@@ -159,7 +155,8 @@ def downgrade() -> None:
     if dialect == "postgresql":
         op.execute(f"REVOKE ALL ON model_call_log FROM {ROLE}")
     if dialect in ("postgresql", "mssql"):
-        op.execute(move_sql(dialect, "model_call_refusals", "model_call_log", "1 = 1"))
+        for statement in move_sql("model_call_refusals", "model_call_log", "1 = 1"):
+            op.execute(statement)
     op.drop_index("ix_model_call_log_tenant_created", table_name="model_call_log")
     op.drop_table("model_key_spend")
     op.drop_index("ix_model_call_refusals_created_at", table_name="model_call_refusals")
