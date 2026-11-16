@@ -49,16 +49,6 @@ if [ "${#present[@]}" -gt 0 ]; then
   "$root/.venv/bin/python" "$root/scripts/scrub_board_paths.py" --root "$PWD" --check "${present[@]}" \
     || { echo "verify-staged: a staged file names a home path or the machine login; run uv run python scripts/scrub_board_paths.py --apply"; exit 1; }
 fi
-# Access decided outside can() (a 403, a role name, a system lock, a closed policy default) fails unless the access
-# register records it (access-exceptions-allowlist.txt). It reads service and package code and the console, so it runs
-# when one of those or the allowlist is staged. GIT_DIR lets it read the allowlist at HEAD, so a line being added on a
-# row with no decision fails here.
-if touches '^(services|packages)/[^/]+/src/.*\.py$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$|^docs/architecture/roles-and-permissions\.md$'; then
-  GIT_DIR="$git_dir" "$root/.venv/bin/python" scripts/check_access_exceptions.py
-  # An exception line needs the owner's approval as a Standards-exception: trailer. A pre-commit hook cannot read the
-  # message it is about to get, so this reads the commits already made, on the repository itself, not the export.
-  "$root/.venv/bin/python" "$root/scripts/check_access_exceptions.py" --commits
-fi
 # Checks a commit needs by what it changes: one `gate` row each, naming the staged paths that call for it, how to fix a
 # failure, and the command, run on this export with the export's own sources first (the shared venv's editable installs
 # read the working tree, where other builders' uncommitted files would decide the result). Each ran only in verify-head
@@ -84,15 +74,6 @@ gate downgrades '/migrations/versions/.*\.py$' \
 gate token-lifetime '(^|/)tests/.*\.py$' \
   "a test mints a short-lived person token (above); mint it for an hour, or allowlist an expiry test with its reason" \
   "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider scripts/tests/test_test_token_lifetime.py
-# The dependencies page is generated from the lock (make sbom).
-gate sbom '(^|/)pyproject\.toml$|^uv\.lock$|^docs/architecture/dependencies\.md$' \
-  "docs/architecture/dependencies.md does not match uv.lock; run make sbom and stage it" \
-  "$root/.venv/bin/python" scripts/sbom.py --check
-# deploy/k8s/base carries every shared setting, read from the compose file's x-settings (deploy/k8s/generate.py); a
-# setting committed without regenerating it turned HEAD red at 12:52 on 10-30, and only QA caught it.
-gate k8s '^deploy/compose/app\.yaml$|^deploy/k8s/|^(services|packages)/[^/]+/src/[^/]+/settings\.py$' \
-  "deploy/k8s/base is not what deploy/k8s/generate.py writes; run uv run python deploy/k8s/generate.py and stage it" \
-  "$root/.venv/bin/python" deploy/k8s/generate.py --check
 # No service imports another, outside a test conftest the allowlist names (c4957ea5 reddened QA this way).
 gate cross-service '^services/[^/]+/(src|tests)/' \
   "a service imports another service; import it only in a tests/conftest.py the allowlist names" \
@@ -102,14 +83,15 @@ gate cross-service '^services/[^/]+/(src|tests)/' \
 gate standards '^(services|packages)/.*\.py$' \
   "a code rule in services/agents-service/scripts/check_standards.py fails (above); fix the code" \
   bash -c 'cd services/agents-service && "$0" scripts/check_standards.py' "$root/.venv/bin/python"
-# An address that falls back to this machine, or a literal timeout or HTTP client beyond the member's baseline.
-gate config-literals '^(services|packages)/[^/]+/(src/.*\.py|config-literals-baseline\.txt)$|^scripts/check_config_literals\.py$' \
-  "configuration is written into code (above); read it from Settings, or use ServiceClient.for_settings" \
-  "$root/.venv/bin/python" scripts/check_config_literals.py --strict
-# A boundary crossed without a model (a dict, a gather, a bare task, a loose body or reply) beyond the member's baseline.
-gate typed-boundaries '^(services|packages)/[^/]+/(src/.*\.py|typed-boundaries-baseline\.txt)$|^scripts/check_typed_boundaries\.py$' \
-  "a boundary is crossed without a model (above); use In, Out, ops_store.rows, a TaskGroup or background.start" \
-  "$root/.venv/bin/python" scripts/check_typed_boundaries.py --strict
+# The one list of checks (make/checks.mk), each run when a staged path can change its result: access decided outside
+# can(), the standards ratchets and their history, the files written from code, import directions, the SDK drift check.
+# CI's checks job and `make verify` run the same list. They run on this export with the checkout's own tools; GIT_DIR
+# lets the history checks read the commits already made, which the export does not have.
+printf '%s\n' "${staged[@]}" > "$tmp/.staged"
+if ! GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$tmp/.staged" \
+  PY="$root/.venv/bin/python" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$tmp/.checks.log" 2>&1; then
+  tail -60 "$tmp/.checks.log"; echo "verify-staged: make checks failed (above); fix what it names"; exit 1
+fi
 # Python files in the commit are linted and format-checked; a second each.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
 if [ "${#py[@]}" -gt 0 ]; then

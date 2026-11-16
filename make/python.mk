@@ -44,27 +44,14 @@ python-verify: ## Lint and type-check packages, then verify each service with mo
 	@rm -f $(VERIFY_FAILED)
 	$(KEEP) uv run ruff format --check packages
 	$(KEEP) uv run ruff check packages
-	@# Database code only in store packages, and the layers' import directions (.importlinter). Seconds.
-	$(KEEP) uv run lint-imports --no-logo
 	@mkdir -p $(VERIFY_LOGS)
 	@# The suites side by side; each writes its own log, printed below in a fixed order once all have ended.
 	-@$(MAKE) -s -k -j$(VERIFY_JOBS) $(VERIFY_POOL) VERIFY_FAILED=$(VERIFY_FAILED) VERIFY_LOGS=$(VERIFY_LOGS)
 	@for job in $(VERIFY_POOL); do echo "== $$job"; cat $(VERIFY_LOGS)/$$job.log 2>/dev/null; done; rm -rf $(VERIFY_LOGS)
-	$(KEEP) uv run python scripts/store_inventory.py --check
-	$(KEEP) uv run python scripts/roles_matrix.py --check
-	$(KEEP) uv run python scripts/check_access_exceptions.py
-	$(KEEP) uv run python scripts/check_access_exceptions.py --commits
-	$(KEEP) uv run python scripts/sbom.py --check
-	$(KEEP) uv run python deploy/k8s/generate.py --check
+	@# The one list of checks (make/checks.mk): the standards ratchets, the files written from code, import directions
+	@# and the SDK drift check. The pull-request checks job and pre-commit run the same list.
+	$(KEEP) $(MAKE) -s checks
 	$(KEEP) uv run pytest -q scripts/tests
-	@# Database-specific code outside ops_store, unbounded key columns, long names; a raised baseline row needs a trailer.
-	$(KEEP) uv run python scripts/check_portable_store.py --strict
-	$(KEEP) uv run python scripts/check_portable_store.py --commits
-	@# A loopback fallback anywhere; a literal timeout or an HTTP client beyond a member's config-literals-baseline.txt.
-	$(KEEP) uv run python scripts/check_config_literals.py --strict
-	$(KEEP) uv run python scripts/check_config_literals.py --commits
-	@# A dict, gather, bare task, loose body or untyped reply beyond a member's typed-boundaries-baseline.txt; any print.
-	$(KEEP) uv run python scripts/check_typed_boundaries.py --strict
 	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
 
 # The suites share nothing but the machine, so they run side by side: one after another they used one of 14

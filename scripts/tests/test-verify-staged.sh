@@ -13,6 +13,10 @@ cd "$tmp/repo"
 git checkout -q --detach "$(git -C "$root" rev-parse HEAD)"
 cp "$hook" .githooks/pre-commit
 cp "$root/scripts/verify-staged.sh" scripts/verify-staged.sh
+# The one list of checks the hook runs (make checks STAGED=1).
+cp "$root/Makefile" Makefile
+cp "$root/make/checks.mk" make/checks.mk
+git add make/checks.mk
 git -c user.name=t -c user.email=t@local commit -q --no-verify -am "hook under test" >/dev/null 2>&1 || true
 # apps/embed/node_modules: the hook's console verify type-checks the embed app too (verify-staged.sh links it the same way).
 for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules .venv; do
@@ -60,6 +64,14 @@ git checkout -q HEAD -- "$leak"
 printf '\n# probe\n' >> scripts/sbom.py
 git add scripts/sbom.py
 if commit script scripts/sbom.py; then echo "PASS a commit of a script alone goes through"; else echo "FAIL a script-only commit was refused:"; tail -5 "$tmp/script.log"; pass=1; fi
+# The list of checks (make/checks.mk): a staged path a check names runs it, and a failure refuses the commit under the
+# check's command. A loopback fallback in a service is one the config-literals check lists.
+printf '\nPROBE = None or "http://127.0.0.1:9"\n' >> services/files-service/src/ops_files/__init__.py
+git add services/files-service/src/ops_files/__init__.py
+if commit listed services/files-service/src/ops_files/__init__.py; then echo "FAIL a loopback fallback in a service was committed"; pass=1; else
+  grep -q "check_config_literals.py --strict (exit 1)" "$tmp/listed.log" && echo "PASS a check on the list refuses a commit it fails, naming it" || { echo "FAIL the listed-check commit failed for another reason:"; tail -5 "$tmp/listed.log"; pass=1; }
+fi
+git checkout -q HEAD -- services/files-service/src/ops_files/__init__.py
 # The gate rows (verify-staged.sh `gate`): a staged path a row names runs its check, and a failure refuses the commit
 # under the row's name. Proved once on the cross-service row with a test importing another service (c4957ea5's fault),
 # then with that row taken out of this clone's hook: the same commit goes through, so the refusal came from the gate and

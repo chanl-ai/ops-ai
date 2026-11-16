@@ -87,13 +87,6 @@ want=$(( ${#services[@]} + ${#tested[@]} ))
 [ "${#jobs_order[@]}" -eq "$want" ] || { echo "verify-changed: started ${#jobs_order[@]} of $want suites"; exit 1; }
 [ "$console" = 1 ] && make -s console-verify
 [ "$docs" = 1 ] && make -s docs-verify
-uv run python scripts/store_inventory.py --check
-uv run python scripts/roles_matrix.py --check
-uv run python scripts/check_access_exceptions.py
-uv run python scripts/check_access_exceptions.py --commits
-uv run python deploy/k8s/generate.py --check
-uv run lint-imports --no-logo
-uv run python scripts/check_portable_store.py --strict
-uv run python scripts/check_config_literals.py --strict
-uv run python scripts/check_typed_boundaries.py --strict
+# The one list of checks (make/checks.mk), the same one CI's checks job and pre-commit run.
+make -s checks
 echo "verify-changed: green"
