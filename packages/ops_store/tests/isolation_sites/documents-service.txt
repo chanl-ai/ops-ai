@@ -1,4 +1,5 @@
-# documents-service: 1 raw transactions and 5 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+# documents-service: 1 raw, 5 caught, 1 broad outside Store.tx() or with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+1 broad services/documents-service/src/ops_documents/store/metadata.py
 1 caught services/documents-service/src/ops_documents/store/extractions.py
 3 caught services/documents-service/src/ops_documents/store/readings.py
 1 caught services/documents-service/src/ops_documents/store/template_copies.py

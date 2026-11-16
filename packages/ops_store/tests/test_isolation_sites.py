@@ -16,6 +16,7 @@ A row may only fall: a new site fails here naming its line, and a site that is g
 from __future__ import annotations
 
 import ast
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -256,9 +257,23 @@ def _in_savepoint(attempt: ast.Try) -> bool:
     )
 
 
+# Calls that send a statement; a catch around one is a catch around the database.
+STATEMENTS = {"execute", "executemany", "scalar", "scalars", "commit", "flush"}
+BROAD = {"Exception", "BaseException"}
+
+
+def _sends_statement(nodes: list[ast.stmt]) -> bool:
+    return any(
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in STATEMENTS
+        for stmt in nodes
+        for n in ast.walk(stmt)
+    )
+
+
 def site_findings(source: str) -> list[tuple[int, str]]:
-    """(line, kind) for each raw transaction and each caught database error with no savepoint in one file."""
-    out: list[tuple[int, str]] = []
+    """(line, kind) for each raw transaction, each caught database error and each broad catch or `suppress` around a
+    statement, with no savepoint, in one file."""
+    out: set[tuple[int, str]] = set()
     for node in ast.walk(ast.parse(source)):
         if (
             isinstance(node, ast.Call)
@@ -266,14 +281,35 @@ def site_findings(source: str) -> list[tuple[int, str]]:
             and node.func.attr in {"begin", "connect"}
             and _handle(node.func.value) in HANDLES
         ):
-            out.append((node.lineno, "raw"))
+            out.add((node.lineno, "raw"))
+        # Whatever the handle is called (`self.registry`, `get_engine()`), a transaction opened by `async with`
+        # outside ops_store is a second connection beside the request's.
+        if isinstance(node, ast.AsyncWith):
+            out |= {
+                (item.context_expr.lineno, "raw")
+                for item in node.items
+                if isinstance(item.context_expr, ast.Call)
+                and isinstance(item.context_expr.func, ast.Attribute)
+                and item.context_expr.func.attr in {"begin", "connect"}
+            }
+        if isinstance(node, ast.With | ast.AsyncWith):
+            for item in node.items:
+                call = item.context_expr
+                if not (isinstance(call, ast.Call) and _handle(call.func) == "suppress"):
+                    continue
+                caught = {n for arg in call.args for n in _names(arg)}
+                if caught & DB_ERRORS or (caught & BROAD and _sends_statement(node.body)):
+                    out.add((node.lineno, "suppressed"))
         if isinstance(node, ast.Try) and not _in_savepoint(node):
-            out += [
-                (h.lineno, "caught")
-                for h in node.handlers
+            for h in node.handlers:
                 # A handler whose last statement raises does not carry on; one that retries or answers does.
-                if h.type is not None and _names(h.type) & DB_ERRORS and not isinstance(h.body[-1], ast.Raise)
-            ]
+                if isinstance(h.body[-1], ast.Raise):
+                    continue
+                caught = _names(h.type) if h.type is not None else set()
+                if caught & DB_ERRORS:
+                    out.add((h.lineno, "caught"))
+                elif (h.type is None or caught & BROAD) and _sends_statement(node.body):
+                    out.add((h.lineno, "broad"))
     return sorted(out)
 
 
@@ -281,7 +317,9 @@ def _found() -> tuple[dict[str, Counter[str]], dict[str, list[int]]]:
     """Counts by service and row key, and the lines behind each key."""
     counts: dict[str, Counter[str]] = defaultdict(Counter)
     lines: dict[str, list[int]] = defaultdict(list)
-    for src in sorted(ROOT.glob("services/*/src")):
+    for src in sorted([*ROOT.glob("services/*/src"), *ROOT.glob("packages/*/src")]):
+        if src.parent.name == "ops_store":
+            continue
         for path in sorted(src.rglob("*.py")):
             for line, kind in site_findings(path.read_text()):
                 key = f"{kind} {path.relative_to(ROOT).as_posix()}"
@@ -349,3 +387,78 @@ async def savepoint(self, conn):
     async with self.tx() as c: ...
 """
     assert site_findings(planted) == [(3, "raw"), (4, "raw"), (9, "caught"), (16, "caught")]
+
+
+def test_the_site_scan_finds_a_transaction_on_any_handle_and_a_broad_catch_around_a_statement() -> None:
+    planted = """
+async def registry(self):
+    async with self.registry.begin() as c: ...
+    async with get_engine().connect() as c: ...
+    async with self.engine.begin() as c: ...
+
+async def broad(self, conn):
+    try:
+        await conn.execute(q)
+    except Exception:
+        return False
+
+async def bare(self, conn):
+    try:
+        await conn.execute(q)
+    except:
+        pass
+
+async def quiet(self, conn):
+    with suppress(IntegrityError):
+        await conn.execute(q)
+
+async def quiet_broad(self, conn):
+    with contextlib.suppress(Exception):
+        await conn.execute(q)
+
+async def quiet_other(self):
+    with suppress(KeyError):
+        await notify()
+
+async def no_statement(self):
+    try:
+        await notify()
+    except Exception:
+        pass
+
+async def passed_on(self, conn):
+    try:
+        await conn.execute(q)
+    except Exception as e:
+        raise Wrapped() from e
+
+async def savepoint(self, conn):
+    try:
+        async with self.attempt(conn):
+            await conn.execute(q)
+    except Exception:
+        return False
+"""
+    assert site_findings(planted) == [
+        (3, "raw"),
+        (4, "raw"),
+        (5, "raw"),
+        (10, "broad"),
+        (16, "broad"),
+        (20, "suppressed"),
+        (24, "suppressed"),
+    ]
+
+
+def test_a_baseline_only_falls_in_the_history() -> None:
+    """A row raised, or a file added, in a commit with no `Standards-exception:` trailer: the working tree alone
+    cannot show it, since the baseline and the code are changed together."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import baseline_history  # noqa: PLC0415
+
+    assert (
+        baseline_history.problems(
+            ROOT, "fe46c615f0a2e3fc501853005e71564d2fc5edd1", ["packages/ops_store/tests/isolation_sites"]
+        )
+        == []
+    )
