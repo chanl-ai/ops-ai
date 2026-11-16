@@ -261,6 +261,34 @@ jobs:
           if grep -E "SKIPPED.*(OPS_MSSQL_SERVER|SQL Server)" "$RUNNER_TEMP/mssql-suites.log"; then
             echo "::error title=SQL Server not tested::A both-database test skipped SQL Server (above)."; exit 1
           fi
+      - name: The services' store tests on both databases
+        shell: bash
+        run: |
+          # Each service's database_url runs on PostgreSQL and on a scratch SQL Server database holding its golden DDL
+          # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only; the
+          # provider, storage and route tests stay in the service job, on PostgreSQL.
+          declare -A files=(
+            [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py"
+            [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
+            [files-service]="tests/test_isolation.py tests/test_store.py"
+          )
+          failed=0
+          printf '| service | PostgreSQL passed | SQL Server passed | result |\n|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          for s in models-service documents-service files-service; do
+            log="$RUNNER_TEMP/mssql-$s.log"
+            read -ra picked <<<"${files[$s]}"
+            (cd "services/$s" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -vv -rs -p no:cacheprovider "${picked[@]}") > "$log" 2>&1 || failed=1
+            grep -E " (FAILED|ERROR)|^(FAILED|ERROR|SKIPPED)|^E  " "$log" | head -60 || true
+            pg=$(grep " PASSED" "$log" | grep -c "postgresql" || true)
+            ms=$(grep " PASSED" "$log" | grep -c "mssql" || true)
+            result=$(tail -1 "$log")
+            echo "$s: PostgreSQL passed $pg, SQL Server passed $ms; $result"
+            echo "| $s | $pg | $ms | $result |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$ms" -eq 0 ] || grep -qE "SKIPPED.*(OPS_MSSQL_SERVER|SQL Server)" "$log"; then
+              echo "::error title=SQL Server not tested::$s passed no SQL Server case, or skipped one."; failed=1
+            fi
+          done
+          exit $failed
 
   release-proof:
     # A pull request into main is a release: the upgrade from the last tag's schema on a seeded database, and a fresh

@@ -141,8 +141,9 @@ def test_the_both_database_run_and_the_release_proof_are_required_with_their_tri
     assert "if" not in jobs["store-mssql"]
     steps = "\n".join(str(step.get("run", "")) for step in jobs["store-mssql"]["steps"])
     assert "OPS_MSSQL_SERVER" in steps and "mssql/server:2025-latest@sha256:" in steps and "SKIPPED" in steps
-    for package in ("ops_store", "ops_service_kit", "ops_identity"):
+    for package in ("ops_store", "ops_service_kit", "ops_identity", "models-service", "documents-service"):
         assert package in steps
+    assert "files-service" in steps and "SQL Server passed" in steps
     # A pull request into main is a release.
     assert jobs["release-proof"]["if"] == "github.event_name == 'pull_request' && github.base_ref == 'main'"
     release = "\n".join(str(step.get("run", "")) for step in jobs["release-proof"]["steps"])
