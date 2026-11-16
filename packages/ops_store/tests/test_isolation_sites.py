@@ -46,6 +46,8 @@ WIDENINGS: dict[str, set[str]] = {
     "reason": {
         "packages/ops_store/src/ops_store/store.py",
         "services/agents-service/src/ops_agents/store/tenancy.py",
+        # The base's system_tx as the tenant role on PostgreSQL and as the login's own user on SQL Server.
+        "services/platform-service/src/ops_platform/store/tenancy.py",
     },
     "SIGNIN_LOOKUP": {
         "services/platform-service/src/ops_platform/store/identity.py",

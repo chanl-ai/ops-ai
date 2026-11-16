@@ -200,6 +200,19 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_flows TO ops_platform_runtime
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_grants TO ops_platform_runtime;
 GRANT SELECT ON dbo.alembic_version_platform TO ops_platform_runtime;
 GO
+GRANT SELECT ON dbo.platform_users_by_email TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_session TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_key TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_team TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_flow TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_handoff TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_domain TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_sp TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_watch TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_password_reset TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_invite TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_purge_due TO ops_platform_runtime;
+GO
 -- files-service
 IF USER_ID(N'ops_files_runtime') IS NULL CREATE USER ops_files_runtime FOR LOGIN ops_files_runtime WITH DEFAULT_SCHEMA = dbo;
 GO

@@ -37,6 +37,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from models import chain_metadata
 from schema import MIGRATOR, ONLINE_ONLY, Checkout, chains, exported, runtime_role, sha256, write_sums
 
+from ops_platform.store.lookups import LOOKUPS as PLATFORM_LOOKUPS
+from ops_platform.store.lookups import SYSTEM_USER as PLATFORM_SYSTEM_USER
+from ops_platform.store.lookups import Lookup, mssql_function
 from ops_store.schema import MSSQL_COLLATION, MSSQL_PRECONDITIONS, MSSQL_SECURITY, mssql_full_text_ddl, security_ddl
 from ops_store.schema import POSTGRES_ONLY as POSTGRES_ONLY_TABLE
 
@@ -137,6 +140,13 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
         },
     ),
 }
+# A chain whose system user only its lookup functions run as (EXECUTE AS on each), with no login, no table grant and no
+# IMPERSONATE for anyone, and those functions: platform's pre-tenant lookups (platform 0042). The read predicates pass
+# the user; the runtime user gets SELECT on the functions alone, so it can name one exact key but list nothing across
+# tenants.
+LOOKUP_USERS: dict[str, tuple[str, tuple[Lookup, ...]]] = {"platform": (PLATFORM_SYSTEM_USER, PLATFORM_LOOKUPS)}
+
+
 # Where each chain's portable migrations begin (2026-10-19, each chain's head that day). Revisions up to and including
 # it are PostgreSQL history and never render for SQL Server; every later one is written with Alembic operations both
 # run. SQL Server upgrades start from the first release whose bundle installs, the release cut; the pins
@@ -383,8 +393,12 @@ def compile_all(
         for t in c.tables:
             statements.append(_sql(CreateTable(t)) + ";")
             statements += [_sql(CreateIndex(ix)) + ";" for ix in sorted(t.indexes, key=lambda x: str(x.name))]
-        system = SYSTEM_USERS[chain][0] if chain in SYSTEM_USERS else None
+        lookup_user, lookups = LOOKUP_USERS.get(chain, (None, ()))
+        system = SYSTEM_USERS[chain][0] if chain in SYSTEM_USERS else lookup_user
+        if lookup_user:
+            statements.append(f"IF USER_ID(N'{lookup_user}') IS NULL CREATE USER {lookup_user} WITHOUT LOGIN;")
         statements += [f"{s};" for s in security_ddl(chain, c.tables, column_type=_column_type, system_user=system)]
+        statements += [f"{mssql_function(fn)};" for fn in lookups]
         # The bundle runs outside a transaction, as full-text DDL needs.
         statements += [s for t in c.tables for s in mssql_full_text_ddl(t)]
         statements += stamped
@@ -456,6 +470,8 @@ def grants_script(chains_: list[dict[str, Any]]) -> str:
             "\n".join(f"GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.{t} TO {user};" for t in c["tables"])
             + f"\nGRANT SELECT ON dbo.{c['versionTable']} TO {user};"
         )
+        if lookups := LOOKUP_USERS.get(c["name"], (None, ()))[1]:
+            statements.append("\n".join(f"GRANT SELECT ON dbo.{fn.name} TO {user};" for fn in lookups))
         if c["name"] in SYSTEM_USERS:
             system, reads = SYSTEM_USERS[c["name"]]
             statements.append(f"IF USER_ID(N'{system}') IS NULL CREATE USER {system} WITHOUT LOGIN;")

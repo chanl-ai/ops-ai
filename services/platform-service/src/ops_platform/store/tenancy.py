@@ -9,21 +9,23 @@ lookup returned; platform-service issues tokens and resolves its own sessions, s
 instead of entering a request context. Its governance tables are workspace-level (TENANT_SCOPED, no team). No tenant
 raises `NoTenantError`.
 
-The base's `system_tx(reason)` runs as the same role (`system_role = ROLE`) with no tenant set, so it reads no table
-rows at all. It exists for the lookups that come before the tenant is known (sign-in by email, a session by id, a key
-by prefix, an invite by token hash), which call the SECURITY DEFINER functions of migration 0004 and get back only the
-columns those need; each names a reason below, listed in `packages/ops_store/tests/test_isolation_sites.py`.
+`system_tx(reason)` runs as the tenant role with no tenant set, so it reads no table rows at all. It exists for the
+lookups that come before the tenant is known (sign-in by email, a session by id, a key by prefix, an invite by token
+hash), which call the lookup functions of `lookups.py` and get back only the columns those need; each names a reason
+below, listed in `packages/ops_store/tests/test_isolation_sites.py`. On PostgreSQL that is `SET ROLE` to
+`ops_platform_tenant`; on SQL Server the tenant role is the runtime login's own user, so nothing is impersonated.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_store import isolation
 from ops_store.database import open_database
+from ops_store.dialect import dialect_of
 from ops_store.store import Store
 
 ROLE = "ops_platform_tenant"
@@ -45,12 +47,18 @@ SEED_ID_CHECK = "seed_id_check"  # whether another tenant holds a seeded id, as 
 class TenantDb(Store):
     role = ROLE
     # The lookups before a tenant is known run as the same role with no tenant: they read rows only through the
-    # SECURITY DEFINER functions of migration 0004.
+    # lookup functions (`lookups.py`).
     system_role = ROLE
 
     def __init__(self, db: AsyncEngine | Store) -> None:
         """From an engine, or from another store sharing its engine (a store built beside `IdentityStore`)."""
         super().__init__(db.engine if isinstance(db, Store) else db)
+
+    def system_tx(self, reason: str) -> AbstractAsyncContextManager[AsyncConnection]:
+        """The base's `system_tx` as the tenant role. SQL Server has no user of the PostgreSQL role's name to
+        impersonate: there the runtime login's own user is the tenant role, so the block runs as the login."""
+        role = self.system_role if dialect_of(self.engine) == "postgresql" else None
+        return isolation.system_tx(self.engine, reason, role=role)
 
     @classmethod
     def open(cls, url: str) -> TenantDb:
