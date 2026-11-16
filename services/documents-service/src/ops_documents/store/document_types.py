@@ -24,7 +24,7 @@ from ops_service_kit.http import Out
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.dialect import locked
-from ops_store.listing import ListPage, list_page
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
 from ops_store.store import Store
@@ -38,7 +38,8 @@ document_types = sa.Table(
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team", sa.String(64), nullable=False),
-    sa.Column("name", sa.String(200), nullable=False),
+    # The list sorts on it; uq_document_types_name (tenant, team, name) is its index.
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("description", sa.String(1000)),
     sa.Column("latest_version", sa.Integer, nullable=False),
     sa.Column("created_by", sa.String(320), nullable=False),
@@ -310,13 +311,17 @@ class DocumentTypesStore(Store):
             return await rows(c, q, TypeRow)
 
     async def list(self, team: str, params: ListParams) -> tuple[list[TypeRow], ListPage]:
-        """One page of the team's types on the shared list contract, by name, searched on the name."""
+        """One page of the team's types on the shared list contract, by name (sortBy=name turns it), searched on the
+        name. Only the name sorts: the list row shows no time, and uq_document_types_name (tenant, team, name) serves
+        the order."""
         t = document_types.c
         query = sa.select(document_types).where(
             t.tenant_id == isolation.tenant(), t.team == team, team_visible(document_types)
         )
         async with self.tx() as c:
-            page = await list_page(c, query, params, search=[t.name], default_sort=t.name.asc())
+            page = await list_page(
+                c, query, params, search=[t.name], sortable={"name": t.name}, default_sort=t.name.asc()
+            )
         return [TypeRow.model_validate(r) for r in page["data"]], page
 
     async def version(self, type_id: str, n: int) -> VersionRow | None:

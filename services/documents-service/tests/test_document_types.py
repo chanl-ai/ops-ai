@@ -354,3 +354,13 @@ async def test_a_key_field_is_kept_and_a_mark_that_is_not_true_or_false_is_refus
         )
     assert made["versions"][0]["fields"][0]["keyField"] is True and "keyField" not in made["versions"][0]["fields"][1]
     assert bad.status_code == 400 and "keyField is true or false" in bad.text, bad.text
+
+
+async def test_the_type_list_sorts_by_name_in_the_order_asked(make: Make) -> None:
+    """sortBy=name with sortOrder reorders the list; it was accepted and ignored, always by name ascending."""
+    s = make(Models(), Floor(), Prices())
+    async with s.client as c:
+        for key, name in (("lease", "Lease"), ("statement", "Bank statement"), ("notice", "Invoice notice")):
+            data(await c.post("/v1/document-types", json={**TYPE, "id": key, "name": name}, headers=OPS), 201)
+        down = data(await c.get("/v1/document-types?sortBy=name&sortOrder=desc", headers=OPS))
+    assert [t["name"] for t in down["data"]] == ["Lease", "Invoice notice", "Bank statement"], down
