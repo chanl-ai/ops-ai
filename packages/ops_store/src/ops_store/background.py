@@ -16,7 +16,11 @@ A task that outlives the request that starts it goes on the lifespan's TaskGroup
   await background.start(retry_hand_off(item), key="tools_review_handoff")
 
 A table that only grows gets a sweep the same way: `register(retention(table, table.c.at, keep_s, key=...,
-service=...))` lists it, and `run_sweep(key, tx, stop=stop)` runs it.
+service=...))` lists it, and `run_sweep(key, tx, stop=stop)` runs it. A listed process whose pass is the service's
+own (a purge that deletes bytes and writes events) is given it, and run the same way:
+
+  give_pass("files_retention", lambda _tx, _now: files.purge_released(), service="files")
+  await run_sweep("files_retention", stop=stop)   # no tx: the pass opens its own transactions
 """
 
 from __future__ import annotations
@@ -260,6 +264,24 @@ def register(process: Process) -> Process:
     PROCESSES.append(process)
     BY_KEY[process.key] = process
     return process
+
+
+def give_pass(key: str, cycle: Cycle, *, service: str, every_s: float | None = None) -> Process:
+    """Gives the listed process `key` the pass `run_sweep` runs, for one whose work is not a row delete. Its row keeps
+    its title and description, and its interval unless `every_s` is given. Giving one again replaces it: each app a
+    process builds (a test's, a restart's) brings its own store. A key not listed, listed for another service, or
+    a retention process with its own sweep is refused."""
+    listed = BY_KEY.get(key)
+    if listed is None:
+        raise ValueError(f"{key!r} is not on ops_store.background.PROCESSES; list it before giving it a pass")
+    if listed.service != service:
+        raise ValueError(f"{key} belongs to {listed.service}, not {service}")
+    if listed.sweep is not None:
+        raise ValueError(f"{key} has its own sweep")
+    given = replace(listed, cycle=cycle, every_s=every_s if every_s is not None else listed.every_s)
+    PROCESSES[PROCESSES.index(listed)] = given
+    BY_KEY[key] = given
+    return given
 
 
 def retention(table: sa.Table, at: sa.Column[float], keep_s: float, *, key: str, service: str) -> Process:
@@ -598,7 +620,7 @@ async def start(coro: Coroutine[Any, Any, None], *, key: str, store: HeartbeatSt
 
 async def run_sweep(
     key: str,
-    tx: Tx,
+    tx: Tx | None = None,
     *,
     stop: asyncio.Event,
     store: HeartbeatStore = LOCAL,
@@ -607,16 +629,27 @@ async def run_sweep(
 ) -> None:
     """Runs the registered retention process `key` until `stop` is set, one pass per listed interval. `tx` opens the
     transaction a pass deletes in: the service's own `system_tx` with its reason and role, since the rows are every
-    tenant's. A process with a `cycle` is handed `tx` and opens its transactions itself."""
+    tenant's. A process with a `cycle` is handed `tx` and opens its transactions itself; one given by `give_pass`
+    that opens its own needs no `tx`."""
     process = BY_KEY.get(key)
     cycle = None if process is None else process.cycle or (_in_one_tx(process.sweep) if process.sweep else None)
     if cycle is None:
         raise ValueError(f"{key!r} is not a registered retention process; register(retention(...)) it first")
+    if tx is None and process is not None and process.sweep is not None:
+        raise ValueError(f"{key} deletes in the caller's transaction; pass run_sweep its tx")
+    opens = tx or _no_tx(key)
 
     async def once() -> int:
-        return await cycle(tx, clock())
+        return await cycle(opens, clock())
 
     await run(key, once, stop=stop, store=store, every_s=every_s, clock=clock)
+
+
+def _no_tx(key: str) -> Tx:
+    def refuse() -> AbstractAsyncContextManager[AsyncConnection]:
+        raise ValueError(f"{key}'s pass opened run_sweep's transaction, and run_sweep was given none")
+
+    return refuse
 
 
 def _in_one_tx(sweep: Sweep) -> Cycle:

@@ -25,7 +25,7 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 | `listing` | `list_page`: a list's page, total and facet counts in SQL on the caller's transaction, from the kit's `ListQuery`; `LISTED` marks a column a list filters or sorts on |
 | `search` | `contains` and `like_pattern`: portable, escaped, case-insensitive text search |
 | `outbox` | `outbox_table`, `add`, `Relay`: an event written in the same transaction as its change, delivered at least once; `relay(routes=, targets=)` and `run_relay` are the one wiring (`tests/test_relay_sites.py`) |
-| `background` | `PROCESSES`, `run`, `Beat`, heartbeats (`MemoryHeartbeats`, `DbHeartbeats`) behind `/health/background`; `retention`, `register` and `run_sweep` for an append-only table's sweep |
+| `background` | `PROCESSES`, `run`, `Beat`, heartbeats (`MemoryHeartbeats`, `DbHeartbeats`) behind `/health/background`; `retention`, `register` and `run_sweep` for an append-only table's sweep; `give_pass` for a listed process whose pass is the service's own |
 | `copies` | `copy_table`, `apply`, `resync`: a local copy of another service's records keyed by tenant, id and revision, written by its events (an older revision changes nothing, nor an event older than a delete's tombstone) and repaired by a registered resync of the owner's full list, asked with no transaction open (`Process.cycle`) |
 | `testing` | `loop_reports_failure`: the test every background process has in its service (`tests/test_loop_health.py`) |
 | `reference` | `SqlAuditLog`: a reference audit log for a service that has none, and the audit suite's own check |

@@ -218,3 +218,54 @@ async def test_a_retention_sweep_deletes_only_rows_past_their_date_and_reports_a
         background.PROCESSES.remove(sweep)
         del background.BY_KEY[sweep.key]
         await engine.dispose()
+
+
+async def test_a_pass_given_to_a_listed_process_runs_through_run_sweep_and_reports_on_its_listed_row() -> None:
+    """A listed process whose pass is not a row delete (a purge that deletes bytes and writes events) is given one by
+    `give_pass`. The last pass given is the one that runs, since each app in a process builds its own; the listed row
+    keeps its title and interval; a pass that needs no transaction runs with none."""
+    listed = background.register(
+        background.Process("audit_export", "tools", "Audit export", "Sends the audit log on.", 3600.0, "Every team's.")
+    )
+    ran: list[str] = []
+
+    def pass_of(name: str) -> background.Cycle:
+        async def cycle(_tx: background.Tx, _now: float) -> int:
+            ran.append(name)
+            return 1
+
+        return cycle
+
+    beats, stop = MemoryHeartbeats(), asyncio.Event()
+    try:
+        background.give_pass("audit_export", pass_of("first"), service="tools")
+        given = background.give_pass("audit_export", pass_of("second"), service="tools")
+        assert (given.title, given.does, given.every_s) == (listed.title, listed.does, 3600.0)
+        task = asyncio.create_task(background.run_sweep("audit_export", stop=stop, store=beats, every_s=0.01))
+        await _until(lambda: len(ran) >= 2)
+        stop.set()
+        await asyncio.wait_for(task, timeout=5)
+        assert set(ran) == {"second"}
+        (row,) = [p for p in background.report(await beats.read(), "tools", time.time()) if p["key"] == "audit_export"]
+        assert (row["title"], row["everySeconds"], row["state"]) == ("Audit export", 3600.0, "running")
+    finally:
+        background.PROCESSES.remove(BY_KEY["audit_export"])
+        del BY_KEY["audit_export"]
+
+
+def test_a_pass_is_refused_for_an_unlisted_key_another_service_or_a_sweep_with_its_own() -> None:
+    async def cycle(_tx: background.Tx, _now: float) -> int:
+        return 0
+
+    with pytest.raises(ValueError, match="is not on ops_store"):
+        background.give_pass("nothing_listed", cycle, service="files")
+    with pytest.raises(ValueError, match="files_retention belongs to files"):
+        background.give_pass("files_retention", cycle, service="tools")
+    table = sa.Table("seen", sa.MetaData(), sa.Column[float]("at", sa.Float))
+    sweep = background.register(background.retention(table, table.c.at, 60.0, key="seen_retention", service="tools"))
+    try:
+        with pytest.raises(ValueError, match="has its own sweep"):
+            background.give_pass("seen_retention", cycle, service="tools")
+    finally:
+        background.PROCESSES.remove(sweep)
+        del BY_KEY[sweep.key]
