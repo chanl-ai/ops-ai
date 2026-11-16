@@ -39,6 +39,9 @@ async def test_a_wrapper_run_naming_another_tenants_agent_is_not_found(database_
         agent = await published_agent(client, rt, a, "Payee desk")
     async with started(database_url, seed=False) as (client, rt):
         theirs = person(b)
+        # Its own graph reads as an unknown one, as a deleted agent's does.
+        own = await client.post("/v1/threads", json={"graph": f"agent:{agent}"}, headers=theirs)
+        assert own.status_code == 400, own.text
         made = await client.post("/v1/threads", json={"graph": "agent_wrapper", "metadata": {}}, headers=theirs)
         assert made.status_code == 201, made.text
         tid = made.json()["data"]["threadId"]

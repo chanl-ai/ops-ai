@@ -37,7 +37,7 @@ from ops_service_kit.ids import new_id, now_iso
 from ...store.leases import LeaseHeldError
 from .. import hitl_facade
 from ..agent_calls import agent_team
-from ..agent_registry import live_agent, refuse_new_turns
+from ..agent_registry import live_agent, refuse_new_turns, registry
 from ..auth import (
     Principal,
     graph_target,
@@ -176,9 +176,11 @@ async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
     thread_id = new_id("gth")
     version: int | None = None
     digest: str | None = None
-    if body.graph.startswith("agent:"):
-        # Another tenant's agent id is NotFound: the catalogue holds every tenant's.
-        await agent_team(rt, body.graph.removeprefix("agent:"))
+    if body.graph.startswith("agent:") and body.graph.removeprefix("agent:") not in await registry(rt).tenant_owners(
+        {body.graph.removeprefix("agent:")}
+    ):
+        # A deleted agent and another tenant's read the same: the catalogue holds every tenant's.
+        raise ValidationFailed(f"Unknown graph {body.graph}: no such agent.")
     if body.graph.startswith("agent:") and rt.catalog.agent(body.graph.removeprefix("agent:")) is None:
         # Its graph stays compiled while turns under way drain; no new thread starts on it.
         await refuse_new_turns(rt, body.graph.removeprefix("agent:"))
