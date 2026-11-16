@@ -1,4 +1,4 @@
-# 2520 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 2515 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body agents_attach_skill
 1 body agents_create_agent
 1 reply agents_create_agent
@@ -256,7 +256,7 @@
 7 dict-any services/agents-service/src/ops_agents/api/typed_record_routes.py
 2 dict-any services/agents-service/src/ops_agents/api/usage.py
 4 dict-any services/agents-service/src/ops_agents/api/widget_sessions.py
-14 dict-any services/agents-service/src/ops_agents/api/widgets.py
+13 dict-any services/agents-service/src/ops_agents/api/widgets.py
 1 dict-any services/agents-service/src/ops_agents/api/worker.py
 3 task services/agents-service/src/ops_agents/api/worker.py
 45 dict-any services/agents-service/src/ops_agents/api/workflow_registry.py
@@ -327,8 +327,8 @@
 2 store-dict services/agents-service/src/ops_agents/store/widget_deployments.py
 4 dict-any services/agents-service/src/ops_agents/store/widget_keys.py
 3 store-dict services/agents-service/src/ops_agents/store/widget_keys.py
-11 dict-any services/agents-service/src/ops_agents/store/widgets.py
-7 store-dict services/agents-service/src/ops_agents/store/widgets.py
+9 dict-any services/agents-service/src/ops_agents/store/widgets.py
+5 store-dict services/agents-service/src/ops_agents/store/widgets.py
 10 dict-any services/agents-service/src/ops_agents/store/workflow_registry.py
 7 store-dict services/agents-service/src/ops_agents/store/workflow_registry.py
 42 dict-any services/agents-service/src/ops_agents/task_types.py

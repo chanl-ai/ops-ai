@@ -12,16 +12,18 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import BaseModel, JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee, isolation
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-from .agent_registry import digest_of
+from .agent_registry import digest_of, publish_requests
 from .base import metadata
 from .graphs import mine
 from .tenancy import OWNER, UNIQUE_KEY, RuntimeStore, current_tenant
@@ -73,6 +75,22 @@ registry_widget_versions = sa.Table(
     info={**TENANT_SCOPED, **team_owned_via("registry_widgets", "widget_id")},
 )
 
+
+class ListedWidget(BaseModel):
+    """A widget as the list shows it: its row with its newest version's `content` and `published_at`, and `pending`
+    while a publish request for it waits."""
+
+    id: str
+    team_id: str
+    version: int
+    retired_reason: str | None
+    updated_at: str
+    updated_by: str
+    content: dict[str, JsonValue]
+    published_at: str | None
+    pending: bool
+
+
 LABELS = {"name": "name", "useWhen": "use-when line", "tree": "layout", "dataSchema": "data schema", "sample": "sample"}
 
 
@@ -98,52 +116,63 @@ class WidgetRegistry(RuntimeStore):
                 ).mappings()
             ]
 
-    async def page(self, teams: list[str], search: str, offset: int, limit: int) -> list[dict[str, Any]]:
-        """One page of the widgets in `teams` whose name contains `search`, by name; LIMIT and OFFSET run in the
-        query."""
-        q = (
-            sa.select(registry_widgets)
-            .where(self._matches(teams, search), mine(registry_widgets), team_visible(registry_widgets))
-            .order_by(sa.func.lower(registry_widgets.c.name), registry_widgets.c.id)
-        )
-        async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
-
-    async def pinnable(
+    async def page(
         self, teams: list[str], search: str, offset: int, limit: int, ids: list[str] | None = None
-    ) -> list[dict[str, Any]]:
-        """Widgets an agent may newly pin (published, not retired) in `teams`, by name, searched and limited in the
-        query; `ids` returns exactly those in `teams`, so a pin already held keeps its label."""
-        t = registry_widgets.c
-        scope = t.team_id.in_(teams)
-        if ids is not None:
-            q = sa.select(registry_widgets).where(
-                scope, t.id.in_(ids), mine(registry_widgets), team_visible(registry_widgets)
+    ) -> list[ListedWidget]:
+        """One page of the widgets in `teams` whose name contains `search` (or exactly `ids`), by name then id, each
+        with its newest version's content and publish time and whether a publish request for it waits; one statement,
+        LIMIT and OFFSET in the query."""
+        w, v, r = registry_widgets.c, registry_widget_versions.c, publish_requests.c
+        waiting = (
+            sa.select(r.id)
+            .where(r.tenant_id == current_tenant(), r.kind == "widget", r.subject_id == w.id, r.status == "pending")
+            .correlate(registry_widgets)
+            .exists()
+        )
+        q = (
+            sa.select(
+                w.id,
+                w.team_id,
+                w.version,
+                w.retired_reason,
+                w.updated_at,
+                w.updated_by,
+                v.content,
+                v.published_at,
+                sa.case((waiting, 1), else_=0).label("pending"),
             )
-        else:
-            q = sa.select(registry_widgets).where(
-                self._matches(teams, search),
-                t.published_version.is_not(None),
-                t.retired_reason.is_(None),
-                mine(registry_widgets),
+            .join_from(
+                registry_widgets,
+                registry_widget_versions,
+                sa.and_(v.tenant_id == w.tenant_id, v.widget_id == w.id, v.version == w.version),
+            )
+            .where(
+                self._chosen(teams, search, ids),
+                w.tenant_id == current_tenant(),
+                # The versions are joined on their widget's tenant and id, so the widget's team holds them too.
                 team_visible(registry_widgets),
             )
-        q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
+            .order_by(sa.func.lower(w.name), w.id)
+            .offset(offset)
+            .limit(limit)
+        )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, ListedWidget)
 
-    async def count(self, teams: list[str], search: str) -> int:
+    async def count(self, teams: list[str], search: str, ids: list[str] | None = None) -> int:
         q = (
             sa.select(sa.func.count())
             .select_from(registry_widgets)
-            .where(self._matches(teams, search), mine(registry_widgets), team_visible(registry_widgets))
+            .where(self._chosen(teams, search, ids), mine(registry_widgets), team_visible(registry_widgets))
         )
         async with self.tx() as c:
             return int((await c.execute(q)).scalar_one())
 
     @staticmethod
-    def _matches(teams: list[str], search: str) -> sa.ColumnElement[bool]:
-        return sa.and_(contains(registry_widgets.c.name, search), registry_widgets.c.team_id.in_(teams))
+    def _chosen(teams: list[str], search: str, ids: list[str] | None) -> sa.ColumnElement[bool]:
+        """Widgets in `teams`: exactly `ids` when given, else those whose name contains `search`."""
+        named = registry_widgets.c.id.in_(ids) if ids is not None else contains(registry_widgets.c.name, search)
+        return sa.and_(named, registry_widgets.c.team_id.in_(teams))
 
     async def owner_team(self, widget_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the

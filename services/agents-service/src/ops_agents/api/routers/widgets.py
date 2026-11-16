@@ -31,7 +31,17 @@ from ..publish_policy import decide
 from ..rights import rights
 from ..schemas import WidgetTemplateList, WidgetTemplateOut
 from ..team_names import team_name
-from ..widgets import check_content, listed, picker, publish, seeded_widgets, view, widget_id_of, widgets
+from ..widgets import (
+    check_content,
+    listed,
+    listed_view,
+    picker,
+    publish,
+    seeded_widgets,
+    view,
+    widget_id_of,
+    widgets,
+)
 
 router = APIRouter(dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -81,20 +91,15 @@ async def list_widgets(rt: Rt, me: Reader, _: Tx, q: ListQuery) -> JSONResponse:
     every = await seeded_widgets(rt)
     if q.ids is not None:
         seeded = [w for w in every if w["widgetId"] in q.ids]
-        held = len(await reg.pinnable(teams, "", 0, len(q.ids), q.ids))
     else:
         words = (q.search or "").strip().lower()
         seeded = [w for w in every if words in str(w["name"]).lower()]
-        held = await reg.count(teams, q.search or "")
-    total = len(seeded) + held
+    total = len(seeded) + await reg.count(teams, q.search or "", q.ids)
     page, offset = page_window(total, q.page, q.page_size)
     shown = seeded[offset : offset + q.page_size]
     skip, room = max(0, offset - len(seeded)), q.page_size - len(shown)
-    if q.ids is not None:
-        rows = await reg.pinnable(teams, "", skip, room, q.ids)
-    else:
-        rows = await reg.page(teams, q.search or "", skip, room)
-    return ok(paged(shown + [await view(rt, r["id"]) for r in rows], total, page, q.page_size))
+    rows = await reg.page(teams, q.search or "", skip, room, q.ids) if room > 0 else []
+    return ok(paged(shown + [listed_view(r) for r in rows], total, page, q.page_size))
 
 
 @router.get("/v1/widgets/options", response_model=Envelope[OptionsPage])

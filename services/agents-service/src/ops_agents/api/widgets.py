@@ -12,7 +12,7 @@ from typing import Any, cast
 from ops_agent_kernel import layout
 from ops_agents.activities.catalog import WidgetPinRule
 from ops_agents.store.widget_picker import WidgetPicker
-from ops_agents.store.widgets import WidgetRegistry
+from ops_agents.store.widgets import ListedWidget, WidgetRegistry
 from ops_service_kit.errors import Unprocessable
 
 from .agent_registry import registry
@@ -67,14 +67,6 @@ def check_content(fields: dict[str, Any]) -> dict[str, Any]:
     return {"name": name, "useWhen": use_when, "tree": fields["tree"], "dataSchema": schema, "sample": sample}
 
 
-def _status(row: dict[str, Any], newest: dict[str, Any], pending: bool) -> str:
-    if row["retired_reason"]:
-        return "deprecated"
-    if pending:
-        return "in_review"
-    return "published" if newest["published_at"] is not None else "draft"
-
-
 def _out(widget_id: str, version: int, content: dict[str, Any], **extra: Any) -> dict[str, Any]:
     return {
         "widgetId": widget_id,
@@ -95,14 +87,26 @@ async def view(rt: Runtime, widget_id: str) -> dict[str, Any]:
     newest = await reg.version(widget_id, int(row["version"]))
     assert newest is not None
     pending = any(r["status"] == "pending" for r in await _requests(rt, widget_id))
+    return listed_view(
+        ListedWidget.model_validate(
+            {**row, "content": newest["content"], "published_at": newest["published_at"], "pending": pending}
+        )
+    )
+
+
+def listed_view(w: ListedWidget) -> dict[str, Any]:
+    """A widget's reply: its newest version's content, and its status (retired, in review, published or draft)."""
+    status = (
+        "deprecated"
+        if w.retired_reason
+        else "in_review"
+        if w.pending
+        else "draft"
+        if w.published_at is None
+        else "published"
+    )
     return _out(
-        widget_id,
-        int(row["version"]),
-        newest["content"],
-        status=_status(row, newest, pending),
-        teamId=row["team_id"],
-        updatedBy=row["updated_by"],
-        updatedAt=row["updated_at"],
+        w.id, w.version, w.content, status=status, teamId=w.team_id, updatedBy=w.updated_by, updatedAt=w.updated_at
     )
 
 
