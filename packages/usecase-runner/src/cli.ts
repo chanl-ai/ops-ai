@@ -6,7 +6,7 @@ import { coverage, formatCoverage } from './coverage.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
 import { findUseCase, parseRegistry, RegistryError, type UseCase } from './registry.ts';
 import { EXIT, exitFor, parseChecks, summary, verdict, type Outcome } from './report.ts';
-import { DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
+import { BASE_URL_VAR, DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
 import { resolveScript, USECASE_DIR } from './resolve.ts';
 import { childEnv, commandFor, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
@@ -49,9 +49,12 @@ export async function test(
   const targets = ucId ? [findUseCase(registry, ucId)] : registry;
   const { env: base, realCalls } = childEnv(deps.parent, root);
   console.log(realCalls ? `real model calls approved: ${realCalls}` : 'scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)');
-  if (deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
+  // A deployed host (OPS_USECASE_BASE_URL) has its own database, which no run here makes, sweeps or drops.
+  const deployed = Boolean(base[BASE_URL_VAR]);
+  if (deployed) console.log(`api scripts run against ${base[BASE_URL_VAR]}; no stack or database is started`);
+  if (!deployed && deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
   const { env, ownedDb } = await isolate(base);
-  if (!ownedDb && deps.rebuild && !(await deps.rebuild(root, env, String(env[DB_VAR])))) {
+  if (!deployed && !ownedDb && deps.rebuild && !(await deps.rebuild(root, env, String(env[DB_VAR])))) {
     console.error(`could not check ${env[DB_VAR]}'s migrations; a chain behind may stop the scripts at start`);
   }
   // Each script gets its own database when the run owns the name: a stack's files folder is new per script, so rows an
@@ -74,7 +77,7 @@ export async function test(
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-  console.log(`database ${ownedDb ? 'one per use case, each dropped after it' : env.OPS_USECASE_DB}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
+  if (!deployed) console.log(`database ${ownedDb ? 'one per use case, each dropped after it' : env.OPS_USECASE_DB}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
   return await runAll(root, targets, layerArg, databaseFor);
 }
 

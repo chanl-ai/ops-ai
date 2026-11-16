@@ -359,6 +359,14 @@ test('explicit use-case ports and database win, are never dropped, and a chosen 
   assert.ok(PORT_VARS.includes('OPS_USECASE_KB_PORT') && PORT_VARS.includes('OPS_USECASE_FAKE_OPENAI_PORT') && PORT_VARS.includes('OPS_USECASE_FILES_PORT'));
 });
 
+test('a deployed host starts no stack: no ports are chosen and no database is made', async () => {
+  const run = await isolate({ OPS_USECASE_BASE_URL: 'https://staging.example' });
+  assert.equal(run.ownedDb, undefined);
+  assert.equal(run.env[DB_VAR], undefined);
+  assert.ok(PORT_VARS.every((k) => run.env[k] === undefined));
+  assert.equal(run.env.OPS_USECASE_BASE_URL, 'https://staging.example');
+});
+
 test("a console build is keyed on What's new: a changed entry or roadmap item makes a new build", async () => {
   const { buildKey } = await import('./console-build.ts');
   const root = mkdtempSync(join(tmpdir(), 'console-key-'));
