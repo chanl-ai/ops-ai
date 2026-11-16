@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import tomllib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -80,3 +81,15 @@ async def test_an_embedding_pass_that_raises_shows_on_health(
 ) -> None:
     async with serving(engine, tenant, tmp_path, "kb_embed", monkeypatch) as client:
         await loop_reports_failure(client, "kb_embed", lambda: monkeypatch.setattr(embedding, "embed_all", broken))
+
+
+def test_shutdown_waits_less_than_the_platform_grace_before_it_kills() -> None:
+    """A loop mid-pass at shutdown is waited for, and the platform kills the process after its grace: a wait at or
+    above the smallest grace in the deploy files ends in a kill, not a finished pass."""
+    deploy = Path(__file__).parents[3] / "deploy" / "fly"
+    graces = [tomllib.loads((deploy / "processes.toml").read_text())["host"]["grace_seconds"]]
+    graces += [
+        tomllib.loads(f.read_text())["kill_timeout"] for f in (deploy / "fly.toml", deploy / "staging" / "kb.toml")
+    ]
+    default = Settings.model_fields["stop_wait_s"].default
+    assert default < min(graces), (default, graces)

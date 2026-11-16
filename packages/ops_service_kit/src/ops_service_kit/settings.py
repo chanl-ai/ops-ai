@@ -131,6 +131,9 @@ class Settings(BaseSettings):
     auth_mode: Literal["dev", "platform"] = "platform"
     # The database pool (OPS_DB__SIZE, OPS_DB__OVERFLOW, OPS_DB__WAIT_S).
     db: PoolSettings = PoolSettings()
+    # How long a stopping process waits for its background loops to finish their pass. Below the smallest grace the
+    # platform gives a stopping process (deploy/fly kill_timeout, processes.toml grace_seconds), or the pass is killed.
+    stop_wait_s: float = Field(default=15.0, gt=0)
     # Each service this process calls. None: this install does not run that service, or this process does not call it.
     # A process names the ones it cannot run without in `require`, first thing in its __main__.
     agents: Endpoint | None = None

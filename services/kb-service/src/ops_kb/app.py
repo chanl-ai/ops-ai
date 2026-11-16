@@ -311,9 +311,8 @@ def create_kb_app(
                 rebuild.cancel()
             tasks = {t for t in (beat, hand_off, embeds, *service.rebuilds) if t is not None}
             if tasks:
-                # A loop still in its pass gets as long as a request waits for a database connection: a pass that
-                # has none by then would fail anyway.
-                await asyncio.wait(tasks, timeout=Settings().db.wait_s)
+                # A loop still in its pass may finish it, within the time the platform gives a stopping process.
+                await asyncio.wait(tasks, timeout=Settings().stop_wait_s)
 
     app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id, lifespan=lifespan)
     install_error_handlers(app)
