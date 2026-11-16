@@ -481,6 +481,8 @@ async def workflow_refs(rt: Rt, caller: CurrentTenantCaller, _: Tx) -> JSONRespo
     can(caller, "workflows", "view", team=team, what="the workflow list")
     reg = registry(rt)
     rows = await reg.refs_every_team() if team is None else [r for r in await reg.rows() if r["team_id"] == team]
+    # By id: the registry reads are unordered, so a workflow updated a moment ago would otherwise move in the list.
+    rows = sorted(rows, key=lambda r: str(r["id"]))
     refs = [{"id": r["id"], "name": r["name"], "teamId": r["team_id"], "status": r["status"]} for r in rows]
     # Workflow definitions (v2) are grantable too: each one a version has been approved for, with its team; one
     # no team owns is listed with an empty team, and a grant for it is refused.
