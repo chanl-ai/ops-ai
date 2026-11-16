@@ -9,7 +9,7 @@ import json
 from typing import Any
 
 import httpx
-from usecase_harness import approve_tool_review, check, data, service_headers
+from usecase_harness import approve_tool_review, check, data, every_page, service_headers
 
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 
@@ -25,7 +25,7 @@ def clean(gw: httpx.Client, prefix: str) -> None:
     other accounts before its first."""
     for m in data(gw.get("/v1/tool-modules", params={"search": prefix, "pageSize": 50}))["data"]:
         gw.delete(f"/v1/tool-modules/{m['id']}")
-    for card in data(gw.get("/v1/apps")) or []:
+    for card in every_page(gw, "/v1/apps", search=prefix):
         if card.get("kind") != "connection" or prefix.lower() not in str(card.get("name", "")).lower():
             continue
         app = str(card["id"])

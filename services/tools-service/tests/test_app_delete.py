@@ -96,7 +96,9 @@ async def test_deleting_an_app_takes_every_account_and_its_secrets(
     assert not left["pagination"]["hasNext"], left["pagination"]
     left = left["data"]
     assert not [s for s in left if s.get("connectionId") in (first["id"], second["id"])], left
-    assert app not in [c["id"] for c in (await client.get("/v1/apps", headers=who)).json()["data"]]
+    assert app not in [
+        c["id"] for c in (await client.get("/v1/apps", params={"ids": app}, headers=who)).json()["data"]["data"]
+    ]
 
 
 async def test_only_someone_who_manages_the_teams_apps_deletes_one(

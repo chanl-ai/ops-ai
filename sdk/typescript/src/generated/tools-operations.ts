@@ -272,7 +272,13 @@ export const toolsOperations = {
     "path": "/v1/apps",
     "pathParams": [],
     "query": [
-      "include"
+      "include",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

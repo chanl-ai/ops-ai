@@ -14,9 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
+from ops_service_kit.listing import ListParams
 from ops_service_kit.settings import Settings
+from ops_store import isolation
+from ops_store.team_scope import acting_as
 from ops_tools.modules.seed import ensure_platform_tools, load
 from ops_tools.plugins.host import PluginHost
+from ops_tools.store.app_cards import AppCards
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
@@ -62,9 +66,10 @@ def admin(tenant: str, team: str = TEAM) -> dict[str, str]:
 
 
 async def systems(client: httpx.AsyncClient, tenant: str) -> list[dict[str, Any]]:
-    got = await client.get("/v1/apps", headers=admin(tenant))
+    got = await client.get("/v1/apps", params={"pageSize": 50}, headers=admin(tenant))
     assert got.status_code == 200, got.text
-    return list(got.json()["data"])
+    assert not got.json()["data"]["pagination"]["hasNext"], got.text
+    return list(got.json()["data"]["data"])
 
 
 async def test_a_module_and_the_connection_it_uses_are_one_card(
@@ -282,7 +287,7 @@ async def test_the_approval_pickers_list_keeps_the_built_in_apps(
     await ensure_platform_tools(ModuleStore(engine), tenant_id=tenant, at=datetime.now(UTC), team_id=TEAM)
     r = await client.get("/v1/apps", params={"include": "builtin"}, headers=admin(tenant))
     assert r.status_code == 200, r.text
-    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]}, r.json()["data"]
+    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]["data"]}, r.json()["data"]
 
 
 async def test_a_team_never_provisioned_gets_its_built_in_apps_when_they_are_asked_for(
@@ -292,7 +297,7 @@ async def test_a_team_never_provisioned_gets_its_built_in_apps_when_they_are_ask
     # first listing provisions it, as a first tool lookup does.
     r = await client.get("/v1/apps", params={"include": "builtin"}, headers=admin(tenant, "team_cards"))
     assert r.status_code == 200, r.text
-    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]}, r.json()["data"]
+    assert "builtin:mailboxes" in {c["id"] for c in r.json()["data"]["data"]}, r.json()["data"]
 
 
 async def test_the_apps_list_holds_each_card_once_by_name_ignoring_case(
@@ -318,4 +323,70 @@ async def test_the_apps_list_holds_each_card_once_by_name_ignoring_case(
     ):
         got = await client.get("/v1/apps", params=params, headers=admin(tenant))
         assert got.status_code == 200, got.text
-        assert [c["id"] for c in got.json()["data"]] == want, got.json()["data"]
+        assert [c["id"] for c in got.json()["data"]["data"]] == want, got.json()["data"]
+
+
+# ── The list is chosen, searched and counted in SQL over the team's card rows ──
+
+
+async def _ids(client: httpx.AsyncClient, tenant: str, **params: Any) -> tuple[list[str], dict[str, Any]]:
+    got = await client.get("/v1/apps", params=params, headers=admin(tenant))
+    assert got.status_code == 200, got.text
+    page = got.json()["data"]
+    return [c["id"] for c in page["data"]], page["pagination"]
+
+
+async def test_the_apps_list_pages_searches_and_names_cards_in_sql(client: httpx.AsyncClient, tenant: str) -> None:
+    made: list[str] = []
+    for name, category in (("Ledger", "Finance"), ("ledger", None), ("Claims core", "Insurance")):
+        body = {"name": name, "authKind": "none", **({"category": category} if category else {})}
+        r = await client.post("/v1/apps", json=body, headers=admin(tenant))
+        assert r.status_code == 201, r.text
+        made.append(r.json()["data"]["id"])
+    ledger, ledger_lower, claims = made
+    # Equal names ignoring case keep one place each: by id after the name.
+    equal = sorted([ledger, ledger_lower])
+    every = [claims, "plugin:test.desk", "plugin:test.header-key", *equal]
+    for params, want, at in (
+        ({"pageSize": 2}, every[:2], (1, 5, True)),
+        ({"pageSize": 2, "page": 3}, every[4:], (3, 5, False)),
+        ({"pageSize": 2, "page": 9}, every[4:], (3, 5, False)),
+        ({"search": "insur"}, [claims], (1, 1, False)),
+        ({"search": "LEDGER"}, equal, (1, 2, False)),
+        ({"ids": [ledger, "plugin:test.desk", "plugin:nobody"]}, ["plugin:test.desk", ledger], (1, 2, False)),
+    ):
+        ids, pagination = await _ids(client, tenant, **params)
+        assert ids == want, (params, ids)
+        assert (pagination["page"], pagination["total"], pagination["hasNext"]) == at, (params, pagination)
+
+
+async def test_a_write_to_an_app_shows_on_the_next_list(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    made = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "none"}, headers=admin(tenant))
+    app = made.json()["data"]["id"]
+    assert app in (await _ids(client, tenant))[0]
+    store = ConnectionStore(engine)
+    row = await store.get(tenant, app)
+    assert row is not None
+    await store.change(tenant, app, int(row["revision"]), {"name": "Accounts payable"}, actor="t", at=datetime.now(UTC))
+    ids, _ = await _ids(client, tenant)
+    assert ids[0] == app, ids
+    await store.delete(tenant, app, actor="t", at=datetime.now(UTC))
+    assert app not in (await _ids(client, tenant))[0]
+
+
+async def test_the_card_rows_hold_the_acting_team_when_the_policy_lets_every_team_through(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    for team in (TEAM, "team_ops"):
+        r = await client.post(
+            "/v1/apps", json={"name": f"Desk of {team}", "authKind": "none"}, headers=admin(tenant, team)
+        )
+        assert r.status_code == 201, r.text
+        assert (await client.get("/v1/apps", headers=admin(tenant, team))).status_code == 200
+    # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
+    wide = isolation.tenant_wide("a test reads the app cards with every team let through", tenant_id=tenant)
+    with wide, acting_as(TEAM):
+        page = await AppCards(engine).page(tenant, TEAM, ListParams(page_size=50), builtins=True)
+    assert [r["name"] for r in page["data"] if r["kind"] == "connection"] == [f"Desk of {TEAM}"], page["data"]

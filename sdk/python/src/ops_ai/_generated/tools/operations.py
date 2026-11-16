@@ -232,7 +232,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/apps",
         "pathParams": [],
-        "query": ["include"],
+        "query": ["include", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "apps_make_team_default": {
@@ -900,10 +900,34 @@ class Operations:
             SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def apps_list_apps(self, *, include: str | None = None, x_acting_for: str | None = None) -> list[SystemCard]:
+    def apps_list_apps(
+        self,
+        *,
+        include: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+        x_acting_for: str | None = None,
+    ) -> SystemCardList:
         "List Apps"
         return self._t.call(
-            SERVICE, OPERATIONS["apps_list_apps"], {}, {"include": include}, {"x-acting-for": x_acting_for}, None
+            SERVICE,
+            OPERATIONS["apps_list_apps"],
+            {},
+            {
+                "include": include,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {"x-acting-for": x_acting_for},
+            None,
         )  # type: ignore[no-any-return]
 
     def apps_add_app(self, body: NewAppIn) -> AccountDetail:
@@ -1542,10 +1566,34 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_list_apps(self, *, include: str | None = None, x_acting_for: str | None = None) -> list[SystemCard]:
+    async def apps_list_apps(
+        self,
+        *,
+        include: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+        x_acting_for: str | None = None,
+    ) -> SystemCardList:
         "List Apps"
         return await self._t.call(
-            SERVICE, OPERATIONS["apps_list_apps"], {}, {"include": include}, {"x-acting-for": x_acting_for}, None
+            SERVICE,
+            OPERATIONS["apps_list_apps"],
+            {},
+            {
+                "include": include,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {"x-acting-for": x_acting_for},
+            None,
         )  # type: ignore[no-any-return]
 
     async def apps_add_app(self, body: NewAppIn) -> AccountDetail:

@@ -199,7 +199,7 @@ try {
     if (!page.url().includes('/integrations/apps/')) await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(app.id)}`, { waitUntil: 'domcontentloaded' });
     const badge = page.getByTestId('app-status');
     await badge.filter({ hasText: 'Connected' }).waitFor({ timeout: 30_000 }).catch(() => undefined);
-    const card = ((await call('GET', '/v1/apps', headers)).data ?? []).find((c) => c.id === app.id);
+    const card = ((await call('GET', `/v1/apps?ids=${encodeURIComponent(app.id)}`, headers)).data?.data ?? []).find((c) => c.id === app.id);
     return { badge: ((await badge.innerText().catch(() => '')) ?? '').trim(), state: card?.appState };
   }
 
@@ -212,7 +212,7 @@ try {
       for (const range of ranges) await call('POST', '/v1/egress/ranges', sam, { value: range, note: 'uc-625' });
       let cards = [];
       for (let i = 0; i < 40 && !APPS.every((a) => cards.some((c) => c.id === a.id && c.plugin?.platformApp)); i++) {
-        cards = (await call('GET', '/v1/apps', priya)).data ?? [];
+        cards = (await call('GET', `/v1/apps?${APPS.map((a) => `ids=${encodeURIComponent(a.id)}`).join('&')}`, priya)).data?.data ?? [];
         if (!APPS.every((a) => cards.some((c) => c.id === a.id && c.plugin?.platformApp))) await new Promise((r) => setTimeout(r, 500));
       }
       check('0 set-up: GitHub, Salesforce and Person desk are listed with Ops AI’s own app', APPS.every((a) => cards.some((c) => c.id === a.id && c.plugin?.platformApp)), cards.map((c) => [c.id, Boolean(c.plugin?.platformApp)]));
@@ -280,7 +280,7 @@ try {
             await leaveConnectWindow(page);
             // Turn on saved the team's setting before the refused sign-in, and a refusal never turns it off again; the
             // next step starts from the app off, as an admin first meets it.
-            const on = ((await call('GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === app.id);
+            const on = ((await call('GET', `/v1/apps?ids=${encodeURIComponent(app.id)}`, priya)).data?.data ?? []).find((c) => c.id === app.id);
             if (on?.connectionId) {
               await call('PUT', `/v1/apps/${encodeURIComponent(app.id)}/team`, priya, { enabled: false });
               await call('DELETE', `/v1/apps/${encodeURIComponent(app.id)}/accounts/${on.connectionId}`, priya);

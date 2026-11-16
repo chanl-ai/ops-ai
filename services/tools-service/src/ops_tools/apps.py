@@ -9,6 +9,8 @@ part of the plugin's card, so no app shows twice. Every read is the caller's tea
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
+import hashlib
+import json
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
@@ -26,8 +28,10 @@ from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Out, ok
+from ops_service_kit.http import Envelope, In, ListResult, Out, ok
+from ops_service_kit.listing import ListQuery
 from ops_store import isolation
+from ops_store.listing import ListPage
 
 from .app_states import AppGroup, AppState, app_group
 from .auth.kinds import BY_ID, kind_of
@@ -44,7 +48,7 @@ from .connections.records import (
 from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn, SignIn
 from .connections.service import OPS_AI_APP, ConnectionService, own_key
 from .connectors import MyConnector, my_connectors
-from .defaults import ensure_defaults
+from .defaults import DEFAULTS_VERSION, ensure_defaults
 from .modules.directory import Directory
 from .modules.policy import WriteApprovals, tool_mode
 from .modules.routes import ERRORS
@@ -70,6 +74,7 @@ from .plugins.host import (
 )
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
+from .store.app_cards import AppCards, CardRow
 from .store.connections import DEFAULT_VALUE, FIXED_VALUE, PERSON_ORIGIN, name_key, plugin_app, plugin_of, split_config
 from .store.modules import ModuleStore
 from .store.secrets import SecretMeta
@@ -209,6 +214,10 @@ class SystemCard(Out):
 # An app credential's status, from the last Test with my account (connections.service check_credential).
 CredentialStatus = Literal["working", "not_tested", "failing"]
 CHECKED = "credential_checked"
+
+
+class SystemCardList(ListResult[SystemCard]):
+    """A page of the team's app cards."""
 
 
 class AppCredential(Out):
@@ -614,6 +623,8 @@ class Apps:
         self.users = users
         connections.account_users = users.accounts if users is not None else None
         self.modules = modules
+        # The team's cards as rows, which GET /v1/apps pages (store/app_cards.py).
+        self.app_cards = AppCards(modules.engine)
         self.plugins = plugins
         # A plugin's turn-on and accounts, when the install has plugins.
         self.plugin_accounts = PluginAccounts(plugins, connections) if plugins is not None else None
@@ -637,12 +648,19 @@ class Apps:
         return out
 
     async def cards(
-        self, who: Caller, *, listed: bool = False, builtins: bool = True, person: str | None = None
+        self,
+        who: Caller,
+        *,
+        listed: bool = False,
+        builtins: bool = True,
+        person: str | None = None,
+        only: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
         added. A built-in app has its own menu, and an account made to hold a custom tool's address (origin "tool") or
         a module with none is reached from its tool, so neither is listed; their pages still answer. `builtins` keeps
-        the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply)."""
+        the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply). `only` keeps
+        the cards it names."""
         if builtins or not listed:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
             # finds it: listing its built-in apps provisions them, as a first tool lookup does.
@@ -835,8 +853,49 @@ class Apps:
                     "managedClient": False,
                 }
             )
+        if only is not None:
+            cards = [c for c in cards if c["id"] in only]
         await self._app_states(who, cards, by_id, person)
         return sorted(cards, key=lambda c: str(c["name"]).lower())
+
+    def cards_stamp(self) -> str:
+        """What the team's card rows depend on beyond its own writes: the installed plugins' names and categories, the
+        built-in apps and the defaults version. A new install or release with another set rebuilds every team's rows."""
+        plugins = (
+            [(pid, p.manifest.title, p.manifest.display.category) for pid, p in sorted(self.plugins.plugins.items())]
+            if self.plugins is not None
+            else []
+        )
+        built = [(a["id"], a["name"]) for a in BUILT_IN]
+        held = json.dumps([plugins, built, DEFAULTS_VERSION], sort_keys=True, default=str)
+        return hashlib.sha256(held.encode()).hexdigest()
+
+    async def page(self, who: Caller, q: ListQuery, *, builtins: bool, person: str | None) -> ListPage:
+        """One page of the team's cards, chosen, searched and counted in SQL over its card rows (rebuilt first when
+        stale), then each card on the page built in full."""
+        await ensure_defaults(
+            self.modules, TeamDefaults(self.modules.engine), tenant_id=who.tenant_id, team_id=who.team.id,
+            at=datetime.now(UTC),
+        )  # fmt: skip
+        if self.plugins is not None:
+            await self.plugins.ensure(who.tenant_id, self.connections.clock())
+        stamp = self.cards_stamp()
+        seen = await self.app_cards.stamp(who.tenant_id, who.team.id)
+        stale = seen != stamp
+        # Built in full once when stale: the rows are written from it and the page's cards are taken from it.
+        every = await self.cards(who, listed=True, builtins=True, person=person) if stale else []
+        if stale:
+            rows = [
+                CardRow(id=str(c["id"]), kind=str(c["kind"]), name=str(c["name"]), category=c.get("category"))
+                for c in every
+            ]
+            await self.app_cards.rebuild(who.tenant_id, who.team.id, rows, stamp=stamp, seen=seen)
+        page = await self.app_cards.page(who.tenant_id, who.team.id, q, builtins=builtins)
+        ids = [str(r["id"]) for r in page["data"]]
+        if not stale:
+            every = await self.cards(who, listed=True, builtins=builtins, person=person, only=set(ids))
+        built = {c["id"]: c for c in every}
+        return {**page, "data": [SystemCard(**built[i]).model_dump(by_alias=True) for i in ids if i in built]}
 
     async def _app_states(
         self, who: Caller, cards: list[dict[str, Any]], by_id: dict[str, dict[str, Any]], person: str | None
@@ -2145,19 +2204,20 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     caller = caller_in(directory)
     r = APIRouter(tags=["apps"], responses=ERRORS)
 
-    @r.get("/v1/apps", response_model=Envelope[list[SystemCard]])
+    @r.get("/v1/apps", response_model=Envelope[SystemCardList])
     async def list_apps(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Caller, Depends(caller)],
         acting: ActingPerson,
         _: Tx,
+        q: ListQuery,
         include: Annotated[Literal["builtin"] | None, Query()] = None,
     ) -> JSONResponse:
-        """The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
-        the built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads
-        each card's state as that person's."""
+        """One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:
+        its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
+        `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
+        (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced."""
         person = acting.sub if acting else None
-        cards = await apps.cards(who, listed=True, builtins=include == "builtin", person=person)
-        return ok([SystemCard(**c).model_dump(by_alias=True) for c in cards])
+        return ok(await apps.page(who, q, builtins=include == "builtin", person=person))
 
     @r.get("/v1/me/connections", response_model=Envelope[list[MyConnector]])
     async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

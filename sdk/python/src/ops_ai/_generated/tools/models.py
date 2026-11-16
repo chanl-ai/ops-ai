@@ -2283,6 +2283,12 @@ class SystemCard(TypedDict, closed=True):
     toolsCount: int
 
 
+class SystemCardList(TypedDict, closed=True):
+    data: list[SystemCard]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class AppPage(TypedDict, closed=True):
     accounts: NotRequired[list[AppAccount]]
     authConfigs: NotRequired[list[AuthConfig]]
@@ -2315,11 +2321,11 @@ class EnvelopeSignInFinished(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeSystemCard(TypedDict, closed=True):
-    data: SystemCard
+class EnvelopeSystemCardList(TypedDict, closed=True):
+    data: SystemCardList
     success: Literal[True]
 
 
-class EnvelopeListSystemCard(TypedDict, closed=True):
-    data: list[SystemCard]
+class EnvelopeSystemCard(TypedDict, closed=True):
+    data: SystemCard
     success: Literal[True]

@@ -152,10 +152,16 @@ async def test_a_viewer_reads_no_auth_config_on_the_card_mine_or_their_accounts(
 ) -> None:
     await connected(world, tenant)
     viewer = person(tenant, *VIEWER)
-    card = next(c for c in (await world.client.get("/v1/apps", headers=viewer)).json()["data"] if c["id"] == APP)
+    card = next(
+        c
+        for c in (await world.client.get("/v1/apps", params={"ids": APP}, headers=viewer)).json()["data"]["data"]
+        if c["id"] == APP
+    )
     assert card["credential"] is not None and card["credential"]["id"] is None, card["credential"]
     shown = next(
-        c for c in (await world.client.get("/v1/apps", headers=admin(tenant))).json()["data"] if c["id"] == APP
+        c
+        for c in (await world.client.get("/v1/apps", params={"ids": APP}, headers=admin(tenant))).json()["data"]["data"]
+        if c["id"] == APP
     )
     assert shown["credential"]["id"], shown["credential"]
     mine = await world.client.get("/v1/me/connections", headers=viewer)

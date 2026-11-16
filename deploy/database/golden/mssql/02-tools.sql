@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0083_system_reads_columns
+-- tools-service, stamped at tools_0084_app_cards
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -133,6 +133,27 @@ CREATE TABLE service_outbox (
 );
 GO
 CREATE INDEX ix_service_outbox_due ON service_outbox (sent_at, next_at);
+GO
+CREATE TABLE team_defaults (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	applied_at DATETIMEOFFSET NOT NULL, 
+	cards_stamp VARCHAR(64) NULL, 
+	CONSTRAINT team_defaults_pkey PRIMARY KEY (tenant_id, team_id)
+);
+GO
+CREATE TABLE app_cards (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(120) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	category VARCHAR(120) NULL, 
+	CONSTRAINT app_cards_pkey PRIMARY KEY (tenant_id, team_id, id)
+);
+GO
+CREATE INDEX ix_app_cards_name ON app_cards (tenant_id, team_id, name);
 GO
 CREATE TABLE connections (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -362,14 +383,6 @@ CREATE TABLE send_checks (
 	CONSTRAINT send_checks_pkey PRIMARY KEY (tenant_id, team_id, input_hash, policy_version)
 );
 GO
-CREATE TABLE team_defaults (
-	tenant_id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	version INTEGER NOT NULL, 
-	applied_at DATETIMEOFFSET NOT NULL, 
-	CONSTRAINT team_defaults_pkey PRIMARY KEY (tenant_id, team_id)
-);
-GO
 CREATE TABLE module_operations (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -555,6 +568,18 @@ CREATE SECURITY POLICY ops_security.operation_mocks_tenant
     ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.operation_mocks AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.team_defaults_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.team_defaults,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.team_defaults AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.team_defaults AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.app_cards_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.app_cards,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.app_cards AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.app_cards AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.connections_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connections,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connections AFTER INSERT,
@@ -639,12 +664,6 @@ CREATE SECURITY POLICY ops_security.send_checks_isolation
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.send_checks AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.team_defaults_isolation
-    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.team_defaults,
-    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.team_defaults AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.team_defaults AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
 CREATE SECURITY POLICY ops_security.module_operations_tenant
     ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.module_operations,
     ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_operations AFTER INSERT,
@@ -686,5 +705,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0083_system_reads_columns');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0084_app_cards');
 GO

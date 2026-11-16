@@ -28,6 +28,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     platform,
     service_headers,
@@ -156,7 +157,7 @@ with ExitStack() as stack:
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
 
-    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    loaded = every_page(gw, "/v1/apps", headers=priya)
     ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-583"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-583"}, headers=sam))

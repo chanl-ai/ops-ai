@@ -134,9 +134,10 @@ export interface paths {
         };
         /**
          * List Apps
-         * @description The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
-         *     the built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads
-         *     each card's state as that person's.
+         * @description One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:
+         *     its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
+         *     `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
+         *     (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.
          */
         get: operations["apps_list_apps"];
         put?: never;
@@ -3221,6 +3222,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SystemCardList] */
+        Envelope_SystemCardList_: {
+            data: components["schemas"]["SystemCardList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SystemCard] */
         Envelope_SystemCard_: {
             data: components["schemas"]["SystemCard"];
@@ -3396,16 +3406,6 @@ export interface components {
         Envelope_list_SourceHost__: {
             /** Data */
             data: components["schemas"]["SourceHost"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[SystemCard]] */
-        Envelope_list_SystemCard__: {
-            /** Data */
-            data: components["schemas"]["SystemCard"][];
             /**
              * Success
              * @constant
@@ -5435,6 +5435,21 @@ export interface components {
             /** Toolscount */
             toolsCount: number;
         };
+        /**
+         * SystemCardList
+         * @description A page of the team's app cards.
+         */
+        SystemCardList: {
+            /** Data */
+            data: components["schemas"]["SystemCard"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** SystemPlugin */
         SystemPlugin: {
             /** Fixed */
@@ -6885,6 +6900,12 @@ export interface operations {
         parameters: {
             query?: {
                 include?: "builtin" | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: {
                 "x-acting-for"?: string | null;
@@ -6900,7 +6921,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_SystemCard__"];
+                    "application/json": components["schemas"]["Envelope_SystemCardList_"];
                 };
             };
             /** @description Invalid request */

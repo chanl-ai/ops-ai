@@ -25,6 +25,8 @@ team_defaults = sa.Table(
     sa.Column("team_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("applied_at", sa.DateTime(timezone=True), nullable=False),
+    # The install stamp the team's app cards (app_cards) were built for; cleared by a write that changes them.
+    sa.Column("cards_stamp", sa.String(64)),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 

@@ -61,8 +61,8 @@ async def test_a_removed_plugin_keeps_its_card_and_says_it_is_no_longer_installe
     assert on.status_code == 200, on.text
     conn_id = on.json()["data"]["connectionId"]
     host.loaded = []  # the install's plugins folder no longer holds it
-    got = await client.get("/v1/apps", headers=team_admin(tenant))
-    cards = got.json()["data"]
+    got = await client.get("/v1/apps", params={"ids": f"plugin:{ID}"}, headers=team_admin(tenant))
+    cards = got.json()["data"]["data"]
     card = next(c for c in cards if c["id"] == f"plugin:{ID}")
     assert card["appState"] == "removed" and "runs Ops AI at your company" in card["appStateReason"], card
     assert card["connectionId"] == conn_id and card["name"] == "Desk"

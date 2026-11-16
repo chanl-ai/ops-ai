@@ -213,7 +213,7 @@ async def test_an_apps_card_says_the_callers_own_sign_in_beside_the_teams(
     viewer = person(tenant, "Ravi Menon", {TEAM: "viewer"})
 
     async def own(headers: dict[str, str]) -> str | None:
-        cards = (await c.get("/v1/apps", headers=headers)).json()["data"]
+        cards = (await c.get("/v1/apps", params={"ids": SITES}, headers=headers)).json()["data"]["data"]
         return next(x for x in cards if x["id"] == SITES).get("ownSignIn")
 
     assert await own(viewer) == "none"

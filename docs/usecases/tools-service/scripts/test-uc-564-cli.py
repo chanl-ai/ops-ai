@@ -28,6 +28,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     platform,
     service_headers,
@@ -196,7 +197,7 @@ with ExitStack() as stack:
     tenant = str((session.get("principal") or {}).get("tenantId") or "")
     # The workspace allows the host, so only the plugin's own list stands between its code and that host.
     gw.post("/v1/egress/hosts", json={"value": "elsewhere.example", "note": "uc-564"}, headers=sam)
-    cards = data(gw.get("/v1/apps", headers=priya)) or []
+    cards = every_page(gw, "/v1/apps", headers=priya)
     loaded = sorted(str(c["pluginId"]) for c in cards if c.get("kind") == "plugin")
     with TOOLS_LOG.open("rb") as fh:
         fh.seek(LOG_FROM)
@@ -242,7 +243,7 @@ with ExitStack() as stack:
         "29 with no plugin installed, none loads, no plugin app is listed, its routes answer 404 and no plugin tool "
         "can be granted",
         listed.status_code == 200
-        and not [c for c in data(listed) or [] if c.get("kind") == "plugin"]
+        and not [c for c in every_page(gw, "/v1/apps", headers=priya) if c.get("kind") == "plugin"]
         and team_on.status_code == 404
         and bool(names)
         and not any(n.startswith(("salesforce_", "reach_")) for n in names),

@@ -20,7 +20,9 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.store import Store
 from ops_store.team_scope import acting_as, any_team, team_visible
 
+from .app_cards import forget_cards
 from .modules import metadata
+from .team_defaults import team_defaults
 from .tenancy import ROLE
 
 plugin_bindings = sa.Table(
@@ -205,3 +207,5 @@ class PluginBindings(Store):
         with isolation.scope(tenant_id, team_id):
             async with self.tx() as c:
                 await c.execute(upsert(c, plugin_bindings, values, keys=["tenant_id", "team_id", "plugin_id"]))
+                # Turning a plugin on or off can add or take away its card when the install no longer holds it.
+                await forget_cards(c, tenant_id, team_defaults.c.team_id == team_id)

@@ -82,8 +82,8 @@ async def test_only_someone_who_manages_connections_changes_one(client: httpx.As
     # Every member reads them, and is told whether they may manage them.
     read = await client.get(_at(conn), headers=builder)
     assert read.status_code == 200 and read.json()["data"]["mayManage"] is False
-    listed = await client.get("/v1/apps", headers=builder)
-    assert conn["id"] in {c["id"] for c in listed.json()["data"]}, listed.text
+    listed = await client.get("/v1/apps", params={"ids": conn["id"]}, headers=builder)
+    assert conn["id"] in {c["id"] for c in listed.json()["data"]["data"]}, listed.text
 
 
 async def test_a_secret_part_is_written_once_and_never_read_back(client: httpx.AsyncClient, tenant: str) -> None:
@@ -262,7 +262,7 @@ async def test_a_team_reads_only_its_own_connections_an_all_scope_team_included(
     cards = person(tenant, "Carla Cards", {"team_cards": "admin"})
     theirs = await _made(client, cards)
     platform = admin(tenant)
-    listed = (await client.get("/v1/apps", headers=platform)).json()["data"]
+    listed = (await client.get("/v1/apps", params={"ids": theirs["id"]}, headers=platform)).json()["data"]["data"]
     assert theirs["id"] not in {c["id"] for c in listed}, listed
     read = await client.get(_at(theirs), headers=platform)
     assert read.status_code == 404 and "team_cards" not in read.text, read.text

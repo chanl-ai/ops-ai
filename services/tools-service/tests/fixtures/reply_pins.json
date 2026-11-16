@@ -144,7 +144,18 @@
   },
   "list": {
    "body": {
-    "data": [],
+    "data": {
+     "data": [],
+     "facets": {},
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 0,
+      "totalPages": 1
+     }
+    },
     "success": true
    },
    "status": 200

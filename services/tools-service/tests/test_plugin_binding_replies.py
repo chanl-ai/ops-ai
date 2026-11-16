@@ -25,7 +25,9 @@ PINS = Path(__file__).parent / "fixtures" / "plugin_binding_replies.json"
 
 async def _replies(c: httpx.AsyncClient, tenant: str) -> dict[str, Any]:
     h = admin(tenant)
-    card = next(a for a in (await c.get("/v1/apps", headers=h)).json()["data"] if a["id"] == APP)
+    card = next(
+        a for a in (await c.get("/v1/apps", params={"ids": APP}, headers=h)).json()["data"]["data"] if a["id"] == APP
+    )
     out: dict[str, Any] = {"card": card}
     for name, url in (
         ("page", f"/v1/apps/{APP}"),

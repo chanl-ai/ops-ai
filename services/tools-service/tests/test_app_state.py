@@ -27,9 +27,9 @@ JAMES = ("James Richardson", {"team_platform": "builder"})
 
 
 async def card(w: World, tenant: str, who: dict[str, str] | None = None) -> dict[str, Any]:
-    r = await w.client.get("/v1/apps", headers=who or admin(tenant))
+    r = await w.client.get("/v1/apps", params={"ids": APP}, headers=who or admin(tenant))
     assert r.status_code == 200, r.text
-    return next(c for c in r.json()["data"] if c["id"] == APP)
+    return next(c for c in r.json()["data"]["data"] if c["id"] == APP)
 
 
 def state(c: dict[str, Any]) -> tuple[str, str | None]:

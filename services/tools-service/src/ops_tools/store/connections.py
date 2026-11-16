@@ -34,7 +34,9 @@ from ops_store.search import contains
 from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
+from .app_cards import forget_cards
 from .modules import metadata, module_operations, service_outbox, tool_modules
+from .team_defaults import team_defaults
 from .tenancy import ROLE
 
 _TS = sa.DateTime(timezone=True)
@@ -42,6 +44,8 @@ SHARED = ""
 # An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
 # team, signing only that person's calls, and removed when its sign-in turns out to be an identity they already linked.
 PERSON_ORIGIN = "person"
+# The account columns an Apps card is listed and named by: a change to one rebuilds the cards (store/app_cards.py).
+CARD_FIELDS = frozenset({"name", "category", "app_id", "origin", "team_id"})
 
 connections = sa.Table(
     "connections",
@@ -656,6 +660,7 @@ class ConnectionStore(Store):
                 )
             event = {"action": "created", "actor": actor, "at": at, "detail": {"kind": row["auth_kind"]}}
             await self._audit(c, row["tenant_id"], row["id"], event)
+            await forget_cards(c, row["tenant_id"], team_defaults.c.team_id == row["team_id"])
         return True
 
     async def change(
@@ -694,6 +699,14 @@ class ConnectionStore(Store):
                 raise AccountNameTaken(str(values.get("account_name"))) from e
             if changed != 1:
                 raise StaleConnection(connection_id)
+            if CARD_FIELDS & values.keys():
+                # A move changes two teams' cards; only a tenant-wide caller moves one, and it clears every team's.
+                k = connections.c
+                owner = sa.select(k.team_id).where(
+                    k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections)
+                )
+                moved = sa.true() if "team_id" in values else team_defaults.c.team_id.in_(owner)
+                await forget_cards(c, tenant_id, moved)
             if "team_id" in values:
                 # A connection moved to another team takes its sign-in rows; only a tenant-wide caller may move one,
                 # since the policy refuses writing a row into a team the caller does not act in.
@@ -755,6 +768,7 @@ class ConnectionStore(Store):
             held = [dict(r) for q in (tokens_q, states_q) for r in (await c.execute(q)).mappings()]
             if (await c.execute(connections.delete().where(*mine))).rowcount == 0:
                 return None
+            await forget_cards(c, tenant_id, team_defaults.c.team_id == found.team_id)
             # The cascade takes the tokens and links; sign-in states name the connection with no key, so they go here.
             await c.execute(
                 oauth_states.delete().where(

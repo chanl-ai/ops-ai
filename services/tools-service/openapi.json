@@ -4922,6 +4922,25 @@
         "title": "Envelope[SignInStart]",
         "type": "object"
       },
+      "Envelope_SystemCardList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SystemCardList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SystemCardList]",
+        "type": "object"
+      },
       "Envelope_SystemCard_": {
         "additionalProperties": false,
         "properties": {
@@ -5328,29 +5347,6 @@
           "data"
         ],
         "title": "Envelope[list[SourceHost]]",
-        "type": "object"
-      },
-      "Envelope_list_SystemCard__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/SystemCard"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[SystemCard]]",
         "type": "object"
       },
       "ErrorBody": {
@@ -11663,6 +11659,39 @@
         "title": "SystemCard",
         "type": "object"
       },
+      "SystemCardList": {
+        "additionalProperties": false,
+        "description": "A page of the team's app cards.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SystemCard"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "SystemCardList",
+        "type": "object"
+      },
       "SystemPlugin": {
         "additionalProperties": false,
         "properties": {
@@ -15099,7 +15128,7 @@
     },
     "/v1/apps": {
       "get": {
-        "description": "The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds\nthe built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads\neach card's state as that person's.",
+        "description": "One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:\nits plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.\n`include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.",
         "operationId": "apps_list_apps",
         "parameters": [
           {
@@ -15117,6 +15146,100 @@
                 }
               ],
               "title": "Include"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -15205,7 +15328,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_SystemCard__"
+                  "$ref": "#/components/schemas/Envelope_SystemCardList_"
                 }
               }
             },

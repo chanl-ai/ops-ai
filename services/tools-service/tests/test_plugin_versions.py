@@ -274,7 +274,7 @@ async def test_a_team_reviews_an_upgrade_and_takes_it_and_another_team_keeps_its
     assert found["fields_close_case"]["change"] == "new" and found["fields_close_case"]["inputs"]["added"] == ["id"]
     listed = next(
         a["plugin"]
-        for a in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"]
+        for a in (await c.get("/v1/apps", params={"ids": f"plugin:{ID}"}, headers=admin(tenant))).json()["data"]["data"]
         if a["id"] == f"plugin:{ID}"
     )
     assert listed["updateAvailable"] and listed["teamVersion"] == "0.1.0" and "fields_transfer" in listed["tools"]
