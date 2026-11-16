@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from deployed_guard import host_patterns, host_refusal, script_refusal
+from deployed_guard import STAGING_HOST_VAR, host_refusal, script_refusal
 from ops_service_kit.opa_server import opa_server
 from ops_signin.fake_idp import self_signed
 
@@ -80,7 +80,6 @@ ROOT = Path(__file__).resolve().parents[3]
 # every service, its database is migrated by its own deploy, and nothing here starts a process or makes a database.
 BASE_URL = os.environ.get("OPS_USECASE_BASE_URL", "").rstrip("/")
 USECASES = Path(__file__).resolve().parents[1]
-HOSTS_FILE = ROOT / "deploy" / "fly" / "usecase-hosts.txt"
 # The services a deployed host runs; a fake provider, a proxy or a sign-in server stays on this machine.
 DEPLOYED = frozenset({"agents", "tools", "models", "kb", "files", "documents", "platform", "runner"})
 # The plugins checkout every use case loads plugins from; nightly and worktree runs point it elsewhere.
@@ -239,13 +238,13 @@ _GUARDED = False
 
 
 def _deployed_guard() -> None:
-    """Every use of a deployed host passes here first: its host is on docs/usecases/staging-hosts.txt and not named
+    """Every use of a deployed host passes here first: its host is the one in OPS_USECASE_STAGING_HOST and not named
     for production, and the script that is running is an api script the registry marks safe for a deployed host."""
     global _GUARDED
     if not BASE_URL or _GUARDED:
         return
     main = getattr(sys.modules.get("__main__"), "__file__", None)
-    reason = host_refusal(BASE_URL, host_patterns(HOSTS_FILE.read_text())) or script_refusal(
+    reason = host_refusal(BASE_URL, os.environ.get(STAGING_HOST_VAR)) or script_refusal(
         main, (USECASES / "README.md").read_text()
     )
     if reason:

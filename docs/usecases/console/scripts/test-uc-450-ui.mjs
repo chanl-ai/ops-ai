@@ -2,9 +2,9 @@
 // STG_EMAIL, STG_PASSWORD from the environment) in the demo team (STG_TEAM) and checks, as a person sees them, that the
 // Open cases view and the run picker show each record once and that Dispute Desk finds a seeded dispute's charge at the
 // bank. Step c is one chat turn on the team's live model; UC450_ONLY=a,b leaves it out.
-import { check, chromium, finish } from '@ops-ai/usecase-runner/harness';
+import { check, chromium, finish, requireStagingOrigin } from '@ops-ai/usecase-runner/harness';
 
-const ORIGIN = process.env.STG_ORIGIN;
+const ORIGIN = requireStagingOrigin(process.env.STG_ORIGIN);
 const TEAM = process.env.STG_TEAM;
 const ONLY = process.env.UC450_ONLY?.split(',');
 const SHOTS = process.env.UC450_SHOTS;

@@ -21,7 +21,6 @@ import sys
 sys.path.insert(0, {lib!r})
 import usecase_harness as h
 h.USECASES = h.Path({case_dir!r})
-h.HOSTS_FILE = h.Path({hosts!r})
 import subprocess
 calls = []
 subprocess.run = lambda *a, **k: calls.append(a) or (_ for _ in ()).throw(AssertionError("ran " + repr(a)))
@@ -37,7 +36,14 @@ elif act == "seed":
 
 
 def _run(
-    tmp: Path, base: str, act: str, *, uc: str = "uc-901", layer: str = "api", safe: bool = True
+    tmp: Path,
+    base: str,
+    act: str,
+    *,
+    uc: str = "uc-901",
+    layer: str = "api",
+    safe: bool = True,
+    staging: str | None = "acme-web.fly.dev",
 ) -> tuple[int, str]:
     case = tmp / "usecases"
     case.mkdir(exist_ok=True)
@@ -47,20 +53,19 @@ def _run(
         f"| {uc} | agents-service | t | api, ui | passing | {mark} |\n"
         "| uc-902 | agents-service | t | api | passing | |\n"
     )
-    hosts = ROOT / "deploy/fly/usecase-hosts.txt"
     script = tmp / f"test-{uc}-{layer}.py"
-    script.write_text(textwrap.dedent(SCRIPT).format(lib=str(LIB), case_dir=str(case), hosts=str(hosts)))
+    script.write_text(textwrap.dedent(SCRIPT).format(lib=str(LIB), case_dir=str(case)))
     done = subprocess.run(
         [sys.executable, str(script), act],
         capture_output=True,
         text=True,
-        env={"OPS_USECASE_BASE_URL": base, "PATH": ""},
+        env={"OPS_USECASE_BASE_URL": base, "PATH": "", **({"OPS_USECASE_STAGING_HOST": staging} if staging else {})},
         check=False,
     )
     return done.returncode, done.stdout + done.stderr
 
 
-def test_a_staging_host_on_the_list_is_called(tmp_path: Path) -> None:
+def test_the_staging_host_named_in_the_environment_is_called(tmp_path: Path) -> None:
     code, out = _run(tmp_path, STAGING, "serve")
     assert code == 0 and f"base {STAGING}" in out, out
 
@@ -76,6 +81,7 @@ def test_a_staging_host_on_the_list_is_called(tmp_path: Path) -> None:
         "https://user@acme-web.fly.dev",
         "https://prod-web.fly.dev",
         "https://acme-production-web.fly.dev",
+        "https://other-web.fly.dev",
     ],
 )
 def test_any_other_host_and_any_production_name_is_refused(tmp_path: Path, host: str) -> None:
@@ -98,3 +104,9 @@ def test_a_use_case_not_marked_safe_is_refused(tmp_path: Path) -> None:
     assert code != 0 and "deployed-host guard" in out and "base " not in out, out
     code, out = _run(tmp_path, STAGING, "serve", uc="uc-902", safe=False)
     assert code != 0 and "deployed-host guard" in out, out
+
+
+@pytest.mark.parametrize("staging", [None, "", "*-web.fly.dev", ".fly.dev", "acme-web.fly.dev/x"])
+def test_an_unset_or_pattern_staging_host_allows_nothing(tmp_path: Path, staging: str | None) -> None:
+    code, out = _run(tmp_path, STAGING, "serve", staging=staging)
+    assert code != 0 and "deployed-host guard" in out and "base " not in out, out

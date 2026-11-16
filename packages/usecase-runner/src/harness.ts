@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ensureConsoleBuild, materializeConsoleBuild } from './console-build.ts';
 import { pgUrl } from './isolation.ts';
+export { requireStagingOrigin } from './deployed.ts';
 
 import { chromium as playwrightChromium, type Browser, type BrowserContext } from 'playwright';
 

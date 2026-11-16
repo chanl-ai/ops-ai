@@ -58,8 +58,8 @@ export async function test(
   console.log(realCalls ? `real model calls approved: ${realCalls}` : 'scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)');
   // A deployed host (OPS_USECASE_BASE_URL) has its own database, which no run here makes, sweeps or drops.
   const deployed = Boolean(base[BASE_URL_VAR]);
-  // Refused before anything runs: a host off the staging list, any layer but api, and a use case nobody marked safe.
-  const refusal = deployed ? deployedRefusal(root, String(base[BASE_URL_VAR]).replace(/\/+$/, ''), targets, layerArg) : undefined;
+  // Refused before anything runs: a host other than the staging host, any layer but api, and a use case nobody marked safe.
+  const refusal = deployed ? deployedRefusal(String(base[BASE_URL_VAR]).replace(/\/+$/, ''), base, targets, layerArg) : undefined;
   if (refusal) {
     console.error(`refused by the deployed-host guard: ${refusal}`);
     return EXIT.usage;

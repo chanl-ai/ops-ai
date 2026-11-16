@@ -391,24 +391,24 @@ const STAGING = 'https://acme-web.fly.dev';
 function deployedRepo(): { root: string; ran: () => boolean } {
   const root = repo();
   writeFileSync(join(root, 'docs/usecases/README.md'), DEPLOYED_TABLE);
-  mkdirSync(join(root, 'deploy/fly'), { recursive: true });
-  writeFileSync(join(root, 'deploy/fly/usecase-hosts.txt'), '# staging\n*-web.fly.dev\n');
   for (const id of ['uc-001', 'uc-002']) writeFileSync(join(root, `docs/usecases/agents-service/scripts/test-${id}-api.mjs`), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(join(root, 'ran'))}, '1'); console.log('PASS ran');\n`);
   return { root, ran: () => existsSync(join(root, 'ran')) };
 }
 
-async function deployedRun(url: string, uc: string | undefined, layer: string | undefined) {
+async function deployedRun(url: string, uc: string | undefined, layer: string | undefined, staging: string | null = 'acme-web.fly.dev') {
   const { root, ran } = deployedRepo();
   const drop = async () => true;
-  const code = await runUseCases(root, parseRegistry(DEPLOYED_TABLE), uc, layer, { parent: { ...process.env, OPS_USECASE_BASE_URL: url }, drop });
+  const parent = { ...process.env, OPS_USECASE_BASE_URL: url, ...(staging === null ? {} : { OPS_USECASE_STAGING_HOST: staging }) };
+  delete (staging === null ? parent : {}).OPS_USECASE_STAGING_HOST;
+  const code = await runUseCases(root, parseRegistry(DEPLOYED_TABLE), uc, layer, { parent, drop });
   return { code, ran: ran() };
 }
 
-test('a deployed host on the staging list runs a use case marked safe', async () => {
+test('the staging host named in the environment runs a use case marked safe', async () => {
   assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api'), { code: EXIT.ok, ran: true });
 });
 
-for (const host of ['https://example.com', 'https://acme-web.fly.dev.evil.example', 'http://acme-web.fly.dev', 'https://acme-web.fly.dev/api', 'https://user@acme-web.fly.dev', 'https://prod-web.fly.dev', 'https://acme-production-web.fly.dev']) {
+for (const host of ['https://example.com', 'https://other-web.fly.dev', 'https://acme-web.fly.dev.', 'https://acme-web.fly.dev.evil.example', 'http://acme-web.fly.dev', 'https://acme-web.fly.dev/api', 'https://user@acme-web.fly.dev', 'https://prod-web.fly.dev', 'https://acme-production-web.fly.dev']) {
   test(`a deployed run refuses ${host} before any script starts`, async () => {
     assert.deepEqual(await deployedRun(host, 'uc-001', 'api'), { code: EXIT.usage, ran: false });
   });
@@ -418,4 +418,10 @@ test('a deployed run refuses a layer other than api, and a use case not marked s
   assert.deepEqual(await deployedRun(STAGING, 'uc-002', 'ui'), { code: EXIT.usage, ran: false });
   assert.deepEqual(await deployedRun(STAGING, 'uc-001', undefined), { code: EXIT.usage, ran: false });
   assert.deepEqual(await deployedRun(STAGING, 'uc-002', 'api'), { code: EXIT.usage, ran: false });
+});
+
+test('a deployed run is refused when the staging host is unset or is a pattern', async () => {
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', null), { code: EXIT.usage, ran: false });
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', '*-web.fly.dev'), { code: EXIT.usage, ran: false });
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', '.fly.dev'), { code: EXIT.usage, ran: false });
 });
