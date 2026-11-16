@@ -106,7 +106,13 @@ def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
     records; the path ids name the first of each, and the seeded fraud agent and its records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
-    ids.update(workflow_id=REGISTRY_WORKFLOW, version="1", tool_id="lookup_account", type_id="budget_type")
+    ids.update(
+        name="dispute_email",
+        workflow_id=REGISTRY_WORKFLOW,
+        version="1",
+        tool_id="lookup_account",
+        type_id="budget_type",
+    )
 
     async def seed(n: int) -> Seeded:
         if n == 5:

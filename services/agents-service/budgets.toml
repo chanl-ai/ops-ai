@@ -19,7 +19,7 @@ connections = 6
 not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
 
 ["GET /reviews/{review_id}/place"]
-queries = 5
+not_budgeted = "needs a review; the budget seed raises none yet (on an unknown id it answered 200 with 5 statements)"
 transactions = 5
 connections = 5
 
