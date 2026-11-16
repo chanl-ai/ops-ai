@@ -67,6 +67,29 @@ async def list_api_keys(p: CurrentPrincipal, _: Tx, q: ListQuery, st: Stores) ->
 limit = policy(p, "chat.daily_budget")      # never a default read inline
 ```
 
+## Members: why the table stays tenant-only for now
+
+Checked 2026-11-16. `members` has a `team_id` on every row but is marked `TENANT_SCOPED`, so a team admin seeing only
+their own team rests on the routes' filters. Marking it team-owned (`TEAM_OWNED`) would make the database read only
+the acting team's rows, and today that would hide every row from every reader: `tenant_tx` enters
+`isolation.scope(tenant, None)`, a team scope with no team, and the team-owned policy then matches nothing. Every
+reader below runs that way, so each must first say which scope it reads in. The marking lands after that, in the same
+change as its migration, with a pin per reader that the same people are returned.
+
+| Reader or writer (`store/`) | Reads | Scope it needs |
+|---|---|---|
+| `members.py`: `members`, `member_page`, `role_in`, `set_role`, `end_membership`, `_member`, `_lock_admins` | One team's people, the header team | `scope(tenant, team)` |
+| `members.py`: `invite` | One team, but checks the email across the tenant's teams | the team, plus a named workspace-wide reason for the check |
+| `members.py`: `teams_of`, `people_options` | A person's teams; people across teams | `tenant_wide` with a named reason |
+| `teams.py`: `_listing`, `create`; `workspace.py`: `set` | Every team's counts; the Security mirror moves admins between two teams | `tenant_wide` (workspace admin) |
+| `holders.py`: `holders`; `roles.py`: `holdings_in`; `audit.py`: `page` | Who holds a role, and audit rows, across teams | `tenant_wide` (workspace admin) |
+| `lifecycle.py`: `leave`, `leave_team`, `delete_team` | Every team of one person; a team being deleted | `tenant_wide` with a named reason |
+| `identity.py`: `roles` | Every membership of the caller, to build `/v1/me` and the token | `tenant_wide`; sign-in path, pinned |
+| `signin.py`: `_join_groups`, `_group_given`, `_set_role`, `_add_member` | Memberships a sign-in gives, before any team is chosen | `tenant_wide`; sign-in path, pinned |
+| `members.py`: `_accept`; `seeding.py`: `write_seed` | An invite found by its token; the first workspace | `tenant_wide` with a named reason |
+
+The work belongs to step 2 below (every store on the base's `tx()`): that is where each reader chooses its scope.
+
 ## Step order
 
 1. Inventory and characterisation tests, as in the pilot: routes and store functions reached by a use case or test;
