@@ -449,7 +449,8 @@ def grant_views(now: datetime, expiring: timedelta) -> dict[str, sa.ColumnElemen
         "requested": a.status == "requested",
         "expired": sa.or_(a.status == "expired", past),
         "ended": a.status.in_(("rejected", "revoked")),
-        "all": sa.true(),
+        # A comparison, not `sa.true()`: SQL Server renders that as a bare 1, which a CASE refuses as a condition.
+        "all": a.id.is_not(None),
     }
 
 

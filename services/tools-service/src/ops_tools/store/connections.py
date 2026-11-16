@@ -1111,7 +1111,8 @@ class ConnectionStore(Store):
                 t.expires_at,
                 t.refused_at,
                 t.test,
-                t.refresh_ct.is_not(None).label("renews"),
+                # A CASE, not the bare test: SQL Server refuses a predicate as a selected value.
+                sa.case((t.refresh_ct.is_not(None), 1), else_=0).label("renews"),
             )
             .where(
                 t.tenant_id == tenant_id,
@@ -1122,7 +1123,7 @@ class ConnectionStore(Store):
             .order_by(t.refreshed_at.desc(), t.person_id)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return [{**r, "renews": bool(r["renews"])} for r in (await c.execute(q)).mappings()]
 
     async def operation_scopes(self, tenant_id: str, connection_id: str) -> list[str]:
         """Every scope an operation of a module on this connection needs, in a stable order: what the team's
