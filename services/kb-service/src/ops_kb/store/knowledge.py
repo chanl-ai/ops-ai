@@ -21,14 +21,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.errors import Conflict
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.audit import AUDIT_EVENT, AUDIT_ROUTE
 from ops_store.audit import record as record_audit
 from ops_store.database import open_database, reachable
 from ops_store.dialect import Vector, db_after, db_now
-from ops_store.outbox import Poster, Relay, outbox_table, relay
+from ops_store.outbox import Event, KbChanged, Poster, Relay, outbox_table, relay
 from ops_store.outbox import add as add_event
+from ops_store.rows import one
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, dialect_indexes, postgres_only
 from ops_store.search import contains
 from ops_store.store import Store
@@ -81,6 +83,8 @@ kb_bases = sa.Table(
     # The base's own documents source, which Add documents adds files to; found by id, so renaming the base or
     # the source never makes a second one. Null until the first Add documents.
     sa.Column("documents_source_id", sa.String(64)),
+    # Rises with each rename or recolour and once more on delete; `kb.changed` carries it (kb_0025).
+    sa.Column("revision", sa.Integer, nullable=False, server_default=sa.text("0")),
     # Name uniqueness per team: two of a team's knowledge bases with one name make a grant ambiguous to the person
     # granting it. Another team's names are not seen.
     sa.UniqueConstraint("tenant_id", "team_id", "name", name="uq_kb_bases_name"),
@@ -602,20 +606,34 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             try:
                 async with self.attempt(c):
-                    await c.execute(sa.insert(kb_bases).values(**row))
+                    written = await one(c, sa.insert(kb_bases).values(**row).returning(*LABEL), BaseLabel)
             except IntegrityError as e:
                 # An id is unique in the tenant; one another team holds is not seen before the insert.
                 raise Conflict(f"A knowledge base with id {row['id']} already exists.") from e
             await self._link(c, row["tenant_id"], row["id"], source_ids)
+            if written is not None:
+                await _changed(c, row["tenant_id"], written)
 
     async def update_base(
         self, tenant: str, kb_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
     ) -> None:
-        """`audit` is the change's entry for the account's audit log, written in the same transaction."""
+        """`audit` is the change's entry for the account's audit log, written in the same transaction. A new name or
+        colour raises the base's revision and reports `kb.changed`; the same name or colour sent again does neither."""
+        key = (kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id)
         async with self.tx() as c:
-            await c.execute(
-                sa.update(kb_bases).where(kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id).values(**values)
-            )
+            relabel = False
+            if "name" in values or "color" in values:
+                q = sa.select(kb_bases.c.name, kb_bases.c.color).where(*key, team_visible(kb_bases))
+                before = (await c.execute(q)).one_or_none()
+                relabel = before is not None and (
+                    values.get("name", before.name) != before.name or values.get("color", before.color) != before.color
+                )
+            if relabel:
+                bumped = sa.update(kb_bases).where(*key).values(**values, revision=kb_bases.c.revision + 1)
+                if (written := await one(c, bumped.returning(*LABEL), BaseLabel)) is not None:
+                    await _changed(c, tenant, written)
+            else:
+                await c.execute(sa.update(kb_bases).where(*key).values(**values))
             if audit is not None:
                 team = await self._team_of(c, kb_bases, tenant, kb_id)
                 await record_audit(c, kb_outbox, tenant_id=tenant, team_id=team, **audit)
@@ -643,11 +661,12 @@ class KnowledgeStore(Store):
         """Deletes the base and records its id as retired, in one transaction."""
         async with self.tx() as c:
             key = (kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id)
-            q = sa.select(kb_bases.c.name, kb_bases.c.team_id).where(*key, team_visible(kb_bases))
-            row = (await c.execute(q)).first()
+            row = await one(c, sa.select(*LABEL).where(*key, team_visible(kb_bases)), BaseLabel)
             if row is None:
                 return False
             await c.execute(sa.delete(kb_bases).where(*key))
+            # One past its last write, so the delete is newer than every event about the base before it.
+            await _changed(c, tenant, row, deleted=True)
             await c.execute(
                 sa.insert(kb_retired_bases).values(
                     tenant_id=tenant,
@@ -1220,6 +1239,27 @@ class KnowledgeStore(Store):
             )
             rows = [dict(r) for r in (await conn.execute(q)).mappings()]
         return ChangePage(rows, total, {"mine": int(mine_n), "open": int(open_n), "resolved": int(done_n)}, facet)
+
+
+# What `kb.changed` carries of a base: its label as other services show it.
+LABEL = (kb_bases.c.id, kb_bases.c.team_id, kb_bases.c.name, kb_bases.c.color, kb_bases.c.revision)
+
+
+class BaseLabel(Out):
+    id: str
+    team_id: str
+    name: str
+    color: str
+    revision: int
+
+
+async def _changed(c: AsyncConnection, tenant: str, row: BaseLabel, *, deleted: bool = False) -> None:
+    """`kb.changed` on the outbox, in the transaction that made the change: the base's id, name, colour and
+    revision, for the copies of the names other services keep (ops_store.copies)."""
+    payload = KbChanged(id=row.id, name=row.name, colour=row.color, deleted=deleted)
+    revision = row.revision + (1 if deleted else 0)
+    event = Event(name="kb.changed", tenant_id=tenant, team_id=row.team_id, revision=revision, payload=payload)
+    await add_event(c, kb_outbox, event)
 
 
 def _released(tenant: str, source_id: str, owner: str) -> sa.Update:
