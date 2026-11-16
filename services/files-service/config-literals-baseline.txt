@@ -1,3 +1,1 @@
-# 2 literal timeouts and HTTP clients built in services/files-service (scripts/check_config_literals.py). A row may only fall.
-1 client services/files-service/src/ops_files/__main__.py
-1 timeout services/files-service/src/ops_files/__main__.py
+# 0 literal timeouts and HTTP clients built in services/files-service (scripts/check_config_literals.py). A row may only fall.

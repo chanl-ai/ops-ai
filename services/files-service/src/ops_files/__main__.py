@@ -11,7 +11,6 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
-import httpx
 import uvicorn
 
 from ops_files.app import create_files_app
@@ -95,24 +94,25 @@ def build(settings: Settings) -> TenantFiles:
 
 def main() -> None:
     settings = Settings()
-    settings.require(*settings.identity_endpoints)
+    # agents-service reads every file event (file.deleted starts the purge workflow), so files cannot run without it.
+    settings.require(*settings.identity_endpoints, "agents")
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="files-service")
     files = build(settings)
     # Released knowledge snapshots are deleted once their days pass.
-    background: list[Callable[[], Coroutine[Any, Any, None]]] = [lambda: keep_purging(files)]
-    if settings.agents_url:
-        # A deleted file's file.deleted reaches agents-service, which runs the purge workflow.
-        http = httpx.AsyncClient(base_url=settings.agents_url, timeout=5)
-        agents = ServiceClient.for_settings(settings, http, service="files", audience="agents", scopes=["events:emit"])
-        # A read request's event records the run it started on the request, which the console follows.
-        enrich = ReadRequestsStore(files.engine).record_run
-        targets = {"agents": agents}
-        events = relay(
-            files.engine, service_outbox, routes={"*": ("agents",)}, targets=targets, role=SYSTEM_ROLE, enrich=enrich
-        )
-        background.append(lambda: run_relay(events, key="files_relay", stop=asyncio.Event()))
+    # A deleted file's file.deleted reaches agents-service, which runs the purge workflow; a read request's event
+    # records the run it started on the request, which the console follows.
+    agents = ServiceClient.for_settings(settings, service="files", audience="agents", scopes=["events:emit"])
+    enrich = ReadRequestsStore(files.engine).record_run
+    targets = {"agents": agents}
+    events = relay(
+        files.engine, service_outbox, routes={"*": ("agents",)}, targets=targets, role=SYSTEM_ROLE, enrich=enrich
+    )
+    background: list[Callable[[], Coroutine[Any, Any, None]]] = [
+        lambda: keep_purging(files),
+        lambda: run_relay(events, key="files_relay", stop=asyncio.Event()),
+    ]
     app = create_files_app(
         files,
         engine=files.engine,
