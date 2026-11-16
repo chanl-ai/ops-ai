@@ -27,7 +27,7 @@ from ops_store.rows import rows
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
-from .tenancy import LOCAL_TENANT, RuntimeStore, current_tenant
+from .tenancy import RuntimeStore, current_tenant
 
 model_call_records = sa.Table(
     "model_call_records",
@@ -49,7 +49,7 @@ model_call_records = sa.Table(
     sa.Column("response", sa.JSON()),
     sa.Column("created_at", sa.String(40), nullable=False),
     # The thread's tenant, set from the request's or loop's context, never from a body (migration 0104).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default=LOCAL_TENANT),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     # One recorded response per task and request: the first one written wins (CAS).
     sa.UniqueConstraint("thread_id", "task", "request_hash", name="uq_model_call_replay"),
     sa.Index("ix_model_call_records_thread_id", "thread_id"),

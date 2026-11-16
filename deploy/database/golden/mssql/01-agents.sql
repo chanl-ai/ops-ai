@@ -723,7 +723,7 @@ CREATE TABLE model_call_records (
 	request_hash VARCHAR(64) NULL, 
 	response NVARCHAR(max) NULL, 
 	created_at VARCHAR(40) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT model_call_records_pkey PRIMARY KEY (id)
 );
 GO
@@ -839,7 +839,7 @@ CREATE TABLE thread_budgets (
 	max_tokens BIGINT NULL, 
 	max_cost_micros BIGINT NULL, 
 	updated_at VARCHAR(40) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT thread_budgets_pkey PRIMARY KEY (thread_id)
 );
 GO

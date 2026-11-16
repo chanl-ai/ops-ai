@@ -20,7 +20,7 @@ from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
 from .model_calls import ModelCall, ModelCallLedger
-from .tenancy import LOCAL_TENANT, RuntimeStore, current_tenant
+from .tenancy import RuntimeStore, current_tenant
 
 thread_budgets = sa.Table(
     "thread_budgets",
@@ -31,7 +31,7 @@ thread_budgets = sa.Table(
     sa.Column("max_cost_micros", sa.BigInteger()),
     sa.Column("updated_at", sa.String(40), nullable=False),
     # The thread's tenant, set from the request's or loop's context, never from a body (migration 0104).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default=LOCAL_TENANT),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     info=TENANT_SCOPED,
 )
 
