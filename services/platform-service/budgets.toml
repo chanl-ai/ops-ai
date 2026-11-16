@@ -1,5 +1,6 @@
 # The statement budget of every GET route (data-access standard DA1 and DA6), held by tests/test_statement_budget.py at
-# 5 and 55 rows per list. Each value is what the route runs today; a row only falls.
+# 5 and 50 rows per list. Each value is what the route runs today. A row falls when a route reads less; one that rises
+# says why beside it. A row's `query` is sent as the query string, `{name}` taking a seeded id.
 
 ["GET /.well-known/jwks.json"]
 queries = 0
@@ -8,7 +9,8 @@ queries = 0
 queries = 0
 
 ["GET /v1/access/holders"]
-not_budgeted = "needs the area and action query parameters, which the budget does not send"
+queries = 10
+query = { area = "agents", action = "edit" }
 
 ["GET /v1/api-key-summaries"]
 queries = 8
@@ -41,16 +43,20 @@ transactions = 2   # listed: the invite is found by its token before its tenant 
 connections = 2
 
 ["GET /v1/me"]
-queries = 8   # a workspace admin, as here, reads every other team too; anyone else runs 7
+queries = 7   # one more than for anyone else: a workspace admin, as here, also reads every other active team to list it
 
 ["GET /v1/me/permissions"]
 queries = 7
 
 ["GET /v1/me/why"]
-not_budgeted = "needs the area and action query parameters, which the budget does not send"
+queries = 14
+query = { area = "agents", action = "edit" }
 
 ["GET /v1/oauth/consent"]
-not_budgeted = "needs a registered client's query parameters, which the budget does not send"
+queries = 6
+transactions = 3   # listed: the assistant and its address's team are found before the tenant is known, each through system_tx on its own connection; the tenant's reads share one
+connections = 3
+query = { response_type = "code", client_id = "{client_id}", redirect_uri = "https://claude.example/callback", code_challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", code_challenge_method = "S256", resource = "{resource}", state = "st-1" }
 
 ["GET /v1/oauth/grants"]
 queries = 4

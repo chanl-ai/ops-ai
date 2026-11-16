@@ -10,6 +10,9 @@
   ["GET /v1/cases/{case_id}"]
   queries = 4
   hops_in_transaction = 1   # listed: a call to another service while the request's transaction is open
+  ["GET /v1/access/holders"]
+  queries = 6
+  query = { area = "agents", team = "{team_id}" }   # sent as the query string; `{name}` takes a seeded id
   ["GET /v1/auth/oidc/callback"]
   queries = 2
   status = 303              # listed: the status it answers by design, when not 200
@@ -39,6 +42,7 @@ from collections.abc import Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlencode
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute, iter_route_contexts
@@ -84,7 +88,8 @@ async def over_budget(
     """One line per GET route that has no budget row, answers other than its row's `status` (200 unless listed), runs
     more statements at 50 rows than at 5, exceeds its row, opens more transactions or checks out more connections than
     its row lists (one of each unless it says otherwise), calls another service while a transaction is open (none
-    unless listed) or keeps a transaction open too long. A row with `not_budgeted = "<reason>"` is not called, and
+    unless listed) or keeps a transaction open too long. A row's `query` table is sent as the query string, each
+    value formatted with the seeded ids. A row with `not_budgeted = "<reason>"` is not called, and
     needs its reason."""
     rows: dict[str, dict[str, Any]] = tomllib.loads(await asyncio.to_thread(budgets.read_text))
     seen: dict[str, list[dict[str, Any]]] = {}
@@ -97,7 +102,9 @@ async def over_budget(
                 continue
             stream.seek(0)
             stream.truncate()
-            answer = await client.get(route.format(**seeded.ids), headers=dict(seeded.headers))
+            query = urlencode({str(k): str(v).format(**seeded.ids) for k, v in row.get("query", {}).items()})
+            url = route.format(**seeded.ids) + (f"?{query}" if query else "")
+            answer = await client.get(url, headers=dict(seeded.headers))
             lines = [json.loads(line) for line in stream.getvalue().splitlines()]
             line = next((x for x in lines if x.get("event") == "http.request"), None)
             expected = int(row.get("status", 200))

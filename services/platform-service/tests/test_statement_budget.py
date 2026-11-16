@@ -1,7 +1,8 @@
 """Every GET route of platform-service in its statement budget (`budgets.toml`, data-access standard DA1 and DA6), by
 failure mode: a list whose statements grow with its rows, a route over its row, and a route that opens more
 transactions or checks out more connections than its row lists. Each list the routes read grows by `n` people,
-invites, keys, teams, custom roles, sign-in secrets and providers per seeding; the internal app's one GET is held by
+invites, keys, teams, custom roles and a person's grants of them, break-glass rows, the admin's connected assistants,
+sign-in secrets and providers per seeding; the internal app's one GET is held by
 the same file."""
 
 from __future__ import annotations
@@ -14,12 +15,22 @@ from fastapi import FastAPI
 
 from ops_identity import mint_service_token
 from ops_platform.store.roles import mirror_membership
-from ops_platform.store.tables import api_keys, members, roles, teams, users
+from ops_platform.store.tables import (
+    api_keys,
+    members,
+    role_assignments,
+    roles,
+    sessions,
+    signin_break_glass,
+    teams,
+    users,
+)
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import captured_logging
 from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check, over_budget
 
-from .conftest import CALLER, Platform, SignInRig
+from .conftest import CALLER, MCP_URL, Platform, SignInRig
+from .test_mcp_oauth import REGISTRATION
 
 BUDGETS = Path(__file__).parents[1] / "budgets.toml"
 
@@ -45,6 +56,14 @@ def seed_team(signin: SignInRig) -> SeedTeam:
 
     async def seed(n: int) -> Seeded:
         now = now_iso()
+        if "client_id" not in ids:
+            # An assistant registered once, for the consent page's query and the connections the admin holds.
+            made = await signin.public.post("/oauth/register", json=REGISTRATION)
+            assert made.status_code == 201, made.text
+            ids["client_id"] = made.json()["client_id"]
+            ids["resource"] = f"{MCP_URL}/mcp/{signin.ops_team}"
+            me = await signin.public.get("/v1/me", headers=signin.admin)
+            ids["admin_id"] = me.json()["data"]["user"]["id"]
         async with signin.engine.begin() as c:
             for _ in range(n):
                 user, team, role = new_id("usr"), new_id("team"), new_id("role")
@@ -65,6 +84,20 @@ def seed_team(signin: SignInRig) -> SeedTeam:
                     security_team=signin.security_team, granted_by="test", at=now,
                 )  # fmt: skip
                 ids.setdefault("person_id", user)
+                # A break-glass row, a connected assistant of the admin's and a custom role given to the person.
+                await c.execute(
+                    signin_break_glass.insert().values(
+                        tenant_id=signin.tenant, user_id=user, added_by="test", added_at=now
+                    )
+                )  # fmt: skip
+                await c.execute(
+                    sessions.insert().values(
+                        id=new_id("ses"), tenant_id=signin.tenant, user_id=ids["admin_id"], auth_method="password",
+                        refresh_hash=new_id("rh"), expires_at="2999-01-01T00:00:00.000Z", created_at=now,
+                        last_seen_at=now, kind="mcp", client_id=ids["client_id"], team_id=signin.ops_team,
+                        resource=ids["resource"], code_used_at=now,
+                    )
+                )  # fmt: skip
                 await c.execute(
                     teams.insert().values(
                         id=team, tenant_id=signin.tenant, name=f"T {team}", owner_groups=[], scope="owned",
@@ -74,6 +107,13 @@ def seed_team(signin: SignInRig) -> SeedTeam:
                 await c.execute(
                     roles.insert().values(
                         tenant_id=signin.tenant, id=role, name=f"R {role}", builtin=False, description="",
+                        created_at=now,
+                    )
+                )  # fmt: skip
+                await c.execute(
+                    role_assignments.insert().values(
+                        id=new_id("ras"), tenant_id=signin.tenant, subject_kind="person", subject_id=ids["person_id"],
+                        role_id=role, team_id=signin.security_team, granted_by="test", reason="test", source="grant",
                         created_at=now,
                     )
                 )  # fmt: skip

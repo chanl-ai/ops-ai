@@ -1,7 +1,7 @@
 """The statement budget fixture on a small app, by failure mode: a route whose statements grow with its rows, one
 over its budget, one that opens a second transaction or checks out a second connection nobody listed, one that calls
 another service while its transaction is open, a GET with no budget row, one that answers other than 200 or than the
-status its row lists, and one left out of the budget with no reason."""
+status its row lists, one left out of the budget with no reason, and a route whose row's query never reaches it."""
 
 from __future__ import annotations
 
@@ -45,6 +45,9 @@ queries = 3
 status = 303
 ["GET /v1/moved"]
 queries = 3
+["GET /v1/asks"]
+queries = 3
+query = { area = "agents", item = "{item_id}" }
 ["GET /v1/callback"]
 not_budgeted = "a sign-in callback: answers only with the provider's code"
 ["GET /v1/no-reason"]
@@ -87,6 +90,11 @@ def app(seeded: dict[str, int]) -> FastAPI:
     async def heavy(item_id: str) -> dict[str, int]:  # pyright: ignore[reportUnusedFunction]
         return spend(9)
 
+    @app.get("/v1/asks")
+    async def asks(area: str, item: str) -> dict[str, int]:  # pyright: ignore[reportUnusedFunction]
+        # Refused without its query; over budget only when both values arrive, the path id filled in.
+        return spend(9 if (area, item) == ("agents", "itm_1") else 2)
+
     app.get("/v1/twice")(lambda: spend(2, transactions=2))
     app.get("/v1/stream")(lambda: spend(2, transactions=2))
     app.get("/v1/unlisted")(lambda: spend(1))
@@ -127,6 +135,7 @@ async def test_each_route_outside_its_budget_is_named_and_one_inside_it_is_not(
     assert await statement_budget(budgets) == [
         "GET /v1/moved: answered 303 at 5 rows, 200 listed",
         "GET /v1/moved: answered 303 at 50 rows, 200 listed",
+        "GET /v1/asks: 9 statements, budget 3",
         "GET /v1/heavy/{item_id}: 9 statements, budget 3",
         "GET /v1/hop: 1 service call while a transaction was open, 0 listed",
         "GET /v1/no-reason: not_budgeted needs a reason",

@@ -952,7 +952,7 @@ def create_public_app(
 
     @app.get("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentOut], responses=oauth_errors)
     async def oauth_consent(  # pyright: ignore[reportUnusedFunction]
-        request: Request, claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx, request: Request, claims: Annotated[dict[str, Any], Depends(claims_of)]
     ) -> Any:
         """What the consent page shows for an assistant's request: the assistant, the team its address names, the
         host the browser returns to and how long the connection lasts. 403 `team_forbidden` for a person outside the
