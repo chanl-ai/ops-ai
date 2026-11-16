@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from ops_documents.store.document_types import document_type_versions, document_types
 
 from .conftest import OPS, Make
 from .test_document_types import FIELDS, TYPE, Models, Prices
@@ -71,3 +75,51 @@ async def test_the_document_type_extraction_and_reading_replies_keep_every_key_a
         seen["askReading"] = data(await c.post("/v1/documents/readings", json={"fileId": fid}, headers=OPS))
         seen["reading"] = data(await c.get(f"/v1/documents/readings/{fid}", headers=OPS))
     assert seen == json.loads(PINS.read_text()), json.dumps(seen, indent=2, sort_keys=True)
+
+
+async def test_a_version_saved_before_its_options_existed_reads_as_their_defaults(
+    make: Make, engine: AsyncEngine
+) -> None:
+    """A version row from before templates, checks, the date order, page images and offerAt were columns holds null in
+    each; it answers as the defaults, never as null and never as an error."""
+    s = make(Models(), Floor(0.5), Prices())
+    async with s.client as c:
+        data(await c.post("/v1/document-types", json=TYPE, headers=OPS), 201)
+        async with engine.begin() as conn:
+            v = document_type_versions.c
+            old = {"templates": None, "checks": None, "date_order": None, "page_images": None, "offer_at": None}
+            await conn.execute(
+                sa.update(document_type_versions)
+                .where(v.tenant_id == s.tenant, v.type_id == "invoice_notice")
+                .values(**old)
+            )
+            t = document_types.c
+            await conn.execute(sa.update(document_types).where(t.tenant_id == s.tenant).values(description="older"))
+        got = data(await c.get("/v1/document-types/invoice_notice", headers=OPS))
+        version = data(await c.get("/v1/document-types/invoice_notice/versions/1", headers=OPS))
+    assert version == got["versions"][0], (version, got)
+    assert {k: v for k, v in got.items() if k != "versions"} == {
+        "id": "invoice_notice",
+        "name": "Invoice notice",
+        "description": "older",
+        "team": "team_ops",
+        "latestVersion": 1,
+        "createdBy": "j.richardson@harborpine.example",
+        "createdAt": "<time+00:00>",
+        "samples": [],
+        "canEdit": True,
+    }, got
+    assert version == {
+        "version": 1,
+        "fields": json.loads(PINS.read_text())["create"]["versions"][0]["fields"],
+        "many": False,
+        "reviewBelow": None,
+        "dateOrder": "MDY",
+        "templates": [],
+        "checks": [],
+        "pageImages": False,
+        "offerAt": 5,
+        "note": None,
+        "createdBy": "j.richardson@harborpine.example",
+        "createdAt": "<time+00:00>",
+    }, version
