@@ -25,7 +25,7 @@ from ops_store import isolation
 from ops_store.backends import backends
 from ops_store.conformance import engine_for, sql_server_database
 from ops_store.database import open_database
-from ops_store.dialect import dialect_of
+from ops_store.dialect import db_epoch, db_now, dialect_of
 from ops_store.isolation import InstallScopeError, NoTenantError
 from ops_store.schema import (
     MSSQL_SECURITY,
@@ -363,3 +363,23 @@ async def test_an_install_block_refuses_a_column_of_another_table_and_sql_text_o
     assert await _outcomes(st, statements) == ["refused"] * len(statements)
     async with st.install_tx(SETTINGS) as c:
         assert await c.scalar(sa.select(settings.c.value)) == "eu", "a system table is still read"
+
+
+async def test_an_install_block_calls_only_the_listed_functions(engine: AsyncEngine) -> None:
+    """A database function can read any table (or a view over one), so only the listed functions and the database's
+    clock run; any other name, a schema-qualified one, or a function used as a table is refused."""
+    st = Install(engine)
+    allowed: list[sa.Executable] = [
+        sa.select(sa.func.count(settings.c.name), sa.func.coalesce(sa.func.max(settings.c.value), "none")),
+        sa.select(db_now(), db_epoch()),
+    ]
+    user = sa.func.current_user() if dialect_of(engine) == "postgresql" else sa.func.user_name()
+    refused: list[sa.Executable] = [
+        sa.select(user),
+        sa.select(sa.func.sum(sa.literal(2, sa.Integer))).select_from(settings),
+        sa.select(settings.c.value).where(settings.c.name == sa.func.store_test_install_reader()),
+        sa.select(sa.func.dbo.count(settings.c.name)),
+        sa.select(sa.func.count().table_valued("n")),
+    ]
+    out = await _outcomes(st, [*allowed, *refused])
+    assert out == ["ran"] * len(allowed) + ["refused"] * len(refused), out

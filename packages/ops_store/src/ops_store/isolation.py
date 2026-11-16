@@ -41,6 +41,8 @@ from sqlalchemy.exc import DBAPIError, InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 from sqlalchemy.sql import operators, visitors
 from sqlalchemy.sql.elements import CollationClause, Extract, quoted_name
+from sqlalchemy.sql.functions import FunctionElement
+from sqlalchemy.sql.selectable import TableValuedAlias
 
 from ops_service_kit.logging import add_context, get_logger
 from ops_service_kit.request_timing import note_caller
@@ -179,9 +181,9 @@ def install_wide(reason: str) -> Generator[Isolation]:
     """No tenant for a block, logged with `reason`: statements on the install's own tables (marked `system(...)`) from
     a path that may have no caller (a route that authenticates by a model key, a seed, a loop). Inside a request it
     runs on the request's connection. Every statement on a connection in this scope is checked before it is sent
-    (`_refuse_outside_install`): one with a table or column of a table not marked `system(...)`, or SQL text, raises
-    `InstallScopeError`, whatever the login and whether or not the table has a row policy. `tenant()` and
-    `team_visible` raise inside."""
+    (`_refuse_outside_install`): one with a table or column of a table not marked `system(...)`, SQL text, or a
+    function not listed in `INSTALL_FUNCTIONS` raises `InstallScopeError`, whatever the login and whether or not the
+    table has a row policy. `tenant()` and `team_visible` raise inside."""
     _need(reason, "install_wide")
     base = _ctx.get()
     _log_widen(base.kind if base else TASK, reason=reason, scope="install", tenant="-")
@@ -431,6 +433,9 @@ async def enter_transaction(
     now needs none: PostgreSQL goes back to the login's own."""
     install = ctx.scope == "install"
     values = {"tenant_id": ctx.tenant_id, "team_id": ctx.team_id or "", "scope": ctx.scope}
+    # The mechanism's own statement (set_config, a function no install block may call) is not an install block's: the
+    # mark goes first. A statement that fails here fails its transaction, so nothing runs on unmarked.
+    conn.info.pop(_INSTALL, None)
     match dialect.dialect_of(conn):
         case "postgresql":
             values["tenant_id"] = _NO_TENANT if install else ctx.tenant_id
@@ -482,6 +487,12 @@ def _forget_install(_dbapi_conn: object, record: Any) -> None:
 # (a parenthesised subquery) is raw SQL.
 _BARE = re.compile(r"\*|-?\d+(\.\d+)?|'[^']*'|[A-Za-z_][A-Za-z0-9_]*")
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# The database functions a statement in install scope may call, by name: the ones today's install statements use
+# (a count, a fallback, a maximum), which read only their arguments. Any other function may read any table (or a view
+# over one), so it is refused, as is a schema-qualified name or a function used as a table. The database's clock
+# (`dialect.db_now`, `db_epoch`, `db_after`) runs too.
+INSTALL_FUNCTIONS = frozenset({"coalesce", "count", "max"})
+_CLOCK = (dialect.db_now, dialect.db_epoch, dialect.db_after)
 # The statements an install-wide block runs: a DDL element or anything else is refused.
 _STATEMENTS = (sa.Select, sa.CompoundSelect, sa.Insert, sa.Update, sa.Delete)
 # Text a statement carries beside its tree, which the walk below does not reach: rendered as written.
@@ -499,8 +510,9 @@ def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> Non
     table is refused even where the statement's tree does not hold that table. Raw SQL (a text clause, a literal
     column, a custom operator, a prefix, suffix or hint other than the dialect's lock hints, a collation or EXTRACT
     field, an unquoted name, a string for the driver) names no table the check can read, so it is refused rather than
-    parsed; the mechanism's own context statement is the one exception. Functions are not judged here. Each statement
-    is checked as written, so a cached compile does not skip it."""
+    parsed; the mechanism's own context statements are the exceptions. A function runs only when it is listed
+    (`INSTALL_FUNCTIONS`) or is the database's clock. Each statement is checked as written, so a cached compile does
+    not skip it."""
     if not conn.info.get(_INSTALL) or statement is _MS_SET:
         return
     kind: type[object] = type(cast(object, statement))
@@ -542,6 +554,7 @@ def _part_problems(e: object) -> Iterator[str]:
     hints: dict[object, str] = getattr(e, "_hints", None) or {}
     ops: list[object] = [getattr(e, "operator", None), getattr(e, "modifier", None)]
     beside: list[object] = [getattr(e, part, ()) for part in _TEXT_PARTS]
+    packages: object = getattr(e, "packagenames", ())
     literal: object = getattr(e, "is_literal", False)
     if issubclass(kind, sa.TextClause) or (
         issubclass(kind, sa.ColumnClause) and literal and not _BARE.fullmatch(str(name))
@@ -555,6 +568,12 @@ def _part_problems(e: object) -> Iterator[str]:
         yield "raw SQL (a custom operator)"
     if issubclass(kind, Extract | CollationClause) and not _NAME.fullmatch(str(text)):
         yield f"raw SQL (an EXTRACT field or collation {text!r})"
+    if issubclass(kind, TableValuedAlias):
+        yield "a function used as a table"
+    if issubclass(kind, FunctionElement) and not issubclass(kind, _CLOCK):
+        fn = str(name or kind.__name__).lower()
+        if packages or fn not in INSTALL_FUNCTIONS:
+            yield f"the function {fn} (listed: {', '.join(sorted(INSTALL_FUNCTIONS))})"
     if any(beside):
         yield "raw SQL (a prefix, suffix or statement hint)"
     if any(hint not in dialect.LOCK_HINTS for hint in hints.values()):
