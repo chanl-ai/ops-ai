@@ -149,7 +149,7 @@ def _merge(
     ]
     if changed:
         parts.append("WHEN MATCHED THEN UPDATE SET " + ", ".join(f"t.{q(c)} = s.{q(c)}" for c in changed))
-    parts.append(f"WHEN NOT MATCHED THEN INSERT ({names}) VALUES ({', '.join(f's.{q(c)}' for c in cols)})")
+    parts.append(f"WHEN NOT MATCHED THEN INSERT ({names}) VALUES ({', '.join(f's.{q(c)}' for c in cols)})")  # noqa: S608 - column names go through q()
     if returning:
         parts.append("OUTPUT " + ", ".join(f"inserted.{q(c)}" for c in returning))
     params = [sa.bindparam(f"v_{i}", values[c], type_=table.c[c].type) for i, c in enumerate(cols)]
@@ -406,14 +406,14 @@ def _has_pg(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
 def _has_mssql(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
     key = _literal_text(e.field)
     col, val = c.process(e.column, **kw), c.process(e.value, **kw)
-    return f"EXISTS (SELECT 1 FROM OPENJSON({col}, '$.{key}') WHERE value = {val})"
+    return f"EXISTS (SELECT 1 FROM OPENJSON({col}, '$.{key}') WHERE value = {val})"  # noqa: S608 - the key goes through _literal_text
 
 
 @compiles(json_array_has)
 def _has_other(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
     key = _literal_text(e.field)
     col, val = c.process(e.column, **kw), c.process(e.value, **kw)
-    return f"EXISTS (SELECT 1 FROM json_each({col}, '$.{key}') WHERE value = {val})"
+    return f"EXISTS (SELECT 1 FROM json_each({col}, '$.{key}') WHERE value = {val})"  # noqa: S608 - the key goes through _literal_text
 
 
 # Vectors ----------------------------------------------------------------------------------------------------------

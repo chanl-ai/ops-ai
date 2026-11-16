@@ -306,7 +306,7 @@ def batches(statements: Iterable[str]) -> str:
 PRECONDITIONS = batches(
     [
         "SET XACT_ABORT ON;",
-        "IF CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')) <> N'" + COLLATION + "'\n"
+        "IF CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')) <> N'" + COLLATION + "'\n"  # noqa: S608 - the collation is a module constant
         f"    THROW 50001, N'Ops AI needs the database collation {COLLATION}', 1;\n"
         "IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = DB_NAME() AND is_read_committed_snapshot_on = 1)\n"
         "    THROW 50002, N'Ops AI needs READ_COMMITTED_SNAPSHOT ON', 1;\n"
@@ -544,7 +544,7 @@ def steps(old: Checkout, new: Checkout) -> list[Step]:
 
 def guard(version_table: str, expected: str) -> str:
     return (
-        f"IF NOT EXISTS (SELECT 1 FROM dbo.{version_table} WHERE version_num = N'{expected}')\n"
+        f"IF NOT EXISTS (SELECT 1 FROM dbo.{version_table} WHERE version_num = N'{expected}')\n"  # noqa: S608 - version table and revision are the chain's own names
         f"    THROW 50010, N'this step needs {version_table} at {expected}', 1;\nGO\n"
     )
 

@@ -257,7 +257,7 @@ def member_ddl(role: str, login: str) -> str:
     it runs as the migrator wherever roles.sql granted the role. A migration that adds such a role grants it with this:
     roles.sql runs once per server, so a login made before the role existed is otherwise never a member."""
     return (
-        f"DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{login}') "
+        f"DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{login}') "  # noqa: S608 - role and login names come from the module's own spec
         f"AND NOT pg_has_role('{login}', '{role}', 'MEMBER') THEN GRANT {role} TO {login}; END IF; END $$"
     )
 
@@ -477,7 +477,7 @@ def mssql_full_text_ddl(table: sa.Table) -> list[str]:
     quote = mssql_dialect.dialect().identifier_preparer.quote
     catalog, columns = spec["catalog"], ", ".join(quote(c) for c in spec["columns"])
     return [
-        "IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN "
+        "IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN "  # noqa: S608 - catalog, table and column names come from the module's own spec
         f"IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = '{catalog}') "
         f"EXEC('CREATE FULLTEXT CATALOG {catalog}'); "
         f"IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID('{table.name}')) "

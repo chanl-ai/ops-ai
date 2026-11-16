@@ -106,10 +106,6 @@ ignore = ["PLR0913", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "N818"]
 "**/experiments/**" = ["T20", "S608", "ASYNC"]
 # A migration builds its DDL from the chain's own table and role names, never from input.
 "**/migrations/**" = ["T20", "S608"]
-# SQL Server statements built from the module's own identifiers; another change owns these files now.
-"packages/ops_store/src/ops_store/dialect.py" = ["S608"]
-"packages/ops_store/src/ops_store/schema.py" = ["S608"]
-"deploy/database/mssql.py" = ["S608"]
 # The published SDK's client takes a per-call timeout, which is its public signature.
 "sdk/python/src/ops_ai/_client.py" = ["ASYNC109"]
 # Code the sandbox runner executes; its print is the output a test reads.
