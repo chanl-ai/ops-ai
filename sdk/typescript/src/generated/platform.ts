@@ -728,8 +728,8 @@ export interface paths {
         };
         /**
          * Person Role Grants
-         * @description The custom roles given to a person on their own, each with its team; read by whoever shares a team with
-         *     them, as their permissions are (404 otherwise).
+         * @description The custom roles given to a person on their own, each with its team, on the shared list contract by role
+         *     name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise).
          */
         get: operations["people_person_role_grants"];
         put?: never;
@@ -821,8 +821,9 @@ export interface paths {
         };
         /**
          * List Roles
-         * @description Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs
-         *     access.view in the acting team: 403 `admin_required`.
+         * @description The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched
+         *     on name, with how many permissions each grants and how many hold it. Needs access.view in the acting team:
+         *     403 `admin_required`.
          */
         get: operations["roles_list_roles"];
         put?: never;
@@ -878,7 +879,8 @@ export interface paths {
         };
         /**
          * Role Holders
-         * @description Who holds the role and in which team: what deleting it would take from them. A workspace admin's.
+         * @description Who holds the role and in which team, on the shared list contract by name, searched on name and email:
+         *     what deleting it would take from them. A workspace admin's.
          */
         get: operations["roles_role_holders"];
         put?: never;
@@ -2099,6 +2101,33 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[RoleGrantOut]] */
+        Envelope_ListResult_RoleGrantOut__: {
+            data: components["schemas"]["ListResult_RoleGrantOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleHolderOut]] */
+        Envelope_ListResult_RoleHolderOut__: {
+            data: components["schemas"]["ListResult_RoleHolderOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleOut]] */
+        Envelope_ListResult_RoleOut__: {
+            data: components["schemas"]["ListResult_RoleOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[WorkspaceTeamOut]] */
         Envelope_ListResult_WorkspaceTeamOut__: {
             data: components["schemas"]["ListResult_WorkspaceTeamOut_"];
@@ -2378,36 +2407,6 @@ export interface components {
         Envelope_list_ProviderOut__: {
             /** Data */
             data: components["schemas"]["ProviderOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleGrantOut]] */
-        Envelope_list_RoleGrantOut__: {
-            /** Data */
-            data: components["schemas"]["RoleGrantOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleHolderOut]] */
-        Envelope_list_RoleHolderOut__: {
-            /** Data */
-            data: components["schemas"]["RoleHolderOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleOut]] */
-        Envelope_list_RoleOut__: {
-            /** Data */
-            data: components["schemas"]["RoleOut"][];
             /**
              * Success
              * @constant
@@ -2764,6 +2763,42 @@ export interface components {
         ListResult_MemberOut_: {
             /** Data */
             data: components["schemas"]["MemberOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleGrantOut] */
+        ListResult_RoleGrantOut_: {
+            /** Data */
+            data: components["schemas"]["RoleGrantOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleHolderOut] */
+        ListResult_RoleHolderOut_: {
+            /** Data */
+            data: components["schemas"]["RoleHolderOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleOut] */
+        ListResult_RoleOut_: {
+            /** Data */
+            data: components["schemas"]["RoleOut"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -7354,7 +7389,14 @@ export interface operations {
     };
     people_person_role_grants: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 person_id: string;
@@ -7369,7 +7411,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleGrantOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleGrantOut__"];
                 };
             };
             /** @description Invalid request */
@@ -7977,7 +8019,14 @@ export interface operations {
     };
     roles_list_roles: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7990,7 +8039,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleOut__"];
                 };
             };
             /** @description Invalid request */
@@ -8496,7 +8545,14 @@ export interface operations {
     };
     roles_role_holders: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 role_id: string;
@@ -8511,7 +8567,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleHolderOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleHolderOut__"];
                 };
             };
             /** @description Invalid request */

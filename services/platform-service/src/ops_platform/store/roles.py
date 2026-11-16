@@ -32,8 +32,10 @@ from ops_access.catalogue import ADMIN
 from ops_identity import Principal
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import lock_key
+from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 
 from .audit import record
@@ -133,8 +135,9 @@ class Holdings:
 class RoleStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    async def roles(self, tenant_id: str) -> list[RoleSummary]:
-        """Every role with its permission and assignment counts, built-in roles first in their fixed order."""
+    async def roles(self, tenant_id: str, params: ListParams) -> ListPage:
+        """The roles on the shared list contract, with their permission and assignment counts: built-in roles first in
+        their fixed order, then custom roles by name, then by id; searched on name."""
         perms = (
             sa.select(role_permissions.c.role_id, sa.func.count().label("n"))
             .group_by(role_permissions.c.role_id)
@@ -145,23 +148,26 @@ class RoleStore(TenantDb):
             .group_by(role_assignments.c.role_id)
             .subquery()
         )
-        q = (
-            sa.select(
-                roles.c.id,
-                roles.c.name,
-                roles.c.builtin,
-                roles.c.description,
-                sa.func.coalesce(perms.c.n, 0).label("permission_count"),
-                sa.func.coalesce(held.c.n, 0).label("assignment_count"),
-            )
-            .outerjoin(perms, perms.c.role_id == roles.c.id)
-            .outerjoin(held, held.c.role_id == roles.c.id)
-            .order_by(roles.c.builtin.desc(), sa.func.lower(roles.c.name), roles.c.id)
+        q = sa.select(
+            roles.c.id,
+            roles.c.name,
+            roles.c.builtin,
+            roles.c.description,
+            sa.func.coalesce(perms.c.n, 0).label("permission_count"),
+            sa.func.coalesce(held.c.n, 0).label("assignment_count"),
+        ).select_from(
+            roles.outerjoin(perms, perms.c.role_id == roles.c.id).outerjoin(held, held.c.role_id == roles.c.id)
+        )
+        # One sort key: a built-in role's place in BUILTIN_ROLES ("0" and two digits), else "1" and the lower-case name.
+        place = sa.case(
+            {b.id: f"0{n:02d}" for n, b in enumerate(BUILTIN_ROLES)},
+            value=roles.c.id,
+            else_=sa.literal("1") + sa.func.lower(roles.c.name),
         )
         async with self.tenant_tx(tenant_id) as c:
-            found = await rows(c, q, RoleSummary)
-        order = {r.id: i for i, r in enumerate(BUILTIN_ROLES)}
-        return sorted(found, key=lambda r: (not r.builtin, order.get(r.id, 0)))
+            page = await list_page(c, q, params, search=[roles.c.name], default_sort=place.asc())
+        page["data"] = [RoleSummary.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
 
     async def role_by_id(self, tenant_id: str, role_id: str) -> RoleRow | None:
         held = (
@@ -358,10 +364,21 @@ class RoleStore(TenantDb):
                 detail={"from": before.name if before else None, "to": name},
             )
 
-    async def holders(self, tenant_id: str, role_id: str) -> list[RoleHolderRow]:
-        """Who holds the role and in which team, each person by name and address."""
+    async def holders(self, tenant_id: str, role_id: str, params: ListParams) -> ListPage:
+        """Who holds the role and in which team on the shared list contract, each person by name and address: by name,
+        then by assignment id; searched on name and email."""
+        q = (
+            sa.select(role_assignments.c.subject_kind.label("kind"), role_assignments.c.subject_id.label("id"),
+                      role_assignments.c.team_id, sa.func.coalesce(users.c.name, role_assignments.c.subject_id)
+                      .label("name"), users.c.email)
+            .select_from(role_assignments.outerjoin(users, sa.and_(users.c.id == role_assignments.c.subject_id,
+                                                                   role_assignments.c.subject_kind == "person")))
+            .where(role_assignments.c.role_id == role_id)
+        )  # fmt: skip
         async with self.tenant_tx(tenant_id) as c:
-            return await self._holders_in(c, role_id)
+            page = await list_page(c, q, params, search=[users.c.name, users.c.email], default_sort=users.c.name.asc())
+        page["data"] = [RoleHolderRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
 
     async def delete(self, tenant_id: str, role_id: str, *, move_to: str | None, by: str, request_id: str) -> int:
         """Deletes a custom role. While people or teams hold it, RoleInUseError names them, unless `move_to` names the
@@ -411,8 +428,9 @@ class RoleStore(TenantDb):
             )
         return moved
 
-    async def grants_of(self, tenant_id: str, user_id: str) -> list[RoleGrantRow]:
-        """The roles given to the person on their own (not their team role), each with its team and who gave it."""
+    async def grants_of(self, tenant_id: str, user_id: str, params: ListParams) -> ListPage:
+        """The roles given to the person on their own (not their team role), each with its team and who gave it, on
+        the shared list contract: by role name, then by assignment id; searched on the role's name."""
         q = (
             sa.select(
                 role_assignments.c.id,
@@ -423,17 +441,18 @@ class RoleStore(TenantDb):
                 role_assignments.c.granted_by,
                 role_assignments.c.created_at,
             )
-            .join(roles, roles.c.id == role_assignments.c.role_id)
+            .select_from(role_assignments.join(roles, roles.c.id == role_assignments.c.role_id))
             .where(
                 role_assignments.c.subject_kind == "person",
                 role_assignments.c.subject_id == user_id,
                 role_assignments.c.source == "grant",
                 roles.c.builtin.is_(False),
             )
-            .order_by(roles.c.name, role_assignments.c.team_id)
         )
         async with self.tenant_tx(tenant_id) as c:
-            return await rows(c, q, RoleGrantRow)
+            page = await list_page(c, q, params, search=[roles.c.name], default_sort=roles.c.name.asc())
+        page["data"] = [RoleGrantRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
 
     async def grant(self, tenant_id: str, user_id: str, role_id: str, team_id: str, *, by: str, request_id: str) -> str:
         """Gives the person a role in a team, audited as `role.grant`; AlreadyGrantedError when they hold it there."""

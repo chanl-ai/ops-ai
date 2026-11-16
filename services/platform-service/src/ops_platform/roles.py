@@ -14,6 +14,8 @@ from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_AC
 from ops_access.catalogue import ADMIN
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListParams
+from ops_store.listing import ListPage
 
 from .store.roles import AlreadyGrantedError, Holdings, RoleInUseError, RoleNameTakenError, RoleRow, RoleStore
 
@@ -34,8 +36,8 @@ def _checked(cells: list[Grant]) -> None:
 class Roles:
     store: RoleStore
 
-    async def list(self, tenant_id: str) -> list[dict[str, Any]]:
-        return [r.model_dump(by_alias=True) for r in await self.store.roles(tenant_id)]
+    async def list(self, tenant_id: str, params: ListParams) -> ListPage:
+        return await self.store.roles(tenant_id, params)
 
     async def get(self, tenant_id: str, role_id: str) -> dict[str, Any]:
         role = await self.store.role_by_id(tenant_id, role_id)
@@ -162,8 +164,8 @@ class Roles:
             grant_id = await self.store.grant(tenant_id, person_id, role_id, team_id, by=by, request_id=request_id)
         except AlreadyGrantedError as e:
             raise Conflict(f"They hold {role.name} in that team already.", code="already_granted") from e
-        given = next(g for g in await self.store.grants_of(tenant_id, person_id) if g.id == grant_id)
-        return given.model_dump(by_alias=True)
+        [given] = (await self.store.grants_of(tenant_id, person_id, ListParams(ids=[grant_id])))["data"]
+        return given
 
     async def _custom(self, tenant_id: str, role_id: str, verb: str) -> RoleRow:
         role = await self.store.role_by_id(tenant_id, role_id)

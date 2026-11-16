@@ -467,7 +467,14 @@ export const platformOperations = {
     "pathParams": [
       "person_id"
     ],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "people_take_role": {
@@ -552,7 +559,14 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/roles",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "roles_read_role": {
@@ -596,7 +610,14 @@ export const platformOperations = {
     "pathParams": [
       "role_id"
     ],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "sign_in_providers_add_break_glass": {

@@ -971,21 +971,6 @@ class EnvelopeListPolicyOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListRoleGrantOut(TypedDict, closed=True):
-    data: list[RoleGrantOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleHolderOut(TypedDict, closed=True):
-    data: list[RoleHolderOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleOut(TypedDict, closed=True):
-    data: list[RoleOut]
-    success: Literal[True]
-
-
 class EnvelopeListSignInSecretOut(TypedDict, closed=True):
     data: list[SignInSecretOut]
     success: Literal[True]
@@ -1026,6 +1011,24 @@ class ListResultApiKeyOut(TypedDict, closed=True):
 
 class ListResultMemberOut(TypedDict, closed=True):
     data: list[MemberOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleGrantOut(TypedDict, closed=True):
+    data: list[RoleGrantOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleHolderOut(TypedDict, closed=True):
+    data: list[RoleHolderOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleOut(TypedDict, closed=True):
+    data: list[RoleOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -1120,6 +1123,21 @@ class EnvelopeListResultApiKeyOut(TypedDict, closed=True):
 
 class EnvelopeListResultMemberOut(TypedDict, closed=True):
     data: ListResultMemberOut
+    success: Literal[True]
+
+
+class EnvelopeListResultRoleGrantOut(TypedDict, closed=True):
+    data: ListResultRoleGrantOut
+    success: Literal[True]
+
+
+class EnvelopeListResultRoleHolderOut(TypedDict, closed=True):
+    data: ListResultRoleHolderOut
+    success: Literal[True]
+
+
+class EnvelopeListResultRoleOut(TypedDict, closed=True):
+    data: ListResultRoleOut
     success: Literal[True]
 
 

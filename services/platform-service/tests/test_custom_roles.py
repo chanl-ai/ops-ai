@@ -88,7 +88,7 @@ async def test_a_held_role_is_deleted_only_by_moving_its_holders_and_every_chang
     person = await platform.person(roles=("viewer",), tenant_id=owner.tenant_id)
     team = next(iter(person.teams))
     await grant(platform, person, team, rid)
-    holders = (await platform.public.get(f"/v1/roles/{rid}/holders", headers=ah)).json()["data"]
+    holders = (await platform.public.get(f"/v1/roles/{rid}/holders", headers=ah)).json()["data"]["data"]
     assert [(h["id"], h["teamId"]) for h in holders] == [(person.user_id, team)]
     held = await platform.public.delete(f"/v1/roles/{rid}", headers=ah)
     assert (held.status_code, held.json()["error"]["code"]) == (409, "role_in_use"), held.text
@@ -128,9 +128,48 @@ async def test_an_admin_gives_and_takes_a_custom_role_in_the_team_they_act_in(pl
     assert outside.json()["error"]["code"] == "not_a_member", outside.text
     who = await _principal(platform, await bearer(platform, member), team)
     assert can(who, "knowledge", "edit", team=team) == "all"
-    listed = (await platform.public.get(path, headers=th)).json()["data"]
+    listed = (await platform.public.get(path, headers=th)).json()["data"]["data"]
     taken = await platform.public.delete(f"{path}/{listed[0]['id']}", headers=th)
     assert taken.status_code == 204, taken.text
     who = await _principal(platform, await bearer(platform, member), team)
     with pytest.raises(Forbidden):
         can(who, "knowledge", "edit", team=team)
+
+
+async def test_role_lists_never_show_another_persons_or_tenants_rows(platform: Platform) -> None:
+    # A person's grants are theirs only; a role's holders are that role's, in this tenant only; the roles are this
+    # tenant's; `ids` and a search naming the others each still answer the asked-for rows only.
+    made: dict[str, list[str]] = {}
+    people: dict[str, Any] = {}
+    for tenant in ("mine", "outside"):
+        owner, ah = await _admin(platform)
+        rid = await platform.public.post("/v1/roles", headers=ah, json={"name": "Desk", "permissions": CASE_DESK})
+        for who in ("a", "b"):
+            member = await platform.person(roles=("viewer",), tenant_id=owner.tenant_id)
+            th = {**await bearer(platform, owner), "X-Team-Id": next(iter(member.teams))}
+            path = f"/v1/people/{member.user_id}/role-grants"
+            given = await platform.public.post(path, headers=th, json={"roleId": rid.json()["data"]["id"]})
+            assert given.status_code == 201, given.text
+            made.setdefault(tenant + who, []).append(given.json()["data"]["id"])
+            people[tenant + who] = member
+        people[tenant] = (owner, ah)
+        made[tenant] = [rid.json()["data"]["id"]]
+    owner, ah = people["mine"]
+    mine, theirs = made["minea"], {*made["mineb"], *made["outsidea"], *made["outsideb"]}
+    path = f"/v1/people/{people['minea'].user_id}/role-grants"
+    for params in ({}, {"search": "desk"}, {"ids": [*mine, *theirs]}):
+        r = await platform.public.get(path, headers=ah, params=params)
+        assert r.status_code == 200, r.text
+        listed = {g["id"] for g in r.json()["data"]["data"]}
+        assert listed == set(mine), (params, listed)
+    outsiders = {people["outsidea"].user_id, people["outsideb"].user_id, people["outside"][0].user_id}
+    for params in ({}, {"search": "@"}, {"pageSize": 50}):
+        r = await platform.public.get("/v1/roles/viewer/holders", headers=ah, params=params)
+        assert r.status_code == 200, r.text
+        held = {h["id"] for h in r.json()["data"]["data"]}
+        assert people["minea"].user_id in held and owner.user_id not in held and not held & outsiders, (params, held)
+    for params in ({}, {"search": "desk"}, {"ids": [*made["mine"], *made["outside"]]}):
+        r = await platform.public.get("/v1/roles", headers=ah, params=params)
+        assert r.status_code == 200, r.text
+        listed = {x["id"] for x in r.json()["data"]["data"]}
+        assert made["mine"][0] in listed and made["outside"][0] not in listed, (params, listed)

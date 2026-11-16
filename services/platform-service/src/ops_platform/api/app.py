@@ -630,12 +630,13 @@ def create_public_app(
 
     roles = Roles(RoleStore(store.db))
 
-    @app.get("/v1/roles", tags=["roles"], response_model=Envelope[list[RoleOut]], responses=ERRORS)
-    async def list_roles(_: Tx, actor: Annotated[Actor, Depends(reading)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs
-        access.view in the acting team: 403 `admin_required`."""
+    @app.get("/v1/roles", tags=["roles"], response_model=Envelope[ListResult[RoleOut]], responses=ERRORS)
+    async def list_roles(_: Tx, q: ListQuery, actor: Annotated[Actor, Depends(reading)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched
+        on name, with how many permissions each grants and how many hold it. Needs access.view in the acting team:
+        403 `admin_required`."""
         await people.require_admin(actor, "access", "view")
-        return ok(await roles.list(actor.tenant_id))
+        return ok(await roles.list(actor.tenant_id, q))
 
     @app.get("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def read_role(  # pyright: ignore[reportUnusedFunction]
@@ -1175,29 +1176,39 @@ def create_public_app(
         return ok(renamed | {"canEdit": True})
 
     @app.get(
-        "/v1/roles/{role_id}/holders", tags=["roles"], response_model=Envelope[list[RoleHolderOut]], responses=ERRORS
+        "/v1/roles/{role_id}/holders",
+        tags=["roles"],
+        response_model=Envelope[ListResult[RoleHolderOut]],
+        responses=ERRORS,
     )
     async def role_holders(  # pyright: ignore[reportUnusedFunction]
-        _: Tx, role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx,
+        q: ListQuery,
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        actor: Annotated[Actor, Depends(on_workspace)],
     ) -> Any:
-        """Who holds the role and in which team: what deleting it would take from them. A workspace admin's."""
+        """Who holds the role and in which team, on the shared list contract by name, searched on name and email:
+        what deleting it would take from them. A workspace admin's."""
         await people.require_admin(actor, "access", "view")
-        return ok([h.model_dump(by_alias=True) for h in await roles.store.holders(actor.tenant_id, role_id)])
+        return ok(await roles.store.holders(actor.tenant_id, role_id, q))
 
     @app.get(
         "/v1/people/{person_id}/role-grants",
         tags=["people"],
-        response_model=Envelope[list[RoleGrantOut]],
+        response_model=Envelope[ListResult[RoleGrantOut]],
         responses=ERRORS,
     )
     async def person_role_grants(  # pyright: ignore[reportUnusedFunction]
-        _: Tx, person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx,
+        q: ListQuery,
+        person_id: Annotated[str, Path(pattern=RECORD_ID)],
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
     ) -> Any:
-        """The custom roles given to a person on their own, each with its team; read by whoever shares a team with
-        them, as their permissions are (404 otherwise)."""
+        """The custom roles given to a person on their own, each with its team, on the shared list contract by role
+        name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise)."""
         tenant = str(claims["tenant_id"])
         await roles.of_person(tenant, str(claims["sub"]), person_id)
-        return ok([g.model_dump(by_alias=True) for g in await roles.store.grants_of(tenant, person_id)])
+        return ok(await roles.store.grants_of(tenant, person_id, q))
 
     @app.post(
         "/v1/people/{person_id}/role-grants",
