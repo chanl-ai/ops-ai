@@ -136,10 +136,10 @@ async def test_freshness_is_read_on_the_databases_clock_not_the_services(
     await upload(client, src["id"], "hardship.pdf", HARDSHIP)
     data(await client.post(f"/v1/sources/{src['id']}/sync"))
     kb_row = await base_of(client, src["id"])
+    # The slot sits two hours before now, so three days on it is past the one-hour grace at any time of day.
+    slot = (datetime.now(UTC) - timedelta(hours=2)).strftime("%H:%M")
     data(
-        await client.patch(
-            f"/v1/sources/{src['id']}", json={"schedule": {"kind": "daily", "time": "00:00", "tz": "UTC"}}
-        )
+        await client.patch(f"/v1/sources/{src['id']}", json={"schedule": {"kind": "daily", "time": slot, "tz": "UTC"}})
     )
     await _synced_ago(engine, tenant, src["id"], timedelta(minutes=1))
     assert await _freshness(client, kb_row["id"]) == ["fresh"]
