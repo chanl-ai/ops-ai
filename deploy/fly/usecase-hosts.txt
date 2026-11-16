@@ -1,0 +1,4 @@
+# Hosts a use case may be run against with OPS_USECASE_BASE_URL. One per line: an exact host, or a pattern where `*`
+# stands for one name label. Everything else is refused, and so is any host whose name says production, listed or not.
+# The shape is the staging web app deploy/fly/staging/apps.py names (`<app-prefix>-web.fly.dev`); the prefix is yours.
+*-web.fly.dev

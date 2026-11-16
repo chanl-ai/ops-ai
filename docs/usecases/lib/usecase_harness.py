@@ -28,6 +28,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from deployed_guard import host_patterns, host_refusal, script_refusal
 from ops_service_kit.opa_server import opa_server
 from ops_signin.fake_idp import self_signed
 
@@ -78,6 +79,8 @@ ROOT = Path(__file__).resolve().parents[3]
 # A deployed host to run the same scripts against (`OPS_USECASE_BASE_URL=https://<host>`): its one origin answers for
 # every service, its database is migrated by its own deploy, and nothing here starts a process or makes a database.
 BASE_URL = os.environ.get("OPS_USECASE_BASE_URL", "").rstrip("/")
+USECASES = Path(__file__).resolve().parents[1]
+HOSTS_FILE = ROOT / "deploy" / "fly" / "usecase-hosts.txt"
 # The services a deployed host runs; a fake provider, a proxy or a sign-in server stays on this machine.
 DEPLOYED = frozenset({"agents", "tools", "models", "kb", "files", "documents", "platform", "runner"})
 # The plugins checkout every use case loads plugins from; nightly and worktree runs point it elsewhere.
@@ -232,10 +235,29 @@ def _env() -> dict[str, str]:
     return env
 
 
+_GUARDED = False
+
+
+def _deployed_guard() -> None:
+    """Every use of a deployed host passes here first: its host is on docs/usecases/staging-hosts.txt and not named
+    for production, and the script that is running is an api script the registry marks safe for a deployed host."""
+    global _GUARDED
+    if not BASE_URL or _GUARDED:
+        return
+    main = getattr(sys.modules.get("__main__"), "__file__", None)
+    reason = host_refusal(BASE_URL, host_patterns(HOSTS_FILE.read_text())) or script_refusal(
+        main, (USECASES / "README.md").read_text()
+    )
+    if reason:
+        raise SystemExit(f"FAIL refused by the deployed-host guard: {reason}")
+    _GUARDED = True
+
+
 def _prepare(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes] | None:
     """A migration or seed a run does before it starts a service. A deployed host (OPS_USECASE_BASE_URL) had its
     own at deploy, and a script must not write to its database."""
     if BASE_URL:
+        _deployed_guard()
         return None
     return subprocess.run(argv, **kwargs)
 
@@ -245,6 +267,7 @@ def _serve(
     name: str, argv: list[str], port: int, env: dict[str, str], *, health: str = "/health", cwd: Path = AGENTS_DIR
 ) -> Generator[str]:
     if BASE_URL and name in DEPLOYED:
+        _deployed_guard()
         # The service is already up behind the origin: it must answer its health route, and it is never stopped here.
         if httpx.get(f"{BASE_URL}{health}", timeout=15).status_code != 200:
             raise SystemExit(f"FAIL {BASE_URL}{health} is not healthy")
@@ -1023,6 +1046,10 @@ def publish_bank_module(gw: httpx.Client, host: str) -> str:
 def seed_demo_knowledge(kb_url: str, files_url: str, *, agents_url: str | None = None, fees: str = "v1") -> str:
     """services/kb-service/scripts/seed_demo_knowledge.py under dev auth: the two bases (reused on a second run), the
     K12 scores it prints, and with `agents_url` the demo agents wired to their bases and reads."""
+    if BASE_URL:
+        # The seed writes through the API, and a deployed host was seeded by its own deploy.
+        _deployed_guard()
+        raise SystemExit("FAIL refused by the deployed-host guard: a deployed host is not seeded from a use case")
     argv = ["uv", "run", "python", "scripts/seed_demo_knowledge.py", "--kb", kb_url, "--files", files_url, "--dev"]
     argv += ["--fees", fees]
     argv += ["--agents", agents_url] if agents_url else []

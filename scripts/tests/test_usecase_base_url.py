@@ -14,6 +14,7 @@ SNIPPET = """
 import sys
 sys.path.insert(0, {lib!r})
 import usecase_harness as h
+h._GUARDED = True  # the host and script rules are tested in test_usecase_deployed_guard.py
 ran = h._prepare([sys.executable, "-c", "print('ran')"], check=True, capture_output=True)
 print("prepared", ran is not None, flush=True)
 with h._serve("agents", ["false"], 1, {{}}) as base:

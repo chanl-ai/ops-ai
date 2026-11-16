@@ -13,7 +13,7 @@ integration tests (pytest in the Python services); use cases only drive what a c
 | Prerequisite: PostgreSQL :5477 and OPA :8181 | `make db-up` |
 | One use case, every layer it lists | `make usecase-test UC=uc-001` |
 | One layer | `make usecase-test UC=uc-002 LAYER=ui` |
-| An api script against a deployed host | `OPS_USECASE_BASE_URL=https://<host> make usecase-test UC=uc-002 LAYER=api`: the script calls that origin for every service and starts nothing, runs no migration or seed and makes no database; a script that needs the services' internal ports or a fake provider cannot run there |
+| An api script against a deployed host | `OPS_USECASE_BASE_URL=https://<host> make usecase-test UC=uc-002 LAYER=api`: the script calls that origin for every service and starts nothing, runs no migration or seed and makes no database; a script that needs the services' internal ports or a fake provider cannot run there. The host must be on `deploy/fly/usecase-hosts.txt` (a name that says production is refused even then), only `LAYER=api` runs, only a use case whose `Deployed` column says `safe` runs (unmarked is not safe; none is marked yet), and a seed is refused. The runner and `lib/deployed_guard.py` apply the same rules |
 | All of them | `make usecase-test` |
 | Registry, one entry, coverage | `make usecase-list`, `make usecase-show UC=uc-002`, `make usecase-coverage SERVICE=agents-service` |
 | Register a new one | `make usecase-add AREA=<area> TITLE="<short title>" [LAYERS=api,sdk,cli]` (`usecase-new` is the older form) |
@@ -88,8 +88,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 
 ## Registry
 
-| Id | Service | Title | Layers | Status |
-|---|---|---|---|---|
+| Id | Service | Title | Layers | Status | Deployed |
+|---|---|---|---|---|---|
 | uc-001 | agents-service | Chat turn with citation | api | passing |
 | uc-002 | agents-service | Write tool pauses and approval resumes with step-up | api, ui | passing |
 | uc-003 | agents-service | Simple workflow through the four thread calls | api | passing |

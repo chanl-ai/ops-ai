@@ -3,6 +3,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { coverage, formatCoverage } from './coverage.ts';
+import { deployedRefusal } from './deployed.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
 import { findUseCase, parseRegistry, RegistryError, type UseCase } from './registry.ts';
 import { EXIT, exitFor, parseChecks, summary, verdict, type Outcome } from './report.ts';
@@ -35,6 +36,10 @@ export interface TestDeps {
   rebuild?: (root: string, env: NodeJS.ProcessEnv, name: string) => Promise<boolean>;
 }
 
+function parentDeployed(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env[BASE_URL_VAR]);
+}
+
 export async function test(
   root: string,
   registry: UseCase[],
@@ -46,11 +51,19 @@ export async function test(
     console.error(`unknown layer ${layerArg}; one of ${LAYERS.join(', ')}`);
     return EXIT.usage;
   }
-  const targets = ucId ? [findUseCase(registry, ucId)] : registry;
+  const named = ucId ? [findUseCase(registry, ucId)] : registry;
+  // A whole-registry run on a deployed host takes only the use cases marked safe; a named one is refused unless marked.
+  const targets = !ucId && parentDeployed(deps.parent) ? registry.filter((uc) => uc.deployed) : named;
   const { env: base, realCalls } = childEnv(deps.parent, root);
   console.log(realCalls ? `real model calls approved: ${realCalls}` : 'scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)');
   // A deployed host (OPS_USECASE_BASE_URL) has its own database, which no run here makes, sweeps or drops.
   const deployed = Boolean(base[BASE_URL_VAR]);
+  // Refused before anything runs: a host off the staging list, any layer but api, and a use case nobody marked safe.
+  const refusal = deployed ? deployedRefusal(root, String(base[BASE_URL_VAR]).replace(/\/+$/, ''), targets, layerArg) : undefined;
+  if (refusal) {
+    console.error(`refused by the deployed-host guard: ${refusal}`);
+    return EXIT.usage;
+  }
   if (deployed) console.log(`api scripts run against ${base[BASE_URL_VAR]}; no stack or database is started`);
   if (!deployed && deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
   const { env, ownedDb } = await isolate(base);
