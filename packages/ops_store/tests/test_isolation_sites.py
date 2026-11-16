@@ -374,7 +374,7 @@ def test_raw_transactions_and_caught_errors_are_only_the_listed_ones() -> None:
 # connection, catch or install block inside the package fails here naming its file.
 OWNED: dict[str, int] = {
     # The conformance suites open their own transactions on the backend under test.
-    "raw packages/ops_store/src/ops_store/conformance.py": 4,
+    "raw packages/ops_store/src/ops_store/conformance.py": 2,
     "caught packages/ops_store/src/ops_store/conformance.py": 1,
     # /health's probe: one statement naming no table, False on any failure (`database.reachable`).
     "raw packages/ops_store/src/ops_store/database.py": 1,

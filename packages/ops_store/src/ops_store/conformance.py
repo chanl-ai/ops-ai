@@ -15,8 +15,8 @@ from __future__ import annotations
 import asyncio
 import secrets
 import time
-from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping, Sequence
+from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
 from itertools import pairwise
 from secrets import token_hex
@@ -26,12 +26,12 @@ import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from .guarantees import Backend, unmet
 from .isolation import isolated_tx, scope, tenant_wide
 from .ports import AuditPort, LeasePort, TimerClaimPort
-from .schema import MSSQL_COLLATION, isolation_kind, team_column, tenant_column
+from .schema import MSSQL_COLLATION, MSSQL_SECURITY, isolation_kind, team_column, tenant_column
 
 CONTENDERS = 8
 
@@ -207,7 +207,8 @@ async def isolation_suite(
 ) -> list[str]:
     """Every way the database lets a transaction see or change rows its context should not, one line per failure, each
     starting with the table's name; empty when every team-owned and tenant table holds. Rows are written past
-    row-level security (as the engine's own user, which must bypass it: a superuser or a BYPASSRLS role) and read back
+    row-level security (on PostgreSQL as the engine's own user, which must bypass it: a superuser or a BYPASSRLS role;
+    on SQL Server with the table's policy off for that transaction) and read back
     as `role`
     with raw SQL and no WHERE clause, so only the policy can filter: for a team table (T1, A), (T1, B), (T1, no team
     where the column allows it, which no team reads) and (T2, A); for a tenant table one row of each tenant.
@@ -228,7 +229,7 @@ async def isolation_suite(
             if team is not None
             else [(t1, None), (t2, None)]
         )
-        async with engine.begin() as c:
+        async with _past_the_policy(engine, table) as c:
             for row_tenant, row_team in rows:
                 values = {**make(row_tenant, row_team), tenant.name: row_tenant}
                 if team is not None:
@@ -240,9 +241,33 @@ async def isolation_suite(
                 for f in await _isolation_checks(engine, table, role=role, ids=(t1, t2, a, b), make=make)
             ]
         finally:
-            async with engine.begin() as c:
+            async with _past_the_policy(engine, table) as c:
                 await c.execute(table.delete().where(tenant.in_([t1, t2])))
     return failures
+
+
+def _policy_state(table: sa.Table, state: str) -> list[str]:
+    """SQL Server: the table's policy, a team or a tenant one, turned on or off; deferred in EXEC, since SQL Server
+    resolves the policy's name when it compiles the batch and a dropped one would fail it."""
+    names = (f"{MSSQL_SECURITY}.{table.name}_{kind}" for kind in ("isolation", "tenant"))
+    return [
+        f"IF OBJECT_ID(N'{n}', N'SP') IS NOT NULL EXEC (N'ALTER SECURITY POLICY {n} WITH (STATE = {state})')"
+        for n in names
+    ]
+
+
+@asynccontextmanager
+async def _past_the_policy(engine: AsyncEngine, table: sa.Table) -> AsyncGenerator[AsyncConnection]:
+    """One transaction that reads and writes `table` past its policy. On PostgreSQL the engine's own user bypasses
+    row-level security; SQL Server applies a policy to every user, its owner too, so the policy is off for this
+    transaction only (a rollback turns it back on as well)."""
+    async with engine.begin() as c:
+        mssql = c.dialect.name == "mssql"
+        for statement in _policy_state(table, "OFF") if mssql else []:
+            await c.execute(text(statement))
+        yield c
+        for statement in _policy_state(table, "ON") if mssql else []:
+            await c.execute(text(statement))
 
 
 async def _isolation_checks(
@@ -309,7 +334,7 @@ async def _isolation_checks(
 async def _all(
     engine: AsyncEngine, table: sa.Table, tenant: sa.Column[Any], team: sa.Column[Any] | None
 ) -> list[tuple[str, str | None]]:
-    async with engine.connect() as c:
+    async with _past_the_policy(engine, table) as c:
         cols = [tenant] + ([team] if team is not None else [])
         got = (await c.execute(sa.select(*cols).select_from(table))).all()
     return _pairs(got, team is not None)
