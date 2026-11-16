@@ -30,15 +30,30 @@ Agents database only, no service call. Precedence:
    `eval_*`, `form_links`, memories, reviews).
 3. `'local'`.
 
-A team that maps to two tenants aborts the migration with the list. Version tables and validations take their parent's
-tenant.
+Version tables and validations take their parent's tenant. The statements are in
+`services/agents-service/src/ops_agents/store/registry_tenants.py`, shared by the migration and the preflight.
 
-Seeded workflows shared across tenants are copied per tenant for exactly the (tenant, workflow id) pairs other tenants'
+When a reference or a team names more than one tenant:
+
+| Case | Outside dev | Dev |
+|---|---|---|
+| A team seen in no tenant | The migration stops with the list | The rows take `local` |
+| `local` and exactly one other tenant | The other tenant: outside dev `local` holds only rows nothing could place | `local` |
+| Two or more tenants other than `local`, for a team or for a record's references (any kind) | The migration stops with the list | `local` |
+
+Offline SQL cannot check first: a team or record with two tenants writes NULL into the NOT NULL column, so the
+statement fails; an unmapped team's rows take `local`.
+
+Seeded workflows shared across tenants are copied, in Migration C, per tenant for exactly the (tenant, workflow id) pairs other tenants'
 threads or publish requests point at: the `registry_workflows` row, its versions and its `graph_versions`, with name,
 version and digest unchanged, so the digest check in `api/runs.py:94` still passes.
 
-Preflight: an operator command lists teams in the agents database with no tenant mapping and teams that map to two
-tenants. The migration refuses outside dev while gaps remain; dev falls back to `local`.
+Preflight: `make -C services/agents-service registry-tenant-preflight` lists, by the outside-dev rules, each team with
+no tenant, each team and each record with two or more tenants other than `local`, and exits 1 when any exists. It only
+reads, through a `system_tx` past the tenant as the connecting login (row security off, which PostgreSQL refuses for a
+login that does not bypass it). It never drops or alters a policy. On SQL Server no login can read every tenant without
+changing a policy, so the preflight exits 2 and says to run the upgrade, which makes the same check before it changes a
+row.
 
 ## Keys and lookups
 
@@ -72,20 +87,34 @@ tenants. The migration refuses outside dev while gaps remain; dev falls back to 
 
 ## Order
 
-One Alembic chain (`CHAIN="agents"`), taking the next free revision numbers.
+One Alembic chain (`CHAIN="agents"`).
 
-- Migration A: add `tenant_id NOT NULL DEFAULT 'local'` and `registry_publish_requests.team_id`; backfill as above;
-  swap keys; grant to the tenant role; drop `channel_files`. No policy yet, and the tables stay on `WAITING`. On SQL
-  Server, inline unique keys are found by column as migration 0101 does.
+- Migration A, `0106_registry_tenant_columns`:
+  - `tenant_id NOT NULL DEFAULT 'local'` on the five registry tables, their version tables, `registry_validations`,
+    `graph_versions`, `deployments`, `channel_messages`, `channel_cursors` and `thread_inbox`;
+    `registry_publish_requests.team_id` from its subject's team.
+  - The backfill above, with the checks; a deployment with no team takes its threads' team when they share one.
+  - Keys: agents `(tenant_id, slug)`; `graph_versions` primary key `(tenant_id, name, version)` and digest unique
+    `(tenant_id, digest)`; `(tenant_id, team_id)` indexes on guardrails, skills and publish requests.
+  - Grants to the tenant role on PostgreSQL; `channel_files` dropped.
+  - No row policy, and the markings are unchanged, so the tables stay on `WAITING`. The model columns default to
+    `local` on the server, so the stores of today keep working unchanged.
 - Commit B (one commit): the five registry stores and the other registry readers (`store/channel_list.py`,
   `store/actor_names.py`) become `Store` classes on `self.tx()` or `conn`, with `team_visible`, `owner_teams()`
   (`owner_team` deleted), and columns defaulting to the current tenant; the start-up and seed fixes above; markings;
-  Migration C; `WAITING` removals; tests.
-- Migration C: re-run the backfill idempotently for rows written as `local` between A and B, then `isolation_ddl` and
-  `mssql_predicates_ddl` as 0104 does. C never ships ahead of B, because the old code writes as a role that bypasses
-  the policy.
-- Down: drop policies and grants; restore the install-wide keys, but refuse with a count when cross-tenant duplicates
-  exist; delete per-tenant seed copies whose `(name, digest)` matches the `local` row.
+  Migration C; `WAITING` removals; tests. These key changes wait for B, because today's stores name the current keys:
+  - `registry_workflows` `(tenant_id, id)`, with the seed copies that need it (`store/graphs.py:208` would return each
+    copied version twice) and a composite foreign key from its versions;
+  - `registry_widgets` `(tenant_id, id)` and the composite foreign key from its versions (today's stores write a new
+    version as `local` under a parent in another tenant);
+  - `deployments` `(tenant_id, id)`, `channel_messages` `(tenant_id, deployment_id, message_key)`, `channel_cursors`
+    `(tenant_id, deployment_id)`: `store/channels.py:127`, `:173` and `:198` upsert on the current keys.
+- Migration C: re-run the backfill idempotently for rows written as `local` between A and B; the seed copies; the key
+  changes above; then `isolation_ddl` and `mssql_predicates_ddl` as 0104 does. C never ships ahead of B, because the old
+  code writes as a role that bypasses the policy.
+- Down: A refuses with a count while two tenants hold one agent slug, graph version or digest, and otherwise restores
+  the install-wide keys, recreates `channel_files` empty and drops the columns. C's down drops policies and grants and
+  deletes per-tenant seed copies whose `(name, digest)` matches the `local` row.
 - Both databases.
 
 ## Tests
