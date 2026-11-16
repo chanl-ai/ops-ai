@@ -9,9 +9,12 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_documents.store import engine_for
+from ops_documents.store.extractions import extractions
+from ops_documents.store.readings import documents_reading_files, documents_reading_pages, documents_readings
 from ops_service_kit.logging import captured_logging
 from ops_service_kit.request_timing import current
 
@@ -19,6 +22,8 @@ from .conftest import OPS, Make
 from .test_classify import Models as Classifier
 from .test_document_types import FIELDS, TYPE, Prices, data
 from .test_extractions import NOTICE, Floor
+from .test_template_suggestions import INVOICES, Reader, read_invoice
+from .test_templates import INVOICE_TYPE
 
 
 @pytest.fixture
@@ -206,3 +211,32 @@ async def test_a_reading_or_layout_read_now_is_a_gate_and_a_settle_and_a_stored_
     reading, layout = "/v1/documents/readings", "/v1/documents/layout"
     # Read now: the stored reading looked up, the bytes read with none open, then the reading kept. Asked again: one.
     assert seen == [(reading, 2), (layout, 2), (reading, 1), (layout, 1)], seen
+
+
+async def test_a_template_suggestion_reads_its_rows_in_one_gate_and_each_layout_with_none_open_at_a_call(
+    make: Make, monkeypatch: pytest.MonkeyPatch, engine: AsyncEngine
+) -> None:
+    model = Reader()
+    s = make(model, Floor(0.5))
+    held: list[int] = []
+    _held_files(s, held, monkeypatch)
+    url = "/v1/document-types/supplier_invoice/templates/suggest"
+    async with s.client as c:
+        data(await c.post("/v1/document-types", json=INVOICE_TYPE, headers=OPS), 201)
+        first = await read_invoice(s, c, model, INVOICES[0])
+        second = await read_invoice(s, c, model, INVOICES[1])
+        # The first read's reading is no longer stored, so its layout is read again from files-service.
+        async with engine.begin() as conn:
+            r, p, f = documents_readings, documents_reading_pages, documents_reading_files
+            fid = (await conn.execute(sa.select(extractions.c.file_id).where(extractions.c.id == first))).scalar_one()
+            digest = sa.select(f.c.file_digest).where(f.c.tenant_id == s.tenant, f.c.file_id == fid)
+            for t in (p, r):
+                await conn.execute(sa.delete(t).where(t.c.tenant_id == s.tenant, t.c.file_digest.in_(digest)))
+        held.clear()
+        with captured_logging("documents-transactions") as stream:
+            data(await c.post(url, json={"extractionIds": [first, second]}, headers=OPS))
+    [line] = lines(stream.getvalue())
+    # The type, both rows and the latest version in one; the first layout looked up, read with none open and kept
+    # (three); the second found stored (one).
+    assert line["db.tx_count"] == 5, line
+    assert held and set(held) == {0}, held

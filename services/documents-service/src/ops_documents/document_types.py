@@ -392,16 +392,19 @@ class DocumentTypes:
         """A draft template from the team's finished reads of the type, and how it reads each of them. Nothing is
         saved: a builder saves the draft as a new version, so nothing goes live on its own."""
         self._may_write(who)
-        if await self._own(who, type_id) is None:
-            return None
-        ids = list(dict.fromkeys(extraction_ids))
-        if not 0 < len(ids) <= MAX_SUGGEST_READS:
-            raise InvalidRequestError(f"extractionIds lists 1 to {MAX_SUGGEST_READS} reads")
-        rows = [await self.extractor.store.get(i) for i in ids]
+        # Gate: the type, the reads and the latest version in one transaction, closed before any layout is read, which
+        # reads files-service when the layout is not stored.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return None
+            ids = list(dict.fromkeys(extraction_ids))
+            if not 0 < len(ids) <= MAX_SUGGEST_READS:
+                raise InvalidRequestError(f"extractionIds lists 1 to {MAX_SUGGEST_READS} reads")
+            rows = [await self.extractor.store.get(i) for i in ids]
+            version = await self.resolve(who, type_id, None)
         reads = [await self._read_of(who, type_id, r, i) for r, i in zip(rows, ids, strict=True)]
         tid = f"tpl_{uuid.uuid4().hex[:10]}"
         draft = templates.suggest(reads, template_id=tid)
-        version = await self.resolve(who, type_id, None)
         fields = cast(list[dict[str, Any]], version["fields"])
         checks: list[dict[str, Any]] = []
         for row, read in zip(rows, reads, strict=True):
