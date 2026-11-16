@@ -19,6 +19,7 @@ from ops_agents.api.deps import Runtime
 from ops_identity import dev_service_signer, mint_service_token
 from ops_identity.testing import TEST_TOKEN_TTL_S
 
+from .test_graphs import thread
 from .test_hitl_facade import paused_dispute, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_reply_pins import FIXTURES, answer, compare
 
@@ -84,6 +85,8 @@ async def test_the_summary_reads_keep_every_key_value_and_error_object(client: A
 CHECKOUTS: list[tuple[str, Caller, int]] = [
     ("/v1/teams/usage", PLATFORM, 1),
     ("/v1/knowledge-usage", KB, 1),
+    ("/v1/activity", PERSON, 3),
+    ("/v1/model-aliases", PERSON, 0),
     ("/v1/prompts/variables", PERSON, 0),
     ("/health", PERSON, 1),
 ]
@@ -114,10 +117,13 @@ async def test_the_reviews_list_reads_at_most_its_cap_from_a_source(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The list merges its sources before paging, so an unbounded source would read every review a team ever had."""
+    """The list merges its sources before paging, so an unbounded source would read every review a team ever had; and
+    the cap keeps open reviews, so newer threads waiting on nobody never push one off."""
     client, rt = stack
     for _ in range(3):
         await paused_dispute(client)
+    for _ in range(2):
+        await thread(client, "complex_workflow")
     monkeypatch.setattr(rt, "settings", rt.settings.model_copy(update={"review_list_rows_per_source": 2}))
     r = await client.get("/reviews?view=all")
     assert r.status_code == 200, r.text

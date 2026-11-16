@@ -594,8 +594,9 @@ class Settings(BaseSettings):
     review_token_ttl_seconds: int = 900
     # agents-service's Reviews list, Overview counts and a task's place merge three sources (graph threads, publish
     # requests, waiting workflow runs) in Python before paging, so each source reads at most this many rows, newest
-    # first; a source at the cap is logged as `review_source_capped`, and its older rows are left off the list.
-    review_list_rows_per_source: int = Field(default=1000, ge=1)
+    # first after the open ones; a source at the cap is logged as `review_source_capped`, and its older rows are left
+    # off the list. At most 1000: the kept threads' ids are one `IN` list, under SQL Server's 2100 parameters.
+    review_list_rows_per_source: int = Field(default=1000, ge=1, le=1000)
     # An expired approval token is renewed from its recorded approvals while they are younger than this; older, the
     # call needs a fresh review (durability-failure-and-audit.md, approval expiry).
     approval_renewal_max_age_seconds: int = 86400
