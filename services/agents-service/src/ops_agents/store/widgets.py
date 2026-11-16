@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import now_iso
@@ -23,6 +23,7 @@ from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
+from .tenancy import OWNER, RuntimeStore
 
 registry_widgets = sa.Table(
     "registry_widgets",
@@ -70,16 +71,13 @@ def changes_between(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
     return [f"Changed {label}" for k, label in LABELS.items() if old.get(k) != new.get(k)]
 
 
-class WidgetRegistry:
+class WidgetRegistry(RuntimeStore):
     # An id and a version number are unique keys (CAS); a save writes its version row and moves the widget in one
     # transaction, as does a publish (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
     async def rows(self) -> list[dict[str, Any]]:
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [
                 dict(r)
                 for r in (
@@ -99,7 +97,7 @@ class WidgetRegistry:
             .where(self._matches(teams, search), team_visible(registry_widgets))
             .order_by(sa.func.lower(registry_widgets.c.name), registry_widgets.c.id)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
 
     async def pinnable(
@@ -119,7 +117,7 @@ class WidgetRegistry:
                 team_visible(registry_widgets),
             )
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def count(self, teams: list[str], search: str) -> int:
@@ -128,29 +126,24 @@ class WidgetRegistry:
             .select_from(registry_widgets)
             .where(self._matches(teams, search), team_visible(registry_widgets))
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return int((await c.execute(q)).scalar_one())
 
     @staticmethod
     def _matches(teams: list[str], search: str) -> sa.ColumnElement[bool]:
         return sa.and_(contains(registry_widgets.c.name, search), registry_widgets.c.team_id.in_(teams))
 
-    async def owner_team(self, widget_id: str) -> str | None:
+    async def owner_team(self, widget_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
         owning team, never for showing the record."""
-        q = sa.select(registry_widgets.c.team_id).where(
-            registry_widgets.c.id == widget_id, any_team(registry_widgets, "the owning team a refusal is decided on")
-        )
-        async with self.engine.connect() as c:
-            team = (await c.execute(q)).scalar()
-        return str(team) if team else None
+        return (await self.owner_teams(conn, registry_widgets, {widget_id}, OWNER)).get(widget_id)
 
     async def find(self, widget_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
         q = sa.select(registry_widgets).where(registry_widgets.c.id == widget_id, team_visible(registry_widgets))
         if c is not None:
             r = (await c.execute(q)).mappings().first()
         else:
-            async with self.engine.connect() as conn:
+            async with self.tx() as conn:
                 r = (await conn.execute(q)).mappings().first()
         return dict(r) if r else None
 
@@ -161,7 +154,7 @@ class WidgetRegistry:
         return r
 
     async def version(self, widget_id: str, version: int) -> dict[str, Any] | None:
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = sa.select(registry_widget_versions).where(
                 registry_widget_versions.c.widget_id == widget_id,
                 registry_widget_versions.c.version == version,
@@ -171,7 +164,7 @@ class WidgetRegistry:
             return dict(r) if r else None
 
     async def versions(self, widget_id: str) -> list[dict[str, Any]]:
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = (
                 sa.select(registry_widget_versions)
                 .where(registry_widget_versions.c.widget_id == widget_id, team_visible(registry_widget_versions))
@@ -181,7 +174,7 @@ class WidgetRegistry:
 
     async def create(self, widget_id: str, content: dict[str, Any], *, team_id: str, by: str) -> None:
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             taken = sa.select(registry_widgets.c.id).where(
                 registry_widgets.c.id == widget_id,
                 any_team(registry_widgets, "a widget id is unique across every team"),
@@ -215,7 +208,7 @@ class WidgetRegistry:
         """Edits the newest version while it is an unpublished draft, or opens the next version on top of a published
         one. Published versions never change."""
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             n = int((await self.row(widget_id, c))["version"])
             q = sa.select(registry_widget_versions).where(
                 registry_widget_versions.c.widget_id == widget_id,
@@ -246,7 +239,7 @@ class WidgetRegistry:
 
     async def publish(self, widget_id: str, version: int, *, by: str, review_id: str) -> None:
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_widget_versions.update()
                 .where(registry_widget_versions.c.widget_id == widget_id, registry_widget_versions.c.version == version)
@@ -259,7 +252,7 @@ class WidgetRegistry:
             )
 
     async def retire(self, widget_id: str, reason: str, *, by: str) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await self.row(widget_id, c)
             await c.execute(
                 registry_widgets.update()
