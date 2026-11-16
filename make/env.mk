@@ -134,6 +134,9 @@ export OPS_CORS_ORIGINS ?= ["http://localhost:$(OPS_CONSOLE_PORT)","http://local
 
 COMPOSE := docker compose -p $(OPS_COMPOSE_PROJECT) -f $(ROOT)/deploy/compose/compose.yaml
 STACK := $(ROOT)/scripts/stack.sh
+# A service's `make run` in the foreground, on the command `make up` starts it with (`stack.sh cmd`): the other
+# services' addresses and the sign-in mode, without which the service refuses to start. `$(call STACK_RUN,kb)`.
+STACK_RUN = cd $(ROOT) && $$($(STACK) cmd $(1))
 
 # `make help` in any Makefile: targets with a `## ` comment, grouped by `##@` headings.
 define HELP_AWK

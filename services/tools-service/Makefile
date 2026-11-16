@@ -14,7 +14,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve in the foreground on :8720
-	uv run python -m ops_tools
+	$(call STACK_RUN,tools)
 
 lint: ## ruff format check and lint
 	uv run ruff format --check $(PY_DIRS)

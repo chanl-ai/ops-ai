@@ -12,7 +12,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve on :8730, seeded in dev (scripted provider, three aliases, a key per agent)
-	uv run python -m ops_models
+	$(call STACK_RUN,models)
 
 migrate: ## Apply this service's own migrations (version table alembic_version_models)
 	uv run alembic upgrade head

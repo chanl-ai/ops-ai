@@ -13,7 +13,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve on :8760
-	uv run python -m ops_documents
+	$(call STACK_RUN,documents)
 
 migrate: ## Apply this service's own migrations (version table alembic_version_documents)
 	uv run alembic upgrade head

@@ -17,7 +17,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve in the foreground on :8700
-	uv run python -m ops_agents.api
+	$(call STACK_RUN,agents)
 
 worker: ## Workflow runner worker in the foreground: claims engine_work and runs v2 workflows (no port, no model)
 	uv run python -m ops_agents.api.worker

@@ -14,7 +14,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve in the foreground on :8710 and :8711; in dev it seeds team_ops and signs with the dev key
-	uv run python -m ops_platform
+	$(call STACK_RUN,platform)
 
 migrate: ## Apply this service's own migrations (version table alembic_version_platform)
 	uv run alembic upgrade head

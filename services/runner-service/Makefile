@@ -15,7 +15,7 @@ wasm: ## Fetch the pinned CPython WASI build into OPS_RUNNER_CACHE_DIR (.data/ru
 	uv run python -m ops_runner.fetch
 
 run: wasm ## Serve on :8770
-	uv run python -m ops_runner
+	$(call STACK_RUN,runner)
 
 lint: ## ruff format check and lint
 	uv run ruff format --check $(PY_DIRS)
