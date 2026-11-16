@@ -1,4 +1,4 @@
-# 277 boundaries crossed without a model in services/documents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 276 boundaries crossed without a model in services/documents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 reply document_types_add_sample
 1 reply document_types_add_version
 1 reply document_types_create_type
@@ -14,7 +14,6 @@
 1 reply documents_file_extractions
 1 reply documents_get_extraction
 1 reply documents_get_reading
-1 reply health_health
 1 reply resources_review_update
 1 reply resources_take_update
 1 dict-any services/documents-service/src/ops_documents/agents_client.py

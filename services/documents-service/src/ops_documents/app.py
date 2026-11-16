@@ -18,7 +18,6 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
 from ops_access import can
 from ops_documents.agents_client import TypeUses
@@ -76,6 +75,7 @@ from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Vali
 from ops_service_kit.http import (
     Envelope,
     ListResult,
+    Out,
     error_body,
     error_responses,
     install_error_handlers,
@@ -96,9 +96,11 @@ log = get_logger(__name__)
 LOW_DETAIL_SIDE = 512
 
 
-class Health(BaseModel):
-    status: str
-    reason: str | None = None
+class Health(Out):
+    """200 ok, or degraded with the reason: 503 when the database is out of reach, 200 when only OCR is missing."""
+
+    status: Literal["ok", "degraded"]
+    reason: Literal["database", "ocr"] | None = None
 
 
 def _status(e: DocumentsError) -> ApiError:
@@ -248,13 +250,14 @@ def create_documents_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health(response: Response) -> Health:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
-            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
+            response.status_code = 503
+            return Health(status="degraded", reason="database")
         if not ocr_installed():
             # Text files still read; every scanned page fails with "OCR not installed" until Tesseract is there.
-            return {"status": "degraded", "reason": "ocr"}
-        return {"status": "ok"}
+            return Health(status="degraded", reason="ocr")
+        return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
     async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]

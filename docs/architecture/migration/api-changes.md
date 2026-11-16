@@ -32,3 +32,10 @@ that has not changed still gets the same answer.
 | Route | What changed | Before | After | What a caller must change | Old form works |
 |---|---|---|---|---|---|
 | `GET /v1/models/calls` | behaviour: calls that name no tenant | listed with every tenant's calls (before the call log was held to its tenant) | not listed: a completion sent with no `X-Tenant-Id` is kept in `model_calls_untenanted` for operators and no route reads it | Send `X-Tenant-Id` on every completion whose calls must be listed | No |
+
+## documents-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `POST /v1/documents/extractions` | behaviour: files-service fails after the extraction is saved | the request failed and the row stayed `queued`, so a retry with the same `Idempotency-Key` answered 202 `queued` until the process restarted | the row is settled `failed` (`error.code` `failed`), so a retry with the same key runs it again at once | Nothing | Yes |
+| `GET /health` | reply model | an untyped object `{status, reason?}`; the 503 body was written by hand | `Health`: `status` `ok` or `degraded`, `reason` `database` or `ocr` or absent, no other field; the same bodies on 200 and 503 | Nothing | Yes |

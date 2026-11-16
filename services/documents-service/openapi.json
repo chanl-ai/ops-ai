@@ -2305,10 +2305,16 @@
         "type": "object"
       },
       "Health": {
+        "additionalProperties": false,
+        "description": "200 ok, or degraded with the reason: 503 when the database is out of reach, 200 when only OCR is missing.",
         "properties": {
           "reason": {
             "anyOf": [
               {
+                "enum": [
+                  "database",
+                  "ocr"
+                ],
                 "type": "string"
               },
               {
@@ -2318,6 +2324,10 @@
             "title": "Reason"
           },
           "status": {
+            "enum": [
+              "ok",
+              "degraded"
+            ],
             "title": "Status",
             "type": "string"
           }

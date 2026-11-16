@@ -221,9 +221,9 @@ class FormField(TypedDict, closed=True):
     value: str
 
 
-class Health(TypedDict):
-    reason: NotRequired[str | None]
-    status: str
+class Health(TypedDict, closed=True):
+    reason: NotRequired[Literal["database", "ocr"] | None]
+    status: Literal["ok", "degraded"]
 
 
 class InstallInput(TypedDict, closed=True):

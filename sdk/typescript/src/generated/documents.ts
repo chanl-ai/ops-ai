@@ -1433,12 +1433,18 @@ export interface components {
             /** Value */
             value: string;
         };
-        /** Health */
+        /**
+         * Health
+         * @description 200 ok, or degraded with the reason: 503 when the database is out of reach, 200 when only OCR is missing.
+         */
         Health: {
             /** Reason */
-            reason?: string | null;
-            /** Status */
-            status: string;
+            reason?: ("database" | "ocr") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded";
         };
         /** InstallInput */
         InstallInput: {
