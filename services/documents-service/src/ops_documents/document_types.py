@@ -20,8 +20,6 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Protocol, TypedDict, cast
 
-import httpx
-
 from ops_contracts.field_values import DATE_ORDERS, DEFAULT_DATE_ORDER, normalise
 from ops_documents.errors import CreateNotAllowedError, DocumentTypeMissingError, InvalidRequestError, StateError
 from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, request_of
@@ -761,10 +759,9 @@ def default_document_types(files: Files, engine: Any, settings: Settings, extrac
     """On the extractor this app serves, which then resolves `documentTypeId` through them; prices from
     models-service when it is configured, else the estimate gives calls without a cost."""
     prices: Prices | None = None
-    if settings.models_url:
-        http = httpx.AsyncClient(base_url=settings.models_url, timeout=10)
+    if settings.models is not None:
         try:
-            prices = ModelsPrices(ServiceClient.for_settings(settings, http, service="documents", audience="models"))
+            prices = ModelsPrices(ServiceClient.for_settings(settings, service="documents", audience="models"))
         except ValueError as e:  # no service signing key outside dev
             log.warning("no service signing key; test estimates carry no cost", extra={"error": str(e)})
     types = DocumentTypes(DocumentTypesStore(engine), files, extractor, prices)

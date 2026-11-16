@@ -1155,14 +1155,16 @@ def default_extractor(files: Files, engine: Any, settings: Settings, *, readings
     Without models-service every extraction fails `not_configured` rather than calling a provider; without
     platform-service the catalogue's default floor applies, as it does for the workflow worker."""
     models: Models | None = None
-    if settings.models_url and settings.models_key is not None:
-        http = httpx.AsyncClient(base_url=settings.models_url, timeout=120)
+    if settings.models is not None and settings.models_key is not None:
+        # Called with this service's model key, not a service token, so it is not a ServiceClient.
+        http = httpx.AsyncClient(base_url=settings.models.base, timeout=settings.models.timeout_s)
         models = ModelsService(http, settings.models_key.get_secret_value())
     floors: Floors | None = None
     pictures: PageImagePolicy | None = None
     masking: MaskingPolicy | None = None
-    if settings.platform_url:
-        platform = httpx.AsyncClient(base_url=settings.platform_url, timeout=10)
+    if (endpoint := settings.platform) is not None:
+        # One HTTP client for every team's ServiceClient below; each names its own tenant and team.
+        platform = httpx.AsyncClient(base_url=endpoint.base, timeout=endpoint.timeout_s)
 
         def client(tenant: str, team: str) -> ServiceClient:
             return ServiceClient.for_settings(
@@ -1171,6 +1173,7 @@ def default_extractor(files: Files, engine: Any, settings: Settings, *, readings
                 service="documents",
                 audience="platform",
                 scopes=["settings:view"],
+                timeout=endpoint.timeout_s,
                 tenant=lambda: tenant,
                 team=lambda: team,
             )
