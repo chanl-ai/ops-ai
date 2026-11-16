@@ -32,7 +32,7 @@ CI shards are unchanged: a shard runs serially.
 
 | Service | Serial | PAR=5 (three runs) | Failures in every run, serial and parallel alike |
 |---|---|---|---|
-| agents-service | 724 s | 178, 180, 173 s | `test_tools_ownership.py::test_tools_chain_adopts_tables_the_agents_chain_created` (also red in the serial baseline); three in `test_workflow_tools.py` and `test_child_runs.py` from source edits in progress on the branch |
+| agents-service | 724 s | 178, 180, 173 s; 201 s on the final tree, all green | `test_tools_ownership.py::test_tools_chain_adopts_tables_the_agents_chain_created` (also red in the serial baseline); three in `test_workflow_tools.py` and `test_child_runs.py` from source edits in progress on the branch |
 | tools-service | 869 s | 205, 203, 201 s | none (skips are the SQL Server tests, which need OPS_MSSQL_SERVER, as serially) |
 | platform-service | 287 s | 94, 93, 95 s (PAR=4) | none |
 | documents-service | 73 s | 35, 35, 37 s (PAR=4) | none |
@@ -44,8 +44,8 @@ CI shards are unchanged: a shard runs serially.
 
 | Test | Reason | Surviving cover |
 |---|---|---|
-| agents-service `tests/test_settings_without_shared_token.py::test_production_settings_start_without_a_shared_service_token` | The `service_token` setting no longer exists; the test only asserts the attribute is absent. Its one live part, production settings starting with no extra secret, fails for the same mutation (a validator refusing production) in the survivor | `tests/unit/test_engine_fault_settings.py::test_a_production_deployment_without_faults_starts` |
-| agents-service `tests/test_settings_without_shared_token.py::test_a_leftover_shared_token_in_the_environment_is_ignored` | Passes only because pydantic-settings ignores unknown variables (`extra="ignore"`) and the field is gone; it tests the library and removed code | none needed: no code reads `OPS_SERVICE_TOKEN` |
+| agents-service `tests/test_settings_without_shared_token.py::test_production_settings_start_without_a_shared_service_token` | Code that no longer exists: it asserts the removed `service_token` setting is absent. Production settings starting without a required token is still held by the survivor; re-adding the field as an optional one is no longer caught by any test | `tests/unit/test_engine_fault_settings.py::test_a_production_deployment_without_faults_starts` (required-token case only) |
+| agents-service `tests/test_settings_without_shared_token.py::test_a_leftover_shared_token_in_the_environment_is_ignored` | Passes because pydantic-settings ignores unknown variables (`extra="ignore"`) and the field is gone; it tests the library and removed code | none: no code reads `OPS_SERVICE_TOKEN` |
 
 A strict read of agents-service's `unit/` and `api/` files found no other test that meets the rules: near-duplicates
 there hit different routes or stores (different seams), and the excluded kinds (reply pins, isolation, migrations,
