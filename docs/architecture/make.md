@@ -43,7 +43,7 @@ into it before reviewing it.
 | `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `api`, `sdk-call` | The local stack through `scripts/stack.sh`; one route or SDK call as a seeded person (`scripts/api_as.py`) |
 | `make/cli.mk` | `<area>-<verb>` (`chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `cases-*`, `files-*`, `documents-*`, `people-*`, `models-*`, `memories-*`), `test-data-clean` | The `opsai` command (`sdk/python`) as a seeded person (`AS=`); the list: `make/CLAUDE.md` |
 | `make/db.mk` | `db-up`, `db-down`, `db-shell`, `db-reset`, `migrate`, `migration` | Compose (PostgreSQL, OPA) and Alembic |
-| `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`) |
+| `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof`; `mssql-remote-up`, `-proxy`, `-test`, `-status`, `-sweep`, `-down` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`); the shared SQL Server on Fly for both-database tests from a Mac (`deploy/database/mssql_remote.sh`) |
 | `make/services.mk` | `<verb>-<svc>`, generated | `SERVICES`, each service's folder, `SERVICE_VERBS`; one rule template expanded per pair |
 | `make/console.mk` | `console-install`, `dev`, `dev-runtime`, `console-verify` | The console in the foreground |
 | `make/checks.mk` | `checks`, `checks-list` | The one list of standards checks (`CHECKS`): what `python-verify`, the CI `checks` job, `verify-changed.sh` and pre-commit (`STAGED=1`, with `STAGED_FILES=`) run; `PY`, `PYTEST` and `LINT_IMPORTS` name the tools |
