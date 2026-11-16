@@ -315,7 +315,13 @@ async def pinned_by(rt: Runtime, skill_id: str) -> list[str]:
 
 async def workflows_pinning(rt: Runtime, field: str, key: str, value: str) -> set[str]:
     """Published workflows with an agent step whose pinned agent carries `value` under `field[].key`."""
-    out: set[str] = set()
+    return (await workflows_pinning_each(rt, field, key)).get(value, set())
+
+
+async def workflows_pinning_each(rt: Runtime, field: str, key: str) -> dict[str, set[str]]:
+    """Each value held under `field[].key` by an agent step of a published workflow, to those workflows' labels; one
+    pass over the published workflows answers for every record a page shows."""
+    out: dict[str, set[str]] = {}
     if rt.graph_store is None:
         return out
     for row in await published_workflows(rt):
@@ -326,8 +332,10 @@ async def workflows_pinning(rt: Runtime, field: str, key: str, value: str) -> se
             config: dict[str, Any] = dict(n.get("config") or {})
             agent: dict[str, Any] = dict(config.get("agent") or {})
             held: list[dict[str, Any]] = list(agent.get(field) or [])
-            if n.get("kind") == "agent_turn" and any(x.get(key) == value for x in held):
-                out.add(f"workflow {row['name']}")
+            if n.get("kind") == "agent_turn":
+                for x in held:
+                    if x.get(key) is not None:
+                        out.setdefault(str(x[key]), set()).add(f"workflow {row['name']}")
     return out
 
 

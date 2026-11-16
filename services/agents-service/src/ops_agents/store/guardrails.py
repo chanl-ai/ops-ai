@@ -11,12 +11,14 @@ import re
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import BaseModel, JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import locked
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
@@ -69,6 +71,17 @@ registry_guardrail_versions = sa.Table(
     sa.Column("review_id", sa.String(64)),
     info={**TENANT_SCOPED, **team_owned_via("registry_guardrails", "guardrail_id")},
 )
+
+
+class GuardrailVersionRow(BaseModel):
+    guardrail_id: str
+    version: int
+    config: dict[str, JsonValue]
+    note: str
+    saved_at: str
+    saved_by: str
+    published_at: str | None
+    published_by: str | None
 
 
 def _slug(name: str) -> str:
@@ -169,6 +182,28 @@ class GuardrailRegistry(RuntimeStore):
         )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def versions_of(self, guardrail_ids: list[str]) -> dict[str, list[GuardrailVersionRow]]:
+        """The versions of each of `guardrail_ids`, newest first, in one query; the tenant is named in it as well as
+        by the row policies."""
+        if not guardrail_ids:
+            return {}
+        v = registry_guardrail_versions
+        named = [v.c[f] for f in GuardrailVersionRow.model_fields]
+        q = (
+            sa.select(*named)
+            .where(
+                v.c.tenant_id == current_tenant(),
+                v.c.guardrail_id.in_(sorted(set(guardrail_ids))),
+                team_visible(v),
+            )
+            .order_by(v.c.guardrail_id, v.c.version.desc())
+        )
+        out: dict[str, list[GuardrailVersionRow]] = {g: [] for g in guardrail_ids}
+        async with self.tx() as c:
+            for r in await rows(c, q, GuardrailVersionRow):
+                out[r.guardrail_id].append(r)
+        return out
 
     async def version(self, guardrail_id: str, version: int) -> dict[str, Any] | None:
         q = sa.select(registry_guardrail_versions).where(

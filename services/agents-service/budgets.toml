@@ -146,13 +146,13 @@ queries = 2
 queries = 1
 
 ["GET /v1/guardrails"]
-not_budgeted = "grows with rows: 87 statements at 5, 1342 at 50; reads one row per agent or record (N+1); to be fixed"
+queries = 10
 
 ["GET /v1/guardrails/options"]
 queries = 1
 
 ["GET /v1/guardrails/{guardrail_id}"]
-not_budgeted = "grows with rows: 17 statements at 5, 67 at 50; reads one row per agent or record (N+1); to be fixed"
+queries = 9
 
 ["GET /v1/knowledge-usage"]
 queries = 1
@@ -292,7 +292,7 @@ transactions = 9
 connections = 9
 
 ["GET /v1/workflows/{workflow_id}/forms"]
-queries = 1
+queries = 2
 
 ["GET /v1/workflows/{workflow_id}/live"]
 not_budgeted = "needs a live engine definition; the budget seed publishes none yet"

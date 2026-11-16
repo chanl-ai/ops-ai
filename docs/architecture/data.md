@@ -45,6 +45,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.mailboxes` | `MailboxStore` | CAS | `mailboxes` |
 | agents-service | `ops_agents.store.memories` | `Memories` | TRANSACTION | `agent_memories`, `memory_audit`, `message_memory_use` |
 | agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records` |
+| agents-service | `ops_agents.store.pin_users` | `PinUsers` | none | none |
 | agents-service | `ops_agents.store.poll_cursors` | `PollCursors` | none | `poll_cursors` |
 | agents-service | `ops_agents.store.review_assignments` | `ReviewAssignments` | none | `review_assignments` |
 | agents-service | `ops_agents.store.reviews` | `ReviewStore` | CAS, TRANSACTION | `review_approvals`, `review_decisions` |

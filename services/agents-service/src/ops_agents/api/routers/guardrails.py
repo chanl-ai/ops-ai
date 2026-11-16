@@ -24,7 +24,7 @@ from ..agent_registry import require_owner_or_admin
 from ..auth import Principal, principal, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..guardrails import check_config, decide, guardrails, pinned_by, publish, view
+from ..guardrails import check_config, decide, guardrails, pinned_by, publish, view, views
 from ..publish_policy import decide as review_needed
 from ..schemas import Guardrail, GuardrailList
 
@@ -82,7 +82,7 @@ async def list_guardrails(rt: Rt, _: Reader, __: Tx, q: ListQuery) -> JSONRespon
         rows = await reg.pinnable("", offset, q.page_size, q.ids)
     else:
         rows = await reg.page(search, offset, q.page_size)
-    return ok(paged([await view(rt, r["id"]) for r in rows], total, page, q.page_size))
+    return ok(paged([dict(v) for v in await views(rt, rows)], total, page, q.page_size))
 
 
 @router.get("/options", response_model=Envelope[OptionsPage])
