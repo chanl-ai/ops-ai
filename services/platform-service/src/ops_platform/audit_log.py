@@ -10,7 +10,7 @@ from typing import Any
 from ops_access import ANY_TEAM
 from ops_service_kit.errors import Forbidden
 
-from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditLog
+from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditEntryRow, AuditLog
 from .store.members import Actor, TeamStore
 from .teams import Members
 
@@ -33,10 +33,10 @@ SIGN_IN_HOW = {
 }
 
 
-def summary(row: dict[str, Any]) -> str:
+def summary(row: AuditEntryRow) -> str:
     """One line a person reads, from the action and its detail."""
-    d: dict[str, Any] = row["detail"] or {}
-    target = str(row.get("target_name") or row["target_id"])
+    d = row.detail
+    target = str(row.target_name or row.target_id)
     email = str(d.get("email", target))
 
     def role(key: str) -> str:
@@ -71,28 +71,28 @@ def summary(row: dict[str, Any]) -> str:
             + ("allowed" if d.get("allowed") else "refused")
         ),
     }
-    line = lines.get(str(row["action"]))
+    line = lines.get(row.action)
     # Another service's entry carries its own line (ops_store.audit), since only that service can word its action.
-    return line() if line else str(d.get("summary") or row["action"])
+    return line() if line else str(d.get("summary") or row.action)
 
 
-def shown(row: dict[str, Any]) -> dict[str, Any]:
+def shown(row: AuditEntryRow) -> dict[str, Any]:
     return {
-        "id": row["id"],
-        "teamId": row["team_id"],
-        "team": row.get("team_name"),
-        "actor": row["actor"],
-        "actorName": row.get("actor_name"),
-        "actorEmail": row.get("actor_email"),
-        "action": row["action"],
-        "kind": KIND.get(row["action"], "edited"),
+        "id": row.id,
+        "teamId": row.team_id,
+        "team": row.team_name,
+        "actor": row.actor,
+        "actorName": row.actor_name,
+        "actorEmail": row.actor_email,
+        "action": row.action,
+        "kind": KIND.get(row.action, "edited"),
         "summary": summary(row),
-        "targetKind": row["target_kind"],
-        "targetId": row["target_id"],
-        "targetName": row.get("target_name"),
-        "requestId": row["request_id"],
-        "at": row["at"],
-        "detail": row["detail"],
+        "targetKind": row.target_kind,
+        "targetId": row.target_id,
+        "targetName": row.target_name,
+        "requestId": row.request_id,
+        "at": row.at,
+        "detail": row.detail,
     }
 
 

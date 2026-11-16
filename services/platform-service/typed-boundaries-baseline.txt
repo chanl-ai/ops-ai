@@ -1,4 +1,4 @@
-# 245 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 220 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body access_check_access
 1 body api_keys_create_api_key
 1 reply audit_read_audit
@@ -41,10 +41,10 @@
 27 dict-any services/platform-service/src/ops_platform/api/app.py
 8 dict-any services/platform-service/src/ops_platform/api/schemas.py
 8 dict-any services/platform-service/src/ops_platform/api_keys.py
-5 dict-any services/platform-service/src/ops_platform/audit_log.py
+2 dict-any services/platform-service/src/ops_platform/audit_log.py
 9 dict-any services/platform-service/src/ops_platform/auth.py
 1 dict-any services/platform-service/src/ops_platform/bootstrap.py
-5 dict-any services/platform-service/src/ops_platform/break_glass.py
+4 dict-any services/platform-service/src/ops_platform/break_glass.py
 5 dict-any services/platform-service/src/ops_platform/oauth/authorize.py
 2 dict-any services/platform-service/src/ops_platform/oauth/clients.py
 1 dict-any services/platform-service/src/ops_platform/oauth/metadata.py
@@ -52,19 +52,11 @@
 10 dict-any services/platform-service/src/ops_platform/policies.py
 12 dict-any services/platform-service/src/ops_platform/roles.py
 17 dict-any services/platform-service/src/ops_platform/signin_settings.py
-2 dict-any services/platform-service/src/ops_platform/signin_watch.py
 3 dict-any services/platform-service/src/ops_platform/sso.py
-4 dict-any services/platform-service/src/ops_platform/store/audit.py
-1 store-dict services/platform-service/src/ops_platform/store/audit.py
-2 dict-any services/platform-service/src/ops_platform/store/holders.py
-1 store-dict services/platform-service/src/ops_platform/store/holders.py
 2 dict-any services/platform-service/src/ops_platform/store/identity.py
 2 store-dict services/platform-service/src/ops_platform/store/identity.py
 2 dict-any services/platform-service/src/ops_platform/store/keys.py
-1 dict-any services/platform-service/src/ops_platform/store/lifecycle.py
 1 dict-any services/platform-service/src/ops_platform/store/members.py
-6 dict-any services/platform-service/src/ops_platform/store/policies.py
-4 store-dict services/platform-service/src/ops_platform/store/policies.py
 9 dict-any services/platform-service/src/ops_platform/store/roles.py
 6 store-dict services/platform-service/src/ops_platform/store/roles.py
 2 dict-any services/platform-service/src/ops_platform/store/seeding.py

@@ -50,8 +50,9 @@ class BreakGlass:
 
     async def _security_admins(self, tenant_id: str) -> set[str]:
         team = await self.workspace.security_team(tenant_id)
-        found: dict[str, Any] = await self.holders.holders(tenant_id, team, "settings", "manage") if team else {}
-        return {str(p["id"]) for p in found.get("holders", [])}
+        if not team:
+            return set()
+        return {p.id for p in (await self.holders.holders(tenant_id, team, "settings", "manage")).holders}
 
     async def people(self, tenant_id: str) -> list[dict[str, Any]]:
         """The people on the list who still count."""

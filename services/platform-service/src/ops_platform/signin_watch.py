@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from ops_email import MailSender, OutboundMessage
 from ops_service_kit.ids import new_id
@@ -39,8 +38,7 @@ class SecurityNotices:
         """Audits `action` on `target` and mails `subject` and `body` to each Security admin; returns how many were
         told. `once` makes the mail's key, so a retried notice is sent once and a different one is not taken for it."""
         team = await self.workspace.security_team(tenant_id)
-        found: dict[str, Any] = await self.holders.holders(tenant_id, team, "settings", "manage") if team else {}
-        people: list[dict[str, Any]] = found.get("holders", [])
+        people = (await self.holders.holders(tenant_id, team, "settings", "manage")).holders if team else []
         async with self.store.tenant_tx(tenant_id) as c:
             await record(
                 c,
@@ -58,8 +56,8 @@ class SecurityNotices:
             for person in people:
                 await self.mail.send(
                     OutboundMessage(
-                        key=f"{action}:{target}:{once}:{person['id']}",
-                        to=(str(person["email"]),),
+                        key=f"{action}:{target}:{once}:{person.id}",
+                        to=(person.email,),
                         subject=subject,
                         body=body + link,
                     )

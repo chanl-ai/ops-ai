@@ -14,17 +14,21 @@ entry in the same transaction and raises the permission version when an assignme
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import ANY_TEAM, OWNER
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.dialect import locked
+from ops_store.rows import one
 
 from .audit import record, record_grants_ending
 from .members import ADMIN
@@ -67,11 +71,22 @@ class LastAdminError(Exception):
     """The person is the team's last active admin."""
 
 
-@dataclass(frozen=True)
-class WorkspaceState:
+class _TenantStatus(Out):
+    status: str
+    closed_at: str | None
+
+
+class WorkspaceState(Out):
     status: str
     closed_at: str | None
     owner: str | None
+
+
+class TeamState(Out):
+    """A team that is not deleted: `active` or `archived`, and when it was archived."""
+
+    status: str
+    archived_at: str | None
 
 
 async def _audit(
@@ -84,7 +99,7 @@ async def _audit(
     target_kind: str,
     target_id: str,
     request_id: str,
-    detail: dict[str, object] | None = None,
+    detail: Mapping[str, JsonValue] | None = None,
 ) -> None:
     await record(
         c,
@@ -124,10 +139,12 @@ class LifecycleStore(TenantDb):
 
     async def state(self, tenant_id: str) -> WorkspaceState:
         async with self.tenant_tx(tenant_id) as c:
-            row = (
-                await c.execute(sa.select(tenants.c.status, tenants.c.closed_at).where(tenants.c.id == tenant_id))
-            ).one()
-            return WorkspaceState(str(row[0]), row[1], await _owner_in(c, tenant_id))
+            row = await one(
+                c, sa.select(tenants.c.status, tenants.c.closed_at).where(tenants.c.id == tenant_id), _TenantStatus
+            )
+            if row is None:
+                raise NoResultFound(f"no tenant {tenant_id}")
+            return WorkspaceState(status=row.status, closed_at=row.closed_at, owner=await _owner_in(c, tenant_id))
 
     async def status(self, tenant_id: str) -> str | None:
         """The workspace's status; None for a tenant this database does not hold."""
@@ -298,17 +315,11 @@ class LifecycleStore(TenantDb):
             )  # fmt: skip
         return True
 
-    async def team_state(self, tenant_id: str, team_id: str) -> tuple[str, str | None] | None:
-        """(status, archived at) of a team that is not deleted; None when there is none."""
+    async def team_state(self, tenant_id: str, team_id: str) -> TeamState | None:
+        """The team's state; None when there is none or it is deleted."""
+        q = sa.select(teams.c.status, teams.c.archived_at).where(teams.c.id == team_id, teams.c.status != DELETED)
         async with self.tenant_tx(tenant_id) as c:
-            row = (
-                await c.execute(
-                    sa.select(teams.c.status, teams.c.archived_at).where(
-                        teams.c.id == team_id, teams.c.status != DELETED
-                    )
-                )
-            ).first()
-        return (str(row[0]), row[1]) if row else None
+            return await one(c, q, TeamState)
 
     async def delete_team(
         self, tenant_id: str, team_id: str, *, by: str, archived_before: str, at: str, request_id: str

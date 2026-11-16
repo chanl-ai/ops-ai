@@ -177,7 +177,7 @@ class WorkspaceLifecycle:
         state = await self.store.team_state(actor.tenant_id, team_id)
         if state is None:
             raise NotFound("team")
-        status, archived_at = state
+        status, archived_at = state.status, state.archived_at
         days_left = None
         if status == "archived" and archived_at:
             since = datetime.fromisoformat(archived_at.replace("Z", "+00:00"))
@@ -209,11 +209,11 @@ class WorkspaceLifecycle:
         state = await self.store.team_state(actor.tenant_id, team_id)
         if state is None:
             raise NotFound("team")
-        if state[0] != "archived" or not state[1]:
+        if state.status != "archived" or not state.archived_at:
             raise Conflict("Archive the team before deleting it.", code="not_archived")
         now = datetime.now(UTC)
         cutoff = _iso(now - timedelta(days=self.team_delete_after_days))
-        if state[1] > cutoff:
+        if state.archived_at > cutoff:
             raise Conflict(
                 f"A team is deleted only after {self.team_delete_after_days} days archived.",
                 code="archived_too_recently",

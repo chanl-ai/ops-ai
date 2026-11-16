@@ -265,7 +265,7 @@ class SignInStore(TenantDb):
                     target_kind="signin_provider",
                     target_id=p.id,
                     request_id=request_id,
-                    detail={"kind": p.kind, "enabled": p.enabled, "domains": sorted(p.domains)},
+                    detail={"kind": p.kind, "enabled": p.enabled, "domains": [*sorted(p.domains)]},
                 )
         except IntegrityError as e:
             if "ux_signin_domains_verified" in str(e.orig):

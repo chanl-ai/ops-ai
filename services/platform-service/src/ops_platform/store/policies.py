@@ -7,14 +7,18 @@ from __future__ import annotations
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
+from pydantic import JsonValue
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import BY_KEY, POLICIES, check_value
 from ops_access.platform_events import POLICY_CHANGED
 from ops_access.policies import PUBLISH_AREAS
+from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore
 from ops_store.outbox import add as add_event
+from ops_store.rows import rows
 
 from .audit import record
 from .roles import bump_version
@@ -23,19 +27,32 @@ from .tenancy import TenantDb
 
 OLD_KEYS = ("toolWritesNeedApproval", "appWritesNeedApproval", "appsChangeWithoutAsking")
 
+# Each policy's value is free-form JSON (a switch, a number, a list, or a per-team object), keyed by policy: the shape a
+# token carries in `Principal.policies` and `ops_access.policy()` reads.
+type PolicyValues = dict[str, JsonValue]
+
+
+class PolicyRow(Out):
+    key: str
+    value: JsonValue
+
+
+def _object(value: JsonValue) -> dict[str, JsonValue]:
+    """A per-team value or one team's part of it; anything else (none set yet) reads as empty."""
+    return value if isinstance(value, dict) else {}
+
 
 class PolicyStore(TenantDb):
     # `before` is read in the transaction that writes the change, so the audit entry and the row always agree.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
 
-    async def values(self, tenant_id: str) -> dict[str, Any]:
+    async def values(self, tenant_id: str) -> PolicyValues:
         """Every policy's value: what an admin set, else the catalogue's open default."""
         async with self.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(sa.select(policies.c.key, policies.c.value))).all()
-        held = {r.key: r.value for r in rows}
+            held = {r.key: r.value for r in await rows(c, sa.select(policies.c.key, policies.c.value), PolicyRow)}
         return {p.key: held.get(p.key, p.default) for p in POLICIES}
 
-    async def token_values(self, tenant_id: str) -> dict[str, Any]:
+    async def token_values(self, tenant_id: str) -> PolicyValues:
         """The values a token carries: every policy but those read live on each decision (`live`, publishReview)."""
         values = await self.values(tenant_id)
         return {k: v for k, v in values.items() if not BY_KEY[k].live}
@@ -94,46 +111,50 @@ class PolicyStore(TenantDb):
             )
         return before, (after_of_team if spec.per_team else value)
 
-    async def _team_part(self, tenant_id: str, key: str, team_id: str | None) -> Any:
+    async def _team_part(self, tenant_id: str, key: str, team_id: str | None) -> dict[str, JsonValue]:
+        if team_id is None:
+            return {}
         async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
-        return dict(row.value if row else BY_KEY[key].default).get(team_id)
+        return _object(_object(row.value if row else BY_KEY[key].default).get(team_id))
 
     async def _from_old_key(self, tenant_id: str, key: str, value: Any, team_id: str | None) -> tuple[str, Any]:
         """A write to an old key, as the new key's value for the same team: the old keys stay writable for one release
         and land in appChanges / appChangesByApp, which are the only stored truth."""
         if key == "toolWritesNeedApproval":
-            held = dict(await self._team_part(tenant_id, "appChanges", team_id) or {})
+            held = await self._team_part(tenant_id, "appChanges", team_id)
             if value is True:
                 return "appChanges", {**held, "ask": True, "answer": "reviewer"}
             # Off steps a reviewer down to the person who asked; it never switches asking off.
             if held.get("ask") and held.get("answer") == "reviewer":
                 return "appChanges", {**held, "answer": "person"}
             return "appChanges", held
-        apps = dict(await self._team_part(tenant_id, "appChangesByApp", team_id) or {})
+        apps = await self._team_part(tenant_id, "appChangesByApp", team_id)
         answer = "reviewer" if key == "appWritesNeedApproval" else "none"
         listed = [str(n) for n in cast(list[Any], value)] if isinstance(value, list) else []
-        kept: dict[str, Any] = {a: e for a, e in apps.items() if e.get("answer") != answer or a in listed}
+        kept: dict[str, JsonValue] = {
+            a: e for a, e in apps.items() if _object(e).get("answer") != answer or a in listed
+        }
         for app in listed:
             kept.setdefault(app, {"answer": answer})
         return "appChangesByApp", kept
 
-    async def _derive_old_keys(self, c: Any, tenant_id: str, team_id: str, by: str, at: str) -> None:
+    async def _derive_old_keys(self, c: AsyncConnection, tenant_id: str, team_id: str, by: str, at: str) -> None:
         """The old keys' value for one team, from appChanges and appChangesByApp, so a reader of the old keys sees
         what the new ones say. They are never read to decide a call."""
 
-        async def part(key: str) -> dict[str, Any]:
+        async def part(key: str) -> dict[str, JsonValue]:
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
-            return dict(row.value if row else {})
+            return _object(row.value if row else {})
 
-        team = dict((await part("appChanges")).get(team_id) or {})
+        team = _object((await part("appChanges")).get(team_id))
         # A `tool:<name>` entry is one tool's answer, not an app: the old per-app lists never named it.
         apps = {
-            a: e
-            for a, e in dict((await part("appChangesByApp")).get(team_id) or {}).items()
+            a: _object(e)
+            for a, e in _object((await part("appChangesByApp")).get(team_id)).items()
             if not a.startswith("tool:")
         }
-        derived: dict[str, Any] = {
+        derived: PolicyValues = {
             "toolWritesNeedApproval": bool(team.get("ask")) and team.get("answer") == "reviewer",
             "appWritesNeedApproval": [a for a, e in apps.items() if e.get("answer") == "reviewer"],
             "appsChangeWithoutAsking": [a for a, e in apps.items() if e.get("answer") == "none"],
@@ -150,7 +171,7 @@ class PolicyStore(TenantDb):
                 )
 
 
-def new_workspace_values() -> dict[str, Any]:
+def new_workspace_values() -> PolicyValues:
     """What a workspace starts with when it is created: publishes go live at once, an app may call any public address,
     and a write its plugin or seed marked ask-first runs unless the team asks. Per-team values sit under `*`, the
     workspace's own part, so a team added later starts the same. Written as the workspace's own rows, so a workspace
@@ -163,13 +184,13 @@ def new_workspace_values() -> dict[str, Any]:
     }
 
 
-async def write_new_workspace_policies(c: Any, tenant_id: str, *, at: str) -> None:
+async def write_new_workspace_policies(c: AsyncConnection, tenant_id: str, *, at: str) -> None:
     """Inside the transaction that inserted the tenant row, and only then, so a later seed run never overwrites what an
     admin set since."""
     for key, wanted in new_workspace_values().items():
         # A per-team value is checked one team's part at a time, as a save through `set` checks it.
         value = (
-            {team: check_value(key, part) for team, part in wanted.items()}
+            {team: check_value(key, part) for team, part in _object(wanted).items()}
             if BY_KEY[key].per_team
             else check_value(key, wanted)
         )

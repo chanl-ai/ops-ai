@@ -680,7 +680,8 @@ def create_public_app(
             raise Conflict(
                 "This workspace names no Security team; a workspace admin names it.", code="no_security_team"
             )
-        return ok({"teamId": team, **await holder_store.holders(actor.tenant_id, team, area, action)})
+        found = await holder_store.holders(actor.tenant_id, team, area, action)
+        return ok({"teamId": team, **found.model_dump(by_alias=True)})
 
     @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)
     async def my_permissions(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
