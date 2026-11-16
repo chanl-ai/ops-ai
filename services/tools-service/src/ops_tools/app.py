@@ -480,11 +480,11 @@ def create_gateway_app(
         return JSONResponse({"success": True, "data": data})
 
     @app.post("/v1/fences", tags=["gateway"])
-    async def raise_fence(body: FenceIn, _: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def raise_fence(body: FenceIn, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): agents-service calls it when it takes a thread over, so the new generation is
         the fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;
         a lower generation than the fence is refused."""
-        current = await log.raise_fence(body.thread, body.generation)
+        current = await log.raise_fence(caller.tenant_id, body.thread, body.generation)
         if current > body.generation:
             return as_response(Refused("", 409, "lease_superseded", [f"fence is at generation {current}"]))
         return JSONResponse({"success": True, "data": {"thread": body.thread, "generation": current}})

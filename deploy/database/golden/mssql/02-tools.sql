@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0081_store_roles
+-- tools-service, stamped at tools_0082_tenant_fences
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -50,9 +50,10 @@ GO
 CREATE UNIQUE INDEX ux_gateway_calls_effect_scope ON gateway_calls (tenant_id, effect_scope, step, tool, input_hash) WHERE tenant_id IS NOT NULL AND step IS NOT NULL;
 GO
 CREATE TABLE gateway_fences (
+	tenant_id VARCHAR(64) NOT NULL, 
 	thread_id VARCHAR(64) NOT NULL, 
 	generation BIGINT NOT NULL, 
-	CONSTRAINT gateway_fences_pkey PRIMARY KEY (thread_id)
+	CONSTRAINT gateway_fences_pkey PRIMARY KEY (tenant_id, thread_id)
 );
 GO
 CREATE TABLE tool_modules (
@@ -542,6 +543,12 @@ CREATE SECURITY POLICY ops_security.gateway_calls_tenant
     ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.gateway_calls AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.gateway_fences_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.gateway_fences,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.gateway_fences AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.gateway_fences AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.operation_mocks_tenant
     ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.operation_mocks,
     ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.operation_mocks AFTER INSERT,
@@ -679,5 +686,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0081_store_roles');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0082_tenant_fences');
 GO

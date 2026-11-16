@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import isolation
 from ops_store.schema import isolation_kind
-from ops_tools.store.calls import gateway_calls
+from ops_tools.store.calls import gateway_calls, gateway_fences
 from ops_tools.store.egress import egress_audit, egress_hosts, egress_ranges
 from ops_tools.store.modules import (
     module_approvals,
@@ -39,6 +39,7 @@ POLICED = [
     egress_hosts,
     egress_ranges,
     gateway_calls,
+    gateway_fences,
     module_approvals,
     module_egress_hosts,
     module_operations,

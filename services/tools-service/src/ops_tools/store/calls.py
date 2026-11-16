@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED, system
+from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
 
 from .tenancy import ROLE
@@ -123,10 +123,11 @@ class LeaseSupersededError(RuntimeError):
 gateway_fences = sa.Table(
     "gateway_fences",
     metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("thread_id", sa.String(64), primary_key=True),
     sa.Column("generation", sa.BigInteger(), nullable=False),
-    # A run's lease generation, keyed by its thread id alone: checked and raised inside the claim of any tenant's write.
-    info=system("a thread's lease fence, keyed by thread id; it holds no tenant's record, only a generation number"),
+    # A run's lease generation, checked and raised inside the claim of its tenant's write (tools_0082).
+    info=TENANT_SCOPED,
 )
 
 
@@ -136,34 +137,36 @@ class CallLog(Store):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
     role = ROLE
 
-    async def _fence(self, c: AsyncConnection, thread_id: str, generation: int | None) -> bool:
+    async def _fence(self, c: AsyncConnection, tenant_id: str, thread_id: str, generation: int | None) -> bool:
         """Applies the thread's fence, the highest lease generation a write call has carried, inside the caller's
         transaction. True when the call may go on. A call without a generation passes only on a thread that was
         never fenced (chat turns, direct callers). The gateway keeps this table itself; it never reads the Runtime's
         leases."""
         if generation is None:
-            q = sa.select(gateway_fences.c.generation).where(gateway_fences.c.thread_id == thread_id)
+            q = sa.select(gateway_fences.c.generation).where(
+                gateway_fences.c.tenant_id == tenant_id, gateway_fences.c.thread_id == thread_id
+            )
             return (await c.execute(q)).first() is None
         insert = (postgresql.insert if c.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
         stmt = (
-            insert.values(thread_id=thread_id, generation=generation)
+            insert.values(tenant_id=tenant_id, thread_id=thread_id, generation=generation)
             .on_conflict_do_update(
-                index_elements=["thread_id"],
+                index_elements=["tenant_id", "thread_id"],
                 set_={"generation": sa.func.greatest(gateway_fences.c.generation, generation)},
             )
             .returning(gateway_fences.c.generation)
         )
         return int((await c.execute(stmt)).scalar_one()) <= generation
 
-    async def raise_fence(self, thread_id: str, generation: int) -> int:
-        """Raises the thread's fence to `generation` unless it is already higher, and returns the fence. A lower
-        generation leaves it as it is; the caller compares the result with what it sent."""
+    async def raise_fence(self, tenant_id: str, thread_id: str, generation: int) -> int:
+        """Raises the tenant's fence on the thread to `generation` unless it is already higher, and returns the fence.
+        A lower generation leaves it as it is; the caller compares the result with what it sent."""
         async with self.tx() as c:
             insert = (postgresql.insert if c.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
             stmt = (
-                insert.values(thread_id=thread_id, generation=generation)
+                insert.values(tenant_id=tenant_id, thread_id=thread_id, generation=generation)
                 .on_conflict_do_update(
-                    index_elements=["thread_id"],
+                    index_elements=["tenant_id", "thread_id"],
                     set_={"generation": sa.func.greatest(gateway_fences.c.generation, generation)},
                 )
                 .returning(gateway_fences.c.generation)
@@ -180,7 +183,7 @@ class CallLog(Store):
         answered with the new owner's result. Returns None when this call won the claim, or the first call's row when
         the same write already has one."""
         async with self.tx() as c:
-            if row["thread_id"] and not await self._fence(c, row["thread_id"], generation):
+            if row["thread_id"] and not await self._fence(c, row["tenant_id"], row["thread_id"], generation):
                 raise LeaseSupersededError("lease superseded")
             await _key_lock(c, row["idempotency_key"])
             abandoned = sa.select(gateway_calls.c.id).where(
