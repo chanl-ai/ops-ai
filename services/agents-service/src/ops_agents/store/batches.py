@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_runs
 from ops_service_kit.ids import new_id, now_iso
@@ -21,7 +20,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
-from .tenancy import current_tenant, system_tx, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 # The worker reads every tenant's pending rows to start them, then starts each inside its own tenant and team.
 BATCH_START = "batch_start"
@@ -73,11 +72,8 @@ def run_key(batch_id: str, row: int, attempt: int) -> str:
     return f"batch:{batch_id}:{row}:{attempt}"
 
 
-class Batches:
+class Batches(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def create(
         self,
@@ -103,7 +99,7 @@ class Batches:
             "created_by": created_by,
             "created_at": now_iso(),
         }
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(run_batches.insert().values(**batch))
             await c.execute(
                 run_batch_rows.insert(),
@@ -113,7 +109,7 @@ class Batches:
 
     async def get(self, batch_id: str) -> dict[str, Any] | None:
         b = run_batches
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             found = (await c.execute(sa.select(b).where(b.c.id == batch_id, team_visible(b)))).mappings().first()
         return dict(found) if found is not None else None
 
@@ -131,14 +127,14 @@ class Batches:
             .where(r.c.batch_id == batch_id, team_visible(r))
             .order_by(failed_first, r.c.row)
         )  # fmt: skip
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(x) for x in (await c.execute(q)).mappings()]
 
     async def retry_failed(self, batch_id: str) -> int:
         """A new attempt for each row whose run failed or was cancelled; rows that succeeded or are under way stay."""
         r, e, b = run_batch_rows, engine_runs, run_batches
         failed = sa.select(e.c.id).where(e.c.tenant_id == current_tenant(), e.c.status.in_(("failed", "cancelled")))
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             done = await c.execute(
                 r.update()
                 .where(r.c.batch_id == batch_id, team_visible(r), r.c.run_id.in_(failed))
@@ -162,7 +158,7 @@ class Batches:
             .order_by(b.c.created_at, r.c.batch_id, r.c.row)
             .limit(limit)
         )  # fmt: skip
-        async with system_tx(self.engine, BATCH_START) as c:
+        async with self.system_tx(BATCH_START) as c:
             return [dict(x) for x in (await c.execute(q)).mappings()]
 
     async def spent(self, batch_id: str) -> str | None:
@@ -175,13 +171,13 @@ class Batches:
             .where(r.c.batch_id == batch_id, team_visible(r), e.c.status == "failed", hit)
             .limit(1)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             found = (await c.execute(q)).scalar_one_or_none()
         return str(found) if found is not None else None
 
     async def stop(self, batch_id: str, reason: str) -> None:
         b = run_batches
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 b.update()
                 .where(b.c.id == batch_id, team_visible(b), b.c.stopped_at.is_(None))
@@ -191,7 +187,7 @@ class Batches:
     async def started(self, batch_id: str, row: int, attempt: int, run_id: str) -> None:
         """Names the run a row's attempt started; a later attempt (a retry since) is left as it is."""
         r = run_batch_rows
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 r.update()
                 .where(r.c.batch_id == batch_id, r.c.row == row, r.c.attempt == attempt, team_visible(r))

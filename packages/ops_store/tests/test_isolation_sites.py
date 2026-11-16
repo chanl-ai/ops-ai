@@ -45,7 +45,6 @@ DB_ERRORS = {
 WIDENINGS: dict[str, set[str]] = {
     "reason": {
         "packages/ops_store/src/ops_store/store.py",
-        "services/agents-service/src/ops_agents/store/engine.py",
         "services/agents-service/src/ops_agents/store/tenancy.py",
     },
     "SIGNIN_LOOKUP": {
@@ -125,6 +124,9 @@ WIDENINGS: dict[str, set[str]] = {
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
     "BACKGROUND_PAGE": {"services/agents-service/src/ops_agents/store/background.py"},
+    # A thread's lease and timers, taken, swept, fenced and fired by thread id before its tenant is known.
+    "THREAD_LEASES": {"services/agents-service/src/ops_agents/store/leases.py"},
+    "TIMERS": {"services/agents-service/src/ops_agents/store/timers.py"},
     "RECOVER_PENDING": {
         "services/documents-service/src/ops_documents/store/document_types.py",
         "services/documents-service/src/ops_documents/store/extractions.py",

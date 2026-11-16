@@ -1,4 +1,4 @@
-# agents-service: 98 raw transactions and 10 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+# agents-service: 85 raw transactions and 10 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
 2 caught services/agents-service/src/ops_agents/store/agent_registry.py
 1 caught services/agents-service/src/ops_agents/store/cases.py
 1 caught services/agents-service/src/ops_agents/store/events.py
@@ -8,6 +8,8 @@
 1 caught services/agents-service/src/ops_agents/store/task_assists.py
 1 caught services/agents-service/src/ops_agents/store/team_defaults.py
 1 caught services/agents-service/src/ops_agents/store/template_copies.py
+1 install services/agents-service/src/ops_agents/store/leases.py
+2 install services/agents-service/src/ops_agents/store/timers.py
 1 raw services/agents-service/src/ops_agents/api/channels/inbox.py
 1 raw services/agents-service/src/ops_agents/store/actor_names.py
 14 raw services/agents-service/src/ops_agents/store/agent_registry.py
@@ -16,8 +18,7 @@
 10 raw services/agents-service/src/ops_agents/store/channels.py
 4 raw services/agents-service/src/ops_agents/store/graphs.py
 14 raw services/agents-service/src/ops_agents/store/guardrails.py
-6 raw services/agents-service/src/ops_agents/store/leases.py
+1 raw services/agents-service/src/ops_agents/store/leases.py
 12 raw services/agents-service/src/ops_agents/store/skills.py
-8 raw services/agents-service/src/ops_agents/store/timers.py
 12 raw services/agents-service/src/ops_agents/store/widgets.py
 12 raw services/agents-service/src/ops_agents/store/workflow_registry.py

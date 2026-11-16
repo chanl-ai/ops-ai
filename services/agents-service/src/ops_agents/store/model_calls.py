@@ -17,7 +17,6 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_metering import MICRO, Totals
 from ops_service_kit.ids import new_id, now_iso
@@ -26,7 +25,7 @@ from ops_store.dialect import insert_ignore
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
-from .tenancy import LOCAL_TENANT, current_tenant, tenant_tx
+from .tenancy import LOCAL_TENANT, RuntimeStore, current_tenant
 
 model_call_records = sa.Table(
     "model_call_records",
@@ -73,13 +72,10 @@ class ModelCall:
     response: Any = None
 
 
-class ModelCallLedger:
+class ModelCallLedger(RuntimeStore):
     # Replay depends on the first response recorded for a (thread, task, request) winning (CAS); a record and the sum
     # a budget check reads are each one statement, so no transaction spans them.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def record(self, call: ModelCall) -> bool:
         """Writes the record; False when a response for the same task and request is already there."""
@@ -90,7 +86,7 @@ class ModelCallLedger:
             else model_call_records.insert().values(**values)
         )
         try:
-            async with tenant_tx(self.engine) as c:
+            async with self.tx() as c:
                 return (await c.execute(stmt)).rowcount != 0
         except IntegrityError:
             return False
@@ -98,12 +94,12 @@ class ModelCallLedger:
     async def response(self, thread_id: str, task: str, request_hash: str) -> Any:
         m = model_call_records.c
         q = sa.select(m.response).where(m.thread_id == thread_id, m.task == task, m.request_hash == request_hash)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return (await c.execute(q)).scalar_one_or_none()
 
     async def calls(self, thread_id: str) -> list[dict[str, Any]]:
         q = model_call_records.select().where(model_call_records.c.thread_id == thread_id)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             rows = (await c.execute(q.order_by(model_call_records.c.created_at))).mappings().all()
         return [dict(r) for r in rows]
 
@@ -119,6 +115,6 @@ class ModelCallLedger:
         q = sa.select(key, *cols).where(m.thread_id == thread_id)
         if by_run:
             q = q.group_by(m.run_id)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             rows: list[tuple[Any, ...]] = [tuple(r) for r in (await c.execute(q)).all()]
         return {r[0]: Totals(int(r[1]), int(r[2]), int(r[3]), MICRO * int(r[4])) for r in rows}

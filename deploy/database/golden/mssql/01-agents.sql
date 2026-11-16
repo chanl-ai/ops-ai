@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0104_runtime_tables_isolated
+-- agents-service, stamped at 0106_registry_tenant_columns
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -119,6 +119,7 @@ GO
 CREATE INDEX ix_engine_waits_event ON engine_waits (tenant_id, team_id, event, wait_key);
 GO
 CREATE TABLE registry_agents (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(120) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -130,7 +131,7 @@ CREATE TABLE registry_agents (
 	template_id VARCHAR(120) NULL, 
 	protection VARCHAR(16) NULL, 
 	CONSTRAINT registry_agents_pkey PRIMARY KEY (id), 
-	CONSTRAINT registry_agents_slug_key UNIQUE (slug)
+	CONSTRAINT uq_registry_agents_tenant_slug UNIQUE (tenant_id, slug)
 );
 GO
 CREATE INDEX ix_registry_agents_template_id ON registry_agents (template_id);
@@ -149,10 +150,13 @@ CREATE TABLE registry_publish_requests (
 	decided_by VARCHAR(200) NULL, 
 	decision_reason VARCHAR(max) NULL, 
 	body NVARCHAR(max) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL DEFAULT '', 
 	CONSTRAINT registry_publish_requests_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE INDEX ix_registry_publish_requests_subject ON registry_publish_requests (kind, subject_id);
+GO
+CREATE INDEX ix_registry_publish_requests_team ON registry_publish_requests (tenant_id, team_id);
 GO
 CREATE INDEX ix_registry_publish_requests_tenant_id ON registry_publish_requests (tenant_id);
 GO
@@ -321,6 +325,7 @@ CREATE TABLE graph_threads (
 	deployment_id VARCHAR(64) NULL, 
 	parent_thread_id VARCHAR(64) NULL, 
 	overrides NVARCHAR(max) NULL, 
+	owner VARCHAR(320) NULL, 
 	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	CONSTRAINT graph_threads_pkey PRIMARY KEY (id)
 );
@@ -328,6 +333,8 @@ GO
 CREATE INDEX ix_graph_threads_deployment_id ON graph_threads (deployment_id);
 GO
 CREATE INDEX ix_graph_threads_graph ON graph_threads (graph);
+GO
+CREATE INDEX ix_graph_threads_owner ON graph_threads (tenant_id, owner);
 GO
 CREATE INDEX ix_graph_threads_parent_thread_id ON graph_threads (parent_thread_id);
 GO
@@ -338,13 +345,14 @@ GO
 CREATE UNIQUE INDEX uq_graph_threads_tenant_external_key ON graph_threads (tenant_id, external_key) WHERE external_key IS NOT NULL;
 GO
 CREATE TABLE graph_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	name VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	digest VARCHAR(64) NOT NULL, 
 	definition NVARCHAR(max) NOT NULL, 
 	created_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT graph_versions_pkey PRIMARY KEY (name, version), 
-	CONSTRAINT graph_versions_digest_key UNIQUE (digest)
+	CONSTRAINT graph_versions_pkey PRIMARY KEY (tenant_id, name, version), 
+	CONSTRAINT uq_graph_versions_tenant_digest UNIQUE (tenant_id, digest)
 );
 GO
 CREATE TABLE mailboxes (
@@ -518,6 +526,7 @@ CREATE TABLE poll_cursors (
 );
 GO
 CREATE TABLE deployments (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
 	graph VARCHAR(64) NOT NULL, 
 	channel VARCHAR(32) NOT NULL, 
@@ -530,6 +539,7 @@ CREATE TABLE deployments (
 );
 GO
 CREATE TABLE channel_messages (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	deployment_id VARCHAR(64) NOT NULL, 
 	message_key VARCHAR(512) NOT NULL, 
 	thread_id VARCHAR(64) NULL, 
@@ -541,6 +551,7 @@ CREATE TABLE channel_messages (
 );
 GO
 CREATE TABLE channel_cursors (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	deployment_id VARCHAR(64) NOT NULL, 
 	delta_link VARCHAR(max) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
@@ -548,6 +559,7 @@ CREATE TABLE channel_cursors (
 );
 GO
 CREATE TABLE thread_inbox (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	thread_id VARCHAR(64) NOT NULL, 
 	message_key VARCHAR(512) NOT NULL, 
 	seq BIGINT NOT NULL, 
@@ -557,16 +569,6 @@ CREATE TABLE thread_inbox (
 	created_at VARCHAR(32) NOT NULL, 
 	delivered_at VARCHAR(32) NULL, 
 	CONSTRAINT thread_inbox_pkey PRIMARY KEY (thread_id, message_key)
-);
-GO
-CREATE TABLE channel_files (
-	file_id VARCHAR(64) NOT NULL, 
-	name VARCHAR(512) NOT NULL, 
-	content_type VARCHAR(128) NOT NULL, 
-	size INTEGER NOT NULL, 
-	sha256 VARCHAR(64) NOT NULL, 
-	content VARCHAR(max) NOT NULL, 
-	CONSTRAINT channel_files_pkey PRIMARY KEY (file_id)
 );
 GO
 CREATE TABLE chat_search (
@@ -629,6 +631,7 @@ GO
 CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
 GO
 CREATE TABLE registry_guardrails (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(120) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -643,6 +646,8 @@ CREATE TABLE registry_guardrails (
 	CONSTRAINT registry_guardrails_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_registry_guardrails_team_slug UNIQUE (team_id, slug)
 );
+GO
+CREATE INDEX ix_registry_guardrails_tenant_team ON registry_guardrails (tenant_id, team_id);
 GO
 CREATE TABLE agent_memories (
 	id VARCHAR(64) NOT NULL, 
@@ -739,6 +744,7 @@ GO
 CREATE INDEX ix_review_assignments_review ON review_assignments (tenant_id, review_id, assigned_at);
 GO
 CREATE TABLE registry_skills (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(64) NOT NULL, 
 	owner_team VARCHAR(200) NOT NULL, 
@@ -755,6 +761,8 @@ CREATE TABLE registry_skills (
 	CONSTRAINT registry_skills_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_registry_skills_team_slug UNIQUE (team_id, slug)
 );
+GO
+CREATE INDEX ix_registry_skills_tenant_team ON registry_skills (tenant_id, team_id);
 GO
 CREATE TABLE task_assists (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -869,6 +877,7 @@ GO
 CREATE INDEX ix_widget_mint_key_audit_tenant_id ON widget_mint_key_audit (tenant_id);
 GO
 CREATE TABLE registry_widgets (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL DEFAULT '', 
@@ -882,6 +891,7 @@ CREATE TABLE registry_widgets (
 );
 GO
 CREATE TABLE registry_workflows (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -898,6 +908,7 @@ CREATE TABLE registry_workflows (
 );
 GO
 CREATE TABLE registry_validations (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
 	ran_at VARCHAR(32) NOT NULL, 
@@ -972,6 +983,7 @@ CREATE TABLE ops_checkpoint_fences (
 );
 GO
 CREATE TABLE registry_agent_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	agent_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	spec NVARCHAR(max) NOT NULL, 
@@ -1007,6 +1019,7 @@ GO
 CREATE INDEX ix_graph_runs_thread_id ON graph_runs (thread_id);
 GO
 CREATE TABLE registry_guardrail_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	guardrail_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	config NVARCHAR(max) NOT NULL, 
@@ -1022,6 +1035,7 @@ CREATE TABLE registry_guardrail_versions (
 );
 GO
 CREATE TABLE registry_skill_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	skill_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	content NVARCHAR(max) NOT NULL, 
@@ -1039,6 +1053,7 @@ CREATE TABLE registry_skill_versions (
 );
 GO
 CREATE TABLE registry_widget_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	widget_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	content NVARCHAR(max) NOT NULL, 
@@ -1054,6 +1069,7 @@ CREATE TABLE registry_widget_versions (
 );
 GO
 CREATE TABLE registry_workflow_versions (
+	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
 	workflow_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	graph NVARCHAR(max) NOT NULL, 
@@ -1349,5 +1365,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0104_runtime_tables_isolated');
+INSERT INTO alembic_version (version_num) VALUES ('0106_registry_tenant_columns');
 GO

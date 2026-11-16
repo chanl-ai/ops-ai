@@ -6,9 +6,11 @@ from collections.abc import AsyncIterator
 from typing import ClassVar
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.store.leases import LeaseHeldError, Leases, check_fence, thread_leases
+from ops_agents.store.tenancy import TENANT_ROLE
 from ops_agents.store.timers import TimerStore, timers
 from ops_checkpointer import LeaseSupersededError
 from ops_service_kit.settings import Settings
@@ -63,6 +65,9 @@ async def backend(request: pytest.FixtureRequest) -> AsyncIterator[tuple[Backend
     async with engine.begin() as c:
         await c.run_sync(lambda sync: thread_leases.create(sync, checkfirst=True))
         await c.run_sync(lambda sync: timers.create(sync, checkfirst=True))
+        if c.dialect.name == "postgresql":
+            # The runtime role's grants as migrations 0021 and 0105 make them: these tables are made here, not migrated.
+            await c.execute(sa.text(f"GRANT SELECT, INSERT, UPDATE ON thread_leases, timers TO {TENANT_ROLE}"))
     yield b, engine
     await engine.dispose()
 

@@ -18,7 +18,7 @@ from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
 from .model_calls import ModelCall, ModelCallLedger
-from .tenancy import LOCAL_TENANT, current_tenant, tenant_tx
+from .tenancy import LOCAL_TENANT, RuntimeStore, current_tenant
 
 thread_budgets = sa.Table(
     "thread_budgets",
@@ -42,14 +42,14 @@ def _amount(micros: int | None) -> Decimal:
     return Decimal(micros or 0) * MICRO
 
 
-class UsageLedger:
+class UsageLedger(RuntimeStore):
     # A budget check and the usage it admits are read and written in one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
 
     """The agents service's `Meter`: records usage rows and checks a thread's budget against their sum."""
 
     def __init__(self, engine: AsyncEngine, prices: PriceTable) -> None:
-        self.engine = engine
+        super().__init__(engine)
         self.prices = prices
         self.calls = ModelCallLedger(engine)
 
@@ -97,7 +97,7 @@ class UsageLedger:
         return await self.calls.sums(thread_id, by_run=True)
 
     async def budget(self, thread_id: str) -> Budget | None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             row = (
                 (await c.execute(thread_budgets.select().where(thread_budgets.c.thread_id == thread_id)))
                 .mappings()
@@ -120,7 +120,7 @@ class UsageLedger:
             "updated_at": now_iso(),
             "tenant_id": current_tenant(),
         }
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(upsert(c, thread_budgets, values, keys=["thread_id"]))
 
     async def update_budget(self, thread_id: str, budget: Budget) -> None:

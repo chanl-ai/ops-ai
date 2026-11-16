@@ -8,7 +8,6 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
@@ -17,7 +16,7 @@ from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .leases import check_fence
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 thread_events = sa.Table(
     "thread_events",
@@ -58,13 +57,10 @@ def view(row: Any) -> dict[str, Any]:
     }
 
 
-class EventLog:
+class EventLog(RuntimeStore):
     # Two appends that read the same last seq cannot both land: the unique (thread, seq) refuses the second, which
     # retries with the next one (CAS on insert).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def append(
         self,
@@ -98,7 +94,7 @@ class EventLog:
             )
             stmt = thread_events.insert().values(**values, seq=next_seq).returning(thread_events.c.seq)
             try:
-                async with tenant_tx(self.engine) as c:
+                async with self.tx() as c:
                     await check_fence(c, thread_id, generation)
                     seq = int((await c.execute(stmt)).scalar_one())
             except IntegrityError:
@@ -121,7 +117,7 @@ class EventLog:
             )
             .order_by(thread_events.c.seq)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [view(r) for r in (await c.execute(q)).all()]
 
     async def team_events(self, team_id: str, after: int, limit: int = 200) -> list[tuple[int, dict[str, Any]]]:
@@ -138,7 +134,7 @@ class EventLog:
             .order_by(thread_events.c.position)
             .limit(limit)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [(int(r.position), view(r)) for r in (await c.execute(q)).all()]
 
     async def for_threads(self, thread_ids: list[str]) -> list[Any]:
@@ -148,5 +144,5 @@ class EventLog:
             .where(thread_events.c.thread_id.in_(thread_ids), team_visible(thread_events))
             .order_by(thread_events.c.seq)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return list((await c.execute(q)).all())

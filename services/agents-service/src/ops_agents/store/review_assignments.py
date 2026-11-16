@@ -4,17 +4,17 @@ change who may decide it."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 review_assignments = sa.Table(
     "review_assignments",
@@ -31,28 +31,31 @@ review_assignments = sa.Table(
 )
 
 
-class ReviewAssignments:
+class AssignmentOut(Out):
+    """One assignment as written."""
+
+    id: str
+    review_id: str
+    assignee: str
+    assigned_by: str
+    assigned_at: str
+
+
+class ReviewAssignments(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
-    async def assign(self, review_id: str, assignee: str, *, by: str) -> dict[str, Any]:
-        row = {
-            "id": new_id("ras"),
-            "review_id": review_id,
-            "assignee": assignee,
-            "assigned_by": by,
-            "assigned_at": now_iso(),
-        }
-        async with tenant_tx(self.engine) as c:
-            await c.execute(review_assignments.insert().values(**row))
+    async def assign(self, review_id: str, assignee: str, *, by: str) -> AssignmentOut:
+        row = AssignmentOut(
+            id=new_id("ras"), review_id=review_id, assignee=assignee, assigned_by=by, assigned_at=now_iso()
+        )
+        async with self.tx() as c:
+            await c.execute(review_assignments.insert().values(**row.model_dump()))
         return row
 
     async def current(self) -> dict[str, str]:
         """Each assigned review's assignee now: the latest assignment of each, in the caller's tenant."""
         t = review_assignments
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             # Filtered here as well as by row-level security: SQLite, the tests' and a laptop's store, has none.
             q = (
                 sa.select(t.c.review_id, t.c.assignee)
