@@ -12,8 +12,12 @@ from typing import Any, cast
 import pytest
 from httpx import AsyncClient
 from pydantic_ai.models.test import TestModel
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_agents.api import case_page
+from ops_agents.api.actors import actors
+from ops_agents.api.routers import case_records
 from tests.api import role_app as role_app_module
 from tests.api.test_reply_pins import FIXTURES, answer, compare
 from tests.engine.test_lifecycle_rights import BUILDER, VIEWER, person
@@ -87,3 +91,50 @@ async def test_every_case_route_keeps_its_reply_status_and_error_object(client: 
     seen["tasks.stray"] = answer(await c.post("/v1/tasks", json={**task, "colour": 1}, headers=BUILDER))
     seen["tasks.missing"] = answer(await c.get("/v1/tasks/tk_none1", headers=VIEWER))
     compare(_steady(seen), FIXTURES / "reply-pins-case-records.json")
+
+
+async def test_each_case_route_holds_one_transaction_and_none_while_people_are_named(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A change, note or link half written, or a connection held while platform-service names the owners."""
+    c = client
+    begun: list[int] = []
+    ended: list[int] = []
+    held_while_naming: list[int] = []
+
+    def began(_conn: object) -> None:
+        begun.append(1)
+
+    def finished(_conn: object) -> None:
+        ended.append(1)
+
+    sync = _ENGINES[-1].sync_engine
+    event.listen(sync, "begin", began)
+    event.listen(sync, "commit", finished)
+    event.listen(sync, "rollback", finished)
+
+    async def watched(rt: Any, raws: Any) -> dict[str, dict[str, Any]]:
+        held_while_naming.append(len(begun) - len(ended))
+        return await actors(rt, raws)
+
+    monkeypatch.setattr(case_records, "actors", watched)
+    monkeypatch.setattr(case_page, "actors", watched)
+    other = (await c.post("/v1/cases", json=DISPUTE, headers=VIEWER)).json()["data"]["id"]
+    url = f"/v1/cases/{(await c.post('/v1/cases', json=DISPUTE, headers=VIEWER)).json()['data']['id']}"
+    steps: list[tuple[str, str, str, object]] = [
+        ("open", "POST", "/v1/cases", {**DISPUTE, "subject": "Late fee"}),
+        ("change", "PATCH", url, {"priority": "low", "assignee": "vera@harborpine.example"}),
+        ("note", "POST", f"{url}/events", {"text": "Asked for the receipt"}),
+        ("link", "POST", f"{url}/links", {"caseId": other}),
+    ]
+    counts: dict[str, int] = {}
+    for name, method, path, body in steps:
+        begun.clear()
+        ended.clear()
+        r = await c.request(method, path, json=body, headers=VIEWER)
+        assert r.status_code in (200, 201), (name, r.text)
+        counts[name] = len(begun)
+    for name, path in (("list", "/v1/cases"), ("read", url)):
+        r = await c.get(path, headers=VIEWER)
+        assert r.status_code == 200, (name, r.text)
+    assert (counts, held_while_naming) == (dict.fromkeys(counts, 1), [0, 0]), (counts, held_while_naming)

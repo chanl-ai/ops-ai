@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.isolation import attempt
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -157,7 +158,8 @@ class CaseStore:
             "type_version": type_version,
         }
         try:
-            async with tenant_tx(self.engine) as c:
+            # A savepoint, so a retry's duplicate producer key leaves a request transaction usable for the read below.
+            async with tenant_tx(self.engine) as c, attempt(c):
                 await c.execute(cases.insert().values(**values))
                 await _event(c, str(values["id"]), "opened", ref=None, detail={"subject": subject}, by=by, at=_iso(at))
         except IntegrityError:

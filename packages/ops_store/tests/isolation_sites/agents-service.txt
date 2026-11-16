@@ -1,5 +1,4 @@
-# agents-service: 2 raw transactions and 4 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
-1 caught services/agents-service/src/ops_agents/store/cases.py
+# agents-service: 2 raw transactions and 3 caught database errors with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
 1 caught services/agents-service/src/ops_agents/store/poll_cursors.py
 1 caught services/agents-service/src/ops_agents/store/service_events.py
 1 caught services/agents-service/src/ops_agents/store/task_assists.py

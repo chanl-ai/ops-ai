@@ -3,11 +3,14 @@
 A case belongs to the team the request acts in; another team's or tenant's case answers 404. Every member reads,
 opens and works its team's cases (`cases.view`, `cases.create`, `cases.edit`); closing one, or reopening a closed
 one, is `cases.manage` and a person's: an agent or workflow may resolve a case but never close it. A service token opens
-and works cases with the `cases:*` scopes Settings.service_scopes gives it."""
+and works cases with the `cases:*` scopes Settings.service_scopes gives it.
+
+Opening, changing, noting and linking a case each answer in one request transaction (`Tx`): they touch this service's
+database only. The list and the case page read the case rows in one transaction and name people through
+platform-service (and the page asks files-service and tools-service) after it ends, with no connection held."""
 
 from __future__ import annotations
 
-import math
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeAlias
 
@@ -16,10 +19,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
 from ops_engine.store import RunStore
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
-from ops_service_kit.http import Envelope, ListResult, Out, Pagination
+from ops_service_kit.http import Envelope, In, ListResult, Out, paged
+from ops_store import isolation
 
 from ...store.cases import CaseNotFound, CaseStore, Priority, Status
 from ...store.engine import EngineTransactions
@@ -41,7 +45,7 @@ NoteKind = Literal["note", "run", "chat", "decision"]
 IsoTime = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$")]
 
 
-class CaseIn(WireModel):
+class CaseIn(In):
     subject: str = Field(min_length=1, max_length=300)
     priority: Priority = "normal"
     # The producer's own key (its run or chat id): opening again with it answers the case already opened.
@@ -53,7 +57,7 @@ class CaseIn(WireModel):
     resolution_due_at: IsoTime | None = None
 
 
-class CasePatch(WireModel):
+class CasePatch(In):
     subject: str | None = Field(default=None, min_length=1, max_length=300)
     status: Status | None = None
     priority: Priority | None = None
@@ -65,14 +69,14 @@ class CasePatch(WireModel):
     responded_at: IsoTime | None = None
 
 
-class EventIn(WireModel):
+class EventIn(In):
     kind: NoteKind = "note"
     # The run, chat thread or review the entry is about.
     ref: str | None = Field(default=None, max_length=200)
     text: str | None = Field(default=None, max_length=10_000)
 
 
-class LinkIn(WireModel):
+class LinkIn(In):
     case_id: str = Field(min_length=1, max_length=64)
 
 
@@ -355,7 +359,7 @@ async def _detail(store: CaseStore, row: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("", response_model=Envelope[CaseView], status_code=201)
-async def open_case(rt: Rt, me: Me, body: CaseIn) -> JSONResponse:
+async def open_case(rt: Rt, me: Me, _: Tx, body: CaseIn) -> JSONResponse:
     """Opens a case in the acting team: 201, or 200 with the case a retry with the same producer key opened."""
     team = _team(me)
     can(caller_of(me), "cases", "create", team=team, what="a case")
@@ -379,29 +383,26 @@ class CasesQuery(BaseModel):
 async def list_cases(rt: Rt, me: Me, q: Annotated[CasesQuery, Query()]) -> JSONResponse:
     """The acting team's cases, the soonest resolution deadline first. `overdue` keeps the open ones past it, leaving
     out a case that waits on the customer."""
-    rows, total = await CaseStore(rt.db).list(
-        [_team(me)],
-        status=list(q.status),
-        priority=list(q.priority),
-        assignee=q.assignee,
-        customer_id=q.customerId,
-        overdue=q.overdue,
-        search=q.search,
-        page=q.page,
-        size=q.pageSize,
-    )
-    pages = max(1, math.ceil(total / q.pageSize))
-    pagination = Pagination(
-        page=q.page, page_size=q.pageSize, total=total, total_pages=pages, has_next=q.page < pages, has_prev=q.page > 1
-    )
-    # One batched read of the page's owners; a person platform-service cannot name keeps their email as the name.
+    async with isolation.request_transaction():
+        rows, total = await CaseStore(rt.db).list(
+            [_team(me)],
+            status=list(q.status),
+            priority=list(q.priority),
+            assignee=q.assignee,
+            customer_id=q.customerId,
+            overdue=q.overdue,
+            search=q.search,
+            page=q.page,
+            size=q.pageSize,
+        )
+    # One batched read of the page's owners, with nothing open; a person platform-service cannot name keeps their email
+    # as the name.
     who = await actors(rt, [str(r["assignee"]) for r in rows if r["assignee"]])
     listed = [
         _view(r) | {"owner": {"email": r["assignee"], "name": who[r["assignee"]]["name"]} if r["assignee"] else None}
         for r in rows
     ]
-    result = {"data": listed, "pagination": pagination.model_dump(by_alias=True), "facets": {}}
-    return ok(result)
+    return ok(paged(listed, total, q.page, q.pageSize))
 
 
 @router.get("/{case_id}", response_model=Envelope[CasePage])
@@ -410,12 +411,14 @@ async def get_case(rt: Rt, me: Me, case_id: str) -> JSONResponse:
     it waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest
     activity and what the caller may do."""
     store = CaseStore(rt.db)
-    row = await _visible(store, me, case_id)
-    return ok(await _detail(store, row) | await assembled(rt, me, row))
+    async with isolation.request_transaction():
+        row = await _visible(store, me, case_id)
+        timeline = await _detail(store, row)
+    return ok(timeline | await assembled(rt, me, row))
 
 
 @router.patch("/{case_id}", response_model=Envelope[CaseDetail])
-async def change_case(rt: Rt, me: Me, case_id: str, body: CasePatch) -> JSONResponse:
+async def change_case(rt: Rt, me: Me, _: Tx, case_id: str, body: CasePatch) -> JSONResponse:
     """Changes the fields sent, each one a timeline entry. Moving to or from `closed` is `cases.manage` and a
     person's; leaving `waiting_on_customer` moves both deadlines on by the time it waited."""
     store = CaseStore(rt.db)
@@ -449,7 +452,7 @@ async def _ref_team(rt: Runtime, kind: str, ref: str) -> str | None:
 
 
 @router.post("/{case_id}/events", response_model=Envelope[CaseDetail], status_code=201)
-async def add_event(rt: Rt, me: Me, case_id: str, body: EventIn) -> JSONResponse:
+async def add_event(rt: Rt, me: Me, _: Tx, case_id: str, body: EventIn) -> JSONResponse:
     """Adds a note, or a run, chat or decision the case now covers, to its timeline."""
     store = CaseStore(rt.db)
     row = await _visible(store, me, case_id)
@@ -468,7 +471,7 @@ async def add_event(rt: Rt, me: Me, case_id: str, body: EventIn) -> JSONResponse
 
 
 @router.post("/{case_id}/links", response_model=Envelope[CaseDetail], status_code=201)
-async def link_case(rt: Rt, me: Me, case_id: str, body: LinkIn) -> JSONResponse:
+async def link_case(rt: Rt, me: Me, _: Tx, case_id: str, body: LinkIn) -> JSONResponse:
     """Links two cases of the acting team about one issue: an entry on each, naming the other."""
     store = CaseStore(rt.db)
     row = await _visible(store, me, case_id)
