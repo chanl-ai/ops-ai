@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -15,6 +16,8 @@ from ops_service_kit.ids import new_id
 from ops_store import isolation
 from ops_tools.store import CallLog
 from ops_tools.store.calls import LeaseSupersededError
+
+from .conftest import build_app, service_headers
 
 TEAM = "team_platform"
 
@@ -63,3 +66,19 @@ async def test_a_tenant_neither_reads_nor_raises_another_tenants_fence(engine: A
         assert await log.raise_fence(other, thread, 9) == 9
     with isolation.scope(tenant, TEAM):
         assert await log.raise_fence(tenant, thread, 1) == 5, "the other tenant raised this tenant's fence"
+
+
+async def test_the_fence_route_raises_the_callers_tenants_fence_and_refuses_a_lower_one(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str
+) -> None:
+    # Without the openapi response checker: openapi.json does not list the 409 this route answers.
+    app = build_app(engine, seed, tenant, dev=True)
+    fence = {"thread": f"thr_{uuid4().hex[:10]}", "generation": 4}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as c:
+        raised = await c.post("/v1/fences", json=fence, headers=service_headers(tenant))
+        assert raised.status_code == 200 and raised.json()["data"] == fence, raised.text
+        lower = await c.post("/v1/fences", json={**fence, "generation": 2}, headers=service_headers(tenant))
+        assert lower.status_code == 409 and lower.json()["error"]["code"] == "lease_superseded", lower.text
+        other = {**fence, "generation": 2}
+        elsewhere = await c.post("/v1/fences", json=other, headers=service_headers(f"t_{uuid4().hex[:10]}"))
+        assert elsewhere.status_code == 200, "another tenant's fence on the same thread id refused this one"
