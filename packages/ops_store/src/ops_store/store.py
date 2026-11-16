@@ -12,6 +12,7 @@
           return True
 
   async with aliases.tx() as conn: ...                   # the request's one transaction, or its own outside a request
+  async with providers.install_tx(PROVIDERS) as conn: ...  # the same, with no tenant: the install's own tables only
 
 A store never calls `engine.begin()` or `engine.connect()`: that is a second connection beside the request's, as the
 database's owner, with no caller on it (`tests/test_isolation_sites.py` lists the sites still to move).
@@ -19,7 +20,8 @@ database's owner, with no caller on it (`tests/test_isolation_sites.py` lists th
 
 from __future__ import annotations
 
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncGenerator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import ClassVar
 
 import sqlalchemy as sa
@@ -38,6 +40,16 @@ class Store:
 
     def tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
         return isolation.isolated_tx(self.engine, role=self.role)
+
+    @asynccontextmanager
+    async def install_tx(self, reason: str) -> AsyncGenerator[AsyncConnection]:
+        """`tx()` with no tenant, for the install's own tables (marked `system(...)`), from a path that may carry no
+        caller: a route that authenticates by a model key, a seed, a loop. Inside a request it is the request's
+        connection with its scope set for the block and restored after; a tenant table shows it no row and refuses
+        its writes (`isolation.install_wide`). `reason` is a named constant, listed in test_isolation_sites.py."""
+        with isolation.install_wide(reason):
+            async with self.tx() as conn:
+                yield conn
 
     def attempt(self, conn: AsyncConnection) -> AbstractAsyncContextManager[None]:
         """A savepoint around a statement that may fail and be caught, so the request's connection stays usable."""

@@ -16,8 +16,9 @@ its caller fails instead of reading anything.
 Scope is `team` for every person, API key and service token that names a team. Only two calls widen it, each with a
 reason that is a named constant of the calling service and logged as `isolation.widen`: `tenant_wide` (every team of
 one tenant: the dev header caller, a service token with no team, a loop or seed that acts for the whole tenant) and
-`system_tx` (past the tenant, as a role whose grants limit what it reads). `packages/ops_store/tests/
-test_isolation_sites.py` lists every call site of both, and of `enter` and `scope`, by reason.
+`system_tx` (past the tenant, as a role whose grants limit what it reads); `install_wide` is no tenant, for
+system(...) tables. `packages/ops_store/tests/test_isolation_sites.py` lists every call site of the three, and of
+`enter` and `scope`.
 
 The team is also the acting team (`team_scope`), so the query filter and the database read one value: a team
 scope acts as its team, and a wider scope as none (every team of the tenant).
@@ -46,7 +47,7 @@ from .team_scope import acting_as, acting_team, set_acting_team
 
 log = get_logger(__name__)
 
-Scope = Literal["team", "tenant", "system"]
+Scope = Literal["team", "tenant", "system", "install"]
 # The transaction settings policies read: PostgreSQL custom settings and SQL Server SESSION_CONTEXT keys.
 SETTINGS = {"tenant_id": "app.tenant_id", "team_id": "app.team_id", "scope": "app.scope"}
 # The reason the dev header caller (dev mode only, no roles) acts for every team of its tenant.
@@ -55,6 +56,9 @@ DEV = "dev"
 SERVICE = "service"
 # The kind of a context no request set: a loop, a seed or a test.
 TASK = "task"
+# What an install-wide transaction carries as its tenant on PostgreSQL, which cannot unset a setting: longer than any
+# tenant column (String(64)) holds, so a tenant policy matches no row and refuses every write. SQL Server gets NULL.
+_NO_TENANT = "-" * 65
 
 
 class NoTenantError(RuntimeError):
@@ -164,6 +168,29 @@ def scope(tenant_id: str, team_id: str | None) -> Generator[Isolation]:
             yield found
     finally:
         _ctx.reset(token)
+
+
+@contextmanager
+def install_wide(reason: str) -> Generator[Isolation]:
+    """No tenant for a block, logged with `reason`: statements on the install's own tables (marked `system(...)`) from
+    a path that may have no caller (a route that authenticates by a model key, a seed, a loop). Inside a request it
+    runs on the request's connection; a tenant table's policy shows it no row and refuses its writes, for any login
+    row-level security applies to (every runtime login; the compose superuser bypasses it). `tenant()` raises inside."""
+    _need(reason, "install_wide")
+    base = _ctx.get()
+    _log_widen(base.kind if base else TASK, reason=reason, scope="install", tenant="-")
+    token = _ctx.set(Isolation("", None, "install", base.kind if base else TASK, reason))
+    try:
+        with acting_as(None):
+            yield _ctx.get()  # pyright: ignore[reportReturnType]
+    finally:
+        _ctx.reset(token)
+
+
+def _in_force() -> Isolation:
+    """The context a transaction carries: the current one, which names a tenant unless `install_wide` set it."""
+    found = _ctx.get()
+    return found if found is not None and found.scope == "install" else current()
 
 
 @contextmanager
@@ -305,7 +332,7 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
     statement on the same connection and restores it on exit. In another task (gather branch, created task, loop,
     seed, test): its own transaction, as `role` on PostgreSQL (a role row-level security applies to), with SQL
     Server's session context cleared when it ends however it ends. Only system_tx takes a second connection."""
-    ctx = current()
+    ctx = _in_force()
     state = _request_here(engine)
     if state is None:
         async with _own_tx(engine, ctx, role) as conn:
@@ -390,16 +417,18 @@ async def enter_transaction(
 ) -> None:
     """Writes the context into the transaction. `reset_role` is for a transaction that already runs as a role and
     now needs none: PostgreSQL goes back to the login's own."""
+    install = ctx.scope == "install"
     values = {"tenant_id": ctx.tenant_id, "team_id": ctx.team_id or "", "scope": ctx.scope}
     match dialect.dialect_of(conn):
         case "postgresql":
+            values["tenant_id"] = _NO_TENANT if install else ctx.tenant_id
             # The role is set by the same statement as the context: set_config('role', ...) is SET LOCAL ROLE, with the
             # same membership check, and a transaction's setup is one round trip.
             as_role = role or ("none" if reset_role else None)
             settings = [*([("role", as_role)] if as_role else []), *((SETTINGS[k], v) for k, v in values.items())]
             await conn.execute(sa.select(*(sa.func.set_config(name, v, True) for name, v in settings)))
         case "mssql":
-            await conn.execute(_MS_SET, values)
+            await conn.execute(_MS_SET, {**values, "tenant_id": None} if install else values)
         case _:
             return
 
@@ -458,6 +487,7 @@ __all__ = [
     "current",
     "enter",
     "enter_caller",
+    "install_wide",
     "isolated_tx",
     "request_transaction",
     "scope",

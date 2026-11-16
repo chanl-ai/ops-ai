@@ -53,6 +53,11 @@ class Store:
     def attempt(self, conn: AsyncConnection) -> AbstractAsyncContextManager[None]:
         """A savepoint around a statement that may fail and be caught, so the request's connection stays usable."""
 
+    def install_tx(self, reason: str) -> AbstractAsyncContextManager[AsyncConnection]:
+        """tx() with no tenant (isolation.install_wide), for tables marked system(...): the request's connection with
+        its scope set for the block and restored, or its own outside a request. Tenant tables show it no row and refuse
+        its writes (NULL tenant on SQL Server, a tenant no column can hold on PostgreSQL)."""
+
     async def owner_teams(self, conn: AsyncConnection, table: sa.Table, ids: set[str], reason: str) -> dict[str, str]:
         """The owning team of each id in one query, for deciding a refusal; never for showing the rows."""
 

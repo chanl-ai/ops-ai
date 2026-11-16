@@ -197,11 +197,15 @@ def _reason(call: ast.Call) -> str | None:
     return arg.attr if isinstance(arg, ast.Attribute) else ast.unparse(arg)
 
 
+# `install_wide` and `Store.install_tx` narrow to no tenant; they are listed by reason as the two that widen are.
+WIDENING_CALLS = {"tenant_wide", "system_tx", "install_wide", "install_tx"}
+
+
 def test_every_widening_names_a_listed_reason_at_a_listed_site() -> None:
     found: dict[str, set[str]] = defaultdict(set)
     unnamed: list[str] = []
     for rel, call, name in _calls():
-        if name not in {"tenant_wide", "system_tx"}:
+        if name not in WIDENING_CALLS:
             continue
         reason = _reason(call)
         if reason is None or reason.startswith(("'", '"', "f'", 'f"')):

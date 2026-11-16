@@ -16,8 +16,8 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 | `conformance` | `lease_suite`, `timer_claim_suite`, `audit_suite`, `isolation_suite`, run against every backend from `backends` |
 | `backends` | The registered backends; PostgreSQL is the only one, on a `<db>_conformance` database next to the test database |
 | `database` | `open_database(url)`: the handle code outside a store holds; tests pooled connections and retries a stalled connect |
-| `isolation` | The one isolation context: `enter_caller`, `isolated_tx`, `tenant_wide`, `system_tx`, `NoTenantError`; `request_transaction` (one transaction per request) and `attempt` (a savepoint) |
-| `store` | `Store`: the base of every service's store class (`tx()`, `attempt(conn)`, `owner_teams`) |
+| `isolation` | The one isolation context: `enter_caller`, `isolated_tx`, `tenant_wide`, `system_tx`, `install_wide`, `NoTenantError`; `request_transaction` (one transaction per request) and `attempt` (a savepoint) |
+| `store` | `Store`: the base of every service's store class (`tx()`, `install_tx(reason)`, `attempt(conn)`, `owner_teams`) |
 | `team_scope` | `team_visible` and `any_team`: the where-clause every read of a team-owned table carries |
 | `schema` | `TENANT_SCOPED` and the team-owned markers on tables; `differences` and `unowned` compare a migrated database with the metadata |
 | `schema_version` | `require_current_schema`: a service refuses to start when its chain's head is not recorded |
@@ -38,6 +38,11 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 - Widening past one team needs a reason that is a named constant of the calling service: `tenant_wide` for every team
   of one tenant, `system_tx` past the tenant. `tests/test_isolation_sites.py` lists every call site by reason, so a new
   one fails that test until it is listed.
+- A table marked `system(...)` (no tenant column) is read and written through `Store.install_tx(REASON)`, which needs
+  no caller: the context is `isolation.install_wide`, no tenant, so a tenant table's policy shows the block no row and
+  refuses its writes, for any login row-level security applies to (every runtime login; the compose superuser
+  bypasses it, so a test proves it as a role). Inside a request it is the request's connection, its scope restored
+  after. Its reason is listed in `tests/test_isolation_sites.py` like a widening's (`tests/test_install_scope.py`).
 - Inside a request that took `ops_identity.fastapi.Tx`, every `isolated_tx` of the request's task joins one
   transaction; another task (a gather branch, a created task, a stream's generator) opens its own. A database error
   that is caught runs inside `Store.attempt(conn)`; one that leaves an `isolated_tx` block otherwise fails the request
@@ -57,7 +62,7 @@ Depended on by `ops_checkpointer`, `ops_engine`, `ops_identity` and every Python
 
 | Task | Command |
 |---|---|
-| The suite (needs PostgreSQL; `make test` provides a throwaway database) | `make test PKG=packages/ops_store` (66 tests, about 20 s) |
+| The suite (needs PostgreSQL; `make test` provides a throwaway database) | `make test PKG=packages/ops_store` (112 tests, about 25 s) |
 | One file | `make test PKG=packages/ops_store T=tests/test_isolation_sites.py` |
 | Lint, format, types | `uv run ruff check packages/ops_store`, `uv run ruff format --check packages/ops_store`, `uv run pyright packages/ops_store` |
 | Store inventory in `docs/architecture/data.md` | `uv run python scripts/store_inventory.py --check` (rewrite without `--check`) |
