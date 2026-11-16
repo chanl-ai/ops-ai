@@ -17,14 +17,16 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict
 
 from wasmtime import Config, Engine, ExitTrap, Linker, Module, Store, Trap, WasiConfig
 
+from ops_service_kit.http import JsonValue
 from ops_service_kit.settings import RunnerWaits
 
-from .domain import CallAnswer, Limits, RunResult, failure
+from .domain import CallAnswer, CallReply, Failure, Limits, RunResult, failure
 
 LOG_CAP = 8192
 OUTPUT_CAP = 1 << 20
@@ -84,6 +86,23 @@ class WasmPython:
             shutil.rmtree(work, ignore_errors=True)
 
 
+class _Request(TypedDict):
+    """The one line the guest reads first (guest.py)."""
+
+    source: str
+    entry: str
+    input: JsonValue
+
+
+@dataclass
+class _Ended:
+    """How the guest's thread ended: its exit code, the trap that stopped it, or what kept it from starting."""
+
+    exit: int | None = None
+    trap: str | None = None
+    setup: str | None = None
+
+
 class _Run:
     """One run's directory, pipes and guest thread, and the conversation with the guest over them."""
 
@@ -95,7 +114,7 @@ class _Run:
         self.answer = answer
         self.app = work / "app"
         self.stdin, self.stdout, self.stderr = (str(work / n) for n in ("in", "out", "err"))
-        self.ended: dict[str, Any] = {}
+        self.ended = _Ended()
 
     def _guest(self) -> None:
         store = Store(self.runtime.engine)
@@ -115,11 +134,11 @@ class _Run:
             start: Callable[..., Any] = instance.exports(store)["_start"]  # pyright: ignore[reportAssignmentType]
             start(store)
         except ExitTrap as e:
-            self.ended["exit"] = e.code
+            self.ended.exit = e.code
         except Trap as e:
-            self.ended["trap"] = str(e)
+            self.ended.trap = str(e)
         except Exception as e:  # a wasmtime error before the guest starts
-            self.ended["setup"] = f"{type(e).__name__}: {e}"
+            self.ended.setup = f"{type(e).__name__}: {e}"
         finally:
             # Dropping the store closes the guest's ends of the pipes, so the host's reads see end of file.
             del store
@@ -177,12 +196,11 @@ class _Run:
                 line = bytes(buf[:end])
                 del buf[: end + 1]
                 try:
-                    parsed: Any = json.loads(line)
+                    msg: JsonValue = json.loads(line)
                 except ValueError:
                     continue
-                if not isinstance(parsed, dict):
+                if not isinstance(msg, dict):
                     continue
-                msg = cast(dict[str, Any], parsed)
                 if "call" in msg:
                     reply = self._call(result, str(msg["call"]), msg.get("args"))
                     if in_fd is not None:
@@ -191,30 +209,30 @@ class _Run:
                     result.ok, result.output = True, msg["result"]
                     return
                 elif "error" in msg:
-                    error = cast(dict[str, Any], msg["error"] if isinstance(msg["error"], dict) else {})
+                    error = msg["error"] if isinstance(msg["error"], dict) else {}
                     result.error = failure(str(error.get("code")), str(error.get("message")))
                     return
 
-    def _call(self, result: RunResult, tool: str, args: Any) -> dict[str, Any]:
+    def _call(self, result: RunResult, tool: str, args: JsonValue) -> CallReply:
         result.calls += 1
         if result.calls > self.limits.calls:
-            reply: dict[str, Any] = {
+            reply: CallReply = {
                 "ok": False,
                 "error": failure("call_limit", f"At most {self.limits.calls} calls per run."),
             }
         elif not isinstance(args, dict):
             reply = {"ok": False, "error": failure("invalid_input", "A call's arguments are an object.")}
         else:
-            reply = self.answer(tool, cast(dict[str, Any], args))
-        error = cast(dict[str, Any], reply.get("error") or {})
-        result.trace.append({"tool": tool, "ok": bool(reply.get("ok")), "code": error.get("code")})
+            reply = self.answer(tool, args)
+        error = reply.get("error")
+        result.trace.append({"tool": tool, "ok": bool(reply.get("ok")), "code": error["code"] if error else None})
         return reply
 
-    def _why(self, thread: threading.Thread) -> dict[str, str]:
-        trap = str(self.ended.get("trap", ""))
+    def _why(self, thread: threading.Thread) -> Failure:
+        trap = self.ended.trap or ""
         if "interrupt" in trap or thread.is_alive() or time.monotonic() >= self.started + self.limits.time_s:
             return failure("time_limit", f"The function ran past its {self.limits.time_s:g} s limit.")
-        why = trap or self.ended.get("setup") or f"exit {self.ended.get('exit')}"
+        why = trap or self.ended.setup or f"exit {self.ended.exit}"
         return failure("runner_error", str(why).splitlines()[0][:300])
 
     def _ms(self) -> int:
@@ -233,7 +251,7 @@ def _open_writer(path: str, thread: threading.Thread, poll_s: float, deadline: f
             thread.join(timeout=poll_s)
 
 
-def _write(fd: int, msg: dict[str, Any]) -> None:
+def _write(fd: int, msg: _Request | CallReply) -> None:
     os.set_blocking(fd, True)
     # A broken pipe means the guest ended; its outcome is read from the trap.
     with contextlib.suppress(BrokenPipeError):

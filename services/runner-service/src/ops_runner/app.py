@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 import anyio
 from fastapi import Depends, FastAPI
@@ -37,7 +37,16 @@ from ops_service_kit.http import (
 )
 from ops_service_kit.settings import Settings
 
-from .domain import DEFAULT_CALLS, DEFAULT_MEMORY_MB, DEFAULT_TIME_S, CallAnswer, Limits, RunResult, failure
+from .domain import (
+    DEFAULT_CALLS,
+    DEFAULT_MEMORY_MB,
+    DEFAULT_TIME_S,
+    CallAnswer,
+    CallReply,
+    Limits,
+    RunResult,
+    failure,
+)
 from .wasm import WasmPython
 
 SOURCE_CAP = 100_000
@@ -101,9 +110,12 @@ def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | 
     before the run's deadline (`time.monotonic()`), so calls together never hold a run past its limit; one that
     answers later fails `call_failed`."""
 
-    async def call(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    async def call(tool: str, args: dict[str, JsonValue]) -> CallReply:
         assert tools is not None and token is not None
-        late = {"ok": False, "error": failure("call_failed", "The tool did not answer within the run's time limit.")}
+        late: CallReply = {
+            "ok": False,
+            "error": failure("call_failed", "The tool did not answer within the run's time limit."),
+        }
         if (left := deadline - time.monotonic()) <= 0:
             return late
         try:
@@ -122,15 +134,39 @@ def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | 
             return {"ok": False, "error": failure(e.code, e.message)}
         except ServiceUnreachable:
             return {"ok": False, "error": failure("call_failed", "The gateway did not answer.")}
-        out = cast(dict[str, Any], data)
-        return {"ok": bool(out.get("ok")), "output": out.get("output"), "error": out.get("error")}
+        return replied(data)
 
-    def answer(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    def answer(tool: str, args: dict[str, JsonValue]) -> CallReply:
         if tools is None or not token:
             return {"ok": False, "error": failure("calls_unavailable", "This run cannot call tools.")}
         return anyio.from_thread.run(call, tool, args)
 
     return answer
+
+
+def replied(data: JsonValue) -> CallReply:
+    """tools-service's answer to a call, as the guest reads it: an answer with no `ok` is a failed call, and an error
+    keeps only its code and message."""
+    out: dict[str, JsonValue] = data if isinstance(data, dict) else {}
+    error = out.get("error")
+    if not isinstance(error, dict):
+        return {"ok": bool(out.get("ok")), "output": out.get("output"), "error": None}
+    code, message = error.get("code", "call_failed"), error.get("message", "")
+    return {"ok": bool(out.get("ok")), "output": out.get("output"), "error": failure(str(code), str(message))}
+
+
+def reply(result: RunResult) -> RunOut:
+    error = result.error
+    return RunOut(
+        ok=result.ok,
+        output=result.output,
+        error=ErrorOut(code=error["code"], message=error["message"]) if error else None,
+        log=result.log,
+        calls=result.calls,
+        create_ms=result.create_ms,
+        execute_ms=result.execute_ms,
+        trace=[TraceOut(tool=t["tool"], ok=t["ok"], code=t["code"]) for t in result.trace],
+    )
 
 
 def create_runner_app(
@@ -173,6 +209,6 @@ def create_runner_app(
                 )
             finally:
                 running -= 1
-        return ok(result.wire())
+        return ok(reply(result).model_dump(mode="json", by_alias=True))
 
     return app

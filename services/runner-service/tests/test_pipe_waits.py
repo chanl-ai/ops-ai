@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from typing import Any
 
 import pytest
 
-from ops_runner.domain import Limits
+from ops_runner.domain import CallReply, Limits
 from ops_runner.fetch import compiled_dir, wasm_path
 from ops_runner.wasm import WasmPython
+from ops_service_kit.http import JsonValue
 from ops_service_kit.settings import RunnerWaits, Settings
 
 
@@ -28,7 +28,7 @@ def slow_reads() -> Iterator[WasmPython]:
     rt.close()
 
 
-def no_calls(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+def no_calls(tool: str, args: dict[str, JsonValue]) -> CallReply:
     raise AssertionError("no call expected")
 
 
