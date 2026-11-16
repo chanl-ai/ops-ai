@@ -1274,6 +1274,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def list_workspace_teams(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         actor: Annotated[Actor, Depends(on_workspace)],
         status: Annotated[list[Literal["active", "archived"]] | None, Query()] = None,
         search: Annotated[str, Query(max_length=80)] = "",
