@@ -22,7 +22,7 @@ from sse_starlette import EventSourceResponse
 
 from ops_agents.graphs.definition import InvalidDefinitionError, WorkflowDefinition, validate
 from ops_agents.graphs.metering import budget_from
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     Conflict,
     Forbidden,
@@ -31,7 +31,7 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 from ops_service_kit.ids import new_id, now_iso
 
 from ...store.leases import LeaseHeldError
@@ -83,7 +83,7 @@ MAX_CONCURRENCY = 4
 RECURSION_LIMIT = 60
 
 
-class BudgetInput(WireModel):
+class BudgetInput(In):
     """Caps for one thread (E12); an unset cap does not limit. Cost is in the price table's currency."""
 
     max_calls: int | None = Field(default=None, ge=0)
@@ -91,7 +91,7 @@ class BudgetInput(WireModel):
     max_cost: Decimal | None = Field(default=None, ge=0)
 
 
-class ThreadInput(WireModel):
+class ThreadInput(In):
     graph: str
     metadata: dict[str, Any] = Field(default_factory=dict[str, Any])
     # For a definition-built workflow: the version to pin; the latest when left out.
@@ -104,15 +104,15 @@ class ThreadInput(WireModel):
     budget: BudgetInput | None = None
 
 
-class MigrateInput(WireModel):
+class MigrateInput(In):
     to_version: int
 
 
-class PublishInput(WireModel):
+class PublishInput(In):
     definition: dict[str, Any]
 
 
-class Decision(WireModel):
+class Decision(In):
     decision: Literal["approved", "rejected"]
     reason: str | None = None
     step_up_token: str | None = None
@@ -123,7 +123,7 @@ class Decision(WireModel):
     budget: BudgetInput | None = None
 
 
-class RunInput(WireModel):
+class RunInput(In):
     run_id: str | None = None
     input: dict[str, Any] | None = None
     resume: Decision | None = None
@@ -256,7 +256,8 @@ async def _thread_for(rt: Runtime, me: Principal, thread_id: str) -> tuple[dict[
 
 
 @router.get("", response_model=Envelope[list[ThreadView]])
-async def list_threads(rt: Rt, me: Me, graph: str | None = None) -> JSONResponse:
+async def list_threads(rt: Rt, me: Me, _: Tx, graph: str | None = None) -> JSONResponse:
+    """The threads the caller may read, of one graph when `graph` is given."""
     return ok([_thread_view(r) for r in await _store(rt).threads(graph) if may_read_thread(r, me)])
 
 
@@ -419,7 +420,7 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
 
 
 @router.get("/{thread_id}/runs", response_model=Envelope[list[RunJournalEntry]])
-async def thread_runs(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
+async def thread_runs(rt: Rt, me: Me, _: Tx, thread_id: str) -> JSONResponse:
     """The thread's run journal: each run's kind (input, resume, recovery), status and node sequence."""
     await _thread_for(rt, me, thread_id)
     rows = await _store(rt).runs(thread_id)
@@ -450,7 +451,8 @@ async def thread_runs(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
 async def migrate(rt: Rt, me: Me, thread_id: str, body: MigrateInput) -> JSONResponse:
     """Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only
     when every node it is waiting in exists under the same name in the target, so the resume lands on a real node.
-    Choosing the version a run continues on is a builder's step: a builder or admin of the thread's team."""
+    Choosing the version a run continues on is a builder's step: a builder or admin of the thread's team.
+    No request transaction: the thread's checkpoint is read through the checkpointer, which keeps its own."""
     row, graph = await _thread(rt, thread_id)
     require_builder(
         me,
@@ -486,7 +488,8 @@ versions_router = APIRouter(prefix="/v1/graphs", dependencies=[Depends(principal
 
 
 @versions_router.get("/{name}/versions", response_model=Envelope[list[GraphVersion]])
-async def list_versions(rt: Rt, name: str) -> JSONResponse:
+async def list_versions(rt: Rt, _: Tx, name: str) -> JSONResponse:
+    """The graph's stored versions, oldest first."""
     return ok(
         [
             {"name": v["name"], "version": v["version"], "digest": v["digest"], "createdAt": v["created_at"]}
@@ -500,7 +503,8 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
     """Stores the definition as the graph's next version and points new threads at it, with no review. A builder or
     admin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does
     not hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside
-    the team's publish policy this route refuses one with 409 `review_required`."""
+    the team's publish policy this route refuses one with 409 `review_required`. No request transaction: the
+    publish policy is read from platform-service between its reads and its write."""
     held = await registry_held(rt, name)
     if held is None:
         require_builder(me, area="workflows", team_id=me.team_id, action="publish", what=f"graph {name}")
