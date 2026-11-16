@@ -1,3 +1,1 @@
-# documents-service: 1 raw, 1 broad outside Store.tx() or with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
-1 broad services/documents-service/src/ops_documents/store/metadata.py
-1 raw services/documents-service/src/ops_documents/store/metadata.py
+# documents-service: 0 raw, 0 broad outside Store.tx() or with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.

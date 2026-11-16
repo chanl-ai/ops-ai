@@ -3,7 +3,9 @@
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store.database import open_database
+from ops_store.database import open_database, reachable
+
+__all__ = ["RECOVER_PENDING", "ROLE", "SYSTEM_ROLE", "engine_for", "metadata", "reachable"]
 
 metadata = sa.MetaData()
 # The role every transaction runs as; row-level security applies to it (migration documents_0011).
@@ -16,14 +18,3 @@ RECOVER_PENDING = "recover_pending"
 
 def engine_for(url: str) -> AsyncEngine:
     return open_database(url)
-
-
-async def reachable(engine: object) -> bool:
-    """Whether the database answers; health says degraded when it does not."""
-    assert isinstance(engine, AsyncEngine)
-    try:
-        async with engine.connect() as c:
-            await c.execute(sa.text("SELECT 1"))
-    except Exception:
-        return False
-    return True

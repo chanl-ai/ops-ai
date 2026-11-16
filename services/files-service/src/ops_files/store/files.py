@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.http import Out
 from ops_store import Guarantee, isolation
-from ops_store.database import open_database
+from ops_store.database import open_database, reachable
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.rows import one, rows
@@ -309,16 +309,6 @@ def _team_of(file_id: str) -> Any:
 
 def engine_for(url: str) -> AsyncEngine:
     return open_database(url)
-
-
-async def reachable(engine: AsyncEngine) -> bool:
-    """Whether the database answers; health says degraded when it does not."""
-    try:
-        async with engine.connect() as c:
-            await c.execute(sa.text("SELECT 1"))
-    except Exception:
-        return False
-    return True
 
 
 class FilesStore(Store):

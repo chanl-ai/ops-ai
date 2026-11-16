@@ -121,6 +121,9 @@ class Settings(BaseSettings):
     # fails (ops_store.database). On a loaded host the first attempt has stalled for a minute with no reply.
     database_connect_timeout_s: float = 30.0
     database_connect_attempts: int = 3
+    # How long /health's database probe (ops_store.database.reachable) waits, connect included, before it answers
+    # unreachable; a health check is polled every few seconds and must not wait out the connect attempts above.
+    database_health_timeout_s: float = Field(default=2.0, gt=0)
     # The address every service's HTTP server listens on. A container sets 0.0.0.0 so other containers reach it; on a
     # host the default keeps each port local to the machine. `*` listens on every address, IPv4 and IPv6: a Fly
     # machine needs both (health checks arrive over IPv4, the private network is IPv6), and `::` alone is IPv6 only

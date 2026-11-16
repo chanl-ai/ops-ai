@@ -15,7 +15,7 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 | `ports` | `LeasePort`, `TimerClaimPort`, `AuditPort`: the repository protocols the conformance suites test |
 | `conformance` | `lease_suite`, `timer_claim_suite`, `audit_suite`, `isolation_suite`, run against every backend from `backends` |
 | `backends` | The registered backends; PostgreSQL is the only one, on a `<db>_conformance` database next to the test database |
-| `database` | `open_database(url)`: the handle code outside a store holds; tests pooled connections and retries a stalled connect |
+| `database` | `open_database(url)`: the handle code outside a store holds; tests pooled connections and retries a stalled connect. `reachable(db)`: /health's probe, False within `database_health_timeout_s`, an outage logged once |
 | `isolation` | The one isolation context: `enter_caller`, `isolated_tx`, `tenant_wide`, `system_tx`, `install_wide`, `NoTenantError`; `request_transaction` (one transaction per request) and `attempt` (a savepoint) |
 | `store` | `Store`: the base of every service's store class (`tx()`, `install_tx(reason)`, `system_tx(reason)` as its `system_role`, `attempt(conn)`, `owner_teams`) |
 | `team_scope` | `team_visible` and `any_team`: the where-clause every read of a team-owned table carries |

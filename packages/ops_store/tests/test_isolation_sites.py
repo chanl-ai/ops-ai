@@ -370,6 +370,37 @@ def test_raw_transactions_and_caught_errors_are_only_the_listed_ones() -> None:
     assert problems == [], "\n".join(problems)
 
 
+# ops_store's own sites, which are the door itself and so on no service's baseline: each count is exact, so a new
+# connection, catch or install block inside the package fails here naming its file.
+OWNED: dict[str, int] = {
+    # The conformance suites open their own transactions on the backend under test.
+    "raw packages/ops_store/src/ops_store/conformance.py": 4,
+    "caught packages/ops_store/src/ops_store/conformance.py": 1,
+    # /health's probe: one statement naming no table, False on any failure (`database.reachable`).
+    "raw packages/ops_store/src/ops_store/database.py": 1,
+    "broad packages/ops_store/src/ops_store/database.py": 1,
+    # The system transaction, which runs as a role before any tenant is known.
+    "raw packages/ops_store/src/ops_store/dialect.py": 2,
+    # The isolated transaction itself, and its restore of a connection a cancellation left unusable.
+    "raw packages/ops_store/src/ops_store/isolation.py": 2,
+    "suppressed packages/ops_store/src/ops_store/isolation.py": 2,
+    # The reference audit log, for a service that has none.
+    "raw packages/ops_store/src/ops_store/reference.py": 4,
+    # The schema check at start-up, before any request.
+    "raw packages/ops_store/src/ops_store/schema_version.py": 2,
+    "caught packages/ops_store/src/ops_store/schema_version.py": 1,
+    "install packages/ops_store/src/ops_store/store.py": 1,
+}
+
+
+def test_ops_store_opens_and_catches_only_at_its_owned_sites() -> None:
+    found: Counter[str] = Counter()
+    for path in sorted((ROOT / "packages/ops_store/src").rglob("*.py")):
+        for _line, kind in site_findings(path.read_text()):
+            found[f"{kind} {path.relative_to(ROOT).as_posix()}"] += 1
+    assert dict(found) == OWNED
+
+
 def test_the_site_scan_finds_each_kind_and_passes_the_savepoint_form() -> None:
     planted = """
 async def raw(self):

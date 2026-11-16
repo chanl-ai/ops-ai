@@ -1,6 +1,7 @@
 """Opening a service's database, and how every engine in a process that imports ops_store opens a connection.
 
   db = open_database(settings.database_url)   # the handle code outside a store holds; never AsyncEngine itself
+  await reachable(db)                         # /health's probe: True, or False within database_health_timeout_s
 
 The pool is a setting, not the library's default: OPS_DB__SIZE connections kept, OPS_DB__OVERFLOW more under load,
 and OPS_DB__WAIT_S for a request to wait for one (`Settings.db`).
@@ -19,7 +20,9 @@ Engine class, so engines made anywhere (services, tests, scripts) get it without
 
 from __future__ import annotations
 
+import asyncio
 import time
+import weakref
 from functools import cache
 from typing import Any
 
@@ -139,6 +142,28 @@ def _transaction_ended(conn: sa.Connection) -> None:
     if found is not None:
         request, begun = found
         request.add_transaction((time.perf_counter() - begun) * 1000)
+
+
+# The engines whose last probe failed, so an outage is logged when it starts and not on every poll.
+_DOWN: weakref.WeakSet[sa.Engine] = weakref.WeakSet()
+
+
+async def reachable(db: Database, *, timeout_s: float | None = None) -> bool:
+    """Whether the database answers one statement that names no table, within `timeout_s` (the setting
+    `database_health_timeout_s` by default) from the connect to the reply: what a service's /health asks. Needs no
+    caller, so it is a connection of its own; this package's one probe (tests/test_isolation_sites.py, OWNED)."""
+    limit = timeout_s if timeout_s is not None else Settings().database_health_timeout_s
+    try:
+        async with asyncio.timeout(limit):
+            async with db.connect() as c:
+                await c.execute(sa.select(1))
+    except Exception as e:
+        if db.sync_engine not in _DOWN:
+            _DOWN.add(db.sync_engine)
+            log.warning("database_unreachable", error=f"{type(e).__name__}: {e}"[:500], timeout_s=limit)
+        return False
+    _DOWN.discard(db.sync_engine)
+    return True
 
 
 # An attempt that stalled or was cut off; refused credentials or a missing database fail at once, every time.
