@@ -29,7 +29,7 @@ from ops_store.database import open_database, reachable
 from ops_store.dialect import Vector, db_after, db_now, insert_ignore, locked
 from ops_store.outbox import Event, KbChanged, Poster, Relay, outbox_table, relay
 from ops_store.outbox import add as add_event
-from ops_store.rows import one
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, dialect_indexes, postgres_only
 from ops_store.search import contains
 from ops_store.store import Store
@@ -487,6 +487,27 @@ async def _keep_unchanged(
 DECIDABLE = ("pending", "source_changed")
 
 
+class BaseName(Out):
+    id: str
+    name: str
+
+
+class BaseOption(Out):
+    id: str
+    name: str
+    description: str
+    owner: str
+
+
+class SameText(Out):
+    """An indexed document of a base this one shares, holding the same text."""
+
+    id: str
+    title: str
+    source_id: str
+    processed_at: datetime | None
+
+
 class ChangePage(NamedTuple):
     rows: list[dict[str, Any]]
     total: int
@@ -514,7 +535,7 @@ class KnowledgeStore(Store):
             rows = (await c.execute(q)).mappings()
             return [dict(r) for r in rows]
 
-    async def taken(self, tenant: str, *, name: str | None = None, kb_id: str | None = None) -> list[dict[str, Any]]:
+    async def taken(self, tenant: str, *, name: str | None = None, kb_id: str | None = None) -> list[BaseName]:
         """The caller's team's bases holding `name` (any case) or `kb_id`. A name is unique in a team; an id another
         team holds is refused by the insert (`create_base`), without naming that team."""
         t = kb_bases.c
@@ -524,7 +545,7 @@ class KnowledgeStore(Store):
             return []
         q = sa.select(t.id, t.name).where(t.tenant_id == tenant, sa.or_(*wanted), team_visible(kb_bases))
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, BaseName)
 
     async def team_bases(self, tenant: str, team: str | None) -> list[dict[str, Any]]:
         """The bases a person in `team` reads: the team's and those no team owns, as the picker offers."""
@@ -538,7 +559,7 @@ class KnowledgeStore(Store):
 
     async def base_options(
         self, tenant: str, team: str | None, *, search: str, offset: int, limit: int, ids: list[str] | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[BaseOption]:
         """Knowledge bases a picker offers, by name: the caller's team's and those no team owns, whose name contains
         `search`, or exactly `ids` when given. LIMIT and OFFSET run in the query."""
         t = kb_bases.c
@@ -547,7 +568,7 @@ class KnowledgeStore(Store):
         q = q.where(t.id.in_(ids) if ids is not None else contains(t.name, search))
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, BaseOption)
 
     async def base(self, tenant: str, kb_id: str) -> dict[str, Any] | None:
         async with self.tx() as c:
@@ -1020,7 +1041,7 @@ class KnowledgeStore(Store):
             team = await self._team_of(c, kb_sources, str(row["tenant_id"]), str(row["source_id"]))
             await c.execute(sa.insert(kb_runs).values(**row, team_id=team))
 
-    async def same_content(self, tenant: str, item_id: str, digest: str) -> list[dict[str, Any]]:
+    async def same_content(self, tenant: str, item_id: str, digest: str) -> list[SameText]:
         """Indexed items other than `item_id` with the same cleaned content, in a source read by any knowledge base
         that reads the item's source."""
         i, other, link, mine = kb_items, kb_items.alias("other"), kb_base_sources, kb_base_sources.alias("mine")
@@ -1040,7 +1061,7 @@ class KnowledgeStore(Store):
             .distinct()
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, SameText)
 
     async def update_run(
         self, tenant: str, run_id: str, values: dict[str, Any], *, release: tuple[str, str] | None = None

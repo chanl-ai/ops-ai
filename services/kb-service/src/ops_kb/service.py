@@ -607,7 +607,7 @@ class KnowledgeService:
         rows = await self.store.base_options(
             who.tenant_id, who.team_id, search=search, offset=offset, limit=window, ids=ids
         )
-        options = [{"id": r["id"], "label": r["name"], "hint": r["owner"] or None, "disabled": None} for r in rows]
+        options = [{"id": r.id, "label": r.name, "hint": r.owner or None, "disabled": None} for r in rows]
         return options_page(options, offset, limit)
 
     async def list_bases(
@@ -679,9 +679,9 @@ class KnowledgeService:
                 code="collection_without_owner",
             )
         existing = await self.store.taken(who.tenant_id, name=name, kb_id=i.get("id") or None)
-        if any(b["name"].lower() == name.lower() for b in existing):
+        if any(b.name.lower() == name.lower() for b in existing):
             raise Conflict("A knowledge base with this name already exists.")
-        if i.get("id") and any(b["id"] == i["id"] for b in existing):
+        if i.get("id") and any(b.id == i["id"] for b in existing):
             raise Conflict(f"A knowledge base with id {i['id']} already exists.")
         who.require_provisioner_for(i)
         source_ids = list(dict.fromkeys(i.get("sourceIds") or []))
@@ -755,7 +755,7 @@ class KnowledgeService:
             name = str(patch["name"]).strip()
             if not name:
                 raise ValidationFailed("Give the knowledge base a name.")
-            taken = any(x["id"] != kb_id for x in await self.store.taken(who.tenant_id, name=name))
+            taken = any(x.id != kb_id for x in await self.store.taken(who.tenant_id, name=name))
             if taken:
                 raise Conflict("A knowledge base with this name already exists.")
             values |= {"name": name, "slug": _slug(name)}
@@ -1995,7 +1995,7 @@ class KnowledgeService:
         same = await self.store.same_content(who.tenant_id, str(item["id"]), str(digest))
         if not same:
             return item
-        names = ", ".join(sorted(str(d["title"]) for d in same))
+        names = ", ".join(sorted(d.title for d in same))
         if self.settings_of(s).cleaning.duplicates == "skip":
             values = {"status": "skipped", "warning": f"Not indexed: the same text is already in {names}."}
             await self.store.update_item(who.tenant_id, str(item["id"]), values)
@@ -2003,7 +2003,7 @@ class KnowledgeService:
         for d in same:
             await self.store.update_item(
                 who.tenant_id,
-                str(d["id"]),
+                d.id,
                 {"duplicate_of": item["id"], "warning": f"Left out of search: {item['title']} has the same text."},
             )
         values = {"warning": f"Same text as {names}, which search now leaves out."}
