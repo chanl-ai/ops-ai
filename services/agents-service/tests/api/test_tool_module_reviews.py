@@ -242,3 +242,69 @@ async def test_a_security_review_is_a_task_of_security_alone(stack: tuple[AsyncC
     assert (await c.get(f"/reviews/{rid}", headers=fraud)).status_code == 404
     assert (await c.get(f"/v1/publish-requests/{rid}", headers=fraud)).status_code == 404
     assert (await c.get(f"/v1/publish-requests/{rid}", headers=BUILDER)).status_code == 200
+
+
+async def test_security_reads_a_review_of_another_teams_module_by_id(stack: tuple[AsyncClient, FakeTools]) -> None:
+    """Security reviews what another team ships, so it reads the request by id before deciding; a team that neither
+    owns, asked nor reviews it gets not found."""
+    c, _ = stack
+    rid = (await _open(c)).json()["data"]["id"]
+    read = await c.get(f"/v1/publish-requests/{rid}", headers=SECURITY)
+    assert read.status_code == 200, read.text
+    got = {k: v for k, v in read.json()["data"].items() if k not in ("createdAt", "slaMinutes")}
+    assert got == {
+        "actionTool": "publish_tool_module",
+        "agentName": None,
+        "agentSlug": "",
+        "approvals": [],
+        "confidence": 1,
+        "currency": "CAD",
+        "customer": "Requested by james@harborpine.example",
+        "evidence": [],
+        "id": "TMP-1001",
+        "kind": "publish_request",
+        "policy": {
+            "condition": "every version before it serves",
+            "fourEyes": False,
+            "id": "gp_tool_module_review",
+            "name": "Tool module review",
+            "onTimeout": "Stays pending; the requester is notified",
+            "reviewers": "Security",
+            "sla": "1 business day",
+        },
+        "proposal": "",
+        "reasoning": ["Two approvers"],
+        "risk": "low",
+        "status": "pending",
+        "title": "Publish Core banking v3.0.0",
+        "toolModule": {"applyPending": False, "moduleId": "mod_core_banking", "version": "3.0.0"},
+        "workflowId": "",
+        "workflowName": "Core banking",
+    }
+    fraud = person("otto", "team_fraud", "approver")
+    assert (await c.get(f"/v1/publish-requests/{rid}", headers=fraud)).status_code == 404
+
+
+async def test_a_held_host_is_opened_once_and_read_by_security(stack: tuple[AsyncClient, FakeTools]) -> None:
+    """A new host is a request for Security: 201 when opened, 200 with the same request while it waits, read by
+    Security and the asking team by id and by no other team."""
+    c, _ = stack
+    headers = {**BUILDER, "X-Service-Authorization": service("tools")}
+    body = {"host": "api.ledger.example", "app": "Ledger"}
+    opened = await c.post("/v1/publish-requests/egress-hosts", json=body, headers=headers)
+    assert opened.status_code == 201, opened.text
+    eid = opened.json()["data"]["id"]
+    assert eid == "EGH-1001" and opened.json()["data"]["egressHost"] == {
+        "app": "Ledger",
+        "applyPending": False,
+        "host": "api.ledger.example",
+        "requestedBy": "james@harborpine.example",
+        "teamId": "team_ops",
+    }
+    again = await c.post("/v1/publish-requests/egress-hosts", json=body, headers=headers)
+    assert (again.status_code, again.json()["data"]["id"]) == (200, eid), again.text
+    read = await c.get(f"/v1/publish-requests/{eid}", headers=SECURITY)
+    assert (read.status_code, read.json()["data"]["policy"]["reviewers"]) == (200, "Security"), read.text
+    assert (await c.get(f"/v1/publish-requests/{eid}", headers=BUILDER)).status_code == 200
+    fraud = person("otto", "team_fraud", "approver")
+    assert (await c.get(f"/v1/publish-requests/{eid}", headers=fraud)).status_code == 404
