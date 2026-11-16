@@ -66,12 +66,12 @@ async def list_page(
     a sort value come back in any order, so they repeat or vanish between pages.
 
     `search` columns are matched for `params.search`; `sortable` and `filters` name the columns `sortBy` and the other
-    query keys may use, and a key they do not name is ignored; `params.ids` answers exactly those rows of `query`'s
-    `id` column, whatever the search says. A `labels` entry is a select of (value, label), read for the values its
-    facet counted."""
+    query keys may use, and a key they do not name is ignored; `params.ids` answers exactly those rows by the
+    primary key of `query`'s first table, whatever the search says (a key of more than one column raises ValueError).
+    A `labels` entry is a select of (value, label), read for the values its facet counted."""
     _declared({**sortable, **filters})
     if params.ids is not None:
-        chosen = [query.selected_columns["id"].in_(params.ids)]
+        chosen = [_id_column(query).in_(params.ids)]
     else:
         words = (params.search or "").strip()
         chosen = [sa.or_(*(contains(c, words) for c in search))] if words and search else []
@@ -112,11 +112,25 @@ async def _labels(conn: AsyncConnection, read: Rows, values: list[str]) -> dict[
     return {str(v): str(label) for v, label in await conn.execute(read.where(value.in_(values)))}
 
 
-def _key_order(query: Rows, order: list[sa.ColumnElement[Any]], descending: bool) -> list[sa.ColumnElement[Any]]:
-    """The primary key of the query's first table, as the last ORDER BY terms, so every row has one place."""
+def _first_table(query: Rows) -> Any:
     table: Any = query.get_final_froms()[0]
     while isinstance(table, sa.Join):
         table = table.left
+    return table
+
+
+def _id_column(query: Rows) -> sa.ColumnElement[Any]:
+    """The one column `ids` names a row by: the first table's primary key, since some tables are keyed by a name."""
+    table = _first_table(query)
+    key = list(table.primary_key.columns)
+    if len(key) != 1:
+        raise ValueError(f"list_page ids: {table.name} has a primary key of {len(key)} columns; ids needs one")
+    return key[0]
+
+
+def _key_order(query: Rows, order: list[sa.ColumnElement[Any]], descending: bool) -> list[sa.ColumnElement[Any]]:
+    """The primary key of the query's first table, as the last ORDER BY terms, so every row has one place."""
+    table = _first_table(query)
     named = {_column(term) for term in order}
     key = list(table.primary_key.columns)
     if not key or all(c in named for c in key):

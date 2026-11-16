@@ -50,6 +50,13 @@ aliases = sa.Table(
     sa.Column("name", sa.String(32), primary_key=True),
     sa.Column("target", sa.String(32), nullable=False),
 )
+# Keyed by two columns: `ids` cannot name one row.
+pairs = sa.Table(
+    "store_test_list_pairs",
+    meta,
+    sa.Column("tenant", sa.String(32), primary_key=True),
+    sa.Column("name", sa.String(32), primary_key=True),
+)
 LIST = sa.select(runs.c.id, runs.c.title, runs.c.status, agents.c.name.label("agent")).join(
     agents, agents.c.id == runs.c.agent_id
 )
@@ -196,6 +203,16 @@ async def test_a_list_with_no_filter_counts_every_row_whether_or_not_it_joins(en
     assert (alone["pagination"]["total"], len(alone["data"])) == (5, 5)
     assert (both["pagination"]["total"], len(both["data"])) == (5, 5)
     assert both["facets"] == {"desk": {"Claims intake": 3, "Loan desk": 2}}
+
+
+async def test_ids_pick_rows_by_the_primary_key_and_refuse_a_key_of_two_columns(engine: AsyncEngine) -> None:
+    async with engine.connect() as c:
+        page = await list_page(
+            c, sa.select(aliases.c.target), ListParams(ids=["alias-2", "alias-4", "gone"]), default_sort=aliases.c.name
+        )
+        assert [r["target"] for r in page["data"]] == ["model-2", "model-4"] and page["pagination"]["total"] == 2
+        with pytest.raises(ValueError, match="store_test_list_pairs"):
+            await list_page(c, sa.select(pairs.c.name), ListParams(ids=["x"]), default_sort=pairs.c.name)
 
 
 async def test_rows_sharing_a_sort_value_appear_once_across_pages_ordered_by_primary_key(engine: AsyncEngine) -> None:
