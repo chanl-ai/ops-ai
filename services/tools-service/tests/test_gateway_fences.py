@@ -45,7 +45,8 @@ def _write(tenant: str, thread: str) -> dict[str, Any]:
     }
 
 
-async def test_the_fence_only_rises_and_refuses_a_stalled_owners_write(engine: AsyncEngine, tenant: str) -> None:
+async def test_the_fence_only_rises_and_refuses_a_stalled_owners_write(both_engine: AsyncEngine, tenant: str) -> None:
+    engine = both_engine
     log, thread = CallLog(engine), f"thr_{uuid4().hex[:10]}"
     with isolation.scope(tenant, TEAM):
         assert await log.raise_fence(tenant, thread, 3) == 3
@@ -57,7 +58,8 @@ async def test_the_fence_only_rises_and_refuses_a_stalled_owners_write(engine: A
             await log.claim(generation=None, **_write(tenant, thread))
 
 
-async def test_a_tenant_neither_reads_nor_raises_another_tenants_fence(engine: AsyncEngine, tenant: str) -> None:
+async def test_a_tenant_neither_reads_nor_raises_another_tenants_fence(both_engine: AsyncEngine, tenant: str) -> None:
+    engine = both_engine
     log, thread, other = CallLog(engine), f"thr_{uuid4().hex[:10]}", f"t_{uuid4().hex[:10]}"
     with isolation.scope(tenant, TEAM):
         assert await log.raise_fence(tenant, thread, 5) == 5

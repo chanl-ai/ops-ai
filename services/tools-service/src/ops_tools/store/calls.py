@@ -7,13 +7,13 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 from pydantic import JsonValue
-from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore, lock_key
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
@@ -181,9 +181,20 @@ def _iso(at: datetime) -> str:
 
 
 async def _key_lock(c: AsyncConnection, key: str) -> None:
-    """Serialises the claim and the abandon of one idempotency key until the transaction ends (PostgreSQL)."""
-    if c.dialect.name == "postgresql":
-        await c.execute(sa.text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"call:{key}"})
+    """Serialises the claim and the abandon of one idempotency key until the transaction ends."""
+    await lock_key(c, f"call:{key}")
+
+
+async def _raised(c: AsyncConnection, tenant_id: str, thread_id: str, generation: int) -> int:
+    """Raises the tenant's fence on the thread to `generation` unless it is higher, in the caller's transaction, and
+    returns the fence. The insert leaves an existing row alone and the update only raises it, so two raises at once
+    leave the higher generation on any database."""
+    f = gateway_fences.c
+    mine = (f.tenant_id == tenant_id, f.thread_id == thread_id)
+    row = {"tenant_id": tenant_id, "thread_id": thread_id, "generation": generation}
+    await c.execute(insert_ignore(c, gateway_fences, row, keys=["tenant_id", "thread_id"]))
+    await c.execute(gateway_fences.update().where(*mine, f.generation < generation).values(generation=generation))
+    return int((await c.execute(sa.select(f.generation).where(*mine))).scalar_one())
 
 
 class LeaseSupersededError(RuntimeError):
@@ -217,31 +228,13 @@ class CallLog(Store):
                 gateway_fences.c.tenant_id == tenant_id, gateway_fences.c.thread_id == thread_id
             )
             return (await c.execute(q)).first() is None
-        insert = (postgresql.insert if c.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
-        stmt = (
-            insert.values(tenant_id=tenant_id, thread_id=thread_id, generation=generation)
-            .on_conflict_do_update(
-                index_elements=["tenant_id", "thread_id"],
-                set_={"generation": sa.func.greatest(gateway_fences.c.generation, generation)},
-            )
-            .returning(gateway_fences.c.generation)
-        )
-        return int((await c.execute(stmt)).scalar_one()) <= generation
+        return await _raised(c, tenant_id, thread_id, generation) <= generation
 
     async def raise_fence(self, tenant_id: str, thread_id: str, generation: int) -> int:
         """Raises the tenant's fence on the thread to `generation` unless it is already higher, and returns the fence.
         A lower generation leaves it as it is; the caller compares the result with what it sent."""
         async with self.tx() as c:
-            insert = (postgresql.insert if c.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
-            stmt = (
-                insert.values(tenant_id=tenant_id, thread_id=thread_id, generation=generation)
-                .on_conflict_do_update(
-                    index_elements=["tenant_id", "thread_id"],
-                    set_={"generation": sa.func.greatest(gateway_fences.c.generation, generation)},
-                )
-                .returning(gateway_fences.c.generation)
-            )
-            return int((await c.execute(stmt)).scalar_one())
+            return await _raised(c, tenant_id, thread_id, generation)
 
     async def record(self, **row: Any) -> None:
         async with self.tx() as c:
