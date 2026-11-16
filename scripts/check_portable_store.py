@@ -33,7 +33,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -151,12 +151,19 @@ def _factors(node: ast.expr) -> set[str]:
     return set() if isinstance(node, ast.Constant) else {ast.dump(node)}
 
 
-def _is_page(node: ast.Subscript) -> bool:
+def _is_page(node: ast.Subscript, defs: dict[str, ast.expr] | None = None) -> bool:
     """One cut whose end is counted from its start: `a : a + n`, or the same in multiples: `(p - 1) * n : p * n`."""
     assert isinstance(node.slice, ast.Slice)
-    low, high = node.slice.lower, node.slice.upper
+    return _bounds(node.slice.lower, node.slice.upper, defs or {})
+
+
+def _bounds(low: ast.expr | None, high: ast.expr | None, defs: dict[str, ast.expr]) -> bool:
+    """Whether a window's end is counted from its start. A bound that is a name stands for the expression the scope
+    assigned it once (`end = o + n`)."""
     if low is None or high is None:
         return False
+    low = defs.get(low.id, low) if isinstance(low, ast.Name) else low
+    high = defs.get(high.id, high) if isinstance(high, ast.Name) else high
     if isinstance(high, ast.BinOp) and isinstance(high.op, ast.Add):
         # The window starts where its end is counted from: `start + size`, also `offset + limit + 1`.
         terms, left = [high.right], high.left
@@ -185,16 +192,82 @@ def _is_chained(node: ast.Subscript) -> bool:
     )
 
 
+def _own(scope: ast.AST) -> Iterator[ast.AST]:
+    """The nodes of one scope, not those of a function or class defined in it."""
+    todo = list(ast.iter_child_nodes(scope))
+    while todo:
+        node = todo.pop()
+        yield node
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+            todo.extend(ast.iter_child_nodes(node))
+
+
+def _tail(node: ast.expr) -> bool:
+    """`rows[offset:]`: a cut from a start with no end."""
+    return (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.slice, ast.Slice)
+        and node.slice.lower is not None
+        and node.slice.upper is None
+        and not isinstance(node.slice.lower, ast.Constant)
+    )
+
+
 def slice_findings(source: str) -> list[int]:
-    """The line of each page cut in Python: `x[a : a + n]`, `x[(p - 1) * n : p * n]` and `x[a:][:n]`."""
-    out: list[int] = []
-    for node in ast.walk(ast.parse(source)):
-        if (
-            isinstance(node, ast.Subscript)
-            and isinstance(node.slice, ast.Slice)
-            and (_is_page(node) or _is_chained(node))
-        ):
-            out.append(node.lineno)
+    """The line of each page cut in Python: `x[a : a + n]`, `x[(p - 1) * n : p * n]`, `x[a:][:n]`, and the same read
+    through a name (`end = a + n; x[a:end]`, `tail = x[a:]; tail[:n]`) or `itertools.islice(x, a, a + n)`."""
+    out: set[int] = set()
+    tree = ast.parse(source)
+    islices = {"islice"} | {
+        a.asname or a.name
+        for n in ast.walk(tree)
+        if isinstance(n, ast.ImportFrom) and n.module == "itertools"
+        for a in n.names
+        if a.name == "islice"
+    }
+    modules = {"itertools"} | {
+        a.asname
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Import)
+        for a in n.names
+        if a.name == "itertools" and a.asname
+    }
+    scopes = [tree, *(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef))]
+    for scope in scopes:
+        nodes = list(_own(scope))
+        defs: dict[str, ast.expr] = {}
+        tails: set[str] = set()
+        for n in nodes:
+            if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+                name = n.targets[0].id
+                defs[name] = n.value
+                if _tail(n.value):
+                    tails.add(name)
+        for n in nodes:
+            if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Slice):
+                if (
+                    _is_page(n, defs)
+                    or _is_chained(n)
+                    or (
+                        isinstance(n.value, ast.Name)
+                        and n.value.id in tails
+                        and n.slice.lower is None
+                        and n.slice.upper is not None
+                        and not isinstance(n.slice.upper, ast.Constant)
+                    )
+                ):
+                    out.add(n.lineno)
+            elif isinstance(n, ast.Call) and len(n.args) >= 3:
+                f = n.func
+                named = isinstance(f, ast.Name) and f.id in islices
+                dotted = (
+                    isinstance(f, ast.Attribute)
+                    and f.attr == "islice"
+                    and isinstance(f.value, ast.Name)
+                    and f.value.id in modules
+                )
+                if (named or dotted) and _bounds(n.args[1], n.args[2], defs):
+                    out.add(n.lineno)
     return sorted(out)
 
 

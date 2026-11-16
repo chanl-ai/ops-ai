@@ -165,6 +165,30 @@ scaled = rows[a * 2 : b * 3]
     assert c.slice_findings(code) == [2, 3, 4]  # pyright: ignore[reportUnknownMemberType]
 
 
+def test_a_page_cut_through_a_name_an_islice_or_two_statements_is_found() -> None:
+    code = """
+from itertools import islice
+import itertools as it
+
+def page(rows, o, n, size):
+    end = o + n
+    a = rows[o:end]
+    b = list(islice(rows, o, o + n))
+    c = list(it.islice(rows, o, end))
+    tail = rows[o:]
+    d = tail[:n]
+    e = list(islice(rows, 3))
+    other = rows[1:]
+    f = other[:3]
+    g = rows[o:size]
+
+def elsewhere(rows, o):
+    end = 5
+    return rows[o:end]
+"""
+    assert c.slice_findings(code) == [7, 8, 9, 11]  # pyright: ignore[reportUnknownMemberType]
+
+
 def test_the_list_slice_baseline_is_held_to_its_trailer_like_the_portable_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
