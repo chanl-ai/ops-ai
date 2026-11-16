@@ -40,13 +40,18 @@ def definition_columns(*, since: str | None = None) -> tuple[sa.Select[Any], dic
     t, r, p = engine_definitions, engine_runs, publish_requests
     tenant = current_tenant()
     team = acting_team()
+    newer = engine_definitions.alias("newer")
     seen: list[sa.ColumnElement[bool]] = [t.c.tenant_id == tenant]
+    # The newest version the team may see, as each version carries its own team.
+    later: list[sa.ColumnElement[bool]] = [
+        newer.c.tenant_id == t.c.tenant_id,
+        newer.c.workflow_id == t.c.workflow_id,
+        newer.c.version > t.c.version,
+    ]
     if team is not None:
         seen.append(sa.or_(t.c.team_id == team, t.c.team_id.is_(None)))
-    newer = engine_definitions.alias("newer")
-    latest = ~sa.exists().where(
-        newer.c.tenant_id == t.c.tenant_id, newer.c.workflow_id == t.c.workflow_id, newer.c.version > t.c.version
-    )
+        later.append(sa.or_(newer.c.team_id == team, newer.c.team_id.is_(None)))
+    latest = ~sa.exists().where(*later)
     serving = (
         sa.select(
             t.c.workflow_id,
