@@ -1,0 +1,89 @@
+"""Every `/v1/cases` route's reply, status and error object, value by value, by failure mode: a case row or page key
+the console reads changing; a refusal (a stray body field, a cleared subject, a note with no text, a self link,
+another team's case) changing its status or code. Seconds left on a clock are pinned as present or not, since they
+count down. Regenerate with `AGENTS_REPIN=1` only for an intended change."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import AsyncIterator
+from typing import Any, cast
+
+import pytest
+from httpx import AsyncClient
+from pydantic_ai.models.test import TestModel
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from tests.api import role_app as role_app_module
+from tests.api.test_reply_pins import FIXTURES, answer, compare
+from tests.engine.test_lifecycle_rights import BUILDER, VIEWER, person
+
+from .role_app import role_app
+
+_ENGINES: list[AsyncEngine] = []
+_CASE_ID = re.compile(r"\bcase_[0-9a-f]{12}\b")
+OTHER_TEAM = person("omar", "team_fraud", "builder")
+DISPUTE: dict[str, Any] = {"subject": "Card dispute", "priority": "high", "customerId": "C-1001", "customerName": "Ann"}
+
+
+@pytest.fixture
+async def client(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[AsyncClient]:
+    made = role_app_module.create_async_engine
+
+    def kept(*args: Any, **kwargs: Any) -> AsyncEngine:
+        _ENGINES.append(engine := made(*args, **kwargs))
+        return engine
+
+    monkeypatch.setattr(role_app_module, "create_async_engine", kept)
+    async with role_app(TestModel()) as c:
+        yield c
+
+
+def _steady(value: Any) -> Any:
+    """`value` with each seconds-left count replaced by whether it is set, and a case id in a message by its kind."""
+    if isinstance(value, dict):
+        held = cast(dict[str, Any], value)
+        return {k: (v is not None) if k.endswith(("LeftS", "leftS")) else _steady(v) for k, v in held.items()}
+    if isinstance(value, list):
+        return [_steady(v) for v in cast(list[Any], value)]
+    return _CASE_ID.sub("<case>", value) if isinstance(value, str) else value
+
+
+async def test_every_case_route_keeps_its_reply_status_and_error_object(client: AsyncClient) -> None:
+    c = client
+    seen: dict[str, Any] = {}
+    opened = await c.post("/v1/cases", json={**DISPUTE, "producerKey": "run_pin1"}, headers=VIEWER)
+    case = opened.json()["data"]["id"]
+    other = (await c.post("/v1/cases", json={**DISPUTE, "subject": "Late fee"}, headers=VIEWER)).json()["data"]["id"]
+    theirs = (await c.post("/v1/cases", json=DISPUTE, headers=OTHER_TEAM)).json()["data"]["id"]
+    seen["open"] = answer(opened)
+    seen["openRetry"] = answer(await c.post("/v1/cases", json={**DISPUTE, "producerKey": "run_pin1"}, headers=VIEWER))
+    seen["openStray"] = answer(await c.post("/v1/cases", json={**DISPUTE, "colour": 1}, headers=VIEWER))
+    seen["openBadPriority"] = answer(await c.post("/v1/cases", json={**DISPUTE, "priority": "soon"}, headers=VIEWER))
+    seen["list"] = answer(await c.get("/v1/cases", params={"pageSize": 1, "page": 2}, headers=VIEWER))
+    seen["listSearch"] = answer(await c.get("/v1/cases", params={"search": "late"}, headers=VIEWER))
+    seen["listOtherTeam"] = answer(await c.get("/v1/cases", headers=OTHER_TEAM))
+    seen["listBadSize"] = answer(await c.get("/v1/cases", params={"pageSize": 101}, headers=VIEWER))
+    url = f"/v1/cases/{case}"
+    seen["patch"] = answer(await c.patch(url, json={"priority": "low", "assignee": "james@x.example"}, headers=VIEWER))
+    seen["patchClears"] = answer(await c.patch(url, json={"subject": None}, headers=VIEWER))
+    seen["patchStray"] = answer(await c.patch(url, json={"colour": 1}, headers=VIEWER))
+    seen["patchOtherTeam"] = answer(await c.patch(url, json={"priority": "low"}, headers=OTHER_TEAM))
+    seen["note"] = answer(await c.post(f"{url}/events", json={"text": "Asked for the receipt"}, headers=VIEWER))
+    seen["noteEmpty"] = answer(await c.post(f"{url}/events", json={"kind": "note"}, headers=VIEWER))
+    seen["runNoRef"] = answer(await c.post(f"{url}/events", json={"kind": "run"}, headers=VIEWER))
+    seen["runMissing"] = answer(await c.post(f"{url}/events", json={"kind": "run", "ref": "run_none1"}, headers=VIEWER))
+    seen["link"] = answer(await c.post(f"{url}/links", json={"caseId": other}, headers=BUILDER))
+    seen["linkSelf"] = answer(await c.post(f"{url}/links", json={"caseId": case}, headers=BUILDER))
+    seen["linkOtherTeam"] = answer(await c.post(f"{url}/links", json={"caseId": theirs}, headers=BUILDER))
+    seen["read"] = answer(await c.get(url, headers=VIEWER))
+    seen["readOtherTeam"] = answer(await c.get(url, headers=OTHER_TEAM))
+    seen["readMissing"] = answer(await c.get("/v1/cases/case_none1", headers=VIEWER))
+    # The run list and human tasks beside them (cases.py, tasks.py), pinned here as they had no table of their own.
+    seen["runs.list"] = answer(await c.get("/runs", params={"pageSize": 3}, headers=VIEWER))
+    seen["runs.missing"] = answer(await c.get("/runs/th_none1", headers=VIEWER))
+    task = {"type": "no_such_type", "params": {"payee": "Acme"}}
+    seen["tasks.unknownType"] = answer(await c.post("/v1/tasks", json=task, headers=BUILDER))
+    seen["tasks.stray"] = answer(await c.post("/v1/tasks", json={**task, "colour": 1}, headers=BUILDER))
+    seen["tasks.missing"] = answer(await c.get("/v1/tasks/tk_none1", headers=VIEWER))
+    compare(_steady(seen), FIXTURES / "reply-pins-case-records.json")

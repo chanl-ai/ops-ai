@@ -1,0 +1,874 @@
+{
+  "link": {
+    "body": {
+      "data": {
+        "assignee": "james@x.example",
+        "createdAt": "<timeZ>",
+        "createdBy": "vera@harborpine.example",
+        "customerId": "C-1001",
+        "customerName": "Ann",
+        "events": [
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "subject": "Card dispute"
+            },
+            "id": "<cev>",
+            "kind": "opened",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "low",
+              "before": "high",
+              "field": "priority"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "james@x.example",
+              "before": null,
+              "field": "assignee"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "text": "Asked for the receipt"
+            },
+            "id": "<cev>",
+            "kind": "note",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "james@harborpine.example",
+            "detail": {
+              "case": "<case>"
+            },
+            "id": "<cev>",
+            "kind": "link",
+            "ref": "<case>"
+          }
+        ],
+        "fields": null,
+        "id": "<case>",
+        "pausedSince": null,
+        "priority": "low",
+        "producerKey": "run_pin1",
+        "resolutionDueAt": "<timeZ>",
+        "resolutionLeftS": true,
+        "respondedAt": "<timeZ>",
+        "responseDueAt": "<timeZ>",
+        "responseLeftS": false,
+        "status": "open",
+        "subject": "Card dispute",
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "linkOtherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Case <case> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "linkSelf": {
+    "body": {
+      "error": {
+        "code": "self_link",
+        "message": "A case cannot be linked to itself.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "assignee": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "vera@harborpine.example",
+            "customerId": "C-1001",
+            "customerName": "Ann",
+            "fields": null,
+            "id": "<case>",
+            "owner": null,
+            "pausedSince": null,
+            "priority": "high",
+            "producerKey": null,
+            "resolutionDueAt": "<timeZ>",
+            "resolutionLeftS": true,
+            "respondedAt": null,
+            "responseDueAt": "<timeZ>",
+            "responseLeftS": true,
+            "status": "open",
+            "subject": "Late fee",
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 1,
+          "total": 2,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "listBadSize": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "query",
+              "pageSize"
+            ],
+            "msg": "Input should be less than or equal to 100"
+          }
+        ],
+        "message": "query.pageSize: Input should be less than or equal to 100",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "listOtherTeam": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "assignee": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "omar@harborpine.example",
+            "customerId": "C-1001",
+            "customerName": "Ann",
+            "fields": null,
+            "id": "<case>",
+            "owner": null,
+            "pausedSince": null,
+            "priority": "high",
+            "producerKey": null,
+            "resolutionDueAt": "<timeZ>",
+            "resolutionLeftS": true,
+            "respondedAt": null,
+            "responseDueAt": "<timeZ>",
+            "responseLeftS": true,
+            "status": "open",
+            "subject": "Card dispute",
+            "teamId": "team_fraud",
+            "updatedAt": "<timeZ>"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "listSearch": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "assignee": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "vera@harborpine.example",
+            "customerId": "C-1001",
+            "customerName": "Ann",
+            "fields": null,
+            "id": "<case>",
+            "owner": null,
+            "pausedSince": null,
+            "priority": "high",
+            "producerKey": null,
+            "resolutionDueAt": "<timeZ>",
+            "resolutionLeftS": true,
+            "respondedAt": null,
+            "responseDueAt": "<timeZ>",
+            "responseLeftS": true,
+            "status": "open",
+            "subject": "Late fee",
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "note": {
+    "body": {
+      "data": {
+        "assignee": "james@x.example",
+        "createdAt": "<timeZ>",
+        "createdBy": "vera@harborpine.example",
+        "customerId": "C-1001",
+        "customerName": "Ann",
+        "events": [
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "subject": "Card dispute"
+            },
+            "id": "<cev>",
+            "kind": "opened",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "low",
+              "before": "high",
+              "field": "priority"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "james@x.example",
+              "before": null,
+              "field": "assignee"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "text": "Asked for the receipt"
+            },
+            "id": "<cev>",
+            "kind": "note",
+            "ref": null
+          }
+        ],
+        "fields": null,
+        "id": "<case>",
+        "pausedSince": null,
+        "priority": "low",
+        "producerKey": "run_pin1",
+        "resolutionDueAt": "<timeZ>",
+        "resolutionLeftS": true,
+        "respondedAt": "<timeZ>",
+        "responseDueAt": "<timeZ>",
+        "responseLeftS": false,
+        "status": "open",
+        "subject": "Card dispute",
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "noteEmpty": {
+    "body": {
+      "error": {
+        "code": "text_required",
+        "message": "A note needs text.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "open": {
+    "body": {
+      "data": {
+        "assignee": null,
+        "createdAt": "<timeZ>",
+        "createdBy": "vera@harborpine.example",
+        "customerId": "C-1001",
+        "customerName": "Ann",
+        "fields": null,
+        "id": "<case>",
+        "pausedSince": null,
+        "priority": "high",
+        "producerKey": "run_pin1",
+        "resolutionDueAt": "<timeZ>",
+        "resolutionLeftS": true,
+        "respondedAt": null,
+        "responseDueAt": "<timeZ>",
+        "responseLeftS": true,
+        "status": "open",
+        "subject": "Card dispute",
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "openBadPriority": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "priority"
+            ],
+            "msg": "Input should be 'low', 'normal', 'high' or 'urgent'"
+          }
+        ],
+        "message": "priority: Input should be 'low', 'normal', 'high' or 'urgent'",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "openRetry": {
+    "body": {
+      "data": {
+        "assignee": null,
+        "createdAt": "<timeZ>",
+        "createdBy": "vera@harborpine.example",
+        "customerId": "C-1001",
+        "customerName": "Ann",
+        "fields": null,
+        "id": "<case>",
+        "pausedSince": null,
+        "priority": "high",
+        "producerKey": "run_pin1",
+        "resolutionDueAt": "<timeZ>",
+        "resolutionLeftS": true,
+        "respondedAt": null,
+        "responseDueAt": "<timeZ>",
+        "responseLeftS": true,
+        "status": "open",
+        "subject": "Card dispute",
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "openStray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "patch": {
+    "body": {
+      "data": {
+        "assignee": "james@x.example",
+        "createdAt": "<timeZ>",
+        "createdBy": "vera@harborpine.example",
+        "customerId": "C-1001",
+        "customerName": "Ann",
+        "events": [
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "subject": "Card dispute"
+            },
+            "id": "<cev>",
+            "kind": "opened",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "low",
+              "before": "high",
+              "field": "priority"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "james@x.example",
+              "before": null,
+              "field": "assignee"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          }
+        ],
+        "fields": null,
+        "id": "<case>",
+        "pausedSince": null,
+        "priority": "low",
+        "producerKey": "run_pin1",
+        "resolutionDueAt": "<timeZ>",
+        "resolutionLeftS": true,
+        "respondedAt": "<timeZ>",
+        "responseDueAt": "<timeZ>",
+        "responseLeftS": false,
+        "status": "open",
+        "subject": "Card dispute",
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "patchClears": {
+    "body": {
+      "error": {
+        "code": "field_required",
+        "message": "Subject, status, priority and deadlines cannot be cleared.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "patchOtherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Case <case> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "patchStray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "read": {
+    "body": {
+      "data": {
+        "actions": [],
+        "assignee": "james@x.example",
+        "caseType": null,
+        "createdAt": "<timeZ>",
+        "createdBy": "vera@harborpine.example",
+        "customer": {
+          "href": "/cases?customer=C-1001",
+          "id": "C-1001",
+          "name": "Ann"
+        },
+        "customerId": "C-1001",
+        "customerName": "Ann",
+        "events": [
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "subject": "Card dispute"
+            },
+            "id": "<cev>",
+            "kind": "opened",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "low",
+              "before": "high",
+              "field": "priority"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "after": "james@x.example",
+              "before": null,
+              "field": "assignee"
+            },
+            "id": "<cev>",
+            "kind": "field",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "vera@harborpine.example",
+            "detail": {
+              "text": "Asked for the receipt"
+            },
+            "id": "<cev>",
+            "kind": "note",
+            "ref": null
+          },
+          {
+            "at": "<timeZ>",
+            "by": "james@harborpine.example",
+            "detail": {
+              "case": "<case>"
+            },
+            "id": "<cev>",
+            "kind": "link",
+            "ref": "<case>"
+          }
+        ],
+        "feed": {
+          "lines": [
+            {
+              "actor": "[email]",
+              "at": "<timeZ>",
+              "href": "/cases/<case>",
+              "source": "person",
+              "text": "[email] linked case <case>"
+            },
+            {
+              "actor": "[email]",
+              "at": "<timeZ>",
+              "href": null,
+              "source": "person",
+              "text": "[email] added a note: Asked for the receipt"
+            },
+            {
+              "actor": "[email]",
+              "at": "<timeZ>",
+              "href": null,
+              "source": "person",
+              "text": "[email] changed Priority to Low"
+            },
+            {
+              "actor": "[email]",
+              "at": "<timeZ>",
+              "href": null,
+              "source": "person",
+              "text": "[email] gave the case to [email]"
+            },
+            {
+              "actor": "[email]",
+              "at": "<timeZ>",
+              "href": null,
+              "source": "person",
+              "text": "[email] opened this case"
+            }
+          ],
+          "more": 0
+        },
+        "fields": null,
+        "id": "<case>",
+        "links": {
+          "allHrefs": {
+            "cases": "/cases?customer=C-1001",
+            "emails": "/activity?case=<case>&kind=email",
+            "runs": "/activity?case=<case>&kind=workflow_run"
+          },
+          "cases": [
+            {
+              "href": "/cases/<case>",
+              "id": "<case>",
+              "relation": "linked",
+              "status": "open",
+              "subject": "Late fee"
+            }
+          ],
+          "emails": [],
+          "files": [],
+          "runs": []
+        },
+        "nextAction": null,
+        "origin": {
+          "href": null,
+          "kind": "person",
+          "runId": null,
+          "text": "Opened by vera@harborpine.example"
+        },
+        "owner": {
+          "email": "james@x.example",
+          "name": "james@x.example"
+        },
+        "pausedSince": null,
+        "permissions": {
+          "assign": true,
+          "changeStatus": true,
+          "close": true,
+          "note": true
+        },
+        "priority": "low",
+        "producerKey": "run_pin1",
+        "resolutionDueAt": "<timeZ>",
+        "resolutionLeftS": true,
+        "respondedAt": "<timeZ>",
+        "responseDueAt": "<timeZ>",
+        "responseLeftS": false,
+        "sla": {
+          "pausedSince": null,
+          "resolution": {
+            "dueAt": "<timeZ>",
+            "leftS": true,
+            "metAt": null,
+            "state": "running"
+          },
+          "response": {
+            "dueAt": "<timeZ>",
+            "leftS": false,
+            "metAt": "<timeZ>",
+            "state": "met"
+          }
+        },
+        "status": "open",
+        "subject": "Card dispute",
+        "team": {
+          "id": "team_ops",
+          "name": "team_ops"
+        },
+        "teamId": "team_ops",
+        "timer": {
+          "dueAt": "<timeZ>",
+          "label": "Resolution",
+          "leftS": true,
+          "state": "running"
+        },
+        "typedFields": [],
+        "updatedAt": "<timeZ>",
+        "waiting": [],
+        "waitingAllHref": "/reviews?case=<case>",
+        "whatsLeft": {
+          "items": [],
+          "resolvable": true
+        },
+        "workflow": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "readMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Case case_none1 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "readOtherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Case <case> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "runMissing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Run was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "runNoRef": {
+    "body": {
+      "error": {
+        "code": "ref_required",
+        "message": "A run entry names the run it is about.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "runs.list": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "queue": {},
+          "state": {},
+          "workflowId": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 0,
+          "totalPages": 1
+        },
+        "viewCounts": {
+          "done_today": 0,
+          "needs_person": 0,
+          "open": 0,
+          "past_sla": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Run was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "tasks.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Review was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "tasks.stray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "tasks.unknownType": {
+    "body": {
+      "error": {
+        "code": "task_type_not_found",
+        "message": "Task type no_such_type was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}
