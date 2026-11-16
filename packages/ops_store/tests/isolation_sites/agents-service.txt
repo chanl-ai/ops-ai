@@ -4,7 +4,6 @@
 1 caught services/agents-service/src/ops_agents/store/poll_cursors.py
 1 caught services/agents-service/src/ops_agents/store/service_events.py
 1 caught services/agents-service/src/ops_agents/store/task_assists.py
-1 caught services/agents-service/src/ops_agents/store/team_defaults.py
 1 caught services/agents-service/src/ops_agents/store/template_copies.py
 1 install services/agents-service/src/ops_agents/store/leases.py
 2 install services/agents-service/src/ops_agents/store/timers.py
