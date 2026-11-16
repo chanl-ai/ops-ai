@@ -11,6 +11,7 @@ import json
 from decimal import Decimal
 from typing import Any
 
+import sqlalchemy as sa
 from sqlalchemy import event
 
 from ops_models.store import ModelKeys
@@ -108,3 +109,49 @@ async def test_a_client_gone_after_the_provider_answered_still_settles(models: M
         remove()
     assert gone, "the call never reached its settle"
     assert await models.spent(key_id) > 0, "the client's disconnect rolled back the spend the provider charged"
+
+
+def _on_key_write(models: Models, act: Any) -> Any:
+    """Calls `act` at the settle's write of the key's spent total."""
+
+    def hook(_c: object, _cur: object, statement: str, *_: object) -> None:
+        if statement.lstrip().upper().startswith("UPDATE MODEL_KEYS"):
+            act()
+
+    event.listen(models.engine.sync_engine, "before_cursor_execute", hook)
+    return lambda: event.remove(models.engine.sync_engine, "before_cursor_execute", hook)
+
+
+async def test_a_stop_right_after_the_provider_answered_still_records_the_spend(models: Models) -> None:
+    """The server stops while a settle waits on the database: the stop waits for it, so the spend is recorded before
+    the process ends rather than dropped with its unfinished task."""
+    key_id, secret = await models.key(budget="5")
+    lock = await models.engine.connect()
+    await lock.begin()
+    # Another writer holds the key's row, so the settle's spend write waits after the provider answered.
+    await lock.execute(sa.text("UPDATE model_keys SET status = status WHERE id = :k"), {"k": key_id})
+    waiting: list[bool] = []
+    remove = _on_key_write(models, lambda: waiting.append(True))
+    lifespan = models.app.router.lifespan_context(models.app)
+    try:
+        await lifespan.__aenter__()
+        call = asyncio.ensure_future(models.complete(secret, **{"X-Tenant-Id": "local"}))
+        for _ in range(250):
+            if waiting:
+                break
+            await asyncio.sleep(0.02)
+        assert waiting, "the call never reached its settle"
+        call.cancel()  # the client goes as the server stops
+        with contextlib.suppress(asyncio.CancelledError):
+            await call
+        stopping = asyncio.ensure_future(lifespan.__aexit__(None, None, None))
+        await asyncio.sleep(0.3)
+        assert not stopping.done(), "the server stopped with a settle still waiting to record its spend"
+        await lock.rollback()
+        await asyncio.wait_for(stopping, 10)
+    finally:
+        remove()
+        if lock.in_transaction():
+            await lock.rollback()
+        await lock.close()
+    assert await models.spent(key_id) > 0, "the stop dropped the spend the provider charged"

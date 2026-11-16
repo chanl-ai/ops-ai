@@ -15,6 +15,7 @@ import secrets
 import time
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Mapping, Sequence
 from contextlib import asynccontextmanager
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal, cast
@@ -356,6 +357,18 @@ def _key_refusal(key: KeyRow, now: datetime) -> tuple[int, str, str] | None:
     return None
 
 
+@dataclass(frozen=True)
+class Settling:
+    """A settle in flight: what to log, to recover the spend, if the server stops before it ends."""
+
+    key_id: str
+    tenant_id: str | None
+    alias: object
+    input_tokens: int
+    output_tokens: int
+    cost: str
+
+
 def create_models_app(
     db: Database,
     *,
@@ -389,6 +402,18 @@ def create_models_app(
         except Exception as e:
             log.warning("models_background_stopped", error=f"{type(e).__name__}: {e}"[:500])
 
+    # Settles still writing what a provider charged, each with the usage to log if the stop cannot wait for it.
+    settling: dict[asyncio.Task[None], Settling] = {}
+
+    async def drain_settles() -> None:
+        """Waits for the settles in flight, at most as long as a request waits for a database connection: a settle
+        that has no connection by then would fail anyway. One still unfinished is logged with its usage."""
+        if not settling:
+            return
+        _, unfinished = await asyncio.wait(set(settling), timeout=settings.db.wait_s)
+        for task in unfinished:
+            log.error("model_call_settle_unfinished_at_stop", **asdict(settling[task]))
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         async with asyncio.TaskGroup() as group:
@@ -396,6 +421,7 @@ def create_models_app(
             try:
                 yield
             finally:
+                await drain_settles()
                 stop.set()
                 for task in tasks:
                     task.cancel()
@@ -869,7 +895,12 @@ def create_models_app(
             """Records what the provider charged, in a task of its own: a client gone or a cancel after the answer
             does not roll it back. When the write fails, the usage is logged at error level, to recover the spend."""
             spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), self.price)
-            await asyncio.shield(asyncio.ensure_future(self._settle(input_tokens, output_tokens, spend)))
+            task = asyncio.ensure_future(self._settle(input_tokens, output_tokens, spend))
+            # Held until it ends, so the server's stop waits for it (`drain_settles`).
+            alias = self.row.get("alias")
+            settling[task] = Settling(self.key.id, self.tenant, alias, input_tokens, output_tokens, str(spend))
+            task.add_done_callback(lambda done: settling.pop(done, None))
+            await asyncio.shield(task)
 
         async def _settle(self, input_tokens: int, output_tokens: int, spend: Decimal) -> None:
             tenant = self.tenant if self.key.tenant_budget is not None else None
