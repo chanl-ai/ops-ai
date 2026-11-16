@@ -90,11 +90,12 @@ async def test_a_document_type_test_that_cannot_record_its_end_reports_on_health
     assert FAILED in caplog.text and "the database refused the write" in caplog.text, caplog.text
 
 
+@pytest.mark.lifespan_supervisor
 async def test_a_queued_reading_that_fails_starts_the_next_and_reports_on_health(
     make: Make, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """One slot: the reading behind a failed one starts from the failed one's task, the failure is logged and shown
-    on /health/background, and drain returns once the second is read."""
+    """One slot, on the app's own lifespan: the reading behind a failed one starts from the failed one's task, the
+    failure is logged and shown on /health/background, and drain returns once the second is read."""
     caplog.set_level(logging.WARNING, logger="ops_store.background")
     s = make(Models(), Floor())
     readings = s.extractor.readings
@@ -116,7 +117,7 @@ async def test_a_queued_reading_that_fails_starts_the_next_and_reports_on_health
         assert (await ask(c, failing)).status_code == 202
         assert (await ask(c, good)).status_code == 202
 
-    async with s.client as c:
+    async with s.client as c, s.app.router.lifespan_context(s.app):
         await loop_reports_failure(c, "document_reading", lambda: asked.append(asyncio.create_task(both(c))))
         await asked[0]
         gate.set()

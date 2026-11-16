@@ -37,6 +37,7 @@ OPS = {"X-Team-Id": "team_ops"}
 def pytest_configure(config: pytest.Config) -> None:
     isolate_from_stack()
     config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
+    config.addinivalue_line("markers", "lifespan_supervisor: the test's own app lifespan must hold the supervisor")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -204,8 +205,12 @@ def _release_apps() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
-async def _supervisor() -> AsyncIterator[None]:
+async def _supervisor(request: pytest.FixtureRequest) -> AsyncIterator[None]:
     """The supervisor a lifespan holds, around each test: requests queue readings, extractions and type tests onto it
-    without the lifespan running. Leaving it cancels whatever a test left running."""
+    without the lifespan running. Leaving it cancels whatever a test left running. A test marked
+    `lifespan_supervisor` gets none, so it fails unless the app's own lifespan holds one."""
+    if "lifespan_supervisor" in request.keywords:
+        yield
+        return
     async with background.supervisor():
         yield

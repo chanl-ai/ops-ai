@@ -85,6 +85,7 @@ from ops_service_kit.http import (
 )
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
+from ops_store import background as background_tasks
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
@@ -203,19 +204,21 @@ def create_documents_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        # Readings, extractions and test runs queued or running when the process stopped run again.
-        await readings.resume()
-        await extractor.resume()
-        await document_types.resume()
-        # Work that runs beside the server, such as the service event relay, on one TaskGroup: leaving it cancels each
-        # process and waits for it, so none outlives the server.
-        async with asyncio.TaskGroup() as group:
-            tasks = [group.create_task(kept(start)) for start in background]
-            try:
-                yield
-            finally:
-                for task in tasks:
-                    task.cancel()
+        # The supervisor every queued reading, extraction and test run starts on; leaving it cancels what still runs.
+        async with background_tasks.supervisor():
+            # Readings, extractions and test runs queued or running when the process stopped run again.
+            await readings.resume()
+            await extractor.resume()
+            await document_types.resume()
+            # Work that runs beside the server, such as the service event relay, on one TaskGroup: leaving it cancels
+            # each process and waits for it, so none outlives the server.
+            async with asyncio.TaskGroup() as group:
+                tasks = [group.create_task(kept(start)) for start in background]
+                try:
+                    yield
+                finally:
+                    for task in tasks:
+                        task.cancel()
 
     app = FastAPI(
         title="documents-service", version="0.1.0", lifespan=lifespan, generate_unique_id_function=operation_id
