@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0037_evals_cells
+-- platform-service, stamped at 0040_role_assignments_by_role
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -257,6 +257,8 @@ CREATE TABLE role_assignments (
 	CONSTRAINT fk_role_assignments_role FOREIGN KEY(tenant_id, role_id) REFERENCES roles (tenant_id, id), 
 	CONSTRAINT role_assignments_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
+GO
+CREATE INDEX ix_role_assignments_role ON role_assignments (tenant_id, role_id);
 GO
 CREATE INDEX ix_role_assignments_subject ON role_assignments (tenant_id, subject_id);
 GO
@@ -598,5 +600,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0037_evals_cells');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0040_role_assignments_by_role');
 GO

@@ -32,7 +32,6 @@ WAITING: dict[str, set[str]] = {
         "api_keys.created_by",
         "members.user_id",
         "password_resets.user_id",
-        "role_assignments.role_id",
         "signin_domains.provider_id",
         "signin_flows.provider_id",
         "signin_grants.provider_id",

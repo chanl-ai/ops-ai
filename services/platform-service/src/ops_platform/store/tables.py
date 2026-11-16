@@ -226,6 +226,8 @@ role_assignments = sa.Table(
     # One assignment per subject, role and team: a repeat grant extends or replaces it, never stacks.
     sa.UniqueConstraint("tenant_id", "subject_kind", "subject_id", "role_id", "team_id", name="uq_role_assignments"),
     sa.Index("ix_role_assignments_subject", "tenant_id", "subject_id"),
+    # Who holds a role: a role's holders, a team's admins, and the foreign key to roles.
+    sa.Index("ix_role_assignments_role", "tenant_id", "role_id"),
     sa.ForeignKeyConstraint(["tenant_id", "role_id"], ["roles.tenant_id", "roles.id"], name="fk_role_assignments_role"),
     info=TENANT_SCOPED,
 )
