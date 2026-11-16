@@ -66,6 +66,9 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import baseline_history
+
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST = ROOT / "access-exceptions-allowlist.txt"
 POLICIES = ROOT / "packages/ops_access/src/ops_access/policies.py"
@@ -84,6 +87,9 @@ OUTCOMES = ("keep", "convert", "delete")
 # The commit that began the list with the exceptions already in the code; lines added after it need the trailer.
 LIST_BEGAN = "67f10685"
 TRAILER = "Standards-exception:"
+# Commits up to this one were approved under the older phrase "approved by a maintainer" (below); a commit after it
+# needs `Standards-exception: approved by <login>: <reason>` naming a login in .github/standards-maintainers.txt.
+NAMED_APPROVER_AFTER = "dc281681"
 # Who approves an exception line: the trailer names them, so a trailer anyone could write does not pass.
 APPROVER = "approved by a maintainer"
 # Commits whose added lines were approved after they landed, each with the approval and the fix-forward commit that
@@ -565,6 +571,18 @@ def _row_problems(
     return problems
 
 
+def _approved(sha: str, message: str) -> bool:
+    """Whether the commit's trailer approves it: the older phrase for a commit up to NAMED_APPROVER_AFTER, else a
+    listed maintainer named as the parent commit's file has them."""
+    older = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", sha, NAMED_APPROVER_AFTER], cwd=ROOT, capture_output=True, check=False
+    )
+    if older.returncode == 0:
+        lines = [*message.splitlines(), APPROVED_AFTER.get(sha[:8], "")]
+        return any(line.startswith(TRAILER) and APPROVER in line for line in lines)
+    return baseline_history.approved(message, baseline_history.maintainers_at(ROOT, f"{sha}^"))
+
+
 def commit_problems() -> list[str]:
     """Commits after the list began that add a line with a register row and carry no Standards-exception: trailer
     naming its approver, or add one on a row with no decision. An export without history (verify-head's one-commit copy)
@@ -580,7 +598,7 @@ def commit_problems() -> list[str]:
         check=True,
     ).stdout.split()
     rows = register()
-    out: list[str] = []
+    out: list[str] = baseline_history.list_problems(ROOT)
     for sha in log:
         # Added: a line whose five fields the parent's file does not hold. An outcome comment alone adds nothing; a
         # new line behind a comment, or a raised count, does.
@@ -593,11 +611,9 @@ def commit_problems() -> list[str]:
         message = subprocess.run(
             ["git", "log", "-1", "--format=%B", sha], cwd=ROOT, capture_output=True, text=True, check=True
         ).stdout
-        approved = APPROVED_AFTER.get(sha[:8], "")
-        lines = [*message.splitlines(), approved]
-        if added and not any(line.startswith(TRAILER) and APPROVER in line for line in lines):
+        if added and not _approved(sha, message):
             for line in added:
-                out.append(f"trailer {sha[:8]} adds `{line.strip()}` with no {TRAILER} trailer saying {APPROVER}")
+                out.append(f"trailer {sha[:8]} adds `{line.strip()}` with no {baseline_history.WANTED} trailer")
         for line in added:
             row = line.split()[-1]
             if "no decision" in rows.get(row, "").lower():

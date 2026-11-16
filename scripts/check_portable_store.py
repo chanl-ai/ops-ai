@@ -38,6 +38,9 @@ from pathlib import Path
 
 import sqlalchemy as sa
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import baseline_history
+
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "portable-baseline.txt"
 SLICE_BASELINE = ROOT / "list-slice-baseline.txt"
@@ -390,8 +393,10 @@ def _file_problems(name: str, began: str) -> list[str]:
         ).stdout
         rows = raised(before, _git("show", f"{sha}:{name}"))
         message = _git("log", "-1", "--format=%B", sha)
-        if rows and not any(line.startswith(TRAILER) for line in message.splitlines()):
-            out += [f"trailer {sha[:8]} raises `{row}` in {name} with no {TRAILER} trailer" for row in rows]
+        if rows and not baseline_history.approved(message, baseline_history.maintainers_at(ROOT, f"{sha}^")):
+            out += [
+                f"trailer {sha[:8]} raises `{row}` in {name} with no {baseline_history.WANTED} trailer" for row in rows
+            ]
     return out
 
 

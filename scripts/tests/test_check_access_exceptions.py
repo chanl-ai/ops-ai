@@ -7,6 +7,7 @@ approver."""
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import subprocess
 import sys
@@ -162,6 +163,10 @@ def test_an_exception_line_added_without_the_trailer_fails_and_with_it_passes(
 ) -> None:
     c = checker()
     allow = tmp_path / "access-exceptions-allowlist.txt"
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github/standards-maintainers.txt").write_text(
+        f"# maintainers\n{hashlib.sha256(b'owner-login').hexdigest()}\n"
+    )
     _git(tmp_path, "init", "-q")
     allow.write_text("a.py refusal x 1 E01\n")
     _git(tmp_path, "add", ".")
@@ -181,12 +186,12 @@ def test_an_exception_line_added_without_the_trailer_fails_and_with_it_passes(
     assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"]
     _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: E02, approved by me")
     assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"], "the trailer names no approver"
-    _git(
-        tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: E02, approved by a maintainer"
-    )
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: approved by intruder: E02")
+    assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"], "the approver is not listed"
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: approved by owner-login: E02")
     assert c.commit_problems() == []
     allow.write_text(allow.read_text() + "c.py refusal z 1 E03\n")
-    _git(tmp_path, "commit", "-qam", "undecided\n\nStandards-exception: E03, approved by a maintainer")
+    _git(tmp_path, "commit", "-qam", "undecided\n\nStandards-exception: approved by owner-login: E03")
     assert [p.split()[0] for p in c.commit_problems()] == ["row"], "a row with no decision fails even when approved"
 
 

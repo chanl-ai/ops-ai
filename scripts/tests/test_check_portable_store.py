@@ -4,6 +4,7 @@ the baseline warned about again."""
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 from collections import Counter
@@ -113,6 +114,10 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = tmp_path / "portable-baseline.txt"
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github/standards-maintainers.txt").write_text(
+        f"# maintainers\n{hashlib.sha256(b'owner-login').hexdigest()}\n"
+    )
     _git(tmp_path, "init", "-q")
     base.write_text("# header\n2 sql a.py row lock\n")
     _git(tmp_path, "add", ".")
@@ -127,7 +132,14 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     _git(tmp_path, "commit", "-qam", "a new upsert outside ops_store")
     [problem] = c.commit_problems()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     assert "sql b.py ON CONFLICT (0 -> 1)" in problem
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "an upsert\n\nStandards-exception: b.py upsert, approved by orch")
+    _git(
+        tmp_path,
+        "commit",
+        "-q",
+        "--amend",
+        "-m",
+        "an upsert\n\nStandards-exception: approved by owner-login: b.py upsert",
+    )
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
 
 
@@ -158,6 +170,10 @@ def test_the_list_slice_baseline_is_held_to_its_trailer_like_the_portable_one(
 ) -> None:
     portable, sliced = tmp_path / "portable-baseline.txt", tmp_path / "list-slice-baseline.txt"
     _git(tmp_path, "init", "-q")
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github/standards-maintainers.txt").write_text(
+        f"# maintainers\n{hashlib.sha256(b'owner-login').hexdigest()}\n"
+    )
     portable.write_text("# header\n")
     sliced.write_text("# header\n1 slice a.py list slice\n")
     _git(tmp_path, "add", ".")
@@ -171,7 +187,7 @@ def test_the_list_slice_baseline_is_held_to_its_trailer_like_the_portable_one(
     _git(tmp_path, "commit", "-qam", "a page cut in python")
     [problem] = c.commit_problems()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     assert "slice a.py list slice (1 -> 2)" in problem
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "a page\n\nStandards-exception: a.py, approved by orch")
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "a page\n\nStandards-exception: approved by owner-login: a.py")
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
 
 

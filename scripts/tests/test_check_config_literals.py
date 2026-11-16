@@ -3,6 +3,7 @@ one already on a member's baseline reported again; and a baseline that could be 
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -131,6 +132,10 @@ def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
 ) -> None:
     kb = tmp_path / "services/kb-service"
     kb.mkdir(parents=True)
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github/standards-maintainers.txt").write_text(
+        f"# maintainers\n{hashlib.sha256(b'owner-login').hexdigest()}\n"
+    )
     (kb / c.BASELINE_NAME).write_text("# header\n2 timeout services/kb-service/src/app.py\n")
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "add", ".")
@@ -143,7 +148,7 @@ def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
     _git(tmp_path, "commit", "-qam", "a timeout back in code")
     [raised] = c.commit_problems(tmp_path)
     assert "timeout services/kb-service/src/app.py (1 -> 3)" in raised
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "x\n\nStandards-exception: three timeouts, approved by orch")
+    _git(tmp_path, "commit", "-q", "--amend", "-m", "x\n\nStandards-exception: approved by owner-login: three timeouts")
     assert c.commit_problems(tmp_path) == []
     # A member that had no file gets today's count from `--update`; that new file is a rise like any other.
     models = tmp_path / "services/models-service"
